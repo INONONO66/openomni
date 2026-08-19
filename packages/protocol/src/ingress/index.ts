@@ -6,6 +6,7 @@ import {
   type RoutingDecisionPayload as RoutingDecisionPayloadType,
 } from "../event/ingress.js";
 import { Execution } from "../execution/index.js";
+import * as RouteRecord from "./route-record.js";
 import type { Tool } from "../tool/index.js";
 
 /**
@@ -224,4 +225,16 @@ export namespace Ingress {
   /** #499 observation descriptors — published via Bus; event name strings frozen. */
   export const Events = EventDescriptors;
   export type RoutingDecisionPayload = RoutingDecisionPayloadType;
+
+  /**
+   * Shared `route.decided` recorder core (batch ② commit 1) — the PURE parts
+   * both ingress arms (external gateway router / internal brain path) import
+   * so the two once byte-identical recorders can no longer drift. Each arm
+   * still owns its append (its own scoped `LedgerAppend.port()` + typed error).
+   */
+  export type RouteStreamScope = RouteRecord.RouteStreamScope;
+  export const ROUTE_DECIDED_FACT_TYPE = RouteRecord.ROUTE_DECIDED_FACT_TYPE;
+  export const routeStreamId = RouteRecord.routeStreamId;
+  export const routeDecidedFact = RouteRecord.routeDecidedFact;
+  export const routeDecisionsEquivalent = RouteRecord.routeDecisionsEquivalent;
 }

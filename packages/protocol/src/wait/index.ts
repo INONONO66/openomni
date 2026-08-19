@@ -1,3 +1,4 @@
+import * as CorrelationFold from "./correlation-fold.js";
 import { Events as EventDescriptors } from "./events.js";
 import * as Fold from "./fold.js";
 import * as Matcher from "./matcher.js";
@@ -81,6 +82,15 @@ export namespace Wait {
   export const dispatchEvidence = Matcher.dispatchEvidence;
   export const targetsOfPendingInteraction = Matcher.targetsOfPendingInteraction;
   export const targetsOfWait = Matcher.targetsOfWait;
+
+  // Shared wait-correlation precedence core (batch ② commit 1): the PURE
+  // tier-level builders + pin gate both the gateway router's full lookup and
+  // the dispatch plane's frozen-row slice call. Store reads stay per-side.
+  export type CorrelationLookup = CorrelationFold.CorrelationLookup;
+  export type LegacyLevel = CorrelationFold.LegacyLevel;
+  export const waitPinsAllowClaim = CorrelationFold.waitPinsAllowClaim;
+  export const waitTierLevels = CorrelationFold.waitTierLevels;
+  export const legacyTierLevels = CorrelationFold.legacyTierLevels;
 
   export const Events = EventDescriptors;
 }

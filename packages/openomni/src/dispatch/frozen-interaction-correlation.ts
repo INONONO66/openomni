@@ -1,4 +1,4 @@
-import type { Communication, Wait } from "@openomni/protocol";
+import { Wait, type Communication } from "@openomni/protocol";
 import { PendingAskStore, PendingInteractionStore, WaitStore } from "@openomni/ledger";
 
 /**
@@ -25,94 +25,25 @@ import { PendingAskStore, PendingInteractionStore, WaitStore } from "@openomni/l
  * The lookup never guesses and never writes (legacy rows are frozen).
  */
 
-function scopedPins(
-  correlation: Wait.Correlation,
-): Readonly<{ endpointId: string; channelId: string }> | undefined {
-  if (correlation.endpointId === undefined || correlation.channelId === undefined) {
-    return undefined;
-  }
-  return { endpointId: correlation.endpointId, channelId: correlation.channelId };
-}
-
-/**
- * Channel scope is always enforced; the endpoint pin is stricter only for a
- * single-responder wait (multi-responder waits pin the DELIVERY endpoint,
- * while other expected responders reply from their own endpoints).
- */
-function waitPinsAllowClaim(record: Wait.Record, correlation: Wait.Correlation): boolean {
-  if (
-    record.correlation.channelId !== undefined &&
-    record.correlation.channelId !== correlation.channelId
-  ) {
-    return false;
-  }
-  if (record.expectedResponders.length > 1) return true;
-  return (
-    record.correlation.endpointId === undefined ||
-    record.correlation.endpointId === correlation.endpointId
-  );
-}
-
-function waitTierLevels(correlation: Wait.Correlation): Wait.CorrelationQuery[] {
-  const levels: Wait.CorrelationQuery[] = [];
-  if (correlation.replyToMessageId) levels.push({ replyToMessageId: correlation.replyToMessageId });
-  if (correlation.threadId) levels.push({ threadId: correlation.threadId });
-  if (correlation.tokenHash) levels.push({ tokenHash: correlation.tokenHash });
-  if (correlation.externalConversationId) {
-    levels.push({ externalConversationId: correlation.externalConversationId });
-  } else {
-    const scoped = scopedPins(correlation);
-    if (scoped !== undefined) levels.push(scoped);
-  }
-  return levels;
-}
-
 function waitTierShadows(correlation: Wait.Correlation): boolean {
-  for (const query of waitTierLevels(correlation)) {
+  for (const query of Wait.waitTierLevels(correlation)) {
     const candidates = WaitStore.findByCorrelation(query).filter((record) =>
-      waitPinsAllowClaim(record, correlation),
+      Wait.waitPinsAllowClaim(record, correlation),
     );
     if (candidates.length > 0) return true;
   }
   return false;
 }
 
-type LegacyLevel = Readonly<{
-  pendingInteraction: readonly Communication.PendingInteraction.CorrelationQuery[];
-  pendingAsk: readonly Communication.PendingAsk.CorrelationQuery[];
-}>;
-
-function legacyTierLevels(correlation: Wait.Correlation): LegacyLevel[] {
-  const levels: LegacyLevel[] = [];
-  // Legacy queries are always endpoint+channel scoped; a correlation without
-  // both pins (impossible for a parsed envelope) reaches no legacy level.
-  const scoped = scopedPins(correlation);
-  if (scoped === undefined) return levels;
-
-  if (correlation.replyToMessageId) {
-    const query = { ...scoped, replyToMessageId: correlation.replyToMessageId };
-    levels.push({ pendingInteraction: [query], pendingAsk: [query] });
-  }
-  if (correlation.threadId) {
-    const query = { ...scoped, threadId: correlation.threadId };
-    levels.push({ pendingInteraction: [query], pendingAsk: [query] });
-  }
-  if (correlation.tokenHash) {
-    const query = { ...scoped, tokenHash: correlation.tokenHash };
-    levels.push({ pendingInteraction: [query], pendingAsk: [query] });
-  }
-  const fallback = correlation.externalConversationId
-    ? { ...scoped, externalConversationId: correlation.externalConversationId }
-    : scoped;
-  levels.push({ pendingInteraction: [fallback], pendingAsk: [fallback] });
-  return levels;
-}
-
 export function findFrozenPendingInteractionMatch(
   correlation: Wait.Correlation,
 ): Communication.PendingInteraction.Record | undefined {
   if (waitTierShadows(correlation)) return undefined;
-  for (const level of legacyTierLevels(correlation)) {
+  // The dispatch slice passes NO externalMessageId (the private PendingAsk
+  // externalMessageId fallback is a channels-only lookup) — the shared core's
+  // that branch is inert here, so the level set is identical to the pre-hoist
+  // dispatch fold, now on one drift-proof code path.
+  for (const level of Wait.legacyTierLevels({ correlation })) {
     const byKey = new Map<string, Communication.PendingInteraction.Record | undefined>();
     for (const query of level.pendingInteraction) {
       for (const record of PendingInteractionStore.findByCorrelation(query)) {
