@@ -50,8 +50,6 @@ const TransitionInputBase = z
     ownerApproved: z.boolean().optional(),
     /** Replaces the open-wait set; REQUIRED (non-empty) when entering awaiting_external. */
     waitIds: z.array(z.string().min(1)).optional(),
-    /** Replaces the valid-responder set for the new state. */
-    validResponders: z.array(z.string().min(1)).optional(),
   })
   .strict();
 
@@ -121,12 +119,10 @@ function edgeAllowed(from: Schema.State, to: Schema.State): boolean {
 
 function apply(record: Schema.Record, input: TransitionInput, to: Schema.State): Schema.Record {
   const openWaitIds = TERMINAL.has(to) ? [] : (input.waitIds ?? record.openWaitIds);
-  const validResponders = input.validResponders ?? record.validResponders;
   return {
     ...record,
     state: to,
     openWaitIds,
-    ...(validResponders === undefined ? {} : { validResponders }),
     revision: record.revision + 1,
     updatedAt: input.at,
   };

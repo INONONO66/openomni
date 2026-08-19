@@ -59,10 +59,6 @@ function recordDecision(
   void onDecision?.(decision);
 }
 
-interface TimeoutOptions {
-  readonly onTimeout?: (error: ToolRuntimePolicyMiddleware.TimeoutError) => void;
-}
-
 interface PreToolContext {
   readonly toolName: string;
   readonly toolCallId?: string;
@@ -182,32 +178,5 @@ export namespace ToolRuntimePolicyMiddleware {
     ctx.handle.lockAcquired = false;
     recordDecision(allowDecision("workspace lock released"), ctx.onDecision);
     return allowDecision("runtime policy post-tool evaluated");
-  }
-
-  export function enforceTimeout<T>(
-    promise: Promise<T>,
-    ms: number,
-    options: TimeoutOptions = {},
-  ): Promise<T> {
-    return Promise.race([
-      promise,
-      new Promise<never>((_, reject) => {
-        const timer = globalThis.setTimeout(() => {
-          const error = new TimeoutError(ms);
-          reject(error);
-          try {
-            options.onTimeout?.(error);
-          } catch {
-            // Timeout rejection is authoritative; do not let cleanup callbacks
-            // escape the timer turn as uncaught exceptions.
-          }
-        }, ms);
-
-        promise.then(
-          () => globalThis.clearTimeout(timer),
-          () => globalThis.clearTimeout(timer),
-        );
-      }),
-    ]);
   }
 }

@@ -48,7 +48,6 @@ function renderRecord(record: Engagement.Record): Record<string, unknown> {
     state: record.state,
     terms: record.terms,
     openWaitIds: record.openWaitIds,
-    ...(record.validResponders === undefined ? {} : { validResponders: record.validResponders }),
     ...(record.expiresAt === undefined ? {} : { expiresAt: record.expiresAt }),
   };
 }

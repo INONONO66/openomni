@@ -56,12 +56,9 @@ describe("Engagement.transition — legal edges", () => {
   test("walks the full §5 happy path to done", () => {
     let record = opened({ spendCeiling: 50_000 });
 
-    record = expectRecord(
-      move(record, "awaiting_external", { waitIds: ["wait-1"], validResponders: ["actor-buyer"] }),
-    );
+    record = expectRecord(move(record, "awaiting_external", { waitIds: ["wait-1"] }));
     expect(record.state).toBe("awaiting_external");
     expect(record.openWaitIds).toEqual(["wait-1"]);
-    expect(record.validResponders).toEqual(["actor-buyer"]);
     expect(record.revision).toBe(2);
 
     record = expectRecord(move(record, "deliberating"));
