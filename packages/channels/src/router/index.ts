@@ -10,6 +10,7 @@ import {
 import { SurfaceKey } from "@openomni/ledger";
 import { resolveIngressActor } from "./actor-resolver.js";
 import { IngressAuthorityMiddleware } from "./authority.js";
+import { createReplyGrantInstances, type ReplyGrantInstances } from "./messaging/reply-grant.js";
 import { createExistingAgentMessaging, type DeliveryReceipt } from "./messaging/send.js";
 import type { ExistingAgentMessaging } from "./messaging/send.js";
 import {
@@ -78,6 +79,13 @@ export interface GatewayRouterPorts {
   readonly messaging?: Readonly<{
     deliveryRoutes: ReadonlyMap<string, ChannelDeliveryRoute>;
     grants: () => readonly Gateway.SenderTargetGrant[];
+    /**
+     * Owner-written reply-grant rules (#708, design §2b stage-0 rule): the
+     * router materializes bounded, reply-scoped grant INSTANCES from them
+     * when it admits a first-contact actor on a covered channel. Instances
+     * live in router memory (recorded ruling — durable store is #709).
+     */
+    replyGrantRules?: () => readonly Gateway.ReplyGrantRule[];
   }>;
 }
 
@@ -86,6 +94,16 @@ export interface GatewayRouter {
   ingest(event: unknown): Promise<Ingress.IngressResult>;
   /** The existing-agent send kernel (#215); fail-closed when unconfigured. */
   readonly messaging: ExistingAgentMessaging;
+  /**
+   * Gateway port for the brain's INTERNAL-mode surface↔session stickiness
+   * claims (#708, closing the #707 residue): the brain injects this at
+   * composition instead of writing the perimeter surface directly, making
+   * the gateway the literal sole writer of the surface↔session map. CAS
+   * semantics: with `expectedSessionId` the claim replaces only that owner;
+   * without it, it inserts only when absent. The returned session id is the
+   * owner AFTER the attempt — the CAS receipt.
+   */
+  claimSurface(surfaceKey: string, sessionId: string, expectedSessionId?: string): string;
 }
 
 /**
@@ -172,12 +190,18 @@ function waitContextOf(resolution: KernelRouteResolution): Gateway.WaitContext |
 }
 
 export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
+  const replyGrantRules = ports.messaging?.replyGrantRules;
+  const replyGrants: ReplyGrantInstances | undefined =
+    replyGrantRules === undefined
+      ? undefined
+      : createReplyGrantInstances({ rules: replyGrantRules, publish: ports.sink });
+  const messagingPorts = ports.messaging;
   const messaging =
-    ports.messaging === undefined
+    messagingPorts === undefined
       ? undefined
       : createExistingAgentMessaging({
           deliver: async (message) => {
-            const route = ports.messaging?.deliveryRoutes.get(message.target.channel);
+            const route = messagingPorts.deliveryRoutes.get(message.target.channel);
             if (route === undefined) {
               throw new Error(
                 `no registered channel surface delivers ${message.target.channel} ` +
@@ -186,7 +210,11 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
             }
             return route(message.target.externalId, message.body);
           },
-          grants: ports.messaging.grants,
+          // One grant source per send: Owner-written standing grants plus the
+          // live rule-materialized instances. The scope-less base evaluator
+          // still refuses the instances; only the scope-aware arm honors one
+          // whose replyScope matches the resolved delivery endpoint.
+          grants: () => [...messagingPorts.grants(), ...(replyGrants?.list() ?? [])],
           publish: ports.sink,
         });
 
@@ -202,6 +230,32 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
       const trace = { traceId: externalEvent.traceId };
       const route = resolveAndRecordRoute(resolvedActorEvent, trace.traceId, ports.sink);
       const decision = requireRoutedDecision(route.decision);
+
+      // Reply-grant materialization (#708, §2b stage-0 rule): a ROUTED
+      // admission of a resolved, registered actor on a rule-covered channel
+      // materializes a bounded reply-scoped grant instance — perimeter facts
+      // only (initiator actorId + resolved endpoint + rule TTL). Anonymous
+      // senders (no ActorRegistry endpoint) and dropped/blocked events
+      // materialize nothing.
+      if (replyGrants !== undefined && decision.outcome === "route") {
+        const actor = resolvedActorEvent.meta?.actor;
+        const actorId = typeof actor?.actorId === "string" ? actor.actorId : undefined;
+        const endpoint = actor?.endpoint;
+        if (actorId !== undefined && endpoint !== undefined) {
+          replyGrants.admit({
+            actorId,
+            endpoint: { channel: endpoint.channel, externalId: endpoint.externalId },
+            surface: externalEvent.surface,
+            ...(externalEvent.workspace === undefined
+              ? {}
+              : { workspace: externalEvent.workspace }),
+            ...(externalEvent.channel === undefined ? {} : { channel: externalEvent.channel }),
+            traceId: trace.traceId,
+            at: Date.now(),
+          });
+        }
+      }
+
       const waitExecution = await executeWaitRoute(trace, route, decision);
       if (waitExecution.kind === "handled") return waitExecution.result;
 
@@ -243,6 +297,14 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
         throw new Error("existing-agent messaging is not registered — sends fail closed");
       }
       return messaging;
+    },
+
+    // #708 residue closure: internal-mode (cron stickiness) claims cross this
+    // port instead of a brain-side SurfaceKey write — the gateway is now the
+    // literal sole writer of the surface↔session map. Same CAS semantics as
+    // the router's own resident claim above.
+    claimSurface(surfaceKey: string, sessionId: string, expectedSessionId?: string): string {
+      return SurfaceKey.claim(surfaceKey, sessionId, expectedSessionId);
     },
   };
 }

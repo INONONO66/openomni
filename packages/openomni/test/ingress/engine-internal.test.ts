@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
 import { Ingress } from "@openomni/protocol";
-import { Storage } from "@openomni/ledger";
+import { Storage, SurfaceKey } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import {
   defaultRunFn,
@@ -34,6 +34,10 @@ function makeEngine(overrides: BrainEngineDeps = {}): BrainEngine {
         return { text: testState.responseQueue.shift() ?? "{}", finishReason: "stop" };
       },
     }),
+    // The composition root injects the gateway router's claimSurface (#708);
+    // the test binds the same ledger CAS the router wraps.
+    claimSurface: (surfaceKey, sessionId, expectedSessionId) =>
+      SurfaceKey.claim(surfaceKey, sessionId, expectedSessionId),
     ...overrides,
   });
 }

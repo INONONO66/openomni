@@ -31,6 +31,20 @@ interface ResolveResult extends ResolvedSession {
   trace: TraceContextProtocol.Type;
 }
 
+/**
+ * Gateway port for surface↔session stickiness claims (#708): CAS semantics —
+ * with `expectedSessionId` the claim replaces only that owner; without it, it
+ * inserts only when absent; the returned id is the owner AFTER the attempt.
+ * The brain holds no direct SurfaceKey WRITE since #708 — the composition
+ * root injects the gateway router's `claimSurface`, making the gateway the
+ * literal sole writer of the perimeter surface (reads stay recorded residue).
+ */
+export type SurfaceSessionClaim = (
+  surfaceKey: string,
+  sessionId: string,
+  expectedSessionId?: string,
+) => string;
+
 export namespace IngressSessionResolver {
   /**
    * Lazy materialization of a router-claimed resident session (#707 stage 2):
@@ -72,8 +86,8 @@ export namespace IngressSessionResolver {
    * The internal-path + worker-placement resolver. The EXTERNAL resident
    * surface-map ops moved to the gateway router at #707 stage 2; the
    * resident claim loop below now serves only internal events (cron surface
-   * sessions) — a recorded brain-side write residue on a perimeter surface,
-   * scoped to internal mode which never crosses the perimeter.
+   * sessions) and claims through the injected gateway port (#708) — the
+   * brain writes no perimeter surface directly.
    */
   export function resolve(
     event: ResolvableEvent,
@@ -82,6 +96,7 @@ export namespace IngressSessionResolver {
       providerID: DEFAULT_DISPATCH_MODEL.provider,
       modelID: DEFAULT_DISPATCH_MODEL.id,
     },
+    claimSurface?: SurfaceSessionClaim,
   ): ResolveResult {
     const target = resolveTarget(event);
     let session: Session.Info;
@@ -134,6 +149,7 @@ export namespace IngressSessionResolver {
           event.surface,
           defaultModel,
           traceContext.traceId,
+          claimSurface,
         );
         session = resolved.session;
         isNew = resolved.isNew;
@@ -155,7 +171,17 @@ export namespace IngressSessionResolver {
     surface: string,
     defaultModel: ModelConfig,
     traceId: string,
+    claimSurface: SurfaceSessionClaim | undefined,
   ): ResolvedSession {
+    // Fail closed (#708): without the gateway port there is no legal way to
+    // write the surface↔session map — the brain never falls back to a direct
+    // ledger write.
+    if (claimSurface === undefined) {
+      throw new Error(
+        "surface claim port not configured — resident surface sessions fail closed " +
+          "(#708: internal claims route through the gateway claimSurface port)",
+      );
+    }
     let staleSessionId: string | undefined;
     let lastOwnerSessionId: string | undefined;
 
@@ -178,7 +204,7 @@ export namespace IngressSessionResolver {
       });
       let ownerSessionId: string;
       try {
-        ownerSessionId = SurfaceKey.claim(surfaceKey, candidate.id, staleSessionId);
+        ownerSessionId = claimSurface(surfaceKey, candidate.id, staleSessionId);
       } catch (err) {
         Session.remove(candidate.id, traceId);
         throw err;

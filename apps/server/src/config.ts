@@ -45,6 +45,8 @@ interface RawConfig {
   };
   messaging?: {
     grants?: unknown;
+    personaActorId?: unknown;
+    replyGrantRules?: unknown;
   };
 }
 
@@ -58,8 +60,20 @@ export interface ServerConfig {
   telegram: { token?: string; allowedUsers: string[] };
   github: { secret?: string; token?: string; botUsername?: string; allowedUsers: string[] };
   discord: { token?: string; allowedUsers: string[] };
-  /** Existing-agent messaging grants: default EMPTY — every send is denied `ungranted` until a grant is explicitly configured. */
-  messaging: { grants: Gateway.SenderTargetGrant[] };
+  /**
+   * Existing-agent messaging (#215/#708): `grants` default EMPTY — every send
+   * is denied `ungranted` until a grant is explicitly configured.
+   * `personaActorId` is the Owner-owned resident persona actor every as-me
+   * send is attributed to; unset → the message.send tool fails closed with a
+   * typed "persona not configured" result. `replyGrantRules` are the
+   * Owner-written stage-0 rules the gateway materializes bounded reply-scoped
+   * grant instances from (design §2b); default EMPTY.
+   */
+  messaging: {
+    grants: Gateway.SenderTargetGrant[];
+    personaActorId?: string;
+    replyGrantRules: Gateway.ReplyGrantRule[];
+  };
 }
 
 let _config: ServerConfig | null = null;
@@ -98,6 +112,47 @@ function resolveMessagingGrants(
     context: { configPath, error: parsed.error.message },
   });
   return [];
+}
+
+function resolveReplyGrantRules(
+  raw: RawConfig,
+  configPath: string,
+  traceId: string,
+): Gateway.ReplyGrantRule[] {
+  if (raw.messaging?.replyGrantRules === undefined) return [];
+  const parsed = z.array(Gateway.ReplyGrantRule).safeParse(raw.messaging.replyGrantRules);
+  if (parsed.success) return parsed.data;
+  // Fail closed: a malformed rule list materializes nothing.
+  Bus.publish(Operational.Events.Warn, {
+    traceId,
+    time: Date.now(),
+    component: "server",
+    msg: "invalid messaging.replyGrantRules config ignored; no reply-grant instances materialize",
+    context: { configPath, error: parsed.error.message },
+  });
+  return [];
+}
+
+function resolvePersonaActorId(
+  raw: RawConfig,
+  configPath: string,
+  traceId: string,
+): string | undefined {
+  const value = raw.messaging?.personaActorId;
+  if (value === undefined) return undefined;
+  const parsed = z.string().min(1).safeParse(value);
+  if (parsed.success) return parsed.data;
+  // Fail closed: a malformed persona id configures no persona — the
+  // message.send tool keeps returning its typed "persona not configured"
+  // result instead of sending under a garbage identity.
+  Bus.publish(Operational.Events.Warn, {
+    traceId,
+    time: Date.now(),
+    component: "server",
+    msg: "invalid messaging.personaActorId config ignored; as-me sends stay fail-closed",
+    context: { configPath },
+  });
+  return undefined;
 }
 
 function resolve(raw: RawConfig, configPath: string, traceId: string): ServerConfig {
@@ -158,6 +213,8 @@ function resolve(raw: RawConfig, configPath: string, traceId: string): ServerCon
     },
     messaging: {
       grants: resolveMessagingGrants(raw, configPath, traceId),
+      personaActorId: resolvePersonaActorId(raw, configPath, traceId),
+      replyGrantRules: resolveReplyGrantRules(raw, configPath, traceId),
     },
   };
 }

@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Ingress, type CronJob, type Command } from "@openomni/protocol";
-import { Storage } from "@openomni/ledger";
+import { Storage, SurfaceKey } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { DispatchRegistry, registerBuiltInDispatchHandlers } from "../../src/dispatch";
 import { CronJobRegistry, CronJobRunner } from "../../src/execution-runtime";
@@ -353,6 +353,10 @@ describe("CronJobRunner", () => {
           return { text: "cron-result", finishReason: "stop" };
         },
       }),
+      // #708: cron stickiness claims cross the injected gateway port; the
+      // test binds the same ledger CAS the router wraps.
+      claimSurface: (surfaceKey, sessionId, expectedSessionId) =>
+        SurfaceKey.claim(surfaceKey, sessionId, expectedSessionId),
     });
 
     try {
