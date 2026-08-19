@@ -46,7 +46,7 @@ import { join } from "node:path";
 
 interface LedgerStreamProducer {
   /** Stream class key — must match `Ledger.StreamRegistry`. */
-  readonly streamClass: "wait" | "work" | "route" | "command" | "effect";
+  readonly streamClass: "wait" | "work" | "route" | "command" | "effect" | "engagement";
   /**
    * Repo-relative paths of the enumerated modules that append this class's
    * facts. Every class has exactly one producer except `route`, which split
@@ -102,6 +102,14 @@ export const LEDGER_PRODUCER_MANIFEST: LedgerProducerManifest = {
     {
       streamClass: "effect",
       producers: ["packages/ledger/src/effect/index.ts"],
+      writes: "append",
+    },
+    {
+      // #709 engagement machine (gateway-design §5) — brain-domain surface,
+      // one producer: the ledger EngagementStore (append-before-CAS, no
+      // adoption path — the stream class is born with the table).
+      streamClass: "engagement",
+      producers: ["packages/ledger/src/engagement/index.ts"],
       writes: "append",
     },
   ],

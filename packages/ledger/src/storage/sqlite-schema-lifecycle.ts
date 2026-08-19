@@ -24,6 +24,7 @@ const ORDERED_MIGRATIONS: Migration.Definition[] = [
   { name: "0017_drop_dead_tables/migration.sql" },
   { name: "0018_drop_actor_relationship/migration.sql" },
   { name: "0019_surface_key_perimeter/migration.sql" },
+  { name: "0020_engagement/migration.sql" },
 ];
 
 const CLEAR_ORDER = [
@@ -31,6 +32,7 @@ const CLEAR_ORDER = [
   "ledger_head",
   "event_chain",
   "wait",
+  "engagement",
   "app_connector_installation",
   "channel_grant",
   "blacklist",

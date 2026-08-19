@@ -96,6 +96,11 @@ export namespace Storage {
     // adapter_absent error) when it is missing; production adapters wire it
     // as required (SqliteStorageAdapter).
     wait?: ProtocolStorage.WaitSubAdapter;
+    // Optional here for test fakes only — EngagementStore fails closed (typed
+    // adapter_absent error) when it is missing; production adapters wire it
+    // as required (SqliteStorageAdapter). Brain-domain surface (#709): the
+    // brain is its sole writer.
+    engagement?: ProtocolStorage.EngagementSubAdapter;
     // #510 phase B: decision-class ledger append on the SAME connection as
     // the projection sub-adapters, so a decision-class store can commit
     // append + projection inside one `transaction()` call. Optional for test
