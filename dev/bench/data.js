@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787109458305,
+  "lastUpdate": 1787117156540,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -57659,6 +57659,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 524895,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2b75cf04a22dd2643eaffb7b065d9dae7041a158",
+          "message": "feat(compaction): time carriage beside preserved user text (#737) (#741)\n\n* feat(compaction): time carriage beside preserved user text (#737)\n\nEvery cut stamps each preserved user message with a policy-injected\n[recorded YYYY-MM-DD] marker regenerated from info.time.created:\nreplaced, never stacked, and never recorded — the replacement record\ncarries structured time per kept entry instead, and hydration threads\nit back into info.time.created (DirectMessage/ChatAgentInput/factory),\nso a resumed cut re-derives dates from the RECORD rather than stamping\nresume time onto old words. The summarizer input is date-headed per\nmessage and the checkpoint template gains a date-anchored Timeline &\nFacts section with completeness-over-brevity. The L7 byte guard exempts\nonly the closed marker grammar; tags around free text stay plain\ninjected speech and fail the byte check.\n\nLoCoMo re-measurement (same protocol, canonical run in bench/README.md):\nanchored aggregate 24.0% -> 60.0% (ceiling 64.0%), c2 temporal 4.8% ->\n71.4% (ceiling 81.0%), inverting the uniform baseline lead (44.0%);\ncompression cost recorded honestly (45% -> 27.2% at default budget).\nAblation: markers alone 48.0%, + production-shaped summary cap 48.0%,\n+ template completeness rule 60.0%.\n\nCloses #737\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* test(server): pin hydrated time on worker input messages (#737)\n\nbuildWorkerInputMessages now carries the recorded creation time through\nhydration; the two equality pins compare role/content and assert the\ntime facts explicitly (stored messages carry one, the appended live\nprompt does not).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(compaction): marker legend, per-message quota, disclosures (#741)\n\nAdversarial review round 1 (PASS WITH CHANGES) corrections:\n- F1: the anchor render ships a one-line marker legend whenever markers\n  were stamped — the bench responder was told what markers mean, so the\n  production model must be told too (render-only, never in anchorBody).\n- F3: UTC calendar-date convention documented in the legend and at the\n  render site.\n- F5: the guard exemption gains a per-message quota of one marker (the\n  core stamps exactly one); a second marker-shaped part is plain speech,\n  pinned by a hostile-registration probe.\n- F4: the bench dataset fails fast on an unparseable session header\n  instead of feeding a misleading 1970 marker to the responder.\n- F2/F6: README disclosures — the responder-prompt change vs the\n  2026-08-19 baseline is named in Harness notes, and anchored-dated is\n  recorded as a 10pp regression (budget consumption + duplicate\n  carriage), not 'noise'.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-19T05:24:42Z",
+          "tree_id": "54a7424d43419de9b933d724c6d82d916979a5a3",
+          "url": "https://github.com/INONONO66/openomni/commit/2b75cf04a22dd2643eaffb7b065d9dae7041a158"
+        },
+        "date": 1787117155887,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 452,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 657,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5996,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10226,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2516,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2959,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2427,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15359,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8118,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1075,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 997,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1620,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1606,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 734,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 48776,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2470,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 519433,
             "unit": "ns/op"
           }
         ]
