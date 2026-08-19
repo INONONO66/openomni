@@ -258,7 +258,16 @@ export namespace EngagementStore {
     const alive: Engagement.Record[] = [];
     for (const record of active) {
       if (record.expiresAt !== undefined && now > record.expiresAt) {
-        expire(record.id, traceId, now);
+        try {
+          expire(record.id, traceId, now);
+        } catch (error) {
+          // A concurrent hydration of the same session may have expired this
+          // record first — the loser's CAS conflict is benign; either way the
+          // record is terminal and stays filtered out of the alive set.
+          if (!Engagement.StoreError.isInstance(error) || error.data.code !== "revision_conflict") {
+            throw error;
+          }
+        }
         continue;
       }
       alive.push(record);
