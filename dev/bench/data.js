@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787132424559,
+  "lastUpdate": 1787138609187,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -57887,6 +57887,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 513780,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3089eb0ca09ea50b0ecba812b69cd82311cbd30c",
+          "message": "refactor: seam convergence — kill twins, S6, honest ledger (#743)\n\n* refactor(ingress): hoist route.decided + correlation twins to protocol\n\nThe two ingress arms may not import each other (openomni↛channels = 0/0),\nso their once byte-identical route.decided recorders and wait-correlation\nfolds were cloned — and drifted. Hoist the PURE parts to protocol so one\ncore serves both:\n\n- Ingress.routeStreamId / routeDecisionsEquivalent / routeDecidedFact\n  (+ ROUTE_DECIDED_FACT_TYPE): the owner-stream key, the replay equivalence\n  gate, and the fact-payload builder. Both recorders collapse to (build via\n  shared fn) + (append); the append stays per-side. The brain's internal\n  recorder now records through the SAME scoped LedgerAppend.port() the router\n  uses, replacing raw Storage.get().ledger (ledger-audit finding).\n- Wait.waitTierLevels / legacyTierLevels / waitPinsAllowClaim: the pure\n  precedence tier-level builders + pin gate. Store reads and candidate\n  reduction stay per-side. The drifted PendingAsk externalMessageId fallback\n  (channels had it, dispatch lacked it) is converged onto one code path via\n  the unified { correlation, externalMessageId } input — inert on the\n  dispatch slice (passes no externalMessageId), identical output, no drift.\n\nroute.decided strings/stream/equivalence and the wait lookup stay\nbyte-frozen; p2-ledger-baseline + the equivalence gate stay green.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* feat(protocol): declare typed meta trust keys in Ingress.MetaSchema\n\nMetaSchema.catchall(z.unknown()) carried ~11 undeclared production-written\nkeys, read for AUTHORIZATION via untyped record helpers in the gateway\nrouter. Declare them as typed optional fields (the #500 A6 pattern that\nalready typed actor/runId/agentName): inboundTreatment (Actor.InboundTreatment),\nchannelGrantId, channelGrantKind (Actor.ChannelGrantKind), surfaceKey, kind,\nsender, threadId, replyToId, agentName, correlation (Wait.Correlation), and\npendingAsk (the router's write-only projection shape).\n\nThe catchall is RETAINED — only for the external DirectEventSchema.parse\nboundary: meta carries `raw` (arbitrary per-platform payload) and a driver\nmay attach further escape-hatch keys, genuinely unknown and never an authz\ninput. meta stays in-process on InboundEvent; nothing persists it.\n\nauthority-actor.ts now reads the typed Ingress.Actor (getActor / actorRole\nrole??kind??type fold) and the typed meta.inboundTreatment instead of an\nuntyped Record — the :29/:59 authorization reads the audit flagged.\n\nThe tightened schema now validates meta shape at the ingest boundary; the\nT2 sanitization test feeds a well-formed but forged pendingAsk to prove the\nstrip removes even a valid-looking forge.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* refactor(gateway): drop write-only Deliver.message + Gateway.Media\n\nGateway.Deliver.message was built by the router but NEVER read: the brain's\nonly consumer (ingress engine.deliver) reads event/decision/sessionId/\nwaitContext/actorContext only — verified no production reader of .message.\nGateway.Media had zero producers ever (its only reference was\nInboundMessage.media). Both are theater: the \"one InboundEvent\" endgame\nstays deferred, this removes the dead half now.\n\nRemoved: DeliverSchema.message field + its construction site in the router\n(buildDelivery, plus the now-unused stringMeta helper and extractText\nimport), the orphaned InboundMessageSchema (typed only Deliver.message), and\nMediaSchema — with their Gateway.Media / Gateway.InboundMessage namespace\nexports. Deliver is in-process (no persistence), so no wire/ledger change.\n\nSchema snapshot regenerated surgically: Gateway.Deliver loses `message`,\nGateway.InboundMessage / Gateway.Media disappear (in-process seam types,\nnever persisted), and it also picks up the prior commit's additive\nIngress.MetaSchema fields (additive schema changes snapshot lazily at the\nnext --update). Contract tests updated to drop the message projection.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* feat(ingress): evidence_only framing + route not-delivered correction\n\nS6 — evidence_only is now a command-authority restriction, not just a stamp.\nThread the perimeter inboundTreatment verdict from Gateway.Deliver.actorContext\nthrough the engine deliver consumer into the projection seam (mirroring the\n#709 actorTrustTier thread). At event-projector, an evidence_only inbound is\nprojected as a SYSTEM-FRAMED OBSERVATION block (frameEvidenceOnlyText) with a\npart.metadata tag — the raw text still informs the resident but is framed as\nuntrusted data, never a plain command. This makes the batch-① recovery floor\nload-bearing: a laundered/blacklisted replay, floored to evidence_only, can no\nlonger enter as a top-level command turn. Consumed verbatim per §3; consumption\nstops at the projector (the specified seam), so no dead run-side field.\n\nNon-responder correction — the wait fold rejects a non-responder's correlated\nreply fail-closed (wait_reply_rejected, message dropped), but route.decided was\nalready appended with outcome:route: the ledger claimed a delivery that never\nhappened. RULING: the fail-closed reject is correct; fix the LEDGER LIE. On\nrejection, append a correcting route.not_delivered fact on a SEPARATE\nsingle-fact route_correction:<scope>:<id> stream (new class; sole producer\nrouting-execution.ts) — this leaves the route stream's single-fact\nroute.decided replay gate untouched and is idempotent under redelivery\n(cas_conflict → the recorded correction stands). gateway-design §2a-1 rule 1\namended to match the code: a non-responder reply is rejected fail-closed with a\ncorrection fact, replacing the stale \"degrade to ordinary delivery\" wording.\n\nLedger producer manifest + StreamRegistry + schema snapshot extended for the\nnew route_correction / route.not_delivered fact.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* feat(openomni): hard evidence_only tool-authority gate (S6)\n\nAdversarial review judged the S6 consumption SOFT — the projector frame is\nprompt-level only, where §2a demands a HARD gate. Add the gate: an\nevidence_only inbound must be UNABLE to drive tool use, not merely asked not\nto.\n\nThread actorContext.inboundTreatment from Gateway.Deliver → engine deliver\nconsumer → HandlerContext → ResidentRunContext → buildWorkerMiddleware (the\nsame path #709 threads actorTrustTier, branching at the last hop to the\npermission plane rather than the executor implicit-input rail). In the\ntool-permission plane batch ① hardened (execution-runtime/middleware.ts), an\nevidence_only run's tool permission is forced to FAIL_CLOSED_TOOL_PERMISSION\n(deny-all) on BOTH arms — the legacy-permission arm (the resident path) and\nthe policy-plan hydration arm — OVERRIDING whatever the plan/permissions would\nallow. A full_access/absent delivery is untouched (no over-close). Deny-all\n(not a fuzzy read-only tier) is the landed decision: evidence_only IS the\nuntrusted-actor case, so erring to deny is the correct direction.\n\nThe projector soft frame stays as cooperative defense-in-depth (first layer).\nOverclaim corrected: the projector/floor comments now state the hard deny-all\ngate is what closes the hole; the routing-resolution #742 floor note that\ndeferred the closer to \"batch ②\" now points at the real gate.\n\nTest: an evidence_only run denies a tool its permissions/plan would allow\n(both arms); a full_access run allows it (control). Projector-framing tests\nkept.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* test(protocol): direct units for hoisted route/correlation folds\n\n* test(channels): cover messaging-composed router + reply-grant admit\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-19T11:22:09Z",
+          "tree_id": "751e0a14842350a0c84395934f737e18daf88460",
+          "url": "https://github.com/INONONO66/openomni/commit/3089eb0ca09ea50b0ecba812b69cd82311cbd30c"
+        },
+        "date": 1787138607840,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 448,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 634,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5854,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9281,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2511,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2887,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2469,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15351,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8098,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1043,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 946,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1557,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1634,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 728,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 48434,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2350,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 524295,
             "unit": "ns/op"
           }
         ]
