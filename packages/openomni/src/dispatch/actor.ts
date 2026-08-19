@@ -25,12 +25,24 @@ function actorKindFromAgent(agentName: string | undefined): Actor.Kind {
 
 // #510 D2b — run existence derives from WorkItem attempt facts; frozen
 // legacy worker_run_state rows keep answering through the upcast view.
-function lookupWorkerRun(sessionId: string | undefined, runId: string | undefined) {
-  if (!sessionId || !runId) return undefined;
+//
+// An UNREADABLE store is NOT "no run" (audit batch A): swallowing the read
+// error let a run whose attempt row could not be read fall through to
+// agentName inference — a caller-influenced string like "resident" then
+// derived a privileged kind the dispatch policy default-allows. The failure
+// surfaces as its own state; inference derives kind "unknown", which the
+// dispatch default-authority policy denies (fail-closed).
+type WorkerRunLookup = "found" | "absent" | "unreadable";
+
+function lookupWorkerRun(
+  sessionId: string | undefined,
+  runId: string | undefined,
+): WorkerRunLookup {
+  if (!sessionId || !runId) return "absent";
   try {
-    return WorkItemAttemptRun.find(sessionId, runId);
+    return WorkItemAttemptRun.find(sessionId, runId) ? "found" : "absent";
   } catch {
-    return undefined;
+    return "unreadable";
   }
 }
 
@@ -44,9 +56,16 @@ function deriveTrustTier(
 
 export function deriveActorContext(context: DispatchRuntimeContext = {}): Command.ActorContext {
   const workerRun = lookupWorkerRun(context.sessionId, context.runId);
+  // An explicitly supplied actorKind is the runtime wiring's own authority
+  // and stands; only the INFERENCE path fails closed on an unreadable store.
   const kind =
-    context.actorKind ?? (workerRun ? "internal_worker" : actorKindFromAgent(context.agentName));
-  const trustTier = deriveTrustTier(context, Boolean(workerRun));
+    context.actorKind ??
+    (workerRun === "unreadable"
+      ? "unknown"
+      : workerRun === "found"
+        ? "internal_worker"
+        : actorKindFromAgent(context.agentName));
+  const trustTier = deriveTrustTier(context, workerRun === "found");
   const actorId =
     context.actorId ??
     (context.sessionId && context.runId
@@ -65,6 +84,13 @@ export function deriveActorContext(context: DispatchRuntimeContext = {}): Comman
     ...(context.workspaceRoot ? { workspaceRoot: context.workspaceRoot } : {}),
     ...(trustTier ? { trustTier } : {}),
     labels: [...(context.labels ?? []), `actor.${kind}`],
-    ...(kind === "unknown" ? { reason: "missing dispatch actor context" } : {}),
+    ...(kind === "unknown"
+      ? {
+          reason:
+            workerRun === "unreadable"
+              ? "worker run lookup failed"
+              : "missing dispatch actor context",
+        }
+      : {}),
   });
 }
