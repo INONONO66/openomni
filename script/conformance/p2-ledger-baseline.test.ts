@@ -1541,7 +1541,8 @@ describe("p2 ledger baseline — frozen legacy writers + archive manifest (D2a)"
     if (!entry) throw new Error("manifest misses the frozen pending_ask table");
     expect(entry).toMatchObject({
       table: "pending_ask",
-      sourceSchemaVersion: "0020_engagement/migration.sql",
+      // The last applied migration (#219 added 0021_egress_budget).
+      sourceSchemaVersion: "0021_egress_budget/migration.sql",
       rowCount: 3,
       idRange: { first: "ask-a", last: "ask-c" },
     });

@@ -371,6 +371,9 @@ const CHANNELS_ROUTER_LEDGER_SURFACES = new Set([
   "PendingAskStore",
   "PendingInteractionStore",
   "LedgerAppend",
+  // #219 active-egress debit ledger — a perimeter surface written ONLY by the
+  // router's send kernel (same isolation as the wait store; brain never reaches it).
+  "EgressBudgetStore",
 ]);
 
 function isChannelsJudgmentPath(filePath: string): boolean {
