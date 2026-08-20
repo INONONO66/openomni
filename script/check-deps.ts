@@ -876,6 +876,13 @@ function selfTest(): void {
       ).length === 0,
     ],
     [
+      "S8: the router may name the egress-budget perimeter surface (#219)",
+      channelsRouterLedgerViolations(
+        "packages/channels/src/router/messaging/send.ts",
+        'import { EgressBudgetStore } from "@openomni/ledger";',
+      ).length === 0,
+    ],
+    [
       "S8: the router may not name a brain ledger surface",
       channelsRouterLedgerViolations(
         "packages/channels/src/router/routing-resolution.ts",
