@@ -19,7 +19,14 @@ export function findRegistration(
   return registrations.find((registration) => registration.name === name);
 }
 
-export function invokeTool(registration: Registration | undefined, toolName: string) {
+export function invokeTool(
+  registration: Registration | undefined,
+  toolName: string,
+  // 고도화 A: capability/risk labels the tier deny-overlay matches on (stamped
+  // by `defineTool` in production; supplied explicitly here). Default empty
+  // preserves every existing name-based caller.
+  toolLabels: readonly string[] = [],
+) {
   if (registration === undefined) return undefined;
 
   const engine = PolicyEngine.create({ audit: false });
@@ -36,9 +43,9 @@ export function invokeTool(registration: Registration | undefined, toolName: str
     toolId: toolName,
     toolName,
     toolCallId: "fixture-tool-call",
-    toolLabels: [],
+    toolLabels: [...toolLabels],
     toolInput: {},
-    resourceDescriptor: { ...fixtureDescriptor, id: `tool:${toolName}` },
+    resourceDescriptor: { ...fixtureDescriptor, id: `tool:${toolName}`, labels: [...toolLabels] },
   } satisfies Parameters<PolicyEngineInstance["dispatchPoint"]>[1];
 
   return engine.dispatchPoint("tool.native.pre", context);
