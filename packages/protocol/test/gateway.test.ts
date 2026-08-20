@@ -190,6 +190,80 @@ describe("Gateway.SendInput (re-homed #215 vocabulary)", () => {
     });
     expect(parsed.waitSpec?.waitId).toBe("w-1");
   });
+
+  test("class is additive-optional: absent parses (defaults from operation downstream)", () => {
+    const parsed = Gateway.SendInput.parse({ ...base, operation: "fire_and_forget" });
+    expect(parsed.class).toBeUndefined();
+  });
+
+  test("class coherence: converse ⟺ awaited, notify ⟺ fire_and_forget", () => {
+    // Coherent pairings parse.
+    expect(
+      Gateway.SendInput.parse({ ...base, operation: "fire_and_forget", class: "notify" }).class,
+    ).toBe("notify");
+    expect(
+      Gateway.SendInput.parse({
+        ...base,
+        operation: "awaited",
+        class: "converse",
+        waitSpec: {
+          waitId: "w-1",
+          ownerRef: { kind: "session", id: "s-1" },
+          allowedActions: ["report_result"],
+          expectedResponders: ["seller-1"],
+          resolutionPolicy: "first_reply",
+          expiresAt: 2_000,
+          followUpWindow: 0,
+        },
+      }).class,
+    ).toBe("converse");
+    // Incoherent pairings are refused (the two axes stay coherent, not collapsed).
+    expect(() =>
+      Gateway.SendInput.parse({ ...base, operation: "fire_and_forget", class: "converse" }),
+    ).toThrow();
+    expect(() =>
+      Gateway.SendInput.parse({ ...base, operation: "awaited", class: "notify" }),
+    ).toThrow();
+  });
+});
+
+describe("Gateway.SocialBudget (#219 active-egress contract)", () => {
+  const base = {
+    id: "budget-1",
+    targetActorId: "seller-1",
+    maxPerWindow: 3,
+    windowMs: 86_400_000,
+    cooldownMs: 3_600_000,
+  };
+
+  test("a minimal budget parses; optional caps/quiet-hours/DNC/expiry are additive", () => {
+    expect(Gateway.SocialBudget.parse(base).maxPerWindow).toBe(3);
+    const full = Gateway.SocialBudget.parse({
+      ...base,
+      classCaps: { notify: 1, converse: 2 },
+      quietHours: { startMinuteUtc: 1320, endMinuteUtc: 480 },
+      doNotContact: false,
+      expiresAt: 9_000,
+    });
+    expect(full.classCaps?.notify).toBe(1);
+    expect(full.quietHours?.startMinuteUtc).toBe(1320);
+  });
+
+  test("maxPerWindow and windowMs must be positive; cooldownMs may be zero", () => {
+    expect(() => Gateway.SocialBudget.parse({ ...base, maxPerWindow: 0 })).toThrow();
+    expect(() => Gateway.SocialBudget.parse({ ...base, windowMs: 0 })).toThrow();
+    expect(Gateway.SocialBudget.parse({ ...base, cooldownMs: 0 }).cooldownMs).toBe(0);
+  });
+
+  test("quiet-hours minutes are bounded to a day and unknown keys are rejected (strict)", () => {
+    expect(() =>
+      Gateway.SocialBudget.parse({
+        ...base,
+        quietHours: { startMinuteUtc: 1440, endMinuteUtc: 0 },
+      }),
+    ).toThrow();
+    expect(() => Gateway.SocialBudget.parse({ ...base, unexpected: true })).toThrow();
+  });
 });
 
 describe("Gateway.SenderTargetGrant (instances)", () => {
