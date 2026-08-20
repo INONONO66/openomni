@@ -108,6 +108,94 @@ describe("buildWorkerMiddleware S6 evidence_only hard tool-authority gate", () =
     );
     await expect(invokeTool(gated, "tool:read")).resolves.toMatchObject({ verdict: "deny" });
   });
+
+  // 고도화 A — the tier tool-permission cap is an ADDITIVE deny-label overlay
+  // composed AFTER the evidence_only gate and ON TOP OF the agent's base
+  // permission (deny-wins, ruleset preserved). Tools are stamped with
+  // `capability:read|write|destructive` by defineTool; a read-only cap denies
+  // the write/destructive labels while leaving read tools and the agent's own
+  // rules intact.
+  const READ_ONLY_OVERLAY = {
+    denyLabels: ["capability:write", "capability:destructive"],
+  } as const;
+
+  it("regression guard: a tier with NO overlay leaves the agent permission unchanged", async () => {
+    // owner/co_owner/manager have no profile entry → no overlay is threaded.
+    // A default-allow permission (no allow/deny lists) still allows a write.
+    const openPermission = { action: "tool.call" };
+    const registration = findRegistration(
+      buildWorkerMiddleware({ permissions: openPermission, inboundTreatment: "full_access" }),
+      "builtin:tool-permission",
+    );
+    await expect(invokeTool(registration, "fs.write", ["capability:write"])).resolves.toMatchObject(
+      { verdict: "allow" },
+    );
+  });
+
+  it("collaborator full_access + read-only overlay: write DENIED, read ALLOWED", async () => {
+    // Base permission the agent ships with — a denylist the overlay must NOT
+    // discard (proves additive, not replacement).
+    const basePermission = { action: "tool.call", denylist: ["secrets.read"] };
+    const registration = findRegistration(
+      buildWorkerMiddleware({
+        permissions: basePermission,
+        inboundTreatment: "full_access",
+        tierDenyOverlay: READ_ONLY_OVERLAY,
+      }),
+      "builtin:tool-permission",
+    );
+    // A capability:write tool is denied by the merged deny label.
+    await expect(invokeTool(registration, "fs.write", ["capability:write"])).resolves.toMatchObject(
+      { verdict: "deny" },
+    );
+    // A capability:read tool passes (default-allow with no matching deny).
+    await expect(invokeTool(registration, "fs.read", ["capability:read"])).resolves.toMatchObject({
+      verdict: "allow",
+    });
+    // The agent's OWN denylist still bites — the overlay added to it, not over it.
+    await expect(
+      invokeTool(registration, "secrets.read", ["capability:read"]),
+    ).resolves.toMatchObject({ verdict: "deny" });
+  });
+
+  it("evidence_only beats the tier overlay: deny-all even for a read tool", async () => {
+    // The batch-② gate still wins: a read tool the overlay would ALLOW is
+    // denied because evidence_only caps the whole run to deny-all.
+    const registration = findRegistration(
+      buildWorkerMiddleware({
+        permissions: { action: "tool.call" },
+        inboundTreatment: "evidence_only",
+        tierDenyOverlay: READ_ONLY_OVERLAY,
+      }),
+      "builtin:tool-permission",
+    );
+    await expect(invokeTool(registration, "fs.read", ["capability:read"])).resolves.toMatchObject({
+      verdict: "deny",
+    });
+  });
+
+  it("the overlay merges into a policy-plan ruleset too (full_access)", async () => {
+    const plan = {
+      policies: [
+        {
+          id: "builtin:tool-permission",
+          required: true,
+          config: { permission: { action: "tool.call" } },
+        },
+      ],
+      labels: [],
+    };
+    const registration = findRegistration(
+      buildWorkerMiddleware({ policyPlan: plan, tierDenyOverlay: READ_ONLY_OVERLAY }),
+      "builtin:tool-permission",
+    );
+    await expect(invokeTool(registration, "fs.write", ["capability:write"])).resolves.toMatchObject(
+      { verdict: "deny" },
+    );
+    await expect(invokeTool(registration, "fs.read", ["capability:read"])).resolves.toMatchObject({
+      verdict: "allow",
+    });
+  });
 });
 
 describe("buildWorkerMiddleware injection queue persistence", () => {

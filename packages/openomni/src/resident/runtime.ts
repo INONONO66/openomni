@@ -5,7 +5,7 @@ import {
   type TraceContext as TraceContextProtocol,
 } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
-import { buildWorkerMiddleware } from "../execution-runtime/middleware";
+import { buildWorkerMiddleware, type TierDenyOverlay } from "../execution-runtime/middleware";
 import { createAnchorCompletion } from "../execution-runtime/middleware/anchor-completion";
 import { SessionBridge } from "../ingress/session-bridge";
 import { EngagementContext } from "./engagement-context";
@@ -53,6 +53,15 @@ export interface ResidentRuntimeOptions {
   readonly maxActive?: number;
   readonly idleTimeoutMs?: number;
   readonly slotWaitTimeoutMs?: number;
+  /**
+   * 고도화 A — the Owner-declared tier→deny-overlay table, injected at
+   * composition (server bootstrap resolves it from config), NEVER hardcoded.
+   * Per delivery, the run's `actorTrustTier` indexes this table for the
+   * additive deny-label cap. Keyed by `Actor.TrustTier` string; a tier with no
+   * entry gets NO relaxation change (owner/co_owner/manager by default).
+   * Default empty → no tier ever gains an overlay (base behavior).
+   */
+  readonly permissionProfiles?: Readonly<Record<string, TierDenyOverlay>>;
   readonly runAgent?: (
     config: ChatAgentConfig,
     input: ChatAgentInput,
@@ -178,7 +187,11 @@ function resolveResidentToolExecutor(
   return ctx.event.agent.toolExecutor;
 }
 
-function buildResidentAgentConfig(ctx: ResidentRunContext, runId: string): ChatAgentConfig {
+function buildResidentAgentConfig(
+  ctx: ResidentRunContext,
+  runId: string,
+  permissionProfiles: Readonly<Record<string, TierDenyOverlay>>,
+): ChatAgentConfig {
   // The sandbox root / lock key comes from the COMPOSED agent config only.
   // `ctx.event.workspace` is a surface-derived identifier (an inbound event
   // field the perimeter influences) and must never become the workspace root
@@ -187,6 +200,13 @@ function buildResidentAgentConfig(ctx: ResidentRunContext, runId: string): ChatA
   const workspaceRoot = ctx.event.agent.toolConfig?.workspaceRoot;
   const toolExecutor = resolveResidentToolExecutor(ctx, runId, workspaceRoot);
   const agent = ctx.event.agent as RuntimeAgentDef;
+
+  // 고도화 A: the tier deny-overlay is looked up per delivery from the injected
+  // profiles table. A run with no trust tier (internal / wait-resumption /
+  // anonymous) skips the lookup entirely — the overlay stays absent, so the
+  // middleware applies no cap (same guard shape as inboundTreatment).
+  const tierDenyOverlay =
+    ctx.actorTrustTier === undefined ? undefined : permissionProfiles[ctx.actorTrustTier];
 
   return {
     // The kernel is a composition layer: it chooses what observation
@@ -205,6 +225,9 @@ function buildResidentAgentConfig(ctx: ResidentRunContext, runId: string): ChatA
       // S6 hard gate: an evidence_only delivery caps this run's tool authority
       // to deny-all, overriding whatever permissions/plan would allow.
       ...(ctx.inboundTreatment === undefined ? {} : { inboundTreatment: ctx.inboundTreatment }),
+      // 고도화 A tier tool-permission cap: present only for tiers with a
+      // profile entry on a delivery that carries a trust tier.
+      ...(tierDenyOverlay === undefined ? {} : { tierDenyOverlay }),
       ...(ctx.event.agent.policyPlan ? { policyPlan: ctx.event.agent.policyPlan } : {}),
       compaction: {
         summarizeWith: createAnchorCompletion({
@@ -241,12 +264,15 @@ export class ResidentRuntime {
   private readonly slotWaitTimeoutMs: number;
   private activeRuns = 0;
   private readonly runAgent: NonNullable<ResidentRuntimeOptions["runAgent"]>;
+  private readonly permissionProfiles: Readonly<Record<string, TierDenyOverlay>>;
 
   constructor(options: ResidentRuntimeOptions = {}) {
     this.maxActive = options.maxActive ?? 10;
     this.idleTimeoutMs = options.idleTimeoutMs ?? 30_000;
     this.slotWaitTimeoutMs = options.slotWaitTimeoutMs ?? 30_000;
     this.runAgent = options.runAgent ?? defaultRunAgent;
+    // Default empty → no tier ever gains an overlay (fail-closed base posture).
+    this.permissionProfiles = options.permissionProfiles ?? {};
   }
 
   stats(): { activations: number; activeRuns: number; idle: number; maxActive: number } {
@@ -422,7 +448,7 @@ export class ResidentRuntime {
               ...messages,
             ];
       activation.lifecycle = "active";
-      const agentConfig = buildResidentAgentConfig(ctx, runId);
+      const agentConfig = buildResidentAgentConfig(ctx, runId, this.permissionProfiles);
       const result = await this.runAgent(agentConfig, {
         messages: hydrated,
         traceContext,

@@ -102,6 +102,10 @@ export async function main(options: MainOptions = {}): Promise<void> {
   const residentRuntime = ResidentRuntime.create({
     maxActive: 10,
     idleTimeoutMs: Number(process.env.OPENOMNI_RESIDENT_IDLE_TIMEOUT_MS ?? 30_000),
+    // 고도화 A: the Owner-declared tier→deny-overlay table, injected from config
+    // (default empty = no tier relaxation). Per delivery, the run's trust tier
+    // indexes this table for the additive deny-label tool-permission cap.
+    permissionProfiles: config.permissionProfiles,
   });
 
   Bus.publish(
