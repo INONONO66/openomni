@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787146740270,
+  "lastUpdate": 1787218309717,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -58229,6 +58229,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 513656,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "52e272904fedbe7011715b91828f5d312b612821",
+          "message": "feat: tier tool-permission cap (collaborator read-tier approval) (#746)\n\n* feat(openomni): tier tool-permission cap via deny-label overlay\n\n고도화 A — an Owner-declared per-tier tool-permission cap expressed as an\nADDITIVE deny-label overlay, never a name enumeration or a permission\nreplacement. Tools are already stamped `capability:read|write|destructive`\nby defineTool; a tier overlay unions its `denyLabels` into the effective\nPolicy.Permission so the deny-wins ordering caps the tier WITHOUT discarding\nthe agent's own allowlist/denylist.\n\n- WorkerMiddlewareConfig gains `tierDenyOverlay?: {denyLabels}`; both the\n  legacy and policy-plan arms merge it AFTER the evidence_only hard gate, so\n  evidence_only still short-circuits to deny-all and only a full_access turn\n  gets the overlay.\n- ResidentRuntime accepts an injected `permissionProfiles` table and looks it\n  up per delivery by `actorTrustTier`; a run with no trust tier skips it.\n- Extends the S6 test block: no-overlay regression guard, collaborator\n  read-only (write DENIED / read ALLOWED / agent denylist preserved),\n  evidence_only beats the overlay, and plan-arm merge.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* feat(server): resolve and inject tier permission profiles\n\nWire the 고도화 A tier tool-permission cap into the server bootstrap. The\nOwner writes `permissionProfiles` in config.json as DATA (keyed by\nActor.TrustTier, deny-label subset only); bootstrap resolves it fail-closed\nand injects the table into the resident runtime, where the per-delivery tier\nlookup applies the deny-label overlay.\n\n- config.ts: `resolvePermissionProfiles` follows the resolveMessagingGrants\n  pattern — default EMPTY (no tier relaxation); a malformed block or a single\n  bad tier entry is dropped with an operational warn, so that tier stays at\n  its base permission and boot never crashes.\n- bootstrap: injects `config.permissionProfiles` into ResidentRuntime.create.\n- Documents the shape with a copy-paste config example (read/analysis-only\n  collaborator) in the ServerConfig JSDoc + AGENTS.md.\n- Tests: resolver parses per-tier, defaults empty, and drops malformed\n  entries / non-object blocks fail-closed with a warning.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-20T09:30:33Z",
+          "tree_id": "a8f499709c55b576f895846f1cf46acd3531c3a7",
+          "url": "https://github.com/INONONO66/openomni/commit/52e272904fedbe7011715b91828f5d312b612821"
+        },
+        "date": 1787218308937,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 451,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 636,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6022,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9677,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2515,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2897,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2450,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15633,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8036,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1049,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 944,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1486,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1594,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 740,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 47196,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2474,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 510557,
             "unit": "ns/op"
           }
         ]
