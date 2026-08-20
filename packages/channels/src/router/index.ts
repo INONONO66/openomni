@@ -86,6 +86,14 @@ export interface GatewayRouterPorts {
      * live in router memory (recorded ruling — durable store is #709).
      */
     replyGrantRules?: () => readonly Gateway.ReplyGrantRule[];
+    /**
+     * Owner-declared active-egress budgets (#219): the HOW-OFTEN cap on cold
+     * proactive outreach, per target actor. When wired, the send kernel's
+     * synchronous egress gate engages (fail-safe default: a cold send to a
+     * target with no budget entry is suppressed). When absent the gate is
+     * bypassed — replies are never throttled either way.
+     */
+    budgets?: () => readonly Gateway.SocialBudget[];
   }>;
 }
 
@@ -262,6 +270,9 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
           // still refuses the instances; only the scope-aware arm honors one
           // whose replyScope matches the resolved delivery endpoint.
           grants: () => [...messagingPorts.grants(), ...(replyGrants?.list() ?? [])],
+          // #219: thread the Owner-declared egress budgets through iff the
+          // composition root wired them, so the gate stays a no-op otherwise.
+          ...(messagingPorts.budgets === undefined ? {} : { budgets: messagingPorts.budgets }),
           publish: ports.sink,
         });
 
