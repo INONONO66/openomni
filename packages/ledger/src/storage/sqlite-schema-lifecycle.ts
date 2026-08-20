@@ -25,6 +25,7 @@ const ORDERED_MIGRATIONS: Migration.Definition[] = [
   { name: "0018_drop_actor_relationship/migration.sql" },
   { name: "0019_surface_key_perimeter/migration.sql" },
   { name: "0020_engagement/migration.sql" },
+  { name: "0021_egress_budget/migration.sql" },
 ];
 
 const CLEAR_ORDER = [
@@ -39,6 +40,7 @@ const CLEAR_ORDER = [
   "actor_endpoint",
   "actor_identity",
   "cron_job",
+  "egress_debit",
   "pending_interaction",
   "worker_grant",
   "pending_ask",

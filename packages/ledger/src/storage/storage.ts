@@ -111,6 +111,11 @@ export namespace Storage {
     pendingInteraction?: ProtocolStorage.PendingInteractionSubAdapter;
     workerGrant?: ProtocolStorage.WorkerGrantSubAdapter;
     cronJob?: ProtocolStorage.CronJobSubAdapter;
+    // Active-egress debit ledger (#219, perimeter domain). Optional for test
+    // fakes only — EgressBudgetStore fails closed when it is missing;
+    // production adapters wire it as required (SqliteStorageAdapter). Sole
+    // writer is the channels gateway router (S8), like the wait store.
+    egressBudget?: ProtocolStorage.EgressBudgetSubAdapter;
     actorRegistry?: ProtocolStorage.ActorRegistrySubAdapter;
     blacklist?: ProtocolStorage.BlacklistSubAdapter;
     channelGrant?: ProtocolStorage.ChannelGrantSubAdapter;

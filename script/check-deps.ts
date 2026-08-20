@@ -371,6 +371,9 @@ const CHANNELS_ROUTER_LEDGER_SURFACES = new Set([
   "PendingAskStore",
   "PendingInteractionStore",
   "LedgerAppend",
+  // #219 active-egress debit ledger — a perimeter surface written ONLY by the
+  // router's send kernel (same isolation as the wait store; brain never reaches it).
+  "EgressBudgetStore",
 ]);
 
 function isChannelsJudgmentPath(filePath: string): boolean {
@@ -870,6 +873,13 @@ function selfTest(): void {
       channelsRouterLedgerViolations(
         "packages/channels/src/router/wait/lifecycle.ts",
         'import { WaitStore } from "@openomni/ledger";',
+      ).length === 0,
+    ],
+    [
+      "S8: the router may name the egress-budget perimeter surface (#219)",
+      channelsRouterLedgerViolations(
+        "packages/channels/src/router/messaging/send.ts",
+        'import { EgressBudgetStore } from "@openomni/ledger";',
       ).length === 0,
     ],
     [

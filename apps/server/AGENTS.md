@@ -98,6 +98,40 @@ Errors bubble up as `Error: {message}` strings back to the channel so operators 
 
 The current `conversation.ts` / `ingress/bridge.ts` path still contains transitional model and tool-selection logic; per-message routing back doors were deleted when the kernel's unified `resolveRoute` shipped (#464, PR #485). Do not add new product semantics there. Move new logic into `packages/openomni` and shrink the server bridge over time.
 
+## MESSAGING CONFIG (`config.json` → `messaging`, #215 / #708 / #219)
+
+`config.ts` resolves the outbound `messaging` block; every resolver is fail-closed (a malformed entry is dropped with an `Operational.Warn`, never a crash):
+
+- `grants` — Owner-written standing `SenderTargetGrant`s (authority: MAY the persona reach a target at all). Default EMPTY = every cold send is `ungranted`.
+- `personaActorId` — the as-me persona actor; unset → `message.send` fails closed.
+- `replyGrantRules` — `ReplyGrantRule`s the gateway materializes bounded reply-scoped grant instances from on first contact (§2b).
+- `socialBudget` (#219) — Owner-declared active-egress caps (HOW OFTEN the persona may COLD-contact each target). Wiring the source engages the synchronous egress gate in the send kernel; the gate evaluates AFTER the grant (authority) and BEFORE the Wait/delivery, so a suppressed outreach records a typed `denied` receipt (`budget_exhausted` / `cooldown_suppressed` / `dnc_denied`) without opening a Wait or emitting bytes. **Default EMPTY is FAIL-SAFE, not permissive**: a cold proactive send to a target with NO budget entry is capped at ZERO (suppressed `budget_exhausted`). Replies (reply-scoped grant instances) always bypass the gate — absence of a budget never throttles the reply path. The debit ledger (`EgressBudgetStore`, perimeter domain) is written record-before-act on admission, so split outreach across calls cannot evade the cap and cooldown survives restart.
+
+```json
+{
+  "messaging": {
+    "personaActorId": "actor-persona",
+    "grants": [
+      { "id": "g-seller", "senderId": "actor-persona", "targetActorId": "actor-seller", "operations": ["awaited", "fire_and_forget"] }
+    ],
+    "socialBudget": [
+      {
+        "id": "budget-seller",
+        "targetActorId": "actor-seller",
+        "maxPerWindow": 3,
+        "windowMs": 86400000,
+        "cooldownMs": 3600000,
+        "classCaps": { "notify": 1 },
+        "quietHours": { "startMinuteUtc": 1320, "endMinuteUtc": 480 },
+        "doNotContact": false
+      }
+    ]
+  }
+}
+```
+
+The autonomous timer-fired 봉수 escalation ladder is deliberately OUT of #219 v1 (deferred — blocked by the #469 accumulator + a missing periodic-timeout firing source); the send kernel leaves a seam comment where the escalation coordinate would attach.
+
 ## TOOL SYSTEM
 
 Tool providers are assembled in `bootstrap/index.ts` and passed through to the routing handler and worker manager:

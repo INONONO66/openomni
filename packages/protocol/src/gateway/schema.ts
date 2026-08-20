@@ -111,6 +111,15 @@ const DeliverSchema = z
 const MessageOperationSchema = z.enum(["fire_and_forget", "awaited"]);
 
 /**
+ * Policy-intent axis of a send (#219), coherent with — but not collapsed into
+ * — the Wait axis (`operation`). `converse` intends a reply loop (⟺ awaited);
+ * `notify` is a one-way ping (⟺ fire_and_forget). Kept a SEPARATE field so the
+ * active-egress gate can reason about intent (class caps, future 봉수 rungs)
+ * without overloading `operation`, whose only job is whether a Wait opens.
+ */
+const MessageClassSchema = z.enum(["notify", "converse"]);
+
+/**
  * Explicit target: always one existing actor; an optional endpoint pin
  * disambiguates actors reachable at more than one endpoint. No broadcast or
  * wildcard form — resolution yields exactly one delivery address or a typed
@@ -201,7 +210,82 @@ const MessageDenialCodeSchema = z.enum([
   "target_stale",
   "target_ambiguous",
   "wait_duplicate",
+  // #219 active-egress suppressions: a granted, resolvable send the social
+  // budget refuses — window/class cap hit (or no Owner-declared budget for a
+  // cold proactive send), within cooldown/quiet-hours, or do-not-contact.
+  "budget_exhausted",
+  "cooldown_suppressed",
+  "dnc_denied",
 ]);
+
+/**
+ * Owner-declared active-egress budget for proactive outreach to ONE target
+ * actor (#219). It governs HOW OFTEN the persona may cold-contact a target;
+ * authority (MAY I contact at all) stays the SenderTargetGrant's job, evaluated
+ * first. Replies (reply-scoped grant instances) are never throttled by this.
+ *
+ * Semantics: at most `maxPerWindow` admitted sends per rolling `windowMs`, at
+ * least `cooldownMs` between sends, optional per-class sub-caps, an optional
+ * daily quiet-hours blackout (UTC minute-of-day), a hard `doNotContact` kill
+ * switch, and an optional `expiresAt` after which the allowance lapses (and the
+ * fail-safe default re-applies: cold proactive is capped at zero).
+ */
+const SocialBudgetSchema = z
+  .object({
+    id: z.string().min(1),
+    targetActorId: z.string().min(1),
+    maxPerWindow: z.number().int().positive(),
+    windowMs: z.number().int().positive(),
+    cooldownMs: z.number().int().nonnegative(),
+    classCaps: z
+      .object({
+        notify: z.number().int().nonnegative().optional(),
+        converse: z.number().int().nonnegative().optional(),
+      })
+      .strict()
+      .optional(),
+    quietHours: z
+      .object({
+        startMinuteUtc: z.number().int().min(0).max(1439),
+        endMinuteUtc: z.number().int().min(0).max(1439),
+      })
+      .strict()
+      .optional(),
+    doNotContact: z.boolean().optional(),
+    expiresAt: z.number().optional(),
+  })
+  .strict();
+
+/**
+ * One durable debit row: an ADMITTED proactive send (#219). Recorded
+ * record-before-act when a send is admitted (never when suppressed), so split
+ * outreach across separate calls cannot evade the cap and the cooldown clock
+ * survives a restart. The gateway router is the sole writer (perimeter domain).
+ */
+const EgressDebitRowSchema = z
+  .object({
+    id: z.string().min(1),
+    senderId: z.string().min(1),
+    targetActorId: z.string().min(1),
+    class: MessageClassSchema,
+    at: z.number(),
+  })
+  .strict();
+
+/**
+ * The read projection the store folds from the debit rows for one
+ * (sender, target) pair over a window — the pure evaluator's only debit input.
+ * `lastSendAt` is window-independent (the cooldown clock runs off the most
+ * recent admitted send regardless of window).
+ */
+const EgressDebitStateSchema = z
+  .object({
+    countInWindow: z.number().int().nonnegative(),
+    notifyInWindow: z.number().int().nonnegative(),
+    converseInWindow: z.number().int().nonnegative(),
+    lastSendAt: z.number().optional(),
+  })
+  .strict();
 
 /**
  * The Wait an awaited delivery opens. Quorum/resolution-policy coherence is
@@ -236,6 +320,12 @@ const SendInputBase = z
     /** Injected timestamp — messaging never reads the wall clock. */
     at: z.number(),
     waitSpec: AwaitSpecSchema.optional(),
+    /**
+     * #219 policy-intent axis, additive-optional for backward compat. Absent →
+     * defaults from `operation` (notify for fire_and_forget, converse for
+     * awaited). Present → must stay coherent with `operation` (refined below).
+     */
+    class: MessageClassSchema.optional(),
   })
   .strict();
 
@@ -252,6 +342,23 @@ const SendInputSchema = SendInputBase.superRefine((input, ctx) => {
       code: "custom",
       message: "fire_and_forget never opens a Wait — waitSpec is not allowed",
       path: ["waitSpec"],
+    });
+  }
+  // The two axes stay coherent without collapsing: converse ⟺ awaited,
+  // notify ⟺ fire_and_forget. Absent class is inferred from operation, so
+  // only an explicitly-incoherent pairing is rejected.
+  if (input.class === "converse" && input.operation !== "awaited") {
+    ctx.addIssue({
+      code: "custom",
+      message: 'class "converse" requires operation "awaited" (a converse intends a reply loop)',
+      path: ["class"],
+    });
+  }
+  if (input.class === "notify" && input.operation !== "fire_and_forget") {
+    ctx.addIssue({
+      code: "custom",
+      message: 'class "notify" requires operation "fire_and_forget" (a notify awaits nothing)',
+      path: ["class"],
     });
   }
 });
@@ -290,6 +397,9 @@ export namespace Gateway {
   export const MessageOperation = MessageOperationSchema;
   export type MessageOperation = z.infer<typeof MessageOperationSchema>;
 
+  export const MessageClass = MessageClassSchema;
+  export type MessageClass = z.infer<typeof MessageClassSchema>;
+
   export const MessageTarget = MessageTargetSchema;
   export type MessageTarget = z.infer<typeof MessageTargetSchema>;
 
@@ -298,6 +408,15 @@ export namespace Gateway {
 
   export const ReplyGrantRule = ReplyGrantRuleSchema;
   export type ReplyGrantRule = z.infer<typeof ReplyGrantRuleSchema>;
+
+  export const SocialBudget = SocialBudgetSchema;
+  export type SocialBudget = z.infer<typeof SocialBudgetSchema>;
+
+  export const EgressDebitRow = EgressDebitRowSchema;
+  export type EgressDebitRow = z.infer<typeof EgressDebitRowSchema>;
+
+  export const EgressDebitState = EgressDebitStateSchema;
+  export type EgressDebitState = z.infer<typeof EgressDebitStateSchema>;
 
   export const MessageDenialCode = MessageDenialCodeSchema;
   export type MessageDenialCode = z.infer<typeof MessageDenialCodeSchema>;

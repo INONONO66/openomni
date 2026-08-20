@@ -5,7 +5,7 @@ import {
   type BusEvent,
   type Wait,
 } from "@openomni/protocol";
-import { ActorRegistry } from "@openomni/ledger";
+import { ActorRegistry, EgressBudgetStore } from "@openomni/ledger";
 import { WaitService } from "../wait/index.js";
 import { Events } from "./events.js";
 import {
@@ -14,8 +14,10 @@ import {
   resolveScopedSenderTargetGrant,
   resolveSenderTargetGrant,
 } from "./grant.js";
+import { evaluateSocialBudget } from "./social-budget.js";
 
 type DeliveryTarget = Gateway.DeliveryTarget;
+type MessageClass = Gateway.MessageClass;
 type MessageDenialCode = Gateway.MessageDenialCode;
 type MessageOperation = Gateway.MessageOperation;
 type MessageTarget = Gateway.MessageTarget;
@@ -23,6 +25,12 @@ const SendInput = Gateway.SendInput;
 type SendInput = Gateway.SendInput;
 type SendReceipt = Gateway.SendReceipt;
 type SenderTargetGrant = Gateway.SenderTargetGrant;
+type SocialBudget = Gateway.SocialBudget;
+
+/** Policy-intent class of a send, inferred from `operation` when not explicit (#219). */
+function sendClassOf(input: SendInput): MessageClass {
+  return input.class ?? (input.operation === "awaited" ? "converse" : "notify");
+}
 
 /**
  * Existing-agent messaging service (#215). One send reaches exactly one
@@ -62,6 +70,16 @@ export type MessagingPorts = Readonly<{
   ) => void | DeliveryReceipt | Promise<DeliveryReceipt | undefined>;
   /** Policy-plane grant source; evaluated fresh on every send. */
   grants: () => readonly SenderTargetGrant[];
+  /**
+   * Owner-declared active-egress budget source (#219), evaluated fresh on
+   * every send — the HOW-OFTEN axis, orthogonal to `grants` (the MAY-I axis).
+   * OPTIONAL: when absent the #219 gate is entirely bypassed (pure additive,
+   * backward-compat — existing sends behave exactly as before). When present,
+   * the gate engages and the fail-safe default applies: a COLD-proactive send
+   * to a target with no budget entry is suppressed `budget_exhausted`. Replies
+   * (reply-scoped grant instances) always bypass the gate.
+   */
+  budgets?: () => readonly SocialBudget[];
   /** Injected observation sink (messaging.sent / messaging.denied) — channels never imports the observation channel. */
   publish: BusEvent.Sink["publish"];
 }>;
@@ -203,9 +221,55 @@ export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAge
       }
     }
 
-    // #219 seam: egress semantics (social budget, notify|converse class
-    // split, 봉수 escalation counting) evaluate HERE — after grant, before
-    // the wait record and the delivery effect. Own leaf, not this PR.
+    // #219 active-egress gate: the HOW-OFTEN axis evaluates HERE — after grant
+    // (MAY-I), before the wait record and the delivery effect — so a suppressed
+    // outreach records a denial without opening a Wait or emitting bytes.
+    //
+    // Cold-proactive vs reply (the safety call): a reply-scoped grant instance
+    // (`grant.replyScope !== undefined`, materialized from a ReplyGrantRule) is
+    // a REPLY into an initiating container and BYPASSES the gate entirely — the
+    // existing reply path is never throttled. Everything else is a COLD
+    // proactive initiation authorized by an Owner standing grant, and is
+    // subject to the budget. The gate only engages when a budget source is
+    // injected (`ports.budgets`), keeping the change purely additive.
+    if (ports.budgets !== undefined && grant.replyScope === undefined) {
+      const sendClass = sendClassOf(input);
+      const budget = ports
+        .budgets()
+        .find((candidate) => candidate.targetActorId === input.target.actorId);
+      // Debit state is only meaningful with a budget window; the fail-safe
+      // (budget === undefined → suppress) needs no read.
+      const state =
+        budget === undefined
+          ? { countInWindow: 0, notifyInWindow: 0, converseInWindow: 0 }
+          : EgressBudgetStore.readState(
+              input.senderId,
+              input.target.actorId,
+              input.at - budget.windowMs,
+            );
+      const verdict = evaluateSocialBudget(budget, state, { class: sendClass, at: input.at });
+      if (verdict !== "allow") {
+        return deny(
+          input,
+          verdict.suppress,
+          `active-egress budget suppressed a ${sendClass} send ${input.senderId} -> ${input.target.actorId} (${verdict.suppress})`,
+        );
+      }
+      // Record-before-act: the debit lands on ADMISSION, before the Wait/deliver
+      // path, so split outreach across calls cannot evade the cap and cooldown
+      // survives restart. A later delivery failure conservatively keeps the debit.
+      EgressBudgetStore.record({
+        id: crypto.randomUUID(),
+        senderId: input.senderId,
+        targetActorId: input.target.actorId,
+        class: sendClass,
+        at: input.at,
+      });
+    }
+    // #219 escalation seam (DEFERRED, out of this PR): the autonomous
+    // timer-fired 봉수 rung-advance would attach its counting coordinate HERE —
+    // blocked by the #469 accumulator + a missing periodic-timeout firing
+    // source. The synchronous suppression gate above ships without it.
 
     let wait: Wait.Record | undefined;
     if (input.operation === "awaited") {

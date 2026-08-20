@@ -47,6 +47,7 @@ interface RawConfig {
     grants?: unknown;
     personaActorId?: unknown;
     replyGrantRules?: unknown;
+    socialBudget?: unknown;
   };
   permissionProfiles?: unknown;
 }
@@ -85,11 +86,38 @@ export interface ServerConfig {
    * typed "persona not configured" result. `replyGrantRules` are the
    * Owner-written stage-0 rules the gateway materializes bounded reply-scoped
    * grant instances from (design §2b); default EMPTY.
+   *
+   * `socialBudget` (#219) is the Owner-declared active-egress cap: HOW OFTEN
+   * the persona may COLD-contact each target (authority — MAY I — stays the
+   * grant's job). Default EMPTY, and empty is FAIL-SAFE, not permissive: with
+   * the gate wired, a cold proactive send to a target with NO budget entry is
+   * suppressed (`budget_exhausted`), capped at zero. Replies (reply-scoped
+   * grant instances) are never throttled by absence. Example config block:
+   *
+   * ```json
+   * {
+   *   "messaging": {
+   *     "socialBudget": [
+   *       {
+   *         "id": "budget-seller",
+   *         "targetActorId": "actor-seller",
+   *         "maxPerWindow": 3,
+   *         "windowMs": 86400000,
+   *         "cooldownMs": 3600000,
+   *         "classCaps": { "notify": 1 },
+   *         "quietHours": { "startMinuteUtc": 1320, "endMinuteUtc": 480 },
+   *         "doNotContact": false
+   *       }
+   *     ]
+   *   }
+   * }
+   * ```
    */
   messaging: {
     grants: Gateway.SenderTargetGrant[];
     personaActorId?: string;
     replyGrantRules: Gateway.ReplyGrantRule[];
+    socialBudget: Gateway.SocialBudget[];
   };
   /**
    * 고도화 A — per-tier deny-label overlays keyed by `Actor.TrustTier`. Default
@@ -174,6 +202,29 @@ function resolveReplyGrantRules(
       traceId,
       component: "server",
       msg: "invalid messaging.replyGrantRules config ignored; no reply-grant instances materialize",
+      context: { configPath, error: parsed.error.message },
+    }),
+  );
+  return [];
+}
+
+function resolveSocialBudget(
+  raw: RawConfig,
+  configPath: string,
+  traceId: string,
+): Gateway.SocialBudget[] {
+  if (raw.messaging?.socialBudget === undefined) return [];
+  const parsed = z.array(Gateway.SocialBudget).safeParse(raw.messaging.socialBudget);
+  if (parsed.success) return parsed.data;
+  // Fail closed: a malformed budget list configures NO budget — with the gate
+  // wired this leaves every target on the fail-safe default (cold proactive
+  // capped at zero), never a permissive "no cap" fallback.
+  Bus.publish(
+    Operational.Events.Warn,
+    Operational.envelope({
+      traceId,
+      component: "server",
+      msg: "invalid messaging.socialBudget config ignored; every target stays on the fail-safe zero-cap default",
       context: { configPath, error: parsed.error.message },
     }),
   );
@@ -310,6 +361,7 @@ function resolve(raw: RawConfig, configPath: string, traceId: string): ServerCon
       grants: resolveMessagingGrants(raw, configPath, traceId),
       personaActorId: resolvePersonaActorId(raw, configPath, traceId),
       replyGrantRules: resolveReplyGrantRules(raw, configPath, traceId),
+      socialBudget: resolveSocialBudget(raw, configPath, traceId),
     },
     permissionProfiles: resolvePermissionProfiles(raw, configPath, traceId),
   };

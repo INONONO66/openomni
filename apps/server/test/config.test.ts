@@ -299,6 +299,59 @@ describe("config", () => {
     );
   });
 
+  it("parses messaging.socialBudget; default stays fail-closed empty (#219)", () => {
+    const configPath = join(tempDir, "config.json");
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        messaging: {
+          socialBudget: [
+            {
+              id: "budget-seller",
+              targetActorId: "actor:seller",
+              maxPerWindow: 3,
+              windowMs: 86_400_000,
+              cooldownMs: 3_600_000,
+              classCaps: { notify: 1 },
+            },
+          ],
+        },
+      }),
+    );
+
+    const config = loadConfig("trace-test", configPath);
+    expect(config.messaging.socialBudget).toHaveLength(1);
+    expect(config.messaging.socialBudget[0]).toMatchObject({
+      id: "budget-seller",
+      targetActorId: "actor:seller",
+    });
+
+    const emptyPath = join(tempDir, "empty-budget.json");
+    writeFileSync(emptyPath, JSON.stringify({}));
+    expect(loadConfig("trace-test", emptyPath).messaging.socialBudget).toEqual([]);
+  });
+
+  it("drops malformed messaging.socialBudget fail-closed with a warning (#219)", async () => {
+    const warnings: unknown[] = [];
+    const unsubscribe = Bus.subscribe(Operational.Events.Warn, (payload) => warnings.push(payload));
+    const configPath = join(tempDir, "config.json");
+    writeFileSync(
+      configPath,
+      JSON.stringify({ messaging: { socialBudget: [{ id: "broken", maxPerWindow: -1 }] } }),
+    );
+
+    const config = loadConfig("trace-test", configPath);
+    await flushBus();
+    unsubscribe();
+
+    expect(config.messaging.socialBudget).toEqual([]);
+    expect(warnings).toContainEqual(
+      expect.objectContaining({
+        msg: "invalid messaging.socialBudget config ignored; every target stays on the fail-safe zero-cap default",
+      }),
+    );
+  });
+
   it("resolves permissionProfiles per tier; defaults empty (고도화 A)", () => {
     const configPath = join(tempDir, "config.json");
     writeFileSync(

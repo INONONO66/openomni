@@ -272,6 +272,10 @@ export async function main(options: MainOptions = {}): Promise<void> {
       deliveryRoutes,
       grants: () => config.messaging.grants,
       replyGrantRules: () => config.messaging.replyGrantRules,
+      // #219: wiring the budget source engages the synchronous active-egress
+      // gate. Empty config is fail-safe (cold proactive capped at zero), not
+      // permissive; replies bypass the gate.
+      budgets: () => config.messaging.socialBudget,
     },
   });
   gatewayRouterRef.current = gatewayRouter;

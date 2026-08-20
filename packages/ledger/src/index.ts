@@ -15,6 +15,7 @@ export { WorkItemAttemptRun } from "./work-item/attempt-run.js";
 export { hasRetryExhaustionBlocker } from "./work-item/retry-policy.js";
 export { WaitStore } from "./wait/index.js";
 export { EngagementStore } from "./engagement/index.js";
+export { EgressBudgetStore } from "./egress/index.js";
 export { EffectStore, EffectStoreError } from "./effect/index.js";
 export { PendingAskStore } from "./pending-ask/index.js";
 export { PendingInteractionStore } from "./pending-interaction/index.js";

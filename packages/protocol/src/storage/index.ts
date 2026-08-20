@@ -3,6 +3,7 @@ import type { AppConnector } from "../app-connector/index.js";
 import type { Communication } from "../communication/index.js";
 import type { CronJob } from "../cron/index.js";
 import type { Engagement } from "../engagement/index.js";
+import type { Gateway } from "../gateway/index.js";
 import type { Ledger } from "../ledger/index.js";
 import type { Wait } from "../wait/index.js";
 import type { WorkItem } from "../work-item/index.js";
@@ -140,6 +141,23 @@ export namespace Storage {
     /** Version-guarded upsert: false = an equal-or-newer version already persisted (lost race). */
     set(record: Communication.WorkerGrant.Record): boolean;
     remove(id: string): boolean;
+  }
+
+  /**
+   * Active-egress debit ledger (#219, perimeter domain): a per-(senderId,
+   * targetActorId) append-only log of ADMITTED proactive sends. The gateway
+   * router is the sole writer (same isolation as the wait store — the brain
+   * never reaches it). `record` appends one admitted send;
+   * `readState` folds the window projection the pure budget evaluator consumes
+   * (`windowStartAt` is the caller's `at - budget.windowMs`).
+   */
+  export interface EgressBudgetSubAdapter {
+    record(row: Gateway.EgressDebitRow): void;
+    readState(
+      senderId: string,
+      targetActorId: string,
+      windowStartAt: number,
+    ): Gateway.EgressDebitState;
   }
 
   export interface CronJobSubAdapter {

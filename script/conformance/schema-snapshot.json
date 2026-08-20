@@ -312,6 +312,13 @@
     "userId",
     "workspace"
   ],
+  "Gateway.EgressDebitRow": ["at", "class", "id", "senderId", "targetActorId"],
+  "Gateway.EgressDebitState": [
+    "converseInWindow",
+    "countInWindow",
+    "lastSendAt",
+    "notifyInWindow"
+  ],
   "Gateway.MessageTarget": ["actorId", "endpointId"],
   "Gateway.Origin": ["externalId", "surface"],
   "Gateway.ReplyGrantRule": [
@@ -339,12 +346,24 @@
   "Gateway.SendInput": [
     "at",
     "body",
+    "class",
     "messageId",
     "operation",
     "senderId",
     "target",
     "traceId",
     "waitSpec"
+  ],
+  "Gateway.SocialBudget": [
+    "classCaps",
+    "cooldownMs",
+    "doNotContact",
+    "expiresAt",
+    "id",
+    "maxPerWindow",
+    "quietHours",
+    "targetActorId",
+    "windowMs"
   ],
   "Gateway.WaitContext": ["allowedAction", "engagementId", "waitId"],
   "Gateway.WaitControl": ["action", "reason", "waitId"],
