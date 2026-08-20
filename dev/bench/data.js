@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787218858765,
+  "lastUpdate": 1787230635302,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -58457,6 +58457,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 404376,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d9e046fa12486200d635fad851a9306f3d75f136",
+          "message": "feat: #219 v1 — synchronous active-egress gate (social budget) (#748)\n\n* feat(protocol): #219 active-egress contract (class, budget, debit)\n\nAdd the #219 synchronous-egress vocabulary at the gateway seam (schemas only;\nevaluation stays on the perimeter per the contract boundary):\n\n- SendInput gains `class: notify|converse`, additive-optional for backward\n  compat. A superRefine keeps the two axes coherent without collapsing them:\n  converse <=> awaited, notify <=> fire_and_forget. Absent class defaults from\n  operation downstream, so existing sends parse unchanged.\n- MessageDenialCode gains budget_exhausted / cooldown_suppressed / dnc_denied\n  (additive — the suppression outcome reuses the existing `denied` receipt arm,\n  no new union member; the #708 tool already renders `denied` as a result).\n- SocialBudget: the Owner-declared per-target egress cap (maxPerWindow, windowMs,\n  cooldownMs, optional classCaps / quietHours / doNotContact / expiresAt).\n- EgressDebitRow / EgressDebitState: the durable debit row + the window/cooldown\n  read projection the pure evaluator consumes.\n- EgressBudgetSubAdapter storage interface (perimeter domain; sole writer is the\n  channels router, like the wait store).\n\nSnapshot regenerated surgically for the additions.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* feat(ledger): #219 durable egress debit store + migration 0021\n\nThe perimeter-domain debit ledger the active-egress gate reads and writes\n(gateway is the sole writer, S8 — same isolation as the wait store):\n\n- EgressBudgetStore: record(row) appends one ADMITTED proactive send;\n  readState folds the window projection (count, per-class counts, and the\n  window-independent last-send-at cooldown clock). Fails closed on a missing\n  sub-adapter — the gate never fabricates an \"admitted\" answer.\n- sqlite adapter: append-only egress_debit table; readState is one aggregate\n  query. Migration 0021_egress_budget (table + (sender,target,at) index),\n  registered in the schema lifecycle + clear order.\n- check-deps: extend the S8 router-ledger named-import allowlist with\n  EgressBudgetStore, so only the judgment band may name it.\n\nRecord-before-act: the debit lands on admission, so split outreach across\nseparate calls cannot evade the cap and cooldown survives restart.\n\nThe p2-ledger-baseline manifest source-schema pin advances 0020 -> 0021 (the\nnew last-applied migration); the frozen-row integrity hashes are unchanged.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* feat(channels): #219 synchronous active-egress gate at send seam\n\nEvaluate the HOW-OFTEN axis at the #219 seam — after grant (MAY-I), before the\nWait record and the delivery effect — so a suppressed outreach records a typed\n`denied` receipt without opening a Wait or emitting bytes:\n\n- evaluateSocialBudget: a PURE fold (time + debit are inputs, no store/clock).\n  Order: do-not-contact -> lapsed allowance -> quiet hours -> cooldown ->\n  window cap -> class cap. budget === undefined is the fail-safe default\n  (cold proactive capped at zero), never permissive.\n- send.ts: read the debit state, evaluate, on suppress return the typed denial\n  (no Wait, no deliver); on allow record the debit (record-before-act) then\n  proceed to the existing Wait/deliver path.\n- The budget source is an OPTIONAL messaging port (like grants). Unwired = the\n  gate is fully bypassed (purely additive; existing sends unchanged).\n\nCold-proactive vs reply (the safety call): a reply-scoped grant instance\n(grant.replyScope set, materialized from a ReplyGrantRule) is a reply into an\ninitiating container and BYPASSES the gate entirely — the existing reply path\nis never throttled. Everything else is a cold initiation under an Owner\nstanding grant and is subject to the budget.\n\nDEFERRED (out of this PR, seam comment left in send.ts): the autonomous\ntimer-fired 봉수 escalation ladder / BeaconState / notify batching — blocked by\nthe #469 accumulator and a missing periodic-timeout firing source.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* feat(server): #219 socialBudget config + fail-safe egress wiring\n\n- config.ts: new messaging.socialBudget, parsed by resolveSocialBudget mirroring\n  resolveMessagingGrants (malformed -> drop + warn -> that target has no explicit\n  budget). Default EMPTY.\n- bootstrap: wire the budget source into the gateway router messaging port,\n  engaging the synchronous egress gate.\n\nFail-safe default (critical): empty socialBudget is NOT permissive. With the\ngate wired, a COLD proactive send to a target with no budget entry is suppressed\nbudget_exhausted (capped at zero), never unlimited. REPLIES (reply-scoped grant\ninstances) always bypass the gate, so absence never breaks the existing reply\npath — the #708/#747 harness reply cases stay green.\n\nConfig example documented in the JSDoc and apps/server/AGENTS.md.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* test(deps): pin egress-budget surface in S8 self-test (#219)\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-20T21:56:03+09:00",
+          "tree_id": "aff5f8c68a6819e90a4b1eb31c0712e59f3c4e19",
+          "url": "https://github.com/INONONO66/openomni/commit/d9e046fa12486200d635fad851a9306f3d75f136"
+        },
+        "date": 1787230633243,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 453,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 713,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6226,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10527,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2625,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3280,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2522,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16378,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8584,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1096,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 980,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1726,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1533,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 768,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 48705,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2367,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 520466,
             "unit": "ns/op"
           }
         ]
