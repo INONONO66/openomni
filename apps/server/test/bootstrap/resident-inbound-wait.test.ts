@@ -39,7 +39,7 @@ const serverConfig: ServerConfig = {
   telegram: { allowedUsers: [] },
   github: { allowedUsers: [] },
   discord: { allowedUsers: [] },
-  messaging: { grants: [], replyGrantRules: [] },
+  messaging: { grants: [], replyGrantRules: [], socialBudget: [] },
   permissionProfiles: {},
 };
 
