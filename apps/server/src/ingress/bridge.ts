@@ -23,10 +23,6 @@ export interface BridgeDeps {
 
 type ToolListProvider = Pick<McpToolProvider, "listTools">;
 
-function sanitizeToolName(name: string): string {
-  return name.replace(/\./g, "_");
-}
-
 /**
  * The server's explicit tool-permission ruleset for composed agents (audit
  * batch A): the execution runtime fails CLOSED on an absent permission, so
@@ -55,10 +51,13 @@ function buildAgentDefFromEntries(
   deps: BridgeDeps,
   selectedEntries: ReturnType<typeof selectToolEntries>,
 ): Ingress.AgentDef {
-  const specs = selectedEntries.map((entry) => ({
-    ...entry.tool.spec,
-    name: sanitizeToolName(entry.tool.spec.name),
-  }));
+  // AgentDef entries keep the DOTTED spec name end-to-end (`message.send`,
+  // `grep.search`, …). The provider-wire constraint (`^[a-zA-Z0-9_-]{1,128}$`)
+  // is owned solely by the `@openomni/llm` boundary (`assignWireToolNames` in
+  // run.ts, #749), which sanitizes only the name crossing to the SDK and
+  // records the dotted name back — so policy, dispatch, and the transcript all
+  // stay on the native dotted vocabulary.
+  const specs = selectedEntries.map((entry) => ({ ...entry.tool.spec }));
   const nativeTools = selectedEntries.map((entry) => entry.tool);
 
   return {

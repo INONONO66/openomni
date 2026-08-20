@@ -265,6 +265,79 @@ describe("run() streamText arguments", () => {
     ]);
   });
 
+  test("records the DOTTED internal name even though the provider echoes the wire name", async () => {
+    // The resident/prod path end to end: the AgentDef now carries the dotted
+    // spec name (`message.send`) straight into run() — the server-side
+    // sanitizes were removed, so the llm wire boundary is the ONLY coercion.
+    // The provider advertises + echoes the sanitized wire name (`message_send`),
+    // and the reverse map restores the dotted name on the recorded ToolPart so
+    // the transcript stays on the native vocabulary (the prior audit-tier
+    // wrinkle where a pre-underscored spec recorded `message_send`).
+    mock.module("ai", () => ({
+      streamText: () => ({
+        fullStream: (async function* () {
+          yield {
+            type: "tool-call",
+            toolCallId: "call-send",
+            toolName: "message_send",
+            input: { body: "hi" },
+          };
+          yield {
+            type: "tool-result",
+            toolCallId: "call-send",
+            toolName: "message_send",
+            output: "sent",
+          };
+          yield { type: "finish" };
+        })(),
+      }),
+      jsonSchema: (schema: unknown) => ({ jsonSchema: schema }),
+      stepCountIs: () => () => false,
+    }));
+
+    const recordedCalls: Array<{ tool: string }> = [];
+    const recordedParts: Array<{ type: string; tool?: string }> = [];
+    const capturingSink: Sink = {
+      onMessage: (message) => {
+        for (const part of message.parts) {
+          recordedParts.push(part as { type: string; tool?: string });
+        }
+      },
+      onToolCall: (call) => recordedCalls.push(call),
+      onToolResult: () => undefined,
+    };
+
+    await run(
+      {
+        trace: TEST_TRACE,
+        events: Bus,
+        messages: [],
+        tools: [
+          { name: "message.send", description: "message.send", inputSchema: { type: "object" } },
+        ],
+        toolExecutor: async (call) => ({
+          id: "result-send",
+          toolCallId: call.id,
+          output: "sent",
+          isError: false,
+        }),
+        auth: { type: "api", key: "test-key-run" },
+        model: {
+          id: "gpt-4o",
+          providerID: TEST_PROVIDER_ID,
+          name: "OpenAI-pattern proxy",
+          api: { npm: "@ai-sdk/openai" },
+        },
+      },
+      capturingSink,
+    );
+
+    // Dispatched + recorded on the native dotted vocabulary, not the wire name.
+    expect(recordedCalls.map((call) => call.tool)).toEqual(["message.send"]);
+    const toolPart = recordedParts.find((part) => part.type === "tool");
+    expect(toolPart?.tool).toBe("message.send");
+  });
+
   test("omits the providerOptions key entirely when none are configured", async () => {
     await run(
       {

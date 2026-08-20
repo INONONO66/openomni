@@ -165,6 +165,21 @@ describe("ingress bridge transport boundary", () => {
     ]);
   });
 
+  it("keeps DOTTED spec names in the AgentDef — the llm wire boundary owns sanitize", () => {
+    // A dotted native/MCP name (`grep.search`) must survive into the AgentDef
+    // unchanged: the provider-pattern coercion belongs solely to the
+    // `@openomni/llm` wire boundary (#749), so policy/dispatch/transcript keep
+    // the native dotted vocabulary. Pre-reconcile the bridge underscored here.
+    const dottedDeps = {
+      ...deps,
+      systemProvider: makeProvider([makeTool("read"), makeTool("grep.search")]),
+    };
+    const agent = buildResidentAgentDef(dottedDeps);
+    const names = agent.tools?.map((tool) => tool.name) ?? [];
+    expect(names).toContain("grep.search");
+    expect(names).not.toContain("grep_search");
+  });
+
   it("keeps full agent tool selection available for spawned workers", () => {
     const { customProvider: _customProvider, ...workerDeps } = deps;
     const workerAgent = buildAgentDef("dev", workerDeps);

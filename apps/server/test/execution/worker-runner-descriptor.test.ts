@@ -8,7 +8,7 @@ import { createSpawnOptions, createValidRequest, successfulResult } from "./work
 type AgentTool = NonNullable<ChatAgentConfig["tools"]>[number];
 
 describe("WorkerRunner tool descriptors", () => {
-  it("preserves the listed MCP descriptor when exposing a renamed tool to ChatAgent", async () => {
+  it("preserves the listed MCP descriptor and keeps the dotted name when exposing a tool to ChatAgent", async () => {
     // Given
     const descriptor: Policy.Resource.Descriptor = {
       id: "tool:mcp:filesystem:write_file",
@@ -53,7 +53,10 @@ describe("WorkerRunner tool descriptors", () => {
           getBootstrap: () => bootstrap,
           createAgent: (config) => ({
             async run() {
-              exposedTool = config.tools?.find((tool) => tool.name === "mcp_filesystem_write_file");
+              // The exposed spec keeps its DOTTED internal name: the worker no
+              // longer underscores here — the `@openomni/llm` wire boundary
+              // (#749) owns the provider-pattern coercion on the worker path.
+              exposedTool = config.tools?.find((tool) => tool.name === "mcp.filesystem.write_file");
               return successfulResult;
             },
           }),
@@ -68,7 +71,7 @@ describe("WorkerRunner tool descriptors", () => {
 
     // Then
     expect(exposedTool).toEqual({
-      name: "mcp_filesystem_write_file",
+      name: "mcp.filesystem.write_file",
       description: "Write a file",
       inputSchema: { type: "object" },
       safe: false,

@@ -69,9 +69,14 @@ describe("worker-runtime", () => {
     }
   });
 
-  it("selects requested tools by sanitized protocol names", () => {
+  it("matches an underscored request but keeps the dotted internal name", () => {
     const availableTools = new SystemToolProvider("/workspace/openomni").listTools();
 
+    // A request may still name a tool in the underscored wire form
+    // (`grep_search`); `expandRequestedToolNames` matches it tolerantly against
+    // the dotted catalog entry. But the exposed spec keeps the DOTTED internal
+    // name — the `@openomni/llm` wire boundary (#749) is the only place that
+    // coerces to the provider pattern, on the worker path too.
     const context = createExecutionToolContext(
       {
         tools: [
@@ -83,7 +88,7 @@ describe("worker-runtime", () => {
       availableTools,
     );
 
-    expect(context.tools?.map((tool) => tool.name)).toEqual(["bash", "grep_search"]);
+    expect(context.tools?.map((tool) => tool.name)).toEqual(["bash", "grep.search"]);
     expect(context.toolExecutor).toBeDefined();
   });
 

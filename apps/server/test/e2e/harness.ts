@@ -159,6 +159,15 @@ export function composeHarness(config: ComposeConfig): Harness {
   // = `createToolExecutor({ tools, config })`, and `permissions` allow-by-default
   // (the execution runtime fails closed on an absent permission). The S6 gate
   // overrides this to deny-all for an evidence_only delivery.
+  //
+  // TOOL NAMES: `tools` carries the tools' DOTTED spec names verbatim
+  // (`message.send`, `engagement.open`, …) — exactly as the production
+  // `buildAgentDefFromEntries` now does. There is NO name sanitize here (and
+  // none in the bridge): the provider-wire coercion `^[a-zA-Z0-9_-]{1,128}$`
+  // is owned SOLELY by the `@openomni/llm` boundary (`assignWireToolNames`,
+  // #749), which sanitizes only the name crossing to the SDK and records the
+  // dotted name back. So this harness feeding dotted specs straight to run()
+  // mirrors prod — it is not a bug to "fix" by underscoring here.
   const agentDef: Ingress.AgentDef = {
     model: config.model.model,
     systemPrompt: SYSTEM_PROMPT,
