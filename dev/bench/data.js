@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787235143039,
+  "lastUpdate": 1787237353355,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -58685,6 +58685,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 513932,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7454909ddbfe8dcda8cd071247a82ad5ba75633a",
+          "message": "refactor(server): drop duplicate tool-name sanitize, llm owns it (#750)\n\nTool-name `.`→`_` sanitize existed in THREE places after #749 added the\nuniversal provider-wire boundary in @openomni/llm (assignWireToolNames):\nthe two server-side sanitizes (bridge.ts AgentDef build, worker-runtime.ts\nexposed-tool build) were now redundant. Remove them so AgentDef and worker\ntool specs keep DOTTED names end-to-end; only the llm wire coerces to the\nprovider pattern and records the dotted name back on the transcript.\n\nPreconditions verified:\n- worker agent loop runs through llm run() (ChatAgent.run → runAgent →\n  llmRun), so the llm boundary sanitizes the worker path too — worker-runtime\n  underscoring was redundant.\n- no consumer dispatches/authorizes by the underscored spec name; policy sees\n  the dotted name directly (engagement.*/message.send match), and the\n  executor's call.tool is the internal dotted spec name.\n\nAlso simplify turn.ts resolvePolicyToolName: with names dotted end-to-end the\n`_`→`.` recovery leg is dead (the executor never receives a mangled name), so\nit drops to a direct lookup + `tool:` canonical redirect (kept for MCP/aliased\ntools). The #606 MCP-routing test is retargeted to the dotted call it now\nreceives (still routes fail-closed to tool.mcp.pre).\n\nTests: bridge/worker pins that the AgentDef + exposed specs keep dotted names;\nrun-stream-args pins dotted-spec-in → dotted-recorded through the real run().\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-20T14:47:56Z",
+          "tree_id": "df28ed65f0ef3713c92365e560800866242177b0",
+          "url": "https://github.com/INONONO66/openomni/commit/7454909ddbfe8dcda8cd071247a82ad5ba75633a"
+        },
+        "date": 1787237352462,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 447,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 648,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5867,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9571,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2515,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2934,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2463,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15319,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8074,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1053,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 948,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1520,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1604,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 773,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 46073,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2318,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 515715,
             "unit": "ns/op"
           }
         ]
