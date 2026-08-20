@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { Gateway, Operational } from "@openomni/protocol";
+import { Actor, Gateway, Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { z } from "zod";
 import { parseMcpServerConfigs, type McpServerConfig } from "./config/mcp-server-config";
@@ -48,7 +48,24 @@ interface RawConfig {
     personaActorId?: unknown;
     replyGrantRules?: unknown;
   };
+  permissionProfiles?: unknown;
 }
+
+/**
+ * 고도화 A — the Owner-declared tier→tool-set permission cap, expressed as an
+ * additive deny-label overlay (NOT a name enumeration, NOT a permission
+ * replacement). The only knob is `denyLabels`: capability labels
+ * (`capability:write` / `capability:destructive` / `capability:read`, stamped
+ * on every tool by `defineTool`) or risk tiers (`risk:tier-N`). These union
+ * into the resident's effective `Policy.Permission.denyLabels` at composition,
+ * so the deny-wins ordering caps the tier WITHOUT discarding the agent's own
+ * allowlist/denylist. Restricting the shape to `denyLabels` keeps this a cap,
+ * never a way to WIDEN authority. The type is inlined into `ServerConfig`
+ * (not a named export) so the shape stays server-config-local.
+ */
+const TierPermissionProfileSchema = z.object({
+  denyLabels: z.array(z.string().min(1)),
+});
 
 export interface ServerConfig {
   workspace?: { root: string };
@@ -74,6 +91,30 @@ export interface ServerConfig {
     personaActorId?: string;
     replyGrantRules: Gateway.ReplyGrantRule[];
   };
+  /**
+   * 고도화 A — per-tier deny-label overlays keyed by `Actor.TrustTier`. Default
+   * EMPTY: with no profile configured, every tier stays at its base permission
+   * (no relaxation, no extra cap). A malformed entry is dropped per-tier
+   * (fail-closed: that tier gets NO relaxation), never crashing boot.
+   *
+   * The Owner declares the tier→tool-set cap as DATA in `config.json`; a
+   * read/analysis-only collaborator is one config block:
+   *
+   * ```json
+   * {
+   *   "permissionProfiles": {
+   *     "collaborator": { "denyLabels": ["capability:write", "capability:destructive"] },
+   *     "observer": { "denyLabels": ["capability:write", "capability:destructive", "capability:read"] }
+   *   }
+   * }
+   * ```
+   *
+   * `owner` / `co_owner` / `manager` are intentionally omitted → no overlay,
+   * tools unchanged. The overlay composes AFTER the `evidence_only` hard gate
+   * (evidence still wins deny-all) and merges INTO the agent's own permission
+   * (additive deny; the agent's allowlist/denylist survive).
+   */
+  permissionProfiles: Partial<Record<Actor.TrustTier, { denyLabels: string[] }>>;
 }
 
 let _config: ServerConfig | null = null;
@@ -163,6 +204,50 @@ function resolvePersonaActorId(
   return undefined;
 }
 
+function resolvePermissionProfiles(
+  raw: RawConfig,
+  configPath: string,
+  traceId: string,
+): Partial<Record<Actor.TrustTier, { denyLabels: string[] }>> {
+  const value = raw.permissionProfiles;
+  if (value === undefined) return {};
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    // Fail closed: a non-object profiles block caps nothing and relaxes
+    // nothing — every tier stays at its base permission.
+    Bus.publish(
+      Operational.Events.Warn,
+      Operational.envelope({
+        traceId,
+        component: "server",
+        msg: "invalid permissionProfiles config ignored; every tier stays at its base permission",
+        context: { configPath },
+      }),
+    );
+    return {};
+  }
+  const resolved: Partial<Record<Actor.TrustTier, { denyLabels: string[] }>> = {};
+  for (const [tier, profile] of Object.entries(value)) {
+    const tierParsed = Actor.TrustTier.safeParse(tier);
+    const profileParsed = TierPermissionProfileSchema.safeParse(profile);
+    if (tierParsed.success && profileParsed.success) {
+      resolved[tierParsed.data] = profileParsed.data;
+      continue;
+    }
+    // Fail closed per entry: an unknown tier key or a malformed overlay is
+    // dropped, so THAT tier gets no relaxation (and no accidental cap either).
+    Bus.publish(
+      Operational.Events.Warn,
+      Operational.envelope({
+        traceId,
+        component: "server",
+        msg: "invalid permissionProfiles entry ignored; that tier stays at its base permission",
+        context: { configPath, tier },
+      }),
+    );
+  }
+  return resolved;
+}
+
 function resolve(raw: RawConfig, configPath: string, traceId: string): ServerConfig {
   const defaultDbPath = join(homedir(), ".openomni", "storage.db");
   const workspaceRoot = raw.workspace?.root;
@@ -226,6 +311,7 @@ function resolve(raw: RawConfig, configPath: string, traceId: string): ServerCon
       personaActorId: resolvePersonaActorId(raw, configPath, traceId),
       replyGrantRules: resolveReplyGrantRules(raw, configPath, traceId),
     },
+    permissionProfiles: resolvePermissionProfiles(raw, configPath, traceId),
   };
 }
 

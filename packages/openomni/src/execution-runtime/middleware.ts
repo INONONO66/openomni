@@ -43,9 +43,33 @@ type WorkerCompactionConfig = {
   readonly elideToolOutputs?: { minOutputChars: number; keepHeadChars: number };
 };
 
+/**
+ * 고도화 A — a tier→tool-set permission cap expressed as an ADDITIVE deny-label
+ * overlay (never a name enumeration, never a permission replacement). The
+ * Owner declares, as DATA, that a trust tier's tools are capped by capability
+ * (`capability:write` / `capability:destructive` / `capability:read`, stamped
+ * by `defineTool`); the overlay's `denyLabels` union into the effective
+ * permission's `denyLabels`, so the deny-wins ordering caps the tier WITHOUT
+ * discarding the agent's own allowlist/denylist. Absent overlay → no
+ * relaxation change (base behavior).
+ */
+export interface TierDenyOverlay {
+  readonly denyLabels: readonly string[];
+}
+
 export interface WorkerMiddlewareConfig {
   permissions?: Policy.Permission;
   policyPlan?: Policy.PolicyPlan;
+  /**
+   * 고도화 A — the resolved deny-label overlay for the triggering delivery's
+   * trust tier (looked up from the injected profiles table by the resident
+   * runtime). Composes AFTER the S6 `evidence_only` cap: evidence_only still
+   * short-circuits to deny-all; only a `full_access` turn gets the overlay
+   * merged onto its base permission. Absent for tiers with no profile entry
+   * (owner/co_owner/manager by default) and for runs with no trust tier
+   * (internal / wait-resumption / anonymous).
+   */
+  tierDenyOverlay?: TierDenyOverlay;
   /**
    * The trace of the run these policies are being resolved for. Resolution
    * reports a missing optional policy, and that report is filed under this
@@ -86,6 +110,22 @@ const FAIL_CLOSED_TOOL_PERMISSION: Policy.Permission = { action: "tool.call", de
  */
 function isEvidenceOnly(config: WorkerMiddlewareConfig): boolean {
   return config.inboundTreatment === "evidence_only";
+}
+
+/**
+ * 고도화 A additive-deny merge: union the tier overlay's `denyLabels` into the
+ * effective permission, preserving everything else (allowlist/denylist/rules)
+ * so the cap tightens WITHOUT replacing the agent's own ruleset. A no-op
+ * overlay (absent or empty) returns the permission unchanged by reference, so
+ * callers can cheaply detect "nothing changed".
+ */
+function applyTierDenyOverlay(
+  permission: Policy.Permission,
+  overlay: TierDenyOverlay | undefined,
+): Policy.Permission {
+  if (overlay === undefined || overlay.denyLabels.length === 0) return permission;
+  const merged = [...new Set([...(permission.denyLabels ?? []), ...overlay.denyLabels])];
+  return { ...permission, denyLabels: merged };
 }
 
 export function buildWorkerMiddleware(config: WorkerMiddlewareConfig): PolicyEngineRegistration[] {
@@ -168,10 +208,15 @@ function buildLegacyPermissionMiddleware(
     createToolPermissionPolicy({
       // No plan and no legacy permissions: nothing declared a ruleset for
       // this run, so the guard denies every tool instead of allowing all.
-      // An evidence_only run is capped to deny-all regardless (S6 hard gate).
+      // Composition order: evidence_only cap (deny-all, S6) → tier deny-overlay
+      // → agent base permission. evidence_only short-circuits; only a
+      // full_access turn gets the tier overlay merged onto its base.
       permission: isEvidenceOnly(config)
         ? FAIL_CLOSED_TOOL_PERMISSION
-        : (config.permissions ?? FAIL_CLOSED_TOOL_PERMISSION),
+        : applyTierDenyOverlay(
+            config.permissions ?? FAIL_CLOSED_TOOL_PERMISSION,
+            config.tierDenyOverlay,
+          ),
       events: Bus,
     }),
   ];
@@ -197,13 +242,16 @@ function hydrateToolPermissionConfig(
   workerConfig: WorkerMiddlewareConfig,
 ): Policy.PolicyPlan {
   const evidenceOnly = isEvidenceOnly(workerConfig);
+  const overlay = workerConfig.tierDenyOverlay;
   const fallbackPermission = workerConfig.permissions ?? FAIL_CLOSED_TOOL_PERMISSION;
   let changed = false;
   const policies = plan.policies.map((policy) => {
     if (policy.id !== "builtin:tool-permission") return policy;
     const config = policy.config ?? {};
-    // S6 hard gate: an evidence_only run's tool authority is capped to
-    // deny-all, OVERRIDING whatever ruleset the plan declares.
+    // Composition order: evidence_only cap (deny-all, S6) → tier deny-overlay
+    // → the plan's/legacy ruleset. The S6 hard gate short-circuits FIRST:
+    // an evidence_only run's tool authority is capped to deny-all, OVERRIDING
+    // whatever ruleset the plan declares and skipping the tier overlay.
     if (evidenceOnly) {
       changed = true;
       return { ...policy, config: { ...config, permission: FAIL_CLOSED_TOOL_PERMISSION } };
@@ -213,14 +261,25 @@ function hydrateToolPermissionConfig(
     // either, the absent arm fails CLOSED (deny-all): a plan that selects the
     // guard without a ruleset gets no implicit allow-all.
     // A present-but-invalid permission is treated as explicit and fails closed.
+    // 고도화 A: a full_access turn merges the tier deny-overlay onto the
+    // effective permission (additive deny, deny-wins preserved).
     if ("permission" in config) {
-      if (Policy.Permission.safeParse(config.permission).success) return policy;
+      const parsed = Policy.Permission.safeParse(config.permission);
+      if (parsed.success) {
+        const overlaid = applyTierDenyOverlay(parsed.data, overlay);
+        if (overlaid === parsed.data) return policy;
+        changed = true;
+        return { ...policy, config: { ...config, permission: overlaid } };
+      }
       changed = true;
       return { ...policy, config: { ...config, permission: FAIL_CLOSED_TOOL_PERMISSION } };
     }
 
     changed = true;
-    return { ...policy, config: { ...config, permission: fallbackPermission } };
+    return {
+      ...policy,
+      config: { ...config, permission: applyTierDenyOverlay(fallbackPermission, overlay) },
+    };
   });
 
   return changed ? { ...plan, policies } : plan;

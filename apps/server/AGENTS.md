@@ -11,7 +11,7 @@ Depends on `@openomni/protocol`, `@openomni/policy`, `@openomni/ledger`, `@openo
 ```
 src/
 ├── index.ts              # Entry — calls bootstrap/main()
-├── config.ts             # loadConfig() — reads env / config files into ServerConfig
+├── config.ts             # loadConfig() — reads env / config files into ServerConfig (incl. permissionProfiles: 고도화 A per-tier deny-label tool caps, fail-closed empty)
 ├── recovery.ts           # Crash-recovery glue (delegates to bootstrap/recovery)
 ├── bootstrap/
 │   ├── index.ts          # main() — wires storage, tool providers, resolveModel() (providers.ts merged here, #476), channels, server, recovery, shutdown
