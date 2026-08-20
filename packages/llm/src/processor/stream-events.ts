@@ -20,7 +20,19 @@ export type StreamEventContext = {
   readonly record: (fact: Transcript.Fact) => void;
   /** Debug note for normalized-away provider anomalies (#532-6). */
   readonly note: (msg: string, data?: Record<string, unknown>) => void;
+  /**
+   * Wire tool name → internal dotted name. The provider echoes the sanitized
+   * wire name on stream events; this restores the dotted internal name on the
+   * recorded part so the transcript keeps the native vocabulary. Absent =
+   * record the name verbatim.
+   */
+  readonly toolNames?: ReadonlyMap<string, string>;
 };
+
+/** Map a wire tool name back to its internal dotted name, if known. */
+function resolveToolName(wireName: string, context: StreamEventContext): string {
+  return context.toolNames?.get(wireName) ?? wireName;
+}
 
 type OpenBlock = {
   partId: string;
@@ -327,7 +339,7 @@ function handleToolCall(
     messageID: context.messageID,
     type: "tool",
     callID,
-    tool: String(event.toolName),
+    tool: resolveToolName(String(event.toolName), context),
     state: { status: "pending", input },
   };
   appendPart(part, context);
@@ -363,7 +375,8 @@ function handleToolResult(
       messageID: context.messageID,
       type: "tool",
       callID: toolCallId,
-      tool: String(event.toolName ?? "unknown"),
+      tool:
+        event.toolName !== undefined ? resolveToolName(String(event.toolName), context) : "unknown",
       state: { status: "pending", input: {} },
     };
     const at = Date.now();
@@ -386,7 +399,9 @@ function handleToolResult(
           to: "completed",
           at: Date.now(),
           output: outputPayload.output,
-          ...(event.toolName !== undefined ? { title: String(event.toolName) } : {}),
+          ...(event.toolName !== undefined
+            ? { title: resolveToolName(String(event.toolName), context) }
+            : {}),
         },
     context,
   );

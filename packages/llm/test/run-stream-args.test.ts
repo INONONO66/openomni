@@ -212,6 +212,59 @@ describe("run() streamText arguments", () => {
     expect(Object.keys(streamArgs.tools ?? {})).toEqual(["lookup"]);
   });
 
+  // The real native tool catalog: dotted names a provider SDK rejects
+  // (`^[a-zA-Z0-9_-]{1,128}$`). Kept as literals so this llm-package test does
+  // not depend on @openomni/openomni (the catalog's home).
+  const NATIVE_TOOL_NAMES = [
+    "message.send",
+    "engagement.open",
+    "engagement.transition",
+    "engagement.list",
+    "grep.search",
+    "recall.output",
+  ];
+
+  test("serializes native dotted tool names to the provider wire pattern", async () => {
+    await run(
+      {
+        trace: TEST_TRACE,
+        events: Bus,
+        messages: [],
+        tools: NATIVE_TOOL_NAMES.map((name) => ({
+          name,
+          description: name,
+          inputSchema: { type: "object" as const },
+        })),
+        auth: { type: "api", key: "test-key-run" },
+        model: {
+          id: "gpt-4o",
+          providerID: TEST_PROVIDER_ID,
+          name: "OpenAI-pattern proxy",
+          api: { npm: "@ai-sdk/openai" },
+        },
+      },
+      mockSink,
+    );
+
+    const streamArgs = aiCapture.__openomniAiStreamArgs as { tools?: Record<string, unknown> };
+    const keys = Object.keys(streamArgs.tools ?? {});
+    expect(keys).toHaveLength(NATIVE_TOOL_NAMES.length);
+    // The invariant the live-LLM E2E surfaced: every serialized tool name must
+    // match the provider pattern, on ALL providers (the failure was OpenAI).
+    for (const key of keys) {
+      expect(key).toMatch(/^[a-zA-Z0-9_-]{1,128}$/);
+    }
+    // Plain `.`→`_` on the collision-free native catalog.
+    expect(keys).toEqual([
+      "message_send",
+      "engagement_open",
+      "engagement_transition",
+      "engagement_list",
+      "grep_search",
+      "recall_output",
+    ]);
+  });
+
   test("omits the providerOptions key entirely when none are configured", async () => {
     await run(
       {

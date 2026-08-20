@@ -75,6 +75,39 @@ export namespace Run {
   export type Outcome = z.infer<typeof Outcome>;
 }
 
+/**
+ * Assign each tool spec its wire name — the provider-pattern-safe key it takes
+ * in the `tools` object crossing to the SDK — and the reverse map back to the
+ * internal dotted name.
+ *
+ * The native catalog (`message.send`, `engagement.open`, …) is collision-free
+ * under plain `.`→`_`, but MCP tool names are `${server}.${name}` with
+ * arbitrary segments, so two distinct originals can sanitize to the same key.
+ * A silent overwrite of one tool's `execute` closure by another is a
+ * correctness bug, so a taken key is disambiguated with a deterministic
+ * `_2`/`_3`/… suffix (truncated to keep the 128-char bound). The reverse map
+ * lets the transcript record the dotted internal name instead of the wire name.
+ */
+function assignWireToolNames(tools: Tool.Spec[]): {
+  wireNames: string[];
+  originalByWire: Map<string, string>;
+} {
+  const wireNames: string[] = [];
+  const originalByWire = new Map<string, string>();
+  for (const spec of tools) {
+    const base = ProviderTransform.sanitizeToolName(spec.name);
+    let wire = base;
+    let suffix = 2;
+    while (originalByWire.has(wire)) {
+      const tail = `_${suffix++}`;
+      wire = base.slice(0, 128 - tail.length) + tail;
+    }
+    originalByWire.set(wire, spec.name);
+    wireNames.push(wire);
+  }
+  return { wireNames, originalByWire };
+}
+
 export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
   const { messages, system = "", signal, model } = input;
 
@@ -89,6 +122,12 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
   }
   const messageID = `msg-${crypto.randomUUID()}`;
   const parentID = messages[messages.length - 1]?.info.id || "";
+
+  // The tool set is fixed across retries, so the wire-name assignment (and its
+  // reverse map for transcript fidelity) is computed once here and captured by
+  // createStream. The reverse map keeps the recorded ToolPart.tool dotted even
+  // though the stream reports the wire name the provider echoed back.
+  const { wireNames, originalByWire } = assignWireToolNames(input.tools);
 
   const assistantMessage: Message.AssistantMessage = {
     id: messageID,
@@ -138,10 +177,15 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
         ]
       : [];
 
+    // Tools are keyed by their wire name (provider-pattern-safe), but the
+    // execute closure sets `tool: spec.name` (internal dotted) so execution
+    // and policy always see the dotted vocabulary. The SDK dispatches execute
+    // by the same key it advertised, so the wire→dotted reverse is free here.
     const sdkTools: Record<string, unknown> = {};
-    for (const spec of input.tools) {
+    input.tools.forEach((spec, index) => {
+      const wireName = wireNames[index] as string;
       const executor = input.toolExecutor;
-      sdkTools[spec.name] = {
+      sdkTools[wireName] = {
         type: "function" as const,
         description: spec.description,
         inputSchema: ai.jsonSchema(spec.inputSchema),
@@ -170,8 +214,8 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
           },
         }),
       };
-    }
-    const lastToolName = input.tools[input.tools.length - 1]?.name;
+    });
+    const lastToolName = wireNames[wireNames.length - 1];
     if (cacheOptions && lastToolName !== undefined) {
       (sdkTools[lastToolName] as Record<string, unknown>).providerOptions = cacheOptions;
     }
@@ -246,6 +290,7 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
     abort: abortSignal,
     sink,
     createStream,
+    toolNames: originalByWire,
     trace: {
       traceId,
       sessionId: sessionID,
