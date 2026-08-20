@@ -166,6 +166,88 @@ describe("run() tool execution ownership", () => {
     expect(output).toEqual({ output: "tool-error", isError: true });
   });
 
+  test("SDK invoking the sanitized wire key routes the dotted internal name to the executor", async () => {
+    const toolExecutor = mock(async (call: Tool.Call): Promise<Tool.Result> => {
+      return { id: "result-1", toolCallId: call.id, output: "sent" };
+    });
+
+    await run(
+      {
+        trace: TEST_TRACE,
+        events: Bus,
+        messages: [],
+        tools: [
+          {
+            name: "message.send",
+            description: "the native dotted tool",
+            inputSchema: { type: "object", properties: {} },
+          },
+        ],
+        model: testModel,
+        auth: { type: "api", key: "test-key-run-tool" },
+        toolExecutor,
+      },
+      mockSink,
+    );
+
+    const streamArgs = aiCapture.__openomniAiStreamArgs;
+    const tools = streamArgs?.tools as Record<
+      string,
+      { execute?: (a: Record<string, unknown>, o?: { toolCallId?: string }) => Promise<unknown> }
+    >;
+    // The SDK sees only the wire key; the dotted name would be rejected.
+    expect(tools.message_send).toBeDefined();
+    expect(tools["message.send"]).toBeUndefined();
+
+    await tools.message_send?.execute?.({ text: "hi" }, { toolCallId: "call-1" });
+
+    // The execute closure restores the dotted internal name for execution/policy.
+    expect(toolExecutor).toHaveBeenCalledWith(
+      { id: "call-1", tool: "message.send", input: { text: "hi" } },
+      { signal: expect.any(AbortSignal) },
+    );
+  });
+
+  test("distinct MCP originals that sanitize to one key get distinct reachable wire names", async () => {
+    const seen: string[] = [];
+    const toolExecutor = mock(async (call: Tool.Call): Promise<Tool.Result> => {
+      seen.push(call.tool);
+      return { id: `r-${call.id}`, toolCallId: call.id, output: "ok" };
+    });
+
+    await run(
+      {
+        trace: TEST_TRACE,
+        events: Bus,
+        messages: [],
+        // Two distinct arbitrary MCP names both sanitize to "srv_x_y".
+        tools: [
+          { name: "srv.x.y", description: "a", inputSchema: { type: "object" } },
+          { name: "srv_x_y", description: "b", inputSchema: { type: "object" } },
+        ],
+        model: testModel,
+        auth: { type: "api", key: "test-key-run-tool" },
+        toolExecutor,
+      },
+      mockSink,
+    );
+
+    const streamArgs = aiCapture.__openomniAiStreamArgs;
+    const tools = streamArgs?.tools as Record<
+      string,
+      { execute?: (a: Record<string, unknown>, o?: { toolCallId?: string }) => Promise<unknown> }
+    >;
+    const keys = Object.keys(tools);
+    // No silent overwrite: two keys, one disambiguated deterministically.
+    expect(keys).toEqual(["srv_x_y", "srv_x_y_2"]);
+
+    await tools.srv_x_y?.execute?.({}, { toolCallId: "c1" });
+    await tools.srv_x_y_2?.execute?.({}, { toolCallId: "c2" });
+
+    // Both closures are reachable and each routes to its own dotted original.
+    expect(seen).toEqual(["srv.x.y", "srv_x_y"]);
+  });
+
   test("normalizes missing tool execution results to structured output", async () => {
     const toolExecutor = mock(
       async (): Promise<Tool.Result> => undefined as unknown as Tool.Result,

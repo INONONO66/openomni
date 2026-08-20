@@ -104,6 +104,58 @@ describe("Processor tool result projection", () => {
     expect(runningSnapshot).toBeDefined();
   });
 
+  test("restores the dotted internal name on the recorded part via the reverse map", async () => {
+    // W4: the provider echoes the sanitized WIRE name on stream events, so
+    // without the reverse map the recorded ToolPart.tool would drift to
+    // "message_send". The map keeps the transcript on the native vocabulary.
+    const toolCalls: Tool.Call[] = [];
+    const toolResults: Tool.Result[] = [];
+    const messages: Message.WithParts[] = [];
+    const sink: Sink = {
+      onMessage: (message) => messages.push(message),
+      onToolCall: (call) => toolCalls.push(call),
+      onToolResult: (result) => toolResults.push(result),
+    };
+
+    const processor = Processor.create({
+      assistantMessage: assistantMessage(),
+      sessionID: "session-tool-result",
+      model,
+      abort: new AbortController().signal,
+      sink,
+      events: Bus,
+      toolNames: new Map([["message_send", "message.send"]]),
+      trace: { traceId: "trace-processor-test", sessionId: "session-tool-result" },
+      createStream: async () => ({
+        fullStream: (async function* () {
+          yield {
+            type: "tool-call",
+            toolCallId: "call-send",
+            toolName: "message_send",
+            input: { text: "hi" },
+          };
+          yield {
+            type: "tool-result",
+            toolCallId: "call-send",
+            toolName: "message_send",
+            output: "sent",
+          };
+          yield { type: "finish" };
+        })(),
+      }),
+    });
+
+    await processor.process({ system: "" });
+
+    expect(toolCalls[0]?.tool).toBe("message.send");
+    const toolPart = messages.at(-1)?.parts.find((part) => part.type === "tool");
+    expect(toolPart).toMatchObject({
+      callID: "call-send",
+      tool: "message.send",
+      state: { status: "completed", title: "message.send" },
+    });
+  });
+
   test("synthesizes an error part for unmatched AI SDK tool-result stream parts", async () => {
     const toolCalls: Tool.Call[] = [];
     const toolResults: Tool.Result[] = [];

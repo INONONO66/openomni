@@ -51,7 +51,10 @@ function buildToolCallBlock(call: {
   return {
     type: "tool-call",
     toolCallId: call.id,
-    toolName: call.tool,
+    // Wire name: prior turns must re-serialize the same provider-pattern-safe
+    // name the tools array advertised, or the request is rejected on replay.
+    // Runs for every provider (this builder is provider-agnostic).
+    toolName: ProviderTransform.sanitizeToolName(call.tool),
     input: call.input,
     providerExecuted: false,
   };
@@ -69,7 +72,8 @@ function buildToolResultBlock(result: {
   return {
     type: "tool-result",
     toolCallId: result.id,
-    toolName: result.tool,
+    // Wire name, matching the tool-call block above (all providers).
+    toolName: ProviderTransform.sanitizeToolName(result.tool),
     output: { type: "text", value: result.output },
   };
 }

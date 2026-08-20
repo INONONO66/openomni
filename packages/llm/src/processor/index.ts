@@ -49,6 +49,14 @@ export namespace Processor {
     events: BusEvent.Sink;
     createStream: (input: StreamInput) => Promise<Stream>;
     /**
+     * Wire tool name → internal dotted name. The provider echoes the sanitized
+     * wire name (`message_send`) on tool-call/result stream events, so the
+     * transcript would otherwise record the drifted name; this reverse map
+     * restores the dotted internal name (`message.send`) on the recorded part.
+     * Absent = record the name verbatim.
+     */
+    toolNames?: ReadonlyMap<string, string>;
+    /**
      * The call's identity. Required: `run()` always has it, and making it
      * optional is what justified filing records under `traceId ?? sessionID`
      * — a session id in the field every reader treats as a trace.
@@ -85,6 +93,7 @@ export namespace Processor {
       sink: configuredSink = createNoopSink(),
       events,
       createStream,
+      toolNames,
       maxRetryAttempts = DEFAULT_MAX_RETRY_ATTEMPTS,
       trace,
     } = options;
@@ -162,6 +171,7 @@ export namespace Processor {
               sink,
               record,
               note: debugNote,
+              ...(toolNames !== undefined && { toolNames }),
             };
 
             function finishAttempt(finish: Transcript.FinishReason): void {

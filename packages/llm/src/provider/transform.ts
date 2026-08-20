@@ -147,6 +147,20 @@ export namespace ProviderTransform {
     return toolCallID.replace(/[^a-zA-Z0-9_-]/g, "_");
   }
 
+  /**
+   * Coerce a tool name to the provider-agnostic wire pattern
+   * `^[a-zA-Z0-9_-]{1,128}$`. Native tools are dotted (`message.send`) and MCP
+   * tools are `${server}.${name}` with arbitrary segments, but every provider
+   * SDK (the failure surfaced on an OpenAI-pattern proxy) rejects a name with a
+   * dot. This runs for ALL providers — it is NOT the Anthropic-only
+   * name-touching branch above. The internal dotted vocabulary is unchanged;
+   * only the name that crosses to the SDK is sanitized, and the SDK's
+   * key-match dispatch makes the reverse map free at execution time.
+   */
+  export function sanitizeToolName(name: string): string {
+    return name.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 128);
+  }
+
   function buildMessageWithContent(
     msg: Extract<SDKMessage, { role: "assistant" | "tool" }>,
     content: NormalizableContentPart[],

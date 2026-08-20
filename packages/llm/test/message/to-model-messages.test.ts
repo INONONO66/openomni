@@ -360,6 +360,71 @@ describe("toModelMessages error-turn exclusion (#545 T2)", () => {
   });
 });
 
+describe("toModelMessages tool-name wire sanitization (all providers)", () => {
+  // A non-claude provider: the sanitize must run here too — the live-LLM
+  // failure was an OpenAI-pattern proxy, and the claude-only normalize branch
+  // never touches this model.
+  const openaiModel: Provider.Model = {
+    id: "gpt-4o",
+    providerID: "openai-proxy",
+    name: "Proxied",
+    api: { npm: "@ai-sdk/openai" },
+  };
+
+  function assistantWithDottedToolCall(): Message.WithParts {
+    return {
+      info: {
+        id: "msg-a",
+        sessionID: "session-1",
+        role: "assistant",
+        time: { created: 1100, completed: 1200 },
+        parentID: "msg-u",
+        modelID: "gpt-4o",
+        providerID: "openai-proxy",
+        agent: "default",
+        path: { cwd: "/", root: "/" },
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        finish: "stop",
+      } as Message.AssistantMessage,
+      parts: [
+        {
+          id: "part-tool",
+          sessionID: "session-1",
+          messageID: "msg-a",
+          type: "tool",
+          callID: "call-1",
+          tool: "message.send",
+          state: {
+            status: "completed",
+            input: { text: "hi" },
+            output: "sent",
+            time: { start: 1100, end: 1150 },
+            title: "message.send",
+            metadata: {},
+          },
+        } as Message.ToolPart,
+      ],
+    };
+  }
+
+  test("sanitizes tool-call and tool-result block names for a non-claude provider", () => {
+    const result = toModelMessages([assistantWithDottedToolCall()], openaiModel);
+
+    const assistant = result.find((m) => m.role === "assistant");
+    const toolMsg = result.find((m) => m.role === "tool");
+    if (!assistant || !Array.isArray(assistant.content))
+      throw new Error("expected tool-call block");
+    if (!toolMsg || !Array.isArray(toolMsg.content)) throw new Error("expected tool-result block");
+
+    const toolCall = assistant.content.find((b) => b.type === "tool-call");
+    const toolResult = toolMsg.content.find((b) => b.type === "tool-result");
+    // The dotted internal name must not leak into the re-serialized history.
+    expect((toolCall as { toolName?: string }).toolName).toBe("message_send");
+    expect((toolResult as { toolName?: string }).toolName).toBe("message_send");
+  });
+});
+
 describe("toModelMessages reasoning signature resend gate (#532 candidate 10)", () => {
   const outgoing: Provider.Model = {
     id: "claude-3-5-sonnet",
