@@ -279,11 +279,17 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
     ]);
   });
 
-  it("routes an underscore-mangled MCP call to tool.mcp.pre — never native (#606)", async () => {
+  it("routes a dotted MCP call (mcp labels, no tool: canonical) to tool.mcp.pre — never native (#606)", async () => {
     // The tool registers under its dotted name with mcp labels and NO tool:
-    // canonical label; an executor calling the underscore-mangled alias must
-    // still resolve the labels — the old resolver returned the mangled name
-    // unresolved, downgrading the call to the fail-open tool.native.pre.
+    // canonical label. The executor must resolve its labels so the call routes
+    // to the fail-closed tool.mcp.pre — not the fail-open tool.native.pre
+    // (#606). Post-#749 the name reaching the executor is the internal DOTTED
+    // spec name: the llm wire boundary confines the provider-pattern coercion
+    // to the SDK edge and records the dotted name back, so a mangled name never
+    // re-enters the internal vocabulary. The former `_`→`.` recovery leg in
+    // resolvePolicyToolName is therefore dead and was removed; this pins the
+    // live invariant — an mcp-labelled tool routes fail-closed by its dotted
+    // name.
     const seen: string[] = [];
     const engine = PolicyEngine.create();
     engine.register({
@@ -325,7 +331,7 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
     );
     if (result.type !== "ready") throw new Error("expected a prepared turn");
 
-    await result.turn.runInput.toolExecutor?.({ id: "call", tool: "server_tool", input: {} });
+    await result.turn.runInput.toolExecutor?.({ id: "call", tool: "server.tool", input: {} });
 
     expect(seen).toEqual(["tool.mcp.pre", "tool.mcp.post"]);
   });

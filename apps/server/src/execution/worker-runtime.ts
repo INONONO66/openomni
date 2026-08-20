@@ -66,9 +66,14 @@ export function createExecutionToolContext(
     return {};
   }
   return {
+    // Keep the DOTTED spec name: the worker's agent loop runs through
+    // `@openomni/llm` run() (ChatAgent.run → runAgent → llmRun), whose
+    // `assignWireToolNames` (#749) owns the provider-wire `.`→`_` coercion and
+    // records the dotted name back. Underscoring here would be a redundant
+    // second sanitize that also drifted the recorded transcript off the native
+    // vocabulary.
     tools: selectedTools.map((tool) => ({
       ...tool.spec,
-      name: tool.spec.name.replace(/\./g, "_"),
       ...(tool.descriptor !== undefined && { descriptor: tool.descriptor }),
     })),
     toolExecutor: createToolExecutor({
