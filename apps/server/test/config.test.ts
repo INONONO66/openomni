@@ -299,6 +299,84 @@ describe("config", () => {
     );
   });
 
+  it("resolves permissionProfiles per tier; defaults empty (고도화 A)", () => {
+    const configPath = join(tempDir, "config.json");
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        permissionProfiles: {
+          collaborator: { denyLabels: ["capability:write", "capability:destructive"] },
+          observer: {
+            denyLabels: ["capability:write", "capability:destructive", "capability:read"],
+          },
+        },
+      }),
+    );
+
+    const config = loadConfig("trace-test", configPath);
+    expect(config.permissionProfiles.collaborator).toEqual({
+      denyLabels: ["capability:write", "capability:destructive"],
+    });
+    expect(config.permissionProfiles.observer?.denyLabels).toContain("capability:read");
+    // A tier with no entry stays absent → no relaxation, no cap.
+    expect(config.permissionProfiles.owner).toBeUndefined();
+
+    const emptyPath = join(tempDir, "empty-profiles.json");
+    writeFileSync(emptyPath, JSON.stringify({}));
+    expect(loadConfig("trace-test", emptyPath).permissionProfiles).toEqual({});
+  });
+
+  it("drops malformed permissionProfiles entries fail-closed with a warning (고도화 A)", async () => {
+    const warnings: unknown[] = [];
+    const unsubscribe = Bus.subscribe(Operational.Events.Warn, (payload) => warnings.push(payload));
+    const configPath = join(tempDir, "config.json");
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        permissionProfiles: {
+          // Unknown tier key → dropped.
+          overlord: { denyLabels: ["capability:write"] },
+          // Malformed overlay shape → dropped.
+          manager: { denyLabels: "capability:write" },
+          // Valid → kept.
+          collaborator: { denyLabels: ["capability:write"] },
+        },
+      }),
+    );
+
+    const config = loadConfig("trace-test", configPath);
+    await flushBus();
+    unsubscribe();
+
+    expect(config.permissionProfiles.collaborator).toEqual({ denyLabels: ["capability:write"] });
+    expect((config.permissionProfiles as Record<string, unknown>).overlord).toBeUndefined();
+    expect(config.permissionProfiles.manager).toBeUndefined();
+    expect(warnings).toContainEqual(
+      expect.objectContaining({
+        msg: "invalid permissionProfiles entry ignored; that tier stays at its base permission",
+        context: expect.objectContaining({ tier: "overlord" }),
+      }),
+    );
+  });
+
+  it("treats a non-object permissionProfiles block as empty, fail-closed (고도화 A)", async () => {
+    const warnings: unknown[] = [];
+    const unsubscribe = Bus.subscribe(Operational.Events.Warn, (payload) => warnings.push(payload));
+    const configPath = join(tempDir, "config.json");
+    writeFileSync(configPath, JSON.stringify({ permissionProfiles: ["capability:write"] }));
+
+    const config = loadConfig("trace-test", configPath);
+    await flushBus();
+    unsubscribe();
+
+    expect(config.permissionProfiles).toEqual({});
+    expect(warnings).toContainEqual(
+      expect.objectContaining({
+        msg: "invalid permissionProfiles config ignored; every tier stays at its base permission",
+      }),
+    );
+  });
+
   it("returns undefined when neither config file nor env var is set", () => {
     delete process.env.TELEGRAM_BOT_TOKEN;
     delete process.env.DISCORD_BOT_TOKEN;

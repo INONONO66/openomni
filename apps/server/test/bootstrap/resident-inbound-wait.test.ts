@@ -40,6 +40,7 @@ const serverConfig: ServerConfig = {
   github: { allowedUsers: [] },
   discord: { allowedUsers: [] },
   messaging: { grants: [], replyGrantRules: [] },
+  permissionProfiles: {},
 };
 
 const originalBeginWait = WorkItemAttemptRun.beginWait;
