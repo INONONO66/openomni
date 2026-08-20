@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787230635302,
+  "lastUpdate": 1787235143039,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -58571,6 +58571,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 520466,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "060134c97154e2130caa7a82b5d685104d8f6020",
+          "message": "fix(llm): sanitize tool names to provider pattern (wire-only) (#749)\n\n* fix(llm): sanitize tool names to provider pattern (wire-only)\n\nProviders require tool names to match ^[a-zA-Z0-9_-]{1,128}$, but native\ntools are dotted (message.send, engagement.open, grep.search, ...) and MCP\ntools are ${server}.${name} with arbitrary segments. A live-LLM E2E on an\nOpenAI-pattern proxy rejected the dotted names.\n\nThe internal dotted vocabulary is load-bearing (policy matching, tool\ndispatch, resource labels), so this is a wire-only fix: only the name that\ncrosses to the provider SDK is sanitized, and the SDK's key-match dispatch\nmakes the reverse free at execution time.\n\n- Add provider-agnostic ProviderTransform.sanitizeToolName (runs for every\n  provider, not the Anthropic-only name branch).\n- Key the SDK tools object by the wire name; keep the execute closure setting\n  the dotted spec.name so execution and policy see the dotted vocabulary.\n- Disambiguate wire-name collisions (possible for arbitrary MCP names) with a\n  deterministic _2/_3 suffix so no execute closure is silently overwritten.\n- Thread a wire->dotted reverse map into the processor so the recorded\n  transcript ToolPart keeps the dotted internal name the provider echoed back\n  as the wire name.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(llm): sanitize tool names in replayed message history\n\nPrior tool_use/tool_result blocks re-serialize the tool name into later\nrequests, so a dotted name would leak back to the provider on every\nmulti-turn/replay turn even after the tools array was fixed. Sanitize the\ntoolName in the tool-call and tool-result block builders — the single choke\npoint that covers every provider (the claude-only normalize branch does not)\nand both block types.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-20T14:11:10Z",
+          "tree_id": "53b950db416d519aa8311e9d2a11458b81f0967e",
+          "url": "https://github.com/INONONO66/openomni/commit/060134c97154e2130caa7a82b5d685104d8f6020"
+        },
+        "date": 1787235142404,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 445,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 601,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5887,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 8947,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2504,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2807,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2410,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15159,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7926,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1023,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 944,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1467,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1585,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 746,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 46017,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2328,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 513932,
             "unit": "ns/op"
           }
         ]
