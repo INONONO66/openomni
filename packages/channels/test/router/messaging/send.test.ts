@@ -350,6 +350,59 @@ describe("delivery receipt", () => {
   });
 });
 
+describe("durable send admission faults", () => {
+  test.each([
+    ["unexpected type", "other.fact", {}],
+    ["corrupt payload", "gateway.send.admitted", { signature: 7 }],
+  ] as const)("fails closed on an %s", async (_name, type, data) => {
+    const input = buildSendInput({ messageId: `message:bad-${_name}` });
+    const ledger = Storage.get().ledger;
+    if (ledger === undefined) throw new Error("ledger sub-adapter missing");
+    const appended = ledger.append(
+      {
+        streamId: `gateway_send:${encodeURIComponent(input.messageId)}`,
+        type,
+        data,
+      },
+      0,
+    );
+    expect(appended.kind).toBe("appended");
+
+    await expect(messaging().send(input)).rejects.toThrow(
+      type === "other.fact" ? "unexpected fact type" : "corrupt send admission fact",
+    );
+    expect(deliveries).toEqual([]);
+  });
+
+  test("reusing a fire-and-forget message id with different bytes throws before delivery", async () => {
+    const first = buildSendInput({ messageId: "message:immutable" });
+    expect((await messaging().send(first)).kind).toBe("sent");
+
+    await expect(messaging().send({ ...first, body: "mutated body" })).rejects.toThrow(
+      "already admitted with different content",
+    );
+    expect(deliveries).toHaveLength(1);
+  });
+
+  test("a Wait id owned by another message is denied before a second delivery", async () => {
+    const first = buildAwaitedSendInput({ messageId: "message:first-owner" });
+    const spec = first.waitSpec;
+    if (spec === undefined) throw new Error("awaited fixture requires waitSpec");
+    const second = buildAwaitedSendInput({
+      messageId: "message:second-owner",
+      waitSpec: { ...spec, correlation: { tokenHash: "second" } },
+    });
+
+    expect((await messaging().send(first)).kind).toBe("sent");
+    const receipt = await messaging().send(second);
+
+    expect(receipt.kind).toBe("denied");
+    if (receipt.kind === "denied") expect(receipt.code).toBe("wait_duplicate");
+    expect(deliveries).toHaveLength(1);
+    expect(WaitStore.get(spec.waitId)?.originMessageId).toBe("message:first-owner");
+  });
+});
+
 const activeBudget: Gateway.SocialBudget = {
   id: "budget:reconciliation",
   targetActorId: "actor:target",

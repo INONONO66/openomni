@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, test } from "bun:test";
 import type { Channel } from "@openomni/protocol";
 import { DiscordAdapter } from "../src/discord/surface";
 import { TelegramAdapter } from "../src/telegram/surface";
+import { Dedupe, DedupeWindow } from "../src/support/dedupe";
 
 /**
  * D1: telegram message_id is a PER-CHAT counter, so two different chats can
@@ -159,5 +160,38 @@ describe("outbound adapter delivery dedupe capability", () => {
     // This is the current production path: frozen apps/server wiring drops
     // the key, so retries can create a second platform message.
     expect(outboundCalls()).toBe(2);
+  });
+
+  test("Discord returns the final chunk id as the reply correlation", async () => {
+    const { owner, outboundCalls } = discordFixture();
+
+    const receipt = await owner.deliver("recipient-1", "a".repeat(2001), "chunked-message");
+
+    expect(outboundCalls()).toBe(2);
+    expect(receipt).toEqual({ externalMessageId: "discord-message-2" });
+  });
+
+  test("a failed keyed delivery is evicted so a retry can make progress", async () => {
+    const dedupe = new DedupeWindow<string>();
+    let attempts = 0;
+    const operation = async () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("transient owner failure");
+      return "delivered";
+    };
+
+    await expect(dedupe.run("message-1", operation)).rejects.toThrow("transient owner failure");
+    expect(await dedupe.run("message-1", operation)).toBe("delivered");
+    expect(attempts).toBe(2);
+  });
+
+  test("the inbound dedupe bound evicts oldest ids rather than dropping new work", () => {
+    const dedupe = new Dedupe(Number.POSITIVE_INFINITY, 2);
+    for (let index = 0; index < 100; index += 1) {
+      expect(dedupe.isDuplicate(`message-${index}`)).toBe(false);
+    }
+
+    expect(dedupe.isDuplicate("message-0")).toBe(false);
+    expect(dedupe.isDuplicate("message-99")).toBe(true);
   });
 });

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { BusEvent, Gateway } from "@openomni/protocol";
 import {
   createReplyGrantInstances,
+  replyGrantEndpointFromFacts,
   type ReplyGrantAdmission,
 } from "../../../src/router/messaging/reply-grant.js";
 
@@ -48,6 +49,23 @@ function harness(rules: readonly Gateway.ReplyGrantRule[]) {
 }
 
 describe("reply-grant instance materialization", () => {
+  test("malformed or ambiguous route facts never reconstruct endpoint authority", () => {
+    expect(replyGrantEndpointFromFacts([])).toBeUndefined();
+    expect(
+      replyGrantEndpointFromFacts([
+        "reply_grant.endpoint.channel:telegram",
+        "reply_grant.endpoint.external_id:%E0%A4%A",
+      ]),
+    ).toBeUndefined();
+    expect(
+      replyGrantEndpointFromFacts([
+        "reply_grant.endpoint.channel:telegram",
+        "reply_grant.endpoint.channel:discord",
+        "reply_grant.endpoint.external_id:chat-1",
+      ]),
+    ).toBeUndefined();
+  });
+
   test("an admitted first-contact actor on a covered surface materializes one bounded instance", () => {
     const { instances, published } = harness([rule()]);
 
