@@ -64,15 +64,19 @@ export class TelegramAdapter implements Channel.Surface {
     this.poller = new TelegramPoller(
       this.client,
       {
-        onMessage: (message) => {
+        onMessage: async (message) => {
           // D1: message_id is a PER-CHAT counter, so two different chats can
           // share one id within the dedupe window — key by chat to avoid
           // silently dropping the second chat's message.
-          if (this.dedupe.isDuplicate(`${message.chat.id}:${message.message_id}`)) return;
+          const dedupeKey = `${message.chat.id}:${message.message_id}`;
+          if (this.dedupe.isDuplicate(dedupeKey)) return;
           // Origin: the first frame of an inbound telegram message — this ONE
           // mint is the message's trace, carried to the run (D11).
           const messageTraceId = newTraceId();
-          this.handleMessage(message, messageTraceId).catch((err) => {
+          try {
+            await this.handleMessage(message, messageTraceId);
+          } catch (err) {
+            this.dedupe.forget(dedupeKey);
             this.publish(Operational.Events.Error, {
               traceId: messageTraceId,
               time: Date.now(),
@@ -80,7 +84,8 @@ export class TelegramAdapter implements Channel.Surface {
               msg: "telegram message handling failed",
               context: { err: String(err) },
             });
-          });
+            throw err;
+          }
         },
       },
       this.publish,

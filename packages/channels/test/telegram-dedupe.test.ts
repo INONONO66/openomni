@@ -34,7 +34,7 @@ describe("TelegramAdapter dedupe (D1)", () => {
 
   beforeEach(() => {
     let getUpdatesCall = 0;
-    globalThis.fetch = (async (input: string | URL | Request) => {
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith("/getMe")) {
         return jsonResponse({ id: 42, username: "bot", first_name: "Bot" });
@@ -48,8 +48,14 @@ describe("TelegramAdapter dedupe (D1)", () => {
             { update_id: 2, message: tgMessage(100, 222, "hello from chat two") },
           ]);
         }
-        await new Promise((resolve) => setTimeout(resolve, 50));
-        return jsonResponse([]);
+        return new Promise<Response>((_resolve, reject) => {
+          const signal = init?.signal;
+          signal?.addEventListener(
+            "abort",
+            () => reject(signal.reason ?? new DOMException("Aborted", "AbortError")),
+            { once: true },
+          );
+        });
       }
       // sendChatAction / sendMessage / anything else
       return jsonResponse(true);
@@ -58,15 +64,16 @@ describe("TelegramAdapter dedupe (D1)", () => {
 
   it("delivers same message_id from two different chats (no cross-chat collision)", async () => {
     const delivered: Channel.InboundMessage[] = [];
+    const deliveredBoth = Promise.withResolvers<void>();
     const adapter = new TelegramAdapter("test-token", { triggers: [] }, () => undefined);
     adapter.onMessage(async (message) => {
       delivered.push(message);
+      if (delivered.length === 2) deliveredBoth.resolve();
       return null;
     });
 
     await adapter.start("trace-dedupe-test");
-    // handleMessage is fired (not awaited) inside the poll loop — let it settle.
-    await new Promise((resolve) => setTimeout(resolve, 40));
+    await deliveredBoth.promise;
     adapter.stop("trace-dedupe-test");
 
     expect(delivered).toHaveLength(2);
