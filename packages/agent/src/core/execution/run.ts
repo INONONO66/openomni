@@ -243,8 +243,11 @@ export async function runAgent(
             continue;
           }
 
-          if (outcome.type === "aborted") throw Retry.abortError();
-          if (outcome.type === "error") throw new Error(outcome.error.message);
+          if (outcome.type === "aborted") throw outcome.error ?? Retry.abortError();
+          if (outcome.type === "error") {
+            if (outcome.error instanceof Error) throw outcome.error;
+            throw new Error(outcome.error.message);
+          }
           const _exhaustive: never = outcome;
           throw new Error(`Unknown outcome type: ${unknownOutcomeType(_exhaustive)}`);
         }

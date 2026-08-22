@@ -1,3 +1,4 @@
+import { Run } from "@openomni/llm";
 import { z } from "zod";
 
 /**
@@ -92,6 +93,8 @@ export function classifyRetryReason(errorMessage: string): RetryReason {
  * same prompt fails the same way.
  */
 export function isContextOverflow(error: Error): boolean {
+  const failure = asLlmFailure(error);
+  if (failure !== undefined) return failure.data.contextOverflow;
   const normalized = error.message.toLowerCase();
   return (
     normalized.includes("context_length_exceeded") ||
@@ -123,7 +126,15 @@ export function abortError(message = "aborted"): Error {
  * telemetry (#audit M4).
  */
 export function isAbort(error: Error, signal?: AbortSignal): boolean {
-  return signal?.aborted === true || error.name === "AbortError";
+  return (
+    signal?.aborted === true ||
+    error.name === "AbortError" ||
+    asLlmFailure(error)?.data.aborted === true
+  );
+}
+
+function asLlmFailure(error: Error): Run.Failure | undefined {
+  return Run.FailureError.isInstance(error as unknown) ? (error as Run.Failure) : undefined;
 }
 
 /**

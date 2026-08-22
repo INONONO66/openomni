@@ -9,6 +9,8 @@ import type { Provider } from "./provider";
 import { ProviderTransform } from "./provider/transform";
 import { getLanguage } from "./provider/sdk";
 import { Auth } from "./auth/storage";
+import { coerceApiError, NamedError } from "./error";
+import { Retry } from "./retry";
 
 /**
  * Input for the run() function.
@@ -76,18 +78,49 @@ export interface RunDependencies {
 }
 
 export namespace Run {
+  const FailureUsage = z.object({
+    inputTokens: z.number(),
+    outputTokens: z.number(),
+    reasoningTokens: z.number(),
+    cacheReadTokens: z.number(),
+    cacheWriteTokens: z.number(),
+  });
+
+  /**
+   * The typed failure crossing from the provider-owning package to Agent.
+   * `cause` remains Error's native cause chain; machine-consumed facts live
+   * in data so consumers never have to recover them from prose.
+   */
+  export const FailureError = NamedError.create(
+    "LlmRunFailure",
+    z.object({
+      message: z.string(),
+      providerErrorName: z.string().optional(),
+      retryAfterMs: z.number().nonnegative().optional(),
+      usage: FailureUsage,
+      aborted: z.boolean(),
+      contextOverflow: z.boolean(),
+    }),
+  );
+  export type Failure = InstanceType<typeof FailureError>;
+
+  const LegacyError = z.object({
+    message: z.string(),
+    name: z.string().optional(),
+    stack: z.string().optional(),
+  });
+
   export const Outcome = z.discriminatedUnion("type", [
     z.object({ type: z.literal("stop") }),
     z.object({ type: z.literal("continue") }),
     z.object({ type: z.literal("compact") }),
-    z.object({ type: z.literal("aborted") }),
+    z.object({
+      type: z.literal("aborted"),
+      error: z.instanceof(FailureError).optional(),
+    }),
     z.object({
       type: z.literal("error"),
-      error: z.object({
-        message: z.string(),
-        name: z.string().optional(),
-        stack: z.string().optional(),
-      }),
+      error: z.union([z.instanceof(FailureError), LegacyError]),
     }),
   ]);
   export type Outcome = z.infer<typeof Outcome>;
@@ -368,7 +401,30 @@ export async function run(
     return { type: "stop" };
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
-    const aborted = abortSignal.aborted;
+    const apiError = coerceApiError(err);
+    const source = apiError ?? err;
+    const sourceFacts = errorFacts(source);
+    const aborted = abortSignal.aborted || sourceFacts.aborted === true;
+    const usage = processor.usageTotals;
+    const retryAfterMs = Retry.retryAfterMs(source);
+    const failure = new Run.FailureError(
+      {
+        message: err.message,
+        providerErrorName: err.name,
+        ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
+        usage: {
+          inputTokens: usage.input,
+          outputTokens: usage.output,
+          reasoningTokens: usage.reasoning,
+          cacheReadTokens: usage.cache.read,
+          cacheWriteTokens: usage.cache.write,
+        },
+        aborted,
+        contextOverflow: sourceFacts.contextOverflow === true,
+      },
+      { cause: source },
+    );
+    if (err.stack !== undefined) failure.stack = err.stack;
 
     input.events.publish(LlmCall.Events.Failed, {
       traceId,
@@ -383,16 +439,29 @@ export async function run(
     });
 
     if (aborted) {
-      return { type: "aborted" };
+      return { type: "aborted", error: failure };
     }
 
+    return { type: "error", error: failure };
+  }
+}
+
+function errorFacts(error: unknown): { aborted?: boolean; contextOverflow?: boolean } {
+  if (typeof error !== "object" || error === null) return {};
+  if ("data" in error && typeof error.data === "object" && error.data !== null) {
+    const data = error.data as Record<string, unknown>;
     return {
-      type: "error",
-      error: {
-        message: err.message,
-        name: err.name,
-        stack: err.stack,
-      },
+      ...(typeof data.aborted === "boolean" ? { aborted: data.aborted } : {}),
+      ...(typeof data.contextOverflow === "boolean"
+        ? { contextOverflow: data.contextOverflow }
+        : {}),
     };
   }
+  const record = error as Record<string, unknown>;
+  return {
+    ...(typeof record.aborted === "boolean" ? { aborted: record.aborted } : {}),
+    ...(typeof record.contextOverflow === "boolean"
+      ? { contextOverflow: record.contextOverflow }
+      : {}),
+  };
 }

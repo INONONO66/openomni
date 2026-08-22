@@ -1,6 +1,5 @@
-import type { RunInput } from "@openomni/llm";
+import { Run, type RunInput, type Sink } from "@openomni/llm";
 import { type Message, Operational, PolicyDecision } from "@openomni/protocol";
-import type { Sink } from "@openomni/llm";
 import type { BusEvent, Policy, Tool } from "@openomni/protocol";
 import {
   describeBudgetRemaining,
@@ -595,14 +594,27 @@ export async function handleError(
   retryPolicy: Parameters<typeof Retry.shouldRetry>[0],
 ): Promise<ErrorDecision> {
   const normalizedError = error instanceof Error ? error : new Error(String(error));
+  const typedFailure = Run.FailureError.isInstance(normalizedError as unknown)
+    ? (normalizedError as Run.Failure)
+    : undefined;
   const onErrorDecision = await engine.dispatchPoint(
     "run.error.error",
     buildLifecyclePolicyContext(state, config, agentBase, {
       toolInput: {
         error: {
-          name: normalizedError.name,
+          name: typedFailure?.data.providerErrorName ?? normalizedError.name,
           message: normalizedError.message,
           ...(normalizedError.stack === undefined ? {} : { stack: normalizedError.stack }),
+          ...(typedFailure === undefined
+            ? {}
+            : {
+                ...(typedFailure.data.retryAfterMs === undefined
+                  ? {}
+                  : { retryAfterMs: typedFailure.data.retryAfterMs }),
+                usage: typedFailure.data.usage,
+                aborted: typedFailure.data.aborted,
+                contextOverflow: typedFailure.data.contextOverflow,
+              }),
         },
       },
       errorCode: normalizedError.name || "Error",
