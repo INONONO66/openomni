@@ -1,4 +1,4 @@
-import { Ipc } from "@openomni/protocol";
+import type { Ipc } from "@openomni/protocol";
 
 type MethodTable = typeof Ipc.Methods;
 type MethodName = keyof MethodTable;

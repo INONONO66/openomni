@@ -12,5 +12,5 @@
     }
   },
   "include": ["src", "test"],
-  "exclude": ["node_modules", "dist"]
+  "exclude": ["node_modules", "dist", "test/typed-facade-fixtures"]
 }
