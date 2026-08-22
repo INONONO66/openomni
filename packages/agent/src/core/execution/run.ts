@@ -2,7 +2,6 @@ import {
   assertToolExecutor,
   assertUnambiguousToolMetadata,
   buildTurn,
-  handleCompact,
   handleContinue,
   handleError,
   handleStop,
@@ -234,12 +233,6 @@ export async function runAgent(
 
           if (outcome.type === "continue") {
             handleContinue(config.events, state, agentBase, turnResult.turn.turnUsage);
-            continue;
-          }
-
-          if (outcome.type === "compact") {
-            const compactOutcome = await handleCompact(state, engine, config, agentBase);
-            if (compactOutcome !== "continue") return finish(compactOutcome);
             continue;
           }
 

@@ -394,8 +394,6 @@ export async function createIpcServer(
   };
 }
 
-// merged from codec.ts (#453 hygiene: sub-30-LOC single-importer)
-
 type IpcMessage = Ipc.Request | Ipc.Response | Ipc.Notification;
 
 // Cap how much of an unrecognized payload the error message echoes back.

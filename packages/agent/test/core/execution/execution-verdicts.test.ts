@@ -1,4 +1,4 @@
-import { buildTurn, handleCompact, handleStop } from "../../../src/core/execution/turn";
+import { buildTurn, handleStop } from "../../../src/core/execution/turn";
 import { describe, expect, it } from "bun:test";
 import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
@@ -199,35 +199,6 @@ describe("execution helper deny verdicts", () => {
     if (outcome === "continue") throw new Error("expected the run to end");
     expect(outcome.guardAborted).toBeUndefined();
     expect(hasDenyDiagnostic(diagnostics, "turn.finish")).toBe(true);
-  });
-
-  it("records a diagnostic and fail-closes completion.prepare deny", async () => {
-    Bus.reset();
-    const diagnostics: unknown[] = [];
-    const unsubscribe = Bus.observe((event, payload) => {
-      if (event.name === Operational.Events.Info.name) diagnostics.push(payload);
-    });
-    const engine = PolicyEngine.create();
-    registerAt(
-      engine,
-      "run.completion.pre",
-      "deny-compaction",
-      100,
-      () => deny("test.deny", "post-compaction"),
-      ["audit.annotate"],
-    );
-
-    try {
-      const result = await handleCompact(makeState(), engine, makeConfig(), makeAgentBase());
-      await Promise.resolve();
-
-      expect(result).not.toBe("continue");
-      if (result === "continue") throw new Error("expected the run to end");
-      expect(result.guardAborted).toBe(true);
-      expect(hasDenyDiagnostic(diagnostics, "completion.prepare")).toBe(true);
-    } finally {
-      unsubscribe();
-    }
   });
 });
 

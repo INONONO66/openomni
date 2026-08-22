@@ -44,10 +44,6 @@ export class WebSocketHandler {
         void self.handleMessage(ws, raw, traceId);
       },
       open(ws: { data: WsConnectionData }) {
-        ws.data = {
-          surfaceKey: ws.data.surfaceKey,
-          authenticated: ws.data.authenticated,
-        };
         self.publish(Operational.Events.Info, {
           traceId: newTraceId(),
           time: Date.now(),

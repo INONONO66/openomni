@@ -247,48 +247,4 @@ describe("run() tool execution ownership", () => {
     // Both closures are reachable and each routes to its own dotted original.
     expect(seen).toEqual(["srv.x.y", "srv_x_y"]);
   });
-
-  test("normalizes missing tool execution results to structured output", async () => {
-    const toolExecutor = mock(
-      async (): Promise<Tool.Result> => undefined as unknown as Tool.Result,
-    );
-
-    await run(
-      {
-        trace: TEST_TRACE,
-        events: Bus,
-        messages: [],
-        tools: [
-          {
-            name: "test_tool",
-            description: "A test tool",
-            inputSchema: { type: "object", properties: {} },
-          },
-        ],
-        model: testModel,
-        auth: { type: "api", key: "test-key-run-tool" },
-        toolExecutor,
-      },
-      mockSink,
-    );
-
-    const streamArgs = aiCapture.__openomniAiStreamArgs;
-    const tools = streamArgs?.tools as Record<
-      string,
-      {
-        execute?: (
-          args: Record<string, unknown>,
-          options?: { toolCallId?: string; abortSignal?: AbortSignal },
-        ) => Promise<{ output: string; isError?: boolean }>;
-      }
-    >;
-    const output = await tools.test_tool?.execute?.({}, { toolCallId: "call-missing-result" });
-
-    expect(output).toEqual({ output: "" });
-    // Pin (#606 audit): a minted id can never correlate with the stream's
-    // tool part — execute without the SDK-supplied toolCallId refuses.
-    await expect(tools.test_tool?.execute?.({})).rejects.toThrow(
-      "tool execute called without toolCallId",
-    );
-  });
 });

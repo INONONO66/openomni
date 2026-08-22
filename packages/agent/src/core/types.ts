@@ -2,9 +2,9 @@ import type { Actor, BusEvent, Model, Policy, Token, Tool } from "@openomni/prot
 import type { Provider, RunInput, Sink } from "@openomni/llm";
 import type { PolicyEngineRegistration } from "./policy/types";
 
-export interface TokenUsage extends Token.AgentUsage {}
+export type TokenUsage = Token.AgentUsage;
 
-export interface AgentBudget extends Actor.Profile.Budget {}
+export type AgentBudget = Actor.Profile.Budget;
 
 type AgentToolSpec = Tool.Spec & {
   readonly descriptor?: Policy.Resource.Descriptor;

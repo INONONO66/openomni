@@ -50,13 +50,11 @@ export namespace Provider {
   function catalogModels(provider: ModelsDev.Provider): Record<string, Model> {
     const models: Record<string, Model> = {};
 
-    if (provider.models) {
-      for (const [id, rawModel] of Object.entries(provider.models)) {
-        const isValid = typeof rawModel === "object" && rawModel !== null;
-        if (!isValid) continue;
+    for (const [id, rawModel] of Object.entries(provider.models)) {
+      const isValid = typeof rawModel === "object" && rawModel !== null;
+      if (!isValid) continue;
 
-        models[id] = fromModelsDevModel(provider, rawModel as ModelsDev.Model);
-      }
+      models[id] = fromModelsDevModel(provider, rawModel as ModelsDev.Model);
     }
 
     return models;

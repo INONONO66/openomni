@@ -169,7 +169,7 @@ export function connectIpcClient(
       // sharing a chunk with a bad line still resolves its call.
       if (malformed.length > 0) {
         connected = false;
-        failAllPending(new IpcProtocolError(`received invalid IPC frame: ${malformed[0] ?? ""}`));
+        failAllPending(new IpcProtocolError(`received invalid IPC frame: ${malformed[0]}`));
         socket.destroy();
       }
     });

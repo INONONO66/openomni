@@ -72,7 +72,6 @@ type RouteChannel =
 type RouteActor = {
   readonly id: string;
   readonly trustTier: Actor.TrustTier;
-  readonly registered: true;
 };
 
 export type RouteState = {

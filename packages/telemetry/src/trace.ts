@@ -11,9 +11,7 @@
  * as attributes. They are ours; the trace and span ids are not.
  */
 
-/** 32 lowercase hex characters. */
 export type TraceId = string;
-/** 16 lowercase hex characters. */
 export type SpanId = string;
 
 export interface TraceScope {
@@ -37,7 +35,6 @@ const INVALID_SPAN_ID = "0".repeat(16);
 const TRACEPARENT_PATTERN = /^([0-9a-f]{2})-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})(-.*)?$/;
 const FORBIDDEN_TRACEPARENT_VERSION = "ff";
 
-/** A W3C trace id — the mint moved to protocol (gateway stage-1 seam prep, #551); re-exported here unchanged. */
 import { newTraceId } from "@openomni/protocol";
 export { newTraceId };
 

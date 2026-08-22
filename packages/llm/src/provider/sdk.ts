@@ -104,9 +104,8 @@ export function getSDK(model: Provider.Model, auth: Auth.Info): ProviderSDK {
   if (auth.type === "api") {
     sdkOptions.apiKey = auth.key;
   } else if (auth.type === "proxy") {
-    const proxyAuth = auth as Extract<Auth.Info, { type: "proxy" }>;
-    if (proxyAuth.baseURL) sdkOptions.baseURL = proxyAuth.baseURL;
-    sdkOptions.apiKey = proxyAuth.apiKey ?? "proxy";
+    sdkOptions.baseURL = auth.baseURL;
+    sdkOptions.apiKey = auth.apiKey ?? "proxy";
   }
 
   if (!factory) {

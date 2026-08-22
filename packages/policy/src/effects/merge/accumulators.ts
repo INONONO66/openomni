@@ -36,12 +36,6 @@ export function approvalEffect(
 ): Policy.PolicyEffect {
   const reason = accumulator.reasons.length > 0 ? accumulator.reasons.join("; ") : undefined;
 
-  if (type === "tool.require_approval") {
-    return reason === undefined ? { type } : { type, reason };
-  }
-  if (type === "delegation.require_approval") {
-    return reason === undefined ? { type } : { type, reason };
-  }
   return reason === undefined ? { type } : { type, reason };
 }
 

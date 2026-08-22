@@ -1,25 +1,18 @@
 import { Run } from "@openomni/llm";
-import { z } from "zod";
 
 /**
- * #500 C1: the loop's retry policy, moved here from protocol `RetryPolicy`
- * — this package is its only producer and consumer. `retryOn` speaks the same
- * closed reason vocabulary as `RunEvents.ErrorRetry.reason` ({@link RetryReason}).
+ * The loop's retry policy. `retryOn` uses the same closed reason vocabulary
+ * as the retry event record.
  */
-export const RetryPolicy = z.object({
-  maxAttempts: z.number(),
-  backoffMs: z.object({
-    initial: z.number(),
-    multiplier: z.number(),
-    max: z.number(),
-  }),
-  retryOn: z
-    .array(
-      z.enum(["timeout", "tool_error", "transient_error", "validation_error", "context_overflow"]),
-    )
-    .optional(),
-});
-export type RetryPolicy = z.infer<typeof RetryPolicy>;
+export interface RetryPolicy {
+  maxAttempts: number;
+  backoffMs: {
+    initial: number;
+    multiplier: number;
+    max: number;
+  };
+  retryOn?: RetryReason[];
+}
 
 export type RetryReason =
   | "timeout"
@@ -48,9 +41,6 @@ export function calculateBackoffMs(policy: RetryPolicy, attempt: number): number
 }
 
 /**
- * Classifies an error for the retry policy. Pure: it reads a string and
- * returns a reason.
- *
  * Aborts are NOT classified here (#audit M4): "aborted" as a message
  * substring used to map to the retryable "timeout", so an abort mid-run
  * emitted a retry promise and then died in `Retry.sleep` — and a tool error
@@ -60,11 +50,6 @@ export function calculateBackoffMs(policy: RetryPolicy, attempt: number): number
  * condition that never throws — budget exhaustion ends the run with a
  * result, not an error.
  *
- * It used to narrate every branch through the Bus under a freshly minted
- * trace — eight events describing a decision the caller already reports, on
- * the run's own trace, two statements later (`emitErrorRetry` /
- * `emitRunFailed`). A record that duplicates a correlated one under an
- * uncorrelated id is worse than no record.
  */
 export function classifyRetryReason(errorMessage: string): RetryReason {
   const normalized = errorMessage.toLowerCase();
@@ -80,11 +65,6 @@ export function classifyRetryReason(errorMessage: string): RetryReason {
   return "transient_error";
 }
 
-/**
- * The typed abort the loop throws when it observes its own signal. The name
- * is the identity {@link isAbort} checks — never the message, which tool and
- * provider errors are free to collide with.
- */
 /**
  * Provider context-overflow, decided by message text (compaction-design L5;
  * pattern list adopted from pss-runtime's loop-overflow classifier). Checked
@@ -113,6 +93,11 @@ export function isContextOverflow(error: Error): boolean {
   );
 }
 
+/**
+ * The typed abort the loop throws when it observes its own signal. The name
+ * is the identity {@link isAbort} checks — never the message, which tool and
+ * provider errors are free to collide with.
+ */
 export function abortError(message = "aborted"): Error {
   const error = new Error(message);
   error.name = "AbortError";

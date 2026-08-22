@@ -79,7 +79,6 @@ export function requireTrace(
   return { ...traceContext, traceId, sessionId, runId };
 }
 
-/** A present, non-blank string. The one shape a trace field may take. */
 export function nonEmptyString(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
@@ -216,7 +215,6 @@ export function createRunState(input: ChatAgentInput & { traceContext: RunTrace 
   };
 }
 
-/** Stamps the runner's current retry attempt onto the run state (1-based). */
 export function recordRunAttempt(state: RunState, attempt: number): void {
   state.attempt = attempt;
 }

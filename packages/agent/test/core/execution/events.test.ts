@@ -56,16 +56,6 @@ describe("RunEvents BusEvents", () => {
     ).not.toThrow();
   });
 
-  test("Compaction parses", () => {
-    expect(() =>
-      RunEvents.Compaction.schema.parse({
-        ...base,
-        messagesBefore: 20,
-        messagesAfter: 5,
-      }),
-    ).not.toThrow();
-  });
-
   test("CompactionStarted parses, with and without measurement", () => {
     expect(() =>
       RunEvents.CompactionStarted.schema.parse({

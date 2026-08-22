@@ -1,5 +1,4 @@
 import type { Policy } from "@openomni/protocol";
-import { GitHubHmac } from "./definitions";
 import { evaluateChannelPermission, recordDecision } from "./decision";
 import type { ChannelAuthnDecisionObserver, GitHubAuthResult } from "./types";
 import { verifyGitHubSignature } from "../github/webhook";
@@ -61,7 +60,12 @@ export async function authenticateGitHubWebhook(input: {
     secret: input.secret,
   };
   const verdict = await evaluateGitHubHmac(state);
-  await recordDecision(GitHubHmac, verdict, Date.now() - startedAt, input.onDecision);
+  await recordDecision(
+    "channel-authn:github-hmac",
+    verdict,
+    Date.now() - startedAt,
+    input.onDecision,
+  );
 
   return {
     verdict,

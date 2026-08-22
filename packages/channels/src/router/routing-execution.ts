@@ -91,27 +91,6 @@ export function requireRoutedDecision(decision: Ingress.RoutingDecisionPayload):
   throw new IngressRoutingError("route_blocked", terminalMessage(decision), decision);
 }
 
-export function pinRouteSession<Event extends Gateway.DeliveredEvent>(
-  event: Event,
-  decision: AcceptedDecision,
-): Event {
-  if (decision.sessionId === undefined) return event;
-  return {
-    ...event,
-    activation: {
-      ...event.activation,
-      durableSessionId: decision.sessionId,
-    },
-  };
-}
-
-export function pinSelectedTarget<Event extends Gateway.DeliveredEvent>(
-  event: Event,
-  target: Ingress.Target,
-): Event {
-  return { ...event, target };
-}
-
 function projectWaitOwnerEvent<Event extends Gateway.DeliveredEvent>(
   event: Event,
   ownerSessionId: string,

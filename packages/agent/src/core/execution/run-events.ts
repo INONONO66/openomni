@@ -156,20 +156,6 @@ export function emitRunFailed(
   });
 }
 
-export function emitCompaction(
-  events: BusEvent.Sink,
-  agentBase: AgentRunBase,
-  messagesBefore: number,
-  messagesAfter: number,
-): void {
-  events.publish(RunEvents.Compaction, {
-    ...agentBase,
-    time: Date.now(),
-    messagesBefore,
-    messagesAfter,
-  });
-}
-
 export function publishDenyDiagnostic(
   events: BusEvent.Sink,
   timing: Policy.Timing,

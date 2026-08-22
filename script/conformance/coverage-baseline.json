@@ -1,8 +1,8 @@
 {
   "apps/server": {
-    "linesFound": 4625,
-    "linesHit": 4152,
-    "pct": 89.77
+    "linesFound": 4840,
+    "linesHit": 4374,
+    "pct": 90.37
   },
   "packages/agent": {
     "linesFound": 2726,
@@ -15,14 +15,14 @@
     "pct": 92.84
   },
   "packages/coordinator": {
-    "linesFound": 1259,
-    "linesHit": 1055,
-    "pct": 83.8
+    "linesFound": 1260,
+    "linesHit": 1056,
+    "pct": 83.81
   },
   "packages/ipc": {
-    "linesFound": 473,
-    "linesHit": 427,
-    "pct": 90.27
+    "linesFound": 480,
+    "linesHit": 444,
+    "pct": 92.5
   },
   "packages/ledger": {
     "linesFound": 4742,
@@ -30,14 +30,14 @@
     "pct": 96.1
   },
   "packages/llm": {
-    "linesFound": 1912,
-    "linesHit": 1798,
-    "pct": 94.04
+    "linesFound": 1971,
+    "linesHit": 1914,
+    "pct": 97.11
   },
   "packages/openomni": {
-    "linesFound": 12852,
-    "linesHit": 12193,
-    "pct": 94.87
+    "linesFound": 12881,
+    "linesHit": 12247,
+    "pct": 95.08
   },
   "packages/placement": {
     "linesFound": 22,
@@ -45,14 +45,14 @@
     "pct": 100
   },
   "packages/policy": {
-    "linesFound": 1621,
-    "linesHit": 1377,
-    "pct": 84.95
+    "linesFound": 1622,
+    "linesHit": 1400,
+    "pct": 86.31
   },
   "packages/protocol": {
-    "linesFound": 5974,
-    "linesHit": 5835,
-    "pct": 97.67
+    "linesFound": 6446,
+    "linesHit": 6297,
+    "pct": 97.69
   },
   "packages/telemetry": {
     "linesFound": 274,

@@ -1,1 +1,0 @@
-export { TelegramAdapter } from "./surface";
