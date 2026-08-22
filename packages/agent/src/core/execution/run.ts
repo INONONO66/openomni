@@ -10,6 +10,7 @@ import {
 import { ModelsDev, Provider, run as llmRun } from "@openomni/llm";
 import type { Sink } from "@openomni/llm";
 import { Placement } from "@openomni/placement";
+import { DEFAULT_THRESHOLD_RATIO } from "../../compaction/compact";
 import type { AgentResult, ChatAgentConfig, ChatAgentInput } from "../types";
 import * as Retry from "../retry";
 import { PolicyEngine, type PolicyEngineInstance } from "../policy";
@@ -172,15 +173,46 @@ export async function runAgent(
           if (turnResult.type === "complete") return finish(turnResult.result);
 
           const runLlm = config.llm?.run ?? llmRun;
-          const modelRequestResult = await dispatchModelRequest(
+          const gate = await dispatchModelRequest(
             state,
             engine,
             config,
             agentBase,
             providerModel.id,
           );
-          if (modelRequestResult) return finish(modelRequestResult);
-          const outcome = await runLlm(turnResult.turn.runInput, turnResult.turn.trackingSink);
+          if (gate.blocked) return finish(gate.blocked);
+          // model.override (#753): a connection.llm.pre policy reroutes THIS
+          // connection to a different model — connection-scoped: the next
+          // call re-resolves from the per-attempt selection. The window-yield
+          // arm point is recomputed from the OVERRIDE's window locally; run
+          // state keeps the attempt model's window fact (the next connection
+          // reverts to it), so nothing is re-recorded.
+          let callModel = providerModel;
+          let callRunInput = turnResult.turn.runInput;
+          if (
+            gate.overrideModel !== undefined &&
+            (gate.overrideModel.provider !== attemptModel.provider ||
+              gate.overrideModel.id !== attemptModel.id)
+          ) {
+            callModel = await (config.llm?.resolveProviderModel ?? resolveProviderModel)(
+              gate.overrideModel,
+            );
+            const overrideWindow = callModel.limit?.context ?? 0;
+            const yieldAt =
+              overrideWindow > 0 && state.windowYieldDisarmed !== true
+                ? Math.floor(overrideWindow * DEFAULT_THRESHOLD_RATIO)
+                : undefined;
+            const { yieldAtInputTokens: _priorYield, ...restInput } = turnResult.turn.runInput;
+            callRunInput = {
+              ...restInput,
+              model: callModel,
+              ...(yieldAt === undefined ? {} : { yieldAtInputTokens: yieldAt }),
+            };
+            // turnYield reads this to classify the stop — it must describe
+            // the call that actually ran, not the one buildTurn planned.
+            turnResult.turn.windowYieldArmed = yieldAt !== undefined;
+          }
+          const outcome = await runLlm(callRunInput, turnResult.turn.trackingSink);
           const modelResponseResult = await dispatchModelResponse(
             state,
             engine,
@@ -190,7 +222,7 @@ export async function runAgent(
               responseTokens: turnResult.turn.turnUsage.outputTokens,
             },
             agentBase,
-            providerModel.id,
+            callModel.id,
           );
           if (modelResponseResult) return finish(modelResponseResult);
 

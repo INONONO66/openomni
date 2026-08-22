@@ -1,4 +1,5 @@
 import type { Run } from "@openomni/llm";
+import type { Model } from "@openomni/protocol";
 import { PolicyDecision } from "@openomni/protocol";
 import { effectOf, PolicyEffectApplier } from "./effects";
 import { publishBudgetTelemetry } from "../budget";
@@ -77,6 +78,18 @@ type ModelResponseFacts = {
   readonly responseTokens: number;
 };
 
+/**
+ * The connection gate's verdict: `blocked` carries a terminal result when the
+ * policy denied the connection; `overrideModel` carries a `model.override`
+ * effect (#753) — the model THIS connection must call instead of the
+ * per-attempt selection. Connection-scoped by the effect's definition: the
+ * next connection re-resolves normally.
+ */
+export type ModelRequestGate = {
+  readonly blocked: AgentResult | null;
+  readonly overrideModel?: Model.Ref;
+};
+
 export async function dispatchModelRequest(
   state: RunState,
   engine: PolicyEngineInstance,
@@ -86,15 +99,21 @@ export async function dispatchModelRequest(
   // fallback switch, `config.model.id` names the primary, and a per-model
   // policy would judge the wrong model.
   modelId: string,
-): Promise<AgentResult | null> {
+): Promise<ModelRequestGate> {
   const decision = await engine.dispatchPoint(
     "connection.llm.pre",
     buildLifecyclePolicyContext(state, config, agentBase, { modelId }),
   );
 
-  if (PolicyDecision.isBlocking(decision)) return guardAbortedResult(state);
+  if (PolicyDecision.isBlocking(decision)) return { blocked: guardAbortedResult(state) };
   PolicyEffectApplier.applyPromptMessageEffects(state, decision);
-  return null;
+  const override = effectOf(decision, "model.override");
+  return {
+    blocked: null,
+    ...(override === undefined
+      ? {}
+      : { overrideModel: { provider: override.provider, id: override.id } }),
+  };
 }
 
 export async function dispatchModelResponse(

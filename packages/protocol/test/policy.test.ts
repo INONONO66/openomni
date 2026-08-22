@@ -337,6 +337,28 @@ describe("Policy schemas", () => {
       });
     });
 
+    it("parses model.override effect (#753) — connection-scoped model routing", () => {
+      const result = Policy.PolicyEffect.parse({
+        type: "model.override",
+        provider: "anthropic",
+        id: "claude-3-haiku-20240307",
+      });
+      expect(result).toMatchObject({
+        type: "model.override",
+        provider: "anthropic",
+        id: "claude-3-haiku-20240307",
+      });
+    });
+
+    it("refuses a model.override with empty coordinates", () => {
+      expect(() =>
+        Policy.PolicyEffect.parse({ type: "model.override", provider: "", id: "m" }),
+      ).toThrow();
+      expect(() =>
+        Policy.PolicyEffect.parse({ type: "model.override", provider: "p", id: "" }),
+      ).toThrow();
+    });
+
     it("parses tool.require_approval effect", () => {
       const result = Policy.PolicyEffect.parse({
         type: "tool.require_approval",

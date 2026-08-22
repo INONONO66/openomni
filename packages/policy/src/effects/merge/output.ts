@@ -8,6 +8,8 @@ import { approvalEffect, retryEffect } from "./accumulators";
 
 export interface EffectAccumulatorSet {
   readonly promptReplace?: MergedEffect;
+  /** Single-winner model.override (#753) — the priority-selected reroute for the gated connection. */
+  readonly modelOverride?: MergedEffect;
   readonly toolFilters: ReadonlyMap<string, number>;
   readonly toolRewrite?: { readonly input: Record<string, unknown>; readonly order: number };
   readonly toolOutputRewrite?: MergedEffect;
@@ -33,6 +35,7 @@ export function appendMergedEffects(
   accumulators: EffectAccumulatorSet,
 ): void {
   if (accumulators.promptReplace) merged.push(accumulators.promptReplace);
+  if (accumulators.modelOverride) merged.push(accumulators.modelOverride);
   for (const [toolPattern, order] of accumulators.toolFilters) {
     merged.push({ effect: { type: "tool.filter", toolPattern }, order, priority: 0 });
   }

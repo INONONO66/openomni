@@ -10,6 +10,8 @@ type MockLlmInput = {
   readonly shouldYield?: () => boolean;
   /** The window-yield arm point — undefined when the yield is disarmed or the window unknown. */
   readonly yieldAtInputTokens?: number;
+  /** The resolved model this call runs — reflects a model.override (#753) when one fired. */
+  readonly model?: { readonly id: string; readonly providerID: string };
 };
 
 export type MockLlmFn = (input: MockLlmInput, sink: Sink) => Promise<Run.Outcome>;

@@ -26,7 +26,7 @@ describe("model dispatch points", () => {
     const state = makeState();
     const result = await dispatchModelRequest(state, engine, makeConfig(), makeAgentBase(), "test-model");
 
-    expect(result).toBeNull();
+    expect(result.blocked).toBeNull();
     expect(fn).toHaveBeenCalledTimes(1);
     const ctx = fn.mock.calls[0]?.[0] as PolicyContext | undefined;
     expect(ctx?.timing).toBe("model.request");
@@ -79,7 +79,7 @@ describe("model dispatch points", () => {
     const state = makeState();
     const result = await dispatchModelRequest(state, engine, makeConfig(), makeAgentBase(), "test-model");
 
-    expect(result).toBeNull();
+    expect(result.blocked).toBeNull();
     const lastMessage = state.messages[state.messages.length - 1];
     const hasInjection = lastMessage?.parts.some(
       (part) => part.type === "text" && part.text === "pre-llm context",
