@@ -2,9 +2,44 @@ import { PolicyDecision, type Policy, type Message } from "@openomni/protocol";
 import type { PolicyPointId } from "@openomni/policy";
 import type {
   CanonicalPolicyRegistration,
+  PolicyContext,
   PolicyEngineInstance,
   PolicyFn,
 } from "../../src/core/policy";
+
+export function policyContext(): Omit<PolicyContext, "timing"> {
+  return {
+    steps: [],
+    usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    turnCount: 0,
+    isCompletion: false,
+    continuationCount: 0,
+    elapsedMs: 0,
+  };
+}
+
+export function runContext() {
+  return { ...policyContext(), sessionId: "session", runId: "run" };
+}
+
+export function turnPreContext() {
+  return { ...runContext(), turnIndex: 0 };
+}
+
+export function turnPostContext() {
+  return {
+    ...turnPreContext(),
+    turnResult: { type: "stop" },
+  };
+}
+
+export function toolPreContext() {
+  return {
+    ...runContext(),
+    toolId: "tool:native:test",
+    toolInput: {},
+  };
+}
 
 type PointRegistration = Omit<
   CanonicalPolicyRegistration,

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { Tool } from "@openomni/protocol";
-import type { PolicyContext, PolicyRegistration } from "../../../src/core/policy/types";
+import type { PolicyRegistration } from "../../../src/core/policy/types";
 import {
   atPoint,
   registerAt,
@@ -10,45 +10,11 @@ import {
   deny,
   inject,
   rewriteToolInput,
+  policyContext,
+  turnPostContext,
+  turnPreContext,
+  toolPreContext,
 } from "../../helpers/policy-decision";
-
-function baseCtx(): Omit<PolicyContext, "timing"> {
-  return {
-    steps: [],
-    usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-    turnCount: 0,
-    isCompletion: false,
-    continuationCount: 0,
-    elapsedMs: 0,
-  };
-}
-
-/** Required inputs for the run.turn.pre point contract. */
-function turnPreCtx() {
-  return { ...baseCtx(), sessionId: "session", runId: "run", turnIndex: 0 };
-}
-
-/** Required inputs for the run.turn.post point contract. */
-function turnPostCtx() {
-  return {
-    ...baseCtx(),
-    sessionId: "session",
-    runId: "run",
-    turnIndex: 0,
-    turnResult: { type: "stop" },
-  };
-}
-
-/** Required inputs for the tool.native.pre point contract. */
-function toolPreCtx() {
-  return {
-    ...baseCtx(),
-    sessionId: "session",
-    runId: "run",
-    toolId: "tool:native:test",
-    toolInput: {},
-  };
-}
 
 describe("deny-wins composition", () => {
   it("deny verdict takes precedence over prior continue verdicts", async () => {
@@ -64,7 +30,7 @@ describe("deny-wins composition", () => {
       ["audit.annotate"],
     );
 
-    const verdict = await engine.dispatchPoint("run.turn.pre", turnPreCtx());
+    const verdict = await engine.dispatchPoint("run.turn.pre", turnPreContext());
 
     expect(verdict.verdict).toBe("deny");
     expect(verdict.reasonCodes).toContain("blocked-by-deny");
@@ -101,7 +67,7 @@ describe("deny-wins composition", () => {
       ["tool.rewrite_input"],
     );
 
-    const verdict = await engine.dispatchPoint("tool.native.pre", toolPreCtx());
+    const verdict = await engine.dispatchPoint("tool.native.pre", toolPreContext());
 
     expect(verdict.verdict).toBe("deny");
     expect(executed).toEqual(["deny-first"]);
@@ -138,7 +104,7 @@ describe("deny-wins composition", () => {
       ["prompt.inject_message"],
     );
 
-    const verdict = await engine.dispatchPoint("run.turn.post", turnPostCtx());
+    const verdict = await engine.dispatchPoint("run.turn.post", turnPostContext());
 
     expect(verdict.verdict).toBe("deny");
     expect(executed).toEqual(["allow-first", "abort-second"]);
@@ -157,7 +123,7 @@ describe("deny-wins composition", () => {
     }
 
     const verdict = await engine.dispatchPoint("run.lifecycle.pre", {
-      ...baseCtx(),
+      ...policyContext(),
       actorId: "actor",
       sessionId: "session",
       runId: "run",
@@ -182,7 +148,7 @@ describe("deny-wins composition", () => {
       );
     }
 
-    await engine.dispatchPoint("run.turn.pre", turnPreCtx());
+    await engine.dispatchPoint("run.turn.pre", turnPreContext());
 
     expect(executed).toEqual(["first", "second", "third"]);
   });
@@ -262,7 +228,7 @@ describe("deny-wins composition", () => {
         fn: () => deny("test.deny", `denied-at-${pointId}`),
       });
 
-      const verdict = await engine.dispatchPoint(pointId, { ...baseCtx(), ...ctx });
+      const verdict = await engine.dispatchPoint(pointId, { ...policyContext(), ...ctx });
       expect(verdict.verdict).toBe("deny");
       expect(verdict.reasonCodes).toContain(`denied-at-${pointId}`);
     }
@@ -304,7 +270,7 @@ describe("scope filtering with 100 policies", () => {
       engine.register(reg);
     }
 
-    await engine.dispatchPoint("run.turn.pre", { ...turnPreCtx(), agentType: "coder" });
+    await engine.dispatchPoint("run.turn.pre", { ...turnPreContext(), agentType: "coder" });
 
     expect(executed.length).toBe(10);
     expect(executed.every((name) => name.includes("coder"))).toBe(true);
@@ -346,12 +312,12 @@ describe("scope filtering with 100 policies", () => {
       );
     }
 
-    await engine.dispatchPoint("tool.native.pre", { ...toolPreCtx(), agentType: "reviewer" });
+    await engine.dispatchPoint("tool.native.pre", { ...toolPreContext(), agentType: "reviewer" });
 
     expect(executed.length).toBe(100);
 
     executed.length = 0;
-    await engine.dispatchPoint("tool.native.pre", { ...toolPreCtx(), agentType: "coder" });
+    await engine.dispatchPoint("tool.native.pre", { ...toolPreContext(), agentType: "coder" });
 
     expect(executed.length).toBe(50);
     expect(executed.every((name) => name.startsWith("unscoped-"))).toBe(true);
@@ -388,7 +354,7 @@ describe("scope filtering with 100 policies", () => {
       );
     }
 
-    await engine.dispatchPoint("run.turn.post", turnPostCtx());
+    await engine.dispatchPoint("run.turn.post", turnPostContext());
 
     expect(executed.length).toBe(20);
     expect(executed.every((name) => name.startsWith("unscoped-"))).toBe(true);
@@ -414,7 +380,7 @@ describe("scope filtering with 100 policies", () => {
     }
 
     await engine.dispatchPoint("run.error.error", {
-      ...baseCtx(),
+      ...policyContext(),
       sessionId: "session",
       runId: "run",
       errorCode: "boom",
