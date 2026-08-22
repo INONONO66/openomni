@@ -94,7 +94,7 @@ The package boundary rule is strict: product meaning belongs in `packages/openom
 
 All durable messaging flows through the gateway router and the brain's Deliver consumer:
 
-```
+```text
 raw channel event
   -> channels gateway driver (packages/channels, registered by apps/server) normalizes transport payload
   -> channels gateway router ingest: sanitizes gateway-derived fields, resolves the actor, resolves the route
@@ -137,8 +137,8 @@ raw channel event
 | Agent execution engine | `packages/agent/src/core/execution/` | StreamEngine, ToolExecutor, compaction, parallel-tools |
 | MCP client | `packages/agent/src/runtime/mcp/` | McpClient |
 | Resident agent prompts | `packages/openomni/src/agents/resident/prompt/` | `ResidentAgent.getPrompt({ model })` — model-specific system prompt variants (Claude, GPT) |
-| Messaging kernel | `packages/openomni/src/{ingress,dispatch}/` | OpenOmni-owned envelope routing, access evaluation, correlation, session/target resolution, projection (the unified `resolveRoute` pipeline shipped with #464 / PR #485; a `messaging/` facade remains target direction, not yet a directory) |
-| Ingress engine | `packages/openomni/src/ingress/` | Shipped inbound stage: kernel `resolveRoute` five-stage pipeline (blacklist → wait correlation → channel ceiling → actor identity → surface default) publishes exactly one `RoutingDecision`, then session resolution/projection → resident/direct handler |
+| Messaging kernel | `packages/channels/src/router/` (perimeter) + `packages/openomni/src/{ingress,dispatch}/` (brain) | Split at gateway stage 2 (#707/#736): the gateway router owns external envelope routing, admission, correlation, and the #215 send kernel; the brain owns Deliver-consumer execution, dispatch/egress authorization, session/target materialization, and projection |
+| Ingress routing | `packages/channels/src/router/` (external arms) + `packages/openomni/src/ingress/` (brain stage) | The `resolveRoute` five-stage pipeline (blacklist → wait correlation → channel ceiling → actor identity → surface default) records `route.decided` then publishes exactly one `RoutingDecision`; external arms live in the gateway router since #736, the brain keeps the Deliver consumer, `internal-route.ts` (cron/dispatch arm), session resolution/projection, and handlers |
 | Resident runtime (in-process) | `packages/openomni/src/resident/` | `ResidentRuntime` — handles resident-target ingress in-process, bypassing coordinator |
 | Doc ↔ code gap tracking | `docs/implementation-status.md` | Single source of truth for implemented / dormant / planned components — check before trusting design docs' present tense |
 | Owner-facing usage model | `docs/usage-model.md` | How the system is operated from the Owner's seat (target experience) |

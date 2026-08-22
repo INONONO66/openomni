@@ -2,7 +2,7 @@
 
 Single source of truth for current wiring between accepted design and running code. Other docs (core-model, AGENTS.md, ADRs) link here instead of restating implementation status inline. This document does not set future delivery sequence, issue status, or roadmap checkpoints; those belong only in [GitHub #459](https://github.com/INONONO66/openomni/issues/459).
 
-**Legend**: ✅ implemented and wired · 🔌 dormant — built and tested, zero production callers · 🚧 partial · 📋 designed, not implemented · Last verified: 2026-08-10 (claims re-checked by code inspection at HEAD).
+**Legend**: ✅ implemented and wired · 🔌 dormant — built and tested, zero production callers · 🚧 partial · 📋 designed, not implemented · Last verified: 2026-08-22 (claims re-checked by code inspection at HEAD).
 
 > Project rule of thumb behind this file: an engine without a consumer does not count as shipped. "Built" and "wired" are tracked separately because the recurring failure mode here is completed schemas/stores that nothing calls.
 

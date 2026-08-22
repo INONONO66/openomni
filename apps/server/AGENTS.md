@@ -39,7 +39,7 @@ src/
 │   ├── worker-bootstrap-handler.ts # Validates and stores WorkerBootstrap, resolves credentials, signals readiness; permissions/policyPlan are applied per run in worker-runner.ts via buildWorkerMiddleware
 │   └── worker-runtime.ts # createExecutionToolContext() + resolveWorkerDbPath() — shared worker helpers
 ├── handler/
-│   └── conversation.ts   # createMessageHandler() — queues per surfaceKey, calls OpenOmni kernel/IngressEngine
+│   └── conversation.ts   # createMessageHandler({ ingress }) — queues per surfaceKey, sends to GatewayRouter.ingest
 ├── ingress/
 │   └── bridge.ts         # Transitional Channel.InboundMessage → OpenOmni inbound bridge
 ├── agents/
@@ -96,7 +96,7 @@ Channel.InboundMessage
 
 Errors bubble up as `Error: {message}` strings back to the channel so operators can see failures instead of silent drops.
 
-The current `conversation.ts` / `ingress/bridge.ts` path still contains transitional model and tool-selection logic; per-message routing back doors were deleted when the kernel's unified `resolveRoute` shipped (#464, PR #485). Do not add new product semantics there. Move new logic into `packages/openomni` and shrink the server bridge over time.
+The current `conversation.ts` / `ingress/bridge.ts` path still contains transitional model and tool-selection logic; per-message routing back doors were deleted when the unified `resolveRoute` shipped (#464, PR #485; its external arms live in the gateway router since #736). Do not add new product semantics there. Routing/admission logic belongs in `packages/channels/src/router/`, execution semantics in `packages/openomni`; shrink the server bridge over time.
 
 ## MESSAGING CONFIG (`config.json` → `messaging`, #215 / #708 / #219)
 
@@ -155,7 +155,7 @@ The current server connector surface hosts the process driver and provider-neutr
 | Telegram | (optional sender allowlist) | `final` (post once at the end) |
 | GitHub | `issue_comment.created`, `issues.opened` (+ sender allowlist) | `final`; webhook handler wired into the Hono router |
 | Discord | mention trigger (+ optional sender allowlist) | `final` |
-| WebSocket | built-in (token-gated when `config.server.wsToken` is set — subprotocol `auth` token preferred, query token deprecated; without a configured token upgrades are open and marked unauthenticated) | one JSON `{type:"response"}` frame per inbound message (no streaming) |
+| WebSocket | built-in (token-gated when `config.server.wsToken` is set — subprotocol `auth` token preferred, query token deprecated; without a configured token upgrades are open and marked unauthenticated) | one JSON frame per inbound message (no streaming): `{type:"response"}` for a handled text message, `{type:"error"}` for invalid JSON / missing `text` / handler failure |
 
 Add a new channel by:
 1. Creating a driver under `packages/channels/src/{name}/` implementing `Channel.Surface` (or wrap an existing SDK) — it must stay on the band import contract (`packages/channels/AGENTS.md`).
@@ -184,7 +184,7 @@ Channel adapters must not:
 - `getAgentDefinition(name)` returns `undefined` when the agent is unknown; `ingress/bridge.ts`'s `buildAgentDef` then throws. Direct inbound never consults the registry — `buildResidentAgentDef` builds the Resident definition with the configured default model.
 - `apps/server/src/agents/dev-agent/` is the default agent factory + prompt.
 
-This registry is transitional runtime configuration. Product routing is OpenOmni-owned since the unified kernel `resolveRoute` shipped (#464, PR #485); the registry only feeds the bootstrap-wired agent resolver (internal events such as cron). Do not reintroduce server-side per-message routing.
+This registry is transitional runtime configuration. Product routing left the server when the unified `resolveRoute` shipped (#464, PR #485) and is gateway-owned since #736 (`packages/channels/src/router/`); the registry only feeds the bootstrap-wired agent resolver (internal events such as cron). Do not reintroduce server-side per-message routing.
 
 ## RESIDENT PROFILE
 
