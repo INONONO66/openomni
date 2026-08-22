@@ -42,9 +42,11 @@ describe("Storage.initialize", () => {
       adapter.close();
     }
 
-    expect(refusal).toBeInstanceOf(Storage.IncompleteAdapterError);
+    expect((refusal as Error).name).toBe("IncompleteAdapterError");
     expect(refusal).toMatchObject({ code: "incomplete_adapter", capability: "workItem" });
-    expect((refusal as Error).message).toContain("workItem");
+    expect((refusal as Error).message).toBe(
+      "Production storage adapter is missing required capability: workItem",
+    );
     expect(() => Storage.get()).toThrow("Storage.get() called before initialize()");
   });
 

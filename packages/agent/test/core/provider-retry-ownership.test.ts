@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it, test } from "bun:test";
-import { Run, type RunDependencies } from "@openomni/llm";
+import { Run, type run } from "@openomni/llm";
 import type { Model } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { abortRun, allow } from "../helpers/policy-decision";
@@ -12,7 +12,7 @@ let providerCallsByAgentAttempt: number[] = [];
 let currentAgentAttempt = 0;
 let providerFailure: (call: number) => Error | undefined = () => undefined;
 
-const createProviderStream: NonNullable<RunDependencies["createStream"]> = async () => {
+const createProviderStream: NonNullable<Parameters<typeof run>[2]>["createStream"] = async () => {
   providerCalls += 1;
   if (currentAgentAttempt > 0) {
     providerCallsByAgentAttempt[currentAgentAttempt - 1] =

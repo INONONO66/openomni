@@ -159,7 +159,7 @@ export namespace Storage {
 
   export type ProductionCapability = (typeof requiredProductionCapabilities)[number];
 
-  export class IncompleteAdapterError extends Error {
+  class IncompleteAdapterError extends Error {
     readonly code = "incomplete_adapter" as const;
 
     constructor(readonly capability: ProductionCapability) {
