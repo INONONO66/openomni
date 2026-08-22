@@ -259,6 +259,11 @@ export async function buildTurn(
       : Math.floor(state.contextWindowTokens * DEFAULT_THRESHOLD_RATIO);
   const turnAssistant: TurnArtifacts["turnAssistant"] = {};
   const trackingSink = createTrackingSink(state, sink, turnUsage, turnAssistant);
+  // Steering (#751): the host check is wrapped so the turn records WHY the
+  // loop stopped — without the flag, a steering yield below the step cap is
+  // indistinguishable from a cap end and would terminate as "max-steps".
+  const steering: TurnArtifacts["steering"] = { requested: false };
+  const steeringPending = config.steeringPending;
 
   return {
     type: "ready",
@@ -287,6 +292,15 @@ export async function buildTurn(
         // below gets its chance on every path — Resident and tool loops
         // included, not just injected continuations (#649 reachability map).
         ...(yieldAtInputTokens === undefined ? {} : { yieldAtInputTokens }),
+        ...(steeringPending === undefined
+          ? {}
+          : {
+              shouldYield: () => {
+                if (!steeringPending()) return false;
+                steering.requested = true;
+                return true;
+              },
+            }),
         providerOptions: config.providerOptions,
         trace: { traceId: trace.traceId, sessionId: trace.sessionId, runId: trace.runId },
       },
@@ -295,6 +309,7 @@ export async function buildTurn(
       turnUsage,
       stepCap,
       windowYieldArmed: yieldAtInputTokens !== undefined,
+      steering,
       toolPolicyDecisions,
     },
   };
@@ -392,7 +407,7 @@ export type StopOutcome = AgentResult | "continue";
 function turnYield(
   turn: TurnArtifacts,
   assistantMessage: Message.WithParts,
-): "window" | "steps" | null {
+): "window" | "steps" | "steer" | null {
   let steps = 0;
   let lastReason: string | undefined;
   for (const part of assistantMessage.parts) {
@@ -403,6 +418,11 @@ function turnYield(
   }
   if (lastReason !== "tool-calls") return null;
   if (steps >= turn.stepCap) return "steps";
+  // The cap outranks steering: a turn that spent its whole step budget ended
+  // on the cap even if the steering check also fired — "max-steps" stays the
+  // honest terminal. Steering outranks the window: the pending message should
+  // reach the model next turn; a still-full window re-arms and yields again.
+  if (turn.steering.requested) return "steer";
   return turn.windowYieldArmed ? "window" : "steps";
 }
 
@@ -490,6 +510,16 @@ export async function handleStop(
   // the drained messages (#651 review BLOCKER — a child finishing during a
   // long parent tool loop enqueues exactly there).
   const yielded = turnYield(turn, assistantMessage);
+  if (yielded === "steer") {
+    // A steering yield whose pending injection already drained took the
+    // continuation branch above. Reaching here means nothing arrived (the
+    // host check outpaced the queue, or the message drained elsewhere): the
+    // turn ended early on purpose, so the only honest move is another turn —
+    // ending as "max-steps" would report a cap that never applied. A host
+    // that never clears its pending signal is bounded by the budget check.
+    advanceRunTurn(state);
+    return "continue";
+  }
   if (yielded === "window") {
     const compactionsBefore = state.compactionCount;
     const blocked = await applyPostCompaction(state, engine, config, agentBase, false, true);

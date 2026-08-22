@@ -164,6 +164,67 @@ describe("run() streamText arguments", () => {
     expect(windowYield({ steps: [] })).toBe(false);
   });
 
+  test("arms a steering condition only when shouldYield is set (#751)", async () => {
+    let pending = false;
+    await run(
+      {
+        trace: TEST_TRACE,
+        events: Bus,
+        messages: [],
+        tools: [],
+        maxSteps: 24,
+        shouldYield: () => pending,
+        model: {
+          id: "claude-3-haiku",
+          providerID: TEST_PROVIDER_ID,
+          name: "Claude 3 Haiku Test",
+          api: { npm: "@ai-sdk/anthropic" },
+        },
+        auth: { type: "api", key: "test-key-run" },
+      },
+      mockSink,
+    );
+
+    const streamArgs = aiCapture.__openomniAiStreamArgs as { stopWhen?: unknown };
+    const conditions = streamArgs.stopWhen as Array<(input: { steps: unknown[] }) => boolean>;
+    expect(conditions).toBeArrayOfSize(2);
+    const steering = conditions[1] as () => boolean;
+    // Live check, not a construction-time snapshot: the host flips it while
+    // the step loop runs, and the next step boundary must see the flip.
+    expect(steering()).toBe(false);
+    pending = true;
+    expect(steering()).toBe(true);
+    pending = false;
+    expect(steering()).toBe(false);
+  });
+
+  test("orders steering after the window yield when both are set", async () => {
+    await run(
+      {
+        trace: TEST_TRACE,
+        events: Bus,
+        messages: [],
+        tools: [],
+        maxSteps: 24,
+        yieldAtInputTokens: 800,
+        shouldYield: () => true,
+        model: {
+          id: "claude-3-haiku",
+          providerID: TEST_PROVIDER_ID,
+          name: "Claude 3 Haiku Test",
+          api: { npm: "@ai-sdk/anthropic" },
+        },
+        auth: { type: "api", key: "test-key-run" },
+      },
+      mockSink,
+    );
+
+    const streamArgs = aiCapture.__openomniAiStreamArgs as { stopWhen?: unknown };
+    const conditions = streamArgs.stopWhen as Array<(input: { steps: unknown[] }) => boolean>;
+    expect(conditions).toBeArrayOfSize(3);
+    expect((conditions[2] as () => boolean)()).toBe(true);
+  });
+
   test("passes providerOptions as the nested streamText key, never a top-level spread", async () => {
     // Regression (#audit M1): providerOptions used to be spread into the
     // top-level streamText args. The AI SDK reads provider namespaces from

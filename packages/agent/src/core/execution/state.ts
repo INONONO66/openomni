@@ -132,6 +132,13 @@ export interface RunState {
   turnIndex: number;
   /** The last `turnIndex` charged to the budget; -1 before the first turn. */
   chargedTurnIndex: number;
+  /**
+   * The current retry attempt (1-based), stamped by the runner at each
+   * attempt's start. Together with `turnIndex` it gives lifecycle policies an
+   * attempt-scoped identity: the same turnIndex under a higher attempt is a
+   * retry re-entry, never progress (#694 observation material).
+   */
+  attempt: number;
   readonly startTime: number;
 }
 
@@ -151,6 +158,12 @@ export interface TurnArtifacts {
   readonly stepCap: number;
   /** Whether the window-yield knob was armed (a known window existed). */
   readonly windowYieldArmed: boolean;
+  /**
+   * Set when the host steering check fired at a step boundary (#751) — the
+   * yield disambiguator: a tool-calls stop below the step cap with this set
+   * is a steering yield, not a cap end or a window yield.
+   */
+  readonly steering: { requested: boolean };
 }
 
 export type BuildTurnResult =
@@ -193,8 +206,14 @@ export function createRunState(input: ChatAgentInput & { traceContext: RunTrace 
     compactionCount: 0,
     turnIndex: 0,
     chargedTurnIndex: -1,
+    attempt: 1,
     startTime: Date.now(),
   };
+}
+
+/** Stamps the runner's current retry attempt onto the run state (1-based). */
+export function recordRunAttempt(state: RunState, attempt: number): void {
+  state.attempt = attempt;
 }
 
 export function getCompactionCount(state: RunState): number | undefined {
@@ -303,6 +322,7 @@ export function buildLifecyclePolicyContext<
     steps: state.steps,
     usage: state.totalUsage,
     turnCount: state.budgetState.turns,
+    attempt: state.attempt,
     isCompletion: false,
     continuationCount: state.continuationCount,
     elapsedMs,

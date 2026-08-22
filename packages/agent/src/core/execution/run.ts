@@ -21,6 +21,7 @@ import {
 } from "./lifecycle-dispatch";
 import {
   createRunState,
+  recordRunAttempt,
   recordRunWindow,
   nonEmptyString,
   requireTrace,
@@ -102,6 +103,10 @@ export async function runAgent(
   try {
     for (;;) {
       try {
+        // Attempt identity for lifecycle policies (#694 observation material):
+        // stamped before any dispatch of this attempt, so run.turn.pre can
+        // pair it with turnIndex to tell a retry re-entry from progress.
+        recordRunAttempt(state, attempt);
         const providerModel = await (config.llm?.resolveProviderModel ?? resolveProviderModel)(
           config.model,
         );

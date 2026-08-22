@@ -18,6 +18,19 @@ export interface PolicyContext extends GenericPolicyContext {
   steps: AgentStep[];
   usage: TokenUsage;
   turnCount: number;
+  /**
+   * The runner's current retry attempt (1-based). With `turnIndex` this is
+   * the attempt-scoped progress identity #694 asked for: the same turnIndex
+   * under a higher attempt is a retry re-entry of the same turn, never
+   * progress — `turnCount` alone cannot distinguish the two because the
+   * charge lands after the run.turn.pre dispatch.
+   */
+  attempt?: number;
+  /**
+   * The run's turn index, stable across retries of the same turn (charging
+   * is idempotent per index). Supplied on run.turn.pre / prompt.context.pre.
+   */
+  turnIndex?: number;
   isCompletion: boolean;
   continuationCount: number;
   elapsedMs: number;

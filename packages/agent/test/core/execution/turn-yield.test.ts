@@ -186,6 +186,89 @@ describe("window yield (#649 reachability fix)", () => {
     expect(state.compactionCount).toBe(1);
   });
 
+  it("continues on a steering yield with no drained continuation — never max-steps (#751)", async () => {
+    const state = makeState();
+    state.messages = [userMessage("u0")];
+    const engine = PolicyEngine.create();
+    const turn = makeTurnArtifacts({
+      windowYieldArmed: false,
+      stepCap: 24,
+      steering: { requested: true },
+      turnAssistant: { message: assistantWithSteps(["tool-calls"]) },
+    });
+    const turnBefore = state.turnIndex;
+
+    const outcome = await handleStop(state, makeConfig(), engine, makeAgentBase(), turn);
+
+    expect(outcome).toBe("continue");
+    expect(state.turnIndex).toBe(turnBefore + 1);
+    expect(state.compactionCount).toBe(0);
+  });
+
+  it("routes a steering yield's drained injection through the continuation path (#751)", async () => {
+    const state = makeState();
+    state.messages = [userMessage("u0")];
+    const engine = PolicyEngine.create();
+    engine.register({
+      kind: "point",
+      name: "test-steer-drain",
+      pointIds: ["run.turn.post"],
+      effectCapabilities: { "run.turn.post": ["prompt.inject_message"] },
+      priority: 100,
+      fn: () => inject("steer me"),
+    });
+    const turn = makeTurnArtifacts({
+      windowYieldArmed: false,
+      stepCap: 24,
+      steering: { requested: true },
+      turnAssistant: { message: assistantWithSteps(["tool-calls"]) },
+    });
+
+    const outcome = await handleStop(state, makeConfig(), engine, makeAgentBase(), turn);
+
+    expect(outcome).toBe("continue");
+    const texts = state.messages.flatMap((message) =>
+      message.parts.filter((part) => part.type === "text").map((part) => part.text),
+    );
+    expect(texts).toContain("steer me");
+  });
+
+  it("keeps the step cap's honest terminal even when steering also fired (#751)", async () => {
+    const state = makeState();
+    state.messages = [userMessage("u0")];
+    const engine = PolicyEngine.create();
+    const turn = makeTurnArtifacts({
+      windowYieldArmed: false,
+      stepCap: 2,
+      steering: { requested: true },
+      turnAssistant: { message: assistantWithSteps(["tool-calls", "tool-calls"]) },
+    });
+
+    const outcome = await handleStop(state, makeConfig(), engine, makeAgentBase(), turn);
+
+    if (outcome === "continue") throw new Error("expected a terminal result");
+    expect(outcome.finishReason).toBe("max-steps");
+  });
+
+  it("prefers steering over the window yield — the pending message reaches the model next turn (#751)", async () => {
+    const state = makeState();
+    state.messages = [userMessage("u0")];
+    // A registered compaction seam would record a compaction on the window
+    // path; the steer path must skip it (compactionCount stays 0).
+    const engine = seamEngine(() => replaceMessages([userMessage("compacted")]));
+    const turn = makeTurnArtifacts({
+      windowYieldArmed: true,
+      stepCap: 24,
+      steering: { requested: true },
+      turnAssistant: { message: assistantWithSteps(["tool-calls"]) },
+    });
+
+    const outcome = await handleStop(state, makeConfig(), engine, makeAgentBase(), turn);
+
+    expect(outcome).toBe("continue");
+    expect(state.compactionCount).toBe(0);
+  });
+
   it("still terminates on an abort-carrying deny before the yield gets a say", async () => {
     // Re-review observation: the reordering lets a plain (non-abort) deny on a
     // yielded turn fall through to the yield's continue. Abort-denies must

@@ -40,6 +40,7 @@ function makeTurnArtifacts(): TurnArtifacts {
     toolPolicyDecisions: [],
     stepCap: 24,
     windowYieldArmed: false,
+    steering: { requested: false },
   };
 }
 
