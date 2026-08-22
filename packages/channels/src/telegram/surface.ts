@@ -1,6 +1,6 @@
 import { type Channel, Operational, PolicyDecision } from "@openomni/protocol";
 import { newTraceId } from "@openomni/protocol";
-import { Dedupe } from "../support/dedupe";
+import { Dedupe, DedupeWindow } from "../support/dedupe";
 import { splitText } from "../support/chunk-text";
 import { TelegramClient } from "./client";
 import { TelegramNormalizer } from "./normalizer";
@@ -20,6 +20,7 @@ export class TelegramAdapter implements Channel.Surface {
 
   private readonly client: TelegramClient;
   private readonly dedupe = new Dedupe();
+  private readonly outboundDedupe = new DedupeWindow<{ externalMessageId?: string }>();
   private normalizer: TelegramNormalizer | null = null;
   private poller: TelegramPoller | null = null;
   private botUsername = "";
@@ -109,12 +110,21 @@ export class TelegramAdapter implements Channel.Surface {
    * Telegram chat id — deliver there and report the platform message id of
    * the final chunk (the message a reply would reference).
    */
-  async deliver(externalId: string, body: string): Promise<{ externalMessageId?: string }> {
-    // Origin: the messaging kernel's deliver seam does not thread the
-    // sender's trace yet (#215) — this delivery is its own causal chain.
-    const traceId = newTraceId();
-    const externalMessageId = await this.sendOutbound(externalId, { text: body }, traceId);
-    return externalMessageId === undefined ? {} : { externalMessageId };
+  async deliver(
+    externalId: string,
+    body: string,
+    idempotencyKey?: string,
+  ): Promise<{ externalMessageId?: string }> {
+    const send = async (): Promise<{ externalMessageId?: string }> => {
+      // Origin: the messaging kernel's deliver seam does not thread the
+      // sender's trace yet (#215) — this delivery is its own causal chain.
+      const traceId = newTraceId();
+      const externalMessageId = await this.sendOutbound(externalId, { text: body }, traceId);
+      return externalMessageId === undefined ? {} : { externalMessageId };
+    };
+    // Additive capability only: the current server composition calls this
+    // seam without a key, which intentionally retains at-least-once behavior.
+    return idempotencyKey === undefined ? send() : this.outboundDedupe.run(idempotencyKey, send);
   }
 
   private async handleMessage(message: TelegramMessage, traceId: string): Promise<void> {

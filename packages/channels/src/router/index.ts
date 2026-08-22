@@ -64,7 +64,12 @@ export {
  * owner behind the messaging kernel's injected-delivery seam (registered by
  * the composition root from its channel adapters).
  */
-export type ChannelDeliveryRoute = (externalId: string, body: string) => Promise<DeliveryReceipt>;
+export type ChannelDeliveryRoute = (
+  externalId: string,
+  body: string,
+  /** Stable key available for owner dedupe or platform read-back. */
+  idempotencyKey: string,
+) => Promise<DeliveryReceipt>;
 
 /**
  * Construction-time ports of the gateway router (#707 stage 2). ONE entry:
@@ -322,7 +327,7 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
                   `(endpoint ${message.target.endpointId}) — delivery fails closed`,
               );
             }
-            return route(message.target.externalId, message.body);
+            return route(message.target.externalId, message.body, message.idempotencyKey);
           },
           // One grant source per send: Owner-written standing grants plus the
           // live rule-materialized instances. The scope-less base evaluator

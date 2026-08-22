@@ -205,6 +205,7 @@ describe("fire-and-forget delivery", () => {
     expect(deliveries).toEqual([
       {
         messageId: "message:test",
+        idempotencyKey: "message:test",
         senderId: "actor:sender",
         operation: "fire_and_forget",
         body: "test message",

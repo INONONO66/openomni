@@ -17,14 +17,14 @@ import {
  * in the channels standalone suite.
  */
 
-const delivered: Array<{ externalId: string; body: string }> = [];
+const delivered: Array<{ externalId: string; body: string; idempotencyKey: string }> = [];
 
 function deliveryRoutes(): ReadonlyMap<string, ChannelDeliveryRoute> {
   return new Map<string, ChannelDeliveryRoute>([
     [
       "discord",
-      async (externalId, body) => {
-        delivered.push({ externalId, body });
+      async (externalId, body, idempotencyKey) => {
+        delivered.push({ externalId, body, idempotencyKey });
         return { externalMessageId: `plat-${delivered.length}` };
       },
     ],
@@ -153,7 +153,10 @@ describe("messaging-composed gateway router (#708)", () => {
     });
     expect(receipt.kind).toBe("sent");
     expect(delivered).toHaveLength(1);
-    expect(delivered[0]?.externalId).toBe("buyer-external");
+    expect(delivered[0]).toMatchObject({
+      externalId: "buyer-external",
+      idempotencyKey: "m-2",
+    });
   });
 
   test("preserves a covered reply grant across router restart", async () => {
