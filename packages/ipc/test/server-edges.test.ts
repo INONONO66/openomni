@@ -3,7 +3,9 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { Ipc } from "@openomni/protocol";
+import { connectIpcClient } from "../src/client";
 import { IpcConnectionError, IpcTimeoutError } from "../src/errors";
+import { LineDecoder } from "../src/framing";
 import { createIpcServer } from "../src/server";
 
 function tmpSocketPath(label: string): string {
@@ -13,6 +15,24 @@ function tmpSocketPath(label: string): string {
 function connect(socketPath: string): Promise<net.Socket> {
   const socket = net.createConnection(socketPath);
   return new Promise((resolve) => socket.once("connect", () => resolve(socket)));
+}
+
+async function exchange(socketPath: string, line: string): Promise<Record<string, unknown>> {
+  const socket = await connect(socketPath);
+  const decoder = new LineDecoder();
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error("IPC response timeout")), 1_000);
+    socket.on("data", (chunk) => {
+      const frame = decoder.push(chunk).frames[0];
+      if (frame && typeof frame === "object") {
+        clearTimeout(timeout);
+        socket.destroy();
+        resolve(frame as Record<string, unknown>);
+      }
+    });
+    socket.once("error", reject);
+    socket.write(line);
+  });
 }
 
 describe("server edge branches", () => {
@@ -25,19 +45,42 @@ describe("server edge branches", () => {
     await Bun.sleep(10);
   });
 
-  test("call without a connected client rejects with IpcConnectionError", async () => {
-    const srv = await createIpcServer(tmpSocketPath("noclient"), () => undefined);
-    servers.push(srv);
-    expect(srv.call("worker.shutdown_idle", {})).rejects.toThrow(IpcConnectionError);
-  });
+  for (const method of ["worker.shutdown_idle", "worker.deliver_message"] as const) {
+    test(`${method} without a connected client rejects with IpcConnectionError`, async () => {
+      const srv = await createIpcServer(tmpSocketPath(`noclient-${method}`), () => undefined);
+      servers.push(srv);
+      await expect(srv.call(method, {})).rejects.toThrow(IpcConnectionError);
+    });
+  }
 
-  test("call that never gets a response rejects with IpcTimeoutError", async () => {
+  test("calls in either direction that never get a response reject with IpcTimeoutError", async () => {
     const srv = await createIpcServer(tmpSocketPath("timeout"), () => undefined);
     servers.push(srv);
-    // A silent client: connected, never responds.
     rawSockets.push(await connect(srv.socketPath));
     await Bun.sleep(20);
     expect(srv.call("worker.shutdown_idle", {}, 30)).rejects.toThrow(IpcTimeoutError);
+
+    const client = await connectIpcClient(srv.socketPath);
+    await expect(client.call("coordinator.bootstrap", {}, 30)).rejects.toBeInstanceOf(IpcTimeoutError);
+    client.close();
+  });
+
+  test("schema-invalid frames get bounded, correlated 4000 responses", async () => {
+    const srv = await createIpcServer(tmpSocketPath("protocol"), () => undefined);
+    servers.push(srv);
+    const unknown = await exchange(srv.socketPath, '{"neither":"request-nor-response"}\n');
+    expect(unknown.type).toBe("response");
+    expect(unknown.id).toBe("unknown");
+    expect((unknown.error as { code: number }).code).toBe(4000);
+
+    const correlated = await exchange(srv.socketPath, '{"v":2,"type":"request","id":"req-correlate-1"}\n');
+    expect(correlated.id).toBe("req-correlate-1");
+    expect((correlated.error as { code: number }).code).toBe(4000);
+
+    const oversharing = JSON.stringify({ neither: "z".repeat(5_000) });
+    const bounded = await exchange(srv.socketPath, `${oversharing}\n`);
+    expect((bounded.error as { code: number }).code).toBe(4000);
+    expect((bounded.error as { message: string }).message.length).toBeLessThanOrEqual(250);
   });
 
   test("notification handler failures are contained (sync throw and async rejection)", async () => {

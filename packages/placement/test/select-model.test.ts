@@ -8,11 +8,7 @@ const chain = [primary, second, third];
 
 describe("Placement.selectModel", () => {
   it("selects the primary with no failure history", () => {
-    expect(Placement.selectModel(chain, [])).toEqual({
-      model: primary,
-      index: 0,
-      exhausted: false,
-    });
+    expect(Placement.selectModel(chain, [])).toEqual({ model: primary, index: 0, exhausted: false });
   });
 
   it("advances one candidate per advancing failure class", () => {
@@ -28,37 +24,21 @@ describe("Placement.selectModel", () => {
     expect(selection.exhausted).toBe(true);
   });
 
-  it("never advances on tool_error — the tool failed, not the model", () => {
-    expect(Placement.selectModel(chain, ["tool_error", "tool_error"]).index).toBe(0);
-  });
-
-  it("never advances on context_overflow — the compaction seam retries the SAME model", () => {
-    expect(Placement.selectModel(chain, ["context_overflow"]).index).toBe(0);
-  });
-
-  it("never advances on aborted", () => {
-    expect(Placement.selectModel(chain, ["aborted"]).index).toBe(0);
-  });
-
-  it("stays conservative on unknown reason strings", () => {
-    expect(Placement.selectModel(chain, ["mystery_failure"]).index).toBe(0);
-  });
+  for (const [reason, ownership] of [
+    ["tool_error", "the tool failed, not the model"],
+    ["context_overflow", "the compaction seam retries the SAME model"],
+    ["aborted", "the run was cancelled"],
+    ["mystery_failure", "unknown reasons stay conservative"],
+  ] as const) {
+    it(`never advances on ${reason} — ${ownership}`, () => {
+      expect(Placement.selectModel(chain, [reason, reason]).index).toBe(0);
+    });
+  }
 
   it("counts only the advancing classes in a mixed history", () => {
-    const selection = Placement.selectModel(chain, [
-      "tool_error",
-      "timeout",
-      "context_overflow",
-      "transient_error",
-    ]);
+    const selection = Placement.selectModel(chain, ["tool_error", "timeout", "context_overflow", "transient_error"]);
     expect(selection.index).toBe(2);
     expect(selection.exhausted).toBe(false);
-  });
-
-  it("is deterministic — same inputs, same selection", () => {
-    const a = Placement.selectModel(chain, ["timeout"]);
-    const b = Placement.selectModel(chain, ["timeout"]);
-    expect(a).toEqual(b);
   });
 
   it("refuses an empty chain loudly", () => {
@@ -67,8 +47,6 @@ describe("Placement.selectModel", () => {
 
   it("a single-candidate chain absorbs every failure class at index 0", () => {
     const selection = Placement.selectModel([primary], ["timeout", "transient_error"]);
-    expect(selection.model).toEqual(primary);
-    expect(selection.index).toBe(0);
-    expect(selection.exhausted).toBe(true);
+    expect(selection).toEqual({ model: primary, index: 0, exhausted: true });
   });
 });

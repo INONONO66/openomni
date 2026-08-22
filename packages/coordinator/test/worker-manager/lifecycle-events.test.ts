@@ -240,6 +240,7 @@ describe("worker driver lifecycle events (#462 §4)", () => {
       sessionId: "session-cq-2",
       outcome: "cancelled",
     });
+    expect(manager.stats().activeRuns).toBe(0);
 
     await occupying;
   });
@@ -271,6 +272,7 @@ describe("worker driver lifecycle events (#462 §4)", () => {
       (entry) => entry.event.name === Worker.Events.RunSettled.name,
     )?.data;
     expect(settled).toMatchObject({ runId: "run-cs-1", outcome: "cancelled" });
+    expect(manager.stats().activeRuns).toBe(0);
   });
 
   test("a mid-flight cancel settles as cancelled, not completed (#audit M4b/M4c)", async () => {

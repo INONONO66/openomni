@@ -1,42 +1,28 @@
 import { describe, expect, test } from "bun:test";
 import { SessionInfo } from "../../src/session/info";
 
-describe("SessionInfo schema", () => {
-  test("parses old format (backward compatibility)", () => {
-    const oldFormat = {
-      id: "session-1",
-      title: "My Session",
-      model: { providerID: "anthropic", modelID: "claude-3-sonnet" },
-      time: { created: 1000, updated: 2000 },
-    };
+const base = {
+  model: { providerID: "test", modelID: "test-model" },
+  time: { created: 1000, updated: 2000 },
+};
 
-    const result = SessionInfo.safeParse(oldFormat);
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.id).toBe("session-1");
-      expect(result.data.title).toBe("My Session");
-      expect(result.data.agent).toBeUndefined();
-      expect(result.data.tokens).toBeUndefined();
-      expect(result.data.messageCount).toBeUndefined();
-      expect(result.data.summary).toBeUndefined();
-      expect(result.data.projectId).toBeUndefined();
-      expect(result.data.parentSessionId).toBeUndefined();
-      expect(result.data.spawnDepth).toBe(0);
-      expect(result.data.workerMeta).toBeUndefined();
-      expect(result.data.time.archived).toBeUndefined();
+describe("SessionInfo schema", () => {
+  test("defaults legacy optional fields", () => {
+    const result = SessionInfo.parse({ ...base, id: "session-1", title: "My Session" });
+    expect(result).toMatchObject({ id: "session-1", title: "My Session", spawnDepth: 0 });
+    for (const field of ["agent", "tokens", "messageCount", "summary", "projectId", "parentSessionId", "workerMeta"] as const) {
+      expect(result[field]).toBeUndefined();
     }
+    expect(result.time.archived).toBeUndefined();
   });
 
-  test("parses full format with all new fields", () => {
-    const fullFormat = {
+  test("parses the complete persisted shape", () => {
+    const result = SessionInfo.parse({
+      ...base,
       id: "session-2",
       title: "Full Session",
       model: { providerID: "openai", modelID: "gpt-4" },
-      time: {
-        created: 1000,
-        updated: 2000,
-        archived: 3000,
-      },
+      time: { ...base.time, archived: 3000 },
       expiresAt: 4000,
       parentSessionId: "parent-1",
       spawnDepth: 2,
@@ -46,109 +32,52 @@ describe("SessionInfo schema", () => {
       summary: "Session summary text",
       projectId: "proj-123",
       workerMeta: { kind: "worker", lane: "analysis" },
-    };
-
-    const result = SessionInfo.safeParse(fullFormat);
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.id).toBe("session-2");
-      expect(result.data.agent?.id).toBe("agent-1");
-      expect(result.data.agent?.name).toBe("Research Agent");
-      expect(result.data.tokens?.input).toBe(100);
-      expect(result.data.tokens?.output).toBe(50);
-      expect(result.data.tokens?.total).toBe(150);
-      expect(result.data.messageCount).toBe(5);
-      expect(result.data.summary).toBe("Session summary text");
-      expect(result.data.projectId).toBe("proj-123");
-      expect(result.data.parentSessionId).toBe("parent-1");
-      expect(result.data.spawnDepth).toBe(2);
-      expect(result.data.workerMeta).toEqual({ kind: "worker", lane: "analysis" });
-      expect(result.data.time.archived).toBe(3000);
-    }
+    });
+    expect(result).toMatchObject({
+      id: "session-2",
+      agent: { id: "agent-1", name: "Research Agent" },
+      tokens: { input: 100, output: 50, total: 150 },
+      messageCount: 5,
+      summary: "Session summary text",
+      projectId: "proj-123",
+      parentSessionId: "parent-1",
+      spawnDepth: 2,
+      workerMeta: { kind: "worker", lane: "analysis" },
+      time: { archived: 3000 },
+      expiresAt: 4000,
+    });
   });
 
-  test("parses partial format with some new fields", () => {
-    const partialFormat = {
-      id: "session-3",
-      title: "Partial Session",
-      model: { providerID: "anthropic", modelID: "claude-3-opus" },
-      time: { created: 1000, updated: 2000 },
-      agent: { id: "agent-2" },
-      messageCount: 3,
-    };
-
-    const result = SessionInfo.safeParse(partialFormat);
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.agent?.id).toBe("agent-2");
-      expect(result.data.agent?.name).toBeUndefined();
-      expect(result.data.messageCount).toBe(3);
-      expect(result.data.tokens).toBeUndefined();
-      expect(result.data.summary).toBeUndefined();
-      expect(result.data.projectId).toBeUndefined();
-      expect(result.data.parentSessionId).toBeUndefined();
-      expect(result.data.spawnDepth).toBe(0);
-      expect(result.data.workerMeta).toBeUndefined();
-    }
-  });
-
-  test("infers correct TypeScript types", () => {
-    const session: SessionInfo = {
-      id: "session-4",
-      title: "Type Test",
-      model: { providerID: "test", modelID: "test-model" },
-      time: { created: 1000, updated: 2000 },
-      spawnDepth: 0,
-    };
-
-    expect(session.id).toBe("session-4");
-    expect(session.agent).toBeUndefined();
-    expect(session.tokens).toBeUndefined();
-    expect(session.spawnDepth).toBe(0);
-  });
-
-  test("validates agent object structure", () => {
-    const invalidAgent = {
-      id: "session-5",
-      title: "Invalid Agent",
-      model: { providerID: "test", modelID: "test-model" },
-      time: { created: 1000, updated: 2000 },
-      agent: { id: 123 },
-    };
-
-    const result = SessionInfo.safeParse(invalidAgent);
-    expect(result.success).toBe(false);
-  });
-
-  test("validates tokens object structure", () => {
-    const invalidTokens = {
-      id: "session-6",
-      title: "Invalid Tokens",
-      model: { providerID: "test", modelID: "test-model" },
-      time: { created: 1000, updated: 2000 },
-      tokens: { input: "100", output: 50, total: 150 },
-    };
-
-    const result = SessionInfo.safeParse(invalidTokens);
-    expect(result.success).toBe(false);
-  });
-
-  test("allows expiresAt with new fields", () => {
-    const withExpiry = {
+  for (const row of [
+    {
       id: "session-7",
       title: "With Expiry",
-      model: { providerID: "test", modelID: "test-model" },
-      time: { created: 1000, updated: 2000 },
       expiresAt: 5000,
       agent: { id: "agent-3" },
       tokens: { input: 10, output: 5, total: 15 },
-    };
+    },
+  ]) {
+    test("allows expiresAt with new fields", () => {
+      const result = SessionInfo.parse({ ...base, ...row });
+      expect(result.expiresAt).toBe(5000);
+      expect(result.agent?.id).toBe("agent-3");
+      expect(result.tokens).toEqual({ input: 10, output: 5, total: 15 });
+    });
+  }
 
-    const result = SessionInfo.safeParse(withExpiry);
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.expiresAt).toBe(5000);
-      expect(result.data.agent?.id).toBe("agent-3");
-    }
+  test("parses a partial new shape", () => {
+    const result = SessionInfo.parse({ ...base, id: "session-3", title: "Partial Session", agent: { id: "agent-2" }, messageCount: 3 });
+    expect(result).toMatchObject({ agent: { id: "agent-2" }, messageCount: 3, spawnDepth: 0 });
+    expect(result.agent?.name).toBeUndefined();
+    for (const field of ["tokens", "summary", "projectId", "parentSessionId", "workerMeta"] as const) expect(result[field]).toBeUndefined();
   });
+
+  for (const [name, malformed] of [
+    ["agent", { agent: { id: 123 } }],
+    ["tokens", { tokens: { input: "100", output: 50, total: 150 } }],
+  ] as const) {
+    test(`rejects malformed ${name}`, () => {
+      expect(SessionInfo.safeParse({ ...base, id: `invalid-${name}`, title: "Invalid", ...malformed }).success).toBe(false);
+    });
+  }
 });

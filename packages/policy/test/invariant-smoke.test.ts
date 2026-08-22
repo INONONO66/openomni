@@ -2,29 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { PolicyDecision } from "@openomni/protocol";
 import { PolicyEngine } from "../src/index";
 
-/**
- * In-package smoke pins for the engine's three headline invariants (#606
- * audit): each previously survived mutation under this package's own suite —
- * the only defense was packages/agent's conformance tests, so a policy-local
- * refactor loop ran unprotected.
- */
 const POINT = "run.turn.pre" as const;
+const context = { sessionId: "session-invariant", runId: "run-invariant", turnIndex: 0, traceContext: { traceId: "trace-invariant" } };
 
-function turnContext() {
-  return {
-    sessionId: "session-invariant",
-    runId: "run-invariant",
-    turnIndex: 0,
-    traceContext: { traceId: "trace-invariant" },
-  };
-}
-
-function recorder(
-  name: string,
-  priority: number,
-  calls: string[],
-  verdict: "allow" | "deny" | "pending" = "allow",
-) {
+type Verdict = "allow" | "deny" | "pending";
+function registration(name: string, priority: number, calls: string[], verdict: Verdict = "allow") {
   return {
     kind: "point" as const,
     name,
@@ -33,81 +15,49 @@ function recorder(
     priority,
     fn: () => {
       calls.push(name);
-      if (verdict === "deny") {
-        return PolicyDecision.deny({ policyId: name });
-      }
-      if (verdict === "pending") {
-        return PolicyDecision.pending({ policyId: name });
-      }
-      return PolicyDecision.allow({ policyId: name });
+      return PolicyDecision[verdict]({ policyId: name });
     },
   };
 }
 
 describe("engine invariants hold under the package's own suite", () => {
-  test("a deny short-circuits: later registrations never execute", async () => {
-    const calls: string[] = [];
-    const engine = PolicyEngine.create({ audit: false });
-    // Selection is ASCENDING priority: the priority-0 denier runs first and
-    // the priority-10 registration must never execute.
-    engine.register(recorder("denier", 0, calls, "deny"));
-    engine.register(recorder("after-deny", 10, calls));
-
-    const decision = await engine.dispatchPoint(POINT, turnContext());
-
-    expect(decision.verdict).toBe("deny");
-    expect(calls).toEqual(["denier"]);
-  });
-
-  test("pending outranks allow in composition", async () => {
-    const calls: string[] = [];
-    const engine = PolicyEngine.create({ audit: false });
-    engine.register(recorder("allower", 0, calls));
-    engine.register(recorder("pender", 10, calls, "pending"));
-
-    const decision = await engine.dispatchPoint(POINT, turnContext());
-
-    expect(decision.verdict).toBe("pending");
-    expect(calls).toEqual(["allower", "pender"]);
-  });
-
-  test("priority orders evaluation — ascending, registration order breaks ties", async () => {
-    const calls: string[] = [];
-    const engine = PolicyEngine.create({ audit: false });
-    engine.register(recorder("last", 100, calls));
-    engine.register(recorder("first", 1, calls));
-    engine.register(recorder("tie-a", 50, calls));
-    engine.register(recorder("tie-b", 50, calls));
-
-    await engine.dispatchPoint(POINT, turnContext());
-
-    // Equal priority resolves by registration order (tie-a before tie-b).
-    expect(calls).toEqual(["first", "tie-a", "tie-b", "last"]);
-  });
+  for (const { name, entries, verdict, calls: expectedCalls } of [
+    {
+      name: "a deny short-circuits: later registrations never execute",
+      entries: [["denier", 0, "deny"], ["after-deny", 10, "allow"]],
+      verdict: "deny",
+      calls: ["denier"],
+    },
+    {
+      name: "pending outranks allow in composition",
+      entries: [["allower", 0, "allow"], ["pender", 10, "pending"]],
+      verdict: "pending",
+      calls: ["allower", "pender"],
+    },
+    {
+      name: "priority orders evaluation — ascending, registration order breaks ties",
+      entries: [["last", 100, "allow"], ["first", 1, "allow"], ["tie-a", 50, "allow"], ["tie-b", 50, "allow"]],
+      verdict: "allow",
+      calls: ["first", "tie-a", "tie-b", "last"],
+    },
+  ] as const) {
+    test(name, async () => {
+      const calls: string[] = [];
+      const engine = PolicyEngine.create({ audit: false });
+      for (const [id, priority, result] of entries) engine.register(registration(id, priority, calls, result));
+      const decision = await engine.dispatchPoint(POINT, context);
+      expect(decision.verdict).toBe(verdict);
+      expect(calls).toEqual([...expectedCalls]);
+    });
+  }
 
   test("a deny at a side-effect boundary escalates to run.abort", async () => {
-    // enforceDenyAbort (engine/decisions.ts): a deny composed at a point that
-    // is a side-effect boundary and allows run.abort must carry the abort
-    // effect even when no registration asserted one — a deny that stops
-    // nothing is the failure mode the escalation exists to prevent. This was
-    // previously pinned only by packages/agent's conformance suite; deleting
-    // the escalation survived this package's own 81 tests (#606 re-audit).
     const engine = PolicyEngine.create({ audit: false });
     engine.register({
-      kind: "point",
-      name: "denier-without-abort",
-      pointIds: [POINT],
-      effectCapabilities: { [POINT]: [] },
-      priority: 0,
-      fn: () =>
-        PolicyDecision.deny({
-          policyId: "denier-without-abort",
-          reasonCodes: ["invariant.deny_reason"],
-        }),
+      kind: "point", name: "denier-without-abort", pointIds: [POINT], effectCapabilities: { [POINT]: [] }, priority: 0,
+      fn: () => PolicyDecision.deny({ policyId: "denier-without-abort", reasonCodes: ["invariant.deny_reason"] }),
     });
-
-    const decision = await engine.dispatchPoint(POINT, turnContext());
-
+    const decision = await engine.dispatchPoint(POINT, context);
     expect(decision.verdict).toBe("deny");
     expect(decision.effects[0]).toEqual({ type: "run.abort", reason: "invariant.deny_reason" });
   });

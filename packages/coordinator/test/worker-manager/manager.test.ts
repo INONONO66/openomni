@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
-import { WorkerDeliveryError } from "../../src/error";
-import { createWorkerManager, type WorkerManager } from "../../src/worker-manager";
+import { createWorkerManager, WorkerDeliveryError, type WorkerManager } from "../../src/index";
 import { collectorPorts } from "../harness/ports";
 
 const TEST_TRACE_ID = "trace-coordinator-test";
@@ -184,38 +183,6 @@ describe("on-demand WorkerManager", () => {
     await expect(dispatch).resolves.toMatchObject({ status: "cancelled", runId: "run-cancel" });
   });
 
-  test("accepts cancellation while a worker is still starting", async () => {
-    process.env.OPENOMNI_WORKER_BOOTSTRAP_DELAY_MS = "250";
-    manager = createWorkerManager(
-      {
-        workerScript: WORKER_ENTRY,
-        socketDir: makeSocketDir("startup-cancel"),
-        maxActiveWorkers: 1,
-        idleShutdownMs: 1_000,
-        // The bootstrap-delay knob is a fixture key, off the production
-        // allowlist; the test forwards it explicitly.
-        extraWorkerEnvKeys: ["OPENOMNI_WORKER_BOOTSTRAP_DELAY_MS"],
-      },
-      collectorPorts(),
-    );
-
-    const dispatch = manager.deliver("run-startup-cancel", {
-      traceId: TEST_TRACE_ID,
-      sessionId: "startup-cancel-session",
-      prompt: "test",
-    });
-    await waitFor(() => manager?.stats().activeRuns === 1);
-    expect(manager.stats().ready).toBe(0);
-
-    await expect(manager.cancel("run-startup-cancel")).resolves.toMatchObject({
-      cancelled: true,
-    });
-    await expect(dispatch).resolves.toMatchObject({
-      status: "cancelled",
-      runId: "run-startup-cancel",
-    });
-  });
-
   test("rejects duplicate run ids across concurrent sessions before worker delivery", async () => {
     manager = createWorkerManager(
       {
@@ -382,43 +349,6 @@ describe("on-demand WorkerManager", () => {
 
     expect(results.every((result) => result.status === "fulfilled")).toBe(true);
     expect(manager.stats().workers).toBeLessThanOrEqual(1);
-  });
-
-  test("cancels queued dispatch before worker delivery", async () => {
-    manager = createWorkerManager(
-      {
-        workerScript: WORKER_ENTRY,
-        socketDir: makeSocketDir("queued-cancel"),
-        maxActiveWorkers: 1,
-        idleShutdownMs: 1_000,
-      },
-      collectorPorts(),
-    );
-
-    const first = manager.deliver("run-busy-cancel", {
-      traceId: TEST_TRACE_ID,
-      sessionId: "busy-session",
-      delayMs: 200,
-      prompt: "test",
-    });
-    await waitFor(() => manager?.stats().activeRuns === 1);
-
-    const queued = manager.deliver("run-queued-cancel", {
-      traceId: TEST_TRACE_ID,
-      sessionId: "queued-session",
-      prompt: "test",
-    });
-    await waitFor(() => manager?.stats().activeRuns === 2);
-
-    await expect(manager.cancel("run-queued-cancel")).resolves.toMatchObject({
-      cancelled: true,
-      queued: true,
-    });
-    await expect(queued).resolves.toMatchObject({
-      status: "cancelled",
-      runId: "run-queued-cancel",
-    });
-    await first;
   });
 
   test("delivers live worker messages to an active run mailbox", async () => {
