@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787377877624,
+  "lastUpdate": 1787382205011,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -59027,6 +59027,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 512539,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2ff0f90cb5adb4180cfcfff3cf03100fbe4fd580",
+          "message": "feat(placement,agent): @openomni/placement — model fallback chains per attempt (#756)\n\n* feat(placement,agent): @openomni/placement — model fallback chains per attempt (#752)\n\nOpens the reserved ring-1 placement package with its smallest honest slice:\nthe MODEL axis. Loop-only per the issue scope — no openomni/server change.\n\n- placement: Placement.selectModel(chain, priorFailureReasons) — a pure fold\n  in the protocol-fold discipline (no clock, no store, no I/O; deterministic\n  and replayable). Chain-advancing failure classes: timeout, transient_error,\n  validation_error. Deliberately NOT advancing: tool_error (not the model's\n  fault), context_overflow (the compaction recovery seam retries the SAME\n  model), aborted (a stop instruction is never a placement signal), unknown\n  strings (fail conservative). Selection clamps to the last candidate and\n  reports exhaustion — WHEN a run stops retrying stays the retry policy's\n  decision; placement only picks.\n- agent: ChatAgentConfig.modelFallbacks — the loop's EXISTING per-attempt\n  model resolution now selects through the fold using the run's decided\n  failure facts (the retry decision's own reason record, never re-derived\n  from the thrown error). Resolution stays per attempt, so a fallback switch\n  re-records the window fact and the per-call assistant records carry the\n  model actually used. Absent fallbacks = byte-identical behavior (primary\n  every attempt).\n- check-deps: placement rule (protocol-only) + agent whitelist gains\n  placement in both manifest and src allowlists.\n- docs: root AGENTS.md (tree, dep graph, whitelist table, ownership row,\n  11 packages), agent AGENTS.md (deps + config table row),\n  docs/architecture.md placement paragraph (opened at #752, model axis).\n\nTests: placement fold (advancing/non-advancing classes, clamping+exhaustion,\nmixed history, determinism, empty-chain refusal, single-candidate chain);\nagent end-to-end (transient failure -> fallback resolved on attempt 2,\ntool_error stays on primary, no-fallbacks stays on primary).\n\nCloses #752\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(agent,placement): address adversarial review F1-F6 — retryability gate, guard reset, truthful modelId, CI wiring\n\nF1: validation_error was advertised as chain-advancing but unreachable —\nDEFAULT_RETRY_POLICY.retryOn never retried it. It is now retryable EXACTLY\nwhen a fallback chain is configured (a refusal reaches a DIFFERENT model;\nsame-model blind retry stays refused), bounded by maxAttempts as before.\nF2: the placement↔retry reason vocabulary is now cross-pinned on the agent\nside (placement-vocabulary.test.ts: compile-time exhaustiveness over\nRetryReason + runtime set equality) — a rename on either side fails there\ninstead of silently un-advancing the chain; placement AGENTS.md's claim now\nnames the real pin.\nF3: a fallback model SWITCH resets the model-scoped window guards\n(windowYieldDisarmed + the spent L5 overflow one-shot) — they were judgments\nabout the previous model's window; carried over, a smaller fallback window\nran blind with its recovery already consumed. Pinned end-to-end (yield\nre-arms at the fallback's own 0.8 threshold).\nF4: connection.llm.pre/post now carry the model the connection ACTUALLY\ncalls (resolved per-attempt selection), not the configured primary —\nper-model policy no longer judges the wrong model after a switch; modelId\njoins PolicyContext as declared vocabulary.\nF5: the new package is no longer CI-decorative — ci.yml gains the\nTest (placement) step and coverage-baseline.json the packages/placement\nentry (100%, 22/22 lines; ratchet verified locally with all reports).\nF6: verify-tsconfig-inheritance sourceRoots and check-deps TRACKED_DOCS\ngain the placement entries the other packages are under.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* chore: re-verification nits — honest exhausted-chain comment, baseline key order\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* chore: CodeRabbit round — implemented reason classes in arch doc, explicit test timeout\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-22T16:02:18+09:00",
+          "tree_id": "5af98c8a885e97632c5d529b49764b2366bbf6fe",
+          "url": "https://github.com/INONONO66/openomni/commit/2ff0f90cb5adb4180cfcfff3cf03100fbe4fd580"
+        },
+        "date": 1787382204449,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 445,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 656,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6197,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10200,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2608,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2938,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2433,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16091,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8344,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1064,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 958,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1583,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1535,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 816,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 44445,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2312,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 529300,
             "unit": "ns/op"
           }
         ]
