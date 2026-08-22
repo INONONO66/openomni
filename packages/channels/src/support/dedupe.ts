@@ -9,6 +9,10 @@ export class Dedupe {
     this.maxSize = maxSize;
   }
 
+  forget(id: string): void {
+    this.seen.delete(id);
+  }
+
   isDuplicate(id: string): boolean {
     // prune every 100 operations to amortize cost
     if (++this.ops >= 100) {
