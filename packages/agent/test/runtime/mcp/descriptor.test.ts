@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { RequestOptions } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import { Operational, type Policy, type Tool } from "@openomni/protocol";
+import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { McpClient, type McpClientHandle } from "../../../src/runtime/mcp/client";
 
@@ -22,8 +22,6 @@ interface McpToolStub {
   readonly description?: string;
   readonly inputSchema: { readonly type: "object" } & Record<string, unknown>;
 }
-type ToolSpecWithDescriptor = Tool.Spec & { readonly descriptor?: Policy.Resource.Descriptor };
-
 function stubClient(tools: McpToolStub[] = []): McpClientHandle {
   return {
     connect: async () => undefined,
@@ -151,8 +149,8 @@ function observeError(serverName: string) {
   return { seen, next, unsubscribe };
 }
 
-describe("McpClient tool descriptors", () => {
-  test("attaches Policy.Resource descriptors to listed MCP tools", async () => {
+describe("McpClient listed tools", () => {
+  test("namespaces listed MCP tools", async () => {
     const client = new McpClient(stdio(), {
       events: Bus,
       traceId: TRACE_ID,
@@ -164,32 +162,17 @@ describe("McpClient tool descriptors", () => {
         },
       ]),
     });
-    const [tool] = (await client.listTools()) as ToolSpecWithDescriptor[];
+    const [tool] = await client.listTools();
     expect(tool?.name).toBe("filesystem.write_file");
-    expect(tool?.labels).toEqual(["source:mcp", "mcp.filesystem"]);
-    expect(tool?.descriptor).toEqual({
-      id: "tool:mcp:filesystem:write_file",
-      kind: "tool",
-      source: { type: "mcp", serverId: "filesystem", remoteName: "write_file" },
-      labels: ["source:mcp", "mcp.filesystem"],
-      capabilities: ["network.write"],
-      effects: ["external.write"],
-    });
   });
 
-  test("uses the remote MCP tool name in descriptor source metadata", async () => {
+  test("preserves the remote MCP tool name after namespacing", async () => {
     const client = new McpClient(http(), {
       events: Bus,
       client: stubClient([{ name: "search", inputSchema: { type: "object" } }]),
     });
-    const [tool] = (await client.listTools()) as ToolSpecWithDescriptor[];
+    const [tool] = await client.listTools();
     expect(tool?.name).toBe("search-server.search");
-    expect(tool?.descriptor?.id).toBe("tool:mcp:search-server:search");
-    expect(tool?.descriptor?.source).toEqual({
-      type: "mcp",
-      serverId: "search-server",
-      remoteName: "search",
-    });
   });
 });
 

@@ -20,12 +20,7 @@ import {
 } from "./messaging/reply-grant.js";
 import { createExistingAgentMessaging, type DeliveryReceipt } from "./messaging/send.js";
 import type { ExistingAgentMessaging } from "./messaging/send.js";
-import {
-  executeWaitRoute,
-  pinRouteSession,
-  pinSelectedTarget,
-  requireRoutedDecision,
-} from "./routing-execution.js";
+import { executeWaitRoute, requireRoutedDecision } from "./routing-execution.js";
 import { resolveAndRecordRoute, type KernelRouteResolution } from "./routing-resolution.js";
 
 export { resolveIngressActor } from "./actor-resolver.js";
@@ -33,8 +28,6 @@ export { IngressAuthorityMiddleware } from "./authority.js";
 export { resolveRoute, type RouteInbound, type RouteState } from "./resolve-route.js";
 export {
   executeWaitRoute,
-  pinRouteSession,
-  pinSelectedTarget,
   requireRoutedDecision,
   type WaitRouteExecution,
 } from "./routing-execution.js";
@@ -197,7 +190,6 @@ function sanitizeInboundEvent(event: Gateway.DeliveredEvent): Gateway.DeliveredE
   return next;
 }
 
-/** The §2a perimeter-verdict projection of a routed delivery. */
 function actorContextOf(
   event: Gateway.DeliveredEvent,
   decision: Ingress.RoutingDecisionPayload,
@@ -398,7 +390,14 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
         });
         event = preRun.event;
       }
-      const pinned = pinRouteSession(pinSelectedTarget(event, route.selectedTarget), decision);
+      const selected = { ...event, target: route.selectedTarget };
+      const pinned =
+        decision.sessionId === undefined
+          ? selected
+          : {
+              ...selected,
+              activation: { ...selected.activation, durableSessionId: decision.sessionId },
+            };
 
       // Routed session label: the wait-owner / surface-map pin when the
       // decision carries one; otherwise, for a resident surface-default

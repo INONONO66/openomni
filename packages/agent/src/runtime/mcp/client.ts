@@ -8,7 +8,6 @@ import {
   type TransportCloseTracker,
   trackTransportCloseRequests,
 } from "./client-connection";
-import { attachMcpToolDescriptor } from "./client-descriptor";
 import { createTransport } from "./client-transport";
 import type { McpClientDependencies, McpClientHandle, McpTransportFactory } from "./client-types";
 import { convertMcpTool, convertMcpResult } from "./convert";
@@ -121,9 +120,7 @@ export class McpClient {
 
   async listTools(context?: { readonly signal?: AbortSignal }): Promise<Tool.Spec[]> {
     const response = await this.client.listTools(undefined, requestOptions(this.config, context));
-    return response.tools.map((tool) =>
-      attachMcpToolDescriptor(convertMcpTool(tool, this.config.name), this.config.name, tool.name),
-    );
+    return response.tools.map((tool) => convertMcpTool(tool, this.config.name));
   }
 
   async callTool(
@@ -185,10 +182,6 @@ export class McpClient {
 
       throw err;
     }
-  }
-
-  get serverName(): string {
-    return this.config.name;
   }
 }
 

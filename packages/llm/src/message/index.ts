@@ -12,14 +12,6 @@ type AssistantReasoningBlock = Extract<AssistantContentBlock, { type: "reasoning
 type AssistantToolCallBlock = Extract<AssistantContentBlock, { type: "tool-call" }>;
 type ToolResultBlock = Extract<ToolMessage["content"][number], { type: "tool-result" }>;
 
-function buildUserBlock(content: string): Extract<SDKMessage, { role: "user" }> {
-  return { role: "user", content };
-}
-
-function buildAssistantTextBlock(content: string): AssistantTextBlock {
-  return { type: "text", text: content };
-}
-
 /**
  * #532 candidate 10: the provider reasoning signature is only valid for the
  * exact model that produced it, so it is resent only when the outgoing
@@ -60,10 +52,6 @@ function buildToolCallBlock(call: {
   };
 }
 
-function buildAssistantBlock(content: AssistantMessage["content"]): AssistantMessage {
-  return { role: "assistant", content };
-}
-
 function buildToolResultBlock(result: {
   id: string;
   tool: string;
@@ -78,12 +66,10 @@ function buildToolResultBlock(result: {
   };
 }
 
-function buildToolBlock(content: ToolResultBlock[]): ToolMessage {
-  return { role: "tool", content };
-}
-
-function stringifyToolOutput(output: unknown): string {
+export function stringifyToolOutput(output: unknown): string {
   if (typeof output === "string") return output;
+  if (output == null) return "";
+  if (output instanceof Error) return output.message || String(output);
   try {
     return JSON.stringify(output) ?? String(output);
   } catch {
@@ -104,7 +90,7 @@ export function toModelMessages(
       const textParts = msg.parts.filter((p): p is Message.TextPart => p.type === "text");
       const content = textParts.map((p) => p.text).join("\n");
       if (content.length > 0) {
-        coreMessages.push(buildUserBlock(content));
+        coreMessages.push({ role: "user", content });
       }
     }
 
@@ -141,36 +127,39 @@ export function toModelMessages(
           );
 
           if (part.state.status === "completed") {
-            toolResults.push(
-              buildToolBlock([
+            toolResults.push({
+              role: "tool",
+              content: [
                 buildToolResultBlock({
                   id: part.callID,
                   tool: part.tool,
                   output: stringifyToolOutput(part.state.output),
                 }),
-              ]),
-            );
+              ],
+            });
           } else if (part.state.status === "error") {
-            toolResults.push(
-              buildToolBlock([
+            toolResults.push({
+              role: "tool",
+              content: [
                 buildToolResultBlock({
                   id: part.callID,
                   tool: part.tool,
                   output: `Error: ${part.state.error}`,
                 }),
-              ]),
-            );
+              ],
+            });
           } else {
             // pending/running — interrupted
-            toolResults.push(
-              buildToolBlock([
+            toolResults.push({
+              role: "tool",
+              content: [
                 buildToolResultBlock({
                   id: part.callID,
                   tool: part.tool,
                   output: "[Tool execution was interrupted]",
                 }),
-              ]),
-            );
+              ],
+            });
           }
         }
       }
@@ -184,11 +173,11 @@ export function toModelMessages(
         > = [...reasoningBlocks];
 
         if (textContent.length > 0) {
-          assistantContent.push(buildAssistantTextBlock(textContent.join("\n")));
+          assistantContent.push({ type: "text", text: textContent.join("\n") });
         }
         assistantContent.push(...toolCalls);
 
-        coreMessages.push(buildAssistantBlock(assistantContent));
+        coreMessages.push({ role: "assistant", content: assistantContent });
 
         for (const result of toolResults) {
           coreMessages.push(result);
@@ -198,11 +187,11 @@ export function toModelMessages(
           ...reasoningBlocks,
         ];
         if (textContent.length > 0) {
-          assistantContent.push(buildAssistantTextBlock(textContent.join("\n")));
+          assistantContent.push({ type: "text", text: textContent.join("\n") });
         }
-        coreMessages.push(buildAssistantBlock(assistantContent));
+        coreMessages.push({ role: "assistant", content: assistantContent });
       } else if (textContent.length > 0) {
-        coreMessages.push(buildAssistantBlock(textContent.join("\n")));
+        coreMessages.push({ role: "assistant", content: textContent.join("\n") });
       }
     }
   }

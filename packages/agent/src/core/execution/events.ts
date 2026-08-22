@@ -50,22 +50,13 @@ export const RunEvents = {
     }),
     { visibility: "ephemeral" },
   ),
-  Compaction: BusEvent.define(
-    "agent.compaction",
-    AgentBase.extend({
-      messagesBefore: z.number(),
-      messagesAfter: z.number(),
-    }),
-    { visibility: "llm_reason" },
-  ),
   /**
    * The compaction lock bracket. `started` is published before any
    * compaction work; `completed` is the operation's last record on every
    * exit path, a summarizer throw included (`outcome: "failed"`). A started
    * row without a completed row therefore diagnoses a run that died inside
    * compaction — previously indistinguishable from an unexplained
-   * fail-closed deny. The existing `agent.compaction` event remains the
-   * apply-phase record at the effect seam.
+   * fail-closed deny.
    */
   CompactionStarted: BusEvent.define(
     "agent.compaction.started",

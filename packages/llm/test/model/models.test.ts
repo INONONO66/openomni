@@ -1,7 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach, mock } from "bun:test";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Model } from "@openomni/protocol";
 import { ModelsDev } from "../../src/model";
 
 describe("ModelsDev", () => {
@@ -18,86 +17,6 @@ describe("ModelsDev", () => {
   describe("public API", () => {
     it("should expose only the supported catalog operations", () => {
       expect("init" in ModelsDev).toBe(false);
-    });
-  });
-
-  describe("schemas", () => {
-    it("should validate a well-formed Model", () => {
-      const result = ModelsDev.Model.safeParse({
-        id: "claude-sonnet-4",
-        name: "Claude Sonnet 4",
-        limit: { context: 200000 },
-      });
-      expect(result.success).toBe(true);
-    });
-
-    it("should validate a minimal Model (only id and name required)", () => {
-      const result = ModelsDev.Model.safeParse({
-        id: "test-model",
-        name: "Test",
-      });
-      expect(result.success).toBe(true);
-    });
-
-    it("should reject a Model missing id", () => {
-      const result = ModelsDev.Model.safeParse({ name: "Test" });
-      expect(result.success).toBe(false);
-    });
-
-    it("should validate a well-formed Provider", () => {
-      const result = ModelsDev.Provider.safeParse({
-        id: "anthropic",
-        name: "Anthropic",
-        env: ["ANTHROPIC_API_KEY"],
-        npm: "@ai-sdk/anthropic",
-        models: {
-          "claude-sonnet-4": { id: "claude-sonnet-4", name: "Claude Sonnet 4" },
-        },
-      });
-      expect(result.success).toBe(true);
-    });
-
-    it("should reject a Provider missing required fields", () => {
-      const result = ModelsDev.Provider.safeParse({ id: "test" });
-      expect(result.success).toBe(false);
-    });
-
-    it("should validate Model with family and release_date", () => {
-      const result = ModelsDev.Model.safeParse({
-        id: "claude-sonnet-4",
-        name: "Claude Sonnet 4",
-        family: "claude",
-        release_date: "2025-05-22",
-      });
-      expect(result.success).toBe(true);
-    });
-
-    it("should validate Model with status field", () => {
-      for (const status of ["alpha", "beta", "deprecated", "active"] as const) {
-        const result = ModelsDev.Model.safeParse({
-          id: "test",
-          name: "Test",
-          status,
-        });
-        expect(result.success).toBe(true);
-      }
-    });
-
-    it("should reuse the same model status schema for provider models", () => {
-      const result = ModelsDev.ModelStatus.safeParse("active");
-      expect(result.success).toBe(true);
-      expect(ModelsDev.ModelStatus).toBe(Model.Status);
-    });
-
-    it("should validate Provider with api field", () => {
-      const result = ModelsDev.Provider.safeParse({
-        id: "anthropic",
-        name: "Anthropic",
-        api: "https://api.anthropic.com",
-        env: ["ANTHROPIC_API_KEY"],
-        models: {},
-      });
-      expect(result.success).toBe(true);
     });
   });
 

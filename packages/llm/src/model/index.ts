@@ -1,4 +1,4 @@
-import { z } from "zod";
+import type { z } from "zod";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { Model as ProtocolModel } from "@openomni/protocol";
@@ -10,30 +10,24 @@ export namespace ModelsDev {
   export const ModelStatus = ProtocolModel.Status;
   export type ModelStatus = z.infer<typeof ModelStatus>;
 
-  export const Model = z.object({
-    id: z.string(),
-    name: z.string(),
-    family: z.string().optional(),
-    release_date: z.string().optional(),
-    limit: z
-      .object({
-        context: z.number(),
-      })
-      .optional(),
-    status: ModelStatus.optional(),
-    provider: z.object({ npm: z.string() }).optional(),
-  });
-  export type Model = z.infer<typeof Model>;
+  export interface Model {
+    id: string;
+    name: string;
+    family?: string;
+    release_date?: string;
+    limit?: { context: number };
+    status?: ModelStatus;
+    provider?: { npm: string };
+  }
 
-  export const Provider = z.object({
-    api: z.string().optional(),
-    name: z.string(),
-    env: z.array(z.string()),
-    id: z.string(),
-    npm: z.string().optional(),
-    models: z.record(z.string(), z.unknown()),
-  });
-  export type Provider = z.infer<typeof Provider>;
+  export interface Provider {
+    api?: string;
+    name: string;
+    env: string[];
+    id: string;
+    npm?: string;
+    models: Record<string, unknown>;
+  }
 
   function modelsUrl() {
     return process.env.OPENOMNI_MODELS_URL || "https://models.dev";
@@ -118,10 +112,8 @@ export namespace ModelsDev {
       }
     }
 
-    const snapshotModule = await import("./models-snapshot.json").catch(() => undefined);
-    if (snapshotModule?.default) return snapshotModule.default as Record<string, Provider>;
-
-    return {};
+    const snapshotModule = await import("./models-snapshot.json");
+    return snapshotModule.default as Record<string, Provider>;
   });
 
   // The on-disk catalog cache is write-once by design: it is populated on the
@@ -133,7 +125,6 @@ export namespace ModelsDev {
   }
 }
 
-// merged from util/lazy.ts (#453 hygiene: sub-30-LOC single-importer)
 function lazy<T>(fn: () => T) {
   let value: T | undefined;
   let loaded = false;

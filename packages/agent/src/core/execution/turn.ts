@@ -18,7 +18,6 @@ import {
   applyEffectOrDeny,
   emitBudgetReassurance,
   emitBudgetWarning,
-  emitCompaction,
   emitErrorRetry,
   emitTurnComplete,
   guardAbortedResult,
@@ -268,7 +267,6 @@ export async function buildTurn(
     type: "ready",
     turn: {
       runInput: {
-        // llm reports through the same port the agent was handed.
         events: config.events,
         // ALIASING INVARIANT: this is `state.messages` itself, not a copy.
         // Effects that append to run history between here and the llm call
@@ -399,7 +397,6 @@ ${effect.message}`
   return { system };
 }
 
-/** The run ends with this result, or it takes another turn. */
 export type StopOutcome = AgentResult | "continue";
 
 /**
@@ -570,18 +567,6 @@ export function handleContinue(
 ): void {
   emitTurnComplete(events, state, agentBase, turnUsage);
   advanceRunTurn(state);
-}
-
-export async function handleCompact(
-  state: RunState,
-  engine: PolicyEngineInstance,
-  config: ChatAgentConfig,
-  agentBase: AgentRunBase,
-): Promise<StopOutcome> {
-  const blocked = await applyPostCompaction(state, engine, config, agentBase, false);
-  if (blocked) return blocked;
-  advanceRunTurn(state);
-  return "continue";
 }
 
 export async function handleError(
@@ -812,10 +797,7 @@ async function applyPostCompaction(
   );
   if (!applied.ok) return applied.result;
   const messages = applied.value;
-  if (messages !== undefined) {
-    const messagesBefore = applyCompactionMessages(state, messages);
-    emitCompaction(config.events, agentBase, messagesBefore, state.messages.length);
-  }
+  if (messages !== undefined) applyCompactionMessages(state, messages);
   PolicyEffectApplier.applyPromptMessageEffects(state, compactionDecision);
 
   return null;

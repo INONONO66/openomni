@@ -711,7 +711,7 @@ function buildAnchorMessage(
       // append-only store — linear per record, and the newest-user
       // unconditional rule means one oversized user message can ride into
       // every subsequent record by design (user tokens are irreplaceable).
-      keptWindow: keptWindow.map((entry) => ({ ...entry })),
+      keptWindow,
     },
   };
   return { info, parts: [textPart] };

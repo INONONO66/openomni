@@ -39,19 +39,6 @@ export namespace Placement {
     "validation_error",
   ]);
 
-  export interface ModelSelection {
-    readonly model: Model.Ref;
-    /** Index into the chain that was selected (0 = primary). */
-    readonly index: number;
-    /**
-     * True when the failure history had already advanced past the last
-     * candidate — the selection is clamped to the final one. Termination
-     * stays the retry policy's decision; placement only reports that it has
-     * nothing further to offer.
-     */
-    readonly exhausted: boolean;
-  }
-
   /**
    * Selects the model for the next attempt from an ordered candidate chain.
    *
@@ -63,10 +50,7 @@ export namespace Placement {
    * @param priorFailureReasons the reasons of every FINISHED attempt so far,
    *   oldest first (the loop's decided facts, never re-derived)
    */
-  export function selectModel(
-    chain: readonly Model.Ref[],
-    priorFailureReasons: readonly string[],
-  ): ModelSelection {
+  export function selectModel(chain: readonly Model.Ref[], priorFailureReasons: readonly string[]) {
     const primary = chain[0];
     if (primary === undefined) {
       throw new TypeError("placement requires a non-empty model chain");

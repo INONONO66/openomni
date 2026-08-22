@@ -293,16 +293,6 @@ describe("ProviderTransform.anthropicCacheOptions", () => {
     });
   });
 
-  test("returns the breakpoint for vertex-hosted anthropic models", () => {
-    const model: Provider.Model = {
-      id: "claude-sonnet-4-20250514",
-      providerID: "vertex",
-      name: "Sonnet",
-      api: { npm: "@ai-sdk/google-vertex/anthropic" },
-    };
-    expect(ProviderTransform.anthropicCacheOptions(model)).not.toBeUndefined();
-  });
-
   test("returns undefined for non-anthropic models", () => {
     const model: Provider.Model = {
       id: "gpt-4o",

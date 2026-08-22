@@ -1,7 +1,6 @@
 import { Operational } from "@openomni/protocol";
 import type { Policy } from "@openomni/protocol";
 import { newTraceId } from "@openomni/protocol";
-import { WebSocketToken } from "./definitions";
 import { evaluateChannelPermission, recordDecision } from "./decision";
 import type { ChannelAuthnDecisionObserver, WebSocketAuthResult } from "./types";
 import type { PublishPort } from "../types";
@@ -111,7 +110,12 @@ export function authenticateWebSocketUpgrade(input: {
     ...(input.token !== undefined ? { token: input.token } : {}),
   };
   const verdict = evaluateWebSocketToken(state);
-  void recordDecision(WebSocketToken, verdict, Date.now() - startedAt, input.onDecision);
+  void recordDecision(
+    "channel-authn:websocket-token",
+    verdict,
+    Date.now() - startedAt,
+    input.onDecision,
+  );
 
   return {
     verdict,

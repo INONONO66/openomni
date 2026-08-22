@@ -39,7 +39,7 @@ export namespace ProviderTransform {
   }
 
   function isAnthropicPackage(npm: string | undefined): boolean {
-    return npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic";
+    return npm === "@ai-sdk/anthropic";
   }
 
   function normalizeAnthropic(msgs: SDKMessage[], model: NormalizeOptions): SDKMessage[] {

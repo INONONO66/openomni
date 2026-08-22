@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { composeEffects, PolicyEngine } from "@openomni/policy";
 // Deep import: mergeEntries is engine-internal — the root barrel stopped
 // re-exporting it when its only external reader turned out to be this test.
-import { mergeEntries } from "../src/effects";
+import { mergeEntries } from "../src/effects/merge/rules";
 import { Policy, PolicyDecision } from "@openomni/protocol";
 import { dispatchContext } from "./point-test-fixtures";
 

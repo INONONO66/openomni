@@ -1,5 +1,6 @@
 import type { Message, Transcript } from "@openomni/protocol";
 import type { Sink } from "../sink";
+import { stringifyToolOutput } from "../message";
 import { TokenTracker } from "../token";
 
 export interface StreamEvent {
@@ -29,7 +30,6 @@ export type StreamEventContext = {
   readonly toolNames?: ReadonlyMap<string, string>;
 };
 
-/** Map a wire tool name back to its internal dotted name, if known. */
 function resolveToolName(wireName: string, context: StreamEventContext): string {
   return context.toolNames?.get(wireName) ?? wireName;
 }
@@ -42,13 +42,9 @@ type OpenBlock = {
 
 export type StreamEventState = {
   currentText?: OpenBlock;
-  /** Provider reasoning block id → open block buffer. */
   reasoning: Map<string, OpenBlock>;
-  /** Tool callID → part id, for every tool part not yet terminal. */
   pendingTools: Map<string, string>;
-  /** Usage accumulated across this attempt's step-finish events. */
   usage: Transcript.Usage;
-  /** Raw provider finish reason from the last step-finish event. */
   finishReason?: string;
 };
 
@@ -491,24 +487,9 @@ function normalizeOutputPayload(event: StreamEvent): { output: string; isError: 
   }
   const value = raw ?? event.error ?? event.message ?? "";
   return {
-    output: stringifyOutput(value),
+    output: stringifyToolOutput(value),
     isError: false,
   };
-}
-
-function stringifyOutput(value: unknown): string {
-  if (typeof value === "string") return value;
-  if (value == null) return "";
-  // Errors JSON-serialize to "{}" — keep their message.
-  if (value instanceof Error) return value.message || String(value);
-  if (typeof value === "object") {
-    try {
-      return JSON.stringify(value) ?? String(value);
-    } catch {
-      return String(value);
-    }
-  }
-  return String(value);
 }
 
 /**

@@ -1,6 +1,5 @@
 import { type Policy, PolicyDecision } from "@openomni/protocol";
 import { decisionFromEvaluation, evaluatePermission } from "@openomni/policy";
-import { authTiming } from "./definitions";
 import type { ChannelAuthnDecisionObserver, ChannelAuthnPolicyId } from "./types";
 
 export function evaluateChannelPermission(input: {
@@ -49,15 +48,15 @@ export function evaluateChannelPermission(input: {
 }
 
 export function recordDecision(
-  definition: Policy.Definition,
+  name: string,
   verdict: Policy.PolicyDecision,
   durationMs: number,
   onDecision: ChannelAuthnDecisionObserver | undefined,
   metadata?: Record<string, unknown>,
 ): void | Promise<void> {
   return onDecision?.({
-    timing: authTiming,
-    name: definition.name,
+    timing: "run.start",
+    name,
     policyId: verdict.policyId ?? "guardrail.permission",
     verdict: verdict.verdict,
     reason: PolicyDecision.reason(verdict, "unspecified"),

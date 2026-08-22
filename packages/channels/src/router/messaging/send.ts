@@ -1,18 +1,13 @@
 import {
   Gateway,
+  MessagingEvents,
   Wait as WaitProtocol,
   type Actor,
   type BusEvent,
   type Wait,
 } from "@openomni/protocol";
-import {
-  ActorRegistry,
-  EgressBudgetStore,
-  LedgerAppend,
-  WaitStore,
-} from "@openomni/ledger";
+import { ActorRegistry, EgressBudgetStore, LedgerAppend, WaitStore } from "@openomni/ledger";
 import { WaitService } from "../wait/index.js";
-import { Events } from "./events.js";
 import {
   deliverySurfaceKey,
   hasScopedSenderTargetCandidate,
@@ -249,10 +244,7 @@ function recordAdmission(
   }
   const streamId = sendStreamId(input.messageId);
   const admission = { signature: sendSignature(input, target), budgeted, sendClass } as const;
-  const appended = ledger.append(
-    { streamId, type: SEND_ADMITTED_FACT, data: { ...admission } },
-    0,
-  );
+  const appended = ledger.append({ streamId, type: SEND_ADMITTED_FACT, data: { ...admission } }, 0);
   if (appended.kind === "appended") return admission;
   const raced = existingAdmission(input, target);
   if (raced === undefined) {
@@ -285,7 +277,7 @@ function recordDebitOnce(input: SendInput, sendClass: MessageClass): void {
 
 export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAgentMessaging {
   function deny(input: SendInput, code: MessageDenialCode, reason: string): SendReceipt {
-    ports.publish(Events.Denied, {
+    ports.publish(MessagingEvents.Denied, {
       messageId: input.messageId,
       traceId: input.traceId,
       senderId: input.senderId,
@@ -480,7 +472,7 @@ export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAge
       );
       if (receipt.kind === "delivery_recorded") wait = receipt.record;
     }
-    ports.publish(Events.Sent, {
+    ports.publish(MessagingEvents.Sent, {
       messageId: input.messageId,
       traceId: input.traceId,
       senderId: input.senderId,

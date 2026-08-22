@@ -1,6 +1,5 @@
-import type { Channel, Policy } from "@openomni/protocol";
+import type { Channel } from "@openomni/protocol";
 import { evaluateTriggers } from "../support/trigger";
-import { DiscordTriggers, GitHubTriggers, TelegramTriggers } from "./definitions";
 import { evaluateChannelPermission, recordDecision } from "./decision";
 import type {
   ChannelAuthnDecisionObserver,
@@ -27,7 +26,7 @@ function triggerMetadata(input: {
 }
 
 function evaluateChannelTriggers(input: {
-  readonly definition: Policy.Definition;
+  readonly name: string;
   readonly policyId: ChannelAuthnPolicyId;
   readonly surface: string;
   readonly resource: string;
@@ -46,13 +45,7 @@ function evaluateChannelTriggers(input: {
     denyReason: `${input.surface} trigger denied`,
     metadata,
   });
-  void recordDecision(
-    input.definition,
-    verdict,
-    Date.now() - startedAt,
-    input.onDecision,
-    metadata,
-  );
+  void recordDecision(input.name, verdict, Date.now() - startedAt, input.onDecision, metadata);
 
   return { verdict };
 }
@@ -61,7 +54,7 @@ export function authenticateDiscordTriggers(
   input: ChannelTriggerAuthInput,
 ): ChannelTriggerAuthResult {
   return evaluateChannelTriggers({
-    definition: DiscordTriggers,
+    name: "channel-authn:discord-triggers",
     policyId: "channel.authn.discord-triggers",
     surface: "discord",
     resource: "discord.message",
@@ -75,7 +68,7 @@ export function authenticateTelegramTriggers(
   input: ChannelTriggerAuthInput,
 ): ChannelTriggerAuthResult {
   return evaluateChannelTriggers({
-    definition: TelegramTriggers,
+    name: "channel-authn:telegram-triggers",
     policyId: "channel.authn.telegram-triggers",
     surface: "telegram",
     resource: "telegram.message",
@@ -89,7 +82,7 @@ export function authenticateGitHubTriggers(
   input: ChannelTriggerAuthInput,
 ): ChannelTriggerAuthResult {
   return evaluateChannelTriggers({
-    definition: GitHubTriggers,
+    name: "channel-authn:github-triggers",
     policyId: "channel.authn.github-triggers",
     surface: "github",
     resource: `github.${input.ctx.event}`,

@@ -1,5 +1,4 @@
 import {
-  Actor,
   type Gateway,
   Ingress,
   Wait,
@@ -11,10 +10,7 @@ import {
 } from "@openomni/protocol";
 import { BlacklistStore, ChannelGrantStore, LedgerAppend, SurfaceKey } from "@openomni/ledger";
 import { applyChannelGrantTreatment } from "./authority.js";
-import {
-  replyGrantEndpointFacts,
-  replyGrantEndpointFromFacts,
-} from "./messaging/reply-grant.js";
+import { replyGrantEndpointFacts, replyGrantEndpointFromFacts } from "./messaging/reply-grant.js";
 import { resolveRoute, type RouteState } from "./resolve-route.js";
 import { findWaitCandidates, type WaitResolution } from "./wait/index.js";
 
@@ -246,10 +242,10 @@ function channelState(
 
 function actorState(event: Gateway.DeliveredEvent): RouteState["actor"] {
   const actor = event.meta?.actor;
-  const actorId = typeof actor?.actorId === "string" ? actor.actorId : undefined;
-  const trustTier = Actor.TrustTier.safeParse(actor?.trustTier);
-  if (actorId !== undefined && trustTier.success) {
-    return { id: actorId, trustTier: trustTier.data, registered: true };
+  const actorId = actor?.actorId;
+  const trustTier = actor?.trustTier;
+  if (actorId !== undefined && trustTier !== undefined) {
+    return { id: actorId, trustTier };
   }
 
   return undefined;

@@ -1,5 +1,5 @@
 import { Policy, PolicyDecision } from "@openomni/protocol";
-import { composeEffects } from "../effects";
+import { composeEffects } from "../effects/compose";
 import { allowedEffectTypesAtPoint } from "./points";
 import type { PolicyPointId } from "./types";
 

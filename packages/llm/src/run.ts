@@ -113,7 +113,6 @@ export namespace Run {
   export const Outcome = z.discriminatedUnion("type", [
     z.object({ type: z.literal("stop") }),
     z.object({ type: z.literal("continue") }),
-    z.object({ type: z.literal("compact") }),
     z.object({
       type: z.literal("aborted"),
       error: z.instanceof(FailureError).optional(),
@@ -263,8 +262,8 @@ export async function run(
               signal: options?.abortSignal ?? abortSignal,
             });
             return {
-              output: result?.output ?? "",
-              ...(result?.isError === true && { isError: true }),
+              output: result.output,
+              ...(result.isError === true && { isError: true }),
             };
           },
         }),
@@ -275,7 +274,6 @@ export async function run(
       (sdkTools[lastToolName] as Record<string, unknown>).providerOptions = cacheOptions;
     }
 
-    // Narrowed once so the stopWhen closure below carries a stable reference.
     const shouldYield = input.shouldYield;
     const streamArgs = {
       model: languageModel,

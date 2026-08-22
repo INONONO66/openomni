@@ -9,7 +9,6 @@ interface RuntimeContext {
   readonly workspaceRoot?: string;
   readonly traceId?: string;
   readonly sessionId?: string;
-  readonly runId?: string;
   readonly agentName?: string;
   readonly auditEmit?: AuditEmit;
 }
