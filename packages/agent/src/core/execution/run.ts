@@ -9,6 +9,7 @@ import {
 } from "./turn";
 import { ModelsDev, Provider, run as llmRun } from "@openomni/llm";
 import type { Sink } from "@openomni/llm";
+import { Placement } from "@openomni/placement";
 import type { AgentResult, ChatAgentConfig, ChatAgentInput } from "../types";
 import * as Retry from "../retry";
 import { PolicyEngine, type PolicyEngineInstance } from "../policy";
@@ -45,6 +46,10 @@ export async function runAgent(
   const retryPolicy = Retry.DEFAULT_RETRY_POLICY;
   let attempt = 1;
   let thrownFailure: RunFailureFacts | undefined;
+  // The decided reason of every finished attempt, oldest first — the input
+  // to the placement fold below. Decided facts only (the retry decision's
+  // own record), never re-derived from the thrown error (#752).
+  const failureReasons: string[] = [];
 
   const trace = requireTrace("agent run", input.traceContext);
   const { traceId, sessionId, runId } = trace;
@@ -107,8 +112,17 @@ export async function runAgent(
         // stamped before any dispatch of this attempt, so run.turn.pre can
         // pair it with turnIndex to tell a retry re-entry from progress.
         recordRunAttempt(state, attempt);
+        // Fallback chain (#752): THIS attempt's model is a pure placement
+        // selection over the decided failure history — the primary when no
+        // fallbacks are configured. Resolution stays per-attempt, so a
+        // fallback switch also re-records the window fact below and the
+        // per-call assistant records carry the model actually used.
+        const attemptModel = Placement.selectModel(
+          [config.model, ...(config.modelFallbacks ?? [])],
+          failureReasons,
+        ).model;
         const providerModel = await (config.llm?.resolveProviderModel ?? resolveProviderModel)(
-          config.model,
+          attemptModel,
         );
         recordRunWindow(state, providerModel.limit?.context ?? 0);
         const configuredToolChoice = config.toolChoice;
@@ -184,6 +198,7 @@ export async function runAgent(
           // `Retry.sleep`, and the reason and ceiling it has to report are the
           // ones decided here — re-deriving them from the abort would make the
           // terminal record contradict this run's own retry record.
+          failureReasons.push(decision.failure.reason);
           thrownFailure = decision.failure;
           await Retry.sleep(decision.backoffMs, config.signal);
           thrownFailure = undefined;

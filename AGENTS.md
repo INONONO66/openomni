@@ -6,7 +6,7 @@ Last verified against `origin/main`: 2026-08-19 (paths, dependency graph, and sh
 
 OpenOmni — a single-Owner Agent OS. Agents earn autonomy through evidence, not self-report. See [Design Philosophy](docs/design-philosophy.md) (one page: three kernel primitives, two laws and a dial, four roles).
 
-The Owner talks to one Resident (a judgment partner that executes nothing), which delegates to Workers (internal agents, external AI, humans — uniformly) through one gate and isolated sessions; everything lands on one ledger. TypeScript monorepo (Bun + Turborepo) with 10 packages and 1 app (Server).
+The Owner talks to one Resident (a judgment partner that executes nothing), which delegates to Workers (internal agents, external AI, humans — uniformly) through one gate and isolated sessions; everything lands on one ledger. TypeScript monorepo (Bun + Turborepo) with 11 packages and 1 app (Server).
 
 The specification lives in [`docs/core-model.md`](docs/core-model.md) (actors/gate/ledger, roles incl. Governor and Jester, policy hook layer, three-tier vocabulary) and [`docs/architecture.md`](docs/architecture.md) (three communication verbs and package rings). Normative contract detail (guarantee split, authority evaluation, work-item/evidence contracts, Governor rules, memory port) lives in [`docs/kernel-contract.md`](docs/kernel-contract.md). The Owner-directed gateway pivot (channels = perimeter gateway, openomni = brain, SSOT single-ledger storage, engagement machine) is specified in [`docs/gateway-design.md`](docs/gateway-design.md) — stages 0–2 are wired (#718 contracts, #730 driver extraction, #736 router promotion): `packages/channels` IS the perimeter gateway, `packages/openomni` is the brain, and the two meet only in the protocol `Gateway.Deliver` contract plus ports injected by `apps/server`. ADRs are retired — absorbed into these docs; git history preserves the originals. **Design docs describe targets; `docs/implementation-status.md` is the single source of truth for what is actually wired.**
 
@@ -21,6 +21,7 @@ openomni/
 ├── packages/
 │   ├── protocol/        # Shared Zod schemas and cross-package contracts
 │   ├── policy/          # Protocol-only policy engine primitive: dispatch, effect composition, registry
+│   ├── placement/       # Ring-1 pure target selection (#752): model fallback-chain fold, consumed per attempt by the agent loop
 │   ├── telemetry/       # The observation channel: Bus pub/sub, trace-owning scoped emitter, span pairing, sink combinators — protocol-only deps (#606)
 │   ├── ledger/          # Session CRUD, Storage adapter (in-memory + SQLite), BusPersistence, Artifact, SurfaceKey, frozen worker-run archive, WorkItemStore (universal work state)
 │   ├── llm/             # LLM abstraction: providers, auth (API key + proxy), streaming, retry, token/cost tracking, provider transforms
@@ -41,11 +42,11 @@ openomni/
 ## DEPENDENCY GRAPH
 
 ```
-protocol  ←  policy, telemetry, ipc          (ring 0 → 1)
+protocol  ←  policy, telemetry, ipc, placement (ring 0 → 1)
 telemetry ←  ledger, llm                      ledger adds durability
 ipc       ←  coordinator                      process driver, ledger-free
 protocol, ipc, policy, ledger    ←  channels  gateway drivers + router/authn (#707)
-policy, llm, telemetry           ←  agent     the loop
+policy, placement, llm, telemetry  ←  agent   the loop
 everything                       ←  openomni  ←  server
 ```
 
@@ -59,13 +60,14 @@ package's tests may reach further than its runtime code, and the gate holds
 | --- | --- |
 | `protocol` | — (leaf) |
 | `policy` | protocol |
+| `placement` | protocol |
 | `telemetry` | protocol |
 | `ipc` | protocol |
 | `ledger` | protocol, telemetry |
 | `llm` | protocol, telemetry — `src/` protocol only |
 | `coordinator` | protocol, ipc |
 | `channels` | protocol, ipc, policy, ledger — policy/ledger confined to the judgment band `src/router/` + `src/authn/` (S8 banding); the router may name only the perimeter ledger surfaces; tests may add telemetry |
-| `agent` | protocol, policy, llm, telemetry — `src/` protocol, policy, llm |
+| `agent` | protocol, policy, placement, llm, telemetry — `src/` protocol, policy, placement, llm |
 | `openomni` | any except itself |
 | `server` | composition root |
 
@@ -81,6 +83,7 @@ The package boundary rule is strict: product meaning belongs in `packages/openom
 | --- | --- | --- |
 | `packages/protocol` | Zod schemas, wire contracts, event descriptors, storage adapter interfaces | Runtime decisions, routing helpers, authority evaluation, lifecycle orchestration |
 | `packages/policy` | Generic policy dispatch, effect composition, middleware registry primitives over protocol contracts | Agent-specific built-ins, OpenOmni authority semantics, session-backed lifecycle decisions |
+| `packages/placement` | Pure target selection (#752, model axis): fallback-chain fold `(candidates, decided failure history) → next model` — deterministic, clockless, protocol-only | Allow/deny (policy owns it), retry termination (retry policy owns it), capability-tag/machine placement (later slice), any store/llm/telemetry import |
 | `packages/ledger` | Durable state substrate: session/message/part CRUD, Bus persistence (the journal writer; `Bus` itself is `packages/telemetry`), storage adapters, indexed record stores | Communication routing, actor trust decisions, worker grant evaluation semantics, pending-reply precedence |
 | `packages/llm` | Provider I/O, auth shape, message transforms, token/cost accounting, model catalog | Agent/session/workforce routing, policy, tool execution |
 | `packages/agent` | Stateless ChatAgent loop, agent policy built-ins/facade, tool invocation protocol, generic runtime primitives | OpenOmni session-backed worker lifecycle, external actor authority, channel routing, durable background/pending interaction semantics |
@@ -223,7 +226,7 @@ a satellite split) to violations of each one.
 - Prefer narrowing public barrels. A symbol exported from a package is a contract; do not export helper stages just for convenience.
 - Driver-band packages (approved target: `remote` remote execution, `browser` browser use, `machines` machine handles) may import only `@openomni/protocol` and `@openomni/ipc`; registration happens only in `apps/server`, and each must build/test standalone (repo-extractable). Package names are path-level only — exported symbols, protocol nouns, and LLM tool names stay English. See [Architecture § Execution Targets and the Driver Band](docs/architecture.md).
 - `channels` is promoted from driver band to **gateway** (Owner 2026-08-18/19, [docs/gateway-design.md](docs/gateway-design.md)) — LANDED at #736 (stage 2): package whitelist {protocol, ipc, policy, ledger}, with the driver sub-band (`discord/`, `github/`, `telegram/`, `support/`, `websocket.ts`, `channel-authn.ts`) held to {protocol, ipc}. The external resolveRoute arms, wait service, and #215 send kernel live in `packages/channels/src/router/`; the internal-mode arm (cron/dispatch events that never cross the perimeter) stays brain-side in `packages/openomni/src/ingress/internal-route.ts`.
-- Outbound target selection (which model/machine/driver executes) is the ring-1 `@openomni/placement` pure decision package (approved target); do not grow placement decisions inside kernel dispatch or `apps/server`. Inbound routing (`resolveRoute`) is gateway-owned per docs/gateway-design.md §8.4 (external arms in `packages/channels/src/router/` since #736; the internal arm stays in the kernel).
+- Outbound target selection (which model/machine/driver executes) is the ring-1 `@openomni/placement` pure decision package (opened at #752 with the model-fallback axis, consumed by the agent loop's per-attempt resolution); do not grow placement decisions inside kernel dispatch or `apps/server`. Inbound routing (`resolveRoute`) is gateway-owned per docs/gateway-design.md §8.4 (external arms in `packages/channels/src/router/` since #736; the internal arm stays in the kernel).
 
 ## EXECUTION DISCIPLINE
 

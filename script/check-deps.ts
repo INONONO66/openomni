@@ -5,6 +5,7 @@ type PackageKey =
   | "ipc"
   | "telemetry"
   | "policy"
+  | "placement"
   | "ledger"
   | "llm"
   | "agent"
@@ -90,6 +91,16 @@ const RULES: Record<PackageKey, PackageRule> = {
     // imports no implementation of the observation channel at all (#606).
     srcAllowedDeps: new Set(["@openomni/protocol"]),
   },
+  placement: {
+    displayName: "placement",
+    packageJsonPath: "packages/placement/package.json",
+    packageName: "@openomni/placement",
+    // Ring-1 pure target selection (#752): protocol only (Model.Ref). It
+    // decides placement and nothing else — policy alone owns allow/deny and
+    // the retry policy alone terminates, so it can never grow a
+    // policy/ledger/llm/telemetry import.
+    allowedDeps: new Set(["@openomni/protocol"]),
+  },
   agent: {
     displayName: "agent",
     packageJsonPath: "packages/agent/package.json",
@@ -99,12 +110,20 @@ const RULES: Record<PackageKey, PackageRule> = {
     allowedDeps: new Set([
       "@openomni/protocol",
       "@openomni/policy",
+      "@openomni/placement",
       "@openomni/llm",
       "@openomni/telemetry",
     ]),
-    // `src/` may not. The loop reports through an injected `BusEvent.Sink`
-    // and owns no durable state (#606).
-    srcAllowedDeps: new Set(["@openomni/protocol", "@openomni/policy", "@openomni/llm"]),
+    // `src/` may not reach telemetry. The loop reports through an injected
+    // `BusEvent.Sink` and owns no durable state (#606). `placement` is the
+    // ring-1 pure model-fallback fold the per-attempt resolution consumes
+    // (#752).
+    srcAllowedDeps: new Set([
+      "@openomni/protocol",
+      "@openomni/policy",
+      "@openomni/placement",
+      "@openomni/llm",
+    ]),
   },
   openomni: {
     displayName: "openomni",
