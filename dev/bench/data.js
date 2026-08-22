@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787237353355,
+  "lastUpdate": 1787369842272,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -58799,6 +58799,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 515715,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b77d66c6867beb58ecff19e9c5f1745c3e70d744",
+          "message": "docs: reconcile gateway stage-2 reality across root/server/arch/impl-status (#754)\n\n* docs: reconcile gateway stage-2 reality across root/server/arch/impl-status\n\nCode moved at #736/#739/#748 (router promotion, message.send, egress gate)\nbut the cross-cutting docs still described gateway stage 1: channels as\ndrivers-only, routing/wait/messaging living in packages/openomni, and\ngateway-design as \"nothing wired yet\". Verified every claim against HEAD\nsource (packages/channels, openomni ingress, server bootstrap) and updated:\n\n- AGENTS.md: stage-2 tree/dep-graph/whitelist/ownership rows, messaging\n  kernel flow through GatewayRouter.ingest, driver-vs-router store rule\n- apps/server/AGENTS.md: boot sequence (createBrainEngine + createGatewayRouter),\n  message flow, WebSocket table row (single response frame, token-optional)\n- docs/architecture.md: stage-2 landed annotations, ring-5 composition root\n- docs/implementation-status.md: evidence paths for rows whose code moved\n  (router, actor-resolver, blacklist/channel-grant/trust-tier, wait,\n  pending-*), messaging row rewritten for #707/#708/#219/#739\n- packages/channels/AGENTS.md: post-#736 drift (route.not_delivered,\n  EgressBudgetStore surface, reply-grant/social-budget structure, T2\n  ingest sanitization, consumers)\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* docs: address CodeRabbit review — stage-2 split in key rows, band exception, WS contract\n\n- AGENTS.md: Messaging kernel / Ingress routing key-location rows now name the\n  gateway/brain split instead of pre-#736 openomni-only ownership; flow fence\n  gets a language (MD040)\n- apps/server/AGENTS.md: conversation.ts comment and routing anti-pattern\n  pointers follow the router move; agents-registry routing note; WebSocket row\n  documents the error-frame contract (invalid JSON / missing text / handler\n  failure -> type:\"error\")\n- docs/architecture.md: channels marked as gateway graduate in the band listing\n  with an explicit rule-1 exception; inbound bullet names the real wire types\n  (Channel.InboundMessage -> Gateway.DeliveredEvent -> Gateway.Deliver)\n- docs/implementation-status.md: verification date refreshed to 2026-08-22\n- packages/channels/AGENTS.md: \"zero security review\" phrasing clarified to its\n  actual meaning (driver review stays; router re-review not needed under S8)\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-22T12:36:07+09:00",
+          "tree_id": "9509bbba9fbf67aff649f5324bbfd82a3818a98a",
+          "url": "https://github.com/INONONO66/openomni/commit/b77d66c6867beb58ecff19e9c5f1745c3e70d744"
+        },
+        "date": 1787369840873,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 453,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 659,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6217,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9775,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2612,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3017,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2429,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16086,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8351,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1044,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 942,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1579,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 49,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1545,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 779,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 44676,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2328,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 522303,
             "unit": "ns/op"
           }
         ]
