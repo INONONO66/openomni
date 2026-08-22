@@ -70,6 +70,11 @@ export interface RunInput {
  * namespace, so there is no collision (`run` the function and `Run` the
  * namespace are distinct identifiers).
  */
+export interface RunDependencies {
+  /** Overrides provider stream creation for an isolated caller or test harness. */
+  createStream?: Processor.ProcessorOptions["createStream"];
+}
+
 export namespace Run {
   export const Outcome = z.discriminatedUnion("type", [
     z.object({ type: z.literal("stop") }),
@@ -121,7 +126,11 @@ function assignWireToolNames(tools: Tool.Spec[]): {
   return { wireNames, originalByWire };
 }
 
-export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
+export async function run(
+  input: RunInput,
+  sink: Sink,
+  dependencies: RunDependencies = {},
+): Promise<Run.Outcome> {
   const { messages, system = "", signal, model } = input;
 
   const abortSignal = signal ?? new AbortController().signal;
@@ -299,13 +308,15 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
   const modelId = model.id;
 
   const processor = Processor.create({
+    // Call-local injection keeps test and embedding harnesses isolated from
+    // Bun's process-wide module mocks without changing production behavior.
+    createStream: dependencies.createStream ?? createStream,
     events: input.events,
     assistantMessage,
     sessionID,
     model,
     abort: abortSignal,
     sink,
-    createStream,
     toolNames: originalByWire,
     maxRetryAttempts: input.maxRetryAttempts,
     trace: {

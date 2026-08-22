@@ -1,4 +1,5 @@
-import { afterEach, beforeAll, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeAll, describe, expect, test } from "bun:test";
+import type { RunDependencies } from "@openomni/llm";
 import type { Model } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { allow } from "../helpers/policy-decision";
@@ -9,32 +10,30 @@ let providerCallsByAgentAttempt: number[] = [];
 let currentAgentAttempt = 0;
 let providerFailure: (call: number) => Error | undefined = () => undefined;
 
-mock.module("ai", () => ({
-  streamText: () => {
-    providerCalls += 1;
-    if (currentAgentAttempt > 0) {
-      providerCallsByAgentAttempt[currentAgentAttempt - 1] =
-        (providerCallsByAgentAttempt[currentAgentAttempt - 1] ?? 0) + 1;
-    }
-    const failure = providerFailure(providerCalls);
-    return {
-      fullStream: (async function* () {
-        if (failure !== undefined) throw failure;
-        yield { type: "finish" };
-      })(),
-    };
-  },
-  jsonSchema: (schema: unknown) => ({ jsonSchema: schema }),
-  stepCountIs: (stepCount: number) => (input: { steps: unknown[] }) =>
-    input.steps.length === stepCount,
-}));
+const createProviderStream: NonNullable<RunDependencies["createStream"]> = async () => {
+  providerCalls += 1;
+  if (currentAgentAttempt > 0) {
+    providerCallsByAgentAttempt[currentAgentAttempt - 1] =
+      (providerCallsByAgentAttempt[currentAgentAttempt - 1] ?? 0) + 1;
+  }
+  const failure = providerFailure(providerCalls);
+  return {
+    fullStream: (async function* () {
+      if (failure !== undefined) throw failure;
+      yield { type: "finish" as const };
+    })(),
+  };
+};
 
 let ChatAgent: typeof import("../../src/core/chat-agent").ChatAgent;
 let llmRun: typeof import("@openomni/llm").run;
 
 beforeAll(async () => {
   ({ ChatAgent } = await import("../../src/core/chat-agent"));
-  ({ run: llmRun } = await import("@openomni/llm"));
+  // Bun module mocks are process-wide. A unique module identity prevents other
+  // suites' `ai` mocks from replacing the llm.run instance under this test.
+  const isolatedLlmModule = "../../../llm/src/run.ts?provider-retry-ownership";
+  ({ run: llmRun } = await import(isolatedLlmModule));
 });
 
 afterEach(() => {
@@ -63,7 +62,8 @@ const zeroBackoff = {
   pointIds: ["run.error.error" as const],
   effectCapabilities: { "run.error.error": ["run.retry_after" as const] },
   priority: 100,
-  fn: () => allow("test.zero-backoff", undefined, [{ type: "run.retry_after" as const, delayMs: 0 }]),
+  fn: () =>
+    allow("test.zero-backoff", undefined, [{ type: "run.retry_after" as const, delayMs: 0 }]),
 };
 
 function createAgent(signal?: AbortSignal) {
@@ -73,6 +73,7 @@ function createAgent(signal?: AbortSignal) {
     auth: { type: "api", key: "test-key" },
     signal,
     llm: {
+      run: (input, sink) => llmRun(input, sink, { createStream: createProviderStream }),
       resolveProviderModel: async (model: Model.Ref) => {
         currentAgentAttempt += 1;
         return {
@@ -145,6 +146,7 @@ describe("Agent provider retry ownership", () => {
         onToolCall: () => undefined,
         onToolResult: () => undefined,
       },
+      { createStream: createProviderStream },
     );
 
     expect(outcome.type).toBe("error");
