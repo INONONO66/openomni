@@ -337,6 +337,43 @@ describe("Policy schemas", () => {
       });
     });
 
+    it("parses model.override effect (#753) — connection-scoped model routing", () => {
+      const result = Policy.PolicyEffect.parse({
+        type: "model.override",
+        provider: "anthropic",
+        id: "claude-3-haiku-20240307",
+      });
+      expect(result).toMatchObject({
+        type: "model.override",
+        provider: "anthropic",
+        id: "claude-3-haiku-20240307",
+      });
+    });
+
+    it("refuses a model.override with empty coordinates, naming the offending field", () => {
+      const emptyProvider = Policy.PolicyEffect.safeParse({
+        type: "model.override",
+        provider: "",
+        id: "m",
+      });
+      expect(emptyProvider.success).toBe(false);
+      if (!emptyProvider.success) {
+        expect(emptyProvider.error.issues.map((issue) => issue.path.join("."))).toContain(
+          "provider",
+        );
+        expect(emptyProvider.error.issues.every((issue) => issue.code === "too_small")).toBe(true);
+      }
+      const emptyId = Policy.PolicyEffect.safeParse({
+        type: "model.override",
+        provider: "p",
+        id: "",
+      });
+      expect(emptyId.success).toBe(false);
+      if (!emptyId.success) {
+        expect(emptyId.error.issues.map((issue) => issue.path.join("."))).toContain("id");
+      }
+    });
+
     it("parses tool.require_approval effect", () => {
       const result = Policy.PolicyEffect.parse({
         type: "tool.require_approval",

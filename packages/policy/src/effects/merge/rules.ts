@@ -31,6 +31,9 @@ export function mergeEntries(entries: readonly EffectEntry[]): MergeResult {
     | undefined;
   let delegationApproval: ApprovalAccumulator | undefined;
   let promptReplace: MergedEffect | undefined;
+  // Single-winner like prompt.replace: two policies overriding the same
+  // connection's model cannot compose — the higher-priority one wins (#753).
+  let modelOverride: MergedEffect | undefined;
   let writebackRewrite: MergedEffect | undefined;
   let writebackSuppress: PriorityApprovalAccumulator | undefined;
   let timeout: { readonly timeoutMs: number; readonly order: number } | undefined;
@@ -50,6 +53,9 @@ export function mergeEntries(entries: readonly EffectEntry[]): MergeResult {
         break;
       case "prompt.replace":
         promptReplace = selectPriorityEffect(promptReplace, entry);
+        break;
+      case "model.override":
+        modelOverride = selectPriorityEffect(modelOverride, entry);
         break;
       case "tool.filter":
         if (!toolFilters.has(effect.toolPattern)) toolFilters.set(effect.toolPattern, entry.order);
@@ -143,6 +149,7 @@ export function mergeEntries(entries: readonly EffectEntry[]): MergeResult {
 
   appendMergedEffects(merged, {
     promptReplace,
+    modelOverride,
     toolFilters,
     toolRewrite,
     toolOutputRewrite,

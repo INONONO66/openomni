@@ -307,3 +307,68 @@ describe("WorkItem policy effect composition", () => {
     ]);
   });
 });
+
+describe("model.override conflict rule (#757 review F1)", () => {
+  test("same-priority divergent overrides fail closed — never an alphabetical winner", () => {
+    const composed = composeEffects([
+      PolicyDecision.allow({
+        policyId: "aa-budget",
+        priority: 50,
+        effects: [{ type: "model.override", provider: "cheap", id: "model-a" }],
+      }),
+      PolicyDecision.allow({
+        policyId: "zz-residency",
+        priority: 50,
+        effects: [{ type: "model.override", provider: "eu", id: "model-b" }],
+      }),
+    ]);
+
+    expect(composed.verdict).toBe("deny");
+    expect(
+      composed.mergedEffects.some(
+        (effect) =>
+          effect.type === "audit.annotate" &&
+          effect.annotation.includes("policy.effect_conflict.fail_closed") &&
+          effect.annotation.includes("model.override.model"),
+      ),
+    ).toBe(true);
+  });
+
+  test("same-priority IDENTICAL overrides compose — one intent, no conflict", () => {
+    const composed = composeEffects([
+      PolicyDecision.allow({
+        policyId: "aa-budget",
+        priority: 50,
+        effects: [{ type: "model.override", provider: "cheap", id: "model-a" }],
+      }),
+      PolicyDecision.allow({
+        policyId: "zz-mirror",
+        priority: 50,
+        effects: [{ type: "model.override", provider: "cheap", id: "model-a" }],
+      }),
+    ]);
+
+    expect(composed.verdict).toBe("allow");
+    const overrides = composed.mergedEffects.filter((effect) => effect.type === "model.override");
+    expect(overrides).toEqual([{ type: "model.override", provider: "cheap", id: "model-a" }]);
+  });
+
+  test("a higher-priority override wins regardless of policy name order", () => {
+    const composed = composeEffects([
+      PolicyDecision.allow({
+        policyId: "zz-low",
+        priority: 10,
+        effects: [{ type: "model.override", provider: "p", id: "low-model" }],
+      }),
+      PolicyDecision.allow({
+        policyId: "aa-high",
+        priority: 90,
+        effects: [{ type: "model.override", provider: "p", id: "high-model" }],
+      }),
+    ]);
+
+    expect(composed.verdict).toBe("allow");
+    const overrides = composed.mergedEffects.filter((effect) => effect.type === "model.override");
+    expect(overrides).toEqual([{ type: "model.override", provider: "p", id: "high-model" }]);
+  });
+});

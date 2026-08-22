@@ -22,6 +22,7 @@ export namespace PolicyEffects {
     "runtime.set_timeout",
     "runtime.workspace_lock",
     "work.allow_asserted",
+    "model.override",
   ]);
   export type PolicyEffectType = z.infer<typeof PolicyEffectType>;
 
@@ -108,6 +109,17 @@ export namespace PolicyEffects {
     z.object({
       type: z.literal("work.allow_asserted"),
       criterionIds: z.array(z.string().min(1)),
+    }),
+    // Per-point model routing (#753): reroutes the CONNECTION being gated at
+    // `connection.llm.pre` to a different model — connection-scoped by
+    // definition (the next connection re-resolves normally; a policy that
+    // wants the whole run re-issues the effect per connection, which per-run
+    // factory registrations make trivial). A run-scoped variant is deferred
+    // to #753 follow-up scope.
+    z.object({
+      type: z.literal("model.override"),
+      provider: z.string().min(1),
+      id: z.string().min(1),
     }),
   ]);
   export type PolicyEffect = z.infer<typeof PolicyEffect>;

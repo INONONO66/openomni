@@ -9,6 +9,7 @@ import {
   type MockLlmFn,
 } from "../helpers/mock-llm";
 import { runInput } from "../helpers/run-input";
+import { assistantSnapshot } from "../helpers/assistant-snapshot";
 import { allow, inject } from "../helpers/policy-decision";
 import { Bus } from "@openomni/telemetry";
 
@@ -31,40 +32,6 @@ const baseConfig = {
   model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
   llm: mockLlm,
 };
-
-function assistantSnapshot(
-  id: string,
-  text: string,
-  stepReason: "tool-calls" | "stop",
-): Message.WithParts {
-  return {
-    info: {
-      id,
-      sessionID: "test",
-      role: "assistant",
-      time: { created: Date.now() },
-      parentID: "",
-      modelID: "claude-3-haiku-20240307",
-      providerID: "anthropic",
-      agent: "test",
-      path: { cwd: "", root: "" },
-      cost: 0,
-      tokens: { input: 10, output: 5, reasoning: 0, cache: { read: 0, write: 0 } },
-    },
-    parts: [
-      { id: `${id}-t`, sessionID: "test", messageID: id, type: "text", text },
-      {
-        id: `${id}-s`,
-        sessionID: "test",
-        messageID: id,
-        type: "step-finish",
-        reason: stepReason,
-        cost: 0,
-        tokens: { input: 10, output: 5, reasoning: 0, cache: { read: 0, write: 0 } },
-      },
-    ],
-  };
-}
 
 function textsOf(messages: readonly unknown[]): string[] {
   return (messages as Message.WithParts[]).flatMap((message) =>

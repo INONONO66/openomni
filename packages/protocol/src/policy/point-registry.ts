@@ -68,7 +68,13 @@ export namespace PolicyPointRegistryModule {
       "pre",
       ["connection"],
       ["sessionId", "runId", "modelId"],
-      ["prompt.append_context", "prompt.inject_message", "run.abort", "audit.annotate"],
+      [
+        "prompt.append_context",
+        "prompt.inject_message",
+        "run.abort",
+        "audit.annotate",
+        "model.override",
+      ],
       ...preBoundary,
     ),
     "connection.llm.post": contract(

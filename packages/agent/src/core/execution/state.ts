@@ -156,8 +156,13 @@ export interface TurnArtifacts {
   readonly toolPolicyDecisions: Array<{ readonly decision: Policy.PolicyDecision }>;
   /** The step budget this turn was given — a turn that used all of it ended on the cap, not a window yield. */
   readonly stepCap: number;
-  /** Whether the window-yield knob was armed (a known window existed). */
-  readonly windowYieldArmed: boolean;
+  /**
+   * Whether the window-yield knob was armed for the call that actually ran.
+   * Mutable on purpose: a `model.override` (#753) reroutes the connection
+   * after buildTurn planned it, and turnYield must classify the stop against
+   * the call's real arm state, not the plan's.
+   */
+  windowYieldArmed: boolean;
   /**
    * Set when the host steering check fired at a step boundary (#751) — the
    * yield disambiguator: a tool-calls stop below the step cap with this set

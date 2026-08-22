@@ -28,10 +28,16 @@ describe("model execution deny verdicts", () => {
       fn,
     });
 
-    const result = await dispatchModelRequest(makeState(), engine, makeConfig(), makeAgentBase(), "test-model");
+    const result = await dispatchModelRequest(
+      makeState(),
+      engine,
+      makeConfig(),
+      makeAgentBase(),
+      "test-model",
+    );
 
-    expect(result).not.toBeNull();
-    expect(result?.guardAborted).toBe(true);
+    expect(result.blocked).not.toBeNull();
+    expect(result.blocked?.guardAborted).toBe(true);
     expect(fn).toHaveBeenCalledTimes(1);
   });
 

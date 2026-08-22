@@ -140,7 +140,13 @@ describe("PolicyPoint registry", () => {
     );
     expect(roundTripped).toEqual(Policy.PolicyPoint.Registry);
 
-    for (const pointId of expectedPointIds) {
+    // Derived from the registry itself, not the expected list — a NEW point
+    // cannot dodge this assertion by not being enumerated here.
+    const pointIds = Object.keys(Policy.PolicyPoint.Registry) as Array<
+      keyof typeof Policy.PolicyPoint.Registry
+    >;
+    expect(pointIds.length).toBeGreaterThan(0);
+    for (const pointId of pointIds) {
       const contract = Policy.PolicyPoint.Registry[pointId];
       expect(contract).toBeDefined();
       if (contract === undefined) continue;
@@ -151,7 +157,13 @@ describe("PolicyPoint registry", () => {
   });
 
   test("preserves every v1 input schema identifier", () => {
-    for (const pointId of expectedPointIds) {
+    // Derived from the registry itself, not the expected list — a NEW point
+    // cannot dodge this assertion by not being enumerated here.
+    const pointIds = Object.keys(Policy.PolicyPoint.Registry) as Array<
+      keyof typeof Policy.PolicyPoint.Registry
+    >;
+    expect(pointIds.length).toBeGreaterThan(0);
+    for (const pointId of pointIds) {
       const contract = Policy.PolicyPoint.Registry[pointId];
       expect(contract).toBeDefined();
       if (contract === undefined) continue;
@@ -178,5 +190,24 @@ describe("PolicyPoint registry", () => {
     expect(completionContract.defaultFailPolicy).toBe("fail-closed");
     expect(completionContract.sideEffectBoundary).toBe(true);
     expect(Policy.PolicyPoint.Registry["run.error.error"].phase).toBe("error");
+  });
+});
+
+describe("model.override point admission (#753)", () => {
+  test("connection.llm.pre allows model.override; every other point refuses it", () => {
+    // Derived from the registry itself, not the expected list — a NEW point
+    // cannot dodge this assertion by not being enumerated here.
+    const pointIds = Object.keys(Policy.PolicyPoint.Registry) as Array<
+      keyof typeof Policy.PolicyPoint.Registry
+    >;
+    expect(pointIds.length).toBeGreaterThan(0);
+    for (const pointId of pointIds) {
+      const contract = Policy.PolicyPoint.Registry[pointId];
+      const allowed = contract.allowedEffects.includes("model.override");
+      expect({ pointId, allowed }).toEqual({
+        pointId,
+        allowed: pointId === "connection.llm.pre",
+      });
+    }
   });
 });
