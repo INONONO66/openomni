@@ -1,8 +1,9 @@
 import { beforeAll, describe, expect, it } from "bun:test";
 import type { Sink } from "@openomni/llm";
-import type { Message, Model } from "@openomni/protocol";
+import type { Model } from "@openomni/protocol";
 import { createStopOutcome, type MockLlmFn } from "../helpers/mock-llm";
 import { runInput } from "../helpers/run-input";
+import { assistantSnapshot } from "../helpers/assistant-snapshot";
 import { allow } from "../helpers/policy-decision";
 import { Bus } from "@openomni/telemetry";
 
@@ -14,36 +15,6 @@ beforeAll(async () => {
 
 const primary = { provider: "anthropic", id: "primary-model" };
 const fallback = { provider: "openai", id: "fallback-model" };
-
-function snapshot(id: string, text: string): Message.WithParts {
-  return {
-    info: {
-      id,
-      sessionID: "test",
-      role: "assistant",
-      time: { created: Date.now() },
-      parentID: "",
-      modelID: "m",
-      providerID: "p",
-      agent: "test",
-      path: { cwd: "", root: "" },
-      cost: 0,
-      tokens: { input: 10, output: 5, reasoning: 0, cache: { read: 0, write: 0 } },
-    },
-    parts: [
-      { id: `${id}-t`, sessionID: "test", messageID: id, type: "text", text },
-      {
-        id: `${id}-s`,
-        sessionID: "test",
-        messageID: id,
-        type: "step-finish",
-        reason: "stop",
-        cost: 0,
-        tokens: { input: 10, output: 5, reasoning: 0, cache: { read: 0, write: 0 } },
-      },
-    ],
-  };
-}
 
 /** Zero-backoff retry so the tests pin selection, not the schedule. */
 const zeroBackoff = {
@@ -63,7 +34,7 @@ function fallbackHarness(errorMessage: string) {
     if (calls === 1) {
       return { type: "error", error: { message: errorMessage, name: "Error" } };
     }
-    sink.onMessage(snapshot(`msg-${calls}`, "recovered"));
+    sink.onMessage(assistantSnapshot(`msg-${calls}`, "recovered"));
     return createStopOutcome();
   };
   const llm = {
@@ -176,10 +147,7 @@ describe("model fallback via placement (#752)", () => {
           // Primary turn 1: end mid tool-loop so the WINDOW yield fires; no
           // compaction seam is registered, so the seam reclaims nothing and
           // the loop DISARMS the yield.
-          const message = snapshot("msg-w1", "working");
-          const stepPart = message.parts[1] as { reason: string };
-          stepPart.reason = "tool-calls";
-          sink.onMessage(message);
+          sink.onMessage(assistantSnapshot("msg-w1", "working", "tool-calls"));
           return createStopOutcome();
         }
         if (calls === 2) {
@@ -187,7 +155,7 @@ describe("model fallback via placement (#752)", () => {
           // to the fallback model.
           return { type: "error", error: { message: "transient blip", name: "Error" } };
         }
-        sink.onMessage(snapshot(`msg-w${calls}`, "recovered"));
+        sink.onMessage(assistantSnapshot(`msg-w${calls}`, "recovered"));
         return createStopOutcome();
       }) as MockLlmFn,
       resolveProviderModel: async (model: Model.Ref) => ({

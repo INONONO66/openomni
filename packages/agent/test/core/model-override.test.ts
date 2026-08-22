@@ -1,8 +1,9 @@
 import { beforeAll, describe, expect, it } from "bun:test";
 import type { Sink } from "@openomni/llm";
-import type { Message, Model } from "@openomni/protocol";
+import type { Model } from "@openomni/protocol";
 import { createStopOutcome, type MockLlmFn } from "../helpers/mock-llm";
 import { runInput } from "../helpers/run-input";
+import { assistantSnapshot } from "../helpers/assistant-snapshot";
 import { allow, inject } from "../helpers/policy-decision";
 import { Bus } from "@openomni/telemetry";
 
@@ -14,36 +15,6 @@ beforeAll(async () => {
 
 const primary = { provider: "anthropic", id: "primary-model" };
 const override = { provider: "openai", id: "override-model" };
-
-function snapshot(id: string, text: string): Message.WithParts {
-  return {
-    info: {
-      id,
-      sessionID: "test",
-      role: "assistant",
-      time: { created: Date.now() },
-      parentID: "",
-      modelID: "m",
-      providerID: "p",
-      agent: "test",
-      path: { cwd: "", root: "" },
-      cost: 0,
-      tokens: { input: 10, output: 5, reasoning: 0, cache: { read: 0, write: 0 } },
-    },
-    parts: [
-      { id: `${id}-t`, sessionID: "test", messageID: id, type: "text", text },
-      {
-        id: `${id}-s`,
-        sessionID: "test",
-        messageID: id,
-        type: "step-finish",
-        reason: "stop",
-        cost: 0,
-        tokens: { input: 10, output: 5, reasoning: 0, cache: { read: 0, write: 0 } },
-      },
-    ],
-  };
-}
 
 function overrideOnce() {
   let fired = false;
@@ -84,7 +55,7 @@ function harness(windows: Record<string, number | undefined>) {
   const resolved: Model.Ref[] = [];
   const run: MockLlmFn = async (input, sink: Sink) => {
     calls.push({ modelId: input.model?.id, yieldAt: input.yieldAtInputTokens });
-    sink.onMessage(snapshot(`msg-${calls.length}`, `turn ${calls.length}`));
+    sink.onMessage(assistantSnapshot(`msg-${calls.length}`, `turn ${calls.length}`));
     return createStopOutcome();
   };
   const llm = {

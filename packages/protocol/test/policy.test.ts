@@ -350,13 +350,28 @@ describe("Policy schemas", () => {
       });
     });
 
-    it("refuses a model.override with empty coordinates", () => {
-      expect(() =>
-        Policy.PolicyEffect.parse({ type: "model.override", provider: "", id: "m" }),
-      ).toThrow();
-      expect(() =>
-        Policy.PolicyEffect.parse({ type: "model.override", provider: "p", id: "" }),
-      ).toThrow();
+    it("refuses a model.override with empty coordinates, naming the offending field", () => {
+      const emptyProvider = Policy.PolicyEffect.safeParse({
+        type: "model.override",
+        provider: "",
+        id: "m",
+      });
+      expect(emptyProvider.success).toBe(false);
+      if (!emptyProvider.success) {
+        expect(emptyProvider.error.issues.map((issue) => issue.path.join("."))).toContain(
+          "provider",
+        );
+        expect(emptyProvider.error.issues.every((issue) => issue.code === "too_small")).toBe(true);
+      }
+      const emptyId = Policy.PolicyEffect.safeParse({
+        type: "model.override",
+        provider: "p",
+        id: "",
+      });
+      expect(emptyId.success).toBe(false);
+      if (!emptyId.success) {
+        expect(emptyId.error.issues.map((issue) => issue.path.join("."))).toContain("id");
+      }
     });
 
     it("parses tool.require_approval effect", () => {

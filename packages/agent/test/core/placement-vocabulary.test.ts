@@ -19,9 +19,7 @@ const ALL_RETRY_REASONS = [
   "validation_error",
   "context_overflow",
 ] as const satisfies readonly RetryReason[];
-const _everyReasonListed: [Exclude<RetryReason, (typeof ALL_RETRY_REASONS)[number]>] extends [
-  never,
-]
+const _everyReasonListed: [Exclude<RetryReason, (typeof ALL_RETRY_REASONS)[number]>] extends [never]
   ? true
   : never = true;
 void _everyReasonListed;

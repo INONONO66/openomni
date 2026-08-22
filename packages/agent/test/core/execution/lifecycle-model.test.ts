@@ -24,7 +24,13 @@ describe("model dispatch points", () => {
     });
 
     const state = makeState();
-    const result = await dispatchModelRequest(state, engine, makeConfig(), makeAgentBase(), "test-model");
+    const result = await dispatchModelRequest(
+      state,
+      engine,
+      makeConfig(),
+      makeAgentBase(),
+      "test-model",
+    );
 
     expect(result.blocked).toBeNull();
     expect(fn).toHaveBeenCalledTimes(1);
@@ -77,7 +83,13 @@ describe("model dispatch points", () => {
     });
 
     const state = makeState();
-    const result = await dispatchModelRequest(state, engine, makeConfig(), makeAgentBase(), "test-model");
+    const result = await dispatchModelRequest(
+      state,
+      engine,
+      makeConfig(),
+      makeAgentBase(),
+      "test-model",
+    );
 
     expect(result.blocked).toBeNull();
     const lastMessage = state.messages[state.messages.length - 1];
