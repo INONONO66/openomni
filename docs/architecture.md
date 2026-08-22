@@ -51,7 +51,7 @@ ring 2  @openomni/llm           model access
         @openomni/coordinator   worker process driver — verb is deliver, never a gate
 ring 3  @openomni/agent         the LLM execution loop
 ring 4  @openomni/kernel        (rename + shrink of openomni) ingress + dispatch
-ring 5  apps/server             channel adapters + composition root; zero direct ledger imports
+ring 5  apps/server             composition root (registers channel drivers, composes the gateway router); zero direct ledger imports
 ```
 
 Each ring depends only inward. `check-deps` gets real rules (the current openomni/server any-except-self rule is vacuous); a shared tsconfig base ends the 8-way drift. **Resident, Governor, Jester, and Voice are not packages** — they are actor profiles and components running on the kernel (userland), which is the code translation of "all four roles are just actors".
@@ -73,7 +73,10 @@ ring 4  @openomni/kernel
 ring 5  apps/server                       ← composition root: all band registration here
 ──────────────────────────────────────────────────────────────────
 driver band (outside the tower; repo-extractable):
-  @openomni/channels  channel drivers (telegram/discord/github/websocket)
+  @openomni/channels  GRADUATED to the perimeter gateway (stage 2, #736): driver
+                      sub-band (telegram/discord/github/websocket) stays on the
+                      band contract; its router band adds {policy, ledger} under
+                      S8 — see the gateway exception in rule 1 below
   @openomni/remote    remote-execution drivers (ssh/reverse/attach; the shipped local
                       worker path becomes the local-process driver behind the same
                       contract per #500 — coordinator-side, not a band leaf)
@@ -83,18 +86,18 @@ driver band (outside the tower; repo-extractable):
 
 Band rules (enforced by `script/check-deps.ts`):
 
-1. A band package may depend only on the published thin contracts `@openomni/protocol` and `@openomni/ipc` — never on ledger, policy, llm, coordinator, agent, kernel, or server.
+1. A band package may depend only on the published thin contracts `@openomni/protocol` and `@openomni/ipc` — never on ledger, policy, llm, coordinator, agent, kernel, or server. **Gateway exception (stage 2, #736)**: `@openomni/channels` graduated out of the pure driver band — its package whitelist is {protocol, ipc, policy, ledger}, with policy/ledger confined by the S8 intra-package banding check to the judgment band (`src/router/`, `src/authn/`) while its driver sub-band keeps the {protocol, ipc} contract.
 2. Composition happens only in `apps/server`: one registration per driver; the kernel wraps every driver call in policy/verification but never imports a band package.
 3. The extraction test is normative: every band package builds and passes its tests standalone with only its declared dependencies, so it can be lifted into its own repository without touching kernel internals.
 4. Drivers start as folders inside their band package and split into packages only after a second consumer exists (the earned-abstraction rule).
 
-**Outbound target selection is `@openomni/placement`** (pick one executor among capability-tagged candidates), a ring-1 pure decision package beside policy. It maps `(command, capability tags, declared facts, policy constraints) → target decision` with declared fallback chains (model error/refusal/timeout → next candidate). It decides placement only: policy alone owns allow/deny, admission alone closes work, and the selection result is consumed as an input, like Stakes. Inbound routing (`resolveRoute`) is a perimeter gate concern owned by the `@openomni/channels` gateway (superseded 2026-08-19, [gateway-design.md](gateway-design.md) §8.4; it remains in the kernel until gateway stage 2 lands). A network path (VPN, tailnet, proxy exit) is a capability tag and endpoint property on the target — never a kernel concern (*illustration*: per-command network wrapping as a `remote`/`browser` execution-profile option); how the effective path is recorded belongs to the #510 attempt-identity and #492 effect contracts — this document does not extend their enumerations.
+**Outbound target selection is `@openomni/placement`** (pick one executor among capability-tagged candidates), a ring-1 pure decision package beside policy. It maps `(command, capability tags, declared facts, policy constraints) → target decision` with declared fallback chains (model error/refusal/timeout → next candidate). It decides placement only: policy alone owns allow/deny, admission alone closes work, and the selection result is consumed as an input, like Stakes. Inbound routing (`resolveRoute`) is a perimeter gate concern owned by the `@openomni/channels` gateway (superseded 2026-08-19, [gateway-design.md](gateway-design.md) §8.4; landed at gateway stage 2, #736 — the external arms live in `packages/channels/src/router/`, the internal arm stays kernel-side). A network path (VPN, tailnet, proxy exit) is a capability tag and endpoint property on the target — never a kernel concern (*illustration*: per-command network wrapping as a `remote`/`browser` execution-profile option); how the effective path is recorded belongs to the #510 attempt-identity and #492 effect contracts — this document does not extend their enumerations.
 
 ## The Mailroom: One Boundary for External Communication
 
-All communication with the outside world crosses one seam, owned by `@openomni/channels` — the gateway ([gateway-design.md](gateway-design.md), Owner 2026-08-18/19): its `drivers/` sub-band remains the zero-authority mailroom, while its router owns perimeter authority (blacklist, wait correlation, channel ceiling, actor identity, session mapping) after gateway stage 2.
+All communication with the outside world crosses one seam, owned by `@openomni/channels` — the gateway ([gateway-design.md](gateway-design.md), Owner 2026-08-18/19): its driver sub-band remains the zero-authority mailroom, while its router owns perimeter authority (blacklist, wait correlation, channel ceiling, actor identity, session mapping) — wired since gateway stage 2 (#736).
 
-- **Inbound**: a channel driver receives a surface-native event, stamps provenance only (*illustration*: channel, external id, timestamps — the exact provenance field set is fixed by the #499 `Channel` contract), and emits the single canonical `Ingress.InboundEvent`. Every authority decision — blacklist, wait correlation, channel ceiling, actor identity, surface default — happens afterwards, inside the `resolveRoute` pipeline (kernel today; the channels gateway router after gateway stage 2 — [gateway-design.md](gateway-design.md) §8.4), which drivers never re-implement.
+- **Inbound**: a channel driver receives a surface-native event, stamps provenance only (*illustration*: channel, external id, timestamps — the exact provenance field set is fixed by the #499 `Channel` contract), and emits a `Channel.InboundMessage`; the server bridge converts it to the `Gateway.DeliveredEvent` that `GatewayRouter.ingest` accepts, and the router hands the brain a `Gateway.Deliver`. Every authority decision — blacklist, wait correlation, channel ceiling, actor identity, surface default — happens after the driver, inside the `resolveRoute` pipeline (the channels gateway router since stage 2 — [gateway-design.md](gateway-design.md) §8.4), which drivers never re-implement.
 - **Outbound**: the kernel records the effect intent first (intent-event-ID as idempotency key, #492), then hands the authorized payload to a channel driver for delivery; the driver reports `confirmed | failed | unknown` and reconciliation owns the rest.
 - Channel drivers are delivery drivers: they implement the #499-converged `Channel` contract under the band rules above.
 - Internal kernel↔worker transport stays on `@openomni/ipc` and never rides this seam.
