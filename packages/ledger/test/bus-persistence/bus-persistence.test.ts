@@ -17,6 +17,8 @@ interface BusEventRow {
   readonly category: string;
   readonly visibility: string;
   readonly data: string;
+  readonly payload_status: string | null;
+  readonly payload_diagnostic: string | null;
   readonly trace_id: string;
   readonly duration_ms: number | null;
   readonly time_created: number;
@@ -167,6 +169,8 @@ describe("BusPersistence", () => {
       session_id: session.id,
       trace_id: "trace-from-schema",
       time_created: time,
+      payload_status: "valid",
+      payload_diagnostic: null,
     });
     const firstNormalized = persisted[0];
     if (firstNormalized === undefined) throw new Error("shape");
@@ -178,41 +182,68 @@ describe("BusPersistence", () => {
     });
   });
 
-  test("falls back to raw payload when schema parsing fails", async () => {
+  test("marks schema-invalid payloads without changing their raw serialization", async () => {
+    const session = createSession();
+    const expectedPayload = z.object({
+      sessionId: z.string(),
+      traceId: z.string(),
+      time: z.number(),
+    });
+    const event = BusEvent.define(
+      "custom.invalid",
+      z.unknown().refine((value) => expectedPayload.safeParse(value).success),
+    );
+    const rawPayload = {
+      sessionId: session.id,
+      traceId: "trace-raw",
+      time: "not-a-number",
+      extra: "survives",
+    };
+
+    BusPersistence.start();
+    Bus.publish(event, rawPayload);
+
+    const persisted = await waitForRows(1);
+    const firstRaw = persisted[0];
+    if (firstRaw === undefined) throw new Error("shape");
+    expect(firstRaw).toMatchObject({
+      session_id: session.id,
+      trace_id: "trace-raw",
+      payload_status: "invalid",
+      payload_diagnostic: "schema validation failed",
+    });
+    expect(firstRaw.data).toBe(JSON.stringify(rawPayload));
+  });
+
+  test("marks a throwing schema parser separately and retains the raw payload", async () => {
     const session = createSession();
     const event = BusEvent.define(
       "custom.parse_failed",
-      z.object({
-        sessionId: z.string(),
-        traceId: z.string().default("trace-from-schema"),
-        time: z.number(),
-      }),
+      z.object({ sessionId: z.string(), traceId: z.string(), time: z.number() }),
     );
     Object.defineProperty(event.schema, "safeParse", {
       value: () => {
-        throw new Error("schema failed");
+        throw new Error("sensitive parser detail must not persist");
       },
     });
+    const rawPayload = {
+      sessionId: session.id,
+      traceId: "trace-parser-threw",
+      time: Date.UTC(2026, 4, 10, 1, 2, 6),
+    };
 
     BusPersistence.start();
-    Bus.publish(event, {
-      sessionId: session.id,
-      traceId: "trace-raw",
-      time: Date.UTC(2026, 4, 10, 1, 2, 6),
-    });
+    Bus.publish(event, rawPayload);
 
     const persisted = await waitForRows(1);
-    expect(persisted[0]).toMatchObject({
-      session_id: session.id,
-      trace_id: "trace-raw",
-    });
     const firstRaw = persisted[0];
     if (firstRaw === undefined) throw new Error("shape");
-    expect(JSON.parse(firstRaw.data)).toEqual({
-      sessionId: session.id,
-      traceId: "trace-raw",
-      time: Date.UTC(2026, 4, 10, 1, 2, 6),
+    expect(firstRaw).toMatchObject({
+      payload_status: "parse_failed",
+      payload_diagnostic: "schema parser threw",
     });
+    expect(firstRaw.payload_diagnostic).not.toContain("sensitive parser detail");
+    expect(firstRaw.data).toBe(JSON.stringify(rawPayload));
   });
 
   test("skips ephemeral bus events", async () => {

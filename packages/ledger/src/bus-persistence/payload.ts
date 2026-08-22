@@ -15,17 +15,30 @@ interface SafeParseSchema {
   safeParse(value: unknown): unknown;
 }
 
-export function parsePayload(event: Bus.PublishedDescriptor, payload: unknown): unknown {
+export type PayloadStatus = "valid" | "invalid" | "parse_failed";
+
+export interface ParsedPayload {
+  readonly value: unknown;
+  readonly status: PayloadStatus;
+  readonly diagnostic?: string;
+}
+
+export function parsePayload(event: Bus.PublishedDescriptor, payload: unknown): ParsedPayload {
   const schema = toSafeParseSchema(event.schema);
   if (schema === undefined) {
-    return payload;
+    return { value: payload, status: "parse_failed", diagnostic: "schema parser unavailable" };
   }
 
   try {
     const result = schema.safeParse(payload);
-    return isSafeParseResult(result) && result.success ? result.data : payload;
+    if (!isSafeParseResult(result)) {
+      return { value: payload, status: "parse_failed", diagnostic: "schema parser result invalid" };
+    }
+    return result.success
+      ? { value: result.data, status: "valid" }
+      : { value: payload, status: "invalid", diagnostic: "schema validation failed" };
   } catch {
-    return payload;
+    return { value: payload, status: "parse_failed", diagnostic: "schema parser threw" };
   }
 }
 

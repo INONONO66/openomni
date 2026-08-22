@@ -227,6 +227,8 @@ describe("SqliteStorageAdapter", () => {
         "prev_hash",
         "event_hash",
         "visibility",
+        "payload_status",
+        "payload_diagnostic",
       ]);
       expect(tableColumns(db, "event_chain")).toEqual([
         "seq",

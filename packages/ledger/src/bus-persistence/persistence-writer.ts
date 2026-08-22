@@ -124,8 +124,9 @@ function writeRow(db: Database, input: PersistInput): void {
 
   db.query(
     `INSERT INTO bus_event
-       (session_id, run_id, event_type, category, visibility, data, trace_id, duration_ms, time_created, prev_hash, event_hash)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (session_id, run_id, event_type, category, visibility, data, payload_status,
+        payload_diagnostic, trace_id, duration_ms, time_created, prev_hash, event_hash)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     input.sessionId ?? null,
     runId ?? null,
@@ -133,6 +134,8 @@ function writeRow(db: Database, input: PersistInput): void {
     categoryOf(input.event.name),
     visibility,
     data,
+    input.payloadStatus,
+    input.payloadDiagnostic ?? null,
     traceId,
     durationMs ?? null,
     timeCreated,
