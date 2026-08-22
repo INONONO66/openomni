@@ -8,8 +8,8 @@ import {
 /**
  * #708 reply-grant materialization mechanics (design §2b stage-0 rule):
  * Owner-written RULES materialize bounded, reply-scoped grant INSTANCES for
- * first-contact admitted actors — perimeter facts only, capped per rule,
- * in-memory for this stage (recorded ruling; durable store is #709).
+ * first-contact admitted actors — perimeter facts only, capped per rule.
+ * Immutable routed admissions rebuild the in-memory projection after restart.
  */
 
 const NOW = 1_700_000_000_000;
@@ -68,6 +68,46 @@ describe("reply-grant instance materialization", () => {
       msg: "reply-grant instance materialized",
       traceId: "trace-reply-grant",
     });
+  });
+
+  test("immutable admission replay preserves original TTL and capacity", () => {
+    const replayAt = Date.now();
+    const published: Array<{ name: string; data: Record<string, unknown> }> = [];
+    const instances = createReplyGrantInstances({
+      rules: () => [rule({ maxLiveInstances: 1 })],
+      replay: () => [
+        admission({ at: replayAt, sourceId: "route:first" }),
+        admission({
+          actorId: "actor:stranger-2",
+          endpoint: { channel: "telegram", externalId: "chat-2" },
+          at: replayAt + 1,
+          sourceId: "route:second",
+        }),
+      ],
+      publish: (descriptor, data) => {
+        published.push({ name: descriptor.name, data: data as Record<string, unknown> });
+      },
+    });
+
+    const live = instances.list();
+    expect(live).toHaveLength(1);
+    expect(live[0]).toMatchObject({
+      id: "reply-grant:rule-1:route%3Afirst",
+      targetActorId: "actor:stranger-1",
+      expiresAt: replayAt + 60_000,
+      replyScope: { surfaceKey: "telegram:chat-1" },
+    });
+    expect(published).toEqual([]);
+  });
+
+  test("expired immutable admissions rematerialize no authority", () => {
+    const instances = createReplyGrantInstances({
+      rules: () => [rule()],
+      replay: () => [admission({ at: Date.now() - 60_001, sourceId: "route:expired" })],
+      publish: () => undefined,
+    });
+
+    expect(instances.list()).toEqual([]);
   });
 
   test("repeat contact is NOT first contact: no second instance, no expiry refresh", () => {

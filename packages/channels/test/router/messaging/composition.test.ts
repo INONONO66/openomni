@@ -156,6 +156,72 @@ describe("messaging-composed gateway router (#708)", () => {
     expect(delivered[0]?.externalId).toBe("buyer-external");
   });
 
+  test("preserves a covered reply grant across router restart", async () => {
+    const firstRouter = makeRouter();
+    await firstRouter.ingest(strangerEvent);
+
+    // Constructing a new router over the same durable ledger stores simulates
+    // process restart: no inbound replay occurs before the covered reply.
+    const restartedRouter = makeRouter();
+    const receipt = await restartedRouter.messaging.send({
+      messageId: "m-restart",
+      traceId: "t-restart",
+      senderId: "persona-owner",
+      target: { actorId: "actor-buyer", endpointId: "ep-buyer" },
+      operation: "awaited",
+      body: "yes, still available",
+      at: Date.now(),
+      waitSpec: {
+        waitId: "w-restart",
+        ownerRef: { kind: "session", id: "s-1" },
+        allowedActions: ["report_result"],
+        expectedResponders: ["actor-buyer"],
+        resolutionPolicy: "first_reply",
+        expiresAt: Date.now() + 60_000,
+        followUpWindow: 0,
+      },
+    });
+
+    expect(receipt.kind).toBe("sent");
+  });
+
+  test("denies a restarted reply when the endpoint was rebound to another container", async () => {
+    const firstRouter = makeRouter();
+    await firstRouter.ingest(strangerEvent);
+
+    ActorRegistry.registerEndpoint({
+      id: "ep-buyer",
+      actorId: "actor-buyer",
+      channel: "discord",
+      externalId: "different-container",
+      workspace: "shop-ws",
+    });
+
+    const restartedRouter = makeRouter();
+    const receipt = await restartedRouter.messaging.send({
+      messageId: "m-rebound",
+      traceId: "t-rebound",
+      senderId: "persona-owner",
+      target: { actorId: "actor-buyer", endpointId: "ep-buyer" },
+      operation: "awaited",
+      body: "must not escape the initiating container",
+      at: Date.now(),
+      waitSpec: {
+        waitId: "w-rebound",
+        ownerRef: { kind: "session", id: "s-1" },
+        allowedActions: ["report_result"],
+        expectedResponders: ["actor-buyer"],
+        resolutionPolicy: "first_reply",
+        expiresAt: Date.now() + 60_000,
+        followUpWindow: 0,
+      },
+    });
+
+    expect(receipt.kind).toBe("denied");
+    if (receipt.kind === "denied") expect(receipt.code).toBe("ungranted");
+    expect(delivered).toEqual([]);
+  });
+
   test("claimSurface returns the CAS owner and is idempotent for the same session", () => {
     const router = makeRouter();
     const key = extractSurfaceKey(strangerEvent);
