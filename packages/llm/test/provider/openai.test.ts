@@ -1,11 +1,9 @@
-import { describe, test, expect, afterEach } from "bun:test";
-import { getSDK, getLanguage } from "../../src/provider/sdk";
-import type { Provider } from "../../src/provider";
+import { afterEach, describe, expect, test } from "bun:test";
 import type { Auth } from "../../src/auth";
+import type { Provider } from "../../src/provider";
+import { getLanguage, getSDK } from "../../src/provider/sdk";
 
 const originalFetch = globalThis.fetch;
-
-/** `config` is an OpenAI SDK detail, absent from the `LanguageModelV3` interface. */
 type OpenAIModelRef = { readonly config?: { readonly provider?: string } };
 
 function makeModel(overrides?: Partial<Provider.Model>): Provider.Model {
@@ -18,40 +16,21 @@ function makeModel(overrides?: Partial<Provider.Model>): Provider.Model {
   };
 }
 
+const authCases: Array<{ name: string; auth: Auth.Info }> = [
+  { name: "api key auth", auth: { type: "api", key: "sk-xxx" } },
+  { name: "proxy auth", auth: { type: "proxy", baseURL: "http://localhost:8317/v1" } },
+  {
+    name: "proxy auth with apiKey",
+    auth: { type: "proxy", baseURL: "http://localhost:8317/v1", apiKey: "proxy-key" },
+  },
+];
+
 describe("getSDK (OpenAI)", () => {
   afterEach(() => {
     globalThis.fetch = originalFetch;
   });
 
-  test("api key auth returns SDK with languageModel", () => {
-    const auth: Auth.Info = { type: "api", key: "sk-xxx" };
-    const sdk = getSDK(makeModel(), auth);
-    expect(sdk).toBeDefined();
-    expect(typeof sdk.languageModel).toBe("function");
-    const lm = sdk.languageModel("gpt-4o");
-    expect(lm).toBeDefined();
-    expect(lm.modelId).toBe("gpt-4o");
-  });
-
-  test("proxy auth returns SDK", () => {
-    const auth: Auth.Info = {
-      type: "proxy",
-      baseURL: "http://localhost:8317/v1",
-    };
-    const sdk = getSDK(makeModel(), auth);
-    expect(sdk).toBeDefined();
-    expect(typeof sdk.languageModel).toBe("function");
-    const lm = sdk.languageModel("gpt-4o");
-    expect(lm).toBeDefined();
-    expect(lm.modelId).toBe("gpt-4o");
-  });
-
-  test("proxy auth with apiKey returns SDK", () => {
-    const auth: Auth.Info = {
-      type: "proxy",
-      baseURL: "http://localhost:8317/v1",
-      apiKey: "proxy-key",
-    };
+  test.each(authCases)("$name returns SDK", ({ auth }) => {
     const sdk = getSDK(makeModel(), auth);
     expect(sdk).toBeDefined();
     expect(typeof sdk.languageModel).toBe("function");
@@ -61,13 +40,7 @@ describe("getSDK (OpenAI)", () => {
   });
 
   test("proxy auth uses Chat Completions language model", () => {
-    const auth: Auth.Info = {
-      type: "proxy",
-      baseURL: "http://localhost:8317/v1",
-      apiKey: "proxy-key",
-    };
-    const lm = getLanguage(makeModel({ id: "gpt-5.4" }), auth);
-
+    const lm = getLanguage(makeModel({ id: "gpt-5.4" }), authCases[2]?.auth as Auth.Info);
     expect(lm.modelId).toBe("gpt-5.4");
     expect((lm as OpenAIModelRef).config?.provider).toBe("openai.chat");
   });

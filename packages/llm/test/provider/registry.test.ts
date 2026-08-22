@@ -1,16 +1,70 @@
 import { describe, expect, it } from "bun:test";
-import { getSDK } from "../../src/provider/sdk";
-import { Provider } from "../../src/provider";
 import type { Auth } from "../../src/auth";
+import { Provider } from "../../src/provider";
+import { getSDK } from "../../src/provider/sdk";
 
-function makeModel(providerID: string, npm: string, id?: string): Provider.Model {
-  return {
-    id: id ?? "test-model",
-    providerID,
-    name: "Test Model",
-    api: { npm },
-  };
+function makeModel(providerID: string, npm: string, id = "test-model"): Provider.Model {
+  return { id, providerID, name: "Test Model", api: { npm } };
 }
+
+const sdkCases: Array<{
+  name: string;
+  providerID: string;
+  npm: string;
+  id: string;
+  auth: Auth.Info;
+}> = [
+  {
+    name: "Anthropic provider with API auth",
+    providerID: "anthropic",
+    npm: "@ai-sdk/anthropic",
+    id: "claude-sonnet-4-20250514",
+    auth: { type: "api", key: "test-api-key" },
+  },
+  {
+    name: "Anthropic provider with proxy auth",
+    providerID: "anthropic",
+    npm: "@ai-sdk/anthropic",
+    id: "claude-sonnet-4-20250514",
+    auth: { type: "proxy", baseURL: "http://localhost:8317" },
+  },
+  {
+    name: "OpenAI provider with API auth",
+    providerID: "openai",
+    npm: "@ai-sdk/openai",
+    id: "gpt-4o",
+    auth: { type: "api", key: "test-api-key" },
+  },
+  {
+    name: "OpenAI provider with proxy auth",
+    providerID: "openai",
+    npm: "@ai-sdk/openai",
+    id: "gpt-5.1-codex-max",
+    auth: { type: "proxy", baseURL: "http://localhost:8317/v1", apiKey: "test-proxy-key" },
+  },
+];
+
+const modelListCases: Array<{
+  name: string;
+  provider: "anthropic" | "openai";
+  auth?: "proxy" | "api";
+  properties: boolean;
+}> = [
+  { name: "model definitions from ModelsDev", provider: "anthropic", properties: true },
+  { name: "OpenAI model definitions", provider: "openai", properties: false },
+  {
+    name: "OpenAI models for proxy auth type without CODEX filter",
+    provider: "openai",
+    auth: "proxy",
+    properties: false,
+  },
+  {
+    name: "all OpenAI models for API auth type",
+    provider: "openai",
+    auth: "api",
+    properties: false,
+  },
+];
 
 describe("Provider Registry", () => {
   describe("public surface", () => {
@@ -18,7 +72,6 @@ describe("Provider Registry", () => {
       const providerSource = await Bun.file(
         new URL("../../src/provider/index.ts", import.meta.url),
       ).text();
-
       expect(Object.hasOwn(Provider, "BUNDLED_PROVIDERS")).toBe(false);
       expect(providerSource).not.toMatch(/\bexport\s+const\s+BUNDLED_PROVIDERS\b/);
       expect(providerSource).not.toMatch(/\bexport\s+type\s+ProviderID\b/);
@@ -26,93 +79,38 @@ describe("Provider Registry", () => {
   });
 
   describe("getSDK", () => {
-    it("should return configured Anthropic provider with API auth", () => {
-      const auth: Auth.Info = { type: "api", key: "test-api-key" };
-      const model = makeModel("anthropic", "@ai-sdk/anthropic", "claude-sonnet-4-20250514");
-      const provider = getSDK(model, auth);
-      expect(provider).toBeDefined();
-      expect(provider.languageModel).toBeDefined();
-    });
-
-    it("should return configured Anthropic provider with proxy auth", () => {
-      const auth: Auth.Info = {
-        type: "proxy",
-        baseURL: "http://localhost:8317",
-      };
-      const model = makeModel("anthropic", "@ai-sdk/anthropic", "claude-sonnet-4-20250514");
-      const provider = getSDK(model, auth);
-      expect(provider).toBeDefined();
-      expect(provider.languageModel).toBeDefined();
-    });
-
-    it("should return configured OpenAI provider with API auth", () => {
-      const auth: Auth.Info = { type: "api", key: "test-api-key" };
-      const model = makeModel("openai", "@ai-sdk/openai", "gpt-4o");
-      const provider = getSDK(model, auth);
-      expect(provider).toBeDefined();
-      expect(provider.languageModel).toBeDefined();
-    });
-
-    it("should return configured OpenAI provider with proxy auth", () => {
-      const auth: Auth.Info = {
-        type: "proxy",
-        baseURL: "http://localhost:8317/v1",
-        apiKey: "test-proxy-key",
-      };
-      const model = makeModel("openai", "@ai-sdk/openai", "gpt-5.1-codex-max");
-      const provider = getSDK(model, auth);
+    it.each(sdkCases)("should return configured $name", ({ providerID, npm, id, auth }) => {
+      const provider = getSDK(makeModel(providerID, npm, id), auth);
       expect(provider).toBeDefined();
       expect(provider.languageModel).toBeDefined();
     });
 
     it("should throw error for unknown npm package", () => {
-      const auth: Auth.Info = { type: "api", key: "test-api-key" };
-      const model = makeModel("unknown", "unknown-npm-pkg");
-      expect(() => getSDK(model, auth)).toThrow(
-        "No bundled provider for npm package: unknown-npm-pkg",
-      );
+      expect(() =>
+        getSDK(makeModel("unknown", "unknown-npm-pkg"), { type: "api", key: "test-api-key" }),
+      ).toThrow("No bundled provider for npm package: unknown-npm-pkg");
     });
 
     it("treats Object.prototype keys as unknown npm packages", () => {
-      // `in`-style lookups would resolve "toString"/"constructor" to
-      // Object.prototype members and invoke them as SDK factories.
       const auth: Auth.Info = { type: "api", key: "test-api-key" };
       for (const npm of ["toString", "constructor", "valueOf"]) {
-        const model = makeModel("unknown", npm);
-        expect(() => getSDK(model, auth)).toThrow(`No bundled provider for npm package: ${npm}`);
+        expect(() => getSDK(makeModel("unknown", npm), auth)).toThrow(
+          `No bundled provider for npm package: ${npm}`,
+        );
       }
     });
   });
 
   describe("listModels", () => {
-    it("should return model definitions from ModelsDev", async () => {
-      const models = await Provider.listModels("anthropic");
+    it.each(modelListCases)("should return $name", async ({ provider, auth, properties }) => {
+      const models = await Provider.listModels(provider, auth);
       expect(models).toBeDefined();
       expect(Array.isArray(models)).toBe(true);
       expect(models.length).toBeGreaterThan(0);
-      expect(models[0]).toHaveProperty("id");
-      expect(models[0]).toHaveProperty("name");
-    });
-
-    it("should return OpenAI model definitions", async () => {
-      const models = await Provider.listModels("openai");
-      expect(models).toBeDefined();
-      expect(Array.isArray(models)).toBe(true);
-      expect(models.length).toBeGreaterThan(0);
-    });
-
-    it("should return OpenAI models for proxy auth type without CODEX filter", async () => {
-      const models = await Provider.listModels("openai", "proxy");
-      expect(models).toBeDefined();
-      expect(Array.isArray(models)).toBe(true);
-      expect(models.length).toBeGreaterThan(0);
-    });
-
-    it("should return all OpenAI models for API auth type", async () => {
-      const models = await Provider.listModels("openai", "api");
-      expect(models).toBeDefined();
-      expect(Array.isArray(models)).toBe(true);
-      expect(models.length).toBeGreaterThan(0);
+      if (properties) {
+        expect(models[0]).toHaveProperty("id");
+        expect(models[0]).toHaveProperty("name");
+      }
     });
 
     it("should throw error for unknown provider", async () => {
