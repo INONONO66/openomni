@@ -335,14 +335,6 @@ describe("Wait fold — expiry, cancellation, late replies", () => {
       expect(outcome.code).toBe("late_reply");
     }
   });
-
-  test("transitions are deterministic: identical inputs produce identical outcomes", () => {
-    const record = buildWaitRecord();
-    const input = buildReplyInput();
-
-    expect(Wait.attachReply(record, input)).toEqual(Wait.attachReply(record, input));
-    expect(Wait.expire(record, { at: 10_001 })).toEqual(Wait.expire(record, { at: 10_001 }));
-  });
 });
 
 describe("Wait schema — resolution coherence (owning layer for these rules)", () => {

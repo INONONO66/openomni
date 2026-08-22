@@ -43,7 +43,6 @@ import {
   isRetryExhausted,
 } from "../../packages/ledger/src/work-item/retry-policy";
 import {
-  buildReplyInput,
   buildWaitCreate as buildSessionWaitCreate,
   captureStoreError,
 } from "../../packages/ledger/test/helpers/wait";
@@ -182,7 +181,16 @@ function workHeadOf(hash: string): number | undefined {
 describe("p2 ledger baseline — Wait decision-class facts", () => {
   test("append-before-act: every committed transition appends its fact at seq === projected revision", () => {
     const created = WaitStore.create(buildWaitCreate(), "trace-test");
-    const resolved = WaitStore.attachReply("wait-1", buildReplyInput(), "trace-test");
+    const resolved = WaitStore.attachReply(
+      "wait-1",
+      {
+        replyKey: "reply-key-1",
+        responderCandidates: ["actor-a"],
+        messageId: "in-msg-1",
+        at: 1_000,
+      },
+      "trace-test",
+    );
     if (resolved.kind !== "resolved") throw new Error(`expected resolved, got ${resolved.kind}`);
 
     const facts = factsOf("wait-1");
@@ -293,7 +301,16 @@ describe("p2 ledger baseline — Wait decision-class facts", () => {
     inspect.query("DELETE FROM ledger_head WHERE stream_id = ?").run("wait:wait-1");
     expect(factsOf("wait-1")).toHaveLength(0);
 
-    const outcome = WaitStore.attachReply("wait-1", buildReplyInput(), "trace-test");
+    const outcome = WaitStore.attachReply(
+      "wait-1",
+      {
+        replyKey: "reply-key-1",
+        responderCandidates: ["actor-a"],
+        messageId: "in-msg-1",
+        at: 1_000,
+      },
+      "trace-test",
+    );
 
     expect(outcome.kind).toBe("resolved");
     const facts = factsOf("wait-1");
@@ -326,7 +343,16 @@ describe("p2 ledger baseline — Wait decision-class facts", () => {
 
   test("boot tail verification passes after a normal run and detects a tampered row", () => {
     WaitStore.create(buildWaitCreate(), "trace-test");
-    WaitStore.attachReply("wait-1", buildReplyInput(), "trace-test");
+    WaitStore.attachReply(
+      "wait-1",
+      {
+        replyKey: "reply-key-1",
+        responderCandidates: ["actor-a"],
+        messageId: "in-msg-1",
+        at: 1_000,
+      },
+      "trace-test",
+    );
     WaitStore.create(buildWaitCreate({ id: "wait-2", originMessageId: "out-msg-2" }), "trace-test");
     WaitStore.expire("wait-2", "trace-test", 10_001);
 

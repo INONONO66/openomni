@@ -28,16 +28,6 @@ export function buildWaitCreate(overrides: Partial<Wait.Create> = {}): Wait.Crea
   };
 }
 
-export function buildReplyInput(overrides: Partial<Wait.ReplyInput> = {}): Wait.ReplyInput {
-  return {
-    replyKey: "reply-key-1",
-    responderCandidates: ["actor-a"],
-    messageId: "in-msg-1",
-    at: 1_000,
-    ...overrides,
-  };
-}
-
 /** Runs fn and returns the WaitStoreError it throws; fails when none is thrown. */
 export function captureStoreError(fn: () => unknown): InstanceType<typeof Wait.StoreError> {
   try {

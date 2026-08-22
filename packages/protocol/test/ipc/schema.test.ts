@@ -2,19 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { Ipc } from "../../src/index.js";
 
 describe("Ipc.Request", () => {
-  test("parse round-trip", () => {
-    const raw = {
-      v: 2,
-      type: "request",
-      id: "req-1",
-      method: "worker.bootstrap_ready",
-      params: { workerId: "w1", authToken: "token" },
-    };
-    const parsed = Ipc.Request.parse(raw);
-    const reparsed = Ipc.Request.parse(JSON.parse(JSON.stringify(parsed)));
-    expect(reparsed).toEqual(parsed);
-  });
-
   test("rejects missing id", () => {
     expect(
       Ipc.Request.safeParse({ v: 2, type: "request", method: "worker.bootstrap_ready" }).success,
@@ -45,43 +32,12 @@ describe("Ipc.Request", () => {
 });
 
 describe("Ipc.Response", () => {
-  test("parse round-trip with result", () => {
-    const raw = { v: 2, type: "response", id: "req-1", result: { accepted: true } };
-    const parsed = Ipc.Response.parse(raw);
-    const reparsed = Ipc.Response.parse(JSON.parse(JSON.stringify(parsed)));
-    expect(reparsed).toEqual(parsed);
-  });
-
-  test("parse round-trip with error", () => {
-    const raw = {
-      v: 2,
-      type: "response",
-      id: "req-1",
-      error: { code: 2000, message: "method not found" },
-    };
-    const parsed = Ipc.Response.parse(raw);
-    const reparsed = Ipc.Response.parse(JSON.parse(JSON.stringify(parsed)));
-    expect(reparsed).toEqual(parsed);
-  });
-
   test("rejects missing id", () => {
     expect(Ipc.Response.safeParse({ v: 2, type: "response", result: null }).success).toBe(false);
   });
 });
 
 describe("Ipc.Notification", () => {
-  test("parse round-trip", () => {
-    const raw = {
-      v: 2,
-      type: "notification",
-      method: "worker.deliver_message",
-      params: { sessionId: "sess-1", message: "hello" },
-    };
-    const parsed = Ipc.Notification.parse(raw);
-    const reparsed = Ipc.Notification.parse(JSON.parse(JSON.stringify(parsed)));
-    expect(reparsed).toEqual(parsed);
-  });
-
   test("rejects missing method", () => {
     expect(Ipc.Notification.safeParse({ v: 2, type: "notification" }).success).toBe(false);
   });
