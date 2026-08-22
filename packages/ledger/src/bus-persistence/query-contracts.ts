@@ -12,6 +12,8 @@ export const QueryStats = z.object({
 });
 export type QueryStats = z.infer<typeof QueryStats>;
 
+const PayloadStatus = z.enum(["valid", "invalid", "parse_failed", "unmarked"]);
+
 export const EventRecord = z.object({
   id: z.string().describe("Unique event record ID"),
   sessionId: z.string().describe("Session ID this event belongs to"),
@@ -20,6 +22,8 @@ export const EventRecord = z.object({
   category: z.string().describe("Event category"),
   visibility: EventVisibility.describe("Audience that should see this persisted event"),
   data: z.record(z.string(), z.unknown()).describe("Event payload data"),
+  payloadStatus: PayloadStatus.describe("Schema status; unmarked identifies historical rows"),
+  payloadDiagnostic: z.string().optional().describe("Safe payload parsing diagnostic"),
   traceId: z.string().describe("Trace ID for correlation"),
   durationMs: z.number().optional().describe("Duration in milliseconds if applicable"),
   timeCreated: z.number().describe("Timestamp when event was created (ms since epoch)"),

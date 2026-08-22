@@ -17,6 +17,8 @@ export const APIError = NamedError.create(
     responseHeaders: z.record(z.string(), z.string()).optional(),
     responseBody: z.string().optional(),
     metadata: z.record(z.string(), z.string()).optional(),
+    aborted: z.boolean().optional(),
+    contextOverflow: z.boolean().optional(),
   }),
 );
 
@@ -46,6 +48,8 @@ export function coerceApiError(error: unknown): InstanceType<typeof APIError> | 
     statusCode?: unknown;
     responseHeaders?: unknown;
     responseBody?: unknown;
+    aborted?: unknown;
+    contextOverflow?: unknown;
   };
   if (typeof candidate.message !== "string" || typeof candidate.isRetryable !== "boolean") {
     return undefined;
@@ -66,6 +70,10 @@ export function coerceApiError(error: unknown): InstanceType<typeof APIError> | 
       ...(Object.keys(responseHeaders).length > 0 && { responseHeaders }),
       ...(typeof candidate.responseBody === "string" && {
         responseBody: candidate.responseBody,
+      }),
+      ...(typeof candidate.aborted === "boolean" && { aborted: candidate.aborted }),
+      ...(typeof candidate.contextOverflow === "boolean" && {
+        contextOverflow: candidate.contextOverflow,
       }),
     },
     { cause: error },

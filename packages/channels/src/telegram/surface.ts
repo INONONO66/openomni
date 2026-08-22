@@ -1,6 +1,6 @@
 import { type Channel, Operational, PolicyDecision } from "@openomni/protocol";
 import { newTraceId } from "@openomni/protocol";
-import { Dedupe } from "../support/dedupe";
+import { Dedupe, DedupeWindow } from "../support/dedupe";
 import { splitText } from "../support/chunk-text";
 import { TelegramClient } from "./client";
 import { TelegramNormalizer } from "./normalizer";
@@ -20,6 +20,7 @@ export class TelegramAdapter implements Channel.Surface {
 
   private readonly client: TelegramClient;
   private readonly dedupe = new Dedupe();
+  private readonly outboundDedupe = new DedupeWindow<{ externalMessageId?: string }>();
   private normalizer: TelegramNormalizer | null = null;
   private poller: TelegramPoller | null = null;
   private botUsername = "";
@@ -64,15 +65,19 @@ export class TelegramAdapter implements Channel.Surface {
     this.poller = new TelegramPoller(
       this.client,
       {
-        onMessage: (message) => {
+        onMessage: async (message) => {
           // D1: message_id is a PER-CHAT counter, so two different chats can
           // share one id within the dedupe window — key by chat to avoid
           // silently dropping the second chat's message.
-          if (this.dedupe.isDuplicate(`${message.chat.id}:${message.message_id}`)) return;
+          const dedupeKey = `${message.chat.id}:${message.message_id}`;
+          if (this.dedupe.isDuplicate(dedupeKey)) return;
           // Origin: the first frame of an inbound telegram message — this ONE
           // mint is the message's trace, carried to the run (D11).
           const messageTraceId = newTraceId();
-          this.handleMessage(message, messageTraceId).catch((err) => {
+          try {
+            await this.handleMessage(message, messageTraceId);
+          } catch (err) {
+            this.dedupe.forget(dedupeKey);
             this.publish(Operational.Events.Error, {
               traceId: messageTraceId,
               time: Date.now(),
@@ -80,7 +85,8 @@ export class TelegramAdapter implements Channel.Surface {
               msg: "telegram message handling failed",
               context: { err: String(err) },
             });
-          });
+            throw err;
+          }
         },
       },
       this.publish,
@@ -104,12 +110,21 @@ export class TelegramAdapter implements Channel.Surface {
    * Telegram chat id — deliver there and report the platform message id of
    * the final chunk (the message a reply would reference).
    */
-  async deliver(externalId: string, body: string): Promise<{ externalMessageId?: string }> {
-    // Origin: the messaging kernel's deliver seam does not thread the
-    // sender's trace yet (#215) — this delivery is its own causal chain.
-    const traceId = newTraceId();
-    const externalMessageId = await this.sendOutbound(externalId, { text: body }, traceId);
-    return externalMessageId === undefined ? {} : { externalMessageId };
+  async deliver(
+    externalId: string,
+    body: string,
+    idempotencyKey?: string,
+  ): Promise<{ externalMessageId?: string }> {
+    const send = async (): Promise<{ externalMessageId?: string }> => {
+      // Origin: the messaging kernel's deliver seam does not thread the
+      // sender's trace yet (#215) — this delivery is its own causal chain.
+      const traceId = newTraceId();
+      const externalMessageId = await this.sendOutbound(externalId, { text: body }, traceId);
+      return externalMessageId === undefined ? {} : { externalMessageId };
+    };
+    // Additive capability only: the current server composition calls this
+    // seam without a key, which intentionally retains at-least-once behavior.
+    return idempotencyKey === undefined ? send() : this.outboundDedupe.run(idempotencyKey, send);
   }
 
   private async handleMessage(message: TelegramMessage, traceId: string): Promise<void> {

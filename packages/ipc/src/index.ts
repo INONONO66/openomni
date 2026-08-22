@@ -6,3 +6,4 @@ export { connectIpcClient, type IpcClient } from "./client";
 export { IpcConnectionError, IpcProtocolError, IpcRemoteError, IpcTimeoutError } from "./errors";
 export { encode } from "./framing";
 export { createIpcServer, type IpcServer } from "./server";
+export { typedCall } from "./typed-call";

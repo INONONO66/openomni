@@ -9,6 +9,8 @@ import type { Provider } from "./provider";
 import { ProviderTransform } from "./provider/transform";
 import { getLanguage } from "./provider/sdk";
 import { Auth } from "./auth/storage";
+import { coerceApiError, NamedError } from "./error";
+import { Retry } from "./retry";
 
 /**
  * Input for the run() function.
@@ -27,6 +29,11 @@ export interface RunInput {
   toolExecutor?: (call: Tool.Call, context?: Tool.ExecutionContext) => Promise<Tool.Result>;
   toolChoice?: "auto" | "required" | "none";
   maxSteps?: number;
+  /**
+   * Transport retries performed inside this single run call. Absent keeps the
+   * bounded standalone default; orchestrators that own retry attempts set 0.
+   */
+  maxRetryAttempts?: number;
   /**
    * Step-boundary yield: stop the step loop once the last finished step's
    * input tokens (the ai SDK's cache-inclusive prompt total) reach this.
@@ -65,19 +72,55 @@ export interface RunInput {
  * namespace, so there is no collision (`run` the function and `Run` the
  * namespace are distinct identifiers).
  */
+export interface RunDependencies {
+  /** Overrides provider stream creation for an isolated caller or test harness. */
+  createStream?: Processor.ProcessorOptions["createStream"];
+}
+
 export namespace Run {
+  const FailureUsage = z.object({
+    inputTokens: z.number(),
+    outputTokens: z.number(),
+    reasoningTokens: z.number(),
+    cacheReadTokens: z.number(),
+    cacheWriteTokens: z.number(),
+  });
+
+  /**
+   * The typed failure crossing from the provider-owning package to Agent.
+   * `cause` remains Error's native cause chain; machine-consumed facts live
+   * in data so consumers never have to recover them from prose.
+   */
+  export const FailureError = NamedError.create(
+    "LlmRunFailure",
+    z.object({
+      message: z.string(),
+      providerErrorName: z.string().optional(),
+      retryAfterMs: z.number().nonnegative().optional(),
+      usage: FailureUsage,
+      aborted: z.boolean(),
+      contextOverflow: z.boolean(),
+    }),
+  );
+  export type Failure = InstanceType<typeof FailureError>;
+
+  const LegacyError = z.object({
+    message: z.string(),
+    name: z.string().optional(),
+    stack: z.string().optional(),
+  });
+
   export const Outcome = z.discriminatedUnion("type", [
     z.object({ type: z.literal("stop") }),
     z.object({ type: z.literal("continue") }),
     z.object({ type: z.literal("compact") }),
-    z.object({ type: z.literal("aborted") }),
+    z.object({
+      type: z.literal("aborted"),
+      error: z.instanceof(FailureError).optional(),
+    }),
     z.object({
       type: z.literal("error"),
-      error: z.object({
-        message: z.string(),
-        name: z.string().optional(),
-        stack: z.string().optional(),
-      }),
+      error: z.union([z.instanceof(FailureError), LegacyError]),
     }),
   ]);
   export type Outcome = z.infer<typeof Outcome>;
@@ -116,7 +159,11 @@ function assignWireToolNames(tools: Tool.Spec[]): {
   return { wireNames, originalByWire };
 }
 
-export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
+export async function run(
+  input: RunInput,
+  sink: Sink,
+  dependencies: RunDependencies = {},
+): Promise<Run.Outcome> {
   const { messages, system = "", signal, model } = input;
 
   const abortSignal = signal ?? new AbortController().signal;
@@ -294,14 +341,17 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
   const modelId = model.id;
 
   const processor = Processor.create({
+    // Call-local injection keeps test and embedding harnesses isolated from
+    // Bun's process-wide module mocks without changing production behavior.
+    createStream: dependencies.createStream ?? createStream,
     events: input.events,
     assistantMessage,
     sessionID,
     model,
     abort: abortSignal,
     sink,
-    createStream,
     toolNames: originalByWire,
+    maxRetryAttempts: input.maxRetryAttempts,
     trace: {
       traceId,
       sessionId: sessionID,
@@ -351,7 +401,30 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
     return { type: "stop" };
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
-    const aborted = abortSignal.aborted;
+    const apiError = coerceApiError(err);
+    const source = apiError ?? err;
+    const sourceFacts = errorFacts(source);
+    const aborted = abortSignal.aborted || sourceFacts.aborted === true;
+    const usage = processor.usageTotals;
+    const retryAfterMs = Retry.retryAfterMs(source);
+    const failure = new Run.FailureError(
+      {
+        message: err.message,
+        providerErrorName: err.name,
+        ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
+        usage: {
+          inputTokens: usage.input,
+          outputTokens: usage.output,
+          reasoningTokens: usage.reasoning,
+          cacheReadTokens: usage.cache.read,
+          cacheWriteTokens: usage.cache.write,
+        },
+        aborted,
+        contextOverflow: sourceFacts.contextOverflow === true,
+      },
+      { cause: source },
+    );
+    if (err.stack !== undefined) failure.stack = err.stack;
 
     input.events.publish(LlmCall.Events.Failed, {
       traceId,
@@ -366,16 +439,29 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
     });
 
     if (aborted) {
-      return { type: "aborted" };
+      return { type: "aborted", error: failure };
     }
 
+    return { type: "error", error: failure };
+  }
+}
+
+function errorFacts(error: unknown): { aborted?: boolean; contextOverflow?: boolean } {
+  if (typeof error !== "object" || error === null) return {};
+  if ("data" in error && typeof error.data === "object" && error.data !== null) {
+    const data = error.data as Record<string, unknown>;
     return {
-      type: "error",
-      error: {
-        message: err.message,
-        name: err.name,
-        stack: err.stack,
-      },
+      ...(typeof data.aborted === "boolean" ? { aborted: data.aborted } : {}),
+      ...(typeof data.contextOverflow === "boolean"
+        ? { contextOverflow: data.contextOverflow }
+        : {}),
     };
   }
+  const record = error as Record<string, unknown>;
+  return {
+    ...(typeof record.aborted === "boolean" ? { aborted: record.aborted } : {}),
+    ...(typeof record.contextOverflow === "boolean"
+      ? { contextOverflow: record.contextOverflow }
+      : {}),
+  };
 }

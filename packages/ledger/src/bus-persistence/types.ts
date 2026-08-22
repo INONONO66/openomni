@@ -1,4 +1,5 @@
 import type { Bus } from "@openomni/telemetry";
+import type { PayloadStatus } from "./payload.js";
 
 export interface RuntimeState {
   readonly unsubscribe: () => void;
@@ -16,6 +17,8 @@ export interface BusPersistenceOptions {
 export interface PersistInput {
   readonly event: Bus.PublishedDescriptor;
   readonly payload: unknown;
+  readonly payloadStatus: PayloadStatus;
+  readonly payloadDiagnostic?: string;
   readonly sessionId?: string;
   readonly now: () => Date;
 }

@@ -6,7 +6,7 @@ import {
   dispatchModelResponse,
 } from "../../../src/core/execution/lifecycle-dispatch";
 import { PolicyEngine } from "../../../src/core/policy";
-import { deny } from "../../helpers/policy-decision";
+import { atPoint, registerAt, deny } from "../../helpers/policy-decision";
 import { makeAgentBase, makeConfig, makeState } from "./lifecycle-dispatch-fixture";
 
 type DiagnosticIdentity = {
@@ -19,11 +19,9 @@ describe("model execution deny verdicts", () => {
     Bus.reset();
     const fn = mock(() => deny("test.deny", "provider-blocked"));
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
+    registerAt(engine, "connection.llm.pre", {
       name: "deny-model-request",
-      pointIds: ["connection.llm.pre"],
-      effectCapabilities: { "connection.llm.pre": ["audit.annotate"] },
+      effects: ["audit.annotate"],
       priority: 100,
       fn,
     });
@@ -69,14 +67,14 @@ describe("model execution deny verdicts", () => {
 
 function responseDenyEngine(): ReturnType<typeof PolicyEngine.create> {
   const engine = PolicyEngine.create();
-  engine.register({
-    kind: "point",
-    name: "deny-model-response",
-    pointIds: ["connection.llm.post"],
-    effectCapabilities: { "connection.llm.post": ["audit.annotate"] },
-    priority: 100,
-    fn: () => deny("test.deny", "after-provider"),
-  });
+  engine.register(
+    atPoint("connection.llm.post", {
+      name: "deny-model-response",
+      effects: ["audit.annotate"],
+      priority: 100,
+      fn: () => deny("test.deny", "after-provider"),
+    }),
+  );
   return engine;
 }
 

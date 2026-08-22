@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
+import { WorkerDeliveryError } from "../../src/error";
 import { createWorkerManager, type WorkerManager } from "../../src/worker-manager";
 import { collectorPorts } from "../harness/ports";
 
@@ -461,5 +462,19 @@ describe("on-demand WorkerManager", () => {
     // the fixture echoes what actually crossed the IPC boundary.
     expect(delivery).toMatchObject({ accepted: true, traceId: TEST_TRACE_ID });
     await dispatch;
+  });
+});
+
+// #500 C3: moved from packages/protocol/test/worker-driver-event.test.ts with
+// the error type — the taxonomy lives with its throwers now.
+describe("WorkerDeliveryError codes", () => {
+  test.each([
+    "worker_unavailable",
+    "worker_not_ready",
+    "worker_stopped",
+    "ipc_connection_lost",
+  ] as const)("supervisor rejection code %s is part of the taxonomy", (code) => {
+    const error = new WorkerDeliveryError({ message: "m", code });
+    expect(WorkerDeliveryError.Schema.safeParse(error.toObject()).success).toBe(true);
   });
 });

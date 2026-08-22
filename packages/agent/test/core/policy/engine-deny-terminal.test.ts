@@ -1,7 +1,7 @@
 import { describe, expect, it, mock } from "bun:test";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { PolicyContext } from "../../../src/core/policy";
-import { abortRun, allow, deny } from "../../helpers/policy-decision";
+import { atPoint, registerAt, abortRun, allow, deny } from "../../helpers/policy-decision";
 
 function baseCtx(): Omit<PolicyContext, "timing"> & {
   sessionId: string;
@@ -33,22 +33,15 @@ describe("PolicyEngine deny terminal dispatch", () => {
     const engine = PolicyEngine.create();
     const after = mock(() => abortRun("test.late", "late"));
 
-    engine.register({
-      kind: "point",
-      name: "deny-first",
-      pointIds: ["tool.native.pre"],
-      effectCapabilities: { "tool.native.pre": ["audit.annotate"] },
-      priority: 0,
-      fn: () => deny("test.deny-first", "blocked"),
-    });
-    engine.register({
-      kind: "point",
-      name: "after",
-      pointIds: ["tool.native.pre"],
-      effectCapabilities: { "tool.native.pre": ["run.abort"] },
-      priority: 10,
-      fn: after,
-    });
+    registerAt(
+      engine,
+      "tool.native.pre",
+      "deny-first",
+      0,
+      () => deny("test.deny-first", "blocked"),
+      ["audit.annotate"],
+    );
+    registerAt(engine, "tool.native.pre", "after", 10, after, ["run.abort"]);
 
     const verdict = await engine.dispatchPoint("tool.native.pre", baseCtx());
 
@@ -65,22 +58,20 @@ describe("PolicyEngine deny terminal dispatch", () => {
       const engine = PolicyEngine.create();
       const after = mock(() => allow());
 
-      engine.register({
-        kind: "point",
-        name: "missing-policy-id",
-        pointIds: ["tool.native.pre"],
-        effectCapabilities: { "tool.native.pre": [] },
-        priority: 0,
-        fn: () => allow(),
-      });
-      engine.register({
-        kind: "point",
-        name: "after",
-        pointIds: ["tool.native.pre"],
-        effectCapabilities: { "tool.native.pre": [] },
-        priority: 10,
-        fn: after,
-      });
+      engine.register(
+        atPoint("tool.native.pre", {
+          name: "missing-policy-id",
+          priority: 0,
+          fn: () => allow(),
+        }),
+      );
+      engine.register(
+        atPoint("tool.native.pre", {
+          name: "after",
+          priority: 10,
+          fn: after,
+        }),
+      );
 
       const verdict = await engine.dispatchPoint("tool.native.pre", baseCtx());
 

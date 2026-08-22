@@ -3,6 +3,7 @@ import type { AppConnector } from "@openomni/protocol";
 import { unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { ActorRegistry } from "../../src/actor/index";
 import { AppConnectorInstallationStore } from "../../src/app-connector/index";
 import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage";
 import { Storage } from "../../src/storage/storage";
@@ -113,10 +114,9 @@ describe("AppConnectorInstallationStore lifecycle", () => {
     removeSqliteFiles(dbPath);
   });
 
-  test("disables a consented installation and preserves consent metadata", async () => {
+  test("disables a consented installation and preserves consent metadata", () => {
     // Given
     const consented = consentInstallation("install-1");
-    await Bun.sleep(2);
 
     // When
     const disabled = AppConnectorInstallationStore.disable(consented.id);
@@ -160,10 +160,9 @@ describe("AppConnectorInstallationStore lifecycle", () => {
     );
   });
 
-  test("marks a consented installation enabled when smoke verification succeeds", async () => {
+  test("marks a consented installation enabled when smoke verification succeeds", () => {
     // Given
     const consented = consentInstallation("install-1");
-    await Bun.sleep(2);
 
     // When
     const enabled = AppConnectorInstallationStore.markSmokeVerified(consented.id, {
@@ -195,10 +194,9 @@ describe("AppConnectorInstallationStore lifecycle", () => {
     });
   });
 
-  test("marks a consented installation verification_failed when smoke verification fails", async () => {
+  test("marks a consented installation verification_failed when smoke verification fails", () => {
     // Given
     const consented = consentInstallation("install-1");
-    await Bun.sleep(2);
 
     // When
     const failed = AppConnectorInstallationStore.markSmokeVerificationFailed(consented.id, {
@@ -238,9 +236,20 @@ describe("AppConnectorInstallationStore lifecycle", () => {
     }
   });
 
-  test("uninstalls an existing installation and rejects a missing installation", () => {
+  test("uninstalls an installation and its actor records without removing unrelated actors", () => {
     // Given
     const consented = consentInstallation("install-1");
+    ActorRegistry.registerIdentity({
+      id: "act-unrelated",
+      kind: "human",
+      trustTier: "owner",
+    });
+    ActorRegistry.registerEndpoint({
+      id: "endpoint-unrelated",
+      actorId: "act-unrelated",
+      channel: "discord",
+      externalId: "unrelated-user",
+    });
 
     // When
     const removed = AppConnectorInstallationStore.uninstall(consented.id);
@@ -248,9 +257,32 @@ describe("AppConnectorInstallationStore lifecycle", () => {
     // Then
     expect(removed).toBe(true);
     expect(AppConnectorInstallationStore.get(consented.id)).toBeUndefined();
+    expect(ActorRegistry.getIdentity("actor:install-1")).toBeUndefined();
+    expect(ActorRegistry.getEndpoint(consented.endpointId)).toBeUndefined();
+    expect(ActorRegistry.getIdentity("act-unrelated")).toBeDefined();
+    expect(ActorRegistry.getEndpoint("endpoint-unrelated")).toBeDefined();
     expect(() => AppConnectorInstallationStore.uninstall(consented.id)).toThrow(
       "AppConnector installation not found",
     );
+  });
+
+  test("rolls back uninstall when actor cleanup is interrupted", () => {
+    // Given
+    const stored = AppConnectorInstallationStore.set(installation("install-interrupted"));
+    const actorRegistry = adapter.actorRegistry;
+    const removeIdentity = actorRegistry.removeIdentity;
+    actorRegistry.removeIdentity = (id) => {
+      removeIdentity(id);
+      throw new Error("injected actor cleanup failure");
+    };
+
+    // When / Then
+    expect(() => AppConnectorInstallationStore.uninstall(stored.id)).toThrow(
+      "injected actor cleanup failure",
+    );
+    expect(AppConnectorInstallationStore.get(stored.id)).toEqual(stored);
+    expect(ActorRegistry.getIdentity("actor:install-interrupted")).toBeDefined();
+    expect(ActorRegistry.getEndpoint(stored.endpointId)).toBeDefined();
   });
 
   test("rejects consent request after disable", () => {

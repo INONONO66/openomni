@@ -4,7 +4,7 @@ JSON-RPC 2.0-style IPC protocol for coordinator ↔ worker communication over Un
 
 ## Purpose
 
-Defines the locked-in wire contract between the coordinator process and worker processes. All messages are JSON-serializable. Version field (`v`) enables future breaking-change detection.
+Defines the locked-in wire contract between the coordinator process and worker processes. All messages are JSON-serializable. The fixed version field (`v: 2`) rejects mixed-version traffic; generic envelopes remain permissive while `Ipc.Methods` records the current same-version parameter/result schemas.
 
 ## Message Types
 
@@ -37,17 +37,14 @@ The `v` field is a protocol version integer.
 - Current version: `v: 2`
 - Backward-incompatible changes (field removal, type change, semantic change) require bumping the version
 - Additive changes (new optional fields) are allowed without a version bump
-- Version mismatch should cause the receiver to reject the message with error code `4000`
+- The transport rejects any schema-invalid JSON frame, including a version mismatch, with error code `4000`
 
 ## Error Codes
 
 | Code | Meaning |
 |------|---------|
-| `1000` | Internal error (unhandled exception in handler) |
-| `2000` | Method not found |
-| `3000` | Invalid params (Zod parse failure) |
-| `4000` | Protocol version mismatch |
-| `5000` | Run not found |
-| `5001` | Run already completed |
-| `5002` | Worker not ready |
-| `6000` | Permission denied |
+| `1000` | Request handler failure or missing handler |
+| `4000` | JSON parsed, but the IPC envelope schema (including version) is invalid |
+| `4001` | Frame is not valid JSON or exceeds the transport frame cap |
+
+The generic error envelope can carry other numeric codes, but current transport code emits only the codes above. Coordinator worker unavailability is a package-owned `WorkerDeliveryError` with code `worker_unavailable`, not an IPC error response.

@@ -9,18 +9,17 @@ src/
 ├── index.ts                    # Public API
 ├── core/
 │   ├── chat-agent.ts           # ChatAgent.create() — provides run()
-│   ├── types.ts                # ChatAgentConfig, ChatAgentInput, AgentResult (+ internal AgentStep/AgentBudget/TokenUsage; Sink is protocol's, used in signatures)
+│   ├── types.ts                # ChatAgentConfig, ChatAgentInput, AgentResult (+ internal step/budget/usage; streaming Sink is llm-owned)
 │   ├── budget.ts               # createBudgetState / checkBudget / recordTurn / recordToolCall / recordTokenUsage
 │   ├── retry.ts                # DEFAULT_RETRY_POLICY, classifyRetryReason, shouldRetry, sleep
 │   ├── message-factory.ts      # Message envelope helpers for injected messages
-│   ├── execution/              # The agent loop. Phase 4 rule 1 names five of these: run.ts (entry), turn.ts (prepare + settle), tools.ts (tool.native/mcp pre/post dispatch), effects.ts (effect application), state.ts (run state + lifecycle context). Beside them: run-events.ts (the records), lifecycle-dispatch.ts (run-level points)
+│   ├── execution/              # Agent loop: run/turn/tools/effects/state, lifecycle dispatch, and event projection
 │   └── policy/
 │       ├── index.ts            # Agent-scoped PolicyEngine facade over @openomni/policy
 │       └── types.ts            # PolicyContext, canonical registration types, PolicyEngineRegistration
-├── compaction/                 # D6 home (#641): compact.ts (Compaction mechanism + boundary guard), policy.ts (run.completion.pre seam adapter), index.ts (config type + factory)
+├── compaction/                 # compact/measure/reduce/speculate mechanisms + run.completion.pre policy adapter
 └── runtime/
-    └── mcp/
-        ├── client.ts           # McpClient — connect / disconnect / listTools / callTool (stdio / sse / streamable-http)
+    └── mcp/                    # McpClient split across connection, transport, descriptor, conversion, and type modules
 ```
 
 ## PUBLIC API
@@ -48,9 +47,9 @@ const result = await agent.run({
 Also exported from `@openomni/agent`:
 
 - Types: `ChatAgentConfig`, `ChatAgentInput`, `AgentResult`
-- Policy: `PolicyEngine`, `PolicyRegistry`, `PolicyContext`, `PolicyFn`, `CanonicalPolicyRegistration`, `PolicyEngineRegistration`, `PolicyEngineInstance`, `PolicyRegistryInstance`
+- Policy: `PolicyEngine`, `PolicyRegistry`, `PolicyContext`, `PolicyFn`, `CanonicalPolicyRegistration`, `PolicyEngineRegistration`, `PolicyEngineInstance`, `PolicyRegistrationFactory`, `PolicyRegistryInstance`
 - Budget queries: `checkBudget`, `describeBudgetRemaining`, `BudgetState` — the accounting stays here, what to say about it does not (D5)
-- Reason codes: `RunReasonCode`; Compaction: `createCompactionPolicy`, `CompactionOptions`; Runtime: `McpClient`
+- Reason codes: `RunReasonCode`; compaction: `createCompactionPolicy`, `isTimeCarriageMarkerPart`, `CompactionOptions`; runtime: `McpClient`
 
 The entry carries what a consumer somewhere actually imports (#647). Types
 reachable through exported signatures (`BudgetStatus`, `AgentStep`, `Sink`, …)
@@ -109,7 +108,7 @@ run.ts (entry) → Promise<AgentResult>
   │       ├─ dispatchPoint(prompt.context.pre)  → context/prompt enrichment
   │       ├─ dispatchPoint(tool.catalog.pre)    → filter/modify tools exposed to LLM
   │       ├─ dispatchPoint(connection.llm.pre)
-  │       ├─ llmRun via @openomni/llm
+  │       ├─ llmRun via @openomni/llm (nested transport retries disabled)
   │       ├─ dispatchPoint(connection.llm.post)
   │       │    └─ tool calls flow through tools.ts:
   │       │         ├─ dispatchPoint(tool.native.pre / tool.mcp.pre)  → tool-permission (fail-closed)
@@ -150,10 +149,10 @@ When in doubt, keep the agent package as a loop engine and put product semantics
 ## KEY PATTERNS
 
 - **Invocation-scoped core**: Every `ChatAgent.run()` is independent — no session mutation, storage, durable orchestration, or scheduler. Per-run state such as budget and memory lives on the call context. For future replayable WorkItem attempts, the host supplies captured nondeterministic inputs; this package does not discover or persist them. The normative attempt contract lives in the [kernel contract](../../docs/kernel-contract.md).
-- **Sink-driven**: Callers pass a `Sink` (from `@openomni/protocol`) to receive streaming output. The agent never creates sessions on its own.
+- **Sink-driven**: Callers pass the `Sink` owned by `@openomni/llm` to receive streaming output. The agent never creates sessions on its own.
 - **Policy > ad-hoc hooks**: New extensions MUST use canonical point registrations in `middleware: [...]`. `PolicyEngine.create()` is the single extension surface; timing registrations are rejected fail-closed (#530).
 - **Budget check before each turn**: `checkBudget()` runs before `llmRun()`, not after, so budget enforcement blocks the next turn cleanly.
-- **A retried attempt is the same turn**: `recordRunTurn` charges once per `turnIndex`, so an attempt that failed and was retried is free in the *turns* unit and bounded by `maxAttempts` instead. Tokens and tool calls still charge per attempt, because they were really spent (#630).
+- **Retry ownership**: One Agent attempt makes one provider call: its `RunInput` sets `maxRetryAttempts: 0`, disabling `llm.run`'s nested transport retries for this orchestrated path. Agent owns inter-attempt classification, backoff, `maxAttempts`, and fallback selection; standalone `llm.run` callers retain bounded transport retry. A retried Agent attempt is the same turn: `recordRunTurn` charges once per `turnIndex`, while tokens and tool calls still charge per attempt because they were spent.
 - **Message format**: `ChatAgentInput.messages` is a simple `{ role: "user" | "assistant"; content: string }[]`. Richer `Message.WithParts[]` is used internally only.
 
 ## ANTI-PATTERNS

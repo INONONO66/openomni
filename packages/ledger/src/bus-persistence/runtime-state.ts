@@ -74,7 +74,8 @@ export function startBusPersistence(options: BusPersistenceOptions = {}): () => 
   const now = options.now ?? (() => new Date());
 
   const unsubscribe = Bus.observe((event, payload) => {
-    const normalizedPayload = parsePayload(event, payload);
+    const parsedPayload = parsePayload(event, payload);
+    const normalizedPayload = parsedPayload.value;
 
     writeOperationalToStdout(event.name, normalizedPayload);
 
@@ -87,7 +88,14 @@ export function startBusPersistence(options: BusPersistenceOptions = {}): () => 
     // queue (group commit, #510 D1) is the single ordering mechanism, so no
     // per-session promise chaining is needed — and chaining would defeat
     // group commit by forcing one batch per event.
-    const write = persist({ event, payload: normalizedPayload, sessionId, now });
+    const write = persist({
+      event,
+      payload: normalizedPayload,
+      payloadStatus: parsedPayload.status,
+      payloadDiagnostic: parsedPayload.diagnostic,
+      sessionId,
+      now,
+    });
     pending.add(write);
     void write
       .catch((err) => {

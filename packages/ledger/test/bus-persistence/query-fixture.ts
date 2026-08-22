@@ -37,6 +37,8 @@ export function insertEvent(input: {
   readonly category: string;
   readonly visibility?: "internal" | "llm_reason" | "user_audit" | "ephemeral";
   readonly data?: Record<string, unknown>;
+  readonly payloadStatus?: "valid" | "invalid" | "parse_failed";
+  readonly payloadDiagnostic?: string;
   readonly traceId: string;
   readonly durationMs?: number;
   readonly timeCreated: number;
@@ -44,8 +46,9 @@ export function insertEvent(input: {
   db()
     .query(
       `INSERT INTO bus_event
-       (session_id, run_id, event_type, category, visibility, data, trace_id, duration_ms, time_created)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (session_id, run_id, event_type, category, visibility, data, payload_status,
+        payload_diagnostic, trace_id, duration_ms, time_created)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       input.sessionId,
@@ -54,6 +57,8 @@ export function insertEvent(input: {
       input.category,
       input.visibility ?? "internal",
       JSON.stringify(input.data ?? {}),
+      input.payloadStatus ?? null,
+      input.payloadDiagnostic ?? null,
       input.traceId,
       input.durationMs ?? null,
       input.timeCreated,

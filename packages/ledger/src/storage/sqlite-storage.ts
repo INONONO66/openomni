@@ -25,9 +25,10 @@ import { createSqliteWaitAdapter } from "./sqlite-wait-adapter";
 import { createSqliteWorkItemAdapter } from "./sqlite-work-item-adapter";
 import { createSqliteWorkerRunStateAdapter } from "./sqlite-worker-run-state-adapter";
 import { createSqliteWorkerGrantAdapter } from "./sqlite-worker-grant-adapter";
-import type { Storage } from "./storage";
+import { productionStorageAdapterBrand, type Storage } from "./storage";
 
 export class SqliteStorageAdapter implements Storage.Adapter {
+  declare readonly [productionStorageAdapterBrand]: true;
   private readonly db: Database;
   /**
    * #510 D1 durability split: NORMAL/group-commit telemetry connection on
@@ -116,6 +117,10 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     this.blacklist = createSqliteBlacklistAdapter(this.db);
     this.channelGrant = createSqliteChannelGrantAdapter(this.db);
     this.appConnectorInstallation = createSqliteAppConnectorInstallationAdapter(this.db);
+
+    // Non-enumerable so object-spread test fakes stay narrow and are not
+    // mistaken for the concrete production adapter during Storage.configure.
+    Object.defineProperty(this, productionStorageAdapterBrand, { value: true });
   }
 
   /**

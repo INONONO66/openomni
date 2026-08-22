@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { anthropicModel as model, assistantMessage as buildAssistantMessage } from "../helpers/fixtures";
 import type { Message } from "@openomni/protocol";
 import type { Sink } from "../../src/sink";
 import { Processor } from "../../src/processor";
-import type { Provider } from "../../src/provider";
 import { Bus } from "@openomni/telemetry";
 
 /**
@@ -18,34 +18,6 @@ import { Bus } from "@openomni/telemetry";
 const DELTA = "tok ";
 const REASONING_DELTAS = 400;
 const TEXT_DELTAS_PER_BLOCK = 800;
-
-function assistantMessage(): Message.AssistantMessage {
-  return {
-    id: "msg-measure",
-    sessionID: "session-measure",
-    role: "assistant",
-    time: { created: Date.now() },
-    parentID: "parent-measure",
-    modelID: "claude-3-5-sonnet",
-    providerID: "anthropic",
-    agent: "test-agent",
-    path: { cwd: "/test", root: "/" },
-    cost: 0,
-    tokens: {
-      input: 0,
-      output: 0,
-      reasoning: 0,
-      cache: { read: 0, write: 0 },
-    },
-  };
-}
-
-const model: Provider.Model = {
-  id: "claude-3-5-sonnet",
-  providerID: "anthropic",
-  name: "Claude 3.5 Sonnet",
-  api: { npm: "@ai-sdk/anthropic" },
-};
 
 function scenario(): Array<Record<string, unknown>> {
   const chunks: Array<Record<string, unknown>> = [{ type: "step-start" }];
@@ -87,7 +59,7 @@ describe("Processor emission measurement (#545 T2)", () => {
     };
 
     const processor = Processor.create({
-      assistantMessage: assistantMessage(),
+      assistantMessage: buildAssistantMessage("msg-measure", "session-measure", "parent-measure"),
       sessionID: "session-measure",
       model,
       abort: new AbortController().signal,

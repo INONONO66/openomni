@@ -5,20 +5,16 @@ const it = test;
 
 describe("Artifact schemas", () => {
   describe("Meta", () => {
-    it("parses valid metadata", () => {
-      const result = Artifact.Meta.parse({
+    it("round-trips valid metadata unchanged", () => {
+      const meta = {
         id: "art-1",
         sessionId: "sess-1",
         mimeType: "text/plain",
         title: "output.txt",
         version: 1,
         createdAt: "2025-01-01T00:00:00Z",
-      });
-      expect(result.id).toBe("art-1");
-      expect(result.sessionId).toBe("sess-1");
-      expect(result.mimeType).toBe("text/plain");
-      expect(result.title).toBe("output.txt");
-      expect(result.version).toBe(1);
+      };
+      expect(Artifact.Meta.parse(meta)).toEqual(meta);
     });
 
     it("defaults version to 1", () => {
@@ -50,63 +46,48 @@ describe("Artifact schemas", () => {
       ).toThrow();
     });
 
-    describe("version constraint (.int() only)", () => {
-      it("rejects float version", () =>
-        expect(() =>
-          Artifact.Meta.parse({
-            id: "a",
-            sessionId: "b",
-            mimeType: "text/plain",
-            title: "t",
-            version: 1.5,
-            createdAt: "x",
-          }),
-        ).toThrow());
-      it("accepts version 0 (no positive constraint)", () =>
-        expect(() =>
-          Artifact.Meta.parse({
-            id: "a",
-            sessionId: "b",
-            mimeType: "text/plain",
-            title: "t",
-            version: 0,
-            createdAt: "x",
-          }),
-        ).not.toThrow());
-      it("accepts version -1 (no min constraint)", () =>
-        expect(() =>
-          Artifact.Meta.parse({
-            id: "a",
-            sessionId: "b",
-            mimeType: "text/plain",
-            title: "t",
-            version: -1,
-            createdAt: "x",
-          }),
-        ).not.toThrow());
+    describe("version constraint", () => {
+      for (const version of [0, -1, 1.5, Number.NaN]) {
+        it(`rejects version ${String(version)}`, () =>
+          expect(() =>
+            Artifact.Meta.parse({
+              id: "a",
+              sessionId: "b",
+              mimeType: "text/plain",
+              title: "t",
+              version,
+              createdAt: "x",
+            }),
+          ).toThrow());
+      }
     });
 
-    describe("acceptance (documents current behavior)", () => {
-      it("accepts empty string createdAt", () =>
-        expect(() =>
-          Artifact.Meta.parse({
-            id: "a",
-            sessionId: "b",
-            mimeType: "text/plain",
-            title: "t",
-            createdAt: "",
-          }),
-        ).not.toThrow());
-      it("accepts empty mimeType", () =>
-        expect(() =>
-          Artifact.Meta.parse({
-            id: "a",
-            sessionId: "b",
-            mimeType: "",
-            title: "t",
-            createdAt: "x",
-          }),
-        ).not.toThrow());
+    describe("non-empty fields", () => {
+      for (const createdAt of ["", "   "]) {
+        it(`rejects createdAt ${JSON.stringify(createdAt)}`, () =>
+          expect(() =>
+            Artifact.Meta.parse({
+              id: "a",
+              sessionId: "b",
+              mimeType: "text/plain",
+              title: "t",
+              createdAt,
+            }),
+          ).toThrow());
+      }
+
+      for (const mimeType of ["", "   "]) {
+        it(`rejects mimeType ${JSON.stringify(mimeType)}`, () =>
+          expect(() =>
+            Artifact.Meta.parse({
+              id: "a",
+              sessionId: "b",
+              mimeType,
+              title: "t",
+              createdAt: "x",
+            }),
+          ).toThrow());
+      }
     });
   });
 });

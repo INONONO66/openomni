@@ -2,7 +2,15 @@ import { describe, expect, it } from "bun:test";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { Tool } from "@openomni/protocol";
 import type { PolicyContext, PolicyRegistration } from "../../../src/core/policy/types";
-import { abortRun, allow, deny, inject, rewriteToolInput } from "../../helpers/policy-decision";
+import {
+  atPoint,
+  registerAt,
+  abortRun,
+  allow,
+  deny,
+  inject,
+  rewriteToolInput,
+} from "../../helpers/policy-decision";
 
 function baseCtx(): Omit<PolicyContext, "timing"> {
   return {
@@ -45,30 +53,16 @@ function toolPreCtx() {
 describe("deny-wins composition", () => {
   it("deny verdict takes precedence over prior continue verdicts", async () => {
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "allow-policy-a",
-      pointIds: ["run.turn.pre"],
-      effectCapabilities: { "run.turn.pre": [] },
-      priority: 10,
-      fn: () => allow(),
-    });
-    engine.register({
-      kind: "point",
-      name: "allow-policy-b",
-      pointIds: ["run.turn.pre"],
-      effectCapabilities: { "run.turn.pre": [] },
-      priority: 20,
-      fn: () => allow(),
-    });
-    engine.register({
-      kind: "point",
-      name: "deny-policy",
-      pointIds: ["run.turn.pre"],
-      effectCapabilities: { "run.turn.pre": ["audit.annotate"] },
-      priority: 30,
-      fn: () => deny("test.deny", "blocked-by-deny"),
-    });
+    registerAt(engine, "run.turn.pre", "allow-policy-a", 10, () => allow());
+    registerAt(engine, "run.turn.pre", "allow-policy-b", 20, () => allow());
+    registerAt(
+      engine,
+      "run.turn.pre",
+      "deny-policy",
+      30,
+      () => deny("test.deny", "blocked-by-deny"),
+      ["audit.annotate"],
+    );
 
     const verdict = await engine.dispatchPoint("run.turn.pre", turnPreCtx());
 
@@ -80,39 +74,32 @@ describe("deny-wins composition", () => {
     const executed: string[] = [];
     const engine = PolicyEngine.create();
 
-    engine.register({
-      kind: "point",
-      name: "deny-first",
-      pointIds: ["tool.native.pre"],
-      effectCapabilities: { "tool.native.pre": ["audit.annotate"] },
-      priority: 0,
-      fn: () => {
+    registerAt(
+      engine,
+      "tool.native.pre",
+      "deny-first",
+      0,
+      () => {
         executed.push("deny-first");
         return deny("test.deny-first", "early-deny");
       },
+      ["audit.annotate"],
+    );
+    registerAt(engine, "tool.native.pre", "allow-later", 100, () => {
+      executed.push("allow-later");
+      return allow();
     });
-    engine.register({
-      kind: "point",
-      name: "allow-later",
-      pointIds: ["tool.native.pre"],
-      effectCapabilities: { "tool.native.pre": [] },
-      priority: 100,
-      fn: () => {
-        executed.push("allow-later");
-        return allow();
-      },
-    });
-    engine.register({
-      kind: "point",
-      name: "transform-later",
-      pointIds: ["tool.native.pre"],
-      effectCapabilities: { "tool.native.pre": ["tool.rewrite_input"] },
-      priority: 200,
-      fn: () => {
+    registerAt(
+      engine,
+      "tool.native.pre",
+      "transform-later",
+      200,
+      () => {
         executed.push("transform-later");
         return rewriteToolInput({}, "test.transform", "transform");
       },
-    });
+      ["tool.rewrite_input"],
+    );
 
     const verdict = await engine.dispatchPoint("tool.native.pre", toolPreCtx());
 
@@ -124,39 +111,32 @@ describe("deny-wins composition", () => {
     const executed: string[] = [];
     const engine = PolicyEngine.create();
 
-    engine.register({
-      kind: "point",
-      name: "allow-first",
-      pointIds: ["run.turn.post"],
-      effectCapabilities: { "run.turn.post": [] },
-      priority: 10,
-      fn: () => {
-        executed.push("allow-first");
-        return allow();
-      },
+    registerAt(engine, "run.turn.post", "allow-first", 10, () => {
+      executed.push("allow-first");
+      return allow();
     });
-    engine.register({
-      kind: "point",
-      name: "abort-second",
-      pointIds: ["run.turn.post"],
-      effectCapabilities: { "run.turn.post": ["run.abort"] },
-      priority: 20,
-      fn: () => {
+    registerAt(
+      engine,
+      "run.turn.post",
+      "abort-second",
+      20,
+      () => {
         executed.push("abort-second");
         return abortRun("test.abort", "abort-wins");
       },
-    });
-    engine.register({
-      kind: "point",
-      name: "inject-third",
-      pointIds: ["run.turn.post"],
-      effectCapabilities: { "run.turn.post": ["prompt.inject_message"] },
-      priority: 30,
-      fn: () => {
+      ["run.abort"],
+    );
+    registerAt(
+      engine,
+      "run.turn.post",
+      "inject-third",
+      30,
+      () => {
         executed.push("inject-third");
         return inject("msg", "test.inject", "inject");
       },
-    });
+      ["prompt.inject_message"],
+    );
 
     const verdict = await engine.dispatchPoint("run.turn.post", turnPostCtx());
 
@@ -167,14 +147,13 @@ describe("deny-wins composition", () => {
   it("all continue verdicts result in continue", async () => {
     const engine = PolicyEngine.create();
     for (let i = 0; i < 5; i++) {
-      engine.register({
-        kind: "point",
-        name: `continue-${i}`,
-        pointIds: ["run.lifecycle.pre"],
-        effectCapabilities: { "run.lifecycle.pre": [] },
-        priority: i * 10,
-        fn: () => allow(),
-      });
+      engine.register(
+        atPoint("run.lifecycle.pre", {
+          name: `continue-${i}`,
+          priority: i * 10,
+          fn: () => allow(),
+        }),
+      );
     }
 
     const verdict = await engine.dispatchPoint("run.lifecycle.pre", {
@@ -191,17 +170,16 @@ describe("deny-wins composition", () => {
     const executed: string[] = [];
 
     for (const name of ["first", "second", "third"]) {
-      engine.register({
-        kind: "point",
-        name,
-        pointIds: ["run.turn.pre"],
-        effectCapabilities: { "run.turn.pre": [] },
-        priority: 10,
-        fn: () => {
-          executed.push(name);
-          return allow();
-        },
-      });
+      engine.register(
+        atPoint("run.turn.pre", {
+          name,
+          priority: 10,
+          fn: () => {
+            executed.push(name);
+            return allow();
+          },
+        }),
+      );
     }
 
     await engine.dispatchPoint("run.turn.pre", turnPreCtx());
@@ -342,32 +320,30 @@ describe("scope filtering with 100 policies", () => {
     const executed: string[] = [];
 
     for (let i = 0; i < 50; i++) {
-      engine.register({
-        kind: "point",
-        name: `scoped-reviewer-${i}`,
-        pointIds: ["tool.native.pre"],
-        effectCapabilities: { "tool.native.pre": [] },
-        priority: i * 2,
-        scope: { agentType: ["reviewer"] },
-        fn: () => {
-          executed.push(`scoped-reviewer-${i}`);
-          return allow();
-        },
-      });
+      engine.register(
+        atPoint("tool.native.pre", {
+          name: `scoped-reviewer-${i}`,
+          priority: i * 2,
+          scope: { agentType: ["reviewer"] },
+          fn: () => {
+            executed.push(`scoped-reviewer-${i}`);
+            return allow();
+          },
+        }),
+      );
     }
 
     for (let i = 0; i < 50; i++) {
-      engine.register({
-        kind: "point",
-        name: `unscoped-${i}`,
-        pointIds: ["tool.native.pre"],
-        effectCapabilities: { "tool.native.pre": [] },
-        priority: i * 2 + 1,
-        fn: () => {
-          executed.push(`unscoped-${i}`);
-          return allow();
-        },
-      });
+      engine.register(
+        atPoint("tool.native.pre", {
+          name: `unscoped-${i}`,
+          priority: i * 2 + 1,
+          fn: () => {
+            executed.push(`unscoped-${i}`);
+            return allow();
+          },
+        }),
+      );
     }
 
     await engine.dispatchPoint("tool.native.pre", { ...toolPreCtx(), agentType: "reviewer" });
@@ -386,32 +362,30 @@ describe("scope filtering with 100 policies", () => {
     const executed: string[] = [];
 
     for (let i = 0; i < 80; i++) {
-      engine.register({
-        kind: "point",
-        name: `scoped-${i}`,
-        pointIds: ["run.turn.post"],
-        effectCapabilities: { "run.turn.post": [] },
-        priority: i,
-        scope: { agentType: ["planner", "architect"] },
-        fn: () => {
-          executed.push(`scoped-${i}`);
-          return allow();
-        },
-      });
+      engine.register(
+        atPoint("run.turn.post", {
+          name: `scoped-${i}`,
+          priority: i,
+          scope: { agentType: ["planner", "architect"] },
+          fn: () => {
+            executed.push(`scoped-${i}`);
+            return allow();
+          },
+        }),
+      );
     }
 
     for (let i = 0; i < 20; i++) {
-      engine.register({
-        kind: "point",
-        name: `unscoped-${i}`,
-        pointIds: ["run.turn.post"],
-        effectCapabilities: { "run.turn.post": [] },
-        priority: 100 + i,
-        fn: () => {
-          executed.push(`unscoped-${i}`);
-          return allow();
-        },
-      });
+      engine.register(
+        atPoint("run.turn.post", {
+          name: `unscoped-${i}`,
+          priority: 100 + i,
+          fn: () => {
+            executed.push(`unscoped-${i}`);
+            return allow();
+          },
+        }),
+      );
     }
 
     await engine.dispatchPoint("run.turn.post", turnPostCtx());
@@ -426,18 +400,17 @@ describe("scope filtering with 100 policies", () => {
 
     for (let i = 0; i < 100; i++) {
       const scopeTypes = i % 3 === 0 ? ["coder", "reviewer"] : i % 3 === 1 ? ["planner"] : ["ops"];
-      engine.register({
-        kind: "point",
-        name: `policy-${i}`,
-        pointIds: ["run.error.error"],
-        effectCapabilities: { "run.error.error": [] },
-        priority: i,
-        scope: { agentType: scopeTypes },
-        fn: () => {
-          executed.push(`policy-${i}`);
-          return allow();
-        },
-      });
+      engine.register(
+        atPoint("run.error.error", {
+          name: `policy-${i}`,
+          priority: i,
+          scope: { agentType: scopeTypes },
+          fn: () => {
+            executed.push(`policy-${i}`);
+            return allow();
+          },
+        }),
+      );
     }
 
     await engine.dispatchPoint("run.error.error", {

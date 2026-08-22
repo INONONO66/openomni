@@ -3,7 +3,14 @@ import { Policy } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { PolicyContext } from "../../../src/core/policy";
-import { allow, deny, inject, rewriteToolInput } from "../../helpers/policy-decision";
+import {
+  atPoint,
+  registerAt,
+  allow,
+  deny,
+  inject,
+  rewriteToolInput,
+} from "../../helpers/policy-decision";
 
 function baseCtx(): Omit<PolicyContext, "timing"> & { sessionId: string; runId: string } {
   return {
@@ -32,22 +39,17 @@ function systemToolDescriptor(name: string): Policy.Resource.Descriptor {
 describe("PolicyEngine.dispatchPoint", () => {
   it("composes canonical policy decisions", async () => {
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "context-note",
-      pointIds: ["connection.llm.pre"],
-      effectCapabilities: { "connection.llm.pre": ["prompt.inject_message"] },
-      priority: 20,
-      fn: () => inject("Prefer read-only tools.", "policy.context-note", "safe-default"),
-    });
-    engine.register({
-      kind: "point",
-      name: "request-budget",
-      pointIds: ["connection.llm.pre"],
-      effectCapabilities: { "connection.llm.pre": [] },
-      priority: 10,
-      fn: () => allow("policy.request-budget"),
-    });
+    registerAt(
+      engine,
+      "connection.llm.pre",
+      "context-note",
+      20,
+      () => inject("Prefer read-only tools.", "policy.context-note", "safe-default"),
+      ["prompt.inject_message"],
+    );
+    registerAt(engine, "connection.llm.pre", "request-budget", 10, () =>
+      allow("policy.request-budget"),
+    );
 
     const decision = await engine.dispatchPoint("connection.llm.pre", {
       ...baseCtx(),
@@ -65,13 +67,11 @@ describe("PolicyEngine.dispatchPoint", () => {
 
   it("fails closed when an effect is not declared for the policy point", async () => {
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
+    registerAt(engine, "run.lifecycle.post", {
       name: "bad-run-injection",
-      pointIds: ["run.lifecycle.post"],
       // prompt.inject_message is not an allowed effect at run.lifecycle.post, so it
       // cannot be declared here; returning it must trip the undeclared-effect guard.
-      effectCapabilities: { "run.lifecycle.post": ["audit.annotate"] },
+      effects: ["audit.annotate"],
       priority: 0,
       fn: () => inject("not valid here", "policy.bad-run", "bad-run-effect"),
     });
@@ -98,23 +98,22 @@ describe("PolicyEngine.dispatchPoint", () => {
   it("injects run.abort when composition deny occurs at a pre-boundary point", async () => {
     const descriptor = systemToolDescriptor("shell");
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "rewrite-shell-a",
-      pointIds: ["tool.native.pre"],
-      effectCapabilities: { "tool.native.pre": ["tool.rewrite_input"] },
-      priority: 0,
-      fn: () => rewriteToolInput({ command: "pwd" }, "policy.rewrite-shell-a", "rewrite-shell-a"),
-    });
-    engine.register({
-      kind: "point",
-      name: "rewrite-shell-b",
-      pointIds: ["tool.native.pre"],
-      effectCapabilities: { "tool.native.pre": ["tool.rewrite_input"] },
-      priority: 0,
-      fn: () =>
-        rewriteToolInput({ command: "whoami" }, "policy.rewrite-shell-b", "rewrite-shell-b"),
-    });
+    registerAt(
+      engine,
+      "tool.native.pre",
+      "rewrite-shell-a",
+      0,
+      () => rewriteToolInput({ command: "pwd" }, "policy.rewrite-shell-a", "rewrite-shell-a"),
+      ["tool.rewrite_input"],
+    );
+    registerAt(
+      engine,
+      "tool.native.pre",
+      "rewrite-shell-b",
+      0,
+      () => rewriteToolInput({ command: "whoami" }, "policy.rewrite-shell-b", "rewrite-shell-b"),
+      ["tool.rewrite_input"],
+    );
 
     const decision = await engine.dispatchPoint("tool.native.pre", {
       ...baseCtx(),
@@ -131,14 +130,14 @@ describe("PolicyEngine.dispatchPoint", () => {
 
   it("does not inject run.abort when composition deny occurs at a post-boundary point", async () => {
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "deny-run-finish",
-      pointIds: ["run.lifecycle.post"],
-      effectCapabilities: { "run.lifecycle.post": ["audit.annotate"] },
-      priority: 0,
-      fn: () => deny("policy.deny-run-finish", "blocked-run-finish"),
-    });
+    registerAt(
+      engine,
+      "run.lifecycle.post",
+      "deny-run-finish",
+      0,
+      () => deny("policy.deny-run-finish", "blocked-run-finish"),
+      ["audit.annotate"],
+    );
 
     const decision = await engine.dispatchPoint("run.lifecycle.post", {
       ...baseCtx(),
@@ -152,13 +151,11 @@ describe("PolicyEngine.dispatchPoint", () => {
   it("injects run.abort on undeclared-effect deny at a pre-boundary point", async () => {
     const descriptor = systemToolDescriptor("shell");
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
+    registerAt(engine, "tool.native.pre", {
       name: "invalid-shell-prompt",
-      pointIds: ["tool.native.pre"],
       // prompt.replace is not an allowed effect at tool.native.pre, so it cannot be
       // declared; returning it denies with the undeclared-effect guard (fail-closed).
-      effectCapabilities: { "tool.native.pre": ["audit.annotate"] },
+      effects: ["audit.annotate"],
       priority: 0,
       fn: () =>
         allow("policy.invalid-shell-prompt", "invalid-shell-prompt", [
@@ -186,14 +183,9 @@ describe("PolicyEngine.dispatchPoint", () => {
       return rewriteToolInput({ command: "pwd" }, "policy.tool-rewrite", "rewrite-shell");
     });
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "rewrite-tool-input",
-      pointIds: ["tool.native.pre"],
-      effectCapabilities: { "tool.native.pre": ["tool.rewrite_input"] },
-      priority: 0,
-      fn: received,
-    });
+    registerAt(engine, "tool.native.pre", "rewrite-tool-input", 0, received, [
+      "tool.rewrite_input",
+    ]);
 
     const decision = await engine.dispatchPoint("tool.native.pre", {
       ...baseCtx(),
@@ -227,22 +219,21 @@ describe("PolicyEngine.dispatchPoint", () => {
     try {
       const afterDeny = mock(() => allow());
       const engine = PolicyEngine.create({ auditEmit: Bus.publish });
-      engine.register({
-        kind: "point",
-        name: "deny-shell",
-        pointIds: ["tool.native.pre"],
-        effectCapabilities: { "tool.native.pre": ["audit.annotate"] },
-        priority: 0,
-        fn: () => deny("policy.deny-shell", "blocked-shell"),
-      });
-      engine.register({
-        kind: "point",
-        name: "after-deny",
-        pointIds: ["tool.native.pre"],
-        effectCapabilities: { "tool.native.pre": [] },
-        priority: 10,
-        fn: afterDeny,
-      });
+      engine.register(
+        atPoint("tool.native.pre", {
+          name: "deny-shell",
+          effects: ["audit.annotate"],
+          priority: 0,
+          fn: () => deny("policy.deny-shell", "blocked-shell"),
+        }),
+      );
+      engine.register(
+        atPoint("tool.native.pre", {
+          name: "after-deny",
+          priority: 10,
+          fn: afterDeny,
+        }),
+      );
 
       const decision = await engine.dispatchPoint("tool.native.pre", {
         ...baseCtx(),

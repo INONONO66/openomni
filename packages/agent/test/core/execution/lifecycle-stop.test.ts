@@ -2,7 +2,13 @@ import { describe, expect, it, mock } from "bun:test";
 import { Bus } from "@openomni/telemetry";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { CanonicalPolicyRegistration } from "../../../src/core/policy/types";
-import { abortRun, allow, inject, replaceMessages } from "../../helpers/policy-decision";
+import {
+  registerAt,
+  abortRun,
+  allow,
+  inject,
+  replaceMessages,
+} from "../../helpers/policy-decision";
 import { createAssistantMessage } from "../../../src/core/message-factory";
 import { handleStop } from "../../../src/core/execution/turn";
 import {
@@ -20,11 +26,8 @@ describe("handleStop (turn.finish + run.finish)", () => {
       return allow();
     });
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
+    registerAt(engine, "run.turn.post", {
       name: "test-post-turn",
-      pointIds: ["run.turn.post"],
-      effectCapabilities: { "run.turn.post": [] },
       priority: 100,
       fn,
     });
@@ -48,14 +51,14 @@ describe("handleStop (turn.finish + run.finish)", () => {
   it("turn.finish inject verdict causes continuation", async () => {
     Bus.reset();
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "test-post-turn-inject",
-      pointIds: ["run.turn.post"],
-      effectCapabilities: { "run.turn.post": ["prompt.inject_message"] },
-      priority: 100,
-      fn: () => inject("continue working", "test.inject", "continuation"),
-    });
+    registerAt(
+      engine,
+      "run.turn.post",
+      "test-post-turn-inject",
+      100,
+      () => inject("continue working", "test.inject", "continuation"),
+      ["prompt.inject_message"],
+    );
 
     const state = makeState();
     state.lastAssistantText = "partial response";
@@ -74,14 +77,14 @@ describe("handleStop (turn.finish + run.finish)", () => {
     const { createUserMessage } = await import("../../../src/core/message-factory");
     const replacement = [createUserMessage("turn replacement", "test")];
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "test-post-turn-replace",
-      pointIds: ["run.turn.post"],
-      effectCapabilities: { "run.turn.post": ["run.replace_messages"] },
-      priority: 100,
-      fn: () => replaceMessages(replacement, "test.turn", "replace"),
-    });
+    registerAt(
+      engine,
+      "run.turn.post",
+      "test-post-turn-replace",
+      100,
+      () => replaceMessages(replacement, "test.turn", "replace"),
+      ["run.replace_messages"],
+    );
 
     const state = makeState();
     state.lastAssistantText = "text";
@@ -100,14 +103,14 @@ describe("handleStop (turn.finish + run.finish)", () => {
   it("turn.finish abort verdict yields complete event with guardAborted", async () => {
     Bus.reset();
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "test-post-turn-abort",
-      pointIds: ["run.turn.post"],
-      effectCapabilities: { "run.turn.post": ["run.abort"] },
-      priority: 100,
-      fn: () => abortRun("test.abort", "force-stop"),
-    });
+    registerAt(
+      engine,
+      "run.turn.post",
+      "test-post-turn-abort",
+      100,
+      () => abortRun("test.abort", "force-stop"),
+      ["run.abort"],
+    );
 
     const state = makeState();
     state.lastAssistantText = "text";
@@ -122,14 +125,14 @@ describe("handleStop (turn.finish + run.finish)", () => {
   it("turn.finish abort with reason 'stalled' sets finishReason to stalled", async () => {
     Bus.reset();
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "test-stalled",
-      pointIds: ["run.turn.post"],
-      effectCapabilities: { "run.turn.post": ["run.abort"] },
-      priority: 100,
-      fn: () => abortRun("test.stalled", "stalled"),
-    });
+    registerAt(
+      engine,
+      "run.turn.post",
+      "test-stalled",
+      100,
+      () => abortRun("test.stalled", "stalled"),
+      ["run.abort"],
+    );
 
     const state = makeState();
     state.lastAssistantText = "text";
@@ -145,14 +148,9 @@ describe("handleStop (turn.finish + run.finish)", () => {
   it("dispatches run.finish without modifying final text", async () => {
     Bus.reset();
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "test-post-run-transform",
-      pointIds: ["run.lifecycle.post"],
-      effectCapabilities: { "run.lifecycle.post": [] },
-      priority: 100,
-      fn: () => allow("test.post-run", "observe-final"),
-    });
+    registerAt(engine, "run.lifecycle.post", "test-post-run-transform", 100, () =>
+      allow("test.post-run", "observe-final"),
+    );
 
     const state = makeState();
     const config = makeConfig();

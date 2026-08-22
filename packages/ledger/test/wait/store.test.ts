@@ -2,12 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Wait } from "@openomni/protocol";
 import { Storage, WaitStore } from "../../src/index";
 import { Bus } from "@openomni/telemetry";
-import {
-  bareStorageAdapter,
-  buildReplyInput,
-  buildWaitCreate,
-  captureStoreError,
-} from "../helpers/wait";
+import { bareStorageAdapter, buildWaitCreate, captureStoreError } from "../helpers/wait";
 
 beforeEach(() => {
   Bus.reset();
@@ -32,7 +27,16 @@ describe("WaitStore", () => {
     });
 
     const record = WaitStore.create(buildWaitCreate(), "trace-open");
-    WaitStore.attachReply(record.id, buildReplyInput(), "trace-reply");
+    WaitStore.attachReply(
+      record.id,
+      {
+        replyKey: "reply-key-1",
+        responderCandidates: ["actor-a"],
+        messageId: "in-msg-1",
+        at: 1_000,
+      },
+      "trace-reply",
+    );
     const second = WaitStore.create(
       buildWaitCreate({ id: "wait-cancel", originMessageId: "message-cancel" }),
       "trace-open-2",
@@ -140,7 +144,16 @@ describe("WaitStore", () => {
       buildWaitCreate({ resolutionPolicy: "first_reply", quorum: undefined }),
       "trace-wait-store",
     );
-    const outcome = WaitStore.attachReply("wait-1", buildReplyInput(), "trace-wait-store");
+    const outcome = WaitStore.attachReply(
+      "wait-1",
+      {
+        replyKey: "reply-key-1",
+        responderCandidates: ["actor-a"],
+        messageId: "in-msg-1",
+        at: 1_000,
+      },
+      "trace-wait-store",
+    );
     expect(outcome.kind).toBe("resolved");
 
     expect(WaitStore.findByCorrelation({ tokenHash: "tok-1" }, 2_000)).toHaveLength(1);
@@ -162,7 +175,16 @@ describe("WaitStore", () => {
     });
     expect(adapter.create(record)).toBe(true);
 
-    const outcome = WaitStore.attachReply("wait-1", buildReplyInput(), "trace-wait-store");
+    const outcome = WaitStore.attachReply(
+      "wait-1",
+      {
+        replyKey: "reply-key-1",
+        responderCandidates: ["actor-a"],
+        messageId: "in-msg-1",
+        at: 1_000,
+      },
+      "trace-wait-store",
+    );
 
     expect(outcome.kind).toBe("attached");
     expect(WaitStore.get("wait-1")?.revision).toBe(4);
@@ -182,10 +204,24 @@ describe("WaitStore", () => {
     Bus.observe((event) => events.push(event.name));
     WaitStore.create(buildWaitCreate(), "trace-wait-store");
 
-    const attached = WaitStore.attachReply("wait-1", buildReplyInput(), "trace-wait-store");
+    const attached = WaitStore.attachReply(
+      "wait-1",
+      {
+        replyKey: "reply-key-1",
+        responderCandidates: ["actor-a"],
+        messageId: "in-msg-1",
+        at: 1_000,
+      },
+      "trace-wait-store",
+    );
     const resolved = WaitStore.attachReply(
       "wait-1",
-      buildReplyInput({ replyKey: "reply-key-2", responderCandidates: ["actor-b"], at: 2_000 }),
+      {
+        replyKey: "reply-key-2",
+        responderCandidates: ["actor-b"],
+        messageId: "in-msg-1",
+        at: 2_000,
+      },
       "trace-wait-store",
     );
     const persisted = WaitStore.get("wait-1");
@@ -205,20 +241,35 @@ describe("WaitStore", () => {
     const events: string[] = [];
     Bus.observe((event) => events.push(event.name));
     WaitStore.create(buildWaitCreate(), "trace-wait-store");
-    WaitStore.attachReply("wait-1", buildReplyInput(), "trace-wait-store");
+    WaitStore.attachReply(
+      "wait-1",
+      {
+        replyKey: "reply-key-1",
+        responderCandidates: ["actor-a"],
+        messageId: "in-msg-1",
+        at: 1_000,
+      },
+      "trace-wait-store",
+    );
 
     const duplicate = WaitStore.attachReply(
       "wait-1",
-      buildReplyInput({ responderCandidates: ["actor-b"], at: 2_000 }),
+      {
+        replyKey: "reply-key-1",
+        responderCandidates: ["actor-b"],
+        messageId: "in-msg-1",
+        at: 2_000,
+      },
       "trace-wait-store",
     );
     const ambiguous = WaitStore.attachReply(
       "wait-1",
-      buildReplyInput({
+      {
         replyKey: "reply-key-3",
         responderCandidates: ["actor-b", "actor-c"],
+        messageId: "in-msg-1",
         at: 2_100,
-      }),
+      },
       "trace-wait-store",
     );
     const persisted = WaitStore.get("wait-1");
@@ -241,7 +292,16 @@ describe("WaitStore", () => {
     const events: string[] = [];
     Bus.observe((event) => events.push(event.name));
     WaitStore.create(buildWaitCreate(), "trace-wait-store");
-    WaitStore.attachReply("wait-1", buildReplyInput(), "trace-wait-store");
+    WaitStore.attachReply(
+      "wait-1",
+      {
+        replyKey: "reply-key-1",
+        responderCandidates: ["actor-a"],
+        messageId: "in-msg-1",
+        at: 1_000,
+      },
+      "trace-wait-store",
+    );
 
     const outcome = WaitStore.expire("wait-1", "trace-wait-store", 10_001);
     const persisted = WaitStore.get("wait-1");

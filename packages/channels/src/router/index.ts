@@ -1,17 +1,23 @@
 import {
   Gateway,
-  type Ingress,
+  Ingress,
   Operational,
   Wait,
   extractSurfaceKey,
   newTraceId,
   type BusEvent,
+  type Ledger,
   type Policy,
 } from "@openomni/protocol";
-import { SurfaceKey } from "@openomni/ledger";
+import { LedgerAppend, SurfaceKey } from "@openomni/ledger";
 import { resolveIngressActor } from "./actor-resolver.js";
 import { IngressAuthorityMiddleware } from "./authority.js";
-import { createReplyGrantInstances, type ReplyGrantInstances } from "./messaging/reply-grant.js";
+import {
+  createReplyGrantInstances,
+  replyGrantEndpointFromFacts,
+  type ReplyGrantAdmission,
+  type ReplyGrantInstances,
+} from "./messaging/reply-grant.js";
 import { createExistingAgentMessaging, type DeliveryReceipt } from "./messaging/send.js";
 import type { ExistingAgentMessaging } from "./messaging/send.js";
 import {
@@ -58,7 +64,12 @@ export {
  * owner behind the messaging kernel's injected-delivery seam (registered by
  * the composition root from its channel adapters).
  */
-export type ChannelDeliveryRoute = (externalId: string, body: string) => Promise<DeliveryReceipt>;
+export type ChannelDeliveryRoute = (
+  externalId: string,
+  body: string,
+  /** Stable key available for owner dedupe or platform read-back. */
+  idempotencyKey: string,
+) => Promise<DeliveryReceipt>;
 
 /**
  * Construction-time ports of the gateway router (#707 stage 2). ONE entry:
@@ -227,6 +238,55 @@ function buildDelivery(
   } satisfies Gateway.Deliver);
 }
 
+function replayReplyGrantAdmissions(): readonly ReplyGrantAdmission[] {
+  const ledger = LedgerAppend.port();
+  if (
+    ledger === undefined ||
+    !("factsByType" in ledger) ||
+    typeof ledger.factsByType !== "function"
+  ) {
+    return [];
+  }
+
+  const facts = ledger.factsByType(Ingress.ROUTE_DECIDED_FACT_TYPE) as Ledger.RecordedFact[];
+  return facts
+    .map((fact): ReplyGrantAdmission | undefined => {
+      const decision = Ingress.Events.RoutingDecision.schema.parse(fact.data);
+      if (decision.outcome !== "route" || decision.actorId === undefined) return undefined;
+
+      const parts = fact.streamId.split(":");
+      if (parts.length !== 5 || parts[0] !== "route") return undefined;
+      const surface = decodeURIComponent(parts[1] ?? "");
+      const workspaceValue = decodeURIComponent(parts[2] ?? "");
+      const channelValue = decodeURIComponent(parts[3] ?? "");
+      const workspace = workspaceValue === "" ? undefined : workspaceValue;
+      const channel = channelValue === "" ? undefined : channelValue;
+      if (surface !== decision.surface) return undefined;
+
+      // The concrete endpoint address is part of this immutable decision,
+      // captured before the fact was appended. Replay never consults the
+      // mutable actor registry; absent or malformed legacy evidence fails closed.
+      const endpoint = replyGrantEndpointFromFacts(decision.factsUsed);
+      if (endpoint === undefined) return undefined;
+
+      return {
+        actorId: decision.actorId,
+        endpoint: { channel: endpoint.channel, externalId: endpoint.externalId },
+        surface,
+        ...(workspace === undefined ? {} : { workspace }),
+        ...(channel === undefined ? {} : { channel }),
+        traceId: decision.traceId,
+        at: decision.time,
+        sourceId: fact.streamId,
+      };
+    })
+    .filter((admission): admission is ReplyGrantAdmission => admission !== undefined)
+    .sort(
+      (left, right) =>
+        left.at - right.at || (left.sourceId ?? "").localeCompare(right.sourceId ?? ""),
+    );
+}
+
 function waitContextOf(resolution: KernelRouteResolution): Gateway.WaitContext | undefined {
   const wait = resolution.waitExecution;
   if (wait.kind !== "wait") return undefined;
@@ -249,7 +309,11 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
   const replyGrants: ReplyGrantInstances | undefined =
     replyGrantRules === undefined
       ? undefined
-      : createReplyGrantInstances({ rules: replyGrantRules, publish: ports.sink });
+      : createReplyGrantInstances({
+          rules: replyGrantRules,
+          replay: replayReplyGrantAdmissions,
+          publish: ports.sink,
+        });
   const messagingPorts = ports.messaging;
   const messaging =
     messagingPorts === undefined
@@ -263,7 +327,7 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
                   `(endpoint ${message.target.endpointId}) — delivery fails closed`,
               );
             }
-            return route(message.target.externalId, message.body);
+            return route(message.target.externalId, message.body, message.idempotencyKey);
           },
           // One grant source per send: Owner-written standing grants plus the
           // live rule-materialized instances. The scope-less base evaluator
@@ -296,9 +360,8 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
       // senders (no ActorRegistry endpoint) and dropped/blocked events
       // materialize nothing.
       if (replyGrants !== undefined && decision.outcome === "route") {
-        const actor = resolvedActorEvent.meta?.actor;
-        const actorId = typeof actor?.actorId === "string" ? actor.actorId : undefined;
-        const endpoint = actor?.endpoint;
+        const actorId = decision.actorId;
+        const endpoint = replyGrantEndpointFromFacts(decision.factsUsed);
         if (actorId !== undefined && endpoint !== undefined) {
           replyGrants.admit({
             actorId,
@@ -309,7 +372,8 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
               : { workspace: externalEvent.workspace }),
             ...(externalEvent.channel === undefined ? {} : { channel: externalEvent.channel }),
             traceId: trace.traceId,
-            at: Date.now(),
+            at: decision.time,
+            sourceId: Ingress.routeStreamId(externalEvent),
           });
         }
       }

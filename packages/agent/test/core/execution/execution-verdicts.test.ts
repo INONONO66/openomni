@@ -13,7 +13,7 @@ import {
   type TurnArtifacts,
 } from "../../../src/core/execution/state";
 import { dispatchPreRun } from "../../../src/core/execution/lifecycle-dispatch";
-import { deny } from "../../helpers/policy-decision";
+import { registerAt, deny } from "../../helpers/policy-decision";
 import { runInput } from "../../helpers/run-input";
 
 const providerModel = { id: "test-model", providerID: "test", name: "test-model" };
@@ -101,14 +101,14 @@ describe("execution helper deny verdicts", () => {
   it("fail-closes run.start deny before execution", async () => {
     Bus.reset();
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "deny-run-start",
-      pointIds: ["run.lifecycle.pre"],
-      effectCapabilities: { "run.lifecycle.pre": ["audit.annotate"] },
-      priority: 100,
-      fn: () => deny("test.deny", "blocked"),
-    });
+    registerAt(
+      engine,
+      "run.lifecycle.pre",
+      "deny-run-start",
+      100,
+      () => deny("test.deny", "blocked"),
+      ["audit.annotate"],
+    );
 
     const complete = expectComplete(
       await dispatchPreRun(makeState(), engine, makeConfig(), makeAgentBase()),
@@ -121,14 +121,9 @@ describe("execution helper deny verdicts", () => {
   it("fail-closes turn.start deny before building a turn", async () => {
     Bus.reset();
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "deny-turn-start",
-      pointIds: ["run.turn.pre"],
-      effectCapabilities: { "run.turn.pre": ["audit.annotate"] },
-      priority: 100,
-      fn: () => deny("test.deny", "blocked"),
-    });
+    registerAt(engine, "run.turn.pre", "deny-turn-start", 100, () => deny("test.deny", "blocked"), [
+      "audit.annotate",
+    ]);
 
     const result = await buildTurn(
       makeState(),
@@ -148,14 +143,14 @@ describe("execution helper deny verdicts", () => {
   it("fail-closes resources.prepare deny before exposing tools", async () => {
     Bus.reset();
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "deny-resources",
-      pointIds: ["tool.catalog.pre"],
-      effectCapabilities: { "tool.catalog.pre": ["audit.annotate"] },
-      priority: 100,
-      fn: () => deny("test.deny", "no-tools"),
-    });
+    registerAt(
+      engine,
+      "tool.catalog.pre",
+      "deny-resources",
+      100,
+      () => deny("test.deny", "no-tools"),
+      ["audit.annotate"],
+    );
 
     const result = await buildTurn(
       makeState(),
@@ -179,14 +174,14 @@ describe("execution helper deny verdicts", () => {
       if (event.name === Operational.Events.Info.name) diagnostics.push(payload);
     });
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "deny-turn-finish",
-      pointIds: ["run.turn.post"],
-      effectCapabilities: { "run.turn.post": ["audit.annotate"] },
-      priority: 100,
-      fn: () => deny("test.deny", "post-turn"),
-    });
+    registerAt(
+      engine,
+      "run.turn.post",
+      "deny-turn-finish",
+      100,
+      () => deny("test.deny", "post-turn"),
+      ["audit.annotate"],
+    );
     const state = makeState();
     state.lastAssistantText = "done";
 
@@ -213,14 +208,14 @@ describe("execution helper deny verdicts", () => {
       if (event.name === Operational.Events.Info.name) diagnostics.push(payload);
     });
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "deny-compaction",
-      pointIds: ["run.completion.pre"],
-      effectCapabilities: { "run.completion.pre": ["audit.annotate"] },
-      priority: 100,
-      fn: () => deny("test.deny", "post-compaction"),
-    });
+    registerAt(
+      engine,
+      "run.completion.pre",
+      "deny-compaction",
+      100,
+      () => deny("test.deny", "post-compaction"),
+      ["audit.annotate"],
+    );
 
     try {
       const result = await handleCompact(makeState(), engine, makeConfig(), makeAgentBase());

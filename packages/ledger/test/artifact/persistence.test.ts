@@ -73,6 +73,84 @@ describe("Artifact persistence (SQLite)", () => {
     adapter2.close();
   });
 
+  test("upcasts legacy-invalid metadata at the read boundary", () => {
+    const legacyRows = [
+      {
+        id: "legacy-zero",
+        meta: {
+          id: "legacy-zero",
+          sessionId: "sess-1",
+          mimeType: "",
+          title: "zero.txt",
+          version: 0,
+          createdAt: "   ",
+        },
+        expected: {
+          mimeType: "application/octet-stream",
+          version: 1,
+          createdAt: "1970-01-01T00:00:00.000Z",
+        },
+      },
+      {
+        id: "legacy-negative",
+        meta: {
+          id: "legacy-negative",
+          sessionId: "sess-1",
+          mimeType: "text/plain",
+          title: "negative.txt",
+          version: -1,
+          createdAt: "legacy-date",
+        },
+        expected: { mimeType: "text/plain", version: 1, createdAt: "legacy-date" },
+      },
+      {
+        id: "legacy-fraction",
+        meta: {
+          id: "legacy-fraction",
+          sessionId: "sess-1",
+          title: "fraction.txt",
+          version: 7.9,
+        },
+        expected: {
+          mimeType: "application/octet-stream",
+          version: 7,
+          createdAt: "1970-01-01T00:00:00.000Z",
+        },
+      },
+      {
+        id: "legacy-invalid-version",
+        meta: {
+          id: "legacy-invalid-version",
+          sessionId: "sess-1",
+          mimeType: null,
+          title: "invalid-version.txt",
+          version: null,
+          createdAt: null,
+        },
+        expected: {
+          mimeType: "application/octet-stream",
+          version: 1,
+          createdAt: "1970-01-01T00:00:00.000Z",
+        },
+      },
+    ];
+
+    for (const row of legacyRows) {
+      adapter.artifact.store(row.id, "sess-1", JSON.stringify(row.meta), "legacy content");
+      expect(Artifact.get(row.id)).toEqual({
+        meta: { ...row.meta, ...row.expected },
+        content: "legacy content",
+      });
+    }
+  });
+
+  test("leaves valid persisted metadata unchanged", () => {
+    const meta = makeMeta({ version: 3, title: "unchanged.txt" });
+    adapter.artifact.store(meta.id, "sess-1", JSON.stringify(meta), "valid content");
+
+    expect(Artifact.get(meta.id)).toEqual({ meta, content: "valid content" });
+  });
+
   test("independent artifacts recover from SQLite after reset", () => {
     Artifact.store("sess-1", makeMeta({ id: "art-1" }), "content-1");
     Artifact.store("sess-1", makeMeta({ id: "art-2" }), "content-2");

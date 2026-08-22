@@ -1,4 +1,5 @@
 import { describe, expect, it, mock } from "bun:test";
+import { registerAt } from "../../helpers/policy-decision";
 import { PolicyDecision } from "@openomni/protocol";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { PolicyContext } from "../../../src/core/policy";
@@ -32,27 +33,20 @@ describe("PolicyEngine prompt.context.pre safety", () => {
       }),
     );
 
-    engine.register({
-      kind: "point",
-      name: "abort-context",
-      pointIds: ["prompt.context.pre"],
-      effectCapabilities: { "prompt.context.pre": ["audit.annotate"] },
-      priority: 0,
-      fn: () =>
+    registerAt(
+      engine,
+      "prompt.context.pre",
+      "abort-context",
+      0,
+      () =>
         PolicyDecision.deny({
           policyId: "test.context-aborted",
           reasonCodes: ["context-aborted"],
           effects: [{ type: "audit.annotate", annotation: "context-aborted", severity: "error" }],
         }),
-    });
-    engine.register({
-      kind: "point",
-      name: "after",
-      pointIds: ["prompt.context.pre"],
-      effectCapabilities: { "prompt.context.pre": ["prompt.inject_message"] },
-      priority: 10,
-      fn: after,
-    });
+      ["audit.annotate"],
+    );
+    registerAt(engine, "prompt.context.pre", "after", 10, after, ["prompt.inject_message"]);
 
     const decision = await engine.dispatchPoint("prompt.context.pre", baseCtx());
     expect(decision.verdict).toBe("deny");
@@ -70,27 +64,20 @@ describe("PolicyEngine prompt.context.pre safety", () => {
       }),
     );
 
-    engine.register({
-      kind: "point",
-      name: "deny-context",
-      pointIds: ["prompt.context.pre"],
-      effectCapabilities: { "prompt.context.pre": ["audit.annotate"] },
-      priority: 0,
-      fn: () =>
+    registerAt(
+      engine,
+      "prompt.context.pre",
+      "deny-context",
+      0,
+      () =>
         PolicyDecision.deny({
           policyId: "test.context-denied",
           reasonCodes: ["context-denied"],
           effects: [{ type: "audit.annotate", annotation: "context-denied", severity: "error" }],
         }),
-    });
-    engine.register({
-      kind: "point",
-      name: "after",
-      pointIds: ["prompt.context.pre"],
-      effectCapabilities: { "prompt.context.pre": ["prompt.inject_message"] },
-      priority: 10,
-      fn: after,
-    });
+      ["audit.annotate"],
+    );
+    registerAt(engine, "prompt.context.pre", "after", 10, after, ["prompt.inject_message"]);
 
     const decision = await engine.dispatchPoint("prompt.context.pre", baseCtx());
     expect(decision.verdict).toBe("deny");
@@ -101,13 +88,12 @@ describe("PolicyEngine prompt.context.pre safety", () => {
   it("keeps transform output when no abort or deny runs", async () => {
     const engine = PolicyEngine.create();
 
-    engine.register({
-      kind: "point",
-      name: "transform-context",
-      pointIds: ["prompt.context.pre"],
-      effectCapabilities: { "prompt.context.pre": ["prompt.replace", "prompt.append_context"] },
-      priority: 0,
-      fn: () =>
+    registerAt(
+      engine,
+      "prompt.context.pre",
+      "transform-context",
+      0,
+      () =>
         PolicyDecision.allow({
           policyId: "test.transform-context",
           reasonCodes: ["transform-context"],
@@ -117,7 +103,8 @@ describe("PolicyEngine prompt.context.pre safety", () => {
             { type: "prompt.append_context", context: "append-a" },
           ],
         }),
-    });
+      ["prompt.replace", "prompt.append_context"],
+    );
 
     const result = await engine.dispatchPoint("prompt.context.pre", baseCtx());
 

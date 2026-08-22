@@ -7,6 +7,9 @@ export interface BusEventRow {
   readonly category: string;
   readonly visibility: string;
   readonly data: string;
+  /** Null only for rows written before payload status markers shipped. */
+  readonly payload_status: "valid" | "invalid" | "parse_failed" | null;
+  readonly payload_diagnostic: string | null;
   readonly trace_id: string;
   readonly duration_ms: number | null;
   readonly time_created: number;

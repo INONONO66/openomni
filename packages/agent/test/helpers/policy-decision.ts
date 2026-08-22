@@ -1,4 +1,58 @@
 import { PolicyDecision, type Policy, type Message } from "@openomni/protocol";
+import type { PolicyPointId } from "@openomni/policy";
+import type {
+  CanonicalPolicyRegistration,
+  PolicyEngineInstance,
+  PolicyFn,
+} from "../../src/core/policy";
+
+type PointRegistration = Omit<
+  CanonicalPolicyRegistration,
+  "kind" | "pointIds" | "effectCapabilities"
+> & { readonly effects?: readonly Policy.PolicyEffectType[] };
+
+/** Build the canonical single-point registration shape used throughout agent tests. */
+export function atPoint(
+  pointId: PolicyPointId,
+  registration: PointRegistration,
+): CanonicalPolicyRegistration {
+  const { effects = [], ...rest } = registration;
+  return {
+    kind: "point",
+    pointIds: [pointId],
+    effectCapabilities: { [pointId]: effects },
+    ...rest,
+  };
+}
+
+export function registerAt(
+  engine: Pick<PolicyEngineInstance, "register">,
+  pointId: PolicyPointId,
+  registration: PointRegistration,
+): void;
+export function registerAt(
+  engine: Pick<PolicyEngineInstance, "register">,
+  pointId: PolicyPointId,
+  name: string,
+  priority: number,
+  fn: PolicyFn,
+  effects?: readonly Policy.PolicyEffectType[],
+): void;
+export function registerAt(
+  engine: Pick<PolicyEngineInstance, "register">,
+  pointId: PolicyPointId,
+  nameOrRegistration: string | PointRegistration,
+  priority?: number,
+  fn?: PolicyFn,
+  effects: readonly Policy.PolicyEffectType[] = [],
+): void {
+  if (typeof nameOrRegistration !== "string") {
+    engine.register(atPoint(pointId, nameOrRegistration));
+    return;
+  }
+  if (priority === undefined || fn === undefined) throw new Error("incomplete test registration");
+  engine.register(atPoint(pointId, { name: nameOrRegistration, priority, fn, effects }));
+}
 
 export function allow(
   policyId = "test.allow",

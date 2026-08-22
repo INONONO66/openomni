@@ -11,11 +11,38 @@ import { deliverySurfaceKey } from "./grant.js";
  * never by engagement id, and `maxLiveInstances` caps grant farming by mass
  * first contact.
  *
- * RULING (#708): instances are IN-MEMORY on the router for this stage. A
- * restart forgets them and the initiator's next admitted message
- * re-materializes an instance under the same rule — no new persisted surface
- * lands here; the durable grant-instance store is the #709/SSOT follow-up.
+ * Instances remain an in-memory projection. Router construction replays the
+ * immutable route.decided admissions that originally justified them; no
+ * reply-grant store or lifecycle is introduced.
  */
+
+const ENDPOINT_CHANNEL_FACT_PREFIX = "reply_grant.endpoint.channel:";
+const ENDPOINT_EXTERNAL_ID_FACT_PREFIX = "reply_grant.endpoint.external_id:";
+
+export function replyGrantEndpointFacts(endpoint: Readonly<{ channel: string; externalId: string }>) {
+  return [
+    `${ENDPOINT_CHANNEL_FACT_PREFIX}${encodeURIComponent(endpoint.channel)}`,
+    `${ENDPOINT_EXTERNAL_ID_FACT_PREFIX}${encodeURIComponent(endpoint.externalId)}`,
+  ] as const;
+}
+
+export function replyGrantEndpointFromFacts(
+  facts: readonly string[],
+): Readonly<{ channel: string; externalId: string }> | undefined {
+  const channels = facts.filter((fact) => fact.startsWith(ENDPOINT_CHANNEL_FACT_PREFIX));
+  const externalIds = facts.filter((fact) => fact.startsWith(ENDPOINT_EXTERNAL_ID_FACT_PREFIX));
+  if (channels.length !== 1 || externalIds.length !== 1) return undefined;
+  try {
+    const channel = decodeURIComponent(channels[0]?.slice(ENDPOINT_CHANNEL_FACT_PREFIX.length) ?? "");
+    const externalId = decodeURIComponent(
+      externalIds[0]?.slice(ENDPOINT_EXTERNAL_ID_FACT_PREFIX.length) ?? "",
+    );
+    if (channel === "" || externalId === "") return undefined;
+    return { channel, externalId };
+  } catch {
+    return undefined;
+  }
+}
 
 export type ReplyGrantAdmission = Readonly<{
   /** Resolved registered initiator (perimeter fact — anonymous senders materialize nothing). */
@@ -27,6 +54,8 @@ export type ReplyGrantAdmission = Readonly<{
   channel?: string;
   traceId: string;
   at: number;
+  /** Immutable route owner stream; makes replayed instance ids stable. */
+  sourceId?: string;
 }>;
 
 export type ReplyGrantInstances = Readonly<{
@@ -38,6 +67,7 @@ export type ReplyGrantInstances = Readonly<{
 
 function ruleCovers(rule: Gateway.ReplyGrantRule, admission: ReplyGrantAdmission): boolean {
   return (
+    (rule.createdAt === undefined || admission.at >= rule.createdAt) &&
     rule.surface === admission.surface &&
     (rule.workspace === undefined || rule.workspace === admission.workspace) &&
     (rule.channel === undefined || rule.channel === admission.channel)
@@ -46,6 +76,8 @@ function ruleCovers(rule: Gateway.ReplyGrantRule, admission: ReplyGrantAdmission
 
 export function createReplyGrantInstances(ports: {
   readonly rules: () => readonly Gateway.ReplyGrantRule[];
+  /** Immutable routed admissions, oldest first, used only to rebuild the projection at boot. */
+  readonly replay?: () => readonly ReplyGrantAdmission[];
   /** Injected observation sink — materialization and capacity refusals are audited, never silent. */
   readonly publish: BusEvent.Sink["publish"];
 }): ReplyGrantInstances {
@@ -58,28 +90,24 @@ export function createReplyGrantInstances(ports: {
     );
   }
 
-  return {
-    list() {
-      return [...instances];
-    },
-
-    admit(admission: ReplyGrantAdmission): void {
-      prune(admission.at);
-      for (const rule of ports.rules()) {
-        if (!ruleCovers(rule, admission)) continue;
-        // The persona never needs a grant to be replied to by itself.
-        if (rule.senderId === admission.actorId) continue;
-        const surfaceKey = deliverySurfaceKey(admission.endpoint);
-        const liveForRule = instances.filter((instance) => instance.ruleId === rule.id);
-        const alreadyLive = liveForRule.some(
-          (instance) =>
-            instance.targetActorId === admission.actorId &&
-            instance.replyScope?.surfaceKey === surfaceKey,
-        );
-        // First contact only: a live instance for this initiator+container
-        // keeps its ORIGINAL expiry — repeat messages never refresh it.
-        if (alreadyLive) continue;
-        if (liveForRule.length >= rule.maxLiveInstances) {
+  function admit(admission: ReplyGrantAdmission, replaying: boolean): void {
+    prune(admission.at);
+    for (const rule of ports.rules()) {
+      if (!ruleCovers(rule, admission)) continue;
+      // The persona never needs a grant to be replied to by itself.
+      if (rule.senderId === admission.actorId) continue;
+      const surfaceKey = deliverySurfaceKey(admission.endpoint);
+      const liveForRule = instances.filter((instance) => instance.ruleId === rule.id);
+      const alreadyLive = liveForRule.some(
+        (instance) =>
+          instance.targetActorId === admission.actorId &&
+          instance.replyScope?.surfaceKey === surfaceKey,
+      );
+      // First contact only: a live instance for this initiator+container
+      // keeps its ORIGINAL expiry — repeat messages never refresh it.
+      if (alreadyLive) continue;
+      if (liveForRule.length >= rule.maxLiveInstances) {
+        if (!replaying) {
           ports.publish(Operational.Events.Warn, {
             traceId: admission.traceId,
             time: admission.at,
@@ -92,20 +120,25 @@ export function createReplyGrantInstances(ports: {
               maxLiveInstances: rule.maxLiveInstances,
             },
           });
-          continue;
         }
-        // Parse pins the schema invariants (rule-materialized ⇒ replyScope +
-        // expiresAt) — a drifting materializer fails loudly, not silently.
-        const instance = Gateway.SenderTargetGrant.parse({
-          id: crypto.randomUUID(),
-          senderId: rule.senderId,
-          targetActorId: admission.actorId,
-          operations: [...rule.operations],
-          expiresAt: admission.at + rule.instanceTtlMs,
-          ruleId: rule.id,
-          replyScope: { surfaceKey },
-        } satisfies Gateway.SenderTargetGrant);
-        instances.push(instance);
+        continue;
+      }
+      // Parse pins the schema invariants (rule-materialized ⇒ replyScope +
+      // expiresAt) — a drifting materializer fails loudly, not silently.
+      const instance = Gateway.SenderTargetGrant.parse({
+        id:
+          admission.sourceId === undefined
+            ? crypto.randomUUID()
+            : `reply-grant:${encodeURIComponent(rule.id)}:${encodeURIComponent(admission.sourceId)}`,
+        senderId: rule.senderId,
+        targetActorId: admission.actorId,
+        operations: [...rule.operations],
+        expiresAt: admission.at + rule.instanceTtlMs,
+        ruleId: rule.id,
+        replyScope: { surfaceKey },
+      } satisfies Gateway.SenderTargetGrant);
+      instances.push(instance);
+      if (!replaying) {
         ports.publish(Operational.Events.Info, {
           traceId: admission.traceId,
           time: admission.at,
@@ -121,6 +154,18 @@ export function createReplyGrantInstances(ports: {
           },
         });
       }
+    }
+  }
+
+  for (const admission of ports.replay?.() ?? []) admit(admission, true);
+  prune(Date.now());
+
+  return {
+    list() {
+      return [...instances];
+    },
+    admit(admission: ReplyGrantAdmission): void {
+      admit(admission, false);
     },
   };
 }

@@ -22,8 +22,8 @@ Depends on `@openomni/protocol` and `@openomni/ipc` **only** — a ring-2 proces
 | Module | Purpose |
 |--------|---------|
 | `worker-manager/worker-pool.ts` | **Primary API.** One pool module (#462 step 4: the former manager/slot-coordinator split is merged; the class is not exported). `createWorkerManager(config, ports)`: one verb — `deliver(runId, task)` (plus `cancel`/`send`/`stats`), typed `WorkerDeliveryError` rejections, session-affinity optimization, spawn on demand up to `maxActiveWorkers` (default 10), waiter queue when saturated, idle shutdown (`idleShutdownMs`, default 600s), generation-tracked restarts. Emits `WorkerDriver` lifecycle events (`worker.spawned/ready/exited/restarted`, `run.delivered/settled`, `worker.queue_saturated`) through the injected events sink; wall-time is driver physics — ceiling = budget + margin (unlimited/absent budgets get the 600s backstop), breach = SIGKILL + `wall_time_exceeded` (#462 step 5) |
-| `worker-supervision/supervisor.ts` | Per-worker process lifecycle: spawn, bootstrap handshake, restart generations, stop. Constructed from a `WorkerSupervisorOptions` object; the worker RPCs (`deliver`/`cancel`/`send`) live here (#462 step 4) |
-| (`@openomni/ipc`) | Request/response framing, bidirectional client/server transport, protocol errors — standalone package since #496, consumed here by `worker-supervision/` |
+| `worker-supervision/supervisor.ts` | Per-worker process lifecycle: spawn, bootstrap handshake, restart generations, stop. Constructed from a `WorkerSupervisorOptions` object; worker RPCs (`deliver`/`cancel`/`send`) live here. The bootstrap call consumes `@openomni/ipc`'s schema-derived `typedCall` facade; dynamic RPC paths retain the generic call surface. |
+| (`@openomni/ipc`) | Request/response framing, bidirectional transport, typed known-method facade, and protocol errors — standalone package since #496, consumed here by `worker-supervision/` |
 
 
 ## WORKER LIFECYCLE (worker-manager)
@@ -48,7 +48,7 @@ Observability is ledger events, not push maps (#462 §4): the supervisor publish
 
 `apps/server/src/execution/coordinator.ts` is the live consumer: `createExecutionCoordinator()` wraps `createWorkerManager(config, ports)` (config mapping: `maxWorkers` → `maxActiveWorkers`, `workerIdleTimeoutMs` → `idleShutdownMs`; ports: `events` = `Bus.publish`, `toolRelay`, `inboundWait`) and owns delivery, cancellation, message send, stats, and recovery wiring (recovery itself lives server-side in `apps/server/src/execution/recovery.ts`).
 
-Barrel exports (`src/index.ts`): `createWorkerManager` (live; the pool class itself is not exported), plus types. `createIpcServer` moved to `@openomni/ipc` (#496) — the coordinator re-exports no IPC surface. `worker-supervision/` is internal — not exported from the root barrel.
+Barrel exports (`src/index.ts`): `createWorkerManager`, `WorkerDeliveryError`, and the currently consumed manager/port types. `createIpcServer` and `typedCall` live in `@openomni/ipc`; coordinator consumes but re-exports no IPC surface. `worker-supervision/` remains internal.
 
 ## TESTS
 

@@ -127,7 +127,13 @@ export class GitHubAdapter implements Channel.Surface {
     try {
       const outbound = await this.getHandler()(inbound);
       if (outbound?.text) {
-        await this.client.postComment(content.repo, content.issueNumber, outbound.text, traceId);
+        await this.client.postComment(
+          content.repo,
+          content.issueNumber,
+          outbound.text,
+          traceId,
+          deliveryId ?? undefined,
+        );
       }
     } catch (err) {
       this.publish(Operational.Events.Error, {
@@ -142,6 +148,8 @@ export class GitHubAdapter implements Channel.Surface {
           stack: err instanceof Error ? err.stack : undefined,
         },
       });
+      if (deliveryId) this.dedupe.forget(deliveryId);
+      return new Response("Processing failed", { status: 500 });
     }
 
     return new Response("OK", { status: 200 });

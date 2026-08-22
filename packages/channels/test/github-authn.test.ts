@@ -185,11 +185,13 @@ function createAdapter(
   decisions: ChannelAuthnDecision[],
   adapterConfig: Channel.Config = config,
 ): GitHubAdapter {
-  return new GitHubAdapter(secret, adapterConfig, () => undefined, undefined, undefined, {
+  const adapter = new GitHubAdapter(secret, adapterConfig, () => undefined, undefined, undefined, {
     onDecision: (decision) => {
       decisions.push(decision);
     },
   });
+  adapter.onMessage(async () => null);
+  return adapter;
 }
 
 async function signGitHubBody(body: string): Promise<string> {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { registerAt } from "../../helpers/policy-decision";
 import { Operational, PolicyDecision } from "@openomni/protocol";
 import { Bus, collector } from "@openomni/telemetry";
 import { dispatchBudgetCheck } from "../../../src/core/execution/lifecycle-dispatch";
@@ -42,17 +43,16 @@ describe("dispatchBudgetCheck (budget exhaustion)", () => {
     const observedOutcomes: unknown[] = [];
     const state = makeState();
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "test:max-steps-observer",
-      pointIds: ["run.lifecycle.post"],
-      effectCapabilities: { "run.lifecycle.post": [] },
-      priority: 0,
-      fn: (context: PolicyContext) => {
+    registerAt(
+      engine,
+      "run.lifecycle.post",
+      "test:max-steps-observer",
+      0,
+      (context: PolicyContext) => {
         observedOutcomes.push(Reflect.get(context, "runOutcome"));
         return PolicyDecision.allow({ policyId: "test.max-steps-observer" });
       },
-    });
+    );
     state.budgetState = {
       ...state.budgetState,
       turns: 100,

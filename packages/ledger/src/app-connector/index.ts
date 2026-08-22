@@ -107,16 +107,26 @@ function connectorActorEndpoint(installation: AppConnector.Installation): Actor.
   });
 }
 
+function requireActorRegistry(): NonNullable<Storage.Adapter["actorRegistry"]> {
+  return requireSubAdapter(
+    Storage.get().actorRegistry,
+    "Storage adapter does not implement actorRegistry — app connector installs fail closed",
+  );
+}
+
 function upsertActorEndpoint(installation: AppConnector.Installation): void {
   // Fail closed: an installation row without its actor identity/endpoint is a
   // half-registered connector (routing would silently miss it). A missing
   // actorRegistry sub-adapter is a wiring defect, never a skip.
-  const actorRegistry = requireSubAdapter(
-    Storage.get().actorRegistry,
-    "Storage adapter does not implement actorRegistry — app connector installs fail closed",
-  );
+  const actorRegistry = requireActorRegistry();
   actorRegistry.setIdentity(connectorActorIdentity(installation));
   actorRegistry.setEndpoint(connectorActorEndpoint(installation));
+}
+
+function removeActorEndpoint(installation: AppConnector.Installation): void {
+  const actorRegistry = requireActorRegistry();
+  actorRegistry.removeEndpoint(installation.endpointId);
+  actorRegistry.removeIdentity(actorIdFor(installation.id));
 }
 
 export namespace AppConnectorInstallationStore {
@@ -206,7 +216,12 @@ export namespace AppConnectorInstallationStore {
   }
 
   export function uninstall(id: string): boolean {
-    requireInstallation(id);
-    return removeInstallation(id);
+    const storage = Storage.get();
+    return storage.transaction(() => {
+      const installation = requireInstallation(id);
+      const removed = removeInstallation(id);
+      removeActorEndpoint(installation);
+      return removed;
+    });
   }
 }

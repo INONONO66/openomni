@@ -1,6 +1,5 @@
-import type { RunInput } from "@openomni/llm";
+import { Run, type RunInput, type Sink } from "@openomni/llm";
 import { type Message, Operational, PolicyDecision } from "@openomni/protocol";
-import type { Sink } from "@openomni/llm";
 import type { BusEvent, Policy, Tool } from "@openomni/protocol";
 import {
   describeBudgetRemaining,
@@ -287,6 +286,10 @@ export async function buildTurn(
         toolExecutor: hookedExecutor,
         toolChoice: configuredToolChoice,
         maxSteps: stepCap,
+        // Agent owns retry attempts, their backoff, and fallback selection.
+        // Disable llm.run's nested transport retries for this orchestrated path;
+        // standalone callers retain llm's bounded default when this is absent.
+        maxRetryAttempts: 0,
         // Yield at the same ratio the compaction trigger defaults to: the
         // loop stops at a step boundary once the window fills, the seam
         // below gets its chance on every path — Resident and tool loops
@@ -591,14 +594,27 @@ export async function handleError(
   retryPolicy: Parameters<typeof Retry.shouldRetry>[0],
 ): Promise<ErrorDecision> {
   const normalizedError = error instanceof Error ? error : new Error(String(error));
+  const typedFailure = Run.FailureError.isInstance(normalizedError as unknown)
+    ? (normalizedError as Run.Failure)
+    : undefined;
   const onErrorDecision = await engine.dispatchPoint(
     "run.error.error",
     buildLifecyclePolicyContext(state, config, agentBase, {
       toolInput: {
         error: {
-          name: normalizedError.name,
+          name: typedFailure?.data.providerErrorName ?? normalizedError.name,
           message: normalizedError.message,
           ...(normalizedError.stack === undefined ? {} : { stack: normalizedError.stack }),
+          ...(typedFailure === undefined
+            ? {}
+            : {
+                ...(typedFailure.data.retryAfterMs === undefined
+                  ? {}
+                  : { retryAfterMs: typedFailure.data.retryAfterMs }),
+                usage: typedFailure.data.usage,
+                aborted: typedFailure.data.aborted,
+                contextOverflow: typedFailure.data.contextOverflow,
+              }),
         },
       },
       errorCode: normalizedError.name || "Error",

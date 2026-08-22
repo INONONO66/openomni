@@ -11,6 +11,10 @@ import {
 } from "@openomni/protocol";
 import { BlacklistStore, ChannelGrantStore, LedgerAppend, SurfaceKey } from "@openomni/ledger";
 import { applyChannelGrantTreatment } from "./authority.js";
+import {
+  replyGrantEndpointFacts,
+  replyGrantEndpointFromFacts,
+} from "./messaging/reply-grant.js";
 import { resolveRoute, type RouteState } from "./resolve-route.js";
 import { findWaitCandidates, type WaitResolution } from "./wait/index.js";
 
@@ -402,6 +406,29 @@ function resolveKernelRoute<Event extends Gateway.DeliveredEvent>(
 // closed: no action, no second fact, nothing published. Only append
 // INFRASTRUCTURE failure (missing sub-adapter, failed append/read, foreign
 // or unparsable recorded fact) fails closed as route_record_failed.
+function pinReplyGrantEndpoint(
+  decision: Ingress.RoutingDecisionPayload,
+  event: Gateway.DeliveredEvent,
+): Ingress.RoutingDecisionPayload {
+  const actor = event.meta?.actor;
+  const endpoint = actor?.endpoint;
+  if (
+    decision.outcome !== "route" ||
+    decision.actorId === undefined ||
+    actor?.actorId !== decision.actorId ||
+    endpoint === undefined
+  ) {
+    return decision;
+  }
+  return {
+    ...decision,
+    factsUsed: [
+      ...decision.factsUsed,
+      ...replyGrantEndpointFacts({ channel: endpoint.channel, externalId: endpoint.externalId }),
+    ],
+  };
+}
+
 function recordRouteDecided(
   streamId: string,
   decision: Ingress.RoutingDecisionPayload,
@@ -441,7 +468,12 @@ function recordRouteDecided(
       decision,
     );
   }
-  if (!Ingress.routeDecisionsEquivalent(recorded, decision)) {
+  const recordedEndpoint = replyGrantEndpointFromFacts(recorded.factsUsed);
+  const freshEndpoint = replyGrantEndpointFromFacts(decision.factsUsed);
+  const endpointEquivalent =
+    recordedEndpoint?.channel === freshEndpoint?.channel &&
+    recordedEndpoint?.externalId === freshEndpoint?.externalId;
+  if (!Ingress.routeDecisionsEquivalent(recorded, decision) || !endpointEquivalent) {
     throw new IngressRoutingError(
       "route_replay_divergent",
       `redelivered inbound diverges from its recorded routing decision: recorded ${recorded.stage}/${recorded.outcome}, fresh ${decision.stage}/${decision.outcome}`,
@@ -461,7 +493,9 @@ export function resolveAndRecordRoute<Event extends Gateway.DeliveredEvent>(
   publish: BusEvent.Sink["publish"],
 ): KernelRouteResolution<Event> {
   const resolution = resolveKernelRoute(event, traceId);
-  const decision = Ingress.Events.RoutingDecision.schema.parse(resolution.decision);
+  const decision = Ingress.Events.RoutingDecision.schema.parse(
+    pinReplyGrantEndpoint(resolution.decision, event),
+  );
   // Redelivery passes the equivalence gate or fails closed — execution below
   // always uses the fresh decision with its own fresh resolution.
   const effective = recordRouteDecided(Ingress.routeStreamId(event), decision);

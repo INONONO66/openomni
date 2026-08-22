@@ -125,8 +125,13 @@ export namespace Retry {
     );
   }
 
-  /** directive: an explicit server instruction (retry-after) vs an inferred
-   * wait from ratelimit reset metadata. */
+  /** Provider-directed delay retained on the terminal typed failure. */
+  export function retryAfterMs(error: unknown): number | undefined {
+    const apiError = APIError.isInstance(error) ? error : undefined;
+    return headerDelay(apiError)?.ms;
+  }
+
+  /** Directive: explicit retry-after vs an inferred ratelimit reset. */
   function headerDelay(
     error?: InstanceType<typeof APIError>,
   ): { ms: number; directive: boolean } | undefined {

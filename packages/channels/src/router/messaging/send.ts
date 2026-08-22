@@ -5,7 +5,12 @@ import {
   type BusEvent,
   type Wait,
 } from "@openomni/protocol";
-import { ActorRegistry, EgressBudgetStore } from "@openomni/ledger";
+import {
+  ActorRegistry,
+  EgressBudgetStore,
+  LedgerAppend,
+  WaitStore,
+} from "@openomni/ledger";
 import { WaitService } from "../wait/index.js";
 import { Events } from "./events.js";
 import {
@@ -44,6 +49,8 @@ function sendClassOf(input: SendInput): MessageClass {
 
 export type OutboundMessage = Readonly<{
   messageId: string;
+  /** Stable gateway idempotency key. Delivery owners must reconcile/dedupe retries under this key. */
+  idempotencyKey: string;
   senderId: string;
   operation: MessageOperation;
   body: string;
@@ -63,6 +70,11 @@ export type MessagingPorts = Readonly<{
    * Concrete delivery owner (server channel / API / connector). Required at
    * construction — there is no ownerless send path, so "no owner" cannot be
    * silently skipped (fail-closed, rule 7).
+   */
+  /**
+   * At-least-once delivery: retries carry the same `message.idempotencyKey` so
+   * a concrete owner can provide bounded dedupe or platform read-back. The
+   * guarantee remains at-least-once when composition does not forward the key.
    */
   deliver: (
     message: OutboundMessage,
@@ -159,6 +171,118 @@ function resolveExistingTarget(target: MessageTarget): TargetResolution {
   return { ok: true, target: deliveryTarget(target.actorId, endpoint) };
 }
 
+const SEND_ADMITTED_FACT = "gateway.send.admitted";
+
+type SendAdmission = Readonly<{
+  signature: string;
+  budgeted: boolean;
+  sendClass: MessageClass;
+}>;
+
+class SendAdmissionConflict extends Error {}
+
+function sendStreamId(messageId: string): string {
+  return `gateway_send:${encodeURIComponent(messageId)}`;
+}
+
+function sendSignature(input: SendInput, target: DeliveryTarget): string {
+  return JSON.stringify({
+    messageId: input.messageId,
+    senderId: input.senderId,
+    operation: input.operation,
+    class: input.class,
+    body: input.body,
+    target,
+    waitSpec: input.waitSpec,
+  });
+}
+
+function parseAdmission(data: unknown, streamId: string): SendAdmission {
+  if (
+    typeof data !== "object" ||
+    data === null ||
+    !("signature" in data) ||
+    typeof data.signature !== "string" ||
+    !("budgeted" in data) ||
+    typeof data.budgeted !== "boolean" ||
+    !("sendClass" in data) ||
+    (data.sendClass !== "notify" && data.sendClass !== "converse")
+  ) {
+    throw new Error(`corrupt send admission fact on ${streamId}`);
+  }
+  return {
+    signature: data.signature,
+    budgeted: data.budgeted,
+    sendClass: data.sendClass,
+  };
+}
+
+function existingAdmission(input: SendInput, target: DeliveryTarget): SendAdmission | undefined {
+  const ledger = LedgerAppend.port();
+  if (ledger === undefined) {
+    throw new Error("Storage adapter does not implement ledger append — gateway sends fail closed");
+  }
+  const streamId = sendStreamId(input.messageId);
+  const fact = ledger.headFact(streamId);
+  if (fact === undefined) return undefined;
+  if (fact.type !== SEND_ADMITTED_FACT) {
+    throw new Error(`unexpected fact type on send stream ${streamId}: ${fact.type}`);
+  }
+  const admission = parseAdmission(fact.data, streamId);
+  if (admission.signature !== sendSignature(input, target)) {
+    throw new SendAdmissionConflict(
+      `message id ${input.messageId} was already admitted with different content`,
+    );
+  }
+  return admission;
+}
+
+function recordAdmission(
+  input: SendInput,
+  target: DeliveryTarget,
+  budgeted: boolean,
+  sendClass: MessageClass,
+): SendAdmission {
+  const ledger = LedgerAppend.port();
+  if (ledger === undefined) {
+    throw new Error("Storage adapter does not implement ledger append — gateway sends fail closed");
+  }
+  const streamId = sendStreamId(input.messageId);
+  const admission = { signature: sendSignature(input, target), budgeted, sendClass } as const;
+  const appended = ledger.append(
+    { streamId, type: SEND_ADMITTED_FACT, data: { ...admission } },
+    0,
+  );
+  if (appended.kind === "appended") return admission;
+  const raced = existingAdmission(input, target);
+  if (raced === undefined) {
+    throw new Error(`send admission conflicted without a recorded fact on ${streamId}`);
+  }
+  return raced;
+}
+
+function recordDebitOnce(input: SendInput, sendClass: MessageClass): void {
+  try {
+    EgressBudgetStore.record({
+      id: `gateway-send:${input.messageId}`,
+      senderId: input.senderId,
+      targetActorId: input.target.actorId,
+      class: sendClass,
+      at: input.at,
+    });
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "SQLITE_CONSTRAINT_PRIMARYKEY"
+    ) {
+      return;
+    }
+    throw error;
+  }
+}
+
 export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAgentMessaging {
   function deny(input: SendInput, code: MessageDenialCode, reason: string): SendReceipt {
     ports.publish(Events.Denied, {
@@ -221,50 +345,52 @@ export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAge
       }
     }
 
-    // #219 active-egress gate: the HOW-OFTEN axis evaluates HERE — after grant
-    // (MAY-I), before the wait record and the delivery effect — so a suppressed
-    // outreach records a denial without opening a Wait or emitting bytes.
-    //
-    // Cold-proactive vs reply (the safety call): a reply-scoped grant instance
-    // (`grant.replyScope !== undefined`, materialized from a ReplyGrantRule) is
-    // a REPLY into an initiating container and BYPASSES the gate entirely — the
-    // existing reply path is never throttled. Everything else is a COLD
-    // proactive initiation authorized by an Owner standing grant, and is
-    // subject to the budget. The gate only engages when a budget source is
-    // injected (`ports.budgets`), keeping the change purely additive.
-    if (ports.budgets !== undefined && grant.replyScope === undefined) {
-      const sendClass = sendClassOf(input);
-      const budget = ports
-        .budgets()
-        .find((candidate) => candidate.targetActorId === input.target.actorId);
-      // Debit state is only meaningful with a budget window; the fail-safe
-      // (budget === undefined → suppress) needs no read.
-      const state =
-        budget === undefined
-          ? { countInWindow: 0, notifyInWindow: 0, converseInWindow: 0 }
-          : EgressBudgetStore.readState(
-              input.senderId,
-              input.target.actorId,
-              input.at - budget.windowMs,
-            );
-      const verdict = evaluateSocialBudget(budget, state, { class: sendClass, at: input.at });
-      if (verdict !== "allow") {
-        return deny(
-          input,
-          verdict.suppress,
-          `active-egress budget suppressed a ${sendClass} send ${input.senderId} -> ${input.target.actorId} (${verdict.suppress})`,
-        );
+    // A durable admission marker distinguishes a retry from a new send before
+    // any mutable budget/Wait state is revisited. It is also the immutable
+    // binding from messageId to content + resolved endpoint: reusing a key for
+    // different bytes fails closed.
+    const sendClass = sendClassOf(input);
+    let admission: SendAdmission | undefined;
+    try {
+      admission = existingAdmission(input, resolution.target);
+    } catch (error) {
+      if (error instanceof SendAdmissionConflict && input.operation === "awaited") {
+        return deny(input, "wait_duplicate", error.message);
       }
-      // Record-before-act: the debit lands on ADMISSION, before the Wait/deliver
-      // path, so split outreach across calls cannot evade the cap and cooldown
-      // survives restart. A later delivery failure conservatively keeps the debit.
-      EgressBudgetStore.record({
-        id: crypto.randomUUID(),
-        senderId: input.senderId,
-        targetActorId: input.target.actorId,
-        class: sendClass,
-        at: input.at,
-      });
+      throw error;
+    }
+    if (admission === undefined) {
+      // #219 active-egress gate: evaluate only for a NEW admission. A resumed
+      // send already passed this judgment and must not consume capacity twice.
+      const budgeted = ports.budgets !== undefined && grant.replyScope === undefined;
+      if (budgeted) {
+        const budget = ports
+          .budgets?.()
+          .find((candidate) => candidate.targetActorId === input.target.actorId);
+        const state =
+          budget === undefined
+            ? { countInWindow: 0, notifyInWindow: 0, converseInWindow: 0 }
+            : EgressBudgetStore.readState(
+                input.senderId,
+                input.target.actorId,
+                input.at - budget.windowMs,
+              );
+        const verdict = evaluateSocialBudget(budget, state, { class: sendClass, at: input.at });
+        if (verdict !== "allow") {
+          return deny(
+            input,
+            verdict.suppress,
+            `active-egress budget suppressed a ${sendClass} send ${input.senderId} -> ${input.target.actorId} (${verdict.suppress})`,
+          );
+        }
+      }
+      admission = recordAdmission(input, resolution.target, budgeted, sendClass);
+    }
+    if (admission.budgeted) {
+      // Deterministic identity closes both sides of the admission/debit crash
+      // window: missing debit is appended; an already-recorded debit is a
+      // proven resume and changes no budget count.
+      recordDebitOnce(input, admission.sendClass);
     }
     // #219 escalation seam (DEFERRED, out of this PR): the autonomous
     // timer-fired 봉수 rung-advance would attach its counting coordinate HERE —
@@ -305,29 +431,42 @@ export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAge
           input.traceId,
         );
       } catch (error) {
-        // Exactly-once awaited delivery surfacing as a typed denial: the
-        // ledger already awaits this message (or wait id), so this send
-        // delivers nothing and changes nothing. Every other StoreError
-        // (adapter_absent, ...) stays a thrown fail-closed error.
         if (WaitProtocol.StoreError.isInstance(error) && error.data.code === "duplicate") {
-          return deny(
-            input,
-            "wait_duplicate",
-            `a Wait already exists for message ${input.messageId} or wait ${spec.waitId} — awaited delivery is exactly-once`,
-          );
+          const recorded = WaitStore.get(spec.waitId);
+          if (recorded?.originMessageId === input.messageId) {
+            wait = recorded;
+          } else {
+            return deny(
+              input,
+              "wait_duplicate",
+              `a different Wait already exists for message ${input.messageId} or wait ${spec.waitId}`,
+            );
+          }
+        } else {
+          throw error;
         }
-        throw error;
       }
     }
 
-    const delivery = await ports.deliver({
-      messageId: input.messageId,
-      senderId: input.senderId,
-      operation: input.operation,
-      body: input.body,
-      target: resolution.target,
-      ...(wait === undefined ? {} : { waitId: wait.id }),
-    });
+    // A recorded external correlation is durable proof that the effect and
+    // receipt CAS completed. Otherwise call the owner under the stable key;
+    // its contract requires API idempotency/read-back reconciliation.
+    const recordedExternalId =
+      wait !== undefined && wait.correlation.replyToMessageId !== input.messageId
+        ? wait.correlation.replyToMessageId
+        : undefined;
+    const delivery =
+      recordedExternalId === undefined
+        ? await ports.deliver({
+            messageId: input.messageId,
+            idempotencyKey: input.messageId,
+            senderId: input.senderId,
+            operation: input.operation,
+            body: input.body,
+            target: resolution.target,
+            ...(wait === undefined ? {} : { waitId: wait.id }),
+          })
+        : { externalMessageId: recordedExternalId };
     if (wait !== undefined && delivery !== undefined && delivery.externalMessageId !== undefined) {
       // The channel returned the platform message id: re-key the wait's
       // correlation.replyToMessageId to it so real platform replies (which

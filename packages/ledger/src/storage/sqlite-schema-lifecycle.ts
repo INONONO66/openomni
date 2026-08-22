@@ -26,6 +26,7 @@ const ORDERED_MIGRATIONS: Migration.Definition[] = [
   { name: "0019_surface_key_perimeter/migration.sql" },
   { name: "0020_engagement/migration.sql" },
   { name: "0021_egress_budget/migration.sql" },
+  { name: "0022_bus_event_payload_status/migration.sql" },
 ];
 
 const CLEAR_ORDER = [

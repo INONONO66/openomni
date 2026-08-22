@@ -1,4 +1,5 @@
 import { expect, it } from "bun:test";
+import { atPoint } from "../../helpers/policy-decision";
 import { PolicyDecision, type Tool } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { createToolExecutor } from "../../../src/core/execution/tools";
@@ -13,17 +14,16 @@ import { PolicyEngine } from "../../../src/core/policy";
 it("dispatches at the canonical native tool result point", async () => {
   let observed = 0;
   const engine = PolicyEngine.create();
-  engine.register({
-    kind: "point",
-    name: "test:native-post-observer",
-    pointIds: ["tool.native.post"],
-    effectCapabilities: { "tool.native.post": [] },
-    priority: 0,
-    fn: (ctx) => {
-      if (ctx.pointId === "tool.native.post" && ctx.timing === "invoke.result") observed++;
-      return PolicyDecision.allow({ policyId: "test.native-post-observer" });
-    },
-  });
+  engine.register(
+    atPoint("tool.native.post", {
+      name: "test:native-post-observer",
+      priority: 0,
+      fn: (ctx) => {
+        if (ctx.pointId === "tool.native.post" && ctx.timing === "invoke.result") observed++;
+        return PolicyDecision.allow({ policyId: "test.native-post-observer" });
+      },
+    }),
+  );
 
   const executor = createToolExecutor({
     events: Bus,

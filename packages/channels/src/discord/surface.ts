@@ -1,6 +1,6 @@
 import { type Channel, Operational, PolicyDecision } from "@openomni/protocol";
 import { newTraceId } from "@openomni/protocol";
-import { Dedupe } from "../support/dedupe";
+import { Dedupe, DedupeWindow } from "../support/dedupe";
 import { DiscordClient } from "./client";
 import { DiscordGateway } from "./gateway";
 import { DiscordNormalizer } from "./normalizer";
@@ -18,6 +18,7 @@ export class DiscordAdapter implements Channel.Surface {
   private readonly client: DiscordClient;
   private readonly gateway: DiscordGateway;
   private readonly dedupe = new Dedupe();
+  private readonly outboundDedupe = new DedupeWindow<{ externalMessageId?: string }>();
   private normalizer: DiscordNormalizer | null = null;
   private botId: string | null = null;
   private handler: Channel.MessageHandler | null = null;
@@ -84,18 +85,27 @@ export class DiscordAdapter implements Channel.Surface {
    * Discord user id — deliver by DM and report the platform message id of
    * the final chunk (the message a reply would reference).
    */
-  async deliver(externalId: string, body: string): Promise<{ externalMessageId?: string }> {
-    // Origin: the messaging kernel's deliver seam does not thread the
-    // sender's trace yet (#215) — this delivery is its own causal chain.
-    const traceId = newTraceId();
-    const channelId = await this.client.createDmChannel(externalId, traceId);
-    const externalMessageId = await sendDiscordMessage(
-      this.client,
-      channelId,
-      { text: body },
-      traceId,
-    );
-    return externalMessageId === undefined ? {} : { externalMessageId };
+  async deliver(
+    externalId: string,
+    body: string,
+    idempotencyKey?: string,
+  ): Promise<{ externalMessageId?: string }> {
+    const send = async (): Promise<{ externalMessageId?: string }> => {
+      // Origin: the messaging kernel's deliver seam does not thread the
+      // sender's trace yet (#215) — this delivery is its own causal chain.
+      const traceId = newTraceId();
+      const channelId = await this.client.createDmChannel(externalId, traceId);
+      const externalMessageId = await sendDiscordMessage(
+        this.client,
+        channelId,
+        { text: body },
+        traceId,
+      );
+      return externalMessageId === undefined ? {} : { externalMessageId };
+    };
+    // Additive capability only: the current server composition calls this
+    // seam without a key, which intentionally retains at-least-once behavior.
+    return idempotencyKey === undefined ? send() : this.outboundDedupe.run(idempotencyKey, send);
   }
 
   private handleMessageCreate(message: DiscordMessage, traceId: string): void {

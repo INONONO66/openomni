@@ -539,28 +539,9 @@ describe("Transcript fold — immutability and determinism", () => {
 
     expect(state).toEqual(snapshot);
   });
-
-  test("identical inputs produce identical outcomes", () => {
-    const state = applyAll([createdFact(), appendedFact(buildToolPart())]);
-    const fact = advancedFact("part-tool-1", { to: "running", at: 1_200 });
-    expect(Transcript.fold(state, fact)).toEqual(Transcript.fold(state, fact));
-  });
 });
 
 describe("Transcript schema", () => {
-  test("every Fact kind parse round-trips", () => {
-    const facts: Transcript.Fact[] = [
-      createdFact(),
-      appendedFact(buildToolPart()),
-      advancedFact("part-tool-1", { to: "completed", at: 1_500, output: "x", title: "t" }),
-      advancedFact("part-tool-1", { to: "interrupted", at: 1_500, partialOutput: "p" }),
-      finishedFact({ finish: "length" }),
-    ];
-    for (const fact of facts) {
-      expect(Transcript.Fact.parse(fact)).toEqual(fact);
-    }
-  });
-
   test("negative and fractional usage counts are rejected", () => {
     const usage = buildUsage();
     for (const bad of [

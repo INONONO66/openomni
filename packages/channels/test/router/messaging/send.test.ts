@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Gateway } from "@openomni/protocol";
-import { ActorRegistry, Storage, WaitStore } from "@openomni/ledger";
+import { ActorRegistry, EgressBudgetStore, Storage, WaitStore } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import {
   createExistingAgentMessaging,
+  type DeliveryReceipt,
   type OutboundMessage,
 } from "../../../src/router/messaging/send.js";
 import {
@@ -205,6 +206,7 @@ describe("fire-and-forget delivery", () => {
     expect(deliveries).toEqual([
       {
         messageId: "message:test",
+        idempotencyKey: "message:test",
         senderId: "actor:sender",
         operation: "fire_and_forget",
         body: "test message",
@@ -345,5 +347,170 @@ describe("delivery receipt", () => {
 
     expect(receipt.kind).toBe("sent");
     expect(WaitStore.list()).toHaveLength(0);
+  });
+});
+
+describe("durable send admission faults", () => {
+  test.each([
+    ["unexpected type", "other.fact", {}],
+    ["corrupt payload", "gateway.send.admitted", { signature: 7 }],
+  ] as const)("fails closed on an %s", async (_name, type, data) => {
+    const input = buildSendInput({ messageId: `message:bad-${_name}` });
+    const ledger = Storage.get().ledger;
+    if (ledger === undefined) throw new Error("ledger sub-adapter missing");
+    const appended = ledger.append(
+      {
+        streamId: `gateway_send:${encodeURIComponent(input.messageId)}`,
+        type,
+        data,
+      },
+      0,
+    );
+    expect(appended.kind).toBe("appended");
+
+    await expect(messaging().send(input)).rejects.toThrow(
+      type === "other.fact" ? "unexpected fact type" : "corrupt send admission fact",
+    );
+    expect(deliveries).toEqual([]);
+  });
+
+  test("reusing a fire-and-forget message id with different bytes throws before delivery", async () => {
+    const first = buildSendInput({ messageId: "message:immutable" });
+    expect((await messaging().send(first)).kind).toBe("sent");
+
+    await expect(messaging().send({ ...first, body: "mutated body" })).rejects.toThrow(
+      "already admitted with different content",
+    );
+    expect(deliveries).toHaveLength(1);
+  });
+
+  test("a Wait id owned by another message is denied before a second delivery", async () => {
+    const first = buildAwaitedSendInput({ messageId: "message:first-owner" });
+    const spec = first.waitSpec;
+    if (spec === undefined) throw new Error("awaited fixture requires waitSpec");
+    const second = buildAwaitedSendInput({
+      messageId: "message:second-owner",
+      waitSpec: { ...spec, correlation: { tokenHash: "second" } },
+    });
+
+    expect((await messaging().send(first)).kind).toBe("sent");
+    const receipt = await messaging().send(second);
+
+    expect(receipt.kind).toBe("denied");
+    if (receipt.kind === "denied") expect(receipt.code).toBe("wait_duplicate");
+    expect(deliveries).toHaveLength(1);
+    expect(WaitStore.get(spec.waitId)?.originMessageId).toBe("message:first-owner");
+  });
+});
+
+const activeBudget: Gateway.SocialBudget = {
+  id: "budget:reconciliation",
+  targetActorId: "actor:target",
+  maxPerWindow: 10,
+  windowMs: 60_000,
+  cooldownMs: 0,
+};
+
+type FaultPoint = "after_debit" | "after_wait" | "after_effect" | "after_receipt_cas";
+
+type Probe = Readonly<{
+  receipts: readonly Gateway.SendReceipt[];
+  effects: number;
+  attempts: number;
+  debits: number;
+  wait: ReturnType<typeof WaitStore.get>;
+}>;
+
+async function probe(point: FaultPoint): Promise<Probe> {
+  const external = new Map<string, DeliveryReceipt>();
+  let attempts = 0;
+  let failBeforeEffect = point === "after_debit" || point === "after_wait";
+  let failAfterEffect = point === "after_effect";
+  let failAfterReceipt = point === "after_receipt_cas";
+
+  const messaging = createExistingAgentMessaging({
+    deliver: (message: OutboundMessage) => {
+      attempts += 1;
+      if (failBeforeEffect) {
+        failBeforeEffect = false;
+        throw new Error(`fault:${point}`);
+      }
+      const recorded = external.get(message.messageId);
+      if (recorded !== undefined) return recorded;
+      const receipt = { externalMessageId: `platform:${message.messageId}` };
+      external.set(message.messageId, receipt);
+      if (failAfterEffect) {
+        failAfterEffect = false;
+        throw new Error(`fault:${point}`);
+      }
+      return receipt;
+    },
+    grants: () => [buildGrant("grant:reconciliation")],
+    budgets: () => [activeBudget],
+    publish: (event) => {
+      if (event.name === "messaging.sent" && failAfterReceipt) {
+        failAfterReceipt = false;
+        throw new Error(`fault:${point}`);
+      }
+    },
+  });
+
+  const input =
+    point === "after_debit"
+      ? buildSendInput({ messageId: `message:${point}` })
+      : buildAwaitedSendInput({
+          messageId: `message:${point}`,
+          waitSpec: (() => {
+            const spec = buildAwaitedSendInput().waitSpec;
+            if (spec === undefined) throw new Error("awaited fixture requires waitSpec");
+            return { ...spec, waitId: `wait:${point}` };
+          })(),
+        });
+
+  let injected: unknown;
+  try {
+    await messaging.send(input);
+  } catch (error) {
+    injected = error;
+  }
+  expect(injected).toBeInstanceOf(Error);
+  expect((injected as Error).message).toBe(`fault:${point}`);
+  const resumed = await messaging.send(input);
+
+  return {
+    receipts: [resumed],
+    effects: external.size,
+    attempts,
+    debits: EgressBudgetStore.readState("actor:sender", "actor:target", 0).countInWindow,
+    wait: input.waitSpec === undefined ? undefined : WaitStore.get(input.waitSpec.waitId),
+  };
+}
+
+beforeEach(() => {
+  Storage.reset();
+  Storage.initialize({ dbPath: ":memory:" });
+  registerAgentFixture("actor:sender");
+  registerAgentFixture("actor:target", [{ id: "endpoint:target", externalId: "target-1" }]);
+});
+
+afterEach(() => Storage.reset());
+
+describe("gateway send crash reconciliation transition table", () => {
+  test.each([
+    ["after_debit", 2],
+    ["after_wait", 2],
+    ["after_effect", 2],
+    ["after_receipt_cas", 1],
+  ] as const)("%s resumes with one debit and one external effect", async (point, attempts) => {
+    const result = await probe(point);
+
+    expect(result.receipts[0]?.kind).toBe("sent");
+    expect(result.effects).toBe(1);
+    expect(result.attempts).toBe(attempts);
+    expect(result.debits).toBe(1);
+    if (point !== "after_debit") {
+      expect(result.wait?.status).toBe("open");
+      expect(result.wait?.correlation.replyToMessageId).toBe(`platform:message:${point}`);
+    }
   });
 });

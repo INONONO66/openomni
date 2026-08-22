@@ -28,6 +28,8 @@ function toEventRecord(row: BusEventRow): EventRecord {
     category: row.category,
     visibility: EventVisibility.parse(row.visibility),
     data: JSON.parse(row.data) as Record<string, unknown>,
+    payloadStatus: row.payload_status ?? "unmarked",
+    payloadDiagnostic: row.payload_diagnostic ?? undefined,
     traceId: row.trace_id,
     durationMs: row.duration_ms ?? undefined,
     timeCreated: row.time_created,

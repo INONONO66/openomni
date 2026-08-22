@@ -17,14 +17,14 @@ import {
  * in the channels standalone suite.
  */
 
-const delivered: Array<{ externalId: string; body: string }> = [];
+const delivered: Array<{ externalId: string; body: string; idempotencyKey: string }> = [];
 
 function deliveryRoutes(): ReadonlyMap<string, ChannelDeliveryRoute> {
   return new Map<string, ChannelDeliveryRoute>([
     [
       "discord",
-      async (externalId, body) => {
-        delivered.push({ externalId, body });
+      async (externalId, body, idempotencyKey) => {
+        delivered.push({ externalId, body, idempotencyKey });
         return { externalMessageId: `plat-${delivered.length}` };
       },
     ],
@@ -43,7 +43,7 @@ const strangerEvent = {
   meta: { actor: { role: "user" } },
 } satisfies Gateway.DeliveredEvent;
 
-function makeRouter(): GatewayRouter {
+function makeRouter(routes: ReadonlyMap<string, ChannelDeliveryRoute> = deliveryRoutes()): GatewayRouter {
   return createGatewayRouter({
     sink: (event, data) => Bus.publish(event, data),
     deliver: async (delivery: Gateway.Deliver): Promise<Ingress.IngressResult> => ({
@@ -53,7 +53,7 @@ function makeRouter(): GatewayRouter {
       result: { output: "ok", finishReason: "stop" },
     }),
     messaging: {
-      deliveryRoutes: deliveryRoutes(),
+      deliveryRoutes: routes,
       grants: () => [],
       replyGrantRules: () => [
         {
@@ -153,7 +153,102 @@ describe("messaging-composed gateway router (#708)", () => {
     });
     expect(receipt.kind).toBe("sent");
     expect(delivered).toHaveLength(1);
-    expect(delivered[0]?.externalId).toBe("buyer-external");
+    expect(delivered[0]).toMatchObject({
+      externalId: "buyer-external",
+      idempotencyKey: "m-2",
+    });
+  });
+
+  test("fails closed when no channel owner delivers a granted endpoint", async () => {
+    const router = makeRouter(new Map());
+    await router.ingest(strangerEvent);
+
+    await expect(
+      router.messaging.send({
+        messageId: "m-owner-missing",
+        traceId: "t-owner-missing",
+        senderId: "persona-owner",
+        target: { actorId: "actor-buyer", endpointId: "ep-buyer" },
+        operation: "awaited",
+        body: "must not disappear",
+        at: 2_000,
+        waitSpec: {
+          waitId: "w-owner-missing",
+          ownerRef: { kind: "session", id: "s-1" },
+          allowedActions: ["report_result"],
+          expectedResponders: ["actor-buyer"],
+          resolutionPolicy: "first_reply",
+          expiresAt: 999_999_999,
+          followUpWindow: 0,
+        },
+      }),
+    ).rejects.toThrow("no registered channel surface delivers discord");
+  });
+
+  test("preserves a covered reply grant across router restart", async () => {
+    const firstRouter = makeRouter();
+    await firstRouter.ingest(strangerEvent);
+
+    // Constructing a new router over the same durable ledger stores simulates
+    // process restart: no inbound replay occurs before the covered reply.
+    const restartedRouter = makeRouter();
+    const receipt = await restartedRouter.messaging.send({
+      messageId: "m-restart",
+      traceId: "t-restart",
+      senderId: "persona-owner",
+      target: { actorId: "actor-buyer", endpointId: "ep-buyer" },
+      operation: "awaited",
+      body: "yes, still available",
+      at: Date.now(),
+      waitSpec: {
+        waitId: "w-restart",
+        ownerRef: { kind: "session", id: "s-1" },
+        allowedActions: ["report_result"],
+        expectedResponders: ["actor-buyer"],
+        resolutionPolicy: "first_reply",
+        expiresAt: Date.now() + 60_000,
+        followUpWindow: 0,
+      },
+    });
+
+    expect(receipt.kind).toBe("sent");
+  });
+
+  test("denies a restarted reply when the endpoint was rebound to another container", async () => {
+    const firstRouter = makeRouter();
+    await firstRouter.ingest(strangerEvent);
+
+    ActorRegistry.registerEndpoint({
+      id: "ep-buyer",
+      actorId: "actor-buyer",
+      channel: "discord",
+      externalId: "different-container",
+      workspace: "shop-ws",
+    });
+
+    const restartedRouter = makeRouter();
+    const receipt = await restartedRouter.messaging.send({
+      messageId: "m-rebound",
+      traceId: "t-rebound",
+      senderId: "persona-owner",
+      target: { actorId: "actor-buyer", endpointId: "ep-buyer" },
+      operation: "awaited",
+      body: "must not escape the initiating container",
+      at: Date.now(),
+      waitSpec: {
+        waitId: "w-rebound",
+        ownerRef: { kind: "session", id: "s-1" },
+        allowedActions: ["report_result"],
+        expectedResponders: ["actor-buyer"],
+        resolutionPolicy: "first_reply",
+        expiresAt: Date.now() + 60_000,
+        followUpWindow: 0,
+      },
+    });
+
+    expect(receipt.kind).toBe("denied");
+    if (receipt.kind === "denied") expect(receipt.code).toBe("ungranted");
+    expect(delivered).toEqual([]);
   });
 
   test("claimSurface returns the CAS owner and is idempotent for the same session", () => {

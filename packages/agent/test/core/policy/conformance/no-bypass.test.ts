@@ -8,11 +8,6 @@ import {
 } from "../../../../src/core/policy";
 import { Bus } from "@openomni/telemetry";
 
-const itSkip = Reflect.get(it, "skip") as (label: string, fn: () => void) => void;
-const documentedSkip = () => {
-  void 0;
-};
-
 /**
  * Canonical equivalent of the legacy `invoke.prepare` deny-all: one
  * registration bound to every invoke-boundary pre point, so no tool or
@@ -144,32 +139,4 @@ describe("policy no-bypass conformance — agent governed paths", () => {
     expect(decision.verdict).toBe("deny");
     expect(decision.reasonCodes).toContain("system prompt denied by conformance policy");
   });
-});
-
-describe("policy no-bypass conformance — known ungoverned paths", () => {
-  itSkip(
-    "UNGOVERNED: Direct MCP client packages/agent/src/runtime/mcp/client.ts:callTool() — no policy check before remote tool call",
-    documentedSkip,
-  );
-  itSkip(
-    "UNGOVERNED: Worker spawn packages/coordinator/src/worker-supervision/supervisor.ts:doStart() — no policy check",
-    documentedSkip,
-  );
-  itSkip(
-    "UNGOVERNED: Worker IPC dispatch packages/ipc/src/server.ts — no policy check",
-    documentedSkip,
-  );
-  itSkip("UNGOVERNED: Direct LLM run packages/llm/src/run.ts — no policy check", documentedSkip);
-  itSkip(
-    "UNGOVERNED: Session direct writes packages/ledger/src/session/index.ts — no policy gate",
-    documentedSkip,
-  );
-  itSkip(
-    "UNGOVERNED: Artifact writes packages/ledger/src/artifact/index.ts — no policy gate",
-    documentedSkip,
-  );
-  itSkip(
-    "UNGOVERNED: WorkItem writes packages/ledger/src/work-item/index.ts — no policy gate",
-    documentedSkip,
-  );
 });
