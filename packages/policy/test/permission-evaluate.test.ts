@@ -4,8 +4,6 @@ import { decisionFromEvaluation, evaluatePermission } from "@openomni/policy";
 
 const it = test;
 
-// Moved from packages/protocol/test/policy.test.ts with the evaluation engine
-// (#498 W1): protocol keeps the schemas, this package owns the behavior.
 describe("evaluatePermission", () => {
   const request = (
     resource: string,
@@ -19,6 +17,7 @@ describe("evaluatePermission", () => {
   it("allows by default", () => {
     expect(evaluatePermission({ action: "tool.call" }, request("any_tool"))).toMatchObject({
       action: "continue",
+      decision: "allow",
       reason: "default_allow",
       policyId: "guardrail.permission",
     });
@@ -27,6 +26,7 @@ describe("evaluatePermission", () => {
   it("aborts on action mismatch", () => {
     expect(evaluatePermission({ action: "task.create" }, request("any_tool"))).toMatchObject({
       action: "abort",
+      decision: "deny",
       reason: "action_mismatch",
       policyId: "guardrail.permission",
     });
@@ -40,6 +40,7 @@ describe("evaluatePermission", () => {
       ),
     ).toMatchObject({
       action: "abort",
+      decision: "deny",
       reason: "denylist",
       policyId: "guardrail.permission",
       matchedPattern: "dangerous_tool",
@@ -51,11 +52,13 @@ describe("evaluatePermission", () => {
 
     expect(evaluatePermission(permission, request("safe_tool"))).toMatchObject({
       action: "continue",
+      decision: "allow",
       reason: "allowlist",
       policyId: "guardrail.permission",
     });
     expect(evaluatePermission(permission, request("other_tool"))).toMatchObject({
       action: "abort",
+      decision: "deny",
       reason: "allowlist_miss",
       policyId: "guardrail.permission",
     });
@@ -123,78 +126,26 @@ describe("evaluatePermission", () => {
       ),
     ).toMatchObject({
       action: "abort",
+      decision: "require_approval",
       reason: "require_approval",
       policyId: "guardrail.permission",
       matchedPattern: "sensitive_tool",
     });
   });
 
-  it("matches wildcard for all policy lists", () => {
-    expect(
-      evaluatePermission({ action: "tool.call", allowlist: ["*"] }, request("file.read")),
-    ).toMatchObject({
-      action: "continue",
-      reason: "allowlist",
-      policyId: "guardrail.permission",
-      matchedPattern: "*",
+  for (const { name, list, pattern, resource, expected } of [
+    { name: "wildcard allowlist", list: "allowlist", pattern: "*", resource: "file.read", expected: { action: "continue", reason: "allowlist", policyId: "guardrail.permission", matchedPattern: "*" } },
+    { name: "wildcard denylist", list: "denylist", pattern: "*", resource: "file.read", expected: { action: "abort", reason: "denylist", policyId: "guardrail.permission", matchedPattern: "*" } },
+    { name: "wildcard approval", list: "requireApproval", pattern: "*", resource: "file.read", expected: { action: "abort", reason: "require_approval", policyId: "guardrail.permission", matchedPattern: "*" } },
+    { name: "prefix allowlist", list: "allowlist", pattern: "file.*", resource: "file.read", expected: { action: "continue", reason: "allowlist", policyId: "guardrail.permission", matchedPattern: "file.*" } },
+    { name: "prefix denylist", list: "denylist", pattern: "file.*", resource: "file.read", expected: { action: "abort", reason: "denylist", policyId: "guardrail.permission", matchedPattern: "file.*" } },
+    { name: "prefix approval", list: "requireApproval", pattern: "file.*", resource: "file.read", expected: { action: "abort", reason: "require_approval", policyId: "guardrail.permission", matchedPattern: "file.*" } },
+    { name: "prefix miss", list: "allowlist", pattern: "file.*", resource: "filesystem.read", expected: { action: "abort", reason: "allowlist_miss", policyId: "guardrail.permission" } },
+  ] as const) {
+    it(`matches ${name}`, () => {
+      expect(evaluatePermission({ action: "tool.call", [list]: [pattern] }, request(resource))).toMatchObject(expected);
     });
-    expect(
-      evaluatePermission({ action: "tool.call", denylist: ["*"] }, request("file.read")),
-    ).toMatchObject({
-      action: "abort",
-      reason: "denylist",
-      policyId: "guardrail.permission",
-      matchedPattern: "*",
-    });
-    expect(
-      evaluatePermission({ action: "tool.call", requireApproval: ["*"] }, request("file.read")),
-    ).toMatchObject({
-      action: "abort",
-      reason: "require_approval",
-      policyId: "guardrail.permission",
-      matchedPattern: "*",
-    });
-  });
-
-  it("matches prefix wildcard for all policy lists", () => {
-    expect(
-      evaluatePermission({ action: "tool.call", allowlist: ["file.*"] }, request("file.read")),
-    ).toMatchObject({
-      action: "continue",
-      reason: "allowlist",
-      policyId: "guardrail.permission",
-      matchedPattern: "file.*",
-    });
-    expect(
-      evaluatePermission({ action: "tool.call", denylist: ["file.*"] }, request("file.read")),
-    ).toMatchObject({
-      action: "abort",
-      reason: "denylist",
-      policyId: "guardrail.permission",
-      matchedPattern: "file.*",
-    });
-    expect(
-      evaluatePermission(
-        { action: "tool.call", requireApproval: ["file.*"] },
-        request("file.read"),
-      ),
-    ).toMatchObject({
-      action: "abort",
-      reason: "require_approval",
-      policyId: "guardrail.permission",
-      matchedPattern: "file.*",
-    });
-    expect(
-      evaluatePermission(
-        { action: "tool.call", allowlist: ["file.*"] },
-        request("filesystem.read"),
-      ),
-    ).toMatchObject({
-      action: "abort",
-      reason: "allowlist_miss",
-      policyId: "guardrail.permission",
-    });
-  });
+  }
 
   it("gives denylist precedence over approval and allowlist matches", () => {
     expect(
@@ -213,43 +164,6 @@ describe("evaluatePermission", () => {
       policyId: "guardrail.permission",
       matchedPattern: "file.*",
     });
-  });
-
-  it("populates decision for every result branch", () => {
-    const allowDefault = evaluatePermission(undefined, request("bash"));
-    expect(allowDefault.decision).toBe("allow");
-    expect(allowDefault.action).toBe("continue");
-
-    const allowList = evaluatePermission(
-      { action: "tool.call", allowlist: ["bash"] },
-      request("bash"),
-    );
-    expect(allowList.decision).toBe("allow");
-
-    const denyList = evaluatePermission(
-      { action: "tool.call", denylist: ["bash"] },
-      request("bash"),
-    );
-    expect(denyList.decision).toBe("deny");
-
-    const requireApproval = evaluatePermission(
-      { action: "tool.call", requireApproval: ["bash"] },
-      request("bash"),
-    );
-    expect(requireApproval.decision).toBe("require_approval");
-    expect(requireApproval.action).toBe("abort");
-
-    const allowMiss = evaluatePermission(
-      { action: "tool.call", allowlist: ["other"] },
-      request("bash"),
-    );
-    expect(allowMiss.decision).toBe("deny");
-
-    const actionMismatch = evaluatePermission(
-      { action: "channel.send", allowlist: ["*"] },
-      request("bash"),
-    );
-    expect(actionMismatch.decision).toBe("deny");
   });
 
   it("preserves require_approval decision when an input rule supplies a custom reason", () => {

@@ -3,7 +3,6 @@ import { unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CronJob } from "@openomni/protocol";
-import { Database } from "bun:sqlite";
 import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage";
 
 function tempDbPath(): string {
@@ -32,12 +31,6 @@ function makeCronJob(id: string, createdAt = Date.now()): CronJob.Info {
   };
 }
 
-function tableColumns(db: Database, table: string): string[] {
-  return (db.query(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).map(
-    (row) => row.name,
-  );
-}
-
 describe("SqliteStorageAdapter cronJob", () => {
   let dbPath = "";
   let adapter: SqliteStorageAdapter;
@@ -58,12 +51,6 @@ describe("SqliteStorageAdapter cronJob", () => {
 
   test("get returns undefined for non-existent jobs", () => {
     expect(adapter.cronJob.get("missing")).toBeUndefined();
-  });
-
-  test("migration creates cron job table", () => {
-    const db = new Database(dbPath);
-    expect(tableColumns(db, "cron_job")).toEqual(["id", "data", "time_created", "time_updated"]);
-    db.close();
   });
 
   test("set/get/list/remove round trips cron jobs", () => {

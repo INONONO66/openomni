@@ -176,252 +176,39 @@ describe("SqliteStorageAdapter appConnectorInstallation", () => {
     expect(AppConnectorInstallationStore.get(registered.id)).toEqual(consented);
   });
 
-  test("store rejects consent grants outside connector requirements", () => {
-    const registered = AppConnectorInstallationStore.set(installation("install-1", 100));
-    AppConnectorInstallationStore.requestConsent(registered.id);
+  test("store rejects every consent dimension outside connector requirements", () => {
+    type ConsentInput = Parameters<typeof AppConnectorInstallationStore.grantConsent>[1];
+    const firstRule = { toolPattern: "bash", field: "command", pattern: "^git", action: "allow" as const, priority: 0 };
+    const secondRule = { ...firstRule, pattern: "^bun" };
+    const cases: ReadonlyArray<{
+      name: string;
+      permissions?: AppConnector.Definition["requires"]["permissions"];
+      consent: ConsentInput;
+      error: string;
+    }> = [
+      { name: "unrequested credential", consent: { grantedBy: "act_owner", credentials: ["ANTHROPIC_API_KEY"] }, error: "not requested by connector" },
+      { name: "unrequested capability", consent: { grantedBy: "act_owner", capabilities: ["shell"] }, error: "not requested by connector" },
+      { name: "broader permission", consent: { grantedBy: "act_owner", permissions: [{ action: "tool.call", allowlist: ["*"] }] }, error: "exceeds connector requirement" },
+      { name: "unrequested allow dimension", permissions: [{ action: "tool.call", allowLabels: ["capability:read"] }], consent: { grantedBy: "act_owner", permissions: [{ action: "tool.call", allowLabels: ["capability:read"], allowlist: ["*"] }] }, error: "allowlist exceeds connector requirement" },
+      { name: "omitted allowing field", consent: { grantedBy: "act_owner", permissions: [{ action: "tool.call" }] }, error: "omits connector requirement" },
+      { name: "omitted restrictive field", permissions: [{ action: "tool.call", denylist: ["rm.*"] }], consent: { grantedBy: "act_owner", permissions: [{ action: "tool.call" }] }, error: "denylist omits connector requirement" },
+      { name: "weakened restrictive field", permissions: [{ action: "tool.call", denylist: ["rm.*"] }], consent: { grantedBy: "act_owner", permissions: [{ action: "tool.call", denylist: [] }] }, error: "denylist omits connector requirement" },
+      { name: "omitted permission actions", consent: { grantedBy: "act_owner", capabilities: ["git"] }, error: "omit connector requirements" },
+      { name: "empty permissions", consent: { grantedBy: "act_owner", permissions: [] }, error: "omit connector requirements" },
+      { name: "one omitted action", permissions: [{ action: "tool.call", allowlist: ["git.*"] }, { action: "file.read", allowlist: ["docs/*"] }], consent: { grantedBy: "act_owner", permissions: [{ action: "tool.call", allowlist: ["git.*"] }] }, error: "omits connector requirement" },
+      { name: "duplicate required action", permissions: [{ action: "tool.call", allowlist: ["git.*"] }, { action: "tool.call", allowLabels: ["capability:read"] }], consent: { grantedBy: "act_owner", permissions: [{ action: "tool.call", allowlist: ["git.*"], allowLabels: ["capability:read"] }] }, error: "duplicate connector requirement" },
+      { name: "duplicate input rule omits another", permissions: [{ action: "tool.call", allowlist: ["bash"], inputRules: [firstRule, secondRule] }], consent: { grantedBy: "act_owner", permissions: [{ action: "tool.call", allowlist: ["bash"], inputRules: [firstRule, firstRule] }] }, error: "inputRules omits connector requirement" },
+    ];
 
-    expect(() =>
-      AppConnectorInstallationStore.grantConsent(registered.id, {
-        grantedBy: "act_owner",
-        credentials: ["ANTHROPIC_API_KEY"],
-      }),
-    ).toThrow("not requested by connector");
-  });
-
-  test("store rejects consent capabilities outside connector requirements", () => {
-    const registered = AppConnectorInstallationStore.set(installation("install-1", 100));
-    AppConnectorInstallationStore.requestConsent(registered.id);
-
-    expect(() =>
-      AppConnectorInstallationStore.grantConsent(registered.id, {
-        grantedBy: "act_owner",
-        capabilities: ["shell"],
-      }),
-    ).toThrow("not requested by connector");
-  });
-
-  test("store rejects consent permissions broader than connector requirements", () => {
-    const registered = AppConnectorInstallationStore.set(installation("install-1", 100));
-    AppConnectorInstallationStore.requestConsent(registered.id);
-
-    expect(() =>
-      AppConnectorInstallationStore.grantConsent(registered.id, {
-        grantedBy: "act_owner",
-        permissions: [{ action: "tool.call", allowlist: ["*"] }],
-      }),
-    ).toThrow("exceeds connector requirement");
-  });
-
-  test("store rejects unrequested allow dimensions that bypass requested label ceilings", () => {
-    const record = installation("install-1", 100);
-    const registered = AppConnectorInstallationStore.set({
-      ...record,
-      definition: {
-        ...record.definition,
-        requires: {
-          ...record.definition.requires,
-          permissions: [{ action: "tool.call", allowLabels: ["capability:read"] }],
-        },
-      },
-    });
-    AppConnectorInstallationStore.requestConsent(registered.id);
-
-    expect(() =>
-      AppConnectorInstallationStore.grantConsent(registered.id, {
-        grantedBy: "act_owner",
-        permissions: [
-          {
-            action: "tool.call",
-            allowLabels: ["capability:read"],
-            allowlist: ["*"],
-          },
-        ],
-      }),
-    ).toThrow("allowlist exceeds connector requirement");
-  });
-
-  test("store rejects consent permissions that omit requested allowing fields", () => {
-    const registered = AppConnectorInstallationStore.set(installation("install-1", 100));
-    AppConnectorInstallationStore.requestConsent(registered.id);
-
-    expect(() =>
-      AppConnectorInstallationStore.grantConsent(registered.id, {
-        grantedBy: "act_owner",
-        permissions: [{ action: "tool.call" }],
-      }),
-    ).toThrow("omits connector requirement");
-  });
-
-  test("store rejects consent permissions that omit requested restrictive fields", () => {
-    const record = installation("install-1", 100);
-    const registered = AppConnectorInstallationStore.set({
-      ...record,
-      definition: {
-        ...record.definition,
-        requires: {
-          ...record.definition.requires,
-          permissions: [{ action: "tool.call", denylist: ["rm.*"] }],
-        },
-      },
-    });
-    AppConnectorInstallationStore.requestConsent(registered.id);
-
-    expect(() =>
-      AppConnectorInstallationStore.grantConsent(registered.id, {
-        grantedBy: "act_owner",
-        permissions: [{ action: "tool.call" }],
-      }),
-    ).toThrow("denylist omits connector requirement");
-  });
-
-  test("store rejects consent permissions that weaken requested restrictive fields", () => {
-    const record = installation("install-1", 100);
-    const registered = AppConnectorInstallationStore.set({
-      ...record,
-      definition: {
-        ...record.definition,
-        requires: {
-          ...record.definition.requires,
-          permissions: [{ action: "tool.call", denylist: ["rm.*"] }],
-        },
-      },
-    });
-    AppConnectorInstallationStore.requestConsent(registered.id);
-
-    expect(() =>
-      AppConnectorInstallationStore.grantConsent(registered.id, {
-        grantedBy: "act_owner",
-        permissions: [{ action: "tool.call", denylist: [] }],
-      }),
-    ).toThrow("denylist omits connector requirement");
-  });
-
-  test("store rejects consent that omits requested permission actions", () => {
-    const registered = AppConnectorInstallationStore.set(installation("install-1", 100));
-    AppConnectorInstallationStore.requestConsent(registered.id);
-
-    expect(() =>
-      AppConnectorInstallationStore.grantConsent(registered.id, {
-        grantedBy: "act_owner",
-        capabilities: ["git"],
-      }),
-    ).toThrow("omit connector requirements");
-  });
-
-  test("store rejects empty consent permissions when connector requires permissions", () => {
-    const registered = AppConnectorInstallationStore.set(installation("install-1", 100));
-    AppConnectorInstallationStore.requestConsent(registered.id);
-
-    expect(() =>
-      AppConnectorInstallationStore.grantConsent(registered.id, {
-        grantedBy: "act_owner",
-        permissions: [],
-      }),
-    ).toThrow("omit connector requirements");
-  });
-
-  test("store rejects consent permissions that omit one requested action", () => {
-    const record = installation("install-1", 100);
-    const registered = AppConnectorInstallationStore.set({
-      ...record,
-      definition: {
-        ...record.definition,
-        requires: {
-          ...record.definition.requires,
-          permissions: [
-            { action: "tool.call", allowlist: ["git.*"] },
-            { action: "file.read", allowlist: ["docs/*"] },
-          ],
-        },
-      },
-    });
-    AppConnectorInstallationStore.requestConsent(registered.id);
-
-    expect(() =>
-      AppConnectorInstallationStore.grantConsent(registered.id, {
-        grantedBy: "act_owner",
-        permissions: [{ action: "tool.call", allowlist: ["git.*"] }],
-      }),
-    ).toThrow("omits connector requirement");
-  });
-
-  test("store rejects connector permission requirements with duplicate actions", () => {
-    const record = installation("install-1", 100);
-    const registered = AppConnectorInstallationStore.set({
-      ...record,
-      definition: {
-        ...record.definition,
-        requires: {
-          ...record.definition.requires,
-          permissions: [
-            { action: "tool.call", allowlist: ["git.*"] },
-            { action: "tool.call", allowLabels: ["capability:read"] },
-          ],
-        },
-      },
-    });
-    AppConnectorInstallationStore.requestConsent(registered.id);
-
-    expect(() =>
-      AppConnectorInstallationStore.grantConsent(registered.id, {
-        grantedBy: "act_owner",
-        permissions: [
-          {
-            action: "tool.call",
-            allowlist: ["git.*"],
-            allowLabels: ["capability:read"],
-          },
-        ],
-      }),
-    ).toThrow("duplicate connector requirement");
-  });
-
-  test("store rejects consent input rules that duplicate one requested rule and omit another", () => {
-    const firstRule = {
-      toolPattern: "bash",
-      field: "command",
-      pattern: "^git",
-      action: "allow" as const,
-      priority: 0,
-    };
-    const secondRule = {
-      toolPattern: "bash",
-      field: "command",
-      pattern: "^bun",
-      action: "allow" as const,
-      priority: 0,
-    };
-    const record = installation("install-1", 100);
-    const registered = AppConnectorInstallationStore.set({
-      ...record,
-      definition: {
-        ...record.definition,
-        requires: {
-          ...record.definition.requires,
-          permissions: [
-            {
-              action: "tool.call",
-              allowlist: ["bash"],
-              inputRules: [firstRule, secondRule],
-            },
-          ],
-        },
-      },
-    });
-    AppConnectorInstallationStore.requestConsent(registered.id);
-
-    expect(() =>
-      AppConnectorInstallationStore.grantConsent(registered.id, {
-        grantedBy: "act_owner",
-        permissions: [
-          {
-            action: "tool.call",
-            allowlist: ["bash"],
-            inputRules: [firstRule, firstRule],
-          },
-        ],
-      }),
-    ).toThrow("inputRules omits connector requirement");
+    for (const [index, item] of cases.entries()) {
+      const record = installation(`invalid-${index}`, 100 + index);
+      const registered = AppConnectorInstallationStore.set(item.permissions === undefined ? record : {
+        ...record,
+        definition: { ...record.definition, requires: { ...record.definition.requires, permissions: item.permissions } },
+      });
+      AppConnectorInstallationStore.requestConsent(registered.id);
+      expect(() => AppConnectorInstallationStore.grantConsent(registered.id, item.consent), item.name).toThrow(item.error);
+    }
   });
 
   test("store permits omitted consent permissions when connector requests none", () => {

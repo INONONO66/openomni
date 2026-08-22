@@ -148,54 +148,37 @@ describe("PendingInteractionStore (frozen legacy writer, #548)", () => {
     ).toHaveLength(0);
   });
 
-  test("read-time expiry gates frozen open rows past expiresAt", async () => {
-    const sessionId = await createWorkerRun("run-1");
-    seedFrozenRow(frozenRecord("pi-expired-open", sessionId, { expiresAt: 1_000 }));
-
-    const query = {
-      endpointId: "telegram:seller-1",
-      channelId: "telegram:dm",
-      tokenHash: "token-1",
-    };
-    expect(PendingInteractionStore.findByCorrelation(query, 999)).toHaveLength(1);
-    expect(PendingInteractionStore.findByCorrelation(query, 1_001)).toHaveLength(0);
-  });
-
-  test("read-time expiry keeps resolved rows matchable only during the follow-up window", async () => {
-    const sessionId = await createWorkerRun("run-1");
-    seedFrozenRow(
-      frozenRecord("pi-resolved", sessionId, {
-        status: "resolved",
-        resolvedAt: 20,
-      }),
-    );
-
-    const query = {
-      endpointId: "telegram:seller-1",
-      channelId: "telegram:dm",
-      threadId: "thread-1",
-    };
-    expect(PendingInteractionStore.findByCorrelation(query, 119)).toHaveLength(1);
-    expect(PendingInteractionStore.findByCorrelation(query, 121)).toHaveLength(0);
-  });
-
-  test("read-time expiry gates follow-up rows by the original follow-up window", async () => {
-    const sessionId = await createWorkerRun("run-1");
-    seedFrozenRow(
-      frozenRecord("pi-follow-up", sessionId, {
-        status: "follow_up",
-        resolvedAt: 20,
-      }),
-    );
-
-    const query = {
-      endpointId: "telegram:seller-1",
-      channelId: "telegram:dm",
-      threadId: "thread-1",
-    };
-    expect(PendingInteractionStore.findByCorrelation(query, 120)).toHaveLength(1);
-    expect(PendingInteractionStore.findByCorrelation(query, 121)).toHaveLength(0);
-  });
+  for (const { name, id, overrides, query, boundaries } of [
+    {
+      name: "open rows past expiresAt",
+      id: "pi-expired-open",
+      overrides: { expiresAt: 1_000 },
+      query: { endpointId: "telegram:seller-1", channelId: "telegram:dm", tokenHash: "token-1" },
+      boundaries: [[999, 1], [1_001, 0]],
+    },
+    {
+      name: "resolved rows outside the follow-up window",
+      id: "pi-resolved",
+      overrides: { status: "resolved", resolvedAt: 20 },
+      query: { endpointId: "telegram:seller-1", channelId: "telegram:dm", threadId: "thread-1" },
+      boundaries: [[119, 1], [121, 0]],
+    },
+    {
+      name: "follow-up rows at the inclusive original window boundary",
+      id: "pi-follow-up",
+      overrides: { status: "follow_up", resolvedAt: 20 },
+      query: { endpointId: "telegram:seller-1", channelId: "telegram:dm", threadId: "thread-1" },
+      boundaries: [[120, 1], [121, 0]],
+    },
+  ] as const) {
+    test(`read-time expiry gates ${name}`, async () => {
+      const sessionId = await createWorkerRun("run-1");
+      seedFrozenRow(frozenRecord(id, sessionId, overrides));
+      for (const [now, count] of boundaries) {
+        expect(PendingInteractionStore.findByCorrelation(query, now)).toHaveLength(count);
+      }
+    });
+  }
 
   test("frozen rows survive adapter recreation", async () => {
     const adapter = Storage.getAdapter();
