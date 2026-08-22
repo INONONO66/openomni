@@ -82,10 +82,14 @@ export async function dispatchModelRequest(
   engine: PolicyEngineInstance,
   config: ChatAgentConfig,
   agentBase: AgentRunBase,
+  // The model THIS connection actually calls (#752 review F4) — after a
+  // fallback switch, `config.model.id` names the primary, and a per-model
+  // policy would judge the wrong model.
+  modelId: string,
 ): Promise<AgentResult | null> {
   const decision = await engine.dispatchPoint(
     "connection.llm.pre",
-    buildLifecyclePolicyContext(state, config, agentBase, { modelId: config.model.id }),
+    buildLifecyclePolicyContext(state, config, agentBase, { modelId }),
   );
 
   if (PolicyDecision.isBlocking(decision)) return guardAbortedResult(state);
@@ -99,13 +103,15 @@ export async function dispatchModelResponse(
   config: ChatAgentConfig,
   response: ModelResponseFacts,
   agentBase: AgentRunBase,
+  /** The model this connection actually called (#752 review F4). */
+  modelId: string,
 ): Promise<AgentResult | null> {
   const decision = await engine.dispatchPoint(
     "connection.llm.post",
     buildLifecyclePolicyContext(state, config, agentBase, {
       isCompletion: response.outcome.type === "stop",
       toolInput: { outcomeType: response.outcome.type },
-      modelId: config.model.id,
+      modelId,
       responseTokens: response.responseTokens,
     }),
   );

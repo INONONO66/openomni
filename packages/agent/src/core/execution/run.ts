@@ -9,6 +9,7 @@ import {
 } from "./turn";
 import { ModelsDev, Provider, run as llmRun } from "@openomni/llm";
 import type { Sink } from "@openomni/llm";
+import { Placement } from "@openomni/placement";
 import type { AgentResult, ChatAgentConfig, ChatAgentInput } from "../types";
 import * as Retry from "../retry";
 import { PolicyEngine, type PolicyEngineInstance } from "../policy";
@@ -23,6 +24,7 @@ import {
   createRunState,
   recordRunAttempt,
   recordRunWindow,
+  resetModelWindowGuards,
   nonEmptyString,
   requireTrace,
   type AgentRunBase,
@@ -42,9 +44,29 @@ export async function runAgent(
   config: ChatAgentConfig,
   sink?: Sink,
 ): Promise<AgentResult> {
-  const retryPolicy = Retry.DEFAULT_RETRY_POLICY;
+  // With a fallback chain configured, validation_error joins the retryable
+  // set (#752 review F1): a refusal/unusable shape is model-specific, so a
+  // DIFFERENT candidate can plausibly succeed. Without a chain it stays
+  // terminal (blind same-model retry). Once a chain is spent, placement
+  // clamps to the last candidate, so the remaining attempts DO re-ask the
+  // same model — bounded by maxAttempts, and the retry policy stays the
+  // termination owner.
+  const retryPolicy =
+    (config.modelFallbacks?.length ?? 0) > 0
+      ? {
+          ...Retry.DEFAULT_RETRY_POLICY,
+          retryOn: [...(Retry.DEFAULT_RETRY_POLICY.retryOn ?? []), "validation_error" as const],
+        }
+      : Retry.DEFAULT_RETRY_POLICY;
   let attempt = 1;
   let thrownFailure: RunFailureFacts | undefined;
+  // The decided reason of every finished attempt, oldest first — the input
+  // to the placement fold below. Decided facts only (the retry decision's
+  // own record), never re-derived from the thrown error (#752).
+  const failureReasons: string[] = [];
+  // The previous attempt's model, for invalidating model-scoped window
+  // guards on a fallback switch (#752 review F3).
+  let lastModelKey: string | undefined;
 
   const trace = requireTrace("agent run", input.traceContext);
   const { traceId, sessionId, runId } = trace;
@@ -107,8 +129,27 @@ export async function runAgent(
         // stamped before any dispatch of this attempt, so run.turn.pre can
         // pair it with turnIndex to tell a retry re-entry from progress.
         recordRunAttempt(state, attempt);
+        // Fallback chain (#752): THIS attempt's model is a pure placement
+        // selection over the decided failure history — the primary when no
+        // fallbacks are configured. Resolution stays per-attempt, so a
+        // fallback switch also re-records the window fact below and the
+        // per-call assistant records carry the model actually used.
+        const attemptModel = Placement.selectModel(
+          [config.model, ...(config.modelFallbacks ?? [])],
+          failureReasons,
+        ).model;
+        // A model SWITCH invalidates the model-scoped window guards (#752
+        // review F3): "the remaining headroom is real" (windowYieldDisarmed)
+        // and the spent L5 overflow recovery were judgments about the
+        // PREVIOUS model's window — carried over, a smaller fallback window
+        // would run blind with its one recovery already consumed.
+        const modelKey = `${attemptModel.provider}/${attemptModel.id}`;
+        if (lastModelKey !== undefined && modelKey !== lastModelKey) {
+          resetModelWindowGuards(state);
+        }
+        lastModelKey = modelKey;
         const providerModel = await (config.llm?.resolveProviderModel ?? resolveProviderModel)(
-          config.model,
+          attemptModel,
         );
         recordRunWindow(state, providerModel.limit?.context ?? 0);
         const configuredToolChoice = config.toolChoice;
@@ -131,7 +172,13 @@ export async function runAgent(
           if (turnResult.type === "complete") return finish(turnResult.result);
 
           const runLlm = config.llm?.run ?? llmRun;
-          const modelRequestResult = await dispatchModelRequest(state, engine, config, agentBase);
+          const modelRequestResult = await dispatchModelRequest(
+            state,
+            engine,
+            config,
+            agentBase,
+            providerModel.id,
+          );
           if (modelRequestResult) return finish(modelRequestResult);
           const outcome = await runLlm(turnResult.turn.runInput, turnResult.turn.trackingSink);
           const modelResponseResult = await dispatchModelResponse(
@@ -143,6 +190,7 @@ export async function runAgent(
               responseTokens: turnResult.turn.turnUsage.outputTokens,
             },
             agentBase,
+            providerModel.id,
           );
           if (modelResponseResult) return finish(modelResponseResult);
 
@@ -184,6 +232,7 @@ export async function runAgent(
           // `Retry.sleep`, and the reason and ceiling it has to report are the
           // ones decided here — re-deriving them from the abort would make the
           // terminal record contradict this run's own retry record.
+          failureReasons.push(decision.failure.reason);
           thrownFailure = decision.failure;
           await Retry.sleep(decision.backoffMs, config.signal);
           thrownFailure = undefined;

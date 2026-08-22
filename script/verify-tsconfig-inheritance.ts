@@ -392,6 +392,8 @@ export function repoManifest(): Manifest {
       "packages/llm/test",
       "packages/openomni/src",
       "packages/openomni/test",
+      "packages/placement/src",
+      "packages/placement/test",
       "packages/policy/src",
       "packages/policy/test",
       "packages/protocol/src",

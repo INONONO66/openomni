@@ -1,6 +1,6 @@
 # packages/agent
 
-`ChatAgent` — an invocation-scoped LLM + tool ReAct loop driven by a policy engine — plus the MCP client runtime. Depends on `@openomni/protocol`, `@openomni/policy`, and `@openomni/llm`. It reports through an injected `BusEvent.Sink` on `ChatAgentConfig.events`, so `src/` imports no implementation of the observation channel and reaches no durable storage — `check-deps.ts` carries a `srcAllowedDeps` for this package that rejects both (#606).
+`ChatAgent` — an invocation-scoped LLM + tool ReAct loop driven by a policy engine — plus the MCP client runtime. Depends on `@openomni/protocol`, `@openomni/policy`, `@openomni/placement` (the #752 pure model-fallback fold), and `@openomni/llm`. It reports through an injected `BusEvent.Sink` on `ChatAgentConfig.events`, so `src/` imports no implementation of the observation channel and reaches no durable storage — `check-deps.ts` carries a `srcAllowedDeps` for this package that rejects both (#606).
 
 ## STRUCTURE
 
@@ -68,6 +68,7 @@ adds the one-line re-export in the same PR that imports it.
 | `budget?`        | `AgentBudget`                            | Max turns / tool calls / wall time / tool runtime (use `-1` for unlimited)  |
 | `toolExecutor?`  | `(call: Tool.Call, context?: Tool.ExecutionContext) => Promise<Tool.Result>` | Custom tool executor; wrapped by `createToolExecutor` |
 | `signal?`        | `AbortSignal`                            | External cancellation                                                       |
+| `modelFallbacks?` | `Model.Ref[]`                           | Ordered fallback models after `model` (#752): a chain-advancing failure (timeout / transient_error / validation_error) moves the next retry attempt to the next candidate via the pure `@openomni/placement` fold; tool errors, context overflow (the compaction recovery retries the SAME model), and aborts never advance; a spent chain clamps to its last candidate — retry termination stays the retry policy's call. A configured chain also makes `validation_error` retryable (terminal without one); a model switch resets the model-scoped window guards (`windowYieldDisarmed`, the L5 overflow one-shot) and the `connection.llm.pre/post` context carries the model ACTUALLY called |
 | `steeringPending?` | `() => boolean`                        | Mid-turn steering signal (#751): loop-native stop-condition port in the same class as `signal` and the window yield — a wake-up check the step loop reads at step boundaries, NEVER a judgment surface. The behavioral decision (what to inject, whether to continue) flows exclusively through the `run.turn.post` policy point; the policy plane cannot evaluate inside the llm step loop by ring design (llm imports no policy engine), so a signal port is the only honest shape |
 | `middleware?`    | `PolicyEngineRegistration[]`             | Caller-owned canonical point registrations; legacy timing shapes are REJECTED fail-closed at registration (#530, typed `legacy_timing_registration`) |
 | `providerOptions?` | `Record<string, unknown>`              | Forwarded to the underlying provider SDK                                    |

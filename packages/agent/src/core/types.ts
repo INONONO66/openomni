@@ -20,6 +20,19 @@ export interface ChatAgentConfig {
   systemPrompt?: string;
   tools?: AgentToolSpec[];
   model: Model.Ref;
+  /**
+   * Ordered fallback models AFTER `model` (#752). On a chain-advancing
+   * failure (timeout / transient_error / validation_error) the next retry
+   * attempt resolves the next candidate via the pure `@openomni/placement`
+   * fold. Tool errors, context overflow (the compaction recovery retries the
+   * SAME model), and aborts never advance the chain; when the chain is spent
+   * the last candidate absorbs the remaining attempts — WHEN the run stops
+   * retrying stays the retry policy's decision. Configuring a chain also
+   * makes `validation_error` retryable (it is terminal without one: a
+   * refusal/unusable shape only earns a retry when a DIFFERENT model can
+   * answer it). Absent = every attempt uses `model`.
+   */
+  modelFallbacks?: Model.Ref[];
   budget?: AgentBudget;
   onStepFinish?: (step: AgentStep) => void | Promise<void>;
   toolExecutor?: (call: Tool.Call, context?: Tool.ExecutionContext) => Promise<Tool.Result>;

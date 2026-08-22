@@ -28,7 +28,7 @@ describe("model execution deny verdicts", () => {
       fn,
     });
 
-    const result = await dispatchModelRequest(makeState(), engine, makeConfig(), makeAgentBase());
+    const result = await dispatchModelRequest(makeState(), engine, makeConfig(), makeAgentBase(), "test-model");
 
     expect(result).not.toBeNull();
     expect(result?.guardAborted).toBe(true);
@@ -46,6 +46,7 @@ describe("model execution deny verdicts", () => {
         makeConfig(),
         { outcome: { type: "stop" }, responseTokens: 0 },
         makeAgentBase(),
+        "test-model",
       );
       await Promise.resolve();
 
