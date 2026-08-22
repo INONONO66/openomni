@@ -287,6 +287,10 @@ export async function buildTurn(
         toolExecutor: hookedExecutor,
         toolChoice: configuredToolChoice,
         maxSteps: stepCap,
+        // Agent owns retry attempts, their backoff, and fallback selection.
+        // Disable llm.run's nested transport retries for this orchestrated path;
+        // standalone callers retain llm's bounded default when this is absent.
+        maxRetryAttempts: 0,
         // Yield at the same ratio the compaction trigger defaults to: the
         // loop stops at a step boundary once the window fills, the seam
         // below gets its chance on every path — Resident and tool loops

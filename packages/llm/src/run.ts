@@ -28,6 +28,11 @@ export interface RunInput {
   toolChoice?: "auto" | "required" | "none";
   maxSteps?: number;
   /**
+   * Transport retries performed inside this single run call. Absent keeps the
+   * bounded standalone default; orchestrators that own retry attempts set 0.
+   */
+  maxRetryAttempts?: number;
+  /**
    * Step-boundary yield: stop the step loop once the last finished step's
    * input tokens (the ai SDK's cache-inclusive prompt total) reach this.
    * The loop ends gracefully at a step boundary — tool pairs complete, the
@@ -302,6 +307,7 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
     sink,
     createStream,
     toolNames: originalByWire,
+    maxRetryAttempts: input.maxRetryAttempts,
     trace: {
       traceId,
       sessionId: sessionID,
