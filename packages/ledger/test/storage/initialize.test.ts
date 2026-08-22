@@ -29,6 +29,25 @@ describe("Storage.initialize", () => {
     expect(Storage.getAdapter()).toBeInstanceOf(SqliteStorageAdapter);
   });
 
+  test("refuses an incomplete production sqlite adapter before first use", () => {
+    const adapter = new SqliteStorageAdapter(":memory:");
+    Object.defineProperty(adapter, "workItem", { configurable: true, value: undefined });
+
+    let refusal: unknown;
+    try {
+      Storage.configure(adapter);
+    } catch (error) {
+      refusal = error;
+    } finally {
+      adapter.close();
+    }
+
+    expect(refusal).toBeInstanceOf(Storage.IncompleteAdapterError);
+    expect(refusal).toMatchObject({ code: "incomplete_adapter", capability: "workItem" });
+    expect((refusal as Error).message).toContain("workItem");
+    expect(() => Storage.get()).toThrow("Storage.get() called before initialize()");
+  });
+
   test("sessions persist to disk with sqlite backend", () => {
     const dbPath = join(tmpDir, ".openomni", "storage.db");
     initialize({ dbPath });

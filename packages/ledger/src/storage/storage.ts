@@ -5,6 +5,8 @@ import { createWorkItemCompletionWriter } from "../work-item/completion-writer.j
 import type { SessionInfo } from "../session/info";
 import type { WorkerRunStateStore } from "../worker-run/state-store";
 
+export const productionStorageAdapterBrand: unique symbol = Symbol("productionStorageAdapter");
+
 // Same-process application modules are trusted composition-root code. The completion writer
 // prevents accidental bypass through ordinary store APIs; it is not an OS isolation boundary.
 export namespace Storage {
@@ -21,6 +23,7 @@ export namespace Storage {
   };
 
   export interface Adapter {
+    readonly [productionStorageAdapterBrand]?: true;
     transaction<T>(operation: () => T): T;
     /**
      * Releases the adapter's resources (SQLite: shutdown WAL checkpoint +
@@ -131,10 +134,56 @@ type StorageScope = {
 const storageScope = new AsyncLocalStorage<StorageScope>();
 
 export namespace Storage {
+  const requiredProductionCapabilities = [
+    "session",
+    "message",
+    "part",
+    "transcriptFact",
+    "surfaceKey",
+    "artifact",
+    "workItem",
+    "wait",
+    "engagement",
+    "ledger",
+    "workerRunState",
+    "pendingAsk",
+    "pendingInteraction",
+    "workerGrant",
+    "cronJob",
+    "egressBudget",
+    "actorRegistry",
+    "blacklist",
+    "channelGrant",
+    "appConnectorInstallation",
+  ] as const satisfies readonly (keyof Adapter)[];
+
+  export type ProductionCapability = (typeof requiredProductionCapabilities)[number];
+
+  export class IncompleteAdapterError extends Error {
+    readonly code = "incomplete_adapter" as const;
+
+    constructor(readonly capability: ProductionCapability) {
+      super(`Production storage adapter is missing required capability: ${capability}`);
+      this.name = "IncompleteAdapterError";
+    }
+  }
+
+  export function assertComplete(adapter: Adapter): void {
+    for (const capability of requiredProductionCapabilities) {
+      if (adapter[capability] === undefined || adapter[capability] === null) {
+        throw new IncompleteAdapterError(capability);
+      }
+    }
+  }
+
   let adapter: Adapter | null = null;
   let initializedDbPathValue: string | null = null;
 
   export function configure(newAdapter: Adapter): WorkItemCompletionWriter {
+    if (newAdapter[productionStorageAdapterBrand] === true) {
+      assertComplete(newAdapter);
+    }
+
     const scope = storageScope.getStore();
     if (scope) {
       scope.adapter = newAdapter;
