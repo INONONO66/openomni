@@ -2,7 +2,7 @@
 
 Hono/Bun runtime host that exposes OpenOmni through external channels (Discord / Telegram / GitHub / WebSocket — adapter implementations live in `packages/channels` since #551; the server registers them), connector processes, MCP/custom tools, and worker entrypoints. The server owns transport wiring and bootstrap, not product messaging/access semantics.
 
-Inbound messages should flow as: raw channel payload -> channels gateway driver transport/auth/dedupe (`packages/channels`) -> normalized inbound facts/envelope -> OpenOmni messaging kernel -> response back to the channel. Server code must not decide PendingInteraction/PendingAsk routing, session target, principal trust, delegation grants, or writeback.
+Inbound messages flow as: raw channel payload -> channels gateway driver transport/auth/dedupe (`packages/channels`) -> normalized inbound facts/envelope -> gateway router `ingest` (`@openomni/channels` `createGatewayRouter`: sanitization, actor resolution, resolveRoute + `route.decided` recording, wait resumption, surface-session claim) -> brain Deliver consumer (`packages/openomni` ingress) -> response back to the channel. Server code must not decide PendingInteraction/PendingAsk routing, session target, principal trust, delegation grants, or writeback — since #707 stage 2 that judgment lives in the gateway router; the server only composes the ports.
 
 Depends on `@openomni/protocol`, `@openomni/policy`, `@openomni/ledger`, `@openomni/llm`, `@openomni/openomni`, `@openomni/coordinator`, `@openomni/channels`, and `@openomni/agent`. `tool/mcp/mcp-prefix-guard.ts` is the current direct `@openomni/policy` consumer; it creates a generic engine for the canonical `tool.mcp.pre` guard. Direct `@openomni/agent` imports are concentrated in `agents/`, `context/middleware.ts`, `execution/worker-runner*.ts`, and the MCP provider code.
 
@@ -14,8 +14,8 @@ src/
 ├── config.ts             # loadConfig() — reads env / config files into ServerConfig (incl. permissionProfiles: 고도화 A per-tier deny-label tool caps, fail-closed empty)
 ├── recovery.ts           # Crash-recovery glue (delegates to bootstrap/recovery)
 ├── bootstrap/
-│   ├── index.ts          # main() — wires storage, tool providers, resolveModel() (providers.ts merged here, #476), channels, server, recovery, shutdown
-│   ├── channels.ts       # createChannelAdapters() — registers @openomni/channels adapters (Discord / Telegram / GitHub / WebSocket) + triggers, binds the publish port
+│   ├── index.ts          # main() — wires storage, tool providers, resolveModel() (providers.ts merged here, #476), brain engine + gateway router (createGatewayRouter, #707), channels, server, recovery, shutdown
+│   ├── channels.ts       # createChannelAdapters() — registers @openomni/channels adapters (Discord / Telegram / GitHub / WebSocket) + triggers, binds the publish port, fills the router's delivery-route map
 │   ├── dispatch-owners.ts # wires dispatch handler owners (connector driver, outbound, device)
 │   ├── resident-inbound-wait.ts # resident-side inbound-wait bridge for worker resident.ask
 │   ├── worker-bootstrap.ts # builds the WorkerBootstrap payload (configEpoch, agents, tool catalog, credentials); per-run policyPlan travels on Execution.Request, not here
@@ -57,7 +57,7 @@ src/
     └── routes.ts         # createRouter(githubWebhookHandler) — Hono app (health, /github/webhook, …)
 ```
 
-Channel adapter implementations (discord/, telegram/, github/, websocket, authn, support helpers) moved to `packages/channels` (#551, gateway stage 1); this app keeps only the registration/composition in `bootstrap/channels.ts`.
+Channel adapter implementations (discord/, telegram/, github/, websocket, authn, support helpers) moved to `packages/channels` (#551, gateway stage 1), and the perimeter router (resolveRoute external arms, wait service, #215 send kernel) followed at stage 2 (#707/#736); this app keeps only driver registration in `bootstrap/channels.ts` and router composition in `bootstrap/index.ts`.
 
 ## BOOT SEQUENCE (`bootstrap/index.ts`)
 
@@ -70,9 +70,9 @@ OpenOmni always runs inbound execution through the coordinator. `OPENOMNI_MODE=l
 4. `connectMcpServers(config, mcpProvider)` — dial each configured MCP server.
 5. `resolveModel()` (in `bootstrap/index.ts`) — pick a default model from stored credentials (if any); kernel-side fallback is `DEFAULT_DISPATCH_MODEL` from `@openomni/openomni` (#471).
 6. `createExecutionCoordinator(...)` — wraps `createWorkerManager(config, ports)`; the server is the composition root that binds the event sink (`Bus.publish`), tool relay, and inbound-wait ports (#477). MCP tools are covered by the tool relay.
-7. Configure OpenOmni kernel/ingress with coordinator, dispatch owners, agent resolver, and runtime providers.
-8. Build `routingHandler = createMessageHandler({ systemProvider, agentProvider, mcpProvider, customProvider, defaultModel, workspaceRoot })`.
-9. `createChannelAdapters(config, routingHandler)` — attach Discord / Telegram / GitHub / WebSocket.
+7. `createBrainEngine({ coordinator, residentRuntime, agentResolver, dispatchRuntime, externalAgentResolver, claimSurface })` — the brain's Deliver consumer + internal-route arm; internal surface-session claims cross the gateway router's `claimSurface` port (#708).
+8. `createGatewayRouter({ sink: Bus.publish, deliver: ingressEngine.deliver, messaging: { deliveryRoutes, grants, replyGrantRules, budgets } })` (#707 stage 2) — perimeter routing + wait service + the #215 send kernel; then `routingHandler = createMessageHandler({ ingress: gatewayRouter })`.
+9. `createChannelAdapters(config, routingHandler, deliveryRoutes)` — attach Discord / Telegram / GitHub / WebSocket (adapters fill the router's delivery-route map); `registerServerMessaging(...)` records the send-seam boot receipt.
 10. `createRouter(githubWebhookHandler)` + `Bun.serve()` — HTTP + WebSocket endpoints.
 11. Start each channel (`channel.start()` in parallel).
 12. `runRecovery(routingHandler, coordinator, traceId)` — resume sessions interrupted before last shutdown.
@@ -85,12 +85,12 @@ OpenOmni always runs inbound execution through the coordinator. `OPENOMNI_MODE=l
 
 ```
 Channel.InboundMessage
-  ↓ handler/conversation.ts — createMessageHandler
+  ↓ handler/conversation.ts — createMessageHandler({ ingress: gatewayRouter })
   ├─ per-surfaceKey FIFO queue (avoids concurrent ingestion for the same surface)
-  └─ processMessage()
-        ├─ normalize/queue only server-owned concerns
-        ├─ hand canonical inbound facts to @openomni/openomni
-        ├─ OpenOmni resolves principal, access, correlation, session, target, agent/runtime
+  └─ buildInboundEvent() → GatewayRouter.ingest()
+        ├─ router (packages/channels): sanitize, resolve actor, resolveRoute, record route.decided,
+        │  wait/pending resumption, routed pre-run authority, surface-session claim
+        ├─ brain (packages/openomni ingress deliver): session materialization/placement, projection, execution
         └─ toResponseText(result) → agent output | "(no response)"
 ```
 
@@ -155,7 +155,7 @@ The current server connector surface hosts the process driver and provider-neutr
 | Telegram | (optional sender allowlist) | `final` (post once at the end) |
 | GitHub | `issue_comment.created`, `issues.opened` (+ sender allowlist) | `final`; webhook handler wired into the Hono router |
 | Discord | mention trigger (+ optional sender allowlist) | `final` |
-| WebSocket | built-in (token-gated via `config.server.wsToken`) | streaming |
+| WebSocket | built-in (token-gated when `config.server.wsToken` is set — subprotocol `auth` token preferred, query token deprecated; without a configured token upgrades are open and marked unauthenticated) | one JSON `{type:"response"}` frame per inbound message (no streaming) |
 
 Add a new channel by:
 1. Creating a driver under `packages/channels/src/{name}/` implementing `Channel.Surface` (or wrap an existing SDK) — it must stay on the band import contract (`packages/channels/AGENTS.md`).
