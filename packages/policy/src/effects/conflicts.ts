@@ -21,6 +21,7 @@ export function collectPreConflicts(entries: EffectEntry[]): Conflict[] {
       "run.replace_messages",
     ),
     ...collectSingleValueConflicts(entries, "writeback.rewrite", "output", "writeback.rewrite"),
+    ...collectSingleValueConflicts(entries, "model.override", "model", "model.override"),
     ...collectWritebackSuppressConflicts(entries),
     ...collectFilterApprovalConflicts(entries),
   ];
@@ -89,8 +90,9 @@ function collectSingleValueConflicts(
     | "tool.rewrite_output"
     | "run.continue_with_prompt"
     | "run.replace_messages"
-    | "writeback.rewrite",
-  field: "prompt" | "output" | "messages",
+    | "writeback.rewrite"
+    | "model.override",
+  field: "prompt" | "output" | "messages" | "model",
   label: string,
 ): Conflict[] {
   const conflicts: Conflict[] = [];
@@ -125,7 +127,8 @@ function singleValueForEffect(
     | "tool.rewrite_output"
     | "run.continue_with_prompt"
     | "run.replace_messages"
-    | "writeback.rewrite",
+    | "writeback.rewrite"
+    | "model.override",
 ): unknown {
   if (effectType === "prompt.replace" && effect.type === "prompt.replace") return effect.prompt;
   if (effectType === "tool.rewrite_output" && effect.type === "tool.rewrite_output") {
@@ -139,6 +142,12 @@ function singleValueForEffect(
   }
   if (effectType === "writeback.rewrite" && effect.type === "writeback.rewrite") {
     return effect.output;
+  }
+  // Two same-priority policies routing ONE connection to different models is
+  // divergent intent, not composition — the same fail-closed family as
+  // prompt.replace (#757 adversarial review F1). Provider+id hash as one value.
+  if (effectType === "model.override" && effect.type === "model.override") {
+    return { provider: effect.provider, id: effect.id };
   }
   return undefined;
 }

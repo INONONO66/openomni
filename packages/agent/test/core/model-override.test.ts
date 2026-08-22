@@ -189,6 +189,65 @@ describe("model.override at connection.llm.pre (#753)", () => {
     ]);
   });
 
+  it("fails honestly on an override to a nonexistent model — bounded retries, zero llm calls", async () => {
+    const resolved: string[] = [];
+    let llmCalls = 0;
+    const llm = {
+      run: (async () => {
+        llmCalls += 1;
+        return createStopOutcome();
+      }) as MockLlmFn,
+      resolveProviderModel: async (model: Model.Ref) => {
+        resolved.push(model.id);
+        if (model.id === override.id) {
+          throw new Error(`Model not found: ${model.id} for provider ${model.provider}`);
+        }
+        return { id: model.id, name: model.id, providerID: model.provider };
+      },
+    };
+    const persistentOverride = {
+      kind: "point" as const,
+      name: "test-ghost-override",
+      pointIds: ["connection.llm.pre" as const],
+      effectCapabilities: { "connection.llm.pre": ["model.override" as const] },
+      priority: 100,
+      fn: () =>
+        allow("test.ghost-override", undefined, [
+          { type: "model.override", provider: override.provider, id: override.id },
+        ]),
+    };
+    const zeroBackoff = {
+      kind: "point" as const,
+      name: "test-zero-backoff",
+      pointIds: ["run.error.error" as const],
+      effectCapabilities: { "run.error.error": ["run.retry_after" as const] },
+      priority: 100,
+      fn: () => allow("test.zero-backoff", undefined, [{ type: "run.retry_after", delayMs: 0 }]),
+    };
+
+    await expect(
+      ChatAgent.create({
+        events: Bus,
+        model: primary,
+        llm,
+        middleware: [persistentOverride, zeroBackoff],
+      }).run(runInput([{ role: "user", content: "go" }])),
+    ).rejects.toThrow("Model not found");
+
+    // Three attempts (default ceiling), each: attempt model resolves, the
+    // ghost override throws — the model is never called, and with no
+    // fallbacks configured the attempt selection stays the primary (a
+    // policy-caused fault must not silently walk a chain).
+    expect(llmCalls).toBe(0);
+    expect(resolved).toEqual([
+      primary.id,
+      override.id,
+      primary.id,
+      override.id,
+      primary.id,
+      override.id,
+    ]);
+  });
   it("drops the arm point entirely when the override model's window is unknown", async () => {
     const { calls, llm } = harness({ [primary.id]: 1000 });
 

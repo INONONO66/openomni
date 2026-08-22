@@ -180,3 +180,16 @@ describe("PolicyPoint registry", () => {
     expect(Policy.PolicyPoint.Registry["run.error.error"].phase).toBe("error");
   });
 });
+
+describe("model.override point admission (#753)", () => {
+  test("connection.llm.pre allows model.override; every other point refuses it", () => {
+    for (const pointId of expectedPointIds) {
+      const contract = Policy.PolicyPoint.Registry[pointId];
+      const allowed = contract.allowedEffects.includes("model.override");
+      expect({ pointId, allowed }).toEqual({
+        pointId,
+        allowed: pointId === "connection.llm.pre",
+      });
+    }
+  });
+});
