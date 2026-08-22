@@ -7,6 +7,7 @@ import {
   IpcConnectionError,
   type IpcClient,
   IpcTimeoutError,
+  typedCall,
 } from "@openomni/ipc";
 import {
   buildWorkerEnv,
@@ -211,7 +212,8 @@ export class WorkerSupervisor {
           },
         });
         attemptClient = c;
-        const bootstrapResult = await c.call(
+        const bootstrapResult = await typedCall(
+          c,
           "coordinator.bootstrap",
           {
             authToken,
