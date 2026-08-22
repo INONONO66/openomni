@@ -46,9 +46,11 @@ export async function runAgent(
 ): Promise<AgentResult> {
   // With a fallback chain configured, validation_error joins the retryable
   // set (#752 review F1): a refusal/unusable shape is model-specific, so a
-  // DIFFERENT candidate can plausibly succeed — while retrying the SAME model
-  // against it stays the blind-retry anti-pattern, which is why the widening
-  // is gated on the chain's existence (and bounded by maxAttempts either way).
+  // DIFFERENT candidate can plausibly succeed. Without a chain it stays
+  // terminal (blind same-model retry). Once a chain is spent, placement
+  // clamps to the last candidate, so the remaining attempts DO re-ask the
+  // same model — bounded by maxAttempts, and the retry policy stays the
+  // termination owner.
   const retryPolicy =
     (config.modelFallbacks?.length ?? 0) > 0
       ? {
