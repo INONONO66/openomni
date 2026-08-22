@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787369842272,
+  "lastUpdate": 1787377877624,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -58913,6 +58913,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 522303,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2b0014cb0d2aa256adb1d1e2248a2e0627cdcf05",
+          "message": "feat(agent,llm): mid-turn steering — injection-pending yield at step boundaries (#755)\n\n* feat(agent,llm): mid-turn steering — injection-pending yield at step boundaries (#751)\n\nA user message that arrives while a turn's tool loop is still running now\nreaches the model at the NEXT STEP BOUNDARY instead of waiting for the whole\nturn to settle. Loop-only per the issue scope: no openomni/server change —\nthe host wires one optional port later.\n\n- llm: RunInput.shouldYield — a host-injected live check evaluated as the\n  third stopWhen member beside the step cap and the window yield. The loop\n  still ends gracefully: tool pairs complete, the message finishes with the\n  model's own finishReason.\n- agent: ChatAgentConfig.steeringPending port; buildTurn wraps it so the\n  turn records WHY the loop stopped (TurnArtifacts.steering); turnYield\n  grows a \"steer\" arm. Precedence: step cap > steering > window — the cap's\n  \"max-steps\" terminal stays honest, and a steering yield below the cap can\n  no longer be misread as a cap end. A steer-yield whose injection already\n  drained rides the existing run.turn.post continuation path; one that\n  drained elsewhere continues to the next turn instead of terminating.\n- #694 observation material: RunState.attempt (stamped per retry attempt)\n  joins turnIndex in the lifecycle policy context, so run.turn.pre observers\n  can tell a retry re-entry of the same turn from progress (same turnIndex,\n  higher attempt). Consumption stays #694 scope.\n\nTests: llm stream-args (steering condition arming/liveness/ordering), agent\nhandleStop steer arms (no-continuation continue, drained-injection routing,\ncap precedence, steering-over-window skip-compaction), end-to-end ChatAgent\nsteering (yield -> drain -> next-call input), attempt/turnIndex identity\nacross a zero-backoff retry.\n\nCloses #751\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* docs(agent): turnIndex docstring — also supplied on run.turn.post\n\nAdversarial review of #755, non-blocking note (b).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* docs(agent): steeringPending is a stop-condition port, not an extension surface\n\nCodeRabbit flagged steeringPending against the 'PolicyEngine is the single\nextension surface' rule. It is not a behavior extension: it is a loop-native\nstop-condition SIGNAL in the same class as `signal` (abort) and\nyieldAtInputTokens (window yield) — evaluated inside the llm step loop where\nthe policy plane cannot reach by ring design (llm imports no policy engine,\nand per-step policy dispatch is exactly the quadratic overhead #606 removed).\nThe behavioral judgment stays on the run.turn.post policy point. Documented\nin the config table so the boundary is explicit.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-22T14:50:09+09:00",
+          "tree_id": "1dd3d93a7f4ce9496681fd8f5e590f1045b11ff2",
+          "url": "https://github.com/INONONO66/openomni/commit/2b0014cb0d2aa256adb1d1e2248a2e0627cdcf05"
+        },
+        "date": 1787377877112,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 448,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 591,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5874,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9442,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2498,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2707,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2340,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15130,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7971,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1030,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 925,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1420,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1603,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 768,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 45034,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2311,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 512539,
             "unit": "ns/op"
           }
         ]
