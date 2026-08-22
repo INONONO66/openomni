@@ -68,6 +68,7 @@ adds the one-line re-export in the same PR that imports it.
 | `budget?`        | `AgentBudget`                            | Max turns / tool calls / wall time / tool runtime (use `-1` for unlimited)  |
 | `toolExecutor?`  | `(call: Tool.Call, context?: Tool.ExecutionContext) => Promise<Tool.Result>` | Custom tool executor; wrapped by `createToolExecutor` |
 | `signal?`        | `AbortSignal`                            | External cancellation                                                       |
+| `steeringPending?` | `() => boolean`                        | Mid-turn steering signal (#751): loop-native stop-condition port in the same class as `signal` and the window yield — a wake-up check the step loop reads at step boundaries, NEVER a judgment surface. The behavioral decision (what to inject, whether to continue) flows exclusively through the `run.turn.post` policy point; the policy plane cannot evaluate inside the llm step loop by ring design (llm imports no policy engine), so a signal port is the only honest shape |
 | `middleware?`    | `PolicyEngineRegistration[]`             | Caller-owned canonical point registrations; legacy timing shapes are REJECTED fail-closed at registration (#530, typed `legacy_timing_registration`) |
 | `providerOptions?` | `Record<string, unknown>`              | Forwarded to the underlying provider SDK                                    |
 

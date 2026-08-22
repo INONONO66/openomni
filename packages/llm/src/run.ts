@@ -35,6 +35,14 @@ export interface RunInput {
    * compact history at its deterministic seam and re-enter. Absent = never.
    */
   yieldAtInputTokens?: number;
+  /**
+   * Step-boundary steering yield (#751): stop the step loop at the next step
+   * boundary while this host-injected check returns true — e.g. a mid-turn
+   * injection is pending for the run. Evaluated beside the step cap and the
+   * window yield, so the loop still ends gracefully: tool pairs complete and
+   * the message finishes with the model's own finishReason. Absent = never.
+   */
+  shouldYield?: () => boolean;
   providerOptions?: Record<string, unknown>;
   /**
    * The run this call belongs to. Required, and not defaulted: a model round
@@ -220,6 +228,8 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
       (sdkTools[lastToolName] as Record<string, unknown>).providerOptions = cacheOptions;
     }
 
+    // Narrowed once so the stopWhen closure below carries a stable reference.
+    const shouldYield = input.shouldYield;
     const streamArgs = {
       model: languageModel,
       messages: [...systemMessages, ...normalizedMessages],
@@ -235,6 +245,7 @@ export async function run(input: RunInput, sink: Sink): Promise<Run.Outcome> {
                 (steps[steps.length - 1]?.usage?.inputTokens ?? 0) >=
                 (input.yieldAtInputTokens as number),
             ]),
+        ...(shouldYield === undefined ? [] : [() => shouldYield()]),
       ],
       onError: ({ error }: { error: unknown }) => {
         input.events.publish(Operational.Events.Error, {

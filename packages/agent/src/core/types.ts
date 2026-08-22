@@ -28,6 +28,16 @@ export interface ChatAgentConfig {
   auth?: RunInput["auth"];
   allowAuthFallback?: RunInput["allowAuthFallback"];
   toolChoice?: "auto" | "required" | "none";
+  /**
+   * Mid-turn steering port (#751): returns true while a host-side injection
+   * is pending for this run. The loop checks it at step boundaries; when it
+   * fires, the turn ends early so the pending message can enter history
+   * through the existing `run.turn.post` continuation drain — the same seam
+   * the injection queue already uses. Absent = turns never yield for
+   * steering. A host that never clears its pending signal costs one model
+   * step per turn until a budget bound ends the run — never an infinite loop.
+   */
+  steeringPending?: () => boolean;
   middleware?: PolicyEngineRegistration[];
   llm?: {
     run?: (input: RunInput, sink: Sink) => Promise<import("@openomni/llm").Run.Outcome>;
