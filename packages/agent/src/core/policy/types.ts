@@ -28,7 +28,8 @@ export interface PolicyContext extends GenericPolicyContext {
   attempt?: number;
   /**
    * The run's turn index, stable across retries of the same turn (charging
-   * is idempotent per index). Supplied on run.turn.pre / prompt.context.pre.
+   * is idempotent per index). Supplied on run.turn.pre / run.turn.post /
+   * prompt.context.pre.
    */
   turnIndex?: number;
   isCompletion: boolean;
