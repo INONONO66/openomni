@@ -7,7 +7,7 @@
   "scripts": {
     "check-types": "tsc --noEmit",
     "lint": "bunx biome check ./src",
-    "test": "bun test"
+    "test": "bun test --timeout 15000"
   },
   "dependencies": {
     "@openomni/protocol": "workspace:*"

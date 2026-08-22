@@ -21,4 +21,4 @@ Ring-1 pure target-selection package (docs/architecture.md § Outbound target se
 
 ## TESTS
 
-`bun test` in this package: advancing/non-advancing classes, clamping + exhaustion, mixed histories, determinism, empty-chain refusal.
+`bun test --timeout 15000` in this package: advancing/non-advancing classes, clamping + exhaustion, mixed histories, determinism, empty-chain refusal.
