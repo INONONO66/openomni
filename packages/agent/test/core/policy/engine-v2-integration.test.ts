@@ -10,20 +10,8 @@ import {
   deny,
   inject,
   rewriteToolInput,
+  runContext,
 } from "../../helpers/policy-decision";
-
-function baseCtx(): Omit<PolicyContext, "timing"> & { sessionId: string; runId: string } {
-  return {
-    sessionId: "session",
-    runId: "run",
-    steps: [],
-    usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-    turnCount: 0,
-    isCompletion: false,
-    continuationCount: 0,
-    elapsedMs: 0,
-  };
-}
 
 function systemToolDescriptor(name: string): Policy.Resource.Descriptor {
   return {
@@ -52,7 +40,7 @@ describe("PolicyEngine.dispatchPoint", () => {
     );
 
     const decision = await engine.dispatchPoint("connection.llm.pre", {
-      ...baseCtx(),
+      ...runContext(),
       modelId: "model",
     });
 
@@ -69,22 +57,18 @@ describe("PolicyEngine.dispatchPoint", () => {
     const engine = PolicyEngine.create();
     registerAt(engine, "run.lifecycle.post", {
       name: "bad-run-injection",
-      // prompt.inject_message is not an allowed effect at run.lifecycle.post, so it
-      // cannot be declared here; returning it must trip the undeclared-effect guard.
       effects: ["audit.annotate"],
       priority: 0,
       fn: () => inject("not valid here", "policy.bad-run", "bad-run-effect"),
     });
 
     const decision = await engine.dispatchPoint("run.lifecycle.post", {
-      ...baseCtx(),
+      ...runContext(),
       runOutcome: { type: "stop" },
     });
 
     expect(decision.verdict).toBe("deny");
     expect(decision.policyId).toBe("agent.policy.composed");
-    // Canonical semantics: undeclared effects are denied per middleware with
-    // "policy.effect_not_declared" (was composed-level "policy.effect_not_allowed").
     expect(decision.effects).toEqual([
       {
         type: "audit.annotate",
@@ -116,7 +100,7 @@ describe("PolicyEngine.dispatchPoint", () => {
     );
 
     const decision = await engine.dispatchPoint("tool.native.pre", {
-      ...baseCtx(),
+      ...runContext(),
       toolId: "shell",
       toolName: "shell",
       toolInput: { command: "ls" },
@@ -140,7 +124,7 @@ describe("PolicyEngine.dispatchPoint", () => {
     );
 
     const decision = await engine.dispatchPoint("run.lifecycle.post", {
-      ...baseCtx(),
+      ...runContext(),
       runOutcome: { type: "stop" },
     });
 
@@ -153,8 +137,6 @@ describe("PolicyEngine.dispatchPoint", () => {
     const engine = PolicyEngine.create();
     registerAt(engine, "tool.native.pre", {
       name: "invalid-shell-prompt",
-      // prompt.replace is not an allowed effect at tool.native.pre, so it cannot be
-      // declared; returning it denies with the undeclared-effect guard (fail-closed).
       effects: ["audit.annotate"],
       priority: 0,
       fn: () =>
@@ -164,7 +146,7 @@ describe("PolicyEngine.dispatchPoint", () => {
     });
 
     const decision = await engine.dispatchPoint("tool.native.pre", {
-      ...baseCtx(),
+      ...runContext(),
       toolId: "shell",
       toolName: "shell",
       toolInput: { command: "ls" },
@@ -188,7 +170,7 @@ describe("PolicyEngine.dispatchPoint", () => {
     ]);
 
     const decision = await engine.dispatchPoint("tool.native.pre", {
-      ...baseCtx(),
+      ...runContext(),
       toolId: "shell",
       toolName: "shell",
       toolInput: { command: "ls" },
@@ -236,7 +218,7 @@ describe("PolicyEngine.dispatchPoint", () => {
       );
 
       const decision = await engine.dispatchPoint("tool.native.pre", {
-        ...baseCtx(),
+        ...runContext(),
         toolId: "shell",
         toolName: "shell",
         toolInput: { command: "ls" },

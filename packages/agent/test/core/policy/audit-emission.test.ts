@@ -3,22 +3,10 @@ import { Policy } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import type { z } from "zod";
 import { PolicyEngine } from "../../../src/core/policy";
-import type { PolicyContext } from "../../../src/core/policy";
-import { atPoint, deny } from "../../helpers/policy-decision";
+import { atPoint, deny, policyContext } from "../../helpers/policy-decision";
 
 type PolicyEvaluatedEvent = z.infer<typeof Policy.Events.Evaluated.schema>;
 type PolicyDecisionComposedEvent = z.infer<typeof Policy.Events.DecisionComposed.schema>;
-
-function baseCtx(): Omit<PolicyContext, "timing"> {
-  return {
-    steps: [],
-    usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-    turnCount: 0,
-    isCompletion: false,
-    continuationCount: 0,
-    elapsedMs: 0,
-  };
-}
 
 function nativeToolDescriptor(name: string): Policy.Resource.Descriptor {
   return {
@@ -63,7 +51,7 @@ describe("PolicyEngine audit emission", () => {
       );
 
       const ctx = {
-        ...baseCtx(),
+        ...policyContext(),
         sessionId: "sess-request",
         runId: "run-request",
         toolId: "shell",
@@ -130,7 +118,7 @@ describe("PolicyEngine audit emission", () => {
       );
 
       const decision = await engine.dispatchPoint("tool.native.pre", {
-        ...baseCtx(),
+        ...policyContext(),
         sessionId: "sess-v2",
         runId: "run-v2",
         toolId: "shell",

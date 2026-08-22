@@ -1,26 +1,7 @@
 import { describe, expect, it, mock } from "bun:test";
-import { registerAt } from "../../helpers/policy-decision";
+import { registerAt, turnPreContext } from "../../helpers/policy-decision";
 import { PolicyDecision } from "@openomni/protocol";
 import { PolicyEngine } from "../../../src/core/policy";
-import type { PolicyContext } from "../../../src/core/policy";
-
-function baseCtx(): Omit<PolicyContext, "timing"> & {
-  sessionId: string;
-  runId: string;
-  turnIndex: number;
-} {
-  return {
-    sessionId: "session",
-    runId: "run",
-    turnIndex: 0,
-    steps: [],
-    usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-    turnCount: 0,
-    isCompletion: false,
-    continuationCount: 0,
-    elapsedMs: 0,
-  };
-}
 
 describe("PolicyEngine prompt.context.pre safety", () => {
   it("stops system prompt composition on abort", async () => {
@@ -48,7 +29,7 @@ describe("PolicyEngine prompt.context.pre safety", () => {
     );
     registerAt(engine, "prompt.context.pre", "after", 10, after, ["prompt.inject_message"]);
 
-    const decision = await engine.dispatchPoint("prompt.context.pre", baseCtx());
+    const decision = await engine.dispatchPoint("prompt.context.pre", turnPreContext());
     expect(decision.verdict).toBe("deny");
     expect(decision.reasonCodes).toContain("context-aborted");
     expect(after).toHaveBeenCalledTimes(0);
@@ -79,7 +60,7 @@ describe("PolicyEngine prompt.context.pre safety", () => {
     );
     registerAt(engine, "prompt.context.pre", "after", 10, after, ["prompt.inject_message"]);
 
-    const decision = await engine.dispatchPoint("prompt.context.pre", baseCtx());
+    const decision = await engine.dispatchPoint("prompt.context.pre", turnPreContext());
     expect(decision.verdict).toBe("deny");
     expect(decision.reasonCodes).toContain("context-denied");
     expect(after).toHaveBeenCalledTimes(0);
@@ -106,7 +87,7 @@ describe("PolicyEngine prompt.context.pre safety", () => {
       ["prompt.replace", "prompt.append_context"],
     );
 
-    const result = await engine.dispatchPoint("prompt.context.pre", baseCtx());
+    const result = await engine.dispatchPoint("prompt.context.pre", turnPreContext());
 
     expect(result.verdict).toBe("allow");
     expect(result.effects).toContainEqual({ type: "prompt.replace", prompt: "PROMPT_A" });

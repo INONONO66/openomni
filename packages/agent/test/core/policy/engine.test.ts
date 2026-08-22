@@ -1,48 +1,16 @@
 import { describe, expect, it, mock } from "bun:test";
-import { atPoint, registerAt } from "../../helpers/policy-decision";
+import {
+  atPoint,
+  policyContext,
+  registerAt,
+  toolPreContext,
+  turnPostContext,
+  turnPreContext,
+} from "../../helpers/policy-decision";
 import { PolicyDecision, Policy } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { Operational } from "@openomni/protocol";
 import { PolicyEngine } from "../../../src/core/policy";
-import type { PolicyContext } from "../../../src/core/policy";
-
-function baseCtx(): Omit<PolicyContext, "timing"> {
-  return {
-    steps: [],
-    usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-    turnCount: 0,
-    isCompletion: false,
-    continuationCount: 0,
-    elapsedMs: 0,
-  };
-}
-
-/** Required inputs for the run.turn.pre / prompt.context.pre point contracts. */
-function turnPreCtx() {
-  return { ...baseCtx(), sessionId: "session", runId: "run", turnIndex: 0 };
-}
-
-/** Required inputs for the run.turn.post point contract. */
-function turnPostCtx() {
-  return {
-    ...baseCtx(),
-    sessionId: "session",
-    runId: "run",
-    turnIndex: 0,
-    turnResult: { type: "stop" },
-  };
-}
-
-/** Required inputs for the tool.native.pre point contract. */
-function toolPreCtx() {
-  return {
-    ...baseCtx(),
-    sessionId: "session",
-    runId: "run",
-    toolId: "tool:native:test",
-    toolInput: {},
-  };
-}
 
 function env(): Record<string, string | undefined> {
   return (globalThis as unknown as { process: { env: Record<string, string | undefined> } }).process
@@ -66,7 +34,7 @@ describe("PolicyEngine", () => {
       return PolicyDecision.allow({ policyId: "test.allow" });
     });
 
-    await engine.dispatchPoint("run.turn.pre", turnPreCtx());
+    await engine.dispatchPoint("run.turn.pre", turnPreContext());
     expect(order).toEqual([100, 200, 300]);
   });
 
@@ -77,7 +45,7 @@ describe("PolicyEngine", () => {
     registerAt(engine, "run.turn.post", "post", 100, postFn);
     registerAt(engine, "run.turn.pre", "pre", 100, preFn);
 
-    await engine.dispatchPoint("run.turn.pre", turnPreCtx());
+    await engine.dispatchPoint("run.turn.pre", turnPreContext());
 
     expect(preFn).toHaveBeenCalledTimes(1);
     expect(postFn).toHaveBeenCalledTimes(0);
@@ -104,7 +72,7 @@ describe("PolicyEngine", () => {
     );
     registerAt(engine, "run.turn.pre", "c", 300, third);
 
-    const verdict = await engine.dispatchPoint("run.turn.pre", turnPreCtx());
+    const verdict = await engine.dispatchPoint("run.turn.pre", turnPreContext());
     expect(verdict.verdict).toBe("deny");
     expect(verdict.reasonCodes).toContain("stop");
     expect(third).toHaveBeenCalledTimes(0);
@@ -137,7 +105,7 @@ describe("PolicyEngine", () => {
         }),
       );
 
-      const verdict = await engine.dispatchPoint("run.turn.pre", turnPreCtx());
+      const verdict = await engine.dispatchPoint("run.turn.pre", turnPreContext());
       expect(verdict.verdict).toBe("allow");
       expect(after).toHaveBeenCalledTimes(1);
     } finally {
@@ -158,7 +126,7 @@ describe("PolicyEngine", () => {
     });
     registerAt(engine, "run.turn.pre", "after", 200, after);
 
-    const verdict = await engine.dispatchPoint("run.turn.pre", turnPreCtx());
+    const verdict = await engine.dispatchPoint("run.turn.pre", turnPreContext());
     expect(verdict.verdict).toBe("deny");
     expect(verdict.reasonCodes).toContain("middleware-error");
     expect(after).toHaveBeenCalledTimes(0);
@@ -172,7 +140,7 @@ describe("PolicyEngine", () => {
     });
     registerAt(engine, "tool.native.pre", "after", 200, after);
 
-    const verdict = await engine.dispatchPoint("tool.native.pre", toolPreCtx());
+    const verdict = await engine.dispatchPoint("tool.native.pre", toolPreContext());
 
     expect(verdict.verdict).toBe("deny");
     expect(verdict.reasonCodes).toContain("middleware-error");
@@ -188,7 +156,7 @@ describe("PolicyEngine", () => {
     });
     registerAt(engine, "run.turn.post", "after", 200, after);
 
-    const verdict = await engine.dispatchPoint("run.turn.post", turnPostCtx());
+    const verdict = await engine.dispatchPoint("run.turn.post", turnPostContext());
 
     expect(verdict.verdict).toBe("allow");
     expect(after).toHaveBeenCalledTimes(1);
@@ -206,7 +174,7 @@ describe("PolicyEngine", () => {
     });
     registerAt(engine, "run.turn.pre", "unscoped", 200, unscoped);
 
-    await engine.dispatchPoint("run.turn.pre", { ...turnPreCtx(), agentType: "primary" });
+    await engine.dispatchPoint("run.turn.pre", { ...turnPreContext(), agentType: "primary" });
 
     expect(scoped).toHaveBeenCalledTimes(0);
     expect(unscoped).toHaveBeenCalledTimes(1);
@@ -224,10 +192,10 @@ describe("PolicyEngine", () => {
       fn,
     });
 
-    await engine.dispatchPoint("run.turn.pre", turnPreCtx());
-    await engine.dispatchPoint("run.turn.post", turnPostCtx());
+    await engine.dispatchPoint("run.turn.pre", turnPreContext());
+    await engine.dispatchPoint("run.turn.post", turnPostContext());
     await engine.dispatchPoint("run.error.error", {
-      ...baseCtx(),
+      ...policyContext(),
       sessionId: "session",
       runId: "run",
       errorCode: "boom",
@@ -247,7 +215,7 @@ describe("PolicyEngine", () => {
       () => ({ action: "abort", reason: "legacy abort", policyId: "legacy" }) as never,
     );
 
-    const result = await engine.dispatchPoint("tool.native.pre", toolPreCtx());
+    const result = await engine.dispatchPoint("tool.native.pre", toolPreContext());
 
     expect(result.verdict).toBe("deny");
     expect(result.reasonCodes).toContain("policy.invalid_decision");
@@ -299,7 +267,7 @@ describe("PolicyEngine", () => {
       ["prompt.inject_message"],
     );
 
-    const result = await engine.dispatchPoint("prompt.context.pre", turnPreCtx());
+    const result = await engine.dispatchPoint("prompt.context.pre", turnPreContext());
     expect(result.verdict).toBe("allow");
     expect(result.effects).toContainEqual({ type: "prompt.replace", prompt: "PROMPT_A" });
     expect(result.effects).toContainEqual({ type: "prompt.append_context", context: "append-a" });
@@ -332,7 +300,7 @@ describe("PolicyEngine", () => {
       ["prompt.inject_message"],
     );
 
-    const decision = await engine.dispatchPoint("prompt.context.pre", turnPreCtx());
+    const decision = await engine.dispatchPoint("prompt.context.pre", turnPreContext());
     expect(decision.verdict).toBe("deny");
     expect(decision.reasonCodes).toContain("middleware-error");
   });
@@ -369,7 +337,7 @@ describe("PolicyEngine", () => {
         }),
       );
 
-      const result = await engine.dispatchPoint("prompt.context.pre", turnPreCtx());
+      const result = await engine.dispatchPoint("prompt.context.pre", turnPreContext());
       expect(result.effects).toContainEqual({
         type: "prompt.inject_message",
         message: "append-after",
@@ -392,7 +360,7 @@ describe("PolicyEngine", () => {
         }),
       );
 
-      const decision = await engine.dispatchPoint("run.turn.pre", turnPreCtx());
+      const decision = await engine.dispatchPoint("run.turn.pre", turnPreContext());
       expect(decision.verdict).toBe("deny");
       expect(decision.reasonCodes).toEqual([]);
     } finally {
@@ -424,8 +392,8 @@ describe("PolicyEngine", () => {
         }),
       );
 
-      const first = await engine.dispatchPoint("run.turn.post", turnPostCtx());
-      const second = await engine.dispatchPoint("run.turn.post", turnPostCtx());
+      const first = await engine.dispatchPoint("run.turn.post", turnPostContext());
+      const second = await engine.dispatchPoint("run.turn.post", turnPostContext());
 
       expect(first.verdict).toBe("deny");
       expect(second.verdict).toBe("deny");
@@ -467,7 +435,7 @@ describe("PolicyEngine", () => {
       );
 
       const decision = await engine.dispatchPoint("run.turn.post", {
-        ...turnPostCtx(),
+        ...turnPostContext(),
         traceContext: { traceId: "trace-observer", sessionId: "session-observer", runId: "run-1" },
       });
       await new Promise((resolve) => queueMicrotask(resolve));
@@ -513,7 +481,7 @@ describe("PolicyEngine", () => {
         }),
       );
 
-      const decision = await engine.dispatchPoint("run.turn.post", turnPostCtx());
+      const decision = await engine.dispatchPoint("run.turn.post", turnPostContext());
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(decision.verdict).toBe("allow");
@@ -548,7 +516,7 @@ describe("PolicyEngine", () => {
       PolicyDecision.allow({ policyId: "observer-latency-isolation" }),
     );
 
-    const decision = await engine.dispatchPoint("run.turn.post", turnPostCtx());
+    const decision = await engine.dispatchPoint("run.turn.post", turnPostContext());
 
     expect(decision.verdict).toBe("allow");
     expect(observerStarted).toBe(true);
@@ -585,7 +553,7 @@ describe("PolicyEngine", () => {
         }),
       );
 
-      await engine.dispatchPoint("tool.native.pre", { ...toolPreCtx(), toolName: "shell" });
+      await engine.dispatchPoint("tool.native.pre", { ...toolPreContext(), toolName: "shell" });
 
       // Bus.publish dispatches handlers via queueMicrotask
       await Promise.resolve();
@@ -628,7 +596,7 @@ describe("PolicyEngine", () => {
         }),
       ["run.abort"],
     );
-    const verdict = await engine.dispatchPoint("run.turn.pre", turnPreCtx());
+    const verdict = await engine.dispatchPoint("run.turn.pre", turnPreContext());
     expect(verdict.verdict).toBe("deny");
     expect(verdict.reasonCodes).toContain("forbidden");
   });
@@ -660,7 +628,7 @@ describe("PolicyEngine", () => {
       return PolicyDecision.allow({ policyId: "test.allow" });
     });
 
-    await engine.dispatchPoint("run.turn.pre", { ...turnPreCtx(), agentType: "coder" });
+    await engine.dispatchPoint("run.turn.pre", { ...turnPreContext(), agentType: "coder" });
     expect(executed).toEqual(["coder", "unscoped"]);
   });
 });
