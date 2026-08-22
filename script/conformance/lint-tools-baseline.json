@@ -28,7 +28,6 @@
   },
   "naming": {
     "grandfathered": [
-      "packages/protocol/src/policy/plan.ts:PolicyPlanModule",
       "packages/protocol/src/policy/point-contract.ts:PolicyPointContractModule",
       "packages/protocol/src/policy/point-registry.ts:PolicyPointRegistryModule",
       "packages/protocol/src/policy/policy-point.ts:PolicyPointModule",
@@ -38,14 +37,6 @@
   },
   "earned": {
     "dormantActions": [],
-    "dormantTools": [
-      "bash",
-      "edit",
-      "glob",
-      "grep.search",
-      "read",
-      "recall.output",
-      "write"
-    ]
+    "dormantTools": ["bash", "recall.output"]
   }
 }

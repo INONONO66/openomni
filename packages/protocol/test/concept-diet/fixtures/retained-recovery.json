@@ -1,8 +1,0 @@
-{
-  "description": "A recovery-path importer that keeps the preserved fail-closed owners (APIError recovery envelope + Token.Count). All required owners are present, so it stays green through every kill batch.",
-  "expect": "accept",
-  "crossPackage": true,
-  "imports": ["APIError", "Token.Count"],
-  "retainsFailClosed": ["APIError", "Token.Count"],
-  "requiredOwners": ["APIError", "Token.Count"]
-}

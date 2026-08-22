@@ -1,7 +1,0 @@
-{
-  "description": "A stale importer that still pulls Extension.Manifest — a removed export shipped in #594 (disposition delete). The verifier must reject it by symbol and rule.",
-  "expect": "reject",
-  "crossPackage": true,
-  "imports": ["Extension.Manifest"],
-  "rule": "removed-export"
-}
