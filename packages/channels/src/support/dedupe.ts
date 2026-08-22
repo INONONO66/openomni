@@ -33,10 +33,6 @@ export class Dedupe {
     return false;
   }
 
-  forget(id: string): void {
-    this.seen.delete(id);
-  }
-
   private prune(): void {
     const cutoff = Date.now() - this.maxAge;
     for (const [id, time] of this.seen) {
