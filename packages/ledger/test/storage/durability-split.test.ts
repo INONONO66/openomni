@@ -96,6 +96,25 @@ describe("durability split (file-backed)", () => {
     expect(head.head).toBe(1);
   });
 
+  test("telemetry insertion does not advance ledger events or owner heads", () => {
+    const { db, telemetryDb } = internals(adapter);
+    const counts = () => ({
+      events: (db.query("SELECT COUNT(*) AS n FROM ledger_event").get() as { n: number }).n,
+      heads: (db.query("SELECT COUNT(*) AS n FROM ledger_head").get() as { n: number }).n,
+    });
+    const before = counts();
+
+    telemetryDb
+      .query(
+        `INSERT INTO bus_event
+       (session_id, run_id, event_type, category, visibility, data, trace_id, duration_ms, time_created)
+       VALUES (NULL, NULL, 'work_item.admission_accepted', 'work_item', 'internal', '{}', 'trace-test', NULL, 1)`,
+      )
+      .run();
+
+    expect(counts()).toEqual(before);
+  });
+
   test("close checkpoints the WAL into the main file (TRUNCATE)", () => {
     const dbPath = join(tempDir, "openomni.db");
     const outcome = adapter.ledger.append(buildAppendInput({ streamId: "wait:checkpoint" }), 0);

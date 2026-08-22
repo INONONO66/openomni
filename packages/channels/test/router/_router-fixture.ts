@@ -81,7 +81,7 @@ function stubDeliverResult(delivery: Gateway.Deliver): Ingress.IngressResult {
  * Rebuilds the current test's router with overridden ports (#549 discipline:
  * construction-time injection only), keeping the shared recording stubs.
  */
-function makeRouter(overrides: Partial<GatewayRouterPorts> = {}): GatewayRouter {
+export function makeRouter(overrides: Partial<GatewayRouterPorts> = {}): GatewayRouter {
   router = createGatewayRouter({
     sink: (event, data) => {
       sinkEvents.push({ name: event.name, data });

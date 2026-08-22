@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { PolicyDecision } from "@openomni/protocol";
+import { Ledger, PolicyDecision } from "@openomni/protocol";
+import { Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
-import { DispatchRuntime } from "../../src/dispatch/runtime";
+import { CommandRecordError, DispatchRuntime } from "../../src/dispatch/runtime";
 import {
   allowDispatchPolicy,
   flushBus,
@@ -41,9 +42,11 @@ describe("DispatchRuntime", () => {
     const events: string[] = [];
     Bus.observe((event) => events.push(event.name));
     let called = false;
+    let factAtHandler: unknown;
     const runtime = new DispatchRuntime({ includeDefaultPolicies: false });
-    runtime.register("resident.ask", async () => {
+    runtime.register("resident.ask", async (command) => {
       called = true;
+      factAtHandler = Storage.get().ledger?.headFact(`command:${command.dispatchId}`);
       return { output: "ok" };
     });
 
@@ -59,6 +62,11 @@ describe("DispatchRuntime", () => {
     expect(result.status).toBe("completed");
     expect(result.output).toBe("ok");
     expect(called).toBe(true);
+    expect(factAtHandler).toMatchObject({ seq: 1, type: "command.authorized" });
+    expect(
+      Ledger.CommandAuthorized.safeParse((factAtHandler as { data: unknown }).data).success,
+    ).toBe(true);
+    expect(Storage.get().ledger?.headFact(`command:${result.dispatchId}`)?.seq).toBe(1);
     expect(events.filter((event) => event.startsWith("dispatch."))).toEqual([
       "dispatch.submitted",
       "dispatch.authorized",
@@ -102,8 +110,59 @@ describe("DispatchRuntime", () => {
     await flushBus();
     expect(result.status).toBe("denied");
     expect(called).toBe(false);
+    expect(Storage.get().ledger?.headFact(`command:${result.dispatchId}`)).toMatchObject({
+      seq: 1,
+      type: "command.denied",
+    });
     expect(events).toContain("dispatch.denied");
     expect(events).not.toContain("dispatch.routed");
+  });
+
+  test.each([
+    "throw",
+    "conflict",
+  ] as const)("ledger %s fails closed as command_record_failed without handler or projection", async (failure) => {
+    const runtime = new DispatchRuntime({ includeDefaultPolicies: false });
+    let calls = 0;
+    runtime.register("resident.ask", () => {
+      calls += 1;
+      return { output: "must not run" };
+    });
+    const adapter = Storage.getAdapter();
+    const ledger = adapter.ledger;
+    if (!ledger) throw new Error("ledger sub-adapter missing");
+    Storage.configure({
+      ...adapter,
+      transaction: adapter.transaction.bind(adapter),
+      ledger: {
+        ...ledger,
+        append: () => {
+          if (failure === "throw") throw new Error("ledger unavailable");
+          return { kind: "cas_conflict", currentHead: 1 } as const;
+        },
+      },
+    });
+    const events: string[] = [];
+    Bus.observe((event) => events.push(event.name));
+
+    let thrown: unknown;
+    try {
+      await runtime.submit(input(), {
+        traceId: TEST_DISPATCH_TRACE_ID,
+        sessionId: "session-1",
+        runId: "run-1",
+        agentName: "resident",
+        policies: [allowDispatchPolicy()],
+      });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(CommandRecordError);
+    expect((thrown as CommandRecordError).code).toBe("command_record_failed");
+    expect(calls).toBe(0);
+    await flushBus();
+    expect(events).not.toContain("dispatch.authorized");
   });
 
   test("rejects duplicate handler registrations", () => {

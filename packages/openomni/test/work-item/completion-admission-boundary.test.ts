@@ -1377,13 +1377,24 @@ describe("WorkItem completion admission service", () => {
       completionReportRef: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
       recordedHead: stored?.revision,
     });
+    const accepted = adapter.ledger
+      .factsByType("work_item.admission_accepted")
+      .find((fact) => fact.streamId === `work:${item.workItemId}`);
+    const completed = adapter.ledger
+      .factsByType("work_item.completed")
+      .find((fact) => fact.streamId === `work:${item.workItemId}`);
+    expect(accepted?.seq).toBe((completed?.seq ?? 0) - 1);
+    expect(adapter.ledger.headFact(`work:${item.workItemId}`)).toMatchObject({
+      seq: completed?.seq,
+      type: "work_item.completed",
+    });
   });
 
   test.each([
     "block",
     "escalate",
   ] as const)("persists a %s admission without completing", async (decision) => {
-    configure();
+    const adapter = configure();
     const { item, request, report } = await fixture();
     const admissionAuthority = authority([decision]);
     const service = guardedService(admissionAuthority.resolver);
@@ -1398,6 +1409,17 @@ describe("WorkItem completion admission service", () => {
     expect(stored ? WorkItem.deriveStatus(stored) : undefined).not.toBe("completed");
     expect(stored?.completionTerminalReceipt).toBeUndefined();
     expect(events.order).toEqual(["CompletionRequested", "CompletionAdmissionRecorded"]);
+    if (decision === "block") {
+      expect(adapter.ledger.headFact(`work:${item.workItemId}`)).toMatchObject({
+        type: "work_item.admission_refused",
+        data: { decision: "block", requestId: request.id },
+      });
+      expect(
+        adapter.ledger
+          .factsByType("work_item.completed")
+          .filter((fact) => fact.streamId === `work:${item.workItemId}`),
+      ).toHaveLength(0);
+    }
   });
 
   test("rejects a terminal report with unresolved evidence after recording admission", async () => {

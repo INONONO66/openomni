@@ -1,3 +1,4 @@
+import type { Database } from "bun:sqlite";
 import { afterEach, describe, expect, test } from "bun:test";
 import { WorkItem } from "@openomni/protocol";
 import { ZodError } from "zod";
@@ -115,6 +116,127 @@ describe("WorkItemStore", () => {
     expect(completed?.completionTerminalReceipt?.admissionId).toBe(
       completed?.completionFacts.admissions[0]?.id,
     );
+  });
+
+  test("owner facts bind lifecycle sequence, revision, head, and compact terminal payload", async () => {
+    configureSqlite();
+    const item = await createItem("owner-fact-sequence");
+    await WorkItemStore.start(item.workItemId, "trace-test");
+    const blocked = await WorkItemStore.addBlocker(
+      item.workItemId,
+      { kind: "external", description: "awaiting result" },
+      "trace-test",
+    );
+    const blockerId = blocked?.blockers[0]?.id;
+    if (!blockerId) throw new Error("missing blocker");
+    await WorkItemStore.resolveBlocker(item.workItemId, blockerId, "trace-test");
+    const failed = await WorkItemStore.fail(item.workItemId, "trace-test", "expected failure");
+    const ledger = Storage.get().ledger;
+    if (!ledger || !failed) throw new Error("missing ledger or projection");
+    const types = [
+      "work_item.created",
+      "work_item.started",
+      "work_item.blocker_added",
+      "work_item.blocker_resolved",
+      "work_item.failed",
+    ];
+    const facts = types
+      .flatMap((type) => ledger.factsByType(type))
+      .filter((fact) => fact.streamId === `work:${item.workItemId}`)
+      .sort((a, b) => a.seq - b.seq);
+
+    expect(facts.map(({ seq, type }) => [seq, type])).toEqual(
+      types.map((type, index) => [index + 1, type]),
+    );
+    expect(ledger.headFact(`work:${item.workItemId}`)?.seq).toBe(failed.revision);
+    expect(facts.at(-1)?.data).toMatchObject({ reason: "expected failure", revision: 5 });
+    expect(facts.at(-1)?.data).not.toHaveProperty("acceptanceCriteria");
+    expect(facts.at(-1)?.data).not.toHaveProperty("completionFacts");
+  });
+
+  test("stale append preserves the competing winner and emits no losing event", async () => {
+    const adapter = configureSqlite();
+    const item = await createItem("stale-append");
+    const originalGet = adapter.workItem.get.bind(adapter.workItem);
+    let injected = false;
+    adapter.workItem.get = (hash) => {
+      const current = originalGet(hash);
+      if (hash === item.workItemId && current && !injected) {
+        injected = true;
+        adapter.transaction(() => {
+          const appended = adapter.ledger.append(
+            {
+              streamId: `work:${hash}`,
+              type: "work_item.updated",
+              data: { fields: ["name"], revision: 2 },
+            },
+            1,
+          );
+          if (
+            appended.kind !== "appended" ||
+            !adapter.workItem.compareAndSet(hash, 1, { ...current, name: "winner", revision: 2 })
+          ) {
+            throw new Error("competing write failed");
+          }
+        });
+      }
+      return current;
+    };
+    const events: string[] = [];
+    Bus.observe((event) => events.push(event.name));
+
+    await expect(WorkItemStore.fail(item.workItemId, "trace-test", "loser")).rejects.toMatchObject({
+      code: "stale_revision",
+    });
+    expect(originalGet(item.workItemId)).toMatchObject({ name: "winner", revision: 2 });
+    expect(adapter.ledger.headFact(`work:${item.workItemId}`)).toMatchObject({
+      seq: 2,
+      type: "work_item.updated",
+    });
+    await flushBus();
+    expect(events).not.toContain("work_item.failed");
+    expect(events).not.toContain("work_item.status_changed");
+  });
+
+  test("adopts a pre-cutover revision at its observed snapshot before transition", async () => {
+    const adapter = configureSqlite();
+    const item = await createItem("lazy-adoption");
+    const started = await WorkItemStore.start(item.workItemId, "trace-test");
+    if (!started) throw new Error("missing started projection");
+    const db = (adapter as unknown as { db: Database }).db;
+    db.query("DELETE FROM ledger_event WHERE stream_id = ?").run(`work:${item.workItemId}`);
+    db.query("DELETE FROM ledger_head WHERE stream_id = ?").run(`work:${item.workItemId}`);
+
+    const failed = await WorkItemStore.fail(item.workItemId, "trace-test", "after adoption");
+    const adopted = adapter.ledger
+      .factsByType("work_item.adopted")
+      .find((fact) => fact.streamId === `work:${item.workItemId}`);
+    expect(adopted).toMatchObject({ seq: 2, data: { revision: 2 } });
+    expect(adopted?.data).toMatchObject({ snapshot: { workItemId: item.workItemId, revision: 2 } });
+    expect(adapter.ledger.headFact(`work:${item.workItemId}`)).toMatchObject({
+      seq: failed?.revision,
+      type: "work_item.failed",
+    });
+    expect(adapter.ledger.verifyTail()).toEqual([]);
+  });
+
+  test("a throwing subscriber observes the durable head and cannot unwind a transition", async () => {
+    const adapter = configureSqlite();
+    const item = await createItem("lossy-bus");
+    const observedHeads: number[] = [];
+    Bus.subscribe(WorkItem.Events.StatusChanged, () => {
+      observedHeads.push(adapter.ledger.headFact(`work:${item.workItemId}`)?.seq ?? -1);
+      throw new Error("subscriber crashed");
+    });
+
+    const started = await WorkItemStore.start(item.workItemId, "trace-test");
+    if (!started) throw new Error("missing started projection");
+    await flushBus();
+    expect(adapter.ledger.headFact(`work:${item.workItemId}`)).toMatchObject({
+      seq: started.revision,
+      type: "work_item.started",
+    });
+    expect(observedHeads).toEqual([started.revision]);
   });
 
   test("D11 pin: every publish of one state transition carries the caller's ONE traceId", async () => {

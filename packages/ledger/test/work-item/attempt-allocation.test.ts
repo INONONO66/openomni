@@ -152,6 +152,39 @@ describe("WorkItemStore.allocateAttempt", () => {
     expect(second.item.currentAttemptId).toBe(second.attempt.attemptId);
   });
 
+  test("cache reuse allocates a distinct immutable fact and rejects self-reuse", async () => {
+    const item = await createItem("cache-reuse");
+    const seeded = await WorkItemStore.allocateAttempt(item.workItemId, identity(), "trace-test");
+    if (!seeded) throw new Error("expected seed allocation");
+    const hit = await WorkItemStore.allocateAttempt(
+      item.workItemId,
+      { ...identity(), reusedFromAttemptId: seeded.attempt.attemptId },
+      "trace-test",
+    );
+    if (!hit) throw new Error("expected cache-hit allocation");
+
+    expect(hit.attempt.attemptId).not.toBe(seeded.attempt.attemptId);
+    expect(hit.attempt.attemptSeq).toBe(seeded.attempt.attemptSeq + 1);
+    expect(hit.attempt.reusedFromAttemptId).toBe(seeded.attempt.attemptId);
+    expect(seeded.attempt.reusedFromAttemptId).toBeNull();
+    const recorded = workFactsOf(item.workItemId)
+      .filter((fact) => fact.type === "work_item.attempt_allocated")
+      .map((fact) => JSON.parse(fact.data) as WorkItem.Attempt);
+    expect(recorded).toHaveLength(2);
+    expect(recorded[0]).toMatchObject({
+      attemptId: seeded.attempt.attemptId,
+      reusedFromAttemptId: null,
+    });
+    expect(recorded[1]).toMatchObject({
+      attemptId: hit.attempt.attemptId,
+      reusedFromAttemptId: seeded.attempt.attemptId,
+    });
+    expect(
+      WorkItem.Attempt.safeParse({ ...hit.attempt, reusedFromAttemptId: hit.attempt.attemptId })
+        .success,
+    ).toBe(false);
+  });
+
   test("a non-monotonic seq is an explosive backstop, not a silent skip", async () => {
     const item = await createItem("attempt-backstop");
     const allocation = await WorkItemStore.allocateAttempt(

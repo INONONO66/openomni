@@ -18,7 +18,7 @@
 // Artifact path convention: `ledger-archive-manifest.json` NEXT TO the
 // database file (production default `~/.openomni/ledger-archive-manifest.json`
 // beside `storage.db`). Verification is the conformance case in
-// script/conformance/p2-ledger-baseline.test.ts: regenerating over the same
+// script/generate-ledger-archive-manifest.test.ts: regenerating over the same
 // rows reproduces the hash byte-for-byte; a tampered row mismatches.
 //
 // Usage:
