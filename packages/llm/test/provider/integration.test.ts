@@ -1,145 +1,119 @@
 import { describe, expect, it } from "bun:test";
 import type { Auth } from "../../src/auth";
-import { getSDK, getLanguage } from "../../src/provider/sdk";
 import { Provider } from "../../src/provider";
+import { getLanguage, getSDK } from "../../src/provider/sdk";
 
-function makeAnthropicModel(id?: string): Provider.Model {
+function makeModel(provider: "anthropic" | "openai", id: string): Provider.Model {
   return {
-    id: id ?? "claude-sonnet-4-20250514",
-    providerID: "anthropic",
-    name: "Claude Sonnet 4",
-    api: { npm: "@ai-sdk/anthropic" },
+    id,
+    providerID: provider,
+    name: provider === "anthropic" ? "Claude Sonnet 4" : "GPT-4o",
+    api: { npm: provider === "anthropic" ? "@ai-sdk/anthropic" : "@ai-sdk/openai" },
   };
 }
 
-function makeOpenAIModel(id?: string): Provider.Model {
-  return {
-    id: id ?? "gpt-4o",
-    providerID: "openai",
-    name: "GPT-4o",
-    api: { npm: "@ai-sdk/openai" },
-  };
-}
-
-describe("Provider Integration", () => {
-  it("full flow: getSDK → getLanguage (Anthropic API)", () => {
-    const auth: Auth.Info = { type: "api", key: "test-anthropic-key" };
-    const model = makeAnthropicModel();
-
-    const sdk = getSDK(model, auth);
-    expect(sdk).toBeDefined();
-    expect(typeof sdk.languageModel).toBe("function");
-    const sdkLm = sdk.languageModel(model.id);
-    expect(sdkLm).toBeDefined();
-    expect(sdkLm.modelId).toBe(model.id);
-
-    const lm = getLanguage(model, auth);
-    expect(lm).toBeDefined();
-    expect(lm.modelId).toBe(model.id);
-  });
-
-  it("full flow: getSDK → getLanguage (Anthropic proxy)", () => {
-    const auth: Auth.Info = {
-      type: "proxy",
-      baseURL: "http://localhost:8317",
-    };
-    const model = makeAnthropicModel("claude-opus-4-20250514");
-
-    const sdk = getSDK(model, auth);
-    expect(sdk).toBeDefined();
-    expect(typeof sdk.languageModel).toBe("function");
-    const sdkLm = sdk.languageModel(model.id);
-    expect(sdkLm).toBeDefined();
-    expect(sdkLm.modelId).toBe(model.id);
-
-    const lm = getLanguage(model, auth);
-    expect(lm).toBeDefined();
-    expect(lm.modelId).toBe(model.id);
-  });
-
-  it("full flow: getSDK returns valid OpenAI SDK (API)", () => {
-    const auth: Auth.Info = { type: "api", key: "test-openai-key" };
-    const model = makeOpenAIModel();
-
-    const sdk = getSDK(model, auth);
-    expect(sdk).toBeDefined();
-    expect(typeof sdk.languageModel).toBe("function");
-
-    const lm = sdk.languageModel("gpt-4o");
-    expect(lm).toBeDefined();
-    expect(lm.modelId).toBe("gpt-4o");
-  });
-
-  it("full flow: getSDK returns valid OpenAI SDK (proxy)", () => {
-    const auth: Auth.Info = {
+const sdkCases: Array<{
+  name: string;
+  model: Provider.Model;
+  auth: Auth.Info;
+  checksGetLanguage: boolean;
+}> = [
+  {
+    name: "Anthropic API",
+    model: makeModel("anthropic", "claude-sonnet-4-20250514"),
+    auth: { type: "api", key: "test-anthropic-key" },
+    checksGetLanguage: true,
+  },
+  {
+    name: "Anthropic proxy",
+    model: makeModel("anthropic", "claude-opus-4-20250514"),
+    auth: { type: "proxy", baseURL: "http://localhost:8317" },
+    checksGetLanguage: true,
+  },
+  {
+    name: "OpenAI API",
+    model: makeModel("openai", "gpt-4o"),
+    auth: { type: "api", key: "test-openai-key" },
+    checksGetLanguage: false,
+  },
+  {
+    name: "OpenAI proxy",
+    model: makeModel("openai", "gpt-5.1-codex-max"),
+    auth: {
       type: "proxy",
       baseURL: "http://localhost:8317/v1",
       apiKey: "test-proxy-api-key",
-    };
-    const model = makeOpenAIModel("gpt-5.1-codex-max");
+    },
+    checksGetLanguage: false,
+  },
+];
 
+describe("Provider Integration", () => {
+  it.each(sdkCases)("full flow: getSDK returns valid SDK ($name)", ({
+    model,
+    auth,
+    checksGetLanguage,
+  }) => {
     const sdk = getSDK(model, auth);
     expect(sdk).toBeDefined();
     expect(typeof sdk.languageModel).toBe("function");
-    const lm = sdk.languageModel(model.id);
-    expect(lm).toBeDefined();
-    expect(lm.modelId).toBe(model.id);
+    const sdkLm = sdk.languageModel(model.id);
+    expect(sdkLm).toBeDefined();
+    expect(sdkLm.modelId).toBe(model.id);
+    if (checksGetLanguage) {
+      const lm = getLanguage(model, auth);
+      expect(lm).toBeDefined();
+      expect(lm.modelId).toBe(model.id);
+    }
   });
 
-  it("should list models for each provider", async () => {
-    const anthropicModels = await Provider.listModels("anthropic");
-    expect(Array.isArray(anthropicModels)).toBe(true);
-    expect(anthropicModels.length).toBeGreaterThan(0);
+  const listCases: Array<{
+    name: string;
+    requests: Array<{ provider: "anthropic" | "openai"; auth?: "proxy" | "api" }>;
+  }> = [
+    {
+      name: "each provider",
+      requests: [{ provider: "anthropic" }, { provider: "openai" }],
+    },
+    {
+      name: "both proxy and api auth types",
+      requests: [
+        { provider: "openai", auth: "proxy" },
+        { provider: "openai", auth: "api" },
+      ],
+    },
+  ];
 
-    const openaiModels = await Provider.listModels("openai");
-    expect(Array.isArray(openaiModels)).toBe(true);
-    expect(openaiModels.length).toBeGreaterThan(0);
-  });
-
-  it("should return all OpenAI models for both proxy and api auth types", async () => {
-    const proxyModels = await Provider.listModels("openai", "proxy");
-    expect(Array.isArray(proxyModels)).toBe(true);
-    expect(proxyModels.length).toBeGreaterThan(0);
-
-    const apiModels = await Provider.listModels("openai", "api");
-    expect(Array.isArray(apiModels)).toBe(true);
-    expect(apiModels.length).toBeGreaterThan(0);
+  it.each(listCases)("should list models for $name", async ({ requests }) => {
+    for (const { provider, auth } of requests) {
+      const models = await Provider.listModels(provider, auth);
+      expect(Array.isArray(models)).toBe(true);
+      expect(models.length).toBeGreaterThan(0);
+    }
   });
 
   it("maps custom models without stale removed-provider npm metadata", () => {
-    const provider = {
-      id: "custom",
-      name: "Custom",
-      env: [],
-      api: "http://localhost:8317/v1",
-      models: {},
-    };
-    const model = Provider.fromModelsDevModel(provider, {
-      id: "custom-model",
-      name: "Custom Model",
-    });
-
+    const model = Provider.fromModelsDevModel(
+      { id: "custom", name: "Custom", env: [], api: "http://localhost:8317/v1", models: {} },
+      { id: "custom-model", name: "Custom Model" },
+    );
     expect(model.api?.npm).toBe("@ai-sdk/openai");
     expect(model.api?.url).toBe("http://localhost:8317/v1");
   });
 
   it("maps catalog limit.context through to the model (the run-window input)", () => {
     const provider = { id: "custom", name: "Custom", env: [], models: {} };
-
     const sized = Provider.fromModelsDevModel(provider, {
       id: "m",
       name: "M",
       limit: { context: 200_000 },
     });
     expect(sized.limit?.context).toBe(200_000);
-
     const unsized = Provider.fromModelsDevModel(provider, { id: "m", name: "M" });
     expect(unsized.limit?.context).toBe(0);
   });
 
   it("honors model.api.url for openai models (#audit L5)", () => {
-    // Regression: the old `providerID !== "openai"` gate silently ignored a
-    // configured catalog URL for openai models.
     const auth: Auth.Info = { type: "api", key: "test-openai-key" };
     const model: Provider.Model = {
       id: "gpt-4o-custom-endpoint",
@@ -147,7 +121,6 @@ describe("Provider Integration", () => {
       name: "GPT-4o (custom endpoint)",
       api: { npm: "@ai-sdk/openai", url: "http://localhost:9317/v1" },
     };
-
     const lm = getLanguage(model, auth) as unknown as {
       config: { url: (options: { path: string; modelId: string }) => string };
       provider: string;
@@ -166,10 +139,8 @@ describe("Provider Integration", () => {
       name: "Custom Model",
       api: { npm: "@ai-sdk/openai", url: "http://localhost:8317/v1" },
     };
-
     const sdk = getSDK(model, auth);
     expect(typeof sdk.languageModel).toBe("function");
-
     const lm = getLanguage(model, auth);
     expect(lm.modelId).toBe("custom-model");
     expect(lm.provider).toBe("custom.responses");

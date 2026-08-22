@@ -1,9 +1,13 @@
-import { describe, test, expect, afterEach } from "bun:test";
-import { getSDK, getLanguage } from "../../src/provider/sdk";
-import type { Provider } from "../../src/provider";
+import { afterEach, describe, expect, test } from "bun:test";
 import type { Auth } from "../../src/auth";
+import type { Provider } from "../../src/provider";
+import { getLanguage, getSDK } from "../../src/provider/sdk";
 
 const originalFetch = globalThis.fetch;
+const authCases: Array<{ name: string; auth: Auth.Info }> = [
+  { name: "api key auth", auth: { type: "api", key: "sk-xxx" } },
+  { name: "proxy auth", auth: { type: "proxy", baseURL: "http://localhost:8317" } },
+];
 
 function makeModel(overrides?: Partial<Provider.Model>): Provider.Model {
   return {
@@ -21,21 +25,7 @@ describe("getSDK (Anthropic)", () => {
     globalThis.fetch = originalFetch;
   });
 
-  test("api key auth returns SDK with languageModel", () => {
-    const auth: Auth.Info = { type: "api", key: "sk-xxx" };
-    const sdk = getSDK(makeModel(), auth);
-    expect(sdk).toBeDefined();
-    expect(typeof sdk.languageModel).toBe("function");
-    const lm = sdk.languageModel("claude-sonnet-4-20250514");
-    expect(lm).toBeDefined();
-    expect(lm.modelId).toBe("claude-sonnet-4-20250514");
-  });
-
-  test("proxy auth returns SDK with languageModel", () => {
-    const auth: Auth.Info = {
-      type: "proxy",
-      baseURL: "http://localhost:8317",
-    };
+  test.each(authCases)("$name returns SDK with languageModel", ({ auth }) => {
     const sdk = getSDK(makeModel(), auth);
     expect(sdk).toBeDefined();
     expect(typeof sdk.languageModel).toBe("function");
@@ -46,28 +36,16 @@ describe("getSDK (Anthropic)", () => {
 });
 
 describe("getLanguage (Anthropic)", () => {
-  test("returns a language model for anthropic model with api auth", () => {
-    const auth: Auth.Info = { type: "api", key: "sk-xxx" };
-    const model = getLanguage(makeModel(), auth);
-    expect(model).toBeDefined();
-    expect(model.modelId).toBe("claude-sonnet-4-20250514");
-  });
-
-  test("returns a language model for proxy auth", () => {
-    const auth: Auth.Info = {
-      type: "proxy",
-      baseURL: "http://localhost:8317",
-    };
+  test.each(authCases)("returns a language model with $name", ({ auth }) => {
     const model = getLanguage(makeModel(), auth);
     expect(model).toBeDefined();
     expect(model.modelId).toBe("claude-sonnet-4-20250514");
   });
 
   test("uses api.id when provided", () => {
-    const auth: Auth.Info = { type: "api", key: "sk-xxx" };
     const model = getLanguage(
       makeModel({ api: { npm: "@ai-sdk/anthropic", id: "claude-3-haiku" } }),
-      auth,
+      { type: "api", key: "sk-xxx" },
     );
     expect(model).toBeDefined();
     expect(model.modelId).toBe("claude-3-haiku");
