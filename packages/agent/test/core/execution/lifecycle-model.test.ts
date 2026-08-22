@@ -24,7 +24,7 @@ describe("model dispatch points", () => {
     });
 
     const state = makeState();
-    const result = await dispatchModelRequest(state, engine, makeConfig(), makeAgentBase());
+    const result = await dispatchModelRequest(state, engine, makeConfig(), makeAgentBase(), "test-model");
 
     expect(result).toBeNull();
     expect(fn).toHaveBeenCalledTimes(1);
@@ -53,6 +53,7 @@ describe("model dispatch points", () => {
       makeConfig(),
       { outcome: { type: "stop" }, responseTokens: 0 },
       makeAgentBase(),
+      "test-model",
     );
 
     expect(result).toBeNull();
@@ -76,7 +77,7 @@ describe("model dispatch points", () => {
     });
 
     const state = makeState();
-    const result = await dispatchModelRequest(state, engine, makeConfig(), makeAgentBase());
+    const result = await dispatchModelRequest(state, engine, makeConfig(), makeAgentBase(), "test-model");
 
     expect(result).toBeNull();
     const lastMessage = state.messages[state.messages.length - 1];
@@ -107,6 +108,7 @@ describe("model dispatch points", () => {
       makeConfig(),
       { outcome: { type: "stop" }, responseTokens: 0 },
       makeAgentBase(),
+      "test-model",
     );
 
     expect(result).toBeNull();
@@ -134,6 +136,7 @@ describe("model dispatch points", () => {
       makeConfig(),
       { outcome: { type: "stop" }, responseTokens: 0 },
       makeAgentBase(),
+      "test-model",
     );
 
     expect(result).not.toBeNull();

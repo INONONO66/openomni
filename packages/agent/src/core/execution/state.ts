@@ -249,6 +249,18 @@ export function disarmWindowYield(state: RunState): void {
   state.windowYieldDisarmed = true;
 }
 
+/**
+ * Clears the model-scoped window guards on a fallback model switch (#752
+ * review F3). `windowYieldDisarmed` ("the remaining headroom is real") and
+ * the spent L5 one-shot overflow recovery are judgments about ONE model's
+ * window; carried onto a different model, a smaller fallback window would be
+ * fired blind with its recovery already consumed.
+ */
+export function resetModelWindowGuards(state: RunState): void {
+  state.windowYieldDisarmed = undefined;
+  state.overflowCompactionAttempted = undefined;
+}
+
 export function recordAssistantTokenDelta(
   state: RunState,
   inputTokens: number,

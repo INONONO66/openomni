@@ -6,8 +6,8 @@ Ring-1 pure target-selection package (docs/architecture.md § Outbound target se
 
 - Chain-advancing failure classes: `timeout`, `transient_error`, `validation_error` (provider/model-specific faults — the point of a fallback chain).
 - Never advancing: `tool_error` (not the model's fault), `context_overflow` (the compaction recovery seam retries the SAME model — advancing would fight it), `aborted` (a stop instruction is never a placement signal), and unknown strings (fail conservative).
-- Selection clamps to the last candidate and reports `exhausted` — WHEN a run stops retrying stays the retry policy's decision; placement only picks.
-- The reason vocabulary is the agent loop's `TerminalReason` strings; placement deliberately does not import the loop — the coupling is by declared string, pinned by tests on both sides.
+- Selection clamps to the last candidate and reports `exhausted` — WHEN a run stops retrying stays the retry policy's decision; placement only picks. (The agent loop makes `validation_error` retryable ONLY while a fallback chain is configured — a refusal reaches a different model, never a blind same-model retry.)
+- The reason vocabulary is the agent loop's `TerminalReason` strings; placement deliberately does not import the loop — the coupling is by declared string, cross-pinned by `packages/agent/test/core/placement-vocabulary.test.ts` (compile-time exhaustiveness over `RetryReason` + runtime set equality; a rename on either side fails there, not silently).
 
 ## BOUNDARIES
 

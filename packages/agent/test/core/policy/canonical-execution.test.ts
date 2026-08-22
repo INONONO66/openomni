@@ -131,7 +131,12 @@ describe("canonical ChatAgent policy execution", () => {
     expect(typeof seen[0]?.sessionId).toBe("string");
     expect(typeof seen[0]?.runId).toBe("string");
     expect(seen.find((entry) => entry.pointId === "run.turn.pre")?.turnIndex).toBe(0);
-    expect(seen.find((entry) => entry.pointId === "connection.llm.pre")?.modelId).toBe("model-1");
+    // #752 F4: the connection points carry the RESOLVED model the call
+    // actually runs (the mock resolver's id), not the configured ref — after
+    // a fallback switch the two diverge and the resolved one is the truth.
+    expect(seen.find((entry) => entry.pointId === "connection.llm.pre")?.modelId).toBe(
+      mockProviderModel.id,
+    );
   });
 });
 

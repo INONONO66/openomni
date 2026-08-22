@@ -32,6 +32,12 @@ export interface PolicyContext extends GenericPolicyContext {
    * prompt.context.pre.
    */
   turnIndex?: number;
+  /**
+   * The model the connection ACTUALLY calls, supplied on
+   * connection.llm.pre/post — the resolved per-attempt selection, which
+   * diverges from the configured primary after a fallback switch (#752 F4).
+   */
+  modelId?: string;
   isCompletion: boolean;
   continuationCount: number;
   elapsedMs: number;

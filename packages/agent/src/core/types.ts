@@ -27,8 +27,10 @@ export interface ChatAgentConfig {
    * fold. Tool errors, context overflow (the compaction recovery retries the
    * SAME model), and aborts never advance the chain; when the chain is spent
    * the last candidate absorbs the remaining attempts — WHEN the run stops
-   * retrying stays the retry policy's decision. Absent = every attempt uses
-   * `model`.
+   * retrying stays the retry policy's decision. Configuring a chain also
+   * makes `validation_error` retryable (it is terminal without one: a
+   * refusal/unusable shape only earns a retry when a DIFFERENT model can
+   * answer it). Absent = every attempt uses `model`.
    */
   modelFallbacks?: Model.Ref[];
   budget?: AgentBudget;

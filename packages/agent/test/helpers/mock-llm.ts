@@ -8,6 +8,8 @@ type MockLlmInput = {
   readonly toolExecutor?: ChatAgentConfig["toolExecutor"];
   /** The steering stop condition the loop passes when config.steeringPending is set (#751). */
   readonly shouldYield?: () => boolean;
+  /** The window-yield arm point — undefined when the yield is disarmed or the window unknown. */
+  readonly yieldAtInputTokens?: number;
 };
 
 export type MockLlmFn = (input: MockLlmInput, sink: Sink) => Promise<Run.Outcome>;

@@ -34,6 +34,11 @@
     "linesHit": 1798,
     "pct": 94.04
   },
+  "packages/placement": {
+    "linesFound": 22,
+    "linesHit": 22,
+    "pct": 100
+  },
   "packages/openomni": {
     "linesFound": 12852,
     "linesHit": 12193,

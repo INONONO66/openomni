@@ -730,6 +730,7 @@ const TRACKED_DOCS = [
   "packages/ledger/AGENTS.md",
   "packages/llm/AGENTS.md",
   "packages/agent/AGENTS.md",
+  "packages/placement/AGENTS.md",
   "packages/openomni/AGENTS.md",
   "packages/coordinator/AGENTS.md",
   "packages/channels/AGENTS.md",

@@ -24,6 +24,7 @@ import {
   createRunState,
   recordRunAttempt,
   recordRunWindow,
+  resetModelWindowGuards,
   nonEmptyString,
   requireTrace,
   type AgentRunBase,
@@ -43,13 +44,27 @@ export async function runAgent(
   config: ChatAgentConfig,
   sink?: Sink,
 ): Promise<AgentResult> {
-  const retryPolicy = Retry.DEFAULT_RETRY_POLICY;
+  // With a fallback chain configured, validation_error joins the retryable
+  // set (#752 review F1): a refusal/unusable shape is model-specific, so a
+  // DIFFERENT candidate can plausibly succeed — while retrying the SAME model
+  // against it stays the blind-retry anti-pattern, which is why the widening
+  // is gated on the chain's existence (and bounded by maxAttempts either way).
+  const retryPolicy =
+    (config.modelFallbacks?.length ?? 0) > 0
+      ? {
+          ...Retry.DEFAULT_RETRY_POLICY,
+          retryOn: [...(Retry.DEFAULT_RETRY_POLICY.retryOn ?? []), "validation_error" as const],
+        }
+      : Retry.DEFAULT_RETRY_POLICY;
   let attempt = 1;
   let thrownFailure: RunFailureFacts | undefined;
   // The decided reason of every finished attempt, oldest first — the input
   // to the placement fold below. Decided facts only (the retry decision's
   // own record), never re-derived from the thrown error (#752).
   const failureReasons: string[] = [];
+  // The previous attempt's model, for invalidating model-scoped window
+  // guards on a fallback switch (#752 review F3).
+  let lastModelKey: string | undefined;
 
   const trace = requireTrace("agent run", input.traceContext);
   const { traceId, sessionId, runId } = trace;
@@ -121,6 +136,16 @@ export async function runAgent(
           [config.model, ...(config.modelFallbacks ?? [])],
           failureReasons,
         ).model;
+        // A model SWITCH invalidates the model-scoped window guards (#752
+        // review F3): "the remaining headroom is real" (windowYieldDisarmed)
+        // and the spent L5 overflow recovery were judgments about the
+        // PREVIOUS model's window — carried over, a smaller fallback window
+        // would run blind with its one recovery already consumed.
+        const modelKey = `${attemptModel.provider}/${attemptModel.id}`;
+        if (lastModelKey !== undefined && modelKey !== lastModelKey) {
+          resetModelWindowGuards(state);
+        }
+        lastModelKey = modelKey;
         const providerModel = await (config.llm?.resolveProviderModel ?? resolveProviderModel)(
           attemptModel,
         );
@@ -145,7 +170,13 @@ export async function runAgent(
           if (turnResult.type === "complete") return finish(turnResult.result);
 
           const runLlm = config.llm?.run ?? llmRun;
-          const modelRequestResult = await dispatchModelRequest(state, engine, config, agentBase);
+          const modelRequestResult = await dispatchModelRequest(
+            state,
+            engine,
+            config,
+            agentBase,
+            providerModel.id,
+          );
           if (modelRequestResult) return finish(modelRequestResult);
           const outcome = await runLlm(turnResult.turn.runInput, turnResult.turn.trackingSink);
           const modelResponseResult = await dispatchModelResponse(
@@ -157,6 +188,7 @@ export async function runAgent(
               responseTokens: turnResult.turn.turnUsage.outputTokens,
             },
             agentBase,
+            providerModel.id,
           );
           if (modelResponseResult) return finish(modelResponseResult);
 
