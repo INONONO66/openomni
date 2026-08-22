@@ -114,6 +114,14 @@ export const StreamRegistry = {
     status:
       "shipped (#709 — writer at ledger engagement/index.ts; brain sole writer, gateway-design §4/§5)",
   },
+  gateway_send: {
+    stream: "gateway_send:<uriencoded messageId>",
+    heads: "single-fact (expectedHead 0, seq 1)",
+    conflictMeans:
+      "message id already admitted — equivalent retries resume the recorded send; divergent content fails closed",
+    factTypes: ["gateway.send.admitted"],
+    status: "shipped",
+  },
   effect: {
     stream: "effect:<effectId>",
     heads: "intent at seq 1 (effectId is the idempotency key), exactly one outcome fact after",

@@ -53,7 +53,8 @@ interface LedgerStreamProducer {
     | "route_correction"
     | "command"
     | "effect"
-    | "engagement";
+    | "engagement"
+    | "gateway_send";
   /**
    * Repo-relative paths of the enumerated modules that append this class's
    * facts. Every class has exactly one producer except `route`, which split
@@ -127,6 +128,13 @@ export const LEDGER_PRODUCER_MANIFEST: LedgerProducerManifest = {
       // adoption path — the stream class is born with the table).
       streamClass: "engagement",
       producers: ["packages/ledger/src/engagement/index.ts"],
+      writes: "append",
+    },
+    {
+      // Todo 21: one durable admission per outbound message id. Retries read
+      // this single-fact stream before resuming debit/wait/delivery state.
+      streamClass: "gateway_send",
+      producers: ["packages/channels/src/router/messaging/send.ts"],
       writes: "append",
     },
   ],
