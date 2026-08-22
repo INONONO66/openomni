@@ -1,38 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { anthropicModel as model, assistantMessage as buildAssistantMessage } from "../helpers/fixtures";
 import type { Message, Tool, Transcript } from "@openomni/protocol";
 import type { Sink } from "../../src/sink";
 import { Bus } from "@openomni/telemetry";
 import { APIError } from "../../src/error";
 import { Processor } from "../../src/processor";
-import type { Provider } from "../../src/provider";
-
-function assistantMessage(): Message.AssistantMessage {
-  return {
-    id: "msg-fold",
-    sessionID: "session-fold",
-    role: "assistant",
-    time: { created: Date.now() },
-    parentID: "parent-fold",
-    modelID: "claude-3-5-sonnet",
-    providerID: "anthropic",
-    agent: "test-agent",
-    path: { cwd: "/test", root: "/" },
-    cost: 0,
-    tokens: {
-      input: 0,
-      output: 0,
-      reasoning: 0,
-      cache: { read: 0, write: 0 },
-    },
-  };
-}
-
-const model: Provider.Model = {
-  id: "claude-3-5-sonnet",
-  providerID: "anthropic",
-  name: "Claude 3.5 Sonnet",
-  api: { npm: "@ai-sdk/anthropic" },
-};
 
 type Capture = {
   sink: Sink;
@@ -68,7 +40,7 @@ function streamOf(chunks: Array<Record<string, unknown>>) {
 
 function createProcessor(cap: Capture, overrides: Partial<Processor.ProcessorOptions> = {}) {
   return Processor.create({
-    assistantMessage: assistantMessage(),
+    assistantMessage: buildAssistantMessage("msg-fold", "session-fold", "parent-fold"),
     sessionID: "session-fold",
     model,
     abort: new AbortController().signal,

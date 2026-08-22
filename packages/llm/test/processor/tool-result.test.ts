@@ -1,37 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { anthropicModel as model, assistantMessage as buildAssistantMessage } from "../helpers/fixtures";
 import type { Message, Tool } from "@openomni/protocol";
 import type { Sink } from "../../src/sink";
 import { Bus } from "@openomni/telemetry";
 import { Processor } from "../../src/processor";
-import type { Provider } from "../../src/provider";
-
-function assistantMessage(): Message.AssistantMessage {
-  return {
-    id: "msg-tool-result",
-    sessionID: "session-tool-result",
-    role: "assistant",
-    time: { created: Date.now() },
-    parentID: "parent-tool-result",
-    modelID: "claude-3-5-sonnet",
-    providerID: "anthropic",
-    agent: "test-agent",
-    path: { cwd: "/test", root: "/" },
-    cost: 0,
-    tokens: {
-      input: 0,
-      output: 0,
-      reasoning: 0,
-      cache: { read: 0, write: 0 },
-    },
-  };
-}
-
-const model: Provider.Model = {
-  id: "claude-3-5-sonnet",
-  providerID: "anthropic",
-  name: "Claude 3.5 Sonnet",
-  api: { npm: "@ai-sdk/anthropic" },
-};
 
 describe("Processor tool result projection", () => {
   afterEach(() => {
@@ -49,7 +21,7 @@ describe("Processor tool result projection", () => {
     };
 
     const processor = Processor.create({
-      assistantMessage: assistantMessage(),
+      assistantMessage: buildAssistantMessage("msg-tool-result", "session-tool-result", "parent-tool-result"),
       sessionID: "session-tool-result",
       model,
       abort: new AbortController().signal,
@@ -118,7 +90,7 @@ describe("Processor tool result projection", () => {
     };
 
     const processor = Processor.create({
-      assistantMessage: assistantMessage(),
+      assistantMessage: buildAssistantMessage("msg-tool-result", "session-tool-result", "parent-tool-result"),
       sessionID: "session-tool-result",
       model,
       abort: new AbortController().signal,
@@ -167,7 +139,7 @@ describe("Processor tool result projection", () => {
     };
 
     const processor = Processor.create({
-      assistantMessage: assistantMessage(),
+      assistantMessage: buildAssistantMessage("msg-tool-result", "session-tool-result", "parent-tool-result"),
       sessionID: "session-tool-result",
       model,
       abort: new AbortController().signal,
@@ -210,7 +182,7 @@ describe("Processor tool result projection", () => {
     };
 
     const processor = Processor.create({
-      assistantMessage: assistantMessage(),
+      assistantMessage: buildAssistantMessage("msg-tool-result", "session-tool-result", "parent-tool-result"),
       sessionID: "session-tool-result",
       model,
       abort: new AbortController().signal,
@@ -259,7 +231,7 @@ describe("Processor tool result projection", () => {
     };
 
     const processor = Processor.create({
-      assistantMessage: assistantMessage(),
+      assistantMessage: buildAssistantMessage("msg-tool-result", "session-tool-result", "parent-tool-result"),
       sessionID: "session-tool-result",
       model,
       abort: new AbortController().signal,
@@ -307,7 +279,7 @@ describe("Processor tool output normalization", () => {
     };
 
     const processor = Processor.create({
-      assistantMessage: assistantMessage(),
+      assistantMessage: buildAssistantMessage("msg-tool-result", "session-tool-result", "parent-tool-result"),
       sessionID: "session-tool-result",
       model,
       abort: new AbortController().signal,
@@ -354,7 +326,7 @@ describe("Processor tool error normalization", () => {
     };
 
     const processor = Processor.create({
-      assistantMessage: assistantMessage(),
+      assistantMessage: buildAssistantMessage("msg-tool-result", "session-tool-result", "parent-tool-result"),
       sessionID: "session-tool-result",
       model,
       abort: new AbortController().signal,
@@ -415,7 +387,7 @@ describe("Processor abort settlement grace (#532 candidate 2)", () => {
     const abortController = new AbortController();
 
     const processor = Processor.create({
-      assistantMessage: assistantMessage(),
+      assistantMessage: buildAssistantMessage("msg-tool-result", "session-tool-result", "parent-tool-result"),
       sessionID: "session-tool-result",
       model,
       abort: abortController.signal,
@@ -460,7 +432,7 @@ describe("Processor abort settlement grace (#532 candidate 2)", () => {
     const abortController = new AbortController();
 
     const processor = Processor.create({
-      assistantMessage: assistantMessage(),
+      assistantMessage: buildAssistantMessage("msg-tool-result", "session-tool-result", "parent-tool-result"),
       sessionID: "session-tool-result",
       model,
       abort: abortController.signal,

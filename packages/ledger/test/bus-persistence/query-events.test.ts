@@ -85,3 +85,12 @@ describe("BusQuery event queries", () => {
     });
   });
 });
+
+describe("BusQuery public contracts", () => {
+  test("exposes public schema contracts", () => {
+    expect(BusQuery.ChainIntegrityResult.parse({ valid: true, totalVerified: 0 })).toEqual({
+      valid: true,
+      totalVerified: 0,
+    });
+  });
+});

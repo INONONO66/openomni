@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { registerAt } from "../../helpers/policy-decision";
 import { PolicyRegistrationError } from "@openomni/policy";
 import { PolicyDecision } from "@openomni/protocol";
 import { PolicyEngine } from "../../../src/core/policy";
@@ -81,16 +82,9 @@ describe("agent policy registration fail-closed boundary (post-#530)", () => {
   it("still accepts canonical point registrations", async () => {
     const engine = PolicyEngine.create();
     const called: string[] = [];
-    engine.register({
-      kind: "point",
-      name: "canonical",
-      pointIds: ["run.turn.pre"],
-      effectCapabilities: { "run.turn.pre": [] },
-      priority: 0,
-      fn: () => {
-        called.push("canonical");
-        return allow();
-      },
+    registerAt(engine, "run.turn.pre", "canonical", 0, () => {
+      called.push("canonical");
+      return allow();
     });
 
     const decision = await engine.dispatchPoint("run.turn.pre", pointCtx() as never);

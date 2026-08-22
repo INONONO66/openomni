@@ -2,7 +2,7 @@ import { describe, expect, it, mock } from "bun:test";
 import { Bus } from "@openomni/telemetry";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { PolicyContext } from "../../../src/core/policy/types";
-import { allow, appendContext, replaceMessages } from "../../helpers/policy-decision";
+import { registerAt, allow, appendContext, replaceMessages } from "../../helpers/policy-decision";
 import { handleCompact } from "../../../src/core/execution/turn";
 import { makeAgentBase, makeConfig, makeState } from "./lifecycle-dispatch-fixture";
 
@@ -13,14 +13,14 @@ describe("completion.prepare dispatch", () => {
     const compactedMessages = [createUserMessage("compacted summary", "test")];
 
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "test-post-compaction",
-      pointIds: ["run.completion.pre"],
-      effectCapabilities: { "run.completion.pre": ["run.replace_messages"] },
-      priority: 100,
-      fn: () => replaceMessages(compactedMessages, "test.compact", "compact"),
-    });
+    registerAt(
+      engine,
+      "run.completion.pre",
+      "test-post-compaction",
+      100,
+      () => replaceMessages(compactedMessages, "test.compact", "compact"),
+      ["run.replace_messages"],
+    );
 
     const state = makeState();
     await handleCompact(state, engine, makeConfig(), makeAgentBase());
@@ -32,14 +32,14 @@ describe("completion.prepare dispatch", () => {
   it("completion.prepare append_context effect appends a user message", async () => {
     Bus.reset();
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "test-post-compaction-context",
-      pointIds: ["run.completion.pre"],
-      effectCapabilities: { "run.completion.pre": ["prompt.append_context"] },
-      priority: 100,
-      fn: () => appendContext("compaction context", "test.compact", "append"),
-    });
+    registerAt(
+      engine,
+      "run.completion.pre",
+      "test-post-compaction-context",
+      100,
+      () => appendContext("compaction context", "test.compact", "append"),
+      ["prompt.append_context"],
+    );
 
     const state = makeState();
     const result = await handleCompact(state, engine, makeConfig(), makeAgentBase());
@@ -53,17 +53,17 @@ describe("completion.prepare dispatch", () => {
   it("completion.prepare malformed replacement messages fail closed", async () => {
     Bus.reset();
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "test-post-compaction-bad-replacement",
-      pointIds: ["run.completion.pre"],
-      effectCapabilities: { "run.completion.pre": ["run.replace_messages"] },
-      priority: 100,
-      fn: () =>
+    registerAt(
+      engine,
+      "run.completion.pre",
+      "test-post-compaction-bad-replacement",
+      100,
+      () =>
         allow("test.compact", "bad-replace", [
           { type: "run.replace_messages", messages: [{ invalid: true }] },
         ]),
-    });
+      ["run.replace_messages"],
+    );
 
     const result = await handleCompact(makeState(), engine, makeConfig(), makeAgentBase());
 
@@ -76,11 +76,8 @@ describe("completion.prepare dispatch", () => {
     Bus.reset();
     const fn = mock((_ctx: PolicyContext) => allow());
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
+    registerAt(engine, "run.completion.pre", {
       name: "test-post-compaction-noop",
-      pointIds: ["run.completion.pre"],
-      effectCapabilities: { "run.completion.pre": [] },
       priority: 100,
       fn,
     });

@@ -1,4 +1,5 @@
 import { describe, expect, it, mock } from "bun:test";
+import { atPoint, registerAt } from "../../helpers/policy-decision";
 import { PolicyDecision, Policy } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { Operational } from "@openomni/protocol";
@@ -52,38 +53,17 @@ describe("PolicyEngine", () => {
   it("executes policy in priority order (ascending)", async () => {
     const order: number[] = [];
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "third",
-      pointIds: ["run.turn.pre"],
-      effectCapabilities: { "run.turn.pre": [] },
-      priority: 300,
-      fn: () => {
-        order.push(300);
-        return PolicyDecision.allow({ policyId: "test.allow" });
-      },
+    registerAt(engine, "run.turn.pre", "third", 300, () => {
+      order.push(300);
+      return PolicyDecision.allow({ policyId: "test.allow" });
     });
-    engine.register({
-      kind: "point",
-      name: "first",
-      pointIds: ["run.turn.pre"],
-      effectCapabilities: { "run.turn.pre": [] },
-      priority: 100,
-      fn: () => {
-        order.push(100);
-        return PolicyDecision.allow({ policyId: "test.allow" });
-      },
+    registerAt(engine, "run.turn.pre", "first", 100, () => {
+      order.push(100);
+      return PolicyDecision.allow({ policyId: "test.allow" });
     });
-    engine.register({
-      kind: "point",
-      name: "second",
-      pointIds: ["run.turn.pre"],
-      effectCapabilities: { "run.turn.pre": [] },
-      priority: 200,
-      fn: () => {
-        order.push(200);
-        return PolicyDecision.allow({ policyId: "test.allow" });
-      },
+    registerAt(engine, "run.turn.pre", "second", 200, () => {
+      order.push(200);
+      return PolicyDecision.allow({ policyId: "test.allow" });
     });
 
     await engine.dispatchPoint("run.turn.pre", turnPreCtx());
@@ -94,22 +74,8 @@ describe("PolicyEngine", () => {
     const engine = PolicyEngine.create();
     const postFn = mock(() => PolicyDecision.allow({ policyId: "test.allow" }));
     const preFn = mock(() => PolicyDecision.allow({ policyId: "test.allow" }));
-    engine.register({
-      kind: "point",
-      name: "post",
-      pointIds: ["run.turn.post"],
-      effectCapabilities: { "run.turn.post": [] },
-      priority: 100,
-      fn: postFn,
-    });
-    engine.register({
-      kind: "point",
-      name: "pre",
-      pointIds: ["run.turn.pre"],
-      effectCapabilities: { "run.turn.pre": [] },
-      priority: 100,
-      fn: preFn,
-    });
+    registerAt(engine, "run.turn.post", "post", 100, postFn);
+    registerAt(engine, "run.turn.pre", "pre", 100, preFn);
 
     await engine.dispatchPoint("run.turn.pre", turnPreCtx());
 
@@ -120,35 +86,23 @@ describe("PolicyEngine", () => {
   it("short-circuits on non-continue verdict", async () => {
     const engine = PolicyEngine.create();
     const third = mock(() => PolicyDecision.allow({ policyId: "test.allow" }));
-    engine.register({
-      kind: "point",
-      name: "a",
-      pointIds: ["run.turn.pre"],
-      effectCapabilities: { "run.turn.pre": [] },
-      priority: 100,
-      fn: () => PolicyDecision.allow({ policyId: "test.allow" }),
-    });
-    engine.register({
-      kind: "point",
-      name: "b",
-      pointIds: ["run.turn.pre"],
-      effectCapabilities: { "run.turn.pre": ["run.abort"] },
-      priority: 200,
-      fn: () =>
+    registerAt(engine, "run.turn.pre", "a", 100, () =>
+      PolicyDecision.allow({ policyId: "test.allow" }),
+    );
+    registerAt(
+      engine,
+      "run.turn.pre",
+      "b",
+      200,
+      () =>
         PolicyDecision.deny({
           policyId: "test.abort",
           reasonCodes: ["stop"],
           effects: [{ type: "run.abort", reason: "stop" }],
         }),
-    });
-    engine.register({
-      kind: "point",
-      name: "c",
-      pointIds: ["run.turn.pre"],
-      effectCapabilities: { "run.turn.pre": [] },
-      priority: 300,
-      fn: third,
-    });
+      ["run.abort"],
+    );
+    registerAt(engine, "run.turn.pre", "c", 300, third);
 
     const verdict = await engine.dispatchPoint("run.turn.pre", turnPreCtx());
     expect(verdict.verdict).toBe("deny");
@@ -165,25 +119,23 @@ describe("PolicyEngine", () => {
     try {
       const engine = PolicyEngine.create();
       const after = mock(() => PolicyDecision.allow({ policyId: "test.allow" }));
-      engine.register({
-        kind: "point",
-        name: "boom",
-        pointIds: ["run.turn.pre"],
-        effectCapabilities: { "run.turn.pre": [] },
-        priority: 100,
-        failPolicy: "fail-open",
-        fn: () => {
-          throw new Error("boom");
-        },
-      });
-      engine.register({
-        kind: "point",
-        name: "after",
-        pointIds: ["run.turn.pre"],
-        effectCapabilities: { "run.turn.pre": [] },
-        priority: 200,
-        fn: after,
-      });
+      engine.register(
+        atPoint("run.turn.pre", {
+          name: "boom",
+          priority: 100,
+          failPolicy: "fail-open",
+          fn: () => {
+            throw new Error("boom");
+          },
+        }),
+      );
+      engine.register(
+        atPoint("run.turn.pre", {
+          name: "after",
+          priority: 200,
+          fn: after,
+        }),
+      );
 
       const verdict = await engine.dispatchPoint("run.turn.pre", turnPreCtx());
       expect(verdict.verdict).toBe("allow");
@@ -196,25 +148,15 @@ describe("PolicyEngine", () => {
   it("fail-closed aborts chain on thrown error", async () => {
     const engine = PolicyEngine.create();
     const after = mock(() => PolicyDecision.allow({ policyId: "test.allow" }));
-    engine.register({
-      kind: "point",
+    registerAt(engine, "run.turn.pre", {
       name: "boom",
-      pointIds: ["run.turn.pre"],
-      effectCapabilities: { "run.turn.pre": [] },
       priority: 100,
       failPolicy: "fail-closed",
       fn: () => {
         throw new Error("boom");
       },
     });
-    engine.register({
-      kind: "point",
-      name: "after",
-      pointIds: ["run.turn.pre"],
-      effectCapabilities: { "run.turn.pre": [] },
-      priority: 200,
-      fn: after,
-    });
+    registerAt(engine, "run.turn.pre", "after", 200, after);
 
     const verdict = await engine.dispatchPoint("run.turn.pre", turnPreCtx());
     expect(verdict.verdict).toBe("deny");
@@ -225,24 +167,10 @@ describe("PolicyEngine", () => {
   it("uses resolved policy point default fail-closed for pre-boundary errors", async () => {
     const engine = PolicyEngine.create();
     const after = mock(() => PolicyDecision.allow({ policyId: "test.allow" }));
-    engine.register({
-      kind: "point",
-      name: "boom",
-      pointIds: ["tool.native.pre"],
-      effectCapabilities: { "tool.native.pre": [] },
-      priority: 100,
-      fn: () => {
-        throw new Error("boom");
-      },
+    registerAt(engine, "tool.native.pre", "boom", 100, () => {
+      throw new Error("boom");
     });
-    engine.register({
-      kind: "point",
-      name: "after",
-      pointIds: ["tool.native.pre"],
-      effectCapabilities: { "tool.native.pre": [] },
-      priority: 200,
-      fn: after,
-    });
+    registerAt(engine, "tool.native.pre", "after", 200, after);
 
     const verdict = await engine.dispatchPoint("tool.native.pre", toolPreCtx());
 
@@ -255,24 +183,10 @@ describe("PolicyEngine", () => {
   it("uses resolved policy point default fail-open for post-boundary errors", async () => {
     const engine = PolicyEngine.create();
     const after = mock(() => PolicyDecision.allow({ policyId: "test.allow" }));
-    engine.register({
-      kind: "point",
-      name: "boom",
-      pointIds: ["run.turn.post"],
-      effectCapabilities: { "run.turn.post": [] },
-      priority: 100,
-      fn: () => {
-        throw new Error("boom");
-      },
+    registerAt(engine, "run.turn.post", "boom", 100, () => {
+      throw new Error("boom");
     });
-    engine.register({
-      kind: "point",
-      name: "after",
-      pointIds: ["run.turn.post"],
-      effectCapabilities: { "run.turn.post": [] },
-      priority: 200,
-      fn: after,
-    });
+    registerAt(engine, "run.turn.post", "after", 200, after);
 
     const verdict = await engine.dispatchPoint("run.turn.post", turnPostCtx());
 
@@ -284,23 +198,13 @@ describe("PolicyEngine", () => {
     const engine = PolicyEngine.create();
     const scoped = mock(() => PolicyDecision.allow({ policyId: "test.allow" }));
     const unscoped = mock(() => PolicyDecision.allow({ policyId: "test.allow" }));
-    engine.register({
-      kind: "point",
+    registerAt(engine, "run.turn.pre", {
       name: "scoped",
-      pointIds: ["run.turn.pre"],
-      effectCapabilities: { "run.turn.pre": [] },
       priority: 100,
       scope: { agentType: ["worker"] },
       fn: scoped,
     });
-    engine.register({
-      kind: "point",
-      name: "unscoped",
-      pointIds: ["run.turn.pre"],
-      effectCapabilities: { "run.turn.pre": [] },
-      priority: 200,
-      fn: unscoped,
-    });
+    registerAt(engine, "run.turn.pre", "unscoped", 200, unscoped);
 
     await engine.dispatchPoint("run.turn.pre", { ...turnPreCtx(), agentType: "primary" });
 
@@ -335,14 +239,13 @@ describe("PolicyEngine", () => {
 
   it("rejects non-canonical policy decision shapes fail-closed", async () => {
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "legacy-shape",
-      pointIds: ["tool.native.pre"],
-      effectCapabilities: { "tool.native.pre": [] },
-      priority: 0,
-      fn: () => ({ action: "abort", reason: "legacy abort", policyId: "legacy" }) as never,
-    });
+    registerAt(
+      engine,
+      "tool.native.pre",
+      "legacy-shape",
+      0,
+      () => ({ action: "abort", reason: "legacy abort", policyId: "legacy" }) as never,
+    );
 
     const result = await engine.dispatchPoint("tool.native.pre", toolPreCtx());
 
@@ -353,13 +256,12 @@ describe("PolicyEngine", () => {
 
   it("dispatchPoint merges prompt effects at prompt.context.pre", async () => {
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "prompt-a",
-      pointIds: ["prompt.context.pre"],
-      effectCapabilities: { "prompt.context.pre": ["prompt.replace", "prompt.append_context"] },
-      priority: 100,
-      fn: () =>
+    registerAt(
+      engine,
+      "prompt.context.pre",
+      "prompt-a",
+      100,
+      () =>
         PolicyDecision.allow({
           policyId: "test.prompt-a",
           reasonCodes: ["prompt-a"],
@@ -368,33 +270,34 @@ describe("PolicyEngine", () => {
             { type: "prompt.append_context", context: "append-a" },
           ],
         }),
-    });
-    engine.register({
-      kind: "point",
-      name: "prompt-b",
-      pointIds: ["prompt.context.pre"],
-      effectCapabilities: { "prompt.context.pre": ["prompt.append_context"] },
-      priority: 200,
-      fn: () =>
+      ["prompt.replace", "prompt.append_context"],
+    );
+    registerAt(
+      engine,
+      "prompt.context.pre",
+      "prompt-b",
+      200,
+      () =>
         PolicyDecision.allow({
           policyId: "test.prompt-b",
           reasonCodes: ["prompt-b"],
           effects: [{ type: "prompt.append_context", context: "append-b" }],
         }),
-    });
-    engine.register({
-      kind: "point",
-      name: "inject-c",
-      pointIds: ["prompt.context.pre"],
-      effectCapabilities: { "prompt.context.pre": ["prompt.inject_message"] },
-      priority: 300,
-      fn: () =>
+      ["prompt.append_context"],
+    );
+    registerAt(
+      engine,
+      "prompt.context.pre",
+      "inject-c",
+      300,
+      () =>
         PolicyDecision.allow({
           policyId: "test.inject-c",
           reasonCodes: ["inject-c"],
           effects: [{ type: "prompt.inject_message", message: "append-c" }],
         }),
-    });
+      ["prompt.inject_message"],
+    );
 
     const result = await engine.dispatchPoint("prompt.context.pre", turnPreCtx());
     expect(result.verdict).toBe("allow");
@@ -407,30 +310,27 @@ describe("PolicyEngine", () => {
   it("prompt.context.pre fail-closed errors become deny decisions", async () => {
     const engine = PolicyEngine.create();
     const testError = new Error("system-prompt-error");
-    engine.register({
-      kind: "point",
+    registerAt(engine, "prompt.context.pre", {
       name: "boom",
-      pointIds: ["prompt.context.pre"],
-      effectCapabilities: { "prompt.context.pre": [] },
       priority: 100,
       failPolicy: "fail-closed",
       fn: () => {
         throw testError;
       },
     });
-    engine.register({
-      kind: "point",
-      name: "after",
-      pointIds: ["prompt.context.pre"],
-      effectCapabilities: { "prompt.context.pre": ["prompt.inject_message"] },
-      priority: 200,
-      fn: () =>
+    registerAt(
+      engine,
+      "prompt.context.pre",
+      "after",
+      200,
+      () =>
         PolicyDecision.allow({
           policyId: "test.after",
           reasonCodes: ["after"],
           effects: [{ type: "prompt.inject_message", message: "should-not-run" }],
         }),
-    });
+      ["prompt.inject_message"],
+    );
 
     const decision = await engine.dispatchPoint("prompt.context.pre", turnPreCtx());
     expect(decision.verdict).toBe("deny");
@@ -445,30 +345,29 @@ describe("PolicyEngine", () => {
     globalObj.console.warn = mock(() => undefined);
     try {
       const engine = PolicyEngine.create();
-      engine.register({
-        kind: "point",
-        name: "boom",
-        pointIds: ["prompt.context.pre"],
-        effectCapabilities: { "prompt.context.pre": [] },
-        priority: 100,
-        failPolicy: "fail-open",
-        fn: () => {
-          throw new Error("fail-open-error");
-        },
-      });
-      engine.register({
-        kind: "point",
-        name: "after",
-        pointIds: ["prompt.context.pre"],
-        effectCapabilities: { "prompt.context.pre": ["prompt.inject_message"] },
-        priority: 200,
-        fn: () =>
-          PolicyDecision.allow({
-            policyId: "test.after",
-            reasonCodes: ["after"],
-            effects: [{ type: "prompt.inject_message", message: "append-after" }],
-          }),
-      });
+      engine.register(
+        atPoint("prompt.context.pre", {
+          name: "boom",
+          priority: 100,
+          failPolicy: "fail-open",
+          fn: () => {
+            throw new Error("fail-open-error");
+          },
+        }),
+      );
+      engine.register(
+        atPoint("prompt.context.pre", {
+          name: "after",
+          effects: ["prompt.inject_message"],
+          priority: 200,
+          fn: () =>
+            PolicyDecision.allow({
+              policyId: "test.after",
+              reasonCodes: ["after"],
+              effects: [{ type: "prompt.inject_message", message: "append-after" }],
+            }),
+        }),
+      );
 
       const result = await engine.dispatchPoint("prompt.context.pre", turnPreCtx());
       expect(result.effects).toContainEqual({
@@ -485,14 +384,13 @@ describe("PolicyEngine", () => {
     env().NODE_ENV = "development";
     try {
       const engine = PolicyEngine.create();
-      engine.register({
-        kind: "point",
-        name: "missing-reason",
-        pointIds: ["run.turn.pre"],
-        effectCapabilities: { "run.turn.pre": [] },
-        priority: 100,
-        fn: () => PolicyDecision.deny({ policyId: "unknown" }),
-      });
+      engine.register(
+        atPoint("run.turn.pre", {
+          name: "missing-reason",
+          priority: 100,
+          fn: () => PolicyDecision.deny({ policyId: "unknown" }),
+        }),
+      );
 
       const decision = await engine.dispatchPoint("run.turn.pre", turnPreCtx());
       expect(decision.verdict).toBe("deny");
@@ -518,14 +416,13 @@ describe("PolicyEngine", () => {
           decisions.push(decision);
         },
       });
-      engine.register({
-        kind: "point",
-        name: "prod-metadata",
-        pointIds: ["run.turn.post"],
-        effectCapabilities: { "run.turn.post": [] },
-        priority: 100,
-        fn: () => PolicyDecision.deny({ policyId: "unknown" }),
-      });
+      engine.register(
+        atPoint("run.turn.post", {
+          name: "prod-metadata",
+          priority: 100,
+          fn: () => PolicyDecision.deny({ policyId: "unknown" }),
+        }),
+      );
 
       const first = await engine.dispatchPoint("run.turn.post", turnPostCtx());
       const second = await engine.dispatchPoint("run.turn.post", turnPostCtx());
@@ -561,14 +458,13 @@ describe("PolicyEngine", () => {
         },
         auditEmit: Bus.publish,
       });
-      engine.register({
-        kind: "point",
-        name: "observer-isolation",
-        pointIds: ["run.turn.post"],
-        effectCapabilities: { "run.turn.post": [] },
-        priority: 100,
-        fn: () => PolicyDecision.allow({ policyId: "observer-isolation" }),
-      });
+      engine.register(
+        atPoint("run.turn.post", {
+          name: "observer-isolation",
+          priority: 100,
+          fn: () => PolicyDecision.allow({ policyId: "observer-isolation" }),
+        }),
+      );
 
       const decision = await engine.dispatchPoint("run.turn.post", {
         ...turnPostCtx(),
@@ -609,14 +505,13 @@ describe("PolicyEngine", () => {
         },
         auditEmit: Bus.publish,
       });
-      engine.register({
-        kind: "point",
-        name: "async-observer-isolation",
-        pointIds: ["run.turn.post"],
-        effectCapabilities: { "run.turn.post": [] },
-        priority: 100,
-        fn: () => PolicyDecision.allow({ policyId: "async-observer-isolation" }),
-      });
+      engine.register(
+        atPoint("run.turn.post", {
+          name: "async-observer-isolation",
+          priority: 100,
+          fn: () => PolicyDecision.allow({ policyId: "async-observer-isolation" }),
+        }),
+      );
 
       const decision = await engine.dispatchPoint("run.turn.post", turnPostCtx());
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -649,14 +544,9 @@ describe("PolicyEngine", () => {
         });
       },
     });
-    engine.register({
-      kind: "point",
-      name: "observer-latency-isolation",
-      pointIds: ["run.turn.post"],
-      effectCapabilities: { "run.turn.post": [] },
-      priority: 100,
-      fn: () => PolicyDecision.allow({ policyId: "observer-latency-isolation" }),
-    });
+    registerAt(engine, "run.turn.post", "observer-latency-isolation", 100, () =>
+      PolicyDecision.allow({ policyId: "observer-latency-isolation" }),
+    );
 
     const decision = await engine.dispatchPoint("run.turn.post", turnPostCtx());
 
@@ -681,19 +571,19 @@ describe("PolicyEngine", () => {
         },
         auditEmit: Bus.publish,
       });
-      engine.register({
-        kind: "point",
-        name: "policy-check",
-        pointIds: ["tool.native.pre"],
-        effectCapabilities: { "tool.native.pre": ["run.abort"] },
-        priority: 100,
-        fn: () =>
-          PolicyDecision.deny({
-            policyId: "test.policy",
-            reasonCodes: ["blocked_by_test_policy"],
-            effects: [{ type: "run.abort", reason: "blocked_by_test_policy" }],
-          }),
-      });
+      engine.register(
+        atPoint("tool.native.pre", {
+          name: "policy-check",
+          effects: ["run.abort"],
+          priority: 100,
+          fn: () =>
+            PolicyDecision.deny({
+              policyId: "test.policy",
+              reasonCodes: ["blocked_by_test_policy"],
+              effects: [{ type: "run.abort", reason: "blocked_by_test_policy" }],
+            }),
+        }),
+      );
 
       await engine.dispatchPoint("tool.native.pre", { ...toolPreCtx(), toolName: "shell" });
 
@@ -722,27 +612,22 @@ describe("PolicyEngine", () => {
 
   it("deny-wins: any deny policy aborts regardless of other effects", async () => {
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "allow-and-label",
-      pointIds: ["run.turn.pre"],
-      effectCapabilities: { "run.turn.pre": [] },
-      priority: 0,
-      fn: () => PolicyDecision.allow({ policyId: "test.allow", reasonCodes: ["allowed"] }),
-    });
-    engine.register({
-      kind: "point",
-      name: "deny-policy",
-      pointIds: ["run.turn.pre"],
-      effectCapabilities: { "run.turn.pre": ["run.abort"] },
-      priority: 10,
-      fn: () =>
+    registerAt(engine, "run.turn.pre", "allow-and-label", 0, () =>
+      PolicyDecision.allow({ policyId: "test.allow", reasonCodes: ["allowed"] }),
+    );
+    registerAt(
+      engine,
+      "run.turn.pre",
+      "deny-policy",
+      10,
+      () =>
         PolicyDecision.deny({
           policyId: "test.deny",
           reasonCodes: ["forbidden"],
           effects: [{ type: "run.abort", reason: "forbidden" }],
         }),
-    });
+      ["run.abort"],
+    );
     const verdict = await engine.dispatchPoint("run.turn.pre", turnPreCtx());
     expect(verdict.verdict).toBe("deny");
     expect(verdict.reasonCodes).toContain("forbidden");
@@ -752,11 +637,8 @@ describe("PolicyEngine", () => {
     const engine = PolicyEngine.create();
     const executed: string[] = [];
 
-    engine.register({
-      kind: "point",
+    registerAt(engine, "run.turn.pre", {
       name: "coder-policy",
-      pointIds: ["run.turn.pre"],
-      effectCapabilities: { "run.turn.pre": [] },
       priority: 0,
       scope: { agentType: ["coder"] },
       fn: () => {
@@ -764,11 +646,8 @@ describe("PolicyEngine", () => {
         return PolicyDecision.allow({ policyId: "test.allow" });
       },
     });
-    engine.register({
-      kind: "point",
+    registerAt(engine, "run.turn.pre", {
       name: "reviewer-policy",
-      pointIds: ["run.turn.pre"],
-      effectCapabilities: { "run.turn.pre": [] },
       priority: 0,
       scope: { agentType: ["reviewer"] },
       fn: () => {
@@ -776,16 +655,9 @@ describe("PolicyEngine", () => {
         return PolicyDecision.allow({ policyId: "test.allow" });
       },
     });
-    engine.register({
-      kind: "point",
-      name: "unscoped-policy",
-      pointIds: ["run.turn.pre"],
-      effectCapabilities: { "run.turn.pre": [] },
-      priority: 0,
-      fn: () => {
-        executed.push("unscoped");
-        return PolicyDecision.allow({ policyId: "test.allow" });
-      },
+    registerAt(engine, "run.turn.pre", "unscoped-policy", 0, () => {
+      executed.push("unscoped");
+      return PolicyDecision.allow({ policyId: "test.allow" });
     });
 
     await engine.dispatchPoint("run.turn.pre", { ...turnPreCtx(), agentType: "coder" });

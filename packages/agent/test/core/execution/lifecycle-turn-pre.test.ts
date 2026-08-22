@@ -6,7 +6,7 @@ import { RunEvents } from "../../../src/core/execution/events";
 import { Bus } from "@openomni/telemetry";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { PolicyContext } from "../../../src/core/policy/types";
-import { abortRun, allow, appendContext } from "../../helpers/policy-decision";
+import { registerAt, abortRun, allow, appendContext } from "../../helpers/policy-decision";
 import { buildTurn } from "../../../src/core/execution/turn";
 import { makeAgentBase, makeConfig, makeState, makeTrace } from "./lifecycle-dispatch-fixture";
 
@@ -34,11 +34,8 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
     Bus.reset();
     const fn = mock((_ctx: PolicyContext) => allow());
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
+    registerAt(engine, "run.turn.pre", {
       name: "test-pre-turn",
-      pointIds: ["run.turn.pre"],
-      effectCapabilities: { "run.turn.pre": [] },
       priority: 100,
       fn,
     });
@@ -65,17 +62,17 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
     Bus.reset();
     const budget = collectBudgetNames();
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "test-budget-reassurance",
-      pointIds: ["run.turn.pre"],
-      effectCapabilities: { "run.turn.pre": ["prompt.inject_message"] },
-      priority: 100,
-      fn: () =>
+    registerAt(
+      engine,
+      "run.turn.pre",
+      "test-budget-reassurance",
+      100,
+      () =>
         allow("test-budget-reassurance", "budget_reassurance", [
           { type: "prompt.inject_message", message: "you are on track" },
         ]),
-    });
+      ["prompt.inject_message"],
+    );
 
     const result = await buildTurn(
       makeState(),
@@ -97,17 +94,17 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
     Bus.reset();
     const budget = collectBudgetNames();
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "test-budget-warning",
-      pointIds: ["run.turn.pre"],
-      effectCapabilities: { "run.turn.pre": ["prompt.inject_message"] },
-      priority: 100,
-      fn: () =>
+    registerAt(
+      engine,
+      "run.turn.pre",
+      "test-budget-warning",
+      100,
+      () =>
         allow("test-budget-warning", "budget_warning", [
           { type: "prompt.inject_message", message: "finish this section soon" },
         ]),
-    });
+      ["prompt.inject_message"],
+    );
 
     const result = await buildTurn(
       makeState(),
@@ -129,20 +126,20 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
     Bus.reset();
     const budget = collectBudgetNames();
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "test-unrelated-inject",
-      pointIds: ["run.turn.pre"],
-      effectCapabilities: { "run.turn.pre": ["prompt.inject_message"] },
-      priority: 100,
-      fn: () =>
+    registerAt(
+      engine,
+      "run.turn.pre",
+      "test-unrelated-inject",
+      100,
+      () =>
         allow("test-unrelated-inject", "idle_nudge", [
           {
             type: "prompt.inject_message",
             message: "[Budget Status] keep going without triggering budget events",
           },
         ]),
-    });
+      ["prompt.inject_message"],
+    );
 
     const result = await buildTurn(
       makeState(),
@@ -163,14 +160,14 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
   it("returns complete when turn.start policy returns abort", async () => {
     Bus.reset();
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "test-pre-turn-abort",
-      pointIds: ["run.turn.pre"],
-      effectCapabilities: { "run.turn.pre": ["run.abort"] },
-      priority: 100,
-      fn: () => abortRun("test.abort", "pre-turn-block"),
-    });
+    registerAt(
+      engine,
+      "run.turn.pre",
+      "test-pre-turn-abort",
+      100,
+      () => abortRun("test.abort", "pre-turn-block"),
+      ["run.abort"],
+    );
 
     const state = makeState();
     const result = await buildTurn(
@@ -189,14 +186,14 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
   it("appends turn.start context as a user message", async () => {
     Bus.reset();
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "test-turn-context",
-      pointIds: ["run.turn.pre"],
-      effectCapabilities: { "run.turn.pre": ["prompt.append_context"] },
-      priority: 100,
-      fn: () => appendContext("turn context", "test.context", "append"),
-    });
+    registerAt(
+      engine,
+      "run.turn.pre",
+      "test-turn-context",
+      100,
+      () => appendContext("turn context", "test.context", "append"),
+      ["prompt.append_context"],
+    );
 
     const state = makeState();
     const result = await buildTurn(

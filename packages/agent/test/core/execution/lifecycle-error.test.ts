@@ -3,7 +3,7 @@ import { RunEvents } from "../../../src/core/execution/events";
 import { Bus } from "@openomni/telemetry";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { PolicyContext } from "../../../src/core/policy/types";
-import { abortRun, allow } from "../../helpers/policy-decision";
+import { registerAt, abortRun, allow } from "../../helpers/policy-decision";
 import { handleError } from "../../../src/core/execution/turn";
 import { makeAgentBase, makeConfig, makeState } from "./lifecycle-dispatch-fixture";
 
@@ -12,11 +12,9 @@ describe("handleError (error)", () => {
     Bus.reset();
     const fn = mock((_ctx: PolicyContext) => abortRun("test.error-abort", "error-abort"));
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
+    registerAt(engine, "run.error.error", {
       name: "test-on-error",
-      pointIds: ["run.error.error"],
-      effectCapabilities: { "run.error.error": ["run.abort"] },
+      effects: ["run.abort"],
       priority: 100,
       fn,
     });
@@ -52,14 +50,7 @@ describe("handleError (error)", () => {
   it("error continue verdict allows retry when retry policy permits", async () => {
     Bus.reset();
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "test-on-error-continue",
-      pointIds: ["run.error.error"],
-      effectCapabilities: { "run.error.error": [] },
-      priority: 100,
-      fn: () => allow(),
-    });
+    registerAt(engine, "run.error.error", "test-on-error-continue", 100, () => allow());
 
     const state = makeState();
     const config = makeConfig();
@@ -89,15 +80,14 @@ describe("handleError (error)", () => {
   it("reports the run.retry_after delay as the backoff", async () => {
     Bus.reset();
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "test-on-error-retry-delay",
-      pointIds: ["run.error.error"],
-      effectCapabilities: { "run.error.error": ["run.retry_after"] },
-      priority: 100,
-      fn: () =>
-        allow("test.retry-delay", "retry-after", [{ type: "run.retry_after", delayMs: 20 }]),
-    });
+    registerAt(
+      engine,
+      "run.error.error",
+      "test-on-error-retry-delay",
+      100,
+      () => allow("test.retry-delay", "retry-after", [{ type: "run.retry_after", delayMs: 20 }]),
+      ["run.retry_after"],
+    );
 
     const state = makeState();
     const config = makeConfig();
@@ -125,17 +115,17 @@ describe("handleError (error)", () => {
   it("applies run.retry_after maxRetries as a stricter retry ceiling", async () => {
     Bus.reset();
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "test-on-error-retry-limit",
-      pointIds: ["run.error.error"],
-      effectCapabilities: { "run.error.error": ["run.retry_after"] },
-      priority: 100,
-      fn: () =>
+    registerAt(
+      engine,
+      "run.error.error",
+      "test-on-error-retry-limit",
+      100,
+      () =>
         allow("test.retry-limit", "retry-after", [
           { type: "run.retry_after", delayMs: 0, maxRetries: 1 },
         ]),
-    });
+      ["run.retry_after"],
+    );
 
     const state = makeState();
     const config = makeConfig();
@@ -211,17 +201,17 @@ describe("handleError (error)", () => {
    */
   it("reports the decision on the terminal failure, with the narrowed ceiling", async () => {
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "narrow-retries",
-      pointIds: ["run.error.error"],
-      effectCapabilities: { "run.error.error": ["run.retry_after"] },
-      priority: 10,
-      fn: () =>
+    registerAt(
+      engine,
+      "run.error.error",
+      "narrow-retries",
+      10,
+      () =>
         allow("narrow-retries", undefined, [
           { type: "run.retry_after", delayMs: 0, maxRetries: 1 },
         ]),
-    });
+      ["run.retry_after"],
+    );
     const decision = await handleError(
       makeState(),
       engine,
@@ -255,17 +245,17 @@ describe("handleError (error)", () => {
       retries.push(event as unknown as { maxAttempts: number });
     });
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "narrow-retries",
-      pointIds: ["run.error.error"],
-      effectCapabilities: { "run.error.error": ["run.retry_after"] },
-      priority: 10,
-      fn: () =>
+    registerAt(
+      engine,
+      "run.error.error",
+      "narrow-retries",
+      10,
+      () =>
         allow("narrow-retries", undefined, [
           { type: "run.retry_after", delayMs: 0, maxRetries: 2 },
         ]),
-    });
+      ["run.retry_after"],
+    );
 
     try {
       await handleError(

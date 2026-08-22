@@ -2,7 +2,7 @@ import { describe, expect, it, mock } from "bun:test";
 import { Bus } from "@openomni/telemetry";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { PolicyContext } from "../../../src/core/policy/types";
-import { allow, inject, replaceMessages } from "../../helpers/policy-decision";
+import { registerAt, allow, inject, replaceMessages } from "../../helpers/policy-decision";
 import {
   dispatchModelRequest,
   dispatchModelResponse,
@@ -14,11 +14,8 @@ describe("model dispatch points", () => {
     Bus.reset();
     const fn = mock((_ctx: PolicyContext) => allow());
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
+    registerAt(engine, "connection.llm.pre", {
       name: "test-model-request",
-      pointIds: ["connection.llm.pre"],
-      effectCapabilities: { "connection.llm.pre": [] },
       priority: 100,
       fn,
     });
@@ -42,11 +39,8 @@ describe("model dispatch points", () => {
     Bus.reset();
     const fn = mock((_ctx: PolicyContext) => allow("test.model-response", "observe-response"));
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
+    registerAt(engine, "connection.llm.post", {
       name: "test-model-response",
-      pointIds: ["connection.llm.post"],
-      effectCapabilities: { "connection.llm.post": [] },
       priority: 100,
       fn,
     });
@@ -73,14 +67,14 @@ describe("model dispatch points", () => {
   it("applies model.request prompt injection before provider execution", async () => {
     Bus.reset();
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "test-model-request-inject",
-      pointIds: ["connection.llm.pre"],
-      effectCapabilities: { "connection.llm.pre": ["prompt.inject_message"] },
-      priority: 100,
-      fn: () => inject("pre-llm context", "test.model-request", "inject"),
-    });
+    registerAt(
+      engine,
+      "connection.llm.pre",
+      "test-model-request-inject",
+      100,
+      () => inject("pre-llm context", "test.model-request", "inject"),
+      ["prompt.inject_message"],
+    );
 
     const state = makeState();
     const result = await dispatchModelRequest(
@@ -104,14 +98,14 @@ describe("model dispatch points", () => {
     const { createUserMessage } = await import("../../../src/core/message-factory");
     const replacement = [createUserMessage("replacement", "test")];
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "test-model-response-replace",
-      pointIds: ["connection.llm.post"],
-      effectCapabilities: { "connection.llm.post": ["run.replace_messages"] },
-      priority: 100,
-      fn: () => replaceMessages(replacement, "test.model-response", "replace"),
-    });
+    registerAt(
+      engine,
+      "connection.llm.post",
+      "test-model-response-replace",
+      100,
+      () => replaceMessages(replacement, "test.model-response", "replace"),
+      ["run.replace_messages"],
+    );
 
     const state = makeState();
     const result = await dispatchModelResponse(
@@ -130,17 +124,17 @@ describe("model dispatch points", () => {
   it("blocks model.response malformed replacement messages", async () => {
     Bus.reset();
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "test-model-response-bad-replace",
-      pointIds: ["connection.llm.post"],
-      effectCapabilities: { "connection.llm.post": ["run.replace_messages"] },
-      priority: 100,
-      fn: () =>
+    registerAt(
+      engine,
+      "connection.llm.post",
+      "test-model-response-bad-replace",
+      100,
+      () =>
         allow("test.model-response", "bad-replace", [
           { type: "run.replace_messages", messages: [{ invalid: true }] },
         ]),
-    });
+      ["run.replace_messages"],
+    );
 
     const result = await dispatchModelResponse(
       makeState(),

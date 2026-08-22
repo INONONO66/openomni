@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { Policy, PolicyDecision } from "@openomni/protocol";
-import { PolicyEngine, PolicyRegistrationError, type PolicyPointId } from "@openomni/policy";
+import {
+  PolicyEngine,
+  PolicyRegistrationError,
+  type PolicyPointId,
+  type GenericPolicyContext,
+  type CanonicalPolicyRegistrationGeneric,
+} from "@openomni/policy";
 import { createPolicyRegistrationStore } from "../src/engine/registration";
 
 const allow = () => PolicyDecision.allow({ policyId: "canonical.test" });
@@ -279,4 +285,21 @@ describe("PolicyEngine canonical registration", () => {
       }
     }
   });
+});
+
+test("accepts union-typed registrations through the public engine overload", () => {
+  const engine = PolicyEngine.create<GenericPolicyContext>();
+  const registerUnion = (registration: CanonicalPolicyRegistrationGeneric<GenericPolicyContext>) =>
+    engine.register(registration);
+
+  expect(() =>
+    registerUnion({
+      kind: "point",
+      name: "union-registration",
+      pointIds: ["run.lifecycle.post"],
+      effectCapabilities: { "run.lifecycle.post": [] },
+      priority: 0,
+      fn: () => PolicyDecision.allow({ policyId: "union-registration" }),
+    }),
+  ).not.toThrow();
 });

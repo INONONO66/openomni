@@ -3,7 +3,14 @@ import type { Message } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { PolicyContext } from "../../../src/core/policy/types";
-import { abortRun, allow, appendContext, inject } from "../../helpers/policy-decision";
+import {
+  atPoint,
+  registerAt,
+  abortRun,
+  allow,
+  appendContext,
+  inject,
+} from "../../helpers/policy-decision";
 import { dispatchPreRun } from "../../../src/core/execution/lifecycle-dispatch";
 import { makeAgentBase, makeConfig, makeState } from "./lifecycle-dispatch-fixture";
 
@@ -12,11 +19,8 @@ describe("dispatchPreRun (run.start)", () => {
     Bus.reset();
     const fn = mock((_ctx: PolicyContext) => allow());
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
+    registerAt(engine, "run.lifecycle.pre", {
       name: "test-pre-run",
-      pointIds: ["run.lifecycle.pre"],
-      effectCapabilities: { "run.lifecycle.pre": [] },
       priority: 100,
       fn,
     });
@@ -33,14 +37,14 @@ describe("dispatchPreRun (run.start)", () => {
   it("returns abort event when run.start policy returns abort", async () => {
     Bus.reset();
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "test-pre-run-abort",
-      pointIds: ["run.lifecycle.pre"],
-      effectCapabilities: { "run.lifecycle.pre": ["run.abort"] },
-      priority: 100,
-      fn: () => abortRun("test.abort", "pre-run-block"),
-    });
+    registerAt(
+      engine,
+      "run.lifecycle.pre",
+      "test-pre-run-abort",
+      100,
+      () => abortRun("test.abort", "pre-run-block"),
+      ["run.abort"],
+    );
 
     const state = makeState();
     const result = await dispatchPreRun(state, engine, makeConfig(), makeAgentBase());
@@ -53,14 +57,14 @@ describe("dispatchPreRun (run.start)", () => {
   it("injects user message when run.start policy returns inject", async () => {
     Bus.reset();
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "test-pre-run-inject",
-      pointIds: ["run.lifecycle.pre"],
-      effectCapabilities: { "run.lifecycle.pre": ["prompt.inject_message"] },
-      priority: 100,
-      fn: () => inject("injected-context", "test.inject", "add-context"),
-    });
+    registerAt(
+      engine,
+      "run.lifecycle.pre",
+      "test-pre-run-inject",
+      100,
+      () => inject("injected-context", "test.inject", "add-context"),
+      ["prompt.inject_message"],
+    );
 
     const state = makeState();
     const messagesBefore = state.messages.length;
@@ -82,14 +86,14 @@ describe("dispatchPreRun (run.start)", () => {
 it("appends run.start context as a user message", async () => {
   Bus.reset();
   const engine = PolicyEngine.create();
-  engine.register({
-    kind: "point",
-    name: "test-pre-run-context",
-    pointIds: ["run.lifecycle.pre"],
-    effectCapabilities: { "run.lifecycle.pre": ["prompt.append_context"] },
-    priority: 100,
-    fn: () => appendContext("run context", "test.context", "append"),
-  });
+  engine.register(
+    atPoint("run.lifecycle.pre", {
+      name: "test-pre-run-context",
+      effects: ["prompt.append_context"],
+      priority: 100,
+      fn: () => appendContext("run context", "test.context", "append"),
+    }),
+  );
 
   const state = makeState();
   const result = await dispatchPreRun(state, engine, makeConfig(), makeAgentBase());

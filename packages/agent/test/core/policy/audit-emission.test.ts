@@ -4,7 +4,7 @@ import { Bus } from "@openomni/telemetry";
 import type { z } from "zod";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { PolicyContext } from "../../../src/core/policy";
-import { deny } from "../../helpers/policy-decision";
+import { atPoint, deny } from "../../helpers/policy-decision";
 
 type PolicyEvaluatedEvent = z.infer<typeof Policy.Events.Evaluated.schema>;
 type PolicyDecisionComposedEvent = z.infer<typeof Policy.Events.DecisionComposed.schema>;
@@ -53,14 +53,14 @@ describe("PolicyEngine audit emission", () => {
         },
         auditEmit: Bus.publish,
       });
-      engine.register({
-        kind: "point",
-        name: "deny-shell",
-        pointIds: ["tool.native.pre"],
-        effectCapabilities: { "tool.native.pre": ["audit.annotate"] },
-        priority: 0,
-        fn: () => deny("policy.deny-shell", "blocked-shell"),
-      });
+      engine.register(
+        atPoint("tool.native.pre", {
+          name: "deny-shell",
+          effects: ["audit.annotate"],
+          priority: 0,
+          fn: () => deny("policy.deny-shell", "blocked-shell"),
+        }),
+      );
 
       const ctx = {
         ...baseCtx(),
@@ -120,14 +120,14 @@ describe("PolicyEngine audit emission", () => {
 
     try {
       const engine = PolicyEngine.create({ auditEmit: Bus.publish });
-      engine.register({
-        kind: "point",
-        name: "deny-shell",
-        pointIds: ["tool.native.pre"],
-        effectCapabilities: { "tool.native.pre": ["audit.annotate"] },
-        priority: 0,
-        fn: () => deny("policy.deny-shell", "blocked-shell"),
-      });
+      engine.register(
+        atPoint("tool.native.pre", {
+          name: "deny-shell",
+          effects: ["audit.annotate"],
+          priority: 0,
+          fn: () => deny("policy.deny-shell", "blocked-shell"),
+        }),
+      );
 
       const decision = await engine.dispatchPoint("tool.native.pre", {
         ...baseCtx(),

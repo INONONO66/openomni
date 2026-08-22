@@ -6,7 +6,7 @@ import {
   type AgentRunBase,
   type TurnArtifacts,
 } from "../../../src/core/execution/state";
-import { allow } from "../../helpers/policy-decision";
+import { registerAt, allow } from "../../helpers/policy-decision";
 import { runInput } from "../../helpers/run-input";
 import { testProviderModel } from "../../helpers/provider-model";
 import { Bus } from "@openomni/telemetry";
@@ -47,13 +47,12 @@ function makeTurnArtifacts(): TurnArtifacts {
 describe("handleStop prompt injection provenance", () => {
   it("preserves assistant role through turn.finish continuation", async () => {
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "test-post-turn-assistant-inject",
-      pointIds: ["run.turn.post"],
-      effectCapabilities: { "run.turn.post": ["prompt.inject_message"] },
-      priority: 100,
-      fn: () =>
+    registerAt(
+      engine,
+      "run.turn.post",
+      "test-post-turn-assistant-inject",
+      100,
+      () =>
         allow("test.inject", "continuation", [
           {
             type: "prompt.inject_message",
@@ -61,7 +60,8 @@ describe("handleStop prompt injection provenance", () => {
             role: "assistant",
           },
         ]),
-    });
+      ["prompt.inject_message"],
+    );
     const state = createRunState(runInput([{ role: "user", content: "parent request" }]));
     state.lastAssistantText = "partial response";
 

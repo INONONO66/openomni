@@ -1,7 +1,14 @@
 import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
 import { PolicyEngine } from "../../../src/core/policy";
-import { abortRun, allow, inject, replaceMessages } from "../../helpers/policy-decision";
+import {
+  atPoint,
+  registerAt,
+  abortRun,
+  allow,
+  inject,
+  replaceMessages,
+} from "../../helpers/policy-decision";
 import { handleStop } from "../../../src/core/execution/turn";
 import {
   makeAgentBase,
@@ -57,14 +64,14 @@ function userMessage(text: string): Message.WithParts {
 
 function seamEngine(decision: () => ReturnType<typeof allow>) {
   const engine = PolicyEngine.create();
-  engine.register({
-    kind: "point",
-    name: "test-compaction-seam",
-    pointIds: ["run.completion.pre"],
-    effectCapabilities: { "run.completion.pre": ["run.replace_messages"] },
-    priority: 900,
-    fn: decision,
-  });
+  engine.register(
+    atPoint("run.completion.pre", {
+      name: "test-compaction-seam",
+      effects: ["run.replace_messages"],
+      priority: 900,
+      fn: decision,
+    }),
+  );
   return engine;
 }
 
@@ -145,14 +152,9 @@ describe("window yield (#649 reachability fix)", () => {
     const state = makeState();
     state.messages = [userMessage("u0")];
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "test-drain",
-      pointIds: ["run.turn.post"],
-      effectCapabilities: { "run.turn.post": ["prompt.inject_message"] },
-      priority: 100,
-      fn: () => inject("child finished"),
-    });
+    registerAt(engine, "run.turn.post", "test-drain", 100, () => inject("child finished"), [
+      "prompt.inject_message",
+    ]);
     const turn = makeTurnArtifacts({
       windowYieldArmed: true,
       stepCap: 24,
@@ -209,14 +211,9 @@ describe("window yield (#649 reachability fix)", () => {
     const state = makeState();
     state.messages = [userMessage("u0")];
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "test-steer-drain",
-      pointIds: ["run.turn.post"],
-      effectCapabilities: { "run.turn.post": ["prompt.inject_message"] },
-      priority: 100,
-      fn: () => inject("steer me"),
-    });
+    registerAt(engine, "run.turn.post", "test-steer-drain", 100, () => inject("steer me"), [
+      "prompt.inject_message",
+    ]);
     const turn = makeTurnArtifacts({
       windowYieldArmed: false,
       stepCap: 24,
@@ -276,14 +273,14 @@ describe("window yield (#649 reachability fix)", () => {
     const state = makeState();
     state.messages = [userMessage("u0")];
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "test-abort-post",
-      pointIds: ["run.turn.post"],
-      effectCapabilities: { "run.turn.post": ["run.abort"] },
-      priority: 100,
-      fn: () => abortRun("policy said stop"),
-    });
+    registerAt(
+      engine,
+      "run.turn.post",
+      "test-abort-post",
+      100,
+      () => abortRun("policy said stop"),
+      ["run.abort"],
+    );
     const turn = makeTurnArtifacts({
       windowYieldArmed: true,
       stepCap: 24,

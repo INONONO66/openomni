@@ -10,7 +10,7 @@ import {
 import type { PolicyRegistration } from "../../../src/core/policy/types";
 import type { Tool } from "@openomni/protocol";
 import type { ChatAgentConfig } from "../../../src/core/types";
-import { abortRun, allow, filterTools } from "../../helpers/policy-decision";
+import { registerAt, abortRun, allow, filterTools } from "../../helpers/policy-decision";
 import { runInput } from "../../helpers/run-input";
 import { testProviderModel } from "../../helpers/provider-model";
 
@@ -177,16 +177,9 @@ describe("resources.prepare dispatch", () => {
     Bus.reset();
     let capturedCtx: Record<string, unknown> | undefined;
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "capture-ctx",
-      pointIds: ["tool.catalog.pre"],
-      effectCapabilities: { "tool.catalog.pre": [] },
-      priority: 0,
-      fn: async (ctx) => {
-        capturedCtx = ctx as unknown as Record<string, unknown>;
-        return allow();
-      },
+    registerAt(engine, "tool.catalog.pre", "capture-ctx", 0, async (ctx) => {
+      capturedCtx = ctx as unknown as Record<string, unknown>;
+      return allow();
     });
 
     const tools = [
@@ -217,14 +210,9 @@ describe("resources.prepare dispatch", () => {
   it("keeps all tools when transform verdict has no tools property", async () => {
     Bus.reset();
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "transform-no-tools",
-      pointIds: ["tool.catalog.pre"],
-      effectCapabilities: { "tool.catalog.pre": [] },
-      priority: 0,
-      fn: async () => allow("test", "test"),
-    });
+    registerAt(engine, "tool.catalog.pre", "transform-no-tools", 0, async () =>
+      allow("test", "test"),
+    );
 
     const tools = makeTools("bash", "read", "write");
     const state = makeState();

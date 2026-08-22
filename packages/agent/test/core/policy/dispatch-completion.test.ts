@@ -4,6 +4,7 @@ import type { PolicyContext } from "../../../src/core/policy";
 import { PolicyEngine } from "../../../src/core/policy";
 import { createToolExecutor } from "../../../src/core/execution/tools";
 import {
+  registerAt,
   abortRun,
   allow,
   pending,
@@ -22,14 +23,7 @@ describe("tool.native.post middleware dispatch", () => {
     const postToolFn = mock((_ctx: PolicyContext) => allow());
 
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "test:invoke.result",
-      pointIds: ["tool.native.post"],
-      effectCapabilities: { "tool.native.post": [] },
-      priority: 100,
-      fn: postToolFn,
-    });
+    registerAt(engine, "tool.native.post", "test:invoke.result", 100, postToolFn);
 
     const executor = createToolExecutor({
       events: Bus,
@@ -57,14 +51,7 @@ describe("tool.native.post middleware dispatch", () => {
     const postToolFn = mock((_ctx: PolicyContext) => allow());
 
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "test:invoke.result",
-      pointIds: ["tool.native.post"],
-      effectCapabilities: { "tool.native.post": [] },
-      priority: 100,
-      fn: postToolFn,
-    });
+    registerAt(engine, "tool.native.post", "test:invoke.result", 100, postToolFn);
 
     const executor = createToolExecutor({
       events: Bus,
@@ -92,14 +79,14 @@ describe("tool.native.post middleware dispatch", () => {
 
   it("transform verdict modifies the tool output", async () => {
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "test:transform",
-      pointIds: ["tool.native.post"],
-      effectCapabilities: { "tool.native.post": ["tool.rewrite_output"] },
-      priority: 100,
-      fn: () => rewriteToolOutput("modified-output", "test.transform", "modify-output"),
-    });
+    registerAt(
+      engine,
+      "tool.native.post",
+      "test:transform",
+      100,
+      () => rewriteToolOutput("modified-output", "test.transform", "modify-output"),
+      ["tool.rewrite_output"],
+    );
 
     const executor = createToolExecutor({
       events: Bus,
@@ -132,17 +119,17 @@ describe("tool.native.pre middleware dispatch", () => {
     );
 
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "test:approval",
-      pointIds: ["tool.native.pre"],
-      effectCapabilities: { "tool.native.pre": ["tool.require_approval"] },
-      priority: 100,
-      fn: () =>
+    registerAt(
+      engine,
+      "tool.native.pre",
+      "test:approval",
+      100,
+      () =>
         pending("test.approval", "approval-required", [
           { type: "tool.require_approval", reason: "approval-required" },
         ]),
-    });
+      ["tool.require_approval"],
+    );
 
     const executor = createToolExecutor({
       events: Bus,
@@ -174,14 +161,14 @@ describe("tool.native.pre middleware dispatch", () => {
     );
 
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "test:abort",
-      pointIds: ["tool.native.pre"],
-      effectCapabilities: { "tool.native.pre": ["run.abort"] },
-      priority: 100,
-      fn: () => abortRun("test.abort", "Blocked: test-deny"),
-    });
+    registerAt(
+      engine,
+      "tool.native.pre",
+      "test:abort",
+      100,
+      () => abortRun("test.abort", "Blocked: test-deny"),
+      ["run.abort"],
+    );
 
     const executor = createToolExecutor({
       events: Bus,
@@ -206,14 +193,14 @@ describe("tool.native.pre middleware dispatch", () => {
     };
 
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "test:transform-input",
-      pointIds: ["tool.native.pre"],
-      effectCapabilities: { "tool.native.pre": ["tool.rewrite_input"] },
-      priority: 100,
-      fn: () => rewriteToolInput({ command: "echo safe" }, "test.transform-input", "rewrite-input"),
-    });
+    registerAt(
+      engine,
+      "tool.native.pre",
+      "test:transform-input",
+      100,
+      () => rewriteToolInput({ command: "echo safe" }, "test.transform-input", "rewrite-input"),
+      ["tool.rewrite_input"],
+    );
 
     const executor = createToolExecutor({
       events: Bus,
@@ -234,14 +221,7 @@ describe("error middleware dispatch (runner level)", () => {
     const onErrorFn = mock((_ctx: PolicyContext) => abortRun("test.on-error", "test-error-abort"));
 
     const engine = PolicyEngine.create();
-    engine.register({
-      kind: "point",
-      name: "test:error",
-      pointIds: ["run.error.error"],
-      effectCapabilities: { "run.error.error": ["run.abort"] },
-      priority: 100,
-      fn: onErrorFn,
-    });
+    registerAt(engine, "run.error.error", "test:error", 100, onErrorFn, ["run.abort"]);
 
     const verdict = await engine.dispatchPoint("run.error.error", {
       sessionId: "session",
