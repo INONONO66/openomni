@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { LlmCall, Operational, type Message } from "@openomni/protocol";
-import { Bus, collector } from "@openomni/telemetry";
+import { Bus } from "@openomni/telemetry";
 import { APIError } from "../../src/error";
 import { Processor } from "../../src/processor";
 import type { Provider } from "../../src/provider";
+import { Retry } from "../../src/retry";
 
 function assistantMessage(): Message.AssistantMessage {
   return {
@@ -103,13 +104,33 @@ describe("Processor retry cap", () => {
 });
 
 describe("Processor retry header-delay cap (#532 candidate 3)", () => {
-  const events = collector();
-
   afterEach(() => {
-    events.reset();
+    Bus.reset();
   });
 
-  test("a server-directed wait above the cap fails fast instead of stalling", async () => {
+  test("a server-directed wait above the cap emits the typed decline decision", async () => {
+    const cap = 60_000;
+    const retryAfterMs = 3_600_000;
+    const reason = "rate_limit" satisfies Retry.RetryableReason;
+    expect(Retry.RETRY_HEADER_DELAY_CAP).toBe(cap);
+
+    const decisions: Array<{
+      traceId: string;
+      time: number;
+      sessionId?: string;
+      component: string;
+      msg: string;
+      error?: string;
+    }> = [];
+    const unsubscribe = Bus.subscribe(Operational.Events.Error, (event) => {
+      if (event.component === "llm.retry") decisions.push(event);
+    });
+    const serverError = new APIError({
+      message: JSON.stringify({ type: "error", error: { type: "too_many_requests" } }),
+      isRetryable: true,
+      responseHeaders: { "retry-after": String(retryAfterMs / 1000) },
+    });
+
     const processor = Processor.create({
       assistantMessage: assistantMessage(),
       sessionID: "session-retry-cap",
@@ -120,32 +141,33 @@ describe("Processor retry header-delay cap (#532 candidate 3)", () => {
         onToolCall: () => undefined,
         onToolResult: () => undefined,
       },
-      events,
+      events: Bus,
       trace: { traceId: "trace-retry-cap", sessionId: "session-retry-cap" },
       createStream: async () => ({
         fullStream: (async function* () {
           yield { type: "text-start", id: "t" };
-          throw new APIError({
-            message: JSON.stringify({ type: "error", error: { type: "too_many_requests" } }),
-            isRetryable: true,
-            responseHeaders: { "retry-after": "3600" },
-          });
+          throw serverError;
         })(),
       }),
     });
 
-    const startedAt = Date.now();
-    await expect(processor.process({ system: "" })).rejects.toBeDefined();
-    // Under the old policy this would have slept for an hour mid-run.
-    expect(Date.now() - startedAt).toBeLessThan(1000);
+    try {
+      await expect(processor.process({ system: "" })).rejects.toBe(serverError);
+    } finally {
+      unsubscribe();
+    }
 
-    // A retryable error declined for a reason other than "non_retryable" has
-    // to say why, and say it through the port.
-    const declined = events
-      .named(Operational.Events.Error.name)
-      .map((event) => event as { component?: string; traceId?: string });
-    const fromRetry = declined.filter((event) => event.component === "llm.retry");
-    expect(fromRetry).toHaveLength(1);
-    expect(fromRetry[0]?.traceId).toBe("trace-retry-cap");
+    expect(decisions).toHaveLength(1);
+    const decision = decisions[0];
+    if (decision === undefined) expect.unreachable("Expected one retry decline decision");
+    expect(decision.time).toBeNumber();
+    expect(decision).toEqual({
+      traceId: "trace-retry-cap",
+      time: decision.time,
+      sessionId: "session-retry-cap",
+      component: "llm.retry",
+      msg: "retry declined",
+      error: `${reason}: server asked to wait ${retryAfterMs}ms, above the ${cap}ms cap`,
+    });
   });
 });
