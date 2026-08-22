@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787382205011,
+  "lastUpdate": 1787389987284,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -59141,6 +59141,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 529300,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b96ce9a1f2838dad525e9c5120bcdc3c9fae6bdd",
+          "message": "feat(protocol,policy,agent): model.override policy effect — per-point model routing (#757)\n\n* feat(protocol,policy,agent): model.override policy effect — per-point model routing (#753)\n\nPolicies can now route the connection being gated at connection.llm.pre to a\ndifferent model, making \"this point / this kind of work -> this model\"\nexpressible without loop special cases. Loop-only per the issue scope: no\nopenomni/server change; production REGISTRATIONS stay #609 scope.\n\n- protocol: model.override joins the policy effect union ({provider, id},\n  both non-empty) and connection.llm.pre's allowed-effect list.\n  Connection-scoped by definition: the next connection re-resolves normally —\n  a policy wanting the whole run re-issues per connection (per-run factory\n  registrations make that trivial); a run-scoped variant is deferred to #753\n  follow-up.\n- policy: the effect-merge fold gains the single-winner rule (mirrors\n  prompt.replace): two policies overriding the same connection cannot\n  compose — the higher-priority one wins.\n- agent: dispatchModelRequest returns a gate ({blocked, overrideModel});\n  the loop re-resolves the override through the same seam as the attempt\n  selection, swaps the call's runInput.model, recomputes the window-yield\n  arm point from the OVERRIDE's window locally (run state keeps the attempt\n  model's window fact — the next connection reverts), updates\n  turn.windowYieldArmed so turnYield classifies the stop against the call\n  that actually ran, and reports the override id to connection.llm.post\n  (keeps the #752 F4 truthfulness). An override naming the already-selected\n  model skips re-resolution.\n\nTests: protocol effect parse + empty-coordinate refusal; agent end-to-end —\nconnection scope (override one call, revert next, connection.llm.post\ntruthful both times), noop-override skips resolution, yield recompute\n(500-window override arms 400 vs primary 800), unknown-window override\ndrops the arm point.\n\nCloses #753\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* fix(policy,agent,protocol): adversarial review — fail-closed same-priority override conflict + pins\n\nF1 (blocking): model.override claimed 'single-winner like prompt.replace'\nbut skipped the fail-closed conflict half — two SAME-priority policies\nrouting one connection to different models composed to a silent,\nalphabetically-chosen winner. model.override joins the single-value\nconflict family in packages/policy/src/effects/conflicts.ts ({provider,id}\nhashed as one value): same-priority divergent overrides now DENY with\npolicy.effect_conflict.fail_closed; identical values still compose; a\nhigher priority still legitimately owns the connection. Pinned by three\ncomposeEffects tests (incl. the aa-budget/zz-residency alphabet scenario).\n\nSecondary review gaps closed:\n- agent: ghost-override test — a policy persistently overriding to a\n  nonexistent model fails honestly (bounded default retries, ZERO llm\n  calls, terminal 'Model not found', and the attempt selection never walks\n  a fallback chain for a policy-caused fault).\n- protocol: registry admission pin — model.override is allowed at\n  connection.llm.pre and REFUSED at every other point.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n* test: CodeRabbit round — shared assistant-snapshot fixture, zod issue pins, registry-derived admission\n\n- packages/agent/test/helpers/assistant-snapshot.ts consolidates the\n  boundary-snapshot fixture that steering / model-fallback / model-override\n  tests each duplicated (the F3 test's part mutation becomes an explicit\n  \"tool-calls\" argument).\n- protocol policy.test.ts: the model.override refusal now pins the zod\n  issues (too_small on the named field), not just \"it throws\".\n- point-registry.test.ts: the model.override admission sweep derives its\n  point set from the Registry itself — a NEW point cannot dodge the\n  assertion by not being enumerated.\n\nKept as-is with reasoning in-thread: the parse-echo shape of the effect\nparse test matches every sibling test in that describe block (the file's\nestablished pattern).\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Fable 5 <noreply@anthropic.com>",
+          "timestamp": "2026-08-22T18:12:00+09:00",
+          "tree_id": "5781d1dd5db05dbdf305658b126bcf4b1b8f1501",
+          "url": "https://github.com/INONONO66/openomni/commit/b96ce9a1f2838dad525e9c5120bcdc3c9fae6bdd"
+        },
+        "date": 1787389986771,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 426,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 597,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5487,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9118,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2346,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2745,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2483,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16975,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8929,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 972,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 884,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1479,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 44,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1562,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 686,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 39750,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2029,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 514720,
             "unit": "ns/op"
           }
         ]
