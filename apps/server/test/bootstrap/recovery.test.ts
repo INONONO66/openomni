@@ -241,6 +241,41 @@ describe("server recovery", () => {
     ).toBe(true);
   });
 
+  it("completes valid-tail recovery without a false chain-break or Governor incident", async () => {
+    WaitStore.create(
+      {
+        id: "wait-valid-tail",
+        ownerRef: { kind: "session", id: "session-valid-tail" },
+        originMessageId: "message-valid-tail",
+        correlation: { tokenHash: "token-valid-tail" },
+        allowedActions: ["report_result"],
+        expectedResponders: ["actor-a"],
+        resolutionPolicy: "first_reply",
+        expiresAt: Date.now() + 60_000,
+        followUpWindow: 1_000,
+      },
+      "trace-valid-tail",
+    );
+    const events: string[] = [];
+    Bus.observe((event) => events.push(event.name));
+
+    await runRecovery({
+      handler: undefined,
+      traceId: "trace-valid-tail",
+      completionRuntime: {
+        recoverRecordedWorkItemCompletions: async () => ({
+          recovered: 0,
+          skipped: 0,
+          failures: [],
+        }),
+      },
+    });
+
+    expect(events).toContain("operational.recovery.completed");
+    expect(events).not.toContain("operational.governor.incident");
+    expect(events.filter((event) => event === "operational.error")).toHaveLength(0);
+  });
+
   it("records a ledger chain-break at boot and continues (does not refuse boot)", async () => {
     const adapter = Storage.getAdapter();
     const outcome = adapter.ledger?.append(

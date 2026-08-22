@@ -55,16 +55,63 @@ function manifestWith(
 }
 
 describe("EffectService", () => {
-  test("fresh intent: records intent, executes, then records the terminal outcome", async () => {
-    const driver = new ScriptedDriver("http.post", { kind: "confirmed", receipt: "ok-1" });
+  test("fresh intent is durable before execution and is followed by one terminal fact", async () => {
+    const facts = () =>
+      Storage.get()
+        .ledger?.factsByType("effect.intended")
+        .filter((fact) => fact.streamId === "effect:e1") ?? [];
+    let observed: Array<[number, string]> = [];
+    const driver: EffectDriver = {
+      kind: "http.post",
+      replay: "never",
+      execute: () => {
+        observed = facts().map((fact) => [fact.seq, fact.type]);
+        return { kind: "confirmed", receipt: "ok-1" };
+      },
+      reconcile: () => ({ kind: "unknown" }),
+    };
     const service = new EffectService(manifestWith(driver));
 
     const result = await service.run({ effectId: "e1", kind: "http.post" });
 
-    expect(driver.executeCalls).toBe(1);
+    expect(observed).toEqual([[1, "effect.intended"]]);
     expect(result.runtime).toBe("confirmed");
-    expect(result.ledger.status).toBe("confirmed");
     expect(result.ledger.materializationCount).toBe(1);
+    expect(Storage.get().ledger?.headFact("effect:e1")).toMatchObject({
+      seq: 2,
+      type: "effect.confirmed",
+    });
+  });
+
+  test("intent append failure prevents execution and leaves no effect stream", async () => {
+    let executions = 0;
+    const driver = new ScriptedDriver("http.post", { kind: "confirmed" });
+    driver.execute = () => {
+      executions += 1;
+      return { kind: "confirmed" };
+    };
+    const storage = Storage.getAdapter();
+    Storage.configure({
+      ...storage,
+      transaction: storage.transaction.bind(storage),
+      ledger: {
+        append: () => {
+          throw new Error("ledger unavailable");
+        },
+        adoptStream: () => {
+          throw new Error("ledger unavailable");
+        },
+        headFact: () => undefined,
+        factsByType: () => [],
+        verifyTail: () => [],
+      },
+    });
+
+    await expect(
+      new EffectService(manifestWith(driver)).run({ effectId: "e-append-fail", kind: "http.post" }),
+    ).rejects.toThrow();
+    expect(executions).toBe(0);
+    expect(Storage.get().ledger?.headFact("effect:e-append-fail")).toBeUndefined();
   });
 
   test("unmanifested kind is refused BEFORE any ledger write", async () => {

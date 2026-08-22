@@ -4,7 +4,7 @@
 // record of WHICH code paths may write WHICH decision-class streams and
 // durable legacy tables. This is the static half of the same mechanism as
 // the FROZEN_TABLES archive manifest (#510 D2a / #548 / D2b): the manifest
-// is the contract, and script/conformance/p2-ledger-baseline.test.ts scans
+// is the contract, and script/conformance/ledger-producer-drift.test.ts scans
 // the production source tree and fails closed when the observed write
 // surface diverges from the manifest in EITHER direction — a producer that
 // disappears is as much a drift as an unlisted new writer.

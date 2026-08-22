@@ -62,6 +62,39 @@ describe("WaitStore", () => {
     expect(Wait.Events.Opened.schema.safeParse({ ...base, traceId: "trace-1" }).success).toBe(true);
   });
 
+  test("owner facts bind sequence, revision, head, and compact payload", () => {
+    const created = WaitStore.create(
+      buildWaitCreate({ resolutionPolicy: "first_reply", quorum: undefined }),
+      "trace-wait-store",
+    );
+    const resolved = WaitStore.attachReply(
+      created.id,
+      {
+        replyKey: "reply-key-1",
+        responderCandidates: ["actor-a"],
+        messageId: "in-msg-1",
+        at: 1_000,
+      },
+      "trace-wait-store",
+    );
+    if (resolved.kind !== "resolved") throw new Error("expected resolved wait");
+    const ledger = Storage.get().ledger;
+    if (!ledger) throw new Error("ledger sub-adapter missing");
+    const facts = [...ledger.factsByType("wait.opened"), ...ledger.factsByType("wait.resolved")]
+      .filter((fact) => fact.streamId === `wait:${created.id}`)
+      .sort((a, b) => a.seq - b.seq);
+
+    expect(facts.map(({ seq, type }) => [seq, type])).toEqual([
+      [1, "wait.opened"],
+      [2, "wait.resolved"],
+    ]);
+    expect(resolved.record.revision).toBe(2);
+    expect(ledger.headFact(`wait:${created.id}`)?.seq).toBe(resolved.record.revision);
+    expect(facts[0]?.data).not.toHaveProperty("replies");
+    expect(facts[1]?.data).not.toHaveProperty("replies");
+    expect(facts[1]?.data).not.toHaveProperty("correlation");
+  });
+
   test("creates an open wait, persists it, and publishes wait.opened", async () => {
     const events: string[] = [];
     Bus.observe((event) => events.push(event.name));
@@ -91,14 +124,26 @@ describe("WaitStore", () => {
     expect(WaitStore.get("wait-2")).toBeUndefined();
   });
 
-  test("rejects a duplicate wait id with a typed duplicate error", () => {
+  test("rejects a duplicate wait id with no owner-stream or Bus side effects", async () => {
     WaitStore.create(buildWaitCreate(), "trace-wait-store");
+    await flushBus();
+    const events: string[] = [];
+    Bus.observe((event) => events.push(event.name));
 
     const error = captureStoreError(() =>
       WaitStore.create(buildWaitCreate({ originMessageId: "out-msg-2" }), "trace-wait-store"),
     );
 
     expect(error.data.code).toBe("duplicate");
+    const ledger = Storage.get().ledger;
+    if (!ledger) throw new Error("ledger sub-adapter missing");
+    expect(
+      ledger.factsByType("wait.opened").filter((fact) => fact.streamId === "wait:wait-1"),
+    ).toHaveLength(1);
+    expect(ledger.headFact("wait:wait-1")?.seq).toBe(1);
+    expect(WaitStore.get("wait-1")?.originMessageId).toBe("out-msg-1");
+    await flushBus();
+    expect(events).not.toContain("wait.opened");
   });
 
   test("finds open waits by scoped correlation and rejects other channels", () => {
@@ -365,8 +410,10 @@ describe("WaitStore", () => {
     expect(WaitStore.get("wait-1")?.correlation.replyToMessageId).toBe("reply-1");
   });
 
-  test("a concurrent write between read and CAS raises a typed revision_conflict", () => {
+  test("a concurrent write between read and CAS raises a typed revision_conflict", async () => {
     WaitStore.create(buildWaitCreate(), "trace-wait-store");
+    const events: string[] = [];
+    Bus.observe((event) => events.push(event.name));
 
     const error = captureStoreError(() =>
       WaitStore.transition(
@@ -374,7 +421,7 @@ describe("WaitStore", () => {
         (record) => {
           // Concurrent writer advances the revision after this step read it.
           WaitStore.cancel("wait-1", "trace-wait-store", 500);
-          return Wait.cancel(record, { at: 600 });
+          return Wait.expire(record, { at: 20_000 });
         },
         "trace-wait-store",
       ),
@@ -383,6 +430,15 @@ describe("WaitStore", () => {
     expect(error.data.code).toBe("revision_conflict");
     expect(error.data.waitId).toBe("wait-1");
     expect(WaitStore.get("wait-1")?.cancelledAt).toBe(500);
+    const ledger = Storage.get().ledger;
+    if (!ledger) throw new Error("ledger sub-adapter missing");
+    expect(ledger.headFact("wait:wait-1")).toMatchObject({ seq: 2, type: "wait.cancelled" });
+    expect(
+      ledger.factsByType("wait.expired").filter((fact) => fact.streamId === "wait:wait-1"),
+    ).toHaveLength(0);
+    await flushBus();
+    expect(events).toContain("wait.cancelled");
+    expect(events).not.toContain("wait.expired");
   });
 
   test("transition on a missing wait raises a typed not_found error", () => {
