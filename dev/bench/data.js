@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787389987284,
+  "lastUpdate": 1787424850068,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -59255,6 +59255,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 514720,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "72d0e166a4078898b720d8fac7731d59b484fe8f",
+          "message": "Execution substrate hardening: defect fixes, slop removal, guarantee proofs across the ten non-brain packages (#758)\n\n* fix(ledger): remove connector actor on uninstall\n\n* test(substrate): remove non-discriminating coverage\n\n* test(llm): assert retry cap decision\n\n* fix(channels): checkpoint telegram after handoff\n\n* fix(ledger): mark invalid persisted bus payloads\n\n* fix(protocol): reject invalid artifact metadata\n\n* fix(channels): retry failed github deliveries\n\n* feat(ipc): add typed call facade\n\n* fix(agent): own provider retry attempts\n\n* chore(substrate): remove proven-dead surface\n\n* fix(ledger): reject incomplete production storage\n\n* fix(channels): resolve duplicate Dedupe.forget from cherry-pick auto-merge\n\n* fix(channels): preserve reply authority\n\n* docs(substrate): synchronize package guides\n\n* fix(substrate): stabilize integration suite\n\n* fix(agent): preserve typed provider failure facts\n\n* fix(channels): reconcile gateway sends\n\n* docs(substrate): record hardening receipts\n\n* chore(substrate): consolidate test scaffolding\n\n* fix(conformance): record gateway send producer\n\n* test(conformance): prove hardened substrate\n\n* fix(substrate): drop unconsumed public exports\n\n* test(channels): cover hardened branch faults\n\n* fix(ci): scope compile-red fixture out of program-wide gates",
+          "timestamp": "2026-08-23T03:52:59+09:00",
+          "tree_id": "6a6d18aea9cad39f4c0dbbd26fd5bbe7be2e4ff7",
+          "url": "https://github.com/INONONO66/openomni/commit/72d0e166a4078898b720d8fac7731d59b484fe8f"
+        },
+        "date": 1787424848799,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 447,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 613,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5936,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9574,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2499,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2879,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2422,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15324,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8089,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1046,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 948,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1541,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1599,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 756,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 47306,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2360,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 517194,
             "unit": "ns/op"
           }
         ]
