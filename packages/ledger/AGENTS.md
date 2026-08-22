@@ -18,7 +18,7 @@ src/
 ├── session/
 │   ├── index.ts          # Session namespace barrel: public Session.* API re-exports
 │   ├── events.ts         # Session bus event descriptors
-│   ├── lifecycle.ts      # Session CRUD, child sessions, worker meta, TTL lazy deletion
+│   ├── lifecycle.ts      # Session CRUD/children; pure expiry-filtering reads + explicit sweepExpired deletion
 │   ├── messages.ts       # Message/part writes and reads, message status
 │   ├── transcript.ts     # TranscriptStore (#547 C3) — append-only transcript_fact recording; message/part tables are fold projections
 │   └── info.ts           # SessionInfo schema (leaf — breaks session ↔ storage cycle)
@@ -31,19 +31,20 @@ src/
 │   ├── migration-runner.ts / sqlite-busy.ts / sqlite-json-data.ts / timestamped-store.ts # shared SQLite helpers (requireSubAdapter lives in timestamped-store)
 │   └── initialize.ts     # initialize({ dbPath }) — bootstraps the default SQLite adapter
 ├── ledger-core/          # Ledger append core (#510 A): serialized CAS append, adoptStream, headFact/factsByType, verifyTail over the hash-chained ledger_event table (schema.ts = drizzle DDL source)
-├── bus-persistence/      # Durable hash-chained bus event journal + BusQuery (stats/errors/history/verifyChainIntegrity)
+├── bus-persistence/      # Observational hash-chained bus journal + BusQuery; payload status/diagnostic preserves invalid raw values
 ├── actor/                # ActorIdentity / ActorEndpoint registry stores
 ├── blacklist/            # Blacklist entry store (absolute deny gate data)
 ├── channel-grant/        # ChannelGrant store (surface/workspace/channel ceilings)
 ├── pending-ask/          # PendingAskStore (legacy resident.ask path; #215 target freezes writes and read-upcasts to Wait)
 ├── pending-interaction/  # PendingInteractionStore (legacy correlation/follow-up records; #215 target read-upcasts to Wait)
 ├── worker-grant/         # WorkerGrantStore (scoped worker-egress grants)
-├── artifact/             # Artifact.store / get — latest-version-wins upsert over SQLite (fail-closed on absent sub-adapter)
-├── app-connector/        # AppConnectorInstallationStore for durable installed-app lifecycle records
+├── artifact/             # Artifact.store / get; reads normalize legacy invalid metadata into the current schema
+├── app-connector/        # Installed-app lifecycle; installation and connector actor identity/endpoint change transactionally
 ├── surface-key/          # SurfaceKey — N:1 mapping from external surface keys to session IDs
 ├── engagement/           # EngagementStore — durable delegation machine (#709, gateway-design §5): fact-before-projection appends on engagement:<id> streams, typed Engagement.StoreError fail-closed, lazy deadline expiry at hydration (listActive). Brain-domain surface: the brain is its sole writer
 ├── wait/                 # WaitStore — durable Wait contract (#215/#510 B): fact-before-projection appends on wait:<id> streams, typed Wait.StoreError fail-closed, lazy pre-cutover adoption (identity-only genesis)
 ├── effect/               # EffectStore (#492) — intent→terminal-outcome effect ledger on effect:<id> streams; outstandingIntents/terminalIntents reconciliation reads
+├── egress/               # EgressBudgetStore — durable perimeter social-budget debit records
 ├── work-item/            # WorkItemStore — universal work state engine
 │   ├── index.ts          # WorkItemStore namespace barrel: public WorkItemStore.* API
 │   ├── create.ts         # Work item creation, parent linkage, Created event
@@ -56,10 +57,9 @@ src/
 │   ├── attempt-run.ts    # WorkItemAttemptRun — run lifecycle over attempt facts + deterministic upcast of frozen worker_run_state rows (#510 D2b)
 │   ├── dependency.ts     # dependency readiness + cycle detection
 │   ├── retry.ts / retry-policy.ts # retry defaults + kernel-enforced exhaustion blocker
-│   ├── outcome.ts        # Owner adoption outcome recording (adopted/corrected/redone/ignored)
 │   ├── builder.ts        # WorkItem.Info construction
 │   └── types.ts          # Internal WorkItemStore implementation types
-└── worker-run/           # WorkerRunStateStore — frozen worker_run_state archive (reads only)
+└── worker-run/           # Frozen worker_run_state implementation (`state-store.ts`); root barrel intentionally exports no write surface
 ```
 
 ### Circular Dependency Avoidance
@@ -69,13 +69,14 @@ src/
 ## KEY PATTERNS
 
 - **Namespace API**: `Session.create()`, `Session.addMessage()`, `Session.addPart()`, `Session.createChild()`, `Session.update()`, etc. No class instances. Worker metadata lives on `SessionInfo.workerMeta` and round-trips through `update`/`get` (the dedicated accessors were dead surface, removed in #606).
-- **Storage.Adapter**: There is no default adapter — `Storage.get()` before `initialize({ dbPath })`/`configure(adapter)` throws (fail-closed, #522; no silent `:memory:` fallback). `SqliteStorageAdapter` is the Bun SQLite persistent backend bootstrapped via `initialize({ dbPath })`. Its facade wires focused SQLite sub-adapter modules for required `session` / `message` / `part` and, required-in-production but optional-in-type for test fakes, `artifact`, `surfaceKey`, `cronJob`, `workItem`, `workerRunState`, and `appConnectorInstallation`. App connector installation records include Owner consent metadata plus disable/uninstall lifecycle operations because the installation record is the lifecycle SSOT. Schema lifecycle concerns that must evolve together (PRAGMAs, ordered migrations, clear ordering) live in `sqlite-schema-lifecycle.ts`. Stores consuming an absent sub-adapter fail closed (`requireSubAdapter` or a typed adapter_absent error), never degrade silently.
+- **Storage.Adapter**: There is no default adapter — `Storage.get()` before `initialize({ dbPath })`/`configure(adapter)` throws (fail-closed, #522; no silent `:memory:` fallback). `SqliteStorageAdapter` is the branded production backend. `Storage.configure()` validates every required production capability before installing a branded adapter and throws `Storage.IncompleteAdapterError` naming the first missing capability; narrow unbranded test fakes remain valid and individual stores still fail closed when an optional-in-type seam is absent. App connector install/update writes the installation and its exact actor identity/endpoint in one transaction; uninstall removes all three in one transaction, leaving unrelated actors untouched. Schema lifecycle concerns that must evolve together live in `sqlite-schema-lifecycle.ts`.
 - **Legacy task/todo tables**: dropped by migration `0017_drop_dead_tables` (#606) — `event_log`, `task`, `task_run`, `task_idempotency`, `plan`, `todo`, `background_task` had zero readers and writers; their features live on the WorkItem projection + ledger and `bus_event`.
-- **Bus events**: `Session.Event.Created`, `.Updated`, `.Deleted` are published on mutation. `worker.run.*` lifecycle events are published by the server worker runner (wire contract), never by this package — the frozen store publishes nothing.
+- **Bus events**: `Session.Event.Created`, `.Updated`, `.Deleted` are published on mutation. `worker.run.*` lifecycle events are published by the server worker runner (wire contract), never by this package — the frozen store publishes nothing. BusPersistence is an observational journal: schema-valid payloads persist as normalized `valid`; validation failures persist the exact raw value as `invalid`; parser failures persist it as `parse_failed` with a safe diagnostic. Query readers expose nullable markers so rows written before the marker migration remain readable.
 - **SurfaceKey records**: N:1 mapping from surface-specific keys (e.g. `telegram:botId:chat:chatId`) to session IDs, stored solely in `Storage.Adapter.surfaceKey` (no in-memory index); a missing sub-adapter fails closed — ownership answers are never fabricated (#522). This package stores and looks up the mapping; `openomni` decides when the mapping wins over PendingInteraction or other routing facts.
 - **WorkItemStore namespace**: `WorkItemStore.create()`, `.get()`, `.list()`, `.start()`, `.fail()`, `.cancel()`, `.assignExecution()`, `.allocateAttempt()`, `.addBlocker()`, `.resolveBlocker()`, `.addEvidence()`, `.addReadBackEvidence()`, `.recordEffect()`, and `.retry()` own lower-layer storage semantics; every mutation is a dedicated lifecycle helper (the freeform `.update()` and `.remove()`/`.recordOutcome()`/`.areDependenciesMet()` dead surface was removed in #606). There is NO raw completion entry point: the old `.complete()` tombstone is deleted, so completion is reachable only through the admission writer returned by `Storage.configure` — OpenOmni owns completion fact/admission appends and the terminal CAS. `parentHash` and stable completion criteria are immutable by construction.
+- **Artifact reads**: New writes must satisfy the current `Artifact.Meta` schema. `Artifact.get()` upcasts legacy persisted rows on read: non-positive/non-integral versions normalize to at least `1`, and blank `mimeType`/`createdAt` receive stable compatibility defaults before current-schema parsing.
 - **WorkerRunStateStore**: the frozen `worker_run_state` archive (#510 D2b, pending-ask precedent). Reads (`get` / `listBySession` / `listByStatus`) keep serving historical rows — including the upcast-on-read attempt-run view in `WorkItemAttemptRun.find` — while every write throws the typed `WorkerRun.FrozenError` (`worker_run_frozen`) and persists nothing. Run lifecycle lives on WorkItem attempt facts (`work_item.attempt_allocated` / `attempt_finished`).
-- **TTL / lazy deletion**: `Session.create({ ttlMs })` sets `expiresAt`; `Session.get()` and `.list()` check expiry and auto-delete.
+- **Session TTL**: `Session.create({ ttlMs })` sets `expiresAt`. `Session.get()` and `.list()` are pure reads that hide expired rows without deleting them. `Session.sweepExpired()` owns physical removal (including message/part cascade) and is invoked by boot recovery; there is no periodic sweep yet.
 - **Session lineage**: `Session.createChild()` + `parentSessionId` + `spawnDepth` are the current foundation for original → self-loop → child Worker trees. Future work should add explicit metadata conventions before adding new storage shapes.
 
 ## STORE SEMANTICS
@@ -99,7 +100,7 @@ If a store method starts combining multiple product facts into an allow/deny/rou
 
 ## ANTI-PATTERNS
 
-- **Storage API tiers**: `Storage.get()` is the public low-level API for accessing optional sub-adapters such as `workItem` and `workerRunState` from outside this package. For core session operations (session/message/part CRUD), prefer the namespace APIs (`Session.*`, `Artifact.*`, `SurfaceKey.*`) for package-level invariants; note that bus publication is operation-specific. `Storage.getAdapter()` is an internal alias — both return the same adapter.
+- **Storage API tiers**: `Storage.get()` is the public low-level API for accessing sub-adapters such as `workItem` and `workerRunState` from outside this package. The interface keeps many capabilities optional so narrow test fakes are possible, but the branded production adapter must pass `Storage.assertComplete()` at configuration. For core session operations, prefer namespace APIs (`Session.*`, `Artifact.*`, `SurfaceKey.*`). `Storage.getAdapter()` is an internal alias; both return the same adapter.
 - Do NOT import internal paths from other packages — import from `@openomni/ledger` (index re-exports).
 - Do NOT persist ad-hoc delegated execution state alongside `Session`. `worker_run_state` is a frozen read-only archive; new writes use the canonical WorkItem attempt contract rather than reviving the legacy shape.
 - Do NOT write raw self-loop transcripts back into the original user session. Store internal work in child sessions and let `openomni` decide what distilled result belongs in the original session.

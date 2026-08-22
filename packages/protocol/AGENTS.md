@@ -8,37 +8,35 @@ Protocol defines schemas plus pure folds — no effects, storage, or I/O. It may
 
 ```
 src/
-├── index.ts              # Package barrel (re-exports all domains; event/ descriptors are re-exported here directly — its own barrel was inlined in #476)
-├── actor/                # Actor.Identity / Endpoint, TrustTier, Blacklist entry schemas
-├── adapter/              # Adapter.Surface / Capabilities / TriggerRule / Inbound-OutboundMessage
-├── agent/                # AgentProfile.Definition (permissions field removed in #475), AgentProfile.AgentBudget
-├── app-connector/        # Declarative installed-app connector ABI
-├── artifact/             # Artifact.Meta, Artifact.Part
-├── bus/                  # BusEvent.define() factory + BusEvent.Sink (injected event-sink interface, #477)
-├── communication/        # PendingAsk / PendingInteraction schemas (transitional names for the Wait primitive, #215)
-├── cron/                 # Cron job schemas
-├── dispatch/             # Dispatch.Command / Actions / ActorContext / target schemas
-├── engagement/           # Engagement.Record/Terms/State + pure transition fold + Events (#709 — the delegation machine, gateway-design §5; Tier-2 Owner addition)
-├── error/                # NamedError factory + built-in error classes (incl. WorkerDeliveryError, #478)
-├── event/                # Typed event descriptors: agent-execution, ingress, llm, mcp, operational, policy, tool
-├── gateway/              # Gateway.Deliver / Send / WaitControl contracts + ReplyGrantRule (gateway stage 0, #706 — the channels↔openomni seam)
-├── execution/            # Execution.Request / Result contracts + Execution.Driver command face (#478)
-├── ingress/              # InboundEvent discriminated union (DirectEvent | InternalEvent), AgentDef, IngressResult, ResolvedInboundEvent
-├── ipc/                  # IPC request/response schemas and worker transport contracts
+├── index.ts              # Package barrel: all public domains
+├── actor/                # Actor.Identity / Endpoint, TrustTier, blacklist schemas
+├── app-connector/        # Connector definition, consent, installation, and lifecycle schemas
+├── artifact/             # Artifact.Meta (positive version and non-empty mimeType/createdAt)
+├── bus/                  # BusEvent.define() + injected BusEvent.Sink contract
+├── channel/              # Channel surfaces, messages, config, and surface-key codec
+├── command/              # Command request/result schemas
+├── communication/        # PendingAsk, PendingInteraction, and WorkerGrant legacy contracts
+├── cron/                 # Cron job schemas and event descriptors
+├── engagement/           # Engagement schemas, events, and pure transition fold
+├── error/                # NamedError factory and shared protocol errors
+├── event/                # Ingress, LLM, MCP, operational, policy, tool, and worker-driver descriptors
+├── execution/            # Execution.Request / Result and Driver contracts
+├── gateway/              # Gateway delivery/send/wait contracts and messaging events
+├── ingress/              # Inbound contracts plus payload, route-record, surface-key, and target helpers
+├── ipc/                  # Version-2 generic envelopes plus current method parameter/result schemas
+├── ledger/               # Append/adopt/chain contracts and frozen stream payload registry
 ├── mcp/                  # MCP server config schemas
-├── message/              # Message.Part (8 variants), Message.Info, Message.WithParts
-├── model/                # Model.Ref shared model identity
-├── policy/               # Point registry (20 registered policy points) + point contracts, PolicyPlan, Permission, PolicyDecision, effects
-├── run/                  # Run.Outcome / RetryPolicy
-├── sink/                 # Sink — streaming callback contract (TS interface, not Zod)
+├── message/              # Message.Part variants, Message.Info, Message.WithParts
+├── model/                # Model.Ref and model status
+├── policy/               # 18-point registry, contracts, plan, permissions, resources, and effects
 ├── storage/              # Storage.WorkItemSubAdapter interface
-├── token/                # Token.Usage / AgentUsage / ProviderUsage / ExecutionUsage
-├── tool/                 # Tool.Spec / Call / Result / State (discriminated union)
-├── tool-selection/       # ToolSelection schema for choosing tool categories and overrides
-├── trace/                # TraceContext schema shared by observability helpers
-├── work-item/            # WorkItem.Info, stable completion facts/contracts/admissions/receipts, historical upcast, Status, WorkItem.Events.*
-├── worker-bootstrap/     # Worker bootstrap payload contracts
-└── worker-run/           # WorkerRun.Info / Status + WorkerRun.Events.*
+├── token/                # Token usage contracts
+├── tool/                 # Tool.Spec / Call / Result / State
+├── trace/                # TraceContext schema and newTraceId()
+├── transcript/           # Transcript facts and pure fold
+├── wait/                 # Wait schemas, events, matching/upcasts, and pure folds
+├── work-item/            # WorkItem schemas, attempt identity, completion admission, events, status, and linkage
+└── worker-bootstrap/     # Worker bootstrap payload contracts
 ```
 
 Namespace additions are gated: `script/lint-tools.ts` (#467) enforces a grandfathered baseline with a no-new-violations ratchet against the core-model Tier-1/2 vocabulary, and the schema-snapshot lint flags field removals/renames (regenerate via `--update` — that diff is the review sign-off surface).
@@ -47,16 +45,14 @@ Namespace additions are gated: `script/lint-tools.ts` (#467) enforces a grandfat
 
 - **NamedError factory**: `NamedError.create(name, zodSchema)` produces typed error classes with `.isInstance()` guard, `.toObject()` serialization, and `.Schema` for validation. `ProviderError` (in `@openomni/llm`) uses this.
 - **Namespace + Zod duality**: Schemas and types share the same name (e.g., `Tool.State` is both a Zod schema and a TS type). Access schema for validation, type for TS.
-- **Discriminated unions**: `Tool.State` on `status`, `Message.Part` on `type`, `Message.Info` on `role`, `Run.Outcome` on `type`, `ExecutionEvent` on `type`, `Policy.PolicyDecision` on `verdict`. `InboundEvent` is a discriminated union on `mode`: `DirectEvent` (`mode: "direct"`) for external inbound and `InternalEvent` (`mode: "internal"`) for system-origin events (e.g., cron). The external `ingest()` path rejects `mode: "internal"` for security.
-- **Sink interface**: Plain TS interface (NOT Zod) — the callback contract for streaming results. Uses `Message.WithParts`, `Tool.Call`, `Tool.Result`, `Transcript.Fact`.
-- **BaseEvent correlation**: All events extend `BaseEvent` with `traceId`, `runId?`, `taskId?`, `sessionId?`, `time`.
-- **Policy points**: `policy/point-registry.ts` registers 18 policy points (`dispatch.action.pre`, `run.lifecycle.pre/post`, `run.turn.pre/post`, `run.completion.pre`, `run.error.error`, `work.complete.pre`, `prompt.context.pre`, `connection.llm.pre/post`, `tool.catalog.pre`, `tool.native.pre/post`, `tool.mcp.pre/post`, `delegation.worker.pre/post`), each with allowed-effects whitelist, default fail policy (pre-boundary fail-closed, post fail-open), required context, and input schema (`point-contract.ts`). Generic agent-loop `run.completion.pre` and WorkItem contract-closing `work.complete.pre` are distinct points. `Policy.PolicyPlan` (`plan.ts`) is the stamped per-task plan shape (#479). `Policy.PolicyDecision` verdict is one of `allow | deny | pending`. A legacy `Policy.Timing` alias survives for pre-v2 timing names and resolves only generic run timing; do not build new code on it.
-- **WorkerRun lifecycle**: `WorkerRun.Events.*` covers delegated run start, completion, failure, and cancellation.
+- **Discriminated unions**: `Tool.State` on `status`, `Message.Part` on `type`, `Message.Info` on `role`, `Policy.PolicyDecision` on `verdict`, and `Ingress.InboundEvent` on `mode`. `DirectEvent` (`mode: "direct"`) is external inbound; `InternalEvent` (`mode: "internal"`) is system-origin input such as cron. The external `ingest()` path rejects internal events for security. LLM `Run.Outcome` and its streaming `Sink` are owned by `@openomni/llm`, not protocol.
+- **Event correlation**: Event descriptors define their own schemas and carry the relevant trace/run/session identity. There is no exported universal `BaseEvent` contract.
+- **Policy points**: `policy/point-registry.ts` registers 18 policy points (`dispatch.action.pre`, `run.lifecycle.pre/post`, `run.turn.pre/post`, `run.completion.pre`, `run.error.error`, `work.complete.pre`, `prompt.context.pre`, `connection.llm.pre/post`, `tool.catalog.pre`, `tool.native.pre/post`, `tool.mcp.pre/post`, `delegation.worker.pre/post`), each with allowed-effects whitelist, default fail policy (pre-boundary fail-closed, post fail-open), required context, and input schema (`point-contract.ts`). Generic agent-loop `run.completion.pre` and WorkItem contract-closing `work.complete.pre` are distinct points. `Policy.PolicyPlan` is defined in `policy/index.ts`. `Policy.PolicyDecision` verdict is one of `allow | deny | pending`. A legacy `Policy.Timing` alias survives for pre-v2 timing names; do not build new code on it.
 - **Storage sub-adapters**: `Storage.WorkItemSubAdapter` in `storage/index.ts` — pure interface contract with no runtime logic. Implementation lives in `@openomni/ledger`.
-- **WorkItem namespace**: `work-item/index.ts` is the public facade. `work-item/schemas.ts` defines current-only `WorkItem.Info`; `completion-admission.ts` defines stable criteria, claims, observations, scoped results, invalidations, verification errors, effects, requests, admissions, and terminal receipts; Rows parse through `WorkItem.Info` directly; there is no historical upcast decoder (no pre-admission data exists). `work-item/events.ts` preserves the shipped `Completed` meaning and adds distinct request/admission/CompletedV2 descriptors. `work-item/status.ts` derives lifecycle status, and `work-item/hash.ts` owns WorkItem plus deterministic criterion identities.
+- **WorkItem namespace**: `work-item/index.ts` is the public facade. `work-item/schemas.ts` defines `WorkItem.Info`; `attempt.ts` owns attempt, fingerprint, cache/replay key, and nondeterminism contracts; `completion-admission.ts` defines stable criteria, claims, observations, requests, admissions, and terminal receipts. Rows parse through `WorkItem.Info` directly. `work-item/events.ts` preserves the shipped `Completed` meaning and carries distinct request/admission/CompletedV2 descriptors; `status.ts`, `hash.ts`, and `terminal-linkage.ts` own pure lifecycle derivation and linkage validation.
 - **Execution/IPC contracts**: `execution/`, `ipc/`, and `worker-bootstrap/` describe worker requests, responses, and bootstrap payloads only. Runtime worker lifecycle lives in `@openomni/coordinator`.
 - **AppConnector namespace**: `app-connector/index.ts` defines installed-app connector schema contracts. Runtime install, consent, and process execution live above protocol.
-- **Trace contract**: `trace/index.ts` defines the shared shape; helper creation lives in `@openomni/ledger`.
+- **Trace contract**: `trace/index.ts` defines `TraceContext` and the shared `newTraceId()` origin helper.
 
 ## CONTRACT BOUNDARY
 
@@ -94,19 +90,17 @@ Future WorkItem-attempt and Jester-evaluation shapes are contracts only: they ad
 
 ## ANTI-PATTERNS
 
-- Do NOT add runtime logic here — this package is schemas/types only.
+- Do NOT add effects, storage, or I/O here. Runtime helpers must remain pure folds or schema-local derivations.
 - Do NOT import from other `@openomni/*` packages — protocol is the dependency leaf.
 - Do NOT add authority or communication-kernel shortcuts here. Add the schema here, then implement semantics in `packages/openomni`.
 
 ## WHEN MODIFYING
 
 - Adding a new error? Use `NamedError.create()` in `error/index.ts` and re-export from `src/index.ts`.
-- Adding a new event? Use `BusEvent.define()` in the relevant domain and extend `BaseEvent`.
+- Adding a new event? Use `BusEvent.define()` in the relevant domain and include the identity fields required by that event family.
 - Adding a new message part? Add a variant to `Message.Part` in `message/index.ts`.
 - Adding a new tool state? Add to `Tool.State` discriminated union in `tool/index.ts`.
-- Adding a new run type? Add to the `Run` namespace in `run/index.ts`.
 - Adding a new policy point? Register it in `policy/point-registry.ts` with a full contract (allowed effects, fail policy, required context, input schema) and coordinate with the engine in `packages/policy` — point additions are protocol vocabulary and ride the #467 gate.
-- Adding a new worker-run event? Extend `WorkerRun.Events` in `worker-run/index.ts` with a `BusEvent.define()` call.
 - Adding a new storage sub-adapter interface? Add it to `storage/index.ts` as a named interface under the `Storage` namespace.
 - Adding a work-item field? Update `WorkItem.Info` in `work-item/schemas.ts`. If it affects status derivation, update `deriveStatus()` in `work-item/status.ts`.
 - Adding a work-item event? Extend `WorkItem.Events` in `work-item/events.ts` with a `BusEvent.define()` call.

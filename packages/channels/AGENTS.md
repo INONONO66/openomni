@@ -19,9 +19,9 @@ src/
 │                     #   arms), #708 reply-grant instance materialization (in-memory by ruling; durable store = #709),
 │                     #   #219 social-budget egress gate (pure fold + EgressBudgetStore debits), audit events
 ├── discord/          # Discord gateway client + surface (mention-trigger by default)
-├── telegram/         # Telegram polling surface
-├── github/           # GitHub webhook surface (issue_comment.created, issues.opened)
-└── support/          # Band-local helpers: chunk-text, dedupe, fetch-retry/sleep, trigger evaluation
+├── telegram/         # Ordered long-poll surface; offset advances only after successful handoff
+├── github/           # Webhooks with retryable 5xx failures and delivery-marker comment read-back
+└── support/          # Band-local helpers: chunk-text, bounded dedupe, fetch retry, trigger evaluation
 ```
 
 ## DEPENDENCIES (the band import contract)
@@ -38,6 +38,8 @@ No kernel (`@openomni/openomni`) either way — both sides meet only in protocol
 - Adapters are ingress-agnostic: inbound flows through the injected `onMessage(routingHandler)` (bound to the router's `ingest` by the composition root); observation flows through injected sinks.
 - The router is constructed ONCE (`createGatewayRouter({ sink, deliver, onPolicyDecision?, messaging? })`) — no post-construction mutation. `ingest` sanitizes gateway-derived fields off the inbound event at the trust boundary (audit A T2: `activation.durableSessionId`, `meta.channelGrant*`/`pendingAsk`; `inboundTreatment` keeps only the harmless `evidence_only` self-downgrade), records `route.decided` before anything acts (record-before-act, #510 C3), mints/claims the resident surface-session label before deliver (S1: the sessionId is an opaque label; session ROWS are brain domain), and never reads session content. A wait-correlated routed reply the fold rejects appends a correcting `route.not_delivered` fact on `route_correction:<scope>:<id>` before the typed rejection returns, so the ledger never claims a delivery that never happened (#743).
 - Wire/persisted vocabulary is byte-frozen: `route.decided` stream ids and decision payloads, `route.not_delivered` corrections, `messaging.sent`/`messaging.denied`, wait rows, surface-key rows, egress-budget debit rows.
+- GitHub filtered/unsupported deliveries remain successful 200 responses. A handler throw, comment read-back failure, or authenticated comment POST failure returns 500 and releases the in-memory delivery claim so GitHub can retry. A missing GitHub token is different: `postComment()` publishes a warning and returns normally, so the webhook returns 200 without posting a reply. Outbound comments carry the encoded delivery id in a hidden marker; retries read all comment pages first and do not repost when that marker already exists.
+- Telegram consumes each returned batch in `update_id` order. Text-message updates are checkpointed only after the awaited `onMessage` handoff succeeds; a failed handoff leaves that update and every later update eligible for retry. Non-text updates require no handoff and are checkpointed in sequence.
 - Normalizers are pure (`InboundNormalizer`); trace ids mint at genuine trace origins only (D11) via protocol's `newTraceId`; surface identity speaks the protocol `Channel.SurfaceKey` codec.
 
 ## CONSUMERS
@@ -46,4 +48,4 @@ No kernel (`@openomni/openomni`) either way — both sides meet only in protocol
 
 ## TESTS
 
-`bun test` in this package. `test/channel-band-boundary.test.ts` is the import-contract gate; `test/router/` carries the promoted kernel-routing, wait, authority, and messaging suites (the brain is a deliver-port stub — see `test/router/_router-fixture.ts`); the rest cover the Discord gateway state machine, GitHub authn/client/normalizer, Telegram/Discord normalizers, trigger authn middleware, and the WebSocket surface. Standalone proof: `cd packages/channels && bun install && bun test && bun run build`.
+`bun test` in this package. `test/channel-band-boundary.test.ts` is the import-contract gate; `test/router/` carries the promoted kernel-routing, wait, authority, and messaging suites (the brain is a deliver-port stub — see `test/router/_router-fixture.ts`). Driver tests include GitHub retry/read-back dedupe and Telegram offset-after-handoff behavior alongside authn, normalizers, Discord gateway, triggers, and WebSocket coverage. Standalone proof: `cd packages/channels && bun install && bun test && bun run build`.
