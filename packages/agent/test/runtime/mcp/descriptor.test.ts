@@ -5,21 +5,26 @@ import { Operational, type Policy, type Tool } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { McpClient, type McpClientHandle } from "../../../src/runtime/mcp/client";
 
-/** An MCP server's lifecycle belongs to whatever brought it up — the boot. */
-const TEST_LIFECYCLE_TRACE_ID = "trace-mcp-lifecycle";
+const TRACE_ID = "trace-mcp-lifecycle";
+const stdio = (name = "filesystem") => ({
+  name,
+  transport: "stdio" as const,
+  command: "mcp-server-filesystem",
+});
+const http = (name = "search-server", transport: "sse" | "streamable-http" = "sse") => ({
+  name,
+  transport,
+  url: "https://example.test/mcp",
+});
 
 interface McpToolStub {
   readonly name: string;
   readonly description?: string;
-  /** MCP requires one on every tool, and so does the SDK result type. */
   readonly inputSchema: { readonly type: "object" } & Record<string, unknown>;
 }
+type ToolSpecWithDescriptor = Tool.Spec & { readonly descriptor?: Policy.Resource.Descriptor };
 
-type ToolSpecWithDescriptor = Tool.Spec & {
-  readonly descriptor?: Policy.Resource.Descriptor;
-};
-
-function createStubClient(tools: McpToolStub[]): McpClientHandle {
+function stubClient(tools: McpToolStub[] = []): McpClientHandle {
   return {
     connect: async () => undefined,
     close: async () => undefined,
@@ -30,62 +35,142 @@ function createStubClient(tools: McpToolStub[]): McpClientHandle {
   };
 }
 
-function createRequestOptionsCaptureClient(tools: McpToolStub[] = []): McpClientHandle & {
-  readonly listOptions: () => Array<RequestOptions | undefined>;
-  readonly callOptions: () => Array<RequestOptions | undefined>;
-} {
-  const capturedListOptions: Array<RequestOptions | undefined> = [];
-  const capturedCallOptions: Array<RequestOptions | undefined> = [];
-
-  return {
+function requestCaptureClient(tools: McpToolStub[] = []) {
+  const listOptions: Array<RequestOptions | undefined> = [];
+  const callOptions: Array<RequestOptions | undefined> = [];
+  const client: McpClientHandle = {
     connect: async () => undefined,
     close: async () => undefined,
     listTools: async (_params, options) => {
-      capturedListOptions.push(options);
+      listOptions.push(options);
       return { tools };
     },
-    callTool: async (_params, _resultSchema, options) => {
-      capturedCallOptions.push(options);
+    callTool: async (_params, _schema, options) => {
+      callOptions.push(options);
       return { content: [{ type: "text", text: "ok" }] };
     },
-    listOptions: () => capturedListOptions,
-    callOptions: () => capturedCallOptions,
   };
+  return { client, listOptions, callOptions };
+}
+
+function transportStub(emitOnClose = true): Transport & { readonly closeCalls: () => number } {
+  let calls = 0;
+  const transport: Transport & { readonly closeCalls: () => number } = {
+    start: async () => undefined,
+    send: async () => undefined,
+    close: async () => {
+      calls += 1;
+      if (emitOnClose) transport.onclose?.();
+    },
+    closeCalls: () => calls,
+  };
+  return transport;
+}
+
+function connectableClient(options: {
+  readonly connectError?: Error;
+  readonly listToolsError?: Error;
+  readonly closeError?: Error;
+  readonly closeTransport?: boolean;
+}) {
+  let transport: Transport | undefined;
+  let calls = 0;
+  const client: McpClientHandle = {
+    connect: async (next) => {
+      transport = next;
+      if (options.connectError) throw options.connectError;
+    },
+    close: async () => {
+      calls += 1;
+      if (options.closeError) throw options.closeError;
+      if (options.closeTransport !== false) await transport?.close();
+    },
+    listTools: async () => {
+      if (options.listToolsError) throw options.listToolsError;
+      return { tools: [] };
+    },
+    callTool: async () => {
+      throw new Error("callTool is not implemented by this test stub");
+    },
+  };
+  return { client, closeCalls: () => calls };
+}
+
+function transportCaptureClient() {
+  let captured: Transport | undefined;
+  const client: McpClientHandle = {
+    connect: async (transport) => {
+      captured = transport;
+    },
+    close: async () => undefined,
+    listTools: async () => ({ tools: [] }),
+    callTool: async () => {
+      throw new Error("callTool is not implemented by this test stub");
+    },
+  };
+  return { client, transport: () => captured };
+}
+
+type CapturedTransport = Transport & {
+  readonly _eventSourceInit?: { readonly fetch?: unknown };
+  readonly _requestInit?: RequestInit;
+  readonly _reconnectionOptions?: { readonly maxRetries?: number };
+};
+function httpOptions(transport: Transport | undefined) {
+  expect(transport).toBeDefined();
+  const captured = transport as CapturedTransport;
+  return {
+    eventSourceFetch: captured._eventSourceInit?.fetch,
+    requestInit: captured._requestInit,
+    reconnectionOptions: captured._reconnectionOptions,
+  };
+}
+
+type ErrorPayload = {
+  readonly component?: string;
+  readonly error?: string;
+  readonly context?: Record<string, unknown>;
+};
+function observeError(serverName: string) {
+  const seen: ErrorPayload[] = [];
+  let resolve!: (payload: ErrorPayload) => void;
+  const next = new Promise<ErrorPayload>((done) => {
+    resolve = done;
+  });
+  const unsubscribe = Bus.observe((event, payload) => {
+    const error = payload as ErrorPayload;
+    if (
+      event.name === Operational.Events.Error.name &&
+      error.component === "agent.mcp" &&
+      error.context?.serverName === serverName
+    ) {
+      seen.push(error);
+      resolve(error);
+    }
+  });
+  return { seen, next, unsubscribe };
 }
 
 describe("McpClient tool descriptors", () => {
   test("attaches Policy.Resource descriptors to listed MCP tools", async () => {
-    const client = new McpClient(
-      {
-        name: "filesystem",
-        transport: "stdio",
-        command: "mcp-server-filesystem",
-      },
-      {
-        events: Bus,
-        traceId: TEST_LIFECYCLE_TRACE_ID,
-        client: createStubClient([
-          {
-            name: "write_file",
-            description: "Write a file",
-            inputSchema: { type: "object", properties: { path: { type: "string" } } },
-          },
-        ]),
-      },
-    );
-
+    const client = new McpClient(stdio(), {
+      events: Bus,
+      traceId: TRACE_ID,
+      client: stubClient([
+        {
+          name: "write_file",
+          description: "Write a file",
+          inputSchema: { type: "object", properties: { path: { type: "string" } } },
+        },
+      ]),
+    });
     const [tool] = (await client.listTools()) as ToolSpecWithDescriptor[];
-
     expect(tool?.name).toBe("filesystem.write_file");
     expect(tool?.labels).toEqual(["source:mcp", "mcp.filesystem"]);
     expect(tool?.descriptor).toEqual({
       id: "tool:mcp:filesystem:write_file",
       kind: "tool",
-      source: {
-        type: "mcp",
-        serverId: "filesystem",
-        remoteName: "write_file",
-      },
+      source: { type: "mcp", serverId: "filesystem", remoteName: "write_file" },
       labels: ["source:mcp", "mcp.filesystem"],
       capabilities: ["network.write"],
       effects: ["external.write"],
@@ -93,20 +178,11 @@ describe("McpClient tool descriptors", () => {
   });
 
   test("uses the remote MCP tool name in descriptor source metadata", async () => {
-    const client = new McpClient(
-      {
-        name: "search-server",
-        transport: "sse",
-        url: "https://example.test/mcp",
-      },
-      {
-        events: Bus,
-        client: createStubClient([{ name: "search", inputSchema: { type: "object" } }]),
-      },
-    );
-
+    const client = new McpClient(http(), {
+      events: Bus,
+      client: stubClient([{ name: "search", inputSchema: { type: "object" } }]),
+    });
     const [tool] = (await client.listTools()) as ToolSpecWithDescriptor[];
-
     expect(tool?.name).toBe("search-server.search");
     expect(tool?.descriptor?.id).toBe("tool:mcp:search-server:search");
     expect(tool?.descriptor?.source).toEqual({
@@ -118,158 +194,85 @@ describe("McpClient tool descriptors", () => {
 });
 
 describe("McpClient request options", () => {
-  test("preserves SDK defaults when neither timeout nor signal is configured", async () => {
-    const sdkClient = createRequestOptionsCaptureClient([
-      { name: "search", inputSchema: { type: "object" } },
-    ]);
+  test.each([
+    ["preserves SDK defaults when neither timeout nor signal is configured", undefined, undefined],
+    ["ignores non-positive timeout overrides", 0, undefined],
+  ] as const)("%s", async (_name, timeout, expected) => {
+    const sdk = requestCaptureClient([{ name: "search", inputSchema: { type: "object" } }]);
     const client = new McpClient(
-      {
-        name: "search-server",
-        transport: "sse",
-        url: "https://example.test/mcp",
-      },
-      { events: Bus, client: sdkClient },
+      { ...http(), ...(timeout !== undefined && { timeout }) },
+      { events: Bus, client: sdk.client },
     );
-
     await client.listTools();
-
-    expect(sdkClient.listOptions()[0]).toBeUndefined();
+    expect(sdk.listOptions[0]).toBe(expected);
   });
 
   test("passes abort signal without requiring a timeout override", async () => {
-    const sdkClient = createRequestOptionsCaptureClient([
-      { name: "search", inputSchema: { type: "object" } },
-    ]);
+    const sdk = requestCaptureClient([{ name: "search", inputSchema: { type: "object" } }]);
     const signal = new AbortController().signal;
-    const client = new McpClient(
-      {
-        name: "search-server",
-        transport: "sse",
-        url: "https://example.test/mcp",
-      },
-      { events: Bus, client: sdkClient },
-    );
-
-    await client.listTools({ signal });
-
-    const options = sdkClient.listOptions()[0];
-    expect(options?.signal).toBe(signal);
-    expect(options?.timeout).toBeUndefined();
-    expect(options?.maxTotalTimeout).toBeUndefined();
-  });
-
-  test("ignores non-positive timeout overrides", async () => {
-    const sdkClient = createRequestOptionsCaptureClient([
-      { name: "search", inputSchema: { type: "object" } },
-    ]);
-    const client = new McpClient(
-      {
-        name: "search-server",
-        transport: "sse",
-        url: "https://example.test/mcp",
-        timeout: 0,
-      },
-      { events: Bus, client: sdkClient },
-    );
-
-    await client.listTools();
-
-    expect(sdkClient.listOptions()[0]).toBeUndefined();
+    await new McpClient(http(), { events: Bus, client: sdk.client }).listTools({ signal });
+    expect(sdk.listOptions[0]?.signal).toBe(signal);
+    expect(sdk.listOptions[0]?.timeout).toBeUndefined();
+    expect(sdk.listOptions[0]?.maxTotalTimeout).toBeUndefined();
   });
 
   test("passes configured timeout to initial tool discovery during connect", async () => {
-    const sdkClient = createRequestOptionsCaptureClient();
+    const sdk = requestCaptureClient();
     const client = new McpClient(
-      {
-        name: "filesystem",
-        transport: "stdio",
-        command: "mcp-server-filesystem",
-        timeout: 1234,
-      },
+      { ...stdio(), timeout: 1234 },
       {
         events: Bus,
-        traceId: TEST_LIFECYCLE_TRACE_ID,
-        client: sdkClient,
-        createTransport: () => createTransportStub(),
+        traceId: TRACE_ID,
+        client: sdk.client,
+        createTransport: () => transportStub(),
       },
     );
-
     await client.connect();
-
-    const options = sdkClient.listOptions()[0];
-    expect(options?.timeout).toBe(1234);
-    expect(options?.maxTotalTimeout).toBe(1234);
+    expect(sdk.listOptions[0]?.timeout).toBe(1234);
+    expect(sdk.listOptions[0]?.maxTotalTimeout).toBe(1234);
   });
 
   test("passes configured timeout and abort signal to listTools", async () => {
-    const sdkClient = createRequestOptionsCaptureClient([
-      { name: "search", inputSchema: { type: "object" } },
-    ]);
+    const sdk = requestCaptureClient([{ name: "search", inputSchema: { type: "object" } }]);
     const signal = new AbortController().signal;
-    const client = new McpClient(
-      {
-        name: "search-server",
-        transport: "sse",
-        url: "https://example.test/mcp",
-        timeout: 2500,
-      },
-      { events: Bus, client: sdkClient },
-    );
-
-    await client.listTools({ signal });
-
-    const options = sdkClient.listOptions()[0];
-    expect(options?.signal).toBe(signal);
-    expect(options?.timeout).toBe(2500);
-    expect(options?.maxTotalTimeout).toBe(2500);
+    await new McpClient(
+      { ...http(), timeout: 2500 },
+      { events: Bus, client: sdk.client },
+    ).listTools({ signal });
+    expect(sdk.listOptions[0]?.signal).toBe(signal);
+    expect(sdk.listOptions[0]?.timeout).toBe(2500);
+    expect(sdk.listOptions[0]?.maxTotalTimeout).toBe(2500);
   });
 
   test("passes configured timeout and abort signal to callTool", async () => {
-    const sdkClient = createRequestOptionsCaptureClient();
+    const sdk = requestCaptureClient();
     const signal = new AbortController().signal;
-    const client = new McpClient(
-      {
-        name: "filesystem",
-        transport: "stdio",
-        command: "mcp-server-filesystem",
-        timeout: 5000,
-      },
-      { events: Bus, client: sdkClient },
-    );
-
-    const result = await client.callTool("filesystem.read_file", { path: "README.md" }, "call-1", {
+    const result = await new McpClient(
+      { ...stdio(), timeout: 5000 },
+      { events: Bus, client: sdk.client },
+    ).callTool("filesystem.read_file", { path: "README.md" }, "call-1", {
       signal,
       traceContext: { traceId: "trace-mcp-call" },
     });
-
     expect(result.output).toBe("ok");
-    const options = sdkClient.callOptions()[0];
-    expect(options?.signal).toBe(signal);
-    expect(options?.timeout).toBe(5000);
-    expect(options?.maxTotalTimeout).toBe(5000);
+    expect(sdk.callOptions[0]?.signal).toBe(signal);
+    expect(sdk.callOptions[0]?.timeout).toBe(5000);
+    expect(sdk.callOptions[0]?.maxTotalTimeout).toBe(5000);
   });
 
   test("passes configured headers to SSE transports", async () => {
-    const sdkClient = createTransportCaptureClient();
-    const client = new McpClient(
-      {
-        name: "search-server",
-        transport: "sse",
-        url: "https://example.test/mcp",
-        headers: { Authorization: "Bearer token" },
-      },
-      { events: Bus, client: sdkClient },
-    );
-
-    await client.connect();
-
-    const options = capturedHttpTransportOptions(sdkClient.transport());
+    const sdk = transportCaptureClient();
+    await new McpClient(
+      { ...http(), headers: { Authorization: "Bearer token" } },
+      { events: Bus, client: sdk.client },
+    ).connect();
+    const options = httpOptions(sdk.transport());
     expect(new Headers(options.requestInit?.headers).get("Authorization")).toBe("Bearer token");
     expect(options.eventSourceFetch).toBeFunction();
   });
 
   test("SSE EventSource header fetch handles omitted init", async () => {
-    const sdkClient = createTransportCaptureClient();
+    const sdk = transportCaptureClient();
     const originalFetch = globalThis.fetch;
     const fetchCalls: Array<{
       readonly url: Parameters<typeof fetch>[0];
@@ -279,408 +282,141 @@ describe("McpClient request options", () => {
       fetchCalls.push({ url, init });
       return new Response(null, { status: 204 });
     }) as typeof fetch;
-
     try {
-      const client = new McpClient(
-        {
-          name: "search-server",
-          transport: "sse",
-          url: "https://example.test/mcp",
-          headers: { Authorization: "Bearer token" },
-        },
-        { events: Bus, client: sdkClient },
-      );
-
-      await client.connect();
-
-      const eventSourceFetch = capturedHttpTransportOptions(sdkClient.transport()).eventSourceFetch;
-      if (typeof eventSourceFetch !== "function") {
+      await new McpClient(
+        { ...http(), headers: { Authorization: "Bearer token" } },
+        { events: Bus, client: sdk.client },
+      ).connect();
+      const eventSourceFetch = httpOptions(sdk.transport()).eventSourceFetch;
+      if (typeof eventSourceFetch !== "function")
         throw new TypeError("expected an eventSourceFetch on the SSE transport");
-      }
       await eventSourceFetch("https://example.test/mcp");
     } finally {
       globalThis.fetch = originalFetch;
     }
-
     expect(fetchCalls).toHaveLength(1);
     expect(new Headers(fetchCalls[0]?.init?.headers).get("Authorization")).toBe("Bearer token");
   });
 
   test("passes configured headers and retries to streamable HTTP transports", async () => {
-    const sdkClient = createTransportCaptureClient();
-    const client = new McpClient(
+    const sdk = transportCaptureClient();
+    await new McpClient(
       {
-        name: "search-server",
-        transport: "streamable-http",
-        url: "https://example.test/mcp",
+        ...http("search-server", "streamable-http"),
         headers: { "x-api-key": "secret" },
         retries: 4,
       },
-      { events: Bus, client: sdkClient },
-    );
-
-    await client.connect();
-
-    const options = capturedHttpTransportOptions(sdkClient.transport());
+      { events: Bus, client: sdk.client },
+    ).connect();
+    const options = httpOptions(sdk.transport());
     expect(new Headers(options.requestInit?.headers).get("x-api-key")).toBe("secret");
     expect(options.reconnectionOptions?.maxRetries).toBe(4);
   });
 });
 
-function createTransportCaptureClient(tools: McpToolStub[] = []): McpClientHandle & {
-  readonly transport: () => Transport | undefined;
-} {
-  let transport: Transport | undefined;
-  return {
-    connect: async (nextTransport) => {
-      transport = nextTransport;
-    },
-    close: async () => undefined,
-    listTools: async () => ({ tools }),
-    callTool: async () => {
-      throw new Error("callTool is not implemented by this test stub");
-    },
-    transport: () => transport,
-  };
-}
-
-interface CapturedHttpTransportOptions {
-  readonly eventSourceFetch?: (url: string | URL, init?: RequestInit) => Promise<Response>;
-  readonly requestInit?: RequestInit;
-  readonly reconnectionOptions?: { readonly maxRetries?: number };
-}
-
-// The MCP SDK accepts these options through public transport constructors, but
-// does not expose them through a public read API. These transport-option tests
-// therefore use guarded, documented white-box reads as the smallest connect-free
-// assertion point for verifying the options passed by McpClient.
-function capturedHttpTransportOptions(
-  transport: Transport | undefined,
-): CapturedHttpTransportOptions {
-  expect(transport).toBeDefined();
-  const captured = transport as TransportWithCapturedHttpOptions;
-  const eventSourceFetch = captured._eventSourceInit?.fetch;
-  return {
-    eventSourceFetch:
-      typeof eventSourceFetch === "function"
-        ? (eventSourceFetch as CapturedHttpTransportOptions["eventSourceFetch"])
-        : undefined,
-    requestInit: captured._requestInit,
-    reconnectionOptions: captured._reconnectionOptions,
-  };
-}
-
-type TransportWithCapturedHttpOptions = Transport & {
-  readonly _eventSourceInit?: { readonly fetch?: unknown };
-  readonly _requestInit?: RequestInit;
-  readonly _reconnectionOptions?: { readonly maxRetries?: number };
-};
-
-function createTransportStub(options: { readonly emitOnClose?: boolean } = {}): Transport & {
-  readonly closeCalls: () => number;
-} {
-  let closeCalls = 0;
-
-  const transport: Transport & { readonly closeCalls: () => number } = {
-    start: async () => undefined,
-    send: async () => undefined,
-    close: async () => {
-      closeCalls += 1;
-      if (options.emitOnClose !== false) {
-        transport.onclose?.();
-      }
-    },
-    closeCalls: () => closeCalls,
-  };
-
-  return transport;
-}
-
-function createConnectableStubClient(options: {
-  readonly connectError?: Error;
-  readonly listToolsError?: Error;
-  readonly closeError?: Error;
-  readonly closeTransport?: boolean;
-}): McpClientHandle & { readonly closeCalls: () => number } {
-  let transport: Transport | undefined;
-  let closeCalls = 0;
-
-  return {
-    connect: async (nextTransport) => {
-      transport = nextTransport;
-      if (options.connectError) {
-        throw options.connectError;
-      }
-    },
-    close: async () => {
-      closeCalls += 1;
-      if (options.closeError) {
-        throw options.closeError;
-      }
-      if (options.closeTransport !== false) {
-        await transport?.close();
-      }
-    },
-    listTools: async () => {
-      if (options.listToolsError) {
-        throw options.listToolsError;
-      }
-      return { tools: [] };
-    },
-    callTool: async () => {
-      throw new Error("callTool is not implemented by this test stub");
-    },
-    closeCalls: () => closeCalls,
-  };
-}
-
 describe("McpClient connection cleanup", () => {
-  test("closes the MCP transport when client.connect fails", async () => {
-    const connectError = new Error("connect failed");
-    const sdkClient = createConnectableStubClient({ connectError });
-    const transport = createTransportStub();
-    const client = new McpClient(
-      {
-        name: "filesystem",
-        transport: "stdio",
-        command: "mcp-server-filesystem",
-      },
-      {
-        events: Bus,
-        traceId: TEST_LIFECYCLE_TRACE_ID,
-        client: sdkClient,
-        createTransport: () => transport,
-      },
-    );
-
-    await expect(client.connect()).rejects.toBe(connectError);
-
-    expect(sdkClient.closeCalls()).toBe(1);
-    expect(transport.closeCalls()).toBe(1);
-  });
-
-  test("closes the MCP transport when initial tool discovery fails", async () => {
-    const listToolsError = new Error("tools/list failed");
-    const sdkClient = createConnectableStubClient({ listToolsError });
-    const transport = createTransportStub();
-    const client = new McpClient(
-      {
-        name: "search-server",
-        transport: "sse",
-        url: "https://example.test/mcp",
-      },
-      {
-        events: Bus,
-        traceId: TEST_LIFECYCLE_TRACE_ID,
-        client: sdkClient,
-        createTransport: () => transport,
-      },
-    );
-
-    await expect(client.connect()).rejects.toBe(listToolsError);
-
-    expect(sdkClient.closeCalls()).toBe(1);
-    expect(transport.closeCalls()).toBe(1);
-  });
-
-  test("falls back to closing the transport directly if the client cleanup does not close it", async () => {
-    const connectError = new Error("connect failed");
-    const sdkClient = createConnectableStubClient({
-      connectError,
-      closeTransport: false,
+  test.each([
+    ["closes the MCP transport when client.connect fails", "connect", true, true],
+    ["closes the MCP transport when initial tool discovery fails", "list", true, true],
+    [
+      "falls back to closing the transport directly if the client cleanup does not close it",
+      "connect",
+      false,
+      true,
+    ],
+    [
+      "does not double-close when the client closes a transport that omits onclose",
+      "connect",
+      true,
+      false,
+    ],
+  ] as const)("%s", async (_name, failure, closeTransport, emitOnClose) => {
+    const error = new Error(failure === "connect" ? "connect failed" : "tools/list failed");
+    const sdk = connectableClient({
+      ...(failure === "connect" ? { connectError: error } : { listToolsError: error }),
+      closeTransport,
     });
-    const transport = createTransportStub();
-    const client = new McpClient(
-      {
-        name: "filesystem",
-        transport: "stdio",
-        command: "mcp-server-filesystem",
-      },
-      {
-        events: Bus,
-        traceId: TEST_LIFECYCLE_TRACE_ID,
-        client: sdkClient,
-        createTransport: () => transport,
-      },
-    );
-
-    await expect(client.connect()).rejects.toBe(connectError);
-
-    expect(sdkClient.closeCalls()).toBe(1);
+    const transport = transportStub(emitOnClose);
+    const client = new McpClient(failure === "list" ? http() : stdio(), {
+      events: Bus,
+      traceId: TRACE_ID,
+      client: sdk.client,
+      createTransport: () => transport,
+    });
+    await expect(client.connect()).rejects.toBe(error);
+    expect(sdk.closeCalls()).toBe(1);
     expect(transport.closeCalls()).toBe(1);
   });
 
   test("reports cleanup failures without masking the original connection error", async () => {
     const connectError = new Error("connect failed");
-    const closeError = new Error("cleanup failed");
-    const sdkClient = createConnectableStubClient({ connectError, closeError });
-    const transport = createTransportStub();
-    const serverName = "filesystem-cleanup-error";
-    const observedErrors: Array<{
-      readonly component?: string;
-      readonly error?: string;
-      readonly context?: Record<string, unknown>;
-    }> = [];
-    const unsubscribe = Bus.observe((event, payload) => {
-      const errorPayload = payload as {
-        readonly component?: string;
-        readonly error?: string;
-        readonly context?: Record<string, unknown>;
-      };
-      if (
-        event.name === Operational.Events.Error.name &&
-        errorPayload.component === "agent.mcp" &&
-        errorPayload.context?.serverName === serverName
-      ) {
-        observedErrors.push(errorPayload);
-      }
+    const sdk = connectableClient({ connectError, closeError: new Error("cleanup failed") });
+    const transport = transportStub();
+    const observed = observeError("filesystem-cleanup-error");
+    const client = new McpClient(stdio("filesystem-cleanup-error"), {
+      events: Bus,
+      traceId: TRACE_ID,
+      client: sdk.client,
+      createTransport: () => transport,
     });
-    const client = new McpClient(
-      {
-        name: serverName,
-        transport: "stdio",
-        command: "mcp-server-filesystem",
-      },
-      {
-        events: Bus,
-        traceId: TEST_LIFECYCLE_TRACE_ID,
-        client: sdkClient,
-        createTransport: () => transport,
-      },
-    );
-
     try {
       await expect(client.connect()).rejects.toBe(connectError);
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await observed.next;
     } finally {
-      unsubscribe();
+      observed.unsubscribe();
     }
-
-    expect(sdkClient.closeCalls()).toBe(1);
+    expect(sdk.closeCalls()).toBe(1);
     expect(transport.closeCalls()).toBe(1);
-    expect(observedErrors).toHaveLength(1);
-    expect(observedErrors[0]?.component).toBe("agent.mcp");
-    expect(observedErrors[0]?.error).toBe("Error: connect failed");
-    expect(observedErrors[0]?.context?.cleanupError).toBe("Error: cleanup failed");
+    expect(observed.seen).toHaveLength(1);
+    expect(observed.seen[0]?.component).toBe("agent.mcp");
+    expect(observed.seen[0]?.error).toBe("Error: connect failed");
+    expect(observed.seen[0]?.context?.cleanupError).toBe("Error: cleanup failed");
   });
 
-  test("reports transport factory failures through operational errors", async () => {
-    const createError = new Error("transport factory failed");
-    const serverName = "factory-failure";
-    const observedErrors: Array<{
-      readonly component?: string;
-      readonly error?: string;
-      readonly context?: Record<string, unknown>;
-    }> = [];
-    const unsubscribe = Bus.observe((event, payload) => {
-      const errorPayload = payload as {
-        readonly component?: string;
-        readonly error?: string;
-        readonly context?: Record<string, unknown>;
-      };
-      if (
-        event.name === Operational.Events.Error.name &&
-        errorPayload.component === "agent.mcp" &&
-        errorPayload.context?.serverName === serverName
-      ) {
-        observedErrors.push(errorPayload);
-      }
-    });
-    const client = new McpClient(
-      {
-        name: serverName,
-        transport: "stdio",
-        command: "mcp-server-filesystem",
-      },
-      {
-        events: Bus,
-        traceId: TEST_LIFECYCLE_TRACE_ID,
-        client: createStubClient([]),
-        createTransport: () => {
-          throw createError;
-        },
-      },
-    );
-
+  const factoryError = new Error("transport factory failed");
+  test.each([
+    [
+      "reports transport factory failures through operational errors",
+      "factory-failure",
+      factoryError,
+      "Error: transport factory failed",
+    ],
+    [
+      "preserves the explicit error for unknown runtime transports",
+      "invalid-transport",
+      "Unknown transport",
+      "Error: Unknown transport",
+    ],
+  ] as const)("%s", async (_name, serverName, rejection, expectedError) => {
+    const observed = observeError(serverName);
+    const client =
+      typeof rejection === "string"
+        ? new McpClient({ ...stdio(serverName), transport: "invalid" } as never, {
+            traceId: TRACE_ID,
+            events: Bus,
+          })
+        : new McpClient(stdio(serverName), {
+            events: Bus,
+            traceId: TRACE_ID,
+            client: stubClient(),
+            createTransport: () => {
+              throw rejection;
+            },
+          });
     try {
-      await expect(client.connect()).rejects.toBe(createError);
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    } finally {
-      unsubscribe();
-    }
-
-    expect(observedErrors).toHaveLength(1);
-    expect(observedErrors[0]?.component).toBe("agent.mcp");
-    expect(observedErrors[0]?.error).toBe("Error: transport factory failed");
-    expect(observedErrors[0]?.context?.serverName).toBe(serverName);
-    expect(observedErrors[0]?.context?.cleanupError).toBeUndefined();
-  });
-
-  test("preserves the explicit error for unknown runtime transports", async () => {
-    const serverName = "invalid-transport";
-    const observedErrors: Array<{
-      readonly component?: string;
-      readonly error?: string;
-      readonly context?: Record<string, unknown>;
-    }> = [];
-    const unsubscribe = Bus.observe((event, payload) => {
-      const errorPayload = payload as {
-        readonly component?: string;
-        readonly error?: string;
-        readonly context?: Record<string, unknown>;
-      };
-      if (
-        event.name === Operational.Events.Error.name &&
-        errorPayload.component === "agent.mcp" &&
-        errorPayload.context?.serverName === serverName
-      ) {
-        observedErrors.push(errorPayload);
+      if (typeof rejection === "string") {
+        await expect(client.connect()).rejects.toThrow(rejection);
+      } else {
+        await expect(client.connect()).rejects.toBe(rejection);
       }
-    });
-    const client = new McpClient(
-      {
-        name: serverName,
-        transport: "invalid",
-        command: "mcp-server-filesystem",
-      } as never,
-      { traceId: TEST_LIFECYCLE_TRACE_ID, events: Bus },
-    );
-
-    try {
-      await expect(client.connect()).rejects.toThrow("Unknown transport");
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await observed.next;
     } finally {
-      unsubscribe();
+      observed.unsubscribe();
     }
-
-    expect(observedErrors).toHaveLength(1);
-    expect(observedErrors[0]?.component).toBe("agent.mcp");
-    expect(observedErrors[0]?.error).toBe("Error: Unknown transport");
-    expect(observedErrors[0]?.context?.serverName).toBe(serverName);
-    expect(observedErrors[0]?.context?.cleanupError).toBeUndefined();
-  });
-
-  test("does not double-close when the client closes a transport that omits onclose", async () => {
-    const connectError = new Error("connect failed");
-    const sdkClient = createConnectableStubClient({ connectError });
-    const transport = createTransportStub({ emitOnClose: false });
-    const client = new McpClient(
-      {
-        name: "filesystem",
-        transport: "stdio",
-        command: "mcp-server-filesystem",
-      },
-      {
-        events: Bus,
-        traceId: TEST_LIFECYCLE_TRACE_ID,
-        client: sdkClient,
-        createTransport: () => transport,
-      },
-    );
-
-    await expect(client.connect()).rejects.toBe(connectError);
-
-    expect(sdkClient.closeCalls()).toBe(1);
-    expect(transport.closeCalls()).toBe(1);
+    expect(observed.seen).toHaveLength(1);
+    expect(observed.seen[0]?.component).toBe("agent.mcp");
+    expect(observed.seen[0]?.error).toBe(expectedError);
+    expect(observed.seen[0]?.context?.serverName).toBe(serverName);
+    expect(observed.seen[0]?.context?.cleanupError).toBeUndefined();
   });
 });
