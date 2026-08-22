@@ -170,6 +170,5 @@ describe("Bus.subscribe match filter", () => {
       // @ts-expect-error - 'invalidKey' is not a key of TestEvent
       match: { invalidKey: "z" },
     });
-    expect(true).toBe(true);
   });
 });

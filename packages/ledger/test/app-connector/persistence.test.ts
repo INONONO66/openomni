@@ -136,9 +136,8 @@ describe("SqliteStorageAdapter appConnectorInstallation", () => {
     expect(adapter.appConnectorInstallation.list()).toEqual([]);
   });
 
-  test("store upsert preserves createdAt and refreshes updatedAt", async () => {
+  test("store upsert preserves createdAt and refreshes updatedAt", () => {
     const first = AppConnectorInstallationStore.set(installation("install-1", 100));
-    await Bun.sleep(2);
 
     const replacement = {
       ...installation("install-1", 999),
@@ -152,10 +151,9 @@ describe("SqliteStorageAdapter appConnectorInstallation", () => {
     expect(AppConnectorInstallationStore.list()).toEqual([second]);
   });
 
-  test("store records owner consent as a status transition", async () => {
+  test("store records owner consent as a status transition", () => {
     const registered = AppConnectorInstallationStore.set(installation("install-1", 100));
     const pending = AppConnectorInstallationStore.requestConsent(registered.id);
-    await Bun.sleep(2);
 
     const consented = AppConnectorInstallationStore.grantConsent(registered.id, {
       grantedBy: "act_owner",

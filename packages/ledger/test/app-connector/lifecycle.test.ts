@@ -114,10 +114,9 @@ describe("AppConnectorInstallationStore lifecycle", () => {
     removeSqliteFiles(dbPath);
   });
 
-  test("disables a consented installation and preserves consent metadata", async () => {
+  test("disables a consented installation and preserves consent metadata", () => {
     // Given
     const consented = consentInstallation("install-1");
-    await Bun.sleep(2);
 
     // When
     const disabled = AppConnectorInstallationStore.disable(consented.id);
@@ -161,10 +160,9 @@ describe("AppConnectorInstallationStore lifecycle", () => {
     );
   });
 
-  test("marks a consented installation enabled when smoke verification succeeds", async () => {
+  test("marks a consented installation enabled when smoke verification succeeds", () => {
     // Given
     const consented = consentInstallation("install-1");
-    await Bun.sleep(2);
 
     // When
     const enabled = AppConnectorInstallationStore.markSmokeVerified(consented.id, {
@@ -196,10 +194,9 @@ describe("AppConnectorInstallationStore lifecycle", () => {
     });
   });
 
-  test("marks a consented installation verification_failed when smoke verification fails", async () => {
+  test("marks a consented installation verification_failed when smoke verification fails", () => {
     // Given
     const consented = consentInstallation("install-1");
-    await Bun.sleep(2);
 
     // When
     const failed = AppConnectorInstallationStore.markSmokeVerificationFailed(consented.id, {

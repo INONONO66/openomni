@@ -12,8 +12,7 @@ export const QueryStats = z.object({
 });
 export type QueryStats = z.infer<typeof QueryStats>;
 
-export const PayloadStatus = z.enum(["valid", "invalid", "parse_failed", "unmarked"]);
-export type PayloadStatus = z.infer<typeof PayloadStatus>;
+const PayloadStatus = z.enum(["valid", "invalid", "parse_failed", "unmarked"]);
 
 export const EventRecord = z.object({
   id: z.string().describe("Unique event record ID"),
