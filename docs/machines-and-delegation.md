@@ -111,9 +111,14 @@ The machine axis of `@openomni/placement` folds candidate machines against
    - **5a — kernel substrate: landed.** A machine offering `kernel.py` runs
      code cells with interpreter state persisting across cells, each cell
      under a required deadline, behind the effective-capability gate.
-   - 5b — the `tool.<name>()` bridge from inside a cell back to the host's
-     tool executor, and the `eval` tool spec that offers it. This is where
-     the batching win lands: one cell instead of N tool round trips.
+   - **5b — the `tool.<name>()` bridge: landed.** A running cell calls back to
+     the host's tool port over the same attachment (`machine.call_tool`), so
+     one cell replaces N tool round trips. The host does not re-implement the
+     placement gate: the composition root injects the same placement-gated
+     executor the model-facing catalog uses, so a tool the fold refused cannot
+     be reached by spelling its name in code. Only an attached connection may
+     reach the tool channel. The `eval` tool spec that offers code mode to the
+     model belongs with the app that composes a catalog, and lands with it.
 6. `DelegationPort` extraction from the agent loop.
 7. DelegationKernel with `inline`/`process` transport drivers, then the
    `machine` driver, then the `channel` driver on Wait resumption.

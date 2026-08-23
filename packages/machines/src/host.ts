@@ -12,6 +12,14 @@ export interface MachineHostOptions {
   readonly enrollment: (machineId: Machine.MachineId) => Machine.Enrollment | undefined;
   readonly events: BusEvent.Sink;
   readonly now: () => number;
+  /**
+   * Runs a `tool.<name>()` call made from inside a cell. Injected by the
+   * composition root, which supplies the SAME placement-gated executor the
+   * model-facing catalog uses — so a tool the placement fold refused cannot be
+   * reached by spelling its name in code. A host wired without this port
+   * exposes no tools, and says so.
+   */
+  readonly callTool?: (call: Machine.ToolCall) => Promise<Machine.ToolCallResult>;
 }
 
 /**
@@ -71,7 +79,21 @@ export async function createMachineHost(options: MachineHostOptions): Promise<Ma
 
   const server: IpcServer = await createIpcServer(
     options.socketPath,
-    (method, params, respond, _notify, connectionId) => {
+    async (method, params, respond, _notify, connectionId) => {
+      if (method === Machine.WireMethod.CallTool) {
+        // Only an attached machine may reach the host's tools; the attachment
+        // table is the authority, not anything the caller claims.
+        if (!attachments.has(connectionId)) {
+          throw new Error("machine is not attached");
+        }
+        const call = Machine.ToolCall.parse(params);
+        respond(
+          options.callTool
+            ? await options.callTool(call)
+            : ({ status: "failed", error: "this host exposes no tools" } satisfies Machine.ToolCallResult),
+        );
+        return;
+      }
       if (method !== Machine.WireMethod.Attach) {
         throw new Error(`unknown method: ${method}`);
       }

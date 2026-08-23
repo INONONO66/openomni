@@ -23,6 +23,10 @@ export namespace Machine {
   export type CellRequest = Schema.CellRequest;
   export const CellResult = Schema.CellResult;
   export type CellResult = Schema.CellResult;
+  export const ToolCall = Schema.ToolCall;
+  export type ToolCall = Schema.ToolCall;
+  export const ToolCallResult = Schema.ToolCallResult;
+  export type ToolCallResult = Schema.ToolCallResult;
 
   export const effectiveCapabilities = Fold.effectiveCapabilities;
   export type EffectiveOutcome = Fold.EffectiveOutcome;
