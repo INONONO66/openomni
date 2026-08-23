@@ -102,10 +102,10 @@ The machine axis of `@openomni/placement` folds candidate machines against
 
 ## 5. Delivery order
 
-1. **Contracts** (this document's schemas) — landed together, no consumer yet.
+1. **Contracts** (this document's schemas) — landed first.
 2. `packages/machines` daemon + localhost attach (driver band).
 3. `apps/openomni` slice 1: pure Resident chat loop (no memory, no delegation).
-4. Agent-loop placement axis + tool catalog `requires` resolution.
+4. **Agent-loop placement axis + tool catalog `requires` resolution — landed.**
 5. Code mode (`eval`) as a `kernel.py`-capability tool.
 6. `DelegationPort` extraction from the agent loop.
 7. DelegationKernel with `inline`/`process` transport drivers, then the

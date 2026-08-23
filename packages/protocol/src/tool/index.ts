@@ -192,6 +192,18 @@ export namespace Tool {
   });
   export type Spec = z.infer<typeof Spec>;
 
+  /**
+   * Every identity an executor may dispatch a tool by: its catalog name plus
+   * the dot-to-underscore spelling executors register for providers that
+   * reject dots. Single owner of that convention — dispatch-table builders
+   * and the placement execution gate both read it, so a tool can never be
+   * runnable under a name one side does not know about.
+   */
+  export function executableNames(name: string): readonly string[] {
+    const sanitized = name.replace(/\./g, "_");
+    return sanitized === name ? [name] : [name, sanitized];
+  }
+
   /** #499 observation descriptors — published via Bus; event name strings frozen. */
   export const Events = EventDescriptors;
 }

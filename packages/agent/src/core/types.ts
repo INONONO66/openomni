@@ -1,5 +1,6 @@
 import type { Actor, BusEvent, Model, Policy, Token, Tool } from "@openomni/protocol";
 import type { Provider, RunInput, Sink } from "@openomni/llm";
+import type { Placement } from "@openomni/placement";
 import type { PolicyEngineRegistration } from "./policy/types";
 
 export type TokenUsage = Token.AgentUsage;
@@ -19,6 +20,14 @@ export interface ChatAgentConfig {
   events: BusEvent.Sink;
   systemPrompt?: string;
   tools?: AgentToolSpec[];
+  /**
+   * The brain host and any attached machines that may execute catalog tools,
+   * with machine capabilities already reduced by
+   * `Machine.effectiveCapabilities`. Absent honestly means one host candidate
+   * with no declared capabilities and no attached machines: free/host tools
+   * with empty requirements remain offerable, machine tools do not.
+   */
+  toolTargets?: readonly Placement.ToolTarget[];
   model: Model.Ref;
   /**
    * Ordered fallback models AFTER `model` (#752). On a chain-advancing

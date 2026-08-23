@@ -1,4 +1,4 @@
-import { PolicyDecision, type Tool } from "@openomni/protocol";
+import { PolicyDecision, Tool } from "@openomni/protocol";
 import { WorkspaceLock } from "../workspace-lock.js";
 import {
   buildActor,
@@ -111,10 +111,14 @@ export async function enforceTimeoutAndAbort<T>(
 
 function buildDispatchTable(tools: readonly NativeTool[]): Map<string, NativeTool> {
   const dispatch = new Map<string, NativeTool>();
+  const exact = new Set(tools.map((tool) => tool.spec.name));
   for (const tool of tools) {
-    dispatch.set(tool.spec.name, tool);
-    const sanitized = tool.spec.name.replace(/\./g, "_");
-    if (sanitized !== tool.spec.name) dispatch.set(sanitized, tool);
+    for (const name of Tool.executableNames(tool.spec.name)) {
+      // An alias never displaces a tool that literally owns that name,
+      // so resolution does not depend on catalog order.
+      if (name !== tool.spec.name && exact.has(name)) continue;
+      dispatch.set(name, tool);
+    }
   }
   return dispatch;
 }

@@ -1,6 +1,8 @@
 import { Run, type RunInput, type Sink } from "@openomni/llm";
+import { Placement } from "@openomni/placement";
 import { type Message, Operational, PolicyDecision } from "@openomni/protocol";
-import type { BusEvent, Policy, Tool } from "@openomni/protocol";
+import { Tool } from "@openomni/protocol";
+import type { BusEvent, Policy } from "@openomni/protocol";
 import {
   describeBudgetRemaining,
   effectiveBudgetThresholds,
@@ -74,6 +76,48 @@ export function assertToolExecutor(config: ChatAgentConfig): void {
  */
 export function assertUnambiguousToolMetadata(config: ChatAgentConfig): void {
   buildToolMetadataMap(config.tools);
+}
+
+/**
+ * Placement decides EXECUTION, not just advertisement. Filtering the catalog
+ * only stops the model from being told about a tool; a model that names a
+ * placement-filtered tool anyway (forged call, stale transcript, cached
+ * catalog) must still be refused, or the capability requirement is
+ * decorative. This wrapper is the single enforcement point for that refusal.
+ *
+ * It refuses ONLY tools this run's placement fold declared unofferable, under
+ * every identity an executor can dispatch them by (`Tool.executableNames`).
+ * Reservation is unconditional: a catalog where an offerable tool's literal
+ * name is also a refused tool's alias is ambiguous at the executor's own
+ * dispatch table, so the gate fails closed rather than resolving it by
+ * catalog order. A name absent from the configured catalog is not a placement
+ * matter — dynamic executors (MCP relays, host-registered tools) legitimately
+ * resolve names the loop never listed, and rejecting those here would be
+ * placement overreaching into tool resolution.
+ */
+function placementGatedExecutor(
+  decisions: readonly Placement.ToolDecision[],
+  execute: NonNullable<ChatAgentConfig["toolExecutor"]>,
+): NonNullable<ChatAgentConfig["toolExecutor"]> {
+  const refused = new Map<string, NonNullable<Tool.Spec["requires"]>>();
+  for (const decision of decisions) {
+    if (decision.offerable) continue;
+    const requires = decision.tool.requires ?? [];
+    for (const name of Tool.executableNames(decision.tool.name)) refused.set(name, requires);
+  }
+  if (refused.size === 0) return execute;
+  return async (call, context) => {
+    const requires = refused.get(call.tool);
+    if (requires === undefined) return execute(call, context);
+    return {
+      id: call.id,
+      toolCallId: call.id,
+      toolName: call.tool,
+      output: `tool "${call.tool}" requires capabilities no attached target holds: ${requires.join(", ")}`,
+      isError: true,
+      settlement: "settled",
+    } as const;
+  };
 }
 
 type ToolPolicyMetadata = Pick<NonNullable<ChatAgentConfig["tools"]>[number], "descriptor"> & {
@@ -182,12 +226,18 @@ export async function buildTurn(
   recordRunTurn(state);
   if (config.signal?.aborted) throw Retry.abortError();
 
+  const toolTargets = config.toolTargets ?? [{ kind: "host", capabilities: [] } as const];
+  const placement = Placement.resolveTools(config.tools ?? [], toolTargets);
+  const allTools = placement.filter((decision) => decision.offerable).map((decision) => decision.tool);
+  const placedExecutor = config.toolExecutor
+    ? placementGatedExecutor(placement, config.toolExecutor)
+    : undefined;
   const toolPolicyDecisions: TurnArtifacts["toolPolicyDecisions"] = [];
-  const toolMetadata = buildToolMetadataMap(config.tools);
-  const hookedExecutor = config.toolExecutor
+  const toolMetadata = buildToolMetadataMap(allTools);
+  const hookedExecutor = placedExecutor
     ? createToolExecutor({
         events: config.events,
-        toolExecutor: config.toolExecutor,
+        toolExecutor: placedExecutor,
         engine,
         getPolicyToolName: (toolName) => resolvePolicyToolName(toolName, toolMetadata),
         getToolLabels: (toolName) => toolMetadata.get(toolName)?.labels,
@@ -209,13 +259,12 @@ export async function buildTurn(
       })
     : undefined;
 
-  const systemResult = await buildTurnSystemPrompt(state, config, engine, agentBase);
+  const systemResult = await buildTurnSystemPrompt(state, config, engine, agentBase, allTools);
   if (systemResult.blocked) {
     return { type: "complete", result: guardAbortedResult(state) };
   }
   const system = systemResult.system;
 
-  const allTools = config.tools ?? [];
   const catalogLabels: Policy.LabelEntry[] = [];
   for (const [name, metadata] of toolMetadata) {
     for (const label of metadata.labels ?? []) {
@@ -369,8 +418,9 @@ async function buildTurnSystemPrompt(
   config: ChatAgentConfig,
   engine: PolicyEngineInstance,
   agentBase: AgentRunBase,
+  tools: Tool.Spec[],
 ): Promise<{ system?: string; blocked?: Policy.PolicyDecision }> {
-  let system = buildSystemPrompt(config.systemPrompt, config.tools ?? []);
+  let system = buildSystemPrompt(config.systemPrompt, tools);
   const decision = await engine.dispatchPoint(
     "prompt.context.pre",
     buildLifecyclePolicyContext(state, config, agentBase, { turnIndex: state.turnIndex }),

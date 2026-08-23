@@ -1,16 +1,17 @@
-import type { Model } from "@openomni/protocol";
+import type { Machine, Model, Tool } from "@openomni/protocol";
 
 /**
  * Placement — the ring-1 pure target-selection package
  * (docs/architecture.md § Outbound target selection; opened by #752 with its
- * smallest honest slice: the MODEL axis).
+ * smallest honest slice: the MODEL axis, now joined by the MACHINE axis for
+ * tool-catalog eligibility).
  *
- * A PURE fold in the protocol-fold discipline: no clock, no store, no I/O —
- * the candidate chain and the failure history are inputs, so every selection
- * is deterministic and replayable. Placement decides placement only: policy
+ * PURE folds in the protocol-fold discipline: no clock, no store, no I/O —
+ * candidates and their decided facts are inputs, so every selection is
+ * deterministic and replayable. Placement decides placement only: policy
  * alone owns allow/deny, the retry policy alone owns when a run stops
- * retrying, and the selection result is consumed as an input by the caller
- * (the agent loop's per-attempt model resolution).
+ * retrying, and selection results are consumed as inputs by the caller (the
+ * agent loop's per-attempt model resolution and tool-catalog assembly).
  */
 export namespace Placement {
   /**
@@ -64,5 +65,69 @@ export namespace Placement {
       index,
       exhausted: advances > lastIndex,
     };
+  }
+
+  /** A caller-supplied execution target and its already-folded capability set. */
+  export type ToolTarget =
+    | {
+        readonly kind: "host";
+        readonly capabilities: readonly Machine.CapabilityId[];
+      }
+    | {
+        readonly kind: "machine";
+        readonly id: Machine.MachineId;
+        /** `Machine.effectiveCapabilities(...).capabilities`, never a raw offer. */
+        readonly capabilities: readonly Machine.CapabilityId[];
+      };
+
+  export type ToolDecision = {
+    readonly tool: Tool.Spec;
+    readonly placement: Tool.Placement;
+    readonly offerable: boolean;
+  };
+
+  /**
+   * Resolves tool offerability against candidate targets.
+   *
+   * This is the single owner of the additive contract's absent placement:
+   * an omitted `Tool.Spec.placement` means `free`. Every required capability
+   * must be present in one candidate's effective set; requirements are never
+   * pooled across candidates. The tool order remains the input catalog order.
+   *
+   * Total: an empty target list is ordinary placement state (nothing attached)
+   * and folds to unofferable decisions rather than throwing.
+   *
+   * Offerability is the whole decision at this stage. Choosing WHICH eligible
+   * machine executes a tool belongs to the machine transport driver (§5 stage
+   * 8) and is deliberately absent here rather than shipped without a consumer.
+   */
+  export function resolveTools(
+    tools: readonly Tool.Spec[],
+    targets: readonly ToolTarget[],
+  ): readonly ToolDecision[] {
+    return tools.map((tool): ToolDecision => {
+      const placement = tool.placement ?? "free";
+      const requires = tool.requires ?? [];
+      const satisfies = (target: ToolTarget): boolean => {
+        const effective = new Set(target.capabilities);
+        return requires.every((capability) => effective.has(capability));
+      };
+
+      if (placement === "machine") {
+        return {
+          tool,
+          placement,
+          offerable: targets.some((target) => target.kind === "machine" && satisfies(target)),
+        };
+      }
+
+      const eligibleTargets =
+        placement === "host" ? targets.filter((target) => target.kind === "host") : targets;
+      return {
+        tool,
+        placement,
+        offerable: eligibleTargets.some(satisfies),
+      };
+    });
   }
 }

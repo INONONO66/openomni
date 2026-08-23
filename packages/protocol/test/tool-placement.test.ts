@@ -38,6 +38,12 @@ describe("Tool.Placement", () => {
     }
   });
 
+  test("executableNames yields the catalog name and its dot-free spelling", () => {
+    expect(Tool.executableNames("screen.capture")).toEqual(["screen.capture", "screen_capture"]);
+    expect(Tool.executableNames("a.b.c")).toEqual(["a.b.c", "a_b_c"]);
+    expect(Tool.executableNames("screen_capture")).toEqual(["screen_capture"]);
+  });
+
   test("a placed machine tool accepts placement + requires together", () => {
     expect(
       Tool.Spec.safeParse({

@@ -193,9 +193,11 @@ export function createChildAgentRuntime(options: ChildAgentRuntimeOptions): Chil
               ...(options.budget ? { budget: options.budget } : {}),
               ...(options.providerOptions ? { providerOptions: options.providerOptions } : {}),
               ...(options.middleware ? { middleware: options.middleware } : {}),
+              // Canonical names: the provider wire boundary sanitizes them for
+              // the model and restores them on the way back, so the catalog the
+              // loop gates on stays the same identity the executor dispatches.
               tools: childTools.map((tool) => ({
                 ...tool.spec,
-                name: tool.spec.name.replace(/\./g, "_"),
                 ...(tool.descriptor !== undefined && { descriptor: tool.descriptor }),
               })),
               ...(toolExecutor ? { toolExecutor } : {}),
