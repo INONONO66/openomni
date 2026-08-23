@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { Execution } from "../execution/index.js";
+import { Machine } from "../machine/index.js";
 import { Tool } from "../tool/index.js";
 import { WorkerBootstrap } from "../worker-bootstrap/index.js";
 
@@ -42,6 +43,17 @@ const notificationSchema = baseMessage.extend({
  * workers/coordinators.
  */
 const methods = {
+  /**
+   * Machine daemon → machine host (docs/machines-and-delegation.md §2):
+   * the daemon offers its capability set, the host answers with the
+   * enrollment∩offer effective set or a typed refusal. The localhost slice
+   * carries no auth token — the Unix socket is the trust boundary; remote
+   * transports add authentication as an additive field when they land.
+   */
+  "machine.attach": {
+    params: Machine.Offer,
+    result: Machine.AttachResult,
+  },
   "coordinator.spawn_run": {
     /**
      * #500 B1: the params ARE the canonical spawn config — Execution.Request
