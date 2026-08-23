@@ -34,16 +34,19 @@ function portFromEnv(): number {
 
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "::1"]);
 
+// The gateway grants every ws sender owner tier (src/gateway.ts), so a
+// non-loopback bind without upgrade authentication would expose owner-tier
+// ingress to the network. startOpenOmni calls this before binding — the
+// single enforcement layer for this invariant, covering injected config too.
+export function assertWsExposure(config: Pick<OpenOmniConfig, "host" | "wsToken">): void {
+  if (!LOOPBACK_HOSTS.has(config.host) && (config.wsToken === undefined || config.wsToken.length === 0)) {
+    throw new Error("OPENOMNI_WS_TOKEN is required when OPENOMNI_WS_HOST is not loopback");
+  }
+}
+
 export function loadConfig(): OpenOmniConfig {
   const host = process.env.OPENOMNI_WS_HOST?.trim() || "127.0.0.1";
   const wsToken = process.env.OPENOMNI_WS_TOKEN?.trim();
-  // The gateway grants every ws sender owner tier (src/gateway.ts), so a
-  // non-loopback bind without upgrade authentication would expose owner-tier
-  // ingress to the network. Fail closed here — the single enforcement layer
-  // for this invariant.
-  if (!LOOPBACK_HOSTS.has(host) && (wsToken === undefined || wsToken.length === 0)) {
-    throw new Error("OPENOMNI_WS_TOKEN is required when OPENOMNI_WS_HOST is not loopback");
-  }
   return {
     dbPath: process.env.OPENOMNI_DB_PATH?.trim() || join(homedir(), ".openomni", "storage.db"),
     host,

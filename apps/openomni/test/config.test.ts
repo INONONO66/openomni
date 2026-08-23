@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { loadConfig } from "../src/config";
+import { assertWsExposure, loadConfig } from "../src/config";
+import { startOpenOmni } from "../src/index";
 
 const ENV_KEYS = [
   "OPENOMNI_DB_PATH",
@@ -29,12 +30,27 @@ afterEach(() => {
   }
 });
 
-describe("loadConfig ws exposure", () => {
+describe("ws exposure enforcement", () => {
   it("refuses a non-loopback host without an upgrade token", () => {
-    process.env.OPENOMNI_WS_HOST = "0.0.0.0";
-    expect(() => loadConfig()).toThrow(
+    expect(() => assertWsExposure({ host: "0.0.0.0" })).toThrow(
       "OPENOMNI_WS_TOKEN is required when OPENOMNI_WS_HOST is not loopback",
     );
+    expect(() => assertWsExposure({ host: "0.0.0.0", wsToken: "" })).toThrow(
+      "OPENOMNI_WS_TOKEN is required when OPENOMNI_WS_HOST is not loopback",
+    );
+  });
+
+  it("refuses injected non-loopback config before binding", () => {
+    expect(() =>
+      startOpenOmni({
+        config: {
+          dbPath: "/dev/null/never-created.db",
+          host: "0.0.0.0",
+          wsPort: 0,
+          model: { provider: "fake", id: "resident-test", apiKey: "test-key" },
+        },
+      }),
+    ).toThrow("OPENOMNI_WS_TOKEN is required when OPENOMNI_WS_HOST is not loopback");
   });
 
   it("accepts a non-loopback host once a token is set", () => {

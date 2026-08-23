@@ -2,7 +2,7 @@ import type { ChatAgentConfig } from "@openomni/agent";
 import { WebSocketHandler } from "@openomni/channels";
 import { initialize, Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
-import { loadConfig, type OpenOmniConfig } from "./config";
+import { assertWsExposure, loadConfig, type OpenOmniConfig } from "./config";
 import { createResidentGateway } from "./gateway";
 import { buildInboundEvent } from "./inbound";
 import { createResident } from "./resident";
@@ -14,6 +14,7 @@ interface StartOptions {
 
 export function startOpenOmni(options: StartOptions = {}) {
   const config = options.config ?? loadConfig();
+  assertWsExposure(config);
   initialize({ dbPath: config.dbPath });
 
   const deliver = createResident({
