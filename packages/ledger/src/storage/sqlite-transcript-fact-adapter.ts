@@ -37,13 +37,19 @@ export function createSqliteTranscriptFactAdapter(
 
     list: (sessionID): Storage.TranscriptFactRow[] =>
       db
-        .query("SELECT seq, data FROM transcript_fact WHERE session_id = ? ORDER BY seq ASC")
+        .query(
+          `SELECT session_id AS sessionID, seq, message_id AS messageID,
+                  attempt_id AS attemptID, type, data, time_created AS timeCreated
+           FROM transcript_fact WHERE session_id = ? ORDER BY seq ASC`,
+        )
         .all(sessionID) as Storage.TranscriptFactRow[],
 
     listByAttempt: (sessionID, attemptID): Storage.TranscriptFactRow[] =>
       db
         .query(
-          `SELECT seq, data FROM transcript_fact
+          `SELECT session_id AS sessionID, seq, message_id AS messageID,
+                  attempt_id AS attemptID, type, data, time_created AS timeCreated
+           FROM transcript_fact
            WHERE session_id = ? AND attempt_id = ? ORDER BY seq ASC`,
         )
         .all(sessionID, attemptID) as Storage.TranscriptFactRow[],

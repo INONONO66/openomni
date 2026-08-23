@@ -14,6 +14,7 @@ Product kernel for OpenOmni — the BRAIN plane of [docs/gateway-design.md](../.
 | `src/evidence/` | Read-back executors plus scoped deterministic verifier-registry and replay-conformance primitives | `ReadBackExecutor`, `VerifierRegistry`, `VerifierConformance` |
 | `src/ledger/` | Deterministic windowed Stakes calculator, criterion treatment, and host capability seams | `Stakes` |
 | `src/work-item/` | WorkItem completion fold, trusted authority, origin projection, atomic admission/terminal boundary | Public `projectCompletionOrigin`; internal `evaluateCompletion`, `createCompletionDecision`, `createCompletionAdmissionService` |
+| `src/projection/` | #493 recorded attempt/transcript assembly, fixed flat-event fold, deterministic JSONL export, content-addressed sidecars | `Projection` namespace (`assembleProjectionInput`, `foldToFlatEvents`, `exportWorkItemProjection`, sidecar stores) |
 | `src/execution-runtime/` | Tool system, workspace, worker middleware, and scheduled job runtime | `buildWorkerMiddleware`, `WorkspaceLock`, `AgentToolProvider`, `SystemToolProvider`, `ToolProxyProvider`, `Tool`, `buildToolCatalog`, `createToolExecutor`, `defineTool`, `InjectionQueue`, `CronJobRegistry`, `CronJobRunner` |
 
 ## Architecture
