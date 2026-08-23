@@ -1,7 +1,8 @@
 import { Run, type RunInput, type Sink } from "@openomni/llm";
 import { Placement } from "@openomni/placement";
 import { type Message, Operational, PolicyDecision } from "@openomni/protocol";
-import type { BusEvent, Policy, Tool } from "@openomni/protocol";
+import { Tool } from "@openomni/protocol";
+import type { BusEvent, Policy } from "@openomni/protocol";
 import {
   describeBudgetRemaining,
   effectiveBudgetThresholds,
@@ -85,29 +86,24 @@ export function assertUnambiguousToolMetadata(config: ChatAgentConfig): void {
  * decorative. This wrapper is the single enforcement point for that refusal.
  *
  * It refuses ONLY tools this run's placement fold declared unofferable, under
- * every identity an executor can dispatch them by: the catalog name and its
- * dot-to-underscore spelling, which tool executors register as an alias for
- * providers that reject dots. A name absent from the configured catalog is
- * not a placement matter — dynamic executors (MCP relays, host-registered
- * tools) legitimately resolve names the loop never listed, and rejecting
- * those here would be placement overreaching into tool resolution.
+ * every identity an executor can dispatch them by (`Tool.executableNames`).
+ * Reservation is unconditional: a catalog where an offerable tool's literal
+ * name is also a refused tool's alias is ambiguous at the executor's own
+ * dispatch table, so the gate fails closed rather than resolving it by
+ * catalog order. A name absent from the configured catalog is not a placement
+ * matter — dynamic executors (MCP relays, host-registered tools) legitimately
+ * resolve names the loop never listed, and rejecting those here would be
+ * placement overreaching into tool resolution.
  */
 function placementGatedExecutor(
   decisions: readonly Placement.ToolDecision[],
   execute: NonNullable<ChatAgentConfig["toolExecutor"]>,
 ): NonNullable<ChatAgentConfig["toolExecutor"]> {
-  const offerable = new Set(
-    decisions.filter((decision) => decision.offerable).map((decision) => decision.tool.name),
-  );
   const refused = new Map<string, NonNullable<Tool.Spec["requires"]>>();
   for (const decision of decisions) {
     if (decision.offerable) continue;
     const requires = decision.tool.requires ?? [];
-    refused.set(decision.tool.name, requires);
-    // Executors register a dotted tool under its underscore spelling too;
-    // an offerable tool owning that exact name keeps it.
-    const alias = decision.tool.name.replace(/\./g, "_");
-    if (alias !== decision.tool.name && !offerable.has(alias)) refused.set(alias, requires);
+    for (const name of Tool.executableNames(decision.tool.name)) refused.set(name, requires);
   }
   if (refused.size === 0) return execute;
   return async (call, context) => {

@@ -292,6 +292,19 @@ describe("createToolExecutor", () => {
     expect(result.output).toBe("grep.search-ok");
   });
 
+  it.each([
+    ["alias first", ["a_b", "a.b"]],
+    ["exact first", ["a.b", "a_b"]],
+  ])("never lets an alias displace the tool that owns the name (%s)", async (_label, names) => {
+    const executor = createToolExecutor({
+      tools: names.map((name) => makeTool(name)),
+    });
+
+    const result = await executor(makeCall("a_b"), RUN_TRACE);
+
+    expect(result.output).toBe("a_b-ok");
+  });
+
   it("ignores authority wildcard policies in the native executor", async () => {
     const executor = createToolExecutor({
       tools: [makeTool("file.read"), makeTool("file.write"), makeTool("bash")],

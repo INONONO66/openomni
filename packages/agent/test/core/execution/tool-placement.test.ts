@@ -113,6 +113,27 @@ describe("agent tool placement catalog", () => {
     });
   });
 
+  it.each([
+    ["refused first", [gatedTool, { name: "screen_capture", inputSchema: { type: "object" } }]],
+    ["offerable first", [{ name: "screen_capture", inputSchema: { type: "object" } }, gatedTool]],
+  ])(
+    "fails closed on an alias collision regardless of catalog order (%s)",
+    async (_label, tools) => {
+      const executed: string[] = [];
+      let refusal: Tool.Result | undefined;
+      const base = config([], [], executed, async (runInput) => {
+        refusal = await runInput.toolExecutor?.(
+          { id: "collide", tool: "screen_capture", input: {} },
+          { signal: new AbortController().signal },
+        );
+      });
+      await ChatAgent.create({ ...base, tools: tools as Tool.Spec[] }).run(input);
+
+      expect(executed).toEqual([]);
+      expect(refusal).toMatchObject({ toolName: "screen_capture", isError: true });
+    },
+  );
+
   it("leaves an unrelated dynamic name to the tool executor", async () => {
     const executed: string[] = [];
     await ChatAgent.create(
