@@ -93,6 +93,32 @@ describe("child_agent tool", () => {
     expect(runs[0]?.config.tools?.map((entry) => entry.name)).toEqual(["read"]);
   });
 
+  test("offers child tools under their canonical names", async () => {
+    const runs: Array<{ config: ChatAgentConfig; input: ChatAgentInput }> = [];
+    const runtime = createChildAgentRuntime({
+      model,
+      parentMessages: [],
+      parentTools: [makeTool("screen.capture")],
+      traceContext: { traceId: PARENT_TRACE_ID, sessionId: "session-1", runId: "parent-run" },
+      createAgent: (config) => ({
+        async run(input) {
+          runs.push({ config, input });
+          return successfulResult;
+        },
+      }),
+    });
+    const tool = createChildAgentTool(runtime);
+
+    const spawn = await tool.execute(
+      makeCall({ action: "spawn", prompt: "look", tools: { allow: ["screen.capture"] } }),
+    );
+    await tool.execute(makeCall({ action: "await", ids: [JSON.parse(spawn.output).childId] }));
+
+    // The catalog the loop gates on must be the identity the executor
+    // dispatches; the provider wire boundary does the model-side sanitizing.
+    expect(runs[0]?.config.tools?.map((entry) => entry.name)).toEqual(["screen.capture"]);
+  });
+
   test("returns an error-shaped result when awaiting an unknown child id", async () => {
     const runtime = createChildAgentRuntime({
       model,
