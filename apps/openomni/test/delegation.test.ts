@@ -284,6 +284,48 @@ describe("delegate tool", () => {
     expect(received).toEqual(["build is green", "tests pass"]);
   });
 
+  test("the deadline stops the running child rather than only bookkeeping it", async () => {
+    let childWasSignalled = false;
+    const kernel = createDelegationKernel({
+      drivers: {
+        inline: createInlineDriver(
+          (input) =>
+            new Promise<string>((resolve) => {
+              const timer = setTimeout(
+                () => resolve("an answer nobody is waiting for"),
+                5000,
+              );
+              input.signal.addEventListener("abort", () => {
+                childWasSignalled = true;
+                clearTimeout(timer);
+                resolve("stopped");
+              });
+            }),
+        ),
+      },
+      now: () => Date.now(),
+      newDelegationId: () => "d-cancel",
+      limits: LIMITS,
+    });
+
+    const settledAt = Date.now();
+    const result = await kernel.delegate(
+      {
+        address: { kind: "core", scope: "inline" },
+        mode: "ask",
+        payload: { text: "a job longer than its deadline" },
+        deadline: Date.now() + 80,
+      },
+      RESIDENT,
+    );
+
+    expect("handle" in result && result.settled.status).toBe("no_response");
+    expect(Date.now() - settledAt).toBeLessThan(4000);
+    // The child is told to stop. Without this the deadline would be bookkeeping:
+    // the parent stops waiting while the work keeps burning.
+    expect(childWasSignalled).toBe(true);
+  });
+
   test("no_response is worded as an unknown outcome rather than a failure", async () => {
     const kernel = createDelegationKernel({
       drivers: { inline: { run: () => new Promise(() => undefined) } },
