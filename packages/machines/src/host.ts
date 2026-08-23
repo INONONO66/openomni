@@ -72,6 +72,9 @@ export async function createMachineHost(options: MachineHostOptions): Promise<Ma
     const attachment = attachments.get(connectionId);
     if (!attachment) return;
     attachments.delete(connectionId);
+    // Housekeeping, not enforcement: the attachment check above already
+    // refuses a detached connection. This just stops an empty set per dead
+    // connection from accumulating on a long-lived host.
     inFlight.delete(connectionId);
     if (connectionByMachine.get(attachment.machineId) === connectionId) {
       connectionByMachine.delete(attachment.machineId);

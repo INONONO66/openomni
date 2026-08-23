@@ -360,6 +360,79 @@ describe("code-mode tool bridge", () => {
     }
   });
 
+  test("a superseded daemon loses tool access mid-cell without wedging it", async () => {
+    const path = socketPath();
+    let release: (value: unknown) => void = () => {
+      return;
+    };
+    const firstCallBlocked = new Promise((resolve) => {
+      release = resolve;
+    });
+    let announceEntered: (value: unknown) => void = () => {
+      return;
+    };
+    const firstCallEntered = new Promise((resolve) => {
+      announceEntered = resolve;
+    });
+    let calls = 0;
+    const host = await createMachineHost({
+      socketPath: path,
+      enrollment: () => ({
+        name: "workstation",
+        machineId: "m-1",
+        allowedCapabilities: ["kernel.py"],
+        enrolledAt: 1000,
+      }),
+      events: silent,
+      now: () => 5000,
+      callTool: async () => {
+        calls += 1;
+        if (calls === 1) {
+          announceEntered(null);
+          await firstCallBlocked;
+        }
+        return { status: "completed", value: calls };
+      },
+    });
+    const offer = {
+      machineId: "m-1" as const,
+      daemonVersion: "0.1.0",
+      platform: "darwin",
+      offeredCapabilities: ["kernel.py" as const],
+      offeredAt: 2000,
+    };
+    const first = await attachMachineDaemon({ socketPath: path, offer });
+    let second: Awaited<ReturnType<typeof attachMachineDaemon>> | undefined;
+    try {
+      const cell = host.runCell("m-1", {
+        cellId: "live",
+        code: [
+          "a = tool.t()",
+          "try:",
+          "    b = tool.t()",
+          "except ToolError as error:",
+          "    b = 'lost'",
+          "(a, b)",
+        ].join("\n"),
+        timeoutMs: 15_000,
+      });
+
+      // Take the machine over while the cell sits inside its first tool call.
+      await firstCallEntered;
+      second = await attachMachineDaemon({ socketPath: path, offer });
+      release(null);
+
+      // Being superseded revokes tools, but the cell still finishes on its
+      // own terms instead of hanging on an answer that will never come.
+      const result = await cell;
+      expect(result).toMatchObject({ status: "completed", value: "(1, 'lost')" });
+    } finally {
+      first.close();
+      second?.close();
+      host.close();
+    }
+  });
+
   test("a host wired without a tool port says so instead of pretending", async () => {
     const path = socketPath();
     const host = await createMachineHost({
