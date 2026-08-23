@@ -12,6 +12,14 @@ export interface MachineHostOptions {
   readonly enrollment: (machineId: Machine.MachineId) => Machine.Enrollment | undefined;
   readonly events: BusEvent.Sink;
   readonly now: () => number;
+  /**
+   * Runs a `tool.<name>()` call made from inside a cell. Injected by the
+   * composition root, which supplies the SAME placement-gated executor the
+   * model-facing catalog uses — so a tool the placement fold refused cannot be
+   * reached by spelling its name in code. A host wired without this port
+   * exposes no tools, and says so.
+   */
+  readonly callTool?: (call: Machine.ToolCall) => Promise<Machine.ToolCallResult>;
 }
 
 /**
@@ -54,11 +62,20 @@ export async function createMachineHost(options: MachineHostOptions): Promise<Ma
   // restart is the normal path, not an error).
   const attachments = new Map<string, Attachment>();
   const connectionByMachine = new Map<Machine.MachineId, string>();
+  // Cells this host has in flight on each connection. A tool call is only
+  // served on behalf of a cell the host itself dispatched and is still
+  // waiting on, so `cellId` is a fact the host can stand behind rather than
+  // an attribution the daemon asserts.
+  const inFlight = new Map<string, Set<string>>();
 
   function detach(connectionId: string, reason: string): void {
     const attachment = attachments.get(connectionId);
     if (!attachment) return;
     attachments.delete(connectionId);
+    // Housekeeping, not enforcement: the attachment check above already
+    // refuses a detached connection. This just stops an empty set per dead
+    // connection from accumulating on a long-lived host.
+    inFlight.delete(connectionId);
     if (connectionByMachine.get(attachment.machineId) === connectionId) {
       connectionByMachine.delete(attachment.machineId);
     }
@@ -71,7 +88,24 @@ export async function createMachineHost(options: MachineHostOptions): Promise<Ma
 
   const server: IpcServer = await createIpcServer(
     options.socketPath,
-    (method, params, respond, _notify, connectionId) => {
+    async (method, params, respond, _notify, connectionId) => {
+      if (method === Machine.WireMethod.CallTool) {
+        // Only an attached machine may reach the host's tools; the attachment
+        // table is the authority, not anything the caller claims.
+        if (!attachments.has(connectionId)) {
+          throw new Error("machine is not attached");
+        }
+        const call = Machine.ToolCall.parse(params);
+        if (!inFlight.get(connectionId)?.has(call.cellId)) {
+          throw new Error(`no cell in flight: ${call.cellId}`);
+        }
+        respond(
+          options.callTool
+            ? await options.callTool(call)
+            : ({ status: "failed", error: "this host exposes no tools" } satisfies Machine.ToolCallResult),
+        );
+        return;
+      }
       if (method !== Machine.WireMethod.Attach) {
         throw new Error(`unknown method: ${method}`);
       }
@@ -130,14 +164,21 @@ export async function createMachineHost(options: MachineHostOptions): Promise<Ma
         return { status: "refused", reason: "kernel_not_available" };
       }
       server.useConnection(connectionId);
-      return Machine.CellResult.parse(
-        await typedCall(
-          server,
-          Machine.WireMethod.RunCell,
-          request,
-          request.timeoutMs + CELL_REPLY_GRACE_MS,
-        ),
-      );
+      const cells = inFlight.get(connectionId) ?? new Set<string>();
+      cells.add(request.cellId);
+      inFlight.set(connectionId, cells);
+      try {
+        return Machine.CellResult.parse(
+          await typedCall(
+            server,
+            Machine.WireMethod.RunCell,
+            request,
+            request.timeoutMs + CELL_REPLY_GRACE_MS,
+          ),
+        );
+      } finally {
+        cells.delete(request.cellId);
+      }
     },
     close() {
       server.close();

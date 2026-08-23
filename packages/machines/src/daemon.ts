@@ -24,7 +24,10 @@ export async function attachMachineDaemon(options: MachineDaemonOptions): Promis
   const kernel = options.offer.offeredCapabilities.includes("kernel.py")
     ? new PythonKernel()
     : undefined;
-  const client: IpcClient = await connectIpcClient(options.socketPath, {
+  // Assigned before any request can arrive: the host can only send RunCell
+  // over a connection this call establishes.
+  let client!: IpcClient;
+  client = await connectIpcClient(options.socketPath, {
     onRequest: async (method, params, respond) => {
       if (method !== Machine.WireMethod.RunCell) {
         throw new Error(`unknown method: ${method}`);
@@ -35,7 +38,13 @@ export async function attachMachineDaemon(options: MachineDaemonOptions): Promis
         throw new Error("kernel.py was not offered by this machine");
       }
       const request = Machine.CellRequest.parse(params);
-      respond(await kernel.run(request));
+      respond(
+        await kernel.run(request, async (call) =>
+          Machine.ToolCallResult.parse(
+            await typedCall(client, Machine.WireMethod.CallTool, call, request.timeoutMs),
+          ),
+        ),
+      );
     },
   });
   try {

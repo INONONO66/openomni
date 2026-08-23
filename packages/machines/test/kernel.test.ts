@@ -2,7 +2,11 @@ import { describe, expect, test } from "bun:test";
 import type { BusEvent, Machine } from "@openomni/protocol";
 import { attachMachineDaemon } from "../src/daemon";
 import { type MachineHost, createMachineHost } from "../src/host";
-import { PythonKernel } from "../src/kernel";
+import { type CellToolCaller, PythonKernel } from "../src/kernel";
+
+/** These cells call no tools, so a call is a test bug and must be visible. */
+const noTools: CellToolCaller = (call) =>
+  Promise.resolve({ status: "failed", error: `unexpected tool call: ${call.name}` });
 
 let socketCounter = 0;
 function socketPath(): string {
@@ -42,6 +46,7 @@ function offer(capabilities: readonly Machine.CapabilityId[]): Machine.Offer {
 async function withMachine(
   capabilities: readonly Machine.CapabilityId[],
   run: (context: { host: MachineHost }) => Promise<void>,
+  callTool?: (call: Machine.ToolCall) => Promise<Machine.ToolCallResult>,
 ): Promise<void> {
   const path = socketPath();
   const host = await createMachineHost({
@@ -49,6 +54,7 @@ async function withMachine(
     enrollment: () => enrollment,
     events: silent,
     now: () => 5000,
+    callTool,
   });
   const daemon = await attachMachineDaemon({ socketPath: path, offer: offer(capabilities) });
   try {
@@ -72,12 +78,15 @@ describe("cell settlement ownership", () => {
     const kernel = new PythonKernel();
     try {
       const [timedOut, successor] = await Promise.all([
-        kernel.run({
-          cellId: "wedged",
-          code: "import time\nwhile True: time.sleep(0.05)",
-          timeoutMs: 700,
-        }),
-        kernel.run({ cellId: "successor", code: "6 * 7", timeoutMs: 15_000 }),
+        kernel.run(
+          {
+            cellId: "wedged",
+            code: "import time\nwhile True: time.sleep(0.05)",
+            timeoutMs: 700,
+          },
+          noTools,
+        ),
+        kernel.run({ cellId: "successor", code: "6 * 7", timeoutMs: 15_000 }, noTools),
       ]);
 
       expect(timedOut).toMatchObject({ status: "timed_out", cellId: "wedged" });

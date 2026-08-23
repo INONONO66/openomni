@@ -58,6 +58,16 @@ const methods = {
     params: Machine.CellRequest,
     result: Machine.CellResult,
   },
+  /**
+   * Machine daemon → machine host, made from inside a running cell
+   * (docs/machines-and-delegation.md §5.5): the reverse direction of RunCell,
+   * on the same attachment, so one cell can batch what would otherwise be N
+   * tool round trips.
+   */
+  [Machine.WireMethod.CallTool]: {
+    params: Machine.ToolCall,
+    result: Machine.ToolCallResult,
+  },
   "coordinator.spawn_run": {
     /**
      * #500 B1: the params ARE the canonical spawn config — Execution.Request

@@ -1,10 +1,10 @@
 # packages/protocol/src/ipc
 
-JSON-RPC 2.0-style IPC protocol for coordinator ↔ worker communication over Unix Domain Sockets.
+JSON-RPC 2.0-style IPC protocol for coordinator ↔ worker and machine host ↔ machine daemon communication over Unix Domain Sockets.
 
 ## Purpose
 
-Defines the locked-in wire contract between the coordinator process and worker processes. All messages are JSON-serializable. The fixed version field (`v: 2`) rejects mixed-version traffic; generic envelopes remain permissive while `Ipc.Methods` records the current same-version parameter/result schemas.
+Defines the locked-in wire contract between the coordinator process and worker processes, and between a machine host and an attached machine daemon. All messages are JSON-serializable. The fixed version field (`v: 2`) rejects mixed-version traffic; generic envelopes remain permissive while `Ipc.Methods` records the current same-version parameter/result schemas.
 
 ## Message Types
 
@@ -29,6 +29,9 @@ Defines the locked-in wire contract between the coordinator process and worker p
 | `worker.tool_call_settled` | Coordinator → Worker | Confirm a relayed tool call fully settled (workspace lock release). |
 | `worker.inbound_wait` | Worker → Coordinator | Block on an external answer (resident guidance/approval). |
 | `worker.inbound_wait_cancel` | Worker → Coordinator | Abort an in-flight inbound wait. |
+| `machine.attach` | Machine daemon → Machine host | Offer a capability set; the host answers with the enrollment∩offer effective set or a typed refusal. |
+| `machine.run_cell` | Machine host → Machine daemon | Run one code cell on the attachment's persistent interpreter under a required deadline. |
+| `machine.call_tool` | Machine daemon → Machine host | A `tool.<name>()` call made from inside a running cell, answered by the host's injected tool port. |
 
 ## Versioning Policy
 

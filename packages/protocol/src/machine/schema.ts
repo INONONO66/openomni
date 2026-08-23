@@ -22,6 +22,7 @@ export type MachineId = z.infer<typeof MachineId>;
 export const WireMethod = {
   Attach: "machine.attach",
   RunCell: "machine.run_cell",
+  CallTool: "machine.call_tool",
 } as const;
 
 /** Shared by Enrollment/Offer arrays and the machine.attached event payload. */
@@ -100,6 +101,31 @@ const CellOutput = z
     stderr: z.string(),
   })
   .strict();
+
+/**
+ * A `tool.<name>(...)` call made from inside a running cell, travelling back to
+ * the host over the same attachment (docs/machines-and-delegation.md §5.5).
+ * This is what makes a cell worth more than N tool round trips.
+ */
+export const ToolCall = z
+  .object({
+    cellId: z.string().min(1),
+    name: z.string().min(1),
+    arguments: z.record(z.string(), z.unknown()),
+  })
+  .strict();
+export type ToolCall = z.infer<typeof ToolCall>;
+
+/**
+ * Two arms because the cell can only do two things with the answer: use the
+ * value, or see an exception. A refused tool is a `failed` whose message says
+ * so — the host's tool port owns that judgment, not this contract.
+ */
+export const ToolCallResult = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("completed"), value: z.unknown() }).strict(),
+  z.object({ status: z.literal("failed"), error: z.string().min(1) }).strict(),
+]);
+export type ToolCallResult = z.infer<typeof ToolCallResult>;
 
 /** Honest Python cell terminals: deadline expiry is never collapsed into a raise. */
 export const CellResult = z.discriminatedUnion("status", [
