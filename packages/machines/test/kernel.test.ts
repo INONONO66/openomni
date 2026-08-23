@@ -9,7 +9,12 @@ function socketPath(): string {
   return `/tmp/omo-kernel-${process.pid}-${socketCounter}.sock`;
 }
 
-const silent: BusEvent.Sink = { publish() {} };
+// These tests assert cell execution, not attach telemetry.
+const silent: BusEvent.Sink = {
+  publish() {
+    return;
+  },
+};
 
 const enrollment: Machine.Enrollment = {
   name: "studio",
