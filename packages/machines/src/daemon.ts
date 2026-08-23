@@ -26,8 +26,13 @@ export async function attachMachineDaemon(options: MachineDaemonOptions): Promis
     : undefined;
   const client: IpcClient = await connectIpcClient(options.socketPath, {
     onRequest: async (method, params, respond) => {
-      if (method !== Machine.WireMethod.RunCell || kernel === undefined) {
+      if (method !== Machine.WireMethod.RunCell) {
         throw new Error(`unknown method: ${method}`);
+      }
+      // The host gate owns this refusal; a daemon that never offered kernel.py
+      // still re-checks because the host is across a trust boundary.
+      if (kernel === undefined) {
+        throw new Error("kernel.py was not offered by this machine");
       }
       const request = Machine.CellRequest.parse(params);
       respond(await kernel.run(request));

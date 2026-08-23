@@ -15,19 +15,22 @@ for _line in sys.stdin:
     _request = json.loads(_line)
     _stdout = io.StringIO()
     _stderr = io.StringIO()
+    _filename = f"<cell {_request['cellId']}>"
     try:
         with contextlib.redirect_stdout(_stdout), contextlib.redirect_stderr(_stderr):
-            _tree = ast.parse(_request["code"], filename=f"<cell {_request['cellId']}>", mode="exec")
+            _tree = ast.parse(_request["code"], filename=_filename, mode="exec")
             _value = None
             _has_value = False
             if _tree.body and isinstance(_tree.body[-1], ast.Expr):
                 _body = ast.Module(body=_tree.body[:-1], type_ignores=_tree.type_ignores)
                 if _body.body:
-                    exec(compile(_body, _tree.filename if hasattr(_tree, "filename") else f"<cell {_request['cellId']}>", "exec"), _scope)
-                _value = eval(compile(ast.Expression(_tree.body[-1].value), f"<cell {_request['cellId']}>", "eval"), _scope)
+                    exec(compile(_body, _filename, "exec"), _scope)
+                _value = eval(compile(ast.Expression(_tree.body[-1].value), _filename, "eval"), _scope)
+                # A trailing expression evaluating to None reports no value, matching
+                # the REPL convention that None is not worth echoing.
                 _has_value = _value is not None
             else:
-                exec(compile(_tree, f"<cell {_request['cellId']}>", "exec"), _scope)
+                exec(compile(_tree, _filename, "exec"), _scope)
         _result = {
             "status": "completed",
             "cellId": _request["cellId"],

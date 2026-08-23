@@ -14,6 +14,14 @@ export interface MachineHostOptions {
   readonly now: () => number;
 }
 
+/**
+ * The daemon owns the cell deadline and answers an overrun with an honest
+ * `timed_out` result. The host RPC deadline must therefore outlast the cell's
+ * own, or the host would report a transport failure for a cell the daemon is
+ * about to report on truthfully; this is the margin for that reply.
+ */
+const CELL_REPLY_GRACE_MS = 1000;
+
 export type RunCellOutcome =
   | Machine.CellResult
   | {
@@ -123,7 +131,12 @@ export async function createMachineHost(options: MachineHostOptions): Promise<Ma
       }
       server.useConnection(connectionId);
       return Machine.CellResult.parse(
-        await typedCall(server, Machine.WireMethod.RunCell, request, request.timeoutMs + 1000),
+        await typedCall(
+          server,
+          Machine.WireMethod.RunCell,
+          request,
+          request.timeoutMs + CELL_REPLY_GRACE_MS,
+        ),
       );
     },
     close() {
