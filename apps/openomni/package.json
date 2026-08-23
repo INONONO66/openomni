@@ -1,0 +1,25 @@
+{
+  "name": "@openomni/app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "start": "bun run src/index.ts",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "lint": "bunx biome check ./src ./test",
+    "check-types": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json"
+  },
+  "dependencies": {
+    "@openomni/agent": "workspace:*",
+    "@openomni/channels": "workspace:*",
+    "@openomni/ledger": "workspace:*",
+    "@openomni/llm": "workspace:*",
+    "@openomni/protocol": "workspace:*",
+    "@openomni/telemetry": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}

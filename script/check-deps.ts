@@ -13,13 +13,16 @@ type PackageKey =
   | "coordinator"
   | "machines"
   | "channels"
-  | "server";
+  | "server"
+  | "openomniApp";
 
 type PackageRule = {
   displayName: string;
   packageJsonPath: string;
   packageName: string;
   allowedDeps: "none" | "any-except-self" | Set<string>;
+  /** Dependencies named here remain forbidden even if the allowlist is widened later. */
+  forbiddenDeps?: Set<string>;
   /**
    * Tighter allowlist for `<pkg>/src/` alone, when a package's runtime surface
    * is narrower than what its tests need. Without it a test-only dependency
@@ -183,6 +186,25 @@ const RULES: Record<PackageKey, PackageRule> = {
     packageName: "@openomni/server",
     allowedDeps: "any-except-self",
   },
+  openomniApp: {
+    displayName: "openomni app",
+    packageJsonPath: "apps/openomni/package.json",
+    packageName: "@openomni/app",
+    // Clean-room fence: @openomni/openomni and @openomni/coordinator are
+    // deliberately absent. The existing S8 helper is channels-package-only;
+    // the global deep-import gate keeps this app on the channels barrel, and
+    // src/gateway.ts is the sole source consumer of its router exports.
+    forbiddenDeps: new Set(["@openomni/openomni", "@openomni/coordinator"]),
+    allowedDeps: new Set([
+      "@openomni/protocol",
+      "@openomni/channels",
+      "@openomni/agent",
+      "@openomni/llm",
+      "@openomni/ledger",
+      "@openomni/telemetry",
+      "@openomni/policy",
+    ]),
+  },
 };
 
 const DEP_FIELDS = [
@@ -199,6 +221,7 @@ function isAllowedSourceDep(rule: PackageRule, dep: string): boolean {
 }
 
 function isAllowedDep(rule: PackageRule, dep: string): boolean {
+  if (rule.forbiddenDeps?.has(dep)) return false;
   if (!dep.startsWith("@openomni/")) {
     return true;
   }
@@ -827,6 +850,11 @@ function selfTest(): void {
     srcAllowedDeps: new Set(["@openomni/protocol"]),
   };
   const oneTier: PackageRule = { ...twoTier, srcAllowedDeps: undefined };
+  const cleanFence: PackageRule = {
+    ...twoTier,
+    allowedDeps: "any-except-self",
+    forbiddenDeps: new Set(["@openomni/openomni"]),
+  };
 
   const cases: Array<[string, boolean]> = [
     ["manifest permits what the manifest lists", isAllowedDep(twoTier, "@openomni/telemetry")],
@@ -841,6 +869,10 @@ function selfTest(): void {
       isAllowedSourceDep(oneTier, "@openomni/telemetry"),
     ],
     ["external packages are never layered", isAllowedSourceDep(twoTier, "zod")],
+    [
+      "an explicit clean-room fence overrides a broad allow rule",
+      !isAllowedDep(cleanFence, "@openomni/openomni"),
+    ],
     [
       "S8: a channels driver may not import the policy engine",
       isChannelsBandingViolation("packages/channels/src/discord/surface.ts", "@openomni/policy"),
