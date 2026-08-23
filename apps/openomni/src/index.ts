@@ -25,7 +25,7 @@ export function startOpenOmni(options: StartOptions = {}) {
   const wsHandler = new WebSocketHandler(async (message) => {
     const result = await gateway.ingest(buildInboundEvent(message));
     return result.kind === "dropped" ? null : { text: result.result.output };
-  }, Bus.publish);
+  }, Bus.publish, config.wsToken === undefined ? {} : { token: config.wsToken });
 
   const server = Bun.serve({
     hostname: config.host,
@@ -34,12 +34,14 @@ export function startOpenOmni(options: StartOptions = {}) {
     fetch(request, bunServer) {
       const url = new URL(request.url);
       if (request.headers.get("upgrade") === "websocket" && url.pathname === "/ws") {
-        return wsHandler.handleUpgrade(request, bunServer) ?? new Response(null, { status: 101 });
+        // undefined = the upgrade succeeded; a Response = the upgrade was denied.
+        return wsHandler.handleUpgrade(request, bunServer);
       }
       return new Response("Not found", { status: 404 });
     },
   });
 
+  if (server.port === undefined) throw new Error("OpenOmni ws server did not bind a TCP port");
   return {
     port: server.port,
     stop(): void {

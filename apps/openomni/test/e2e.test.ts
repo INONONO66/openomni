@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { RunInput, Sink } from "@openomni/llm";
-import { Session, Storage } from "@openomni/ledger";
+import { Session, Storage, SurfaceKey } from "@openomni/ledger";
 import type { Message } from "@openomni/protocol";
 import { startOpenOmni } from "../src/index";
 
@@ -93,32 +93,40 @@ afterEach(() => {
     rmSync(directory, { recursive: true, force: true });
 });
 
+const WS_TOKEN = "e2e-upgrade-token";
+
+function bootApp(): { port: number } {
+  const directory = mkdtempSync(join(tmpdir(), "openomni-resident-"));
+  directories.push(directory);
+  const app = startOpenOmni({
+    config: {
+      dbPath: join(directory, "chat.db"),
+      host: "127.0.0.1",
+      wsPort: 0,
+      wsToken: WS_TOKEN,
+      model: { provider: "fake", id: "resident-test", apiKey: "test-key" },
+    },
+    llm: {
+      resolveProviderModel: async (model) => ({
+        id: model.id,
+        name: model.id,
+        providerID: model.provider,
+      }),
+      run: async (input, sink: Sink) => {
+        sink.onMessage(assistantMessage(input));
+        return { type: "stop" };
+      },
+    },
+  });
+  stopApp = app.stop;
+  return { port: app.port };
+}
+
 describe("OpenOmni Resident WebSocket", () => {
   it("routes one turn, writes the reply, and persists both messages", async () => {
-    const directory = mkdtempSync(join(tmpdir(), "openomni-resident-"));
-    directories.push(directory);
-    const app = startOpenOmni({
-      config: {
-        dbPath: join(directory, "chat.db"),
-        host: "127.0.0.1",
-        wsPort: 0,
-        model: { provider: "fake", id: "resident-test", apiKey: "test-key" },
-      },
-      llm: {
-        resolveProviderModel: async (model) => ({
-          id: model.id,
-          name: model.id,
-          providerID: model.provider,
-        }),
-        run: async (input, sink: Sink) => {
-          sink.onMessage(assistantMessage(input));
-          return { type: "stop" };
-        },
-      },
-    });
-    stopApp = app.stop;
+    const app = bootApp();
 
-    const ws = new WebSocket(`ws://127.0.0.1:${app.port}/ws`);
+    const ws = new WebSocket(`ws://127.0.0.1:${app.port}/ws?token=${WS_TOKEN}`);
     await opened(ws);
     const reply = nextMessage(ws);
     ws.send(JSON.stringify({ type: "message", text: "Help me judge this." }));
@@ -144,6 +152,18 @@ describe("OpenOmni Resident WebSocket", () => {
           .map((part) => part.text),
       ),
     ).toEqual([["Help me judge this."], [REPLY]]);
+
+    const surfaceKeys = SurfaceKey.listBySession(session.id);
+    expect(surfaceKeys).toHaveLength(1);
+    expect(surfaceKeys[0]).toStartWith("ws:");
     ws.close();
+  });
+
+  it("rejects an upgrade carrying the wrong token", async () => {
+    const app = bootApp();
+
+    const ws = new WebSocket(`ws://127.0.0.1:${app.port}/ws?token=wrong-token`);
+    await expect(opened(ws)).rejects.toThrow("WebSocket failed before opening");
+    expect(Session.list()).toHaveLength(0);
   });
 });
