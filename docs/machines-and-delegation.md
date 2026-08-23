@@ -76,6 +76,10 @@ agent loop consumes it through an injected `DelegationPort` (same pattern as
   machine* of one delegation relationship (constraints, expiry edges).
   `Delegation.Request` is the commissioning act itself. An engagement may
   govern a delegation; neither absorbs the other.
+- **Transport ≠ Lane.** `Delegation.Transport` names the wire a commissioned
+  unit travels on (`inline`/`process`/`machine`/`channel`); the core-model
+  "Lane" noun names execution roles (Built-in/Action/Worker/Subagent). The
+  two never alias.
 - **Wait is reused, not redefined.** Reply correlation, quorum, deadlines
   (`expiresAt`), and `delivery_recorded` already live in `protocol/src/wait/`.
   The `channel` lane opens a Wait; `Settled.no_response` is the delegation

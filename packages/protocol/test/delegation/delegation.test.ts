@@ -16,99 +16,140 @@ const assignActor = {
   deadline: 1_700_000_000_000,
 } satisfies Delegation.Request;
 
-function reject(input: unknown): string {
+/** Exact issue message at an exact path — never a substring probe. */
+function requestIssueAt(input: unknown, path: string): string | undefined {
   const result = Delegation.Request.safeParse(input);
   expect(result.success).toBe(false);
   if (result.success) throw new Error("expected rejection");
-  return result.error.issues.map((issue) => issue.message).join("; ");
+  return result.error.issues.find((issue) => issue.path.join(".") === path)?.message;
 }
 
 describe("Delegation.Request mode rules", () => {
-  test("core+ask and actor+assign parse", () => {
-    expect(Delegation.Request.parse(askCore).mode).toBe("ask");
-    expect(Delegation.Request.parse(assignActor).address.kind).toBe("actor");
+  test("core+ask and actor+assign are admitted", () => {
+    expect(Delegation.Request.safeParse(askCore).success).toBe(true);
+    expect(Delegation.Request.safeParse(assignActor).success).toBe(true);
   });
 
   test("actor+ask is refused — actor addresses accept assign only", () => {
-    expect(
-      reject({ ...askCore, address: { kind: "actor", actorId: "kim" } }),
-    ).toContain("actor addresses accept assign only");
+    expect(requestIssueAt({ ...askCore, address: { kind: "actor", actorId: "kim" } }, "mode")).toBe(
+      "actor addresses accept assign only",
+    );
   });
 
   test("assign without acceptance criteria is refused", () => {
-    expect(reject({ ...assignActor, acceptanceCriteria: undefined })).toContain(
+    expect(requestIssueAt({ ...assignActor, acceptanceCriteria: undefined }, "acceptanceCriteria")).toBe(
       "assign requires at least one acceptance criterion",
     );
-    expect(reject({ ...assignActor, acceptanceCriteria: [] })).toContain(
+    expect(requestIssueAt({ ...assignActor, acceptanceCriteria: [] }, "acceptanceCriteria")).toBe(
       "assign requires at least one acceptance criterion",
     );
   });
 
   test("ask carrying acceptance criteria is refused — ask is a question, not a contract", () => {
-    expect(reject({ ...askCore, acceptanceCriteria: ["answered"] })).toContain(
+    expect(requestIssueAt({ ...askCore, acceptanceCriteria: ["answered"] }, "acceptanceCriteria")).toBe(
       "ask carries no acceptance criteria",
     );
   });
 
   test("deadline is required and positive — no unbounded delegation exists", () => {
     const { deadline: _deadline, ...withoutDeadline } = askCore;
-    expect(Delegation.Request.safeParse(withoutDeadline).success).toBe(false);
-    expect(Delegation.Request.safeParse({ ...askCore, deadline: 0 }).success).toBe(false);
+    const missing = Delegation.Request.safeParse(withoutDeadline);
+    expect(missing.success).toBe(false);
+    if (!missing.success) {
+      expect(missing.error.issues.map((issue) => issue.path.join("."))).toContain("deadline");
+    }
+    expect(requestIssueAt({ ...askCore, deadline: 0 }, "deadline")).toBe(
+      "Number must be greater than 0",
+    );
   });
 
   test("unknown fields are refused", () => {
-    expect(Delegation.Request.safeParse({ ...askCore, lane: "inline" }).success).toBe(false);
+    const result = Delegation.Request.safeParse({ ...askCore, transport: "inline" });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0]?.code).toBe("unrecognized_keys");
+    }
   });
 });
 
 describe("Delegation.Settled terminal vocabulary", () => {
-  test("delivery_failed and no_response are distinct terminals — unknown ≠ did-not-happen", () => {
-    const deliveryFailed = Delegation.Settled.parse({
+  test("delivery_failed carries reason; a deadline field there is refused", () => {
+    expect(
+      Delegation.Settled.safeParse({
+        status: "delivery_failed",
+        delegationId: "d-1",
+        reason: "slack channel archived",
+        at: 3,
+      }).success,
+    ).toBe(true);
+    const crossed = Delegation.Settled.safeParse({
       status: "delivery_failed",
       delegationId: "d-1",
-      reason: "slack channel archived",
-      at: 3,
-    });
-    const noResponse = Delegation.Settled.parse({
-      status: "no_response",
-      delegationId: "d-1",
+      reason: "x",
       deadline: 2,
       at: 3,
     });
-    expect(deliveryFailed.status).not.toBe(noResponse.status);
+    expect(crossed.success).toBe(false);
+    if (!crossed.success) {
+      expect(crossed.error.issues[0]?.code).toBe("unrecognized_keys");
+    }
   });
 
-  test("every terminal carries its own evidence field", () => {
-    expect(Delegation.Settled.safeParse({ status: "failed", delegationId: "d", at: 1 }).success).toBe(
-      false,
-    );
+  test("no_response settles only at or after its deadline", () => {
     expect(
-      Delegation.Settled.safeParse({ status: "completed", delegationId: "d", at: 1 }).success,
-    ).toBe(false);
-    expect(
-      Delegation.Settled.safeParse({ status: "cancelled", delegationId: "d", at: 1 }).success,
-    ).toBe(false);
+      Delegation.Settled.safeParse({
+        status: "no_response",
+        delegationId: "d-1",
+        deadline: 2,
+        at: 2,
+      }).success,
+    ).toBe(true);
+    const early = Delegation.Settled.safeParse({
+      status: "no_response",
+      delegationId: "d-1",
+      deadline: 200,
+      at: 100,
+    });
+    expect(early.success).toBe(false);
+    if (!early.success) {
+      expect(early.error.issues[0]?.message).toBe("no_response cannot settle before its deadline");
+      expect(early.error.issues[0]?.path.join(".")).toBe("at");
+    }
+  });
+
+  test("every terminal requires its own evidence field", () => {
+    for (const [status, evidenceField] of [
+      ["completed", "output"],
+      ["failed", "error"],
+      ["cancelled", "reason"],
+    ] as const) {
+      const result = Delegation.Settled.safeParse({ status, delegationId: "d", at: 1 });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues.map((issue) => issue.path.join("."))).toContain(evidenceField);
+      }
+    }
   });
 });
 
 describe("Delegation.Handle", () => {
-  test("carries the resolved lane", () => {
-    const handle = Delegation.Handle.parse({
-      delegationId: "d-1",
-      address: { kind: "core", scope: "independent" },
-      lane: "process",
-      workItemId: "wi-1",
-    });
-    expect(handle.lane).toBe("process");
-  });
-
-  test("rejects a lane outside the four transports", () => {
+  test("resolves onto one of the four transports and refuses anything else", () => {
     expect(
       Delegation.Handle.safeParse({
         delegationId: "d-1",
-        address: { kind: "core", scope: "inline" },
-        lane: "carrier-pigeon",
+        address: { kind: "core", scope: "independent" },
+        transport: "process",
+        workItemId: "wi-1",
       }).success,
-    ).toBe(false);
+    ).toBe(true);
+    const bogus = Delegation.Handle.safeParse({
+      delegationId: "d-1",
+      address: { kind: "core", scope: "inline" },
+      transport: "carrier-pigeon",
+    });
+    expect(bogus.success).toBe(false);
+    if (!bogus.success) {
+      expect(bogus.error.issues[0]?.path.join(".")).toBe("transport");
+    }
   });
 });

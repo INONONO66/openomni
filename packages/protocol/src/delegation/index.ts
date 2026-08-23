@@ -4,7 +4,7 @@ import * as Schema from "./schema.js";
 /**
  * Delegation domain (docs/machines-and-delegation.md): the uniform contract
  * for commissioning work — internal loops and external actors through ONE
- * address vocabulary. Contracts only: admission, lane drivers, and
+ * address vocabulary. Contracts only: admission, transport drivers, and
  * settlement authority live in the kernel's DelegationKernel.
  */
 export namespace Delegation {
@@ -14,8 +14,8 @@ export namespace Delegation {
   export const Mode = Schema.Mode;
   export type Mode = Schema.Mode;
 
-  export const Lane = Schema.Lane;
-  export type Lane = Schema.Lane;
+  export const Transport = Schema.Transport;
+  export type Transport = Schema.Transport;
 
   export const Request = Schema.Request;
   export type Request = Schema.Request;

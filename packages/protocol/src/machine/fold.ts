@@ -5,7 +5,7 @@ export type EffectiveOutcome =
       /** The capability set every placement/authorization decision reads. */
       kind: "effective";
       machineId: MachineId;
-      /** enrollment ∩ offer, deduped by schema, sorted for stable comparison. */
+      /** enrollment ∩ offer — deduped and sorted here, for stable comparison. */
       capabilities: readonly CapabilityId[];
     }
   | {
@@ -32,6 +32,8 @@ export function effectiveCapabilities(enrollment: Enrollment, offer: Offer): Eff
   return {
     kind: "effective",
     machineId: enrollment.machineId,
-    capabilities: offer.offeredCapabilities.filter((id) => allowed.has(id)).sort(),
+    capabilities: [
+      ...new Set(offer.offeredCapabilities.filter((id) => allowed.has(id))),
+    ].sort(),
   };
 }

@@ -169,10 +169,12 @@ export namespace Tool {
   /**
    * Where a tool's effect happens (docs/machines-and-delegation.md §4):
    * `machine` — on an attached machine's daemon; `host` — on the brain's own
-   * host process; `free` — anywhere (pure/network tools). Absent placement
-   * on a Spec reads as `free`; the mutation axis is the existing `safe`
-   * field (safe === false is what the design doc calls "mutates"), so no
-   * second spelling of that convention exists.
+   * host process; `free` — anywhere (pure/network tools). The Spec field is
+   * additive-optional so every existing spec stays valid; the catalog
+   * resolver (the placement consumer, machines-and-delegation.md §5 stage 4)
+   * is the single owner of the absent-means-`free` read. The mutation axis
+   * is the existing `safe` field (safe === false is what the design doc
+   * calls "mutates"), so no second spelling of that convention exists.
    */
   export const Placement = z.enum(["machine", "host", "free"]);
   export type Placement = z.infer<typeof Placement>;

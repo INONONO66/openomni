@@ -9,6 +9,7 @@ import { z } from "zod";
  */
 export const CapabilityId = z
   .string()
+  .max(128, { message: "capability id must be at most 128 characters" })
   .regex(/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/, {
     message: "capability id must be dot-namespaced lowercase (e.g. fs.read)",
   });
@@ -17,7 +18,8 @@ export type CapabilityId = z.infer<typeof CapabilityId>;
 export const MachineId = z.string().min(1);
 export type MachineId = z.infer<typeof MachineId>;
 
-function uniqueCapabilities(capabilities: string[], ctx: z.RefinementCtx): void {
+/** Shared by Enrollment/Offer arrays and the machine.attached event payload. */
+export function uniqueCapabilities(capabilities: string[], ctx: z.RefinementCtx): void {
   if (new Set(capabilities).size !== capabilities.length) {
     ctx.addIssue({ code: "custom", message: "capabilities must be unique" });
   }

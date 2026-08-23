@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { BusEvent } from "../bus/index.js";
-import { CapabilityId, MachineId } from "./schema.js";
+import { CapabilityId, MachineId, uniqueCapabilities } from "./schema.js";
 
 const EventBase = z.object({
   machineId: MachineId,
@@ -11,7 +11,9 @@ export const Events = {
   /** A daemon attached and negotiation settled: this is the effective set in force. */
   Attached: BusEvent.define(
     "machine.attached",
-    EventBase.extend({ effectiveCapabilities: z.array(CapabilityId) }),
+    EventBase.extend({
+      effectiveCapabilities: z.array(CapabilityId).superRefine(uniqueCapabilities),
+    }),
     { visibility: "llm_reason" },
   ),
   Detached: BusEvent.define("machine.detached", EventBase.extend({ reason: z.string().min(1) }), {

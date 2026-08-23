@@ -32,9 +32,13 @@ export type WorkerAddress = z.infer<typeof WorkerAddress>;
 export const Mode = z.enum(["ask", "assign"]);
 export type Mode = z.infer<typeof Mode>;
 
-/** The four delegation transports a kernel driver can resolve an address onto. */
-export const Lane = z.enum(["inline", "process", "machine", "channel"]);
-export type Lane = z.infer<typeof Lane>;
+/**
+ * The four delegation transports a kernel driver can resolve an address
+ * onto. Distinct from the core-model "Lane" noun (Built-in/Action/Worker/
+ * Subagent execution lanes) — this is the wire, not the role.
+ */
+export const Transport = z.enum(["inline", "process", "machine", "channel"]);
+export type Transport = z.infer<typeof Transport>;
 
 export const Request = z
   .object({
@@ -72,7 +76,7 @@ export const Request = z
 export type Request = z.infer<typeof Request>;
 
 /**
- * What the requester holds after admission: the resolved lane plus the
+ * What the requester holds after admission: the resolved transport plus the
  * durable ids the settlement will arrive under. Never the worker's state —
  * progress is observed through Wait/WorkItem, not polled through the handle.
  */
@@ -80,7 +84,7 @@ export const Handle = z
   .object({
     delegationId: z.string().min(1),
     address: WorkerAddress,
-    lane: Lane,
+    transport: Transport,
     waitId: z.string().min(1).optional(),
     workItemId: z.string().min(1).optional(),
   })
@@ -92,7 +96,7 @@ export type Handle = z.infer<typeof Handle>;
  * worker) and `no_response` (delivered, then silence past the deadline) are
  * DISTINCT terminals: unknown-outcome must never be read as did-not-happen.
  */
-export const Settled = z.discriminatedUnion("status", [
+const SettledUnion = z.discriminatedUnion("status", [
   z
     .object({
       status: z.literal("completed"),
@@ -135,6 +139,16 @@ export const Settled = z.discriminatedUnion("status", [
     })
     .strict(),
 ]);
+
+export const Settled = SettledUnion.superRefine((settled, ctx) => {
+  if (settled.status === "no_response" && settled.at < settled.deadline) {
+    ctx.addIssue({
+      code: "custom",
+      message: "no_response cannot settle before its deadline",
+      path: ["at"],
+    });
+  }
+});
 export type Settled = z.infer<typeof Settled>;
 
 export const SettledStatus = z.enum([
