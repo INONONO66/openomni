@@ -5,7 +5,8 @@ import type { Gateway, Ingress, Message, Model } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import type { DelegationOrigin } from "./delegation/admission";
 import type { CatalogPorts } from "./tools/catalog";
-import { catalogEntries, createDispatcher } from "./tools/catalog";
+import { catalogEntries } from "./tools/catalog";
+import { createDispatcher } from "./tools/dispatch";
 
 const RESIDENT_SYSTEM_PROMPT =
   "You are the Owner's Resident. You judge and decide; you do not execute. When work needs doing, hand it to a worker with the delegate tool and state plainly how it ended — a deadline passing means the outcome is unknown, not that the work failed.";

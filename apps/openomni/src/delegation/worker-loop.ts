@@ -1,7 +1,8 @@
 import { ChatAgent, type ChatAgentConfig } from "@openomni/agent";
 import type { Model } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
-import { catalogEntries, createDispatcher, HOST_TARGET } from "../tools/catalog";
+import { catalogEntries } from "../tools/catalog";
+import { createDispatcher, HOST_TARGET } from "../tools/dispatch";
 import type { DelegationKernel } from "./kernel";
 import type { InlineWorkerRunner } from "./inline-driver";
 

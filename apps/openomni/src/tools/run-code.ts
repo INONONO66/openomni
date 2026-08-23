@@ -1,8 +1,11 @@
+import type { ChatAgentConfig } from "@openomni/agent";
+import { placementGatedExecutor } from "@openomni/agent";
+import { Placement } from "@openomni/placement";
 import type { Machine, Tool } from "@openomni/protocol";
 import { z } from "zod";
 import type { DelegationOrigin } from "../delegation/admission";
-import type { CatalogEntry } from "./catalog";
-import { cellDoor } from "./catalog";
+import type { CatalogEntry } from "./dispatch";
+import { createDispatcher, HOST_TARGET } from "./dispatch";
 import type { CellRegistry } from "./cell-registry";
 
 /** What running a cell needs, without knowing how the host is composed. */
@@ -26,6 +29,28 @@ export interface CellPorts {
    */
   toolsFor(origin: DelegationOrigin): readonly CatalogEntry[];
   newCellId(): string;
+}
+
+/**
+ * What a running cell may call back for: the same catalog, folded against the
+ * brain alone.
+ *
+ * Two things follow from that single target, neither of them restated as a
+ * rule here. Machine-placed tools drop out — a cell already runs on a
+ * machine, so reaching back to the brain to reach another machine is the
+ * round trip code mode exists to remove, and a machine tool added later is
+ * excluded by the same fold. And the gate is load-bearing rather than
+ * belt-and-braces: a cell's `tool.<name>()` never passes through the agent
+ * loop, so this door is the only one watching it.
+ */
+export function cellDoor(
+  entries: readonly CatalogEntry[],
+): NonNullable<ChatAgentConfig["toolExecutor"]> {
+  const dispatcher = createDispatcher(entries);
+  return placementGatedExecutor(
+    Placement.resolveTools(dispatcher.specs, [HOST_TARGET]),
+    dispatcher.execute,
+  );
 }
 
 const Input = z

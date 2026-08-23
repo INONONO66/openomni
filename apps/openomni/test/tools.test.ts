@@ -2,11 +2,12 @@ import { describe, expect, it } from "bun:test";
 import { placementGatedExecutor } from "@openomni/agent";
 import { Placement } from "@openomni/placement";
 import type { Machine, Tool } from "@openomni/protocol";
-import type { CatalogEntry } from "../src/tools/catalog";
-import { catalogEntries, cellDoor, createDispatcher, HOST_TARGET } from "../src/tools/catalog";
+import { catalogEntries } from "../src/tools/catalog";
+import type { CatalogEntry } from "../src/tools/dispatch";
+import { createDispatcher, HOST_TARGET } from "../src/tools/dispatch";
 import { createCellRegistry } from "../src/tools/cell-registry";
 import type { CellPorts } from "../src/tools/run-code";
-import { RUN_CODE_TOOL_NAME, runCodeToolExecutor } from "../src/tools/run-code";
+import { cellDoor, RUN_CODE_TOOL_NAME, runCodeToolExecutor } from "../src/tools/run-code";
 
 const RESIDENT = { role: "resident", depth: 0 } as const;
 

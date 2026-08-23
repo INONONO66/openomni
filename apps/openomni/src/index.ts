@@ -12,7 +12,8 @@ import { createInlineWorkerRunner } from "./delegation/worker-loop";
 import { createResidentGateway } from "./gateway";
 import { buildInboundEvent } from "./inbound";
 import { createResident } from "./resident";
-import { catalogEntries, HOST_TARGET } from "./tools/catalog";
+import { catalogEntries } from "./tools/catalog";
+import { HOST_TARGET } from "./tools/dispatch";
 import { createCellRegistry } from "./tools/cell-registry";
 import type { CellPorts } from "./tools/run-code";
 
