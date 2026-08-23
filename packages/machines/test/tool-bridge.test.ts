@@ -241,6 +241,54 @@ describe("code-mode tool bridge", () => {
     }
   });
 
+  test("an attached daemon cannot invoke tools outside a cell the host dispatched", async () => {
+    const path = socketPath();
+    let reached = false;
+    const host = await createMachineHost({
+      socketPath: path,
+      enrollment: () => ({
+        name: "workstation",
+        machineId: "m-1",
+        allowedCapabilities: ["kernel.py"],
+        enrolledAt: 1000,
+      }),
+      events: silent,
+      now: () => 5000,
+      callTool: () => {
+        reached = true;
+        return Promise.resolve({ status: "completed", value: "ran" });
+      },
+    });
+    const client = await connectIpcClient(path, {});
+    try {
+      await typedCall(
+        client,
+        Machine.WireMethod.Attach,
+        {
+          machineId: "m-1",
+          daemonVersion: "0.1.0",
+          platform: "darwin",
+          offeredCapabilities: ["kernel.py"],
+          offeredAt: 2000,
+        },
+        5000,
+      );
+      // Attached, but this host never dispatched a cell called "ghost".
+      await expect(
+        typedCall(
+          client,
+          Machine.WireMethod.CallTool,
+          { cellId: "ghost", name: "add", arguments: {} },
+          5000,
+        ),
+      ).rejects.toThrow("no cell in flight: ghost");
+      expect(reached).toBe(false);
+    } finally {
+      client.close();
+      host.close();
+    }
+  });
+
   test("a host wired without a tool port says so instead of pretending", async () => {
     const path = socketPath();
     const host = await createMachineHost({

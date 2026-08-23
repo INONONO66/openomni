@@ -116,8 +116,9 @@ The machine axis of `@openomni/placement` folds candidate machines against
      one cell replaces N tool round trips. The host does not re-implement the
      placement gate: the composition root injects the same placement-gated
      executor the model-facing catalog uses, so a tool the fold refused cannot
-     be reached by spelling its name in code. Only an attached connection may
-     reach the tool channel. The `eval` tool spec that offers code mode to the
+     be reached by spelling its name in code. A tool call is served only on an
+     attached connection and only for a cell the host itself dispatched and is
+     still awaiting. The `eval` tool spec that offers code mode to the
      model belongs with the app that composes a catalog, and lands with it.
 6. `DelegationPort` extraction from the agent loop.
 7. DelegationKernel with `inline`/`process` transport drivers, then the

@@ -62,11 +62,17 @@ export async function createMachineHost(options: MachineHostOptions): Promise<Ma
   // restart is the normal path, not an error).
   const attachments = new Map<string, Attachment>();
   const connectionByMachine = new Map<Machine.MachineId, string>();
+  // Cells this host has in flight on each connection. A tool call is only
+  // served on behalf of a cell the host itself dispatched and is still
+  // waiting on, so `cellId` is a fact the host can stand behind rather than
+  // an attribution the daemon asserts.
+  const inFlight = new Map<string, Set<string>>();
 
   function detach(connectionId: string, reason: string): void {
     const attachment = attachments.get(connectionId);
     if (!attachment) return;
     attachments.delete(connectionId);
+    inFlight.delete(connectionId);
     if (connectionByMachine.get(attachment.machineId) === connectionId) {
       connectionByMachine.delete(attachment.machineId);
     }
@@ -87,6 +93,9 @@ export async function createMachineHost(options: MachineHostOptions): Promise<Ma
           throw new Error("machine is not attached");
         }
         const call = Machine.ToolCall.parse(params);
+        if (!inFlight.get(connectionId)?.has(call.cellId)) {
+          throw new Error(`no cell in flight: ${call.cellId}`);
+        }
         respond(
           options.callTool
             ? await options.callTool(call)
@@ -152,14 +161,21 @@ export async function createMachineHost(options: MachineHostOptions): Promise<Ma
         return { status: "refused", reason: "kernel_not_available" };
       }
       server.useConnection(connectionId);
-      return Machine.CellResult.parse(
-        await typedCall(
-          server,
-          Machine.WireMethod.RunCell,
-          request,
-          request.timeoutMs + CELL_REPLY_GRACE_MS,
-        ),
-      );
+      const cells = inFlight.get(connectionId) ?? new Set<string>();
+      cells.add(request.cellId);
+      inFlight.set(connectionId, cells);
+      try {
+        return Machine.CellResult.parse(
+          await typedCall(
+            server,
+            Machine.WireMethod.RunCell,
+            request,
+            request.timeoutMs + CELL_REPLY_GRACE_MS,
+          ),
+        );
+      } finally {
+        cells.delete(request.cellId);
+      }
     },
     close() {
       server.close();
