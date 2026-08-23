@@ -99,8 +99,8 @@ const RULES: Record<PackageKey, PackageRule> = {
     displayName: "placement",
     packageJsonPath: "packages/placement/package.json",
     packageName: "@openomni/placement",
-    // Ring-1 pure target selection (#752): protocol only (Model.Ref). It
-    // decides placement and nothing else — policy alone owns allow/deny and
+    // Ring-1 pure target selection: protocol-only model and machine-axis
+    // folds. It decides placement and nothing else — policy alone owns allow/deny and
     // the retry policy alone terminates, so it can never grow a
     // policy/ledger/llm/telemetry import.
     allowedDeps: new Set(["@openomni/protocol"]),
@@ -119,9 +119,8 @@ const RULES: Record<PackageKey, PackageRule> = {
       "@openomni/telemetry",
     ]),
     // `src/` may not reach telemetry. The loop reports through an injected
-    // `BusEvent.Sink` and owns no durable state (#606). `placement` is the
-    // ring-1 pure model-fallback fold the per-attempt resolution consumes
-    // (#752).
+    // `BusEvent.Sink` and owns no durable state (#606). `placement` supplies
+    // the pure model-fallback and tool machine-axis folds consumed by the loop.
     srcAllowedDeps: new Set([
       "@openomni/protocol",
       "@openomni/policy",

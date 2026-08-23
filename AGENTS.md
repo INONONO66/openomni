@@ -22,7 +22,7 @@ openomni/
 ├── packages/
 │   ├── protocol/        # Shared Zod schemas and cross-package contracts
 │   ├── policy/          # Protocol-only policy engine primitive: dispatch, effect composition, registry
-│   ├── placement/       # Ring-1 pure target selection (#752): model fallback-chain fold, consumed per attempt by the agent loop
+│   ├── placement/       # Ring-1 pure target selection: model fallback and tool machine-axis folds, consumed by the agent loop
 │   ├── telemetry/       # The observation channel: Bus pub/sub, trace-owning scoped emitter, span pairing, sink combinators — protocol-only deps (#606)
 │   ├── ledger/          # Session CRUD, Storage adapter (in-memory + SQLite), BusPersistence, Artifact, SurfaceKey, frozen worker-run archive, WorkItemStore (universal work state)
 │   ├── llm/             # LLM abstraction: providers, auth (API key + proxy), streaming, retry, token/cost tracking, provider transforms
@@ -89,7 +89,7 @@ The package boundary rule is strict: product meaning belongs in `packages/openom
 | --- | --- | --- |
 | `packages/protocol` | Zod schemas, wire contracts, event descriptors, storage adapter interfaces | Runtime decisions, routing helpers, authority evaluation, lifecycle orchestration |
 | `packages/policy` | Generic policy dispatch, effect composition, middleware registry primitives over protocol contracts | Agent-specific built-ins, OpenOmni authority semantics, session-backed lifecycle decisions |
-| `packages/placement` | Pure target selection (#752, model axis): fallback-chain fold `(candidates, decided failure history) → next model` — deterministic, clockless, protocol-only | Allow/deny (policy owns it), retry termination (retry policy owns it), capability-tag/machine placement (later slice), any store/llm/telemetry import |
+| `packages/placement` | Pure target selection: model fallback fold plus tool machine-axis fold `(catalog, host/machine effective capability sets) → offerability + eligible machine ids` — deterministic, clockless, protocol-only | Allow/deny (policy owns it), retry termination (retry policy owns it), capability negotiation/intersection (protocol owns it), any store/llm/telemetry import |
 | `packages/ledger` | Durable state substrate: session/message/part CRUD, Bus persistence (the journal writer; `Bus` itself is `packages/telemetry`), storage adapters, indexed record stores | Communication routing, actor trust decisions, worker grant evaluation semantics, pending-reply precedence |
 | `packages/llm` | Provider I/O, auth shape, message transforms, token/cost accounting, model catalog | Agent/session/workforce routing, policy, tool execution |
 | `packages/agent` | Stateless ChatAgent loop, agent policy built-ins/facade, tool invocation protocol, generic runtime primitives | OpenOmni session-backed worker lifecycle, external actor authority, channel routing, durable background/pending interaction semantics |
@@ -235,7 +235,7 @@ a satellite split) to violations of each one.
 - Prefer narrowing public barrels. A symbol exported from a package is a contract; do not export helper stages just for convenience.
 - Driver-band packages (approved target: `remote` remote execution, `browser` browser use, `machines` machine handles) may import only `@openomni/protocol` and `@openomni/ipc`; registration happens only in `apps/server`, and each must build/test standalone (repo-extractable). Package names are path-level only — exported symbols, protocol nouns, and LLM tool names stay English. See [Architecture § Execution Targets and the Driver Band](docs/architecture.md).
 - `channels` is promoted from driver band to **gateway** (Owner 2026-08-18/19, [docs/gateway-design.md](docs/gateway-design.md)) — LANDED at #736 (stage 2): package whitelist {protocol, ipc, policy, ledger}, with the driver sub-band (`discord/`, `github/`, `telegram/`, `support/`, `websocket.ts`, `channel-authn.ts`) held to {protocol, ipc}. The external resolveRoute arms, wait service, and #215 send kernel live in `packages/channels/src/router/`; the internal-mode arm (cron/dispatch events that never cross the perimeter) stays brain-side in `packages/openomni/src/ingress/internal-route.ts`.
-- Outbound target selection (which model/machine/driver executes) is the ring-1 `@openomni/placement` pure decision package (opened at #752 with the model-fallback axis, consumed by the agent loop's per-attempt resolution); do not grow placement decisions inside kernel dispatch or `apps/server`. Inbound routing (`resolveRoute`) is gateway-owned per docs/gateway-design.md §8.4 (external arms in `packages/channels/src/router/` since #736; the internal arm stays in the kernel).
+- Outbound target selection (which model/machine/driver executes) is the ring-1 `@openomni/placement` pure decision package (model fallback is consumed per attempt; tool machine-axis offerability is consumed while assembling the agent catalog); do not grow placement decisions inside kernel dispatch or `apps/server`. Inbound routing (`resolveRoute`) is gateway-owned per docs/gateway-design.md §8.4 (external arms in `packages/channels/src/router/` since #736; the internal arm stays in the kernel).
 
 ## EXECUTION DISCIPLINE
 

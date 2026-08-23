@@ -1,4 +1,5 @@
 import { Run, type RunInput, type Sink } from "@openomni/llm";
+import { Placement } from "@openomni/placement";
 import { type Message, Operational, PolicyDecision } from "@openomni/protocol";
 import type { BusEvent, Policy, Tool } from "@openomni/protocol";
 import {
@@ -182,8 +183,12 @@ export async function buildTurn(
   recordRunTurn(state);
   if (config.signal?.aborted) throw Retry.abortError();
 
+  const toolTargets = config.toolTargets ?? [{ kind: "host", capabilities: [] } as const];
+  const allTools = Placement.resolveTools(config.tools ?? [], toolTargets)
+    .filter((decision) => decision.offerable)
+    .map((decision) => decision.tool);
   const toolPolicyDecisions: TurnArtifacts["toolPolicyDecisions"] = [];
-  const toolMetadata = buildToolMetadataMap(config.tools);
+  const toolMetadata = buildToolMetadataMap(allTools);
   const hookedExecutor = config.toolExecutor
     ? createToolExecutor({
         events: config.events,
@@ -209,13 +214,12 @@ export async function buildTurn(
       })
     : undefined;
 
-  const systemResult = await buildTurnSystemPrompt(state, config, engine, agentBase);
+  const systemResult = await buildTurnSystemPrompt(state, config, engine, agentBase, allTools);
   if (systemResult.blocked) {
     return { type: "complete", result: guardAbortedResult(state) };
   }
   const system = systemResult.system;
 
-  const allTools = config.tools ?? [];
   const catalogLabels: Policy.LabelEntry[] = [];
   for (const [name, metadata] of toolMetadata) {
     for (const label of metadata.labels ?? []) {
@@ -369,8 +373,9 @@ async function buildTurnSystemPrompt(
   config: ChatAgentConfig,
   engine: PolicyEngineInstance,
   agentBase: AgentRunBase,
+  tools: Tool.Spec[],
 ): Promise<{ system?: string; blocked?: Policy.PolicyDecision }> {
-  let system = buildSystemPrompt(config.systemPrompt, config.tools ?? []);
+  let system = buildSystemPrompt(config.systemPrompt, tools);
   const decision = await engine.dispatchPoint(
     "prompt.context.pre",
     buildLifecyclePolicyContext(state, config, agentBase, { turnIndex: state.turnIndex }),
