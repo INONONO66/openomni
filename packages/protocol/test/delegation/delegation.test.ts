@@ -56,7 +56,8 @@ describe("Delegation.Request mode rules", () => {
     const missing = Delegation.Request.safeParse(withoutDeadline);
     expect(missing.success).toBe(false);
     if (!missing.success) {
-      expect(missing.error.issues.map((issue) => issue.path.join("."))).toContain("deadline");
+      const issue = missing.error.issues.find((candidate) => candidate.path.join(".") === "deadline");
+      expect(issue?.message).toBe("Required");
     }
     expect(requestIssueAt({ ...askCore, deadline: 0 }, "deadline")).toBe(
       "Number must be greater than 0",
@@ -68,6 +69,7 @@ describe("Delegation.Request mode rules", () => {
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.error.issues[0]?.code).toBe("unrecognized_keys");
+      expect(result.error.issues[0]?.message).toBe("Unrecognized key(s) in object: 'transport'");
     }
   });
 });
@@ -92,6 +94,7 @@ describe("Delegation.Settled terminal vocabulary", () => {
     expect(crossed.success).toBe(false);
     if (!crossed.success) {
       expect(crossed.error.issues[0]?.code).toBe("unrecognized_keys");
+      expect(crossed.error.issues[0]?.message).toBe("Unrecognized key(s) in object: 'deadline'");
     }
   });
 
@@ -126,7 +129,10 @@ describe("Delegation.Settled terminal vocabulary", () => {
       const result = Delegation.Settled.safeParse({ status, delegationId: "d", at: 1 });
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.error.issues.map((issue) => issue.path.join("."))).toContain(evidenceField);
+        const issue = result.error.issues.find(
+          (candidate) => candidate.path.join(".") === evidenceField,
+        );
+        expect(issue?.message).toBe("Required");
       }
     }
   });
@@ -150,6 +156,9 @@ describe("Delegation.Handle", () => {
     expect(bogus.success).toBe(false);
     if (!bogus.success) {
       expect(bogus.error.issues[0]?.path.join(".")).toBe("transport");
+      expect(bogus.error.issues[0]?.message).toBe(
+        "Invalid enum value. Expected 'inline' | 'process' | 'machine' | 'channel', received 'carrier-pigeon'",
+      );
     }
   });
 });

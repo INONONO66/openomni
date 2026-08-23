@@ -56,16 +56,16 @@ enrollment storage is a ledger record; attach admission is kernel judgment.
   (epoch ms; no unbounded delegation exists — same law as `Wait.expiresAt`).
   `assign` requires acceptance criteria; `ask` forbids them.
 - `Delegation.Handle` — what the requester holds after admission: the
-  resolved `Lane` (`inline` | `process` | `machine` | `channel`) plus the
+  resolved `Transport` (`inline` | `process` | `machine` | `channel`) plus the
   durable ids settlement arrives under. Progress is observed through
   Wait/WorkItem, never polled through the handle.
 - `Delegation.Settled` — five terminals. `delivery_failed` (never reached the
   worker) and `no_response` (delivered, silence past deadline) are distinct:
   unknown-outcome is never read as did-not-happen.
-- Events: `delegation.requested` (admission settled onto a lane),
+- Events: `delegation.requested` (admission settled onto a transport),
   `delegation.settled`.
 
-Admission (depth-1 rule, record-before-act), the four lane drivers, and
+Admission (depth-1 rule, record-before-act), the four transport drivers, and
 settlement authority form the **DelegationKernel** in `apps/openomni`; the
 agent loop consumes it through an injected `DelegationPort` (same pattern as
 `@openomni/placement`), removing spawn/subagent semantics from the loop.
@@ -82,14 +82,15 @@ agent loop consumes it through an injected `DelegationPort` (same pattern as
   two never alias.
 - **Wait is reused, not redefined.** Reply correlation, quorum, deadlines
   (`expiresAt`), and `delivery_recorded` already live in `protocol/src/wait/`.
-  The `channel` lane opens a Wait; `Settled.no_response` is the delegation
+  The `channel` transport opens a Wait; `Settled.no_response` is the delegation
   reading of that Wait's expiry.
 
 ## 4. Tool placement (`Tool.Placement`, `Tool.Spec`)
 
 - `placement`: `machine` (runs on an attached machine's daemon), `host` (runs
-  on the brain's own host), `free` (anywhere — pure/network tools). Absent
-  reads as `free`.
+  on the brain's own host), `free` (anywhere — pure/network tools).
+  Additive-optional on `Tool.Spec`; the catalog resolver (stage 4 below) is
+  the single owner of the absent-means-`free` read.
 - `requires`: capabilities the executing side must hold
   (`Machine.CapabilityId` grammar). Placement resolution =
   `placement` × `requires` ⊆ effective set of a candidate target.
@@ -107,6 +108,6 @@ The machine axis of `@openomni/placement` folds candidate machines against
 4. Agent-loop placement axis + tool catalog `requires` resolution.
 5. Code mode (`eval`) as a `kernel.py`-capability tool.
 6. `DelegationPort` extraction from the agent loop.
-7. DelegationKernel with `inline`/`process` drivers, then the `machine`
-   driver, then the `channel` driver on Wait resumption.
+7. DelegationKernel with `inline`/`process` transport drivers, then the
+   `machine` driver, then the `channel` driver on Wait resumption.
 8. Memory, last, referencing existing implementations.

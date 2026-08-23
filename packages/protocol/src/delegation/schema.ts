@@ -4,7 +4,8 @@ import { z } from "zod";
  * Where delegated work goes (docs/machines-and-delegation.md §3).
  * `core` spawns an internal loop; `actor` messages an already-registered
  * external actor. The address says WHO — never HOW it is transported: the
- * kernel resolves the lane (`Handle.lane`) from the address at admission.
+ * kernel resolves the transport (`Handle.transport`) from the address at
+ * admission.
  */
 export const WorkerAddress = z.discriminatedUnion("kind", [
   z

@@ -53,6 +53,7 @@ describe("Machine.Enrollment", () => {
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.error.issues[0]?.message).toBe("capabilities must be unique");
+      expect(result.error.issues[0]?.path.join(".")).toBe("allowedCapabilities");
     }
   });
 
@@ -61,6 +62,7 @@ describe("Machine.Enrollment", () => {
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.error.issues[0]?.path.join(".")).toBe("allowedCapabilities");
+      expect(result.error.issues[0]?.code).toBe("too_small");
     }
   });
 
@@ -86,6 +88,7 @@ describe("Machine.Offer", () => {
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.error.issues[0]?.message).toBe("capabilities must be unique");
+      expect(result.error.issues[0]?.path.join(".")).toBe("offeredCapabilities");
     }
   });
 });
@@ -132,6 +135,7 @@ describe("machine.attached event payload", () => {
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.error.issues[0]?.message).toBe("capabilities must be unique");
+      expect(result.error.issues[0]?.path.join(".")).toBe("effectiveCapabilities");
     }
   });
 });
