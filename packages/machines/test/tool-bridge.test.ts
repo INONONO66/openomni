@@ -274,6 +274,7 @@ describe("code-mode tool bridge", () => {
         5000,
       );
       // Attached, but this host never dispatched a cell called "ghost".
+      // (See the sibling test for a cellId that WAS dispatched and settled.)
       await expect(
         typedCall(
           client,
@@ -285,6 +286,76 @@ describe("code-mode tool bridge", () => {
       expect(reached).toBe(false);
     } finally {
       client.close();
+      host.close();
+    }
+  });
+
+  test("a cellId stops working the moment its cell settles", async () => {
+    const path = socketPath();
+    let reached = false;
+    const host = await createMachineHost({
+      socketPath: path,
+      enrollment: () => ({
+        name: "workstation",
+        machineId: "m-1",
+        allowedCapabilities: ["kernel.py"],
+        enrolledAt: 1000,
+      }),
+      events: silent,
+      now: () => 5000,
+      callTool: () => {
+        reached = true;
+        return Promise.resolve({ status: "completed", value: "ran" });
+      },
+    });
+    // A stand-in daemon: it answers RunCell itself, so the replay below comes
+    // from the very connection the cell ran on — the only way to prove the
+    // cell is retired rather than merely unknown to some other connection.
+    const daemon = await connectIpcClient(path, {
+      onRequest: (method, _params, respond) => {
+        if (method === Machine.WireMethod.RunCell) {
+          respond({
+            status: "completed",
+            cellId: "spent",
+            output: { stdout: "", stderr: "" },
+          });
+        }
+      },
+    });
+    try {
+      await typedCall(
+        daemon,
+        Machine.WireMethod.Attach,
+        {
+          machineId: "m-1",
+          daemonVersion: "0.1.0",
+          platform: "darwin",
+          offeredCapabilities: ["kernel.py"],
+          offeredAt: 2000,
+        },
+        5000,
+      );
+      const cell = await host.runCell("m-1", {
+        cellId: "spent",
+        code: "'done'",
+        timeoutMs: 15_000,
+      });
+      expect(cell).toMatchObject({ status: "completed" });
+
+      // Same connection, same cellId — but the cell is over, so its name
+      // buys nothing. This is what a background thread leaking a call after
+      // its cell returned looks like from the host's side.
+      await expect(
+        typedCall(
+          daemon,
+          Machine.WireMethod.CallTool,
+          { cellId: "spent", name: "add", arguments: {} },
+          5000,
+        ),
+      ).rejects.toThrow("no cell in flight: spent");
+      expect(reached).toBe(false);
+    } finally {
+      daemon.close();
       host.close();
     }
   });
