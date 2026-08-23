@@ -11,17 +11,21 @@ import type { SidecarStore } from "./sidecar-store";
 /**
  * Transcript attemptIds identify LLM-processor attempts, not WorkItem attempts,
  * and transcript facts currently record no WorkItem ownership edge. Attribution
- * is therefore a recorded-window heuristic: a row belongs to the latest window
- * whose allocation time is <= the row time and whose terminal/next-allocation
- * boundary has not passed. At the same millisecond the newer allocation wins;
- * a terminal `endedAt` boundary is inclusive. Rows outside every window belong
- * to another owner and are excluded. The two clocks remain a known limitation:
+ * is therefore a recorded-window heuristic: a row belongs to the globally
+ * latest same-session allocation at-or-before its time, ordered by
+ * (timeCreated, streamId, seq), only when that allocation belongs to this
+ * WorkItem and its terminal/next-allocation boundary has not passed. Thus the
+ * newer allocation wins across same-session WorkItems, including open ones; a
+ * terminal `endedAt` boundary is inclusive. Rows outside every owned window
+ * belong to another owner and are excluded. The two clocks remain a known limitation:
  * ledger append time and TranscriptStore's Date.now() are recorded separately.
  */
 export type ProjectionMaterials = {
   workItem: WorkItem.Info;
   /** Allocation and terminal facts from this WorkItem's owner stream. */
   attemptFacts: Ledger.RecordedFact[];
+  /** Allocation facts from sibling WorkItems sharing this transcript session. */
+  siblingAllocationFacts: Ledger.RecordedFact[];
   transcriptRows: Storage.TranscriptFactRow[];
 };
 
@@ -42,6 +46,7 @@ export class ProjectionAssemblyError extends Error {
 type Allocation = {
   attempt: WorkItem.Attempt;
   timeCreated: number;
+  streamId: string;
   seq: number;
 };
 type AttemptWindow = { attempt: WorkItem.Attempt; start: number; end?: number };
@@ -64,6 +69,7 @@ function parseAllocation(fact: Ledger.RecordedFact): Allocation {
     return {
       attempt: WorkItemSchema.Attempt.parse(identity),
       timeCreated: fact.timeCreated,
+      streamId: fact.streamId,
       seq: fact.seq,
     };
   } catch (error) {
@@ -138,14 +144,42 @@ function parseTranscriptRow(row: Storage.TranscriptFactRow): Transcript.Fact {
   }
 }
 
+function compareAllocations(a: Allocation, b: Allocation): number {
+  if (a.timeCreated !== b.timeCreated) return a.timeCreated - b.timeCreated;
+  const streamOrder =
+    a.streamId === b.streamId ? 0 : a.streamId < b.streamId ? -1 : 1;
+  if (streamOrder !== 0) return streamOrder;
+  return a.seq - b.seq;
+}
+
 function attributedAttempt(
   windows: AttemptWindow[],
+  sessionAllocations: Allocation[],
   timeCreated: number,
 ): WorkItem.Attempt | undefined {
+  let winner: Allocation | undefined;
+  for (const allocation of sessionAllocations) {
+    if (
+      allocation.timeCreated <= timeCreated &&
+      (winner === undefined || compareAllocations(winner, allocation) < 0)
+    ) {
+      winner = allocation;
+    }
+  }
+  if (
+    winner === undefined ||
+    !windows.some(
+      (window) => window.attempt.attemptId === winner.attempt.attemptId,
+    )
+  ) {
+    return undefined;
+  }
+
   for (let index = windows.length - 1; index >= 0; index -= 1) {
     const window = windows[index];
     if (
       window !== undefined &&
+      window.attempt.attemptId === winner.attempt.attemptId &&
       window.start <= timeCreated &&
       (window.end === undefined || timeCreated <= window.end)
     ) {
@@ -213,13 +247,38 @@ export function assembleProjectionInput(
   sidecar: SidecarStore,
 ): ProjectionInput {
   const windows = buildAttemptWindows(materials.attemptFacts);
+  const ownAllocationFacts = materials.attemptFacts.filter(
+    (fact) => fact.type === "work_item.attempt_allocated",
+  );
+  const sessionAllocations = [
+    ...ownAllocationFacts,
+    ...materials.siblingAllocationFacts,
+  ].map(parseAllocation);
+  const retainedRows = materials.transcriptRows.flatMap((row) => {
+    const attempt = attributedAttempt(
+      windows,
+      sessionAllocations,
+      row.timeCreated,
+    );
+    return attempt === undefined ? [] : [{ row, attempt }];
+  });
+  const retainedSeqs = new Set<string>();
+  for (const { row } of retainedRows) {
+    const key = `${row.sessionID}:${row.seq}`;
+    if (retainedSeqs.has(key)) {
+      throw new ProjectionAssemblyError(
+        "corrupt_fact",
+        `duplicate transcript seq at ${row.sessionID}#${row.seq}`,
+      );
+    }
+    retainedSeqs.add(key);
+  }
+
   const messageAgents = new Map<string, Step["agent"]>();
   const toolParts = new Map<string, ToolIdentity>();
   const steps: Step[] = [];
 
-  for (const row of materials.transcriptRows) {
-    const attempt = attributedAttempt(windows, row.timeCreated);
-    if (attempt === undefined) continue;
+  for (const { row, attempt } of retainedRows) {
     const fact = parseTranscriptRow(row);
     const step = emptyStep(materials, row, attempt, fact.type);
     if (fact.type !== "message.created") {
@@ -243,7 +302,7 @@ export function assembleProjectionInput(
               fact.part.state.input,
             ),
           };
-          toolParts.set(fact.part.id, identity);
+          toolParts.set(`${fact.attemptId}:${fact.part.id}`, identity);
           step.action = identity.action;
           step.actionArgs = identity.actionArgs;
           if (fact.part.state.status === "completed") {
@@ -255,7 +314,7 @@ export function assembleProjectionInput(
         }
         break;
       case "part.advanced": {
-        const identity = toolParts.get(fact.partId);
+        const identity = toolParts.get(`${fact.attemptId}:${fact.partId}`);
         if (identity !== undefined) {
           step.action = identity.action;
           step.actionArgs = identity.actionArgs;

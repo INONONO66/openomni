@@ -155,6 +155,7 @@ function materials(transcriptRows: Storage.TranscriptFactRow[]) {
   return {
     workItem: workItem(),
     attemptFacts: [allocation(attempt("attempt-1", 1), 10, 2)],
+    siblingAllocationFacts: [],
     transcriptRows,
   };
 }
@@ -182,6 +183,7 @@ describe("assembleProjectionInput", () => {
           allocation(second, 30, 4),
           terminal(second.attemptId, 45, 5),
         ],
+        siblingAllocationFacts: [],
         transcriptRows: [
           row(created, 5, 1),
           row(created, 20, 3),
@@ -309,6 +311,67 @@ describe("assembleProjectionInput", () => {
     ).toBe("/tmp");
   });
 
+  test("keeps tool identities separate across LLM attempts with the same partId", () => {
+    const pendingTool = (
+      attemptId: string,
+      tool: string,
+      input: Record<string, string>,
+    ): Transcript.Fact => ({
+      type: "part.appended",
+      attemptId,
+      messageId: `message-${attemptId}`,
+      part: {
+        id: "shared-part",
+        sessionID: "session-1",
+        messageID: `message-${attemptId}`,
+        type: "tool",
+        callID: `call-${attemptId}`,
+        tool,
+        state: { status: "pending", input },
+      },
+    });
+    const completedTool = (
+      attemptId: string,
+      output: string,
+    ): Transcript.Fact => ({
+      type: "part.advanced",
+      attemptId,
+      messageId: `message-${attemptId}`,
+      partId: "shared-part",
+      transition: { to: "completed", at: 25, output },
+    });
+    const input = assembleProjectionInput(
+      materials([
+        row(pendingTool("llm-one", "bash", { command: "pwd" }), 20, 1),
+        row(pendingTool("llm-two", "read", { path: "/tmp/file" }), 21, 2),
+        row(completedTool("llm-one", "/tmp"), 22, 3),
+        row(completedTool("llm-two", "contents"), 23, 4),
+      ]),
+      createInMemorySidecarStore(),
+    );
+
+    expect(input.steps[2]).toMatchObject({
+      action: "bash",
+      actionArgs: { command: "pwd" },
+    });
+    expect(input.steps[3]).toMatchObject({
+      action: "read",
+      actionArgs: { path: "/tmp/file" },
+    });
+  });
+
+  test("rejects duplicate persisted seq values among retained session rows", () => {
+    const error = capturedError(() =>
+      assembleProjectionInput(
+        materials([row(created, 20, 4), row(created, 21, 4)]),
+        createInMemorySidecarStore(),
+      ),
+    );
+
+    expect(error.reason).toBe("corrupt_fact");
+    expect(error.message).toBe("duplicate transcript seq at session-1#4");
+  });
+
   test("maps text and message-finished telemetry", () => {
     const text: Transcript.Fact = {
       type: "part.appended",
@@ -351,7 +414,12 @@ describe("assembleProjectionInput", () => {
   test("returns empty input for empty material and fails loudly on corrupt JSON", () => {
     expect(
       assembleProjectionInput(
-        { workItem: workItem(), attemptFacts: [], transcriptRows: [] },
+        {
+          workItem: workItem(),
+          attemptFacts: [],
+          siblingAllocationFacts: [],
+          transcriptRows: [],
+        },
         createInMemorySidecarStore(),
       ),
     ).toEqual({ steps: [] });

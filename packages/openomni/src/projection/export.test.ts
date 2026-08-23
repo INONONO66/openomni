@@ -41,7 +41,10 @@ function attemptIdentity() {
   };
 }
 
-function assistant(sessionID: string, suffix = "export"): Message.AssistantMessage {
+function assistant(
+  sessionID: string,
+  suffix = "export",
+): Message.AssistantMessage {
   return {
     id: `message-${suffix}`,
     sessionID,
@@ -57,7 +60,10 @@ function assistant(sessionID: string, suffix = "export"): Message.AssistantMessa
   };
 }
 
-function transcriptFacts(sessionID: string, suffix = "export"): Transcript.Fact[] {
+function transcriptFacts(
+  sessionID: string,
+  suffix = "export",
+): Transcript.Fact[] {
   const message = assistant(sessionID, suffix);
   const llmAttemptId = `llm-${suffix}`;
   return [
@@ -88,7 +94,12 @@ function transcriptFacts(sessionID: string, suffix = "export"): Transcript.Fact[
       attemptId: llmAttemptId,
       messageId: message.id,
       partId: `tool-${suffix}`,
-      transition: { to: "completed", at: Date.now(), output: "/tmp", title: "pwd" },
+      transition: {
+        to: "completed",
+        at: Date.now(),
+        output: "/tmp",
+        title: "pwd",
+      },
     },
     {
       type: "message.finished",
@@ -96,7 +107,32 @@ function transcriptFacts(sessionID: string, suffix = "export"): Transcript.Fact[
       messageId: message.id,
       at: Date.now(),
       finish: "stop",
-      usage: { input: 5, output: 3, reasoning: 0, cache: { read: 0, write: 0 } },
+      usage: {
+        input: 5,
+        output: 3,
+        reasoning: 0,
+        cache: { read: 0, write: 0 },
+      },
+    },
+  ];
+}
+
+function textFacts(sessionID: string, suffix: string): Transcript.Fact[] {
+  const message = assistant(sessionID, suffix);
+  const attemptId = `llm-${suffix}`;
+  return [
+    { type: "message.created", attemptId, message },
+    {
+      type: "part.appended",
+      attemptId,
+      messageId: message.id,
+      part: {
+        id: `text-${suffix}`,
+        sessionID,
+        messageID: message.id,
+        type: "text",
+        text: `text-${suffix}`,
+      },
     },
   ];
 }
@@ -142,8 +178,10 @@ describe("exportWorkItemProjection", () => {
       attemptIdentity(),
       "trace-export",
     );
-    if (allocation === undefined) throw new Error("expected attempt allocation");
-    for (const fact of transcriptFacts(session.id)) TranscriptStore.record(session.id, fact);
+    if (allocation === undefined)
+      throw new Error("expected attempt allocation");
+    for (const fact of transcriptFacts(session.id))
+      TranscriptStore.record(session.id, fact);
 
     const sidecar = createInMemorySidecarStore();
     const first = exportWorkItemProjection(item.workItemId, sidecar);
@@ -151,12 +189,109 @@ describe("exportWorkItemProjection", () => {
     const lines = first.jsonl.trimEnd().split("\n");
 
     expect(lines).toHaveLength(first.rows.length);
-    expect(Object.keys(JSON.parse(lines[0] ?? "{}"))).toEqual(FLAT_EVENT_FIELDS);
+    expect(Object.keys(JSON.parse(lines[0] ?? "{}"))).toEqual(
+      FLAT_EVENT_FIELDS,
+    );
     expect(second.jsonl).toBe(first.jsonl);
     expect(first.sidecarDigests).toHaveLength(1);
     const digest = first.sidecarDigests[0];
     if (digest === undefined) throw new Error("expected sidecar digest");
-    expect(sidecar.getText(digest as Parameters<typeof sidecar.getText>[0])).toBe("/tmp");
+    expect(
+      sidecar.getText(digest as Parameters<typeof sidecar.getText>[0]),
+    ).toBe("/tmp");
+  });
+
+  test("exports two open WorkItems sharing one session without absorbing sibling rows", async () => {
+    const originalNow = Date.now;
+    let now = 10;
+    Date.now = () => now;
+    try {
+      const session = Session.create({
+        traceId: "trace-open-shared",
+        title: "open shared projection session",
+        model: { providerID: "test", modelID: "model-shared" },
+      });
+      now = 20;
+      const first = await WorkItemStore.create(
+        {
+          name: "first open projection",
+          sourceMessageId: "source-open-first",
+          sourceChannel: "test",
+          sessionId: session.id,
+          intent: "test",
+          goal: "export only text-one",
+          acceptanceCriteria: ["first export excludes text-two"],
+        },
+        "trace-open-shared",
+      );
+      now = 40;
+      const firstAllocation = await WorkItemStore.allocateAttempt(
+        first.workItemId,
+        attemptIdentity(),
+        "trace-open-shared",
+      );
+      if (firstAllocation === undefined)
+        throw new Error("expected first allocation");
+      now = 50;
+      for (const fact of textFacts(session.id, "one"))
+        TranscriptStore.record(session.id, fact);
+
+      now = 80;
+      const second = await WorkItemStore.create(
+        {
+          name: "second open projection",
+          sourceMessageId: "source-open-second",
+          sourceChannel: "test",
+          sessionId: session.id,
+          intent: "test",
+          goal: "export only text-two",
+          acceptanceCriteria: ["second export excludes text-one"],
+        },
+        "trace-open-shared",
+      );
+      now = 100;
+      const secondAllocation = await WorkItemStore.allocateAttempt(
+        second.workItemId,
+        attemptIdentity(),
+        "trace-open-shared",
+      );
+      if (secondAllocation === undefined)
+        throw new Error("expected second allocation");
+      now = 110;
+      for (const fact of textFacts(session.id, "two"))
+        TranscriptStore.record(session.id, fact);
+
+      const sidecar = createInMemorySidecarStore();
+      const firstExport = exportWorkItemProjection(first.workItemId, sidecar);
+      const secondExport = exportWorkItemProjection(second.workItemId, sidecar);
+
+      expect(firstExport.rows.map((row) => row.step)).toEqual([1, 2]);
+      expect(secondExport.rows.map((row) => row.step)).toEqual([3, 4]);
+      expect(
+        firstExport.rows.flatMap((row) =>
+          row.thought === null ? [] : [row.thought],
+        ),
+      ).toEqual(["text-one"]);
+      expect(
+        secondExport.rows.flatMap((row) =>
+          row.thought === null ? [] : [row.thought],
+        ),
+      ).toEqual(["text-two"]);
+      expect(firstExport.jsonl).not.toContain("text-two");
+      expect(secondExport.jsonl).not.toContain("text-one");
+      expect(
+        firstExport.rows.every(
+          (row) => row.attempt_id === firstAllocation.attempt.attemptId,
+        ),
+      ).toBe(true);
+      expect(
+        secondExport.rows.every(
+          (row) => row.attempt_id === secondAllocation.attempt.attemptId,
+        ),
+      ).toBe(true);
+    } finally {
+      Date.now = originalNow;
+    }
   });
 
   test("exports two WorkItems sharing one session as correct disjoint windows", async () => {
@@ -193,15 +328,22 @@ describe("exportWorkItemProjection", () => {
         attemptIdentity(),
         "trace-shared",
       );
-      if (firstAllocation === undefined) throw new Error("expected first allocation");
+      if (firstAllocation === undefined)
+        throw new Error("expected first allocation");
       now = 50;
       for (const fact of transcriptFacts(session.id, "first")) {
         TranscriptStore.record(session.id, fact);
       }
       now = 60;
-      await WorkItemAttemptRun.finish(session.id, "run-first", "succeeded", "trace-shared", {
-        endedAt: now,
-      });
+      await WorkItemAttemptRun.finish(
+        session.id,
+        "run-first",
+        "succeeded",
+        "trace-shared",
+        {
+          endedAt: now,
+        },
+      );
 
       now = 100;
       const second = await WorkItemStore.create(
@@ -227,15 +369,22 @@ describe("exportWorkItemProjection", () => {
         attemptIdentity(),
         "trace-shared",
       );
-      if (secondAllocation === undefined) throw new Error("expected second allocation");
+      if (secondAllocation === undefined)
+        throw new Error("expected second allocation");
       now = 130;
       for (const fact of transcriptFacts(session.id, "second")) {
         TranscriptStore.record(session.id, fact);
       }
       now = 140;
-      await WorkItemAttemptRun.finish(session.id, "run-second", "succeeded", "trace-shared", {
-        endedAt: now,
-      });
+      await WorkItemAttemptRun.finish(
+        session.id,
+        "run-second",
+        "succeeded",
+        "trace-shared",
+        {
+          endedAt: now,
+        },
+      );
 
       const sidecar = createInMemorySidecarStore();
       const firstExport = exportWorkItemProjection(first.workItemId, sidecar);
@@ -244,14 +393,24 @@ describe("exportWorkItemProjection", () => {
       expect(firstExport.rows).toHaveLength(5);
       expect(secondExport.rows).toHaveLength(5);
       expect(firstExport.rows.map((row) => row.step)).toEqual([1, 2, 3, 4, 5]);
-      expect(secondExport.rows.map((row) => row.step)).toEqual([6, 7, 8, 9, 10]);
-      expect(firstExport.rows.find((row) => row.model !== null)?.model).toBe("model-first");
-      expect(secondExport.rows.find((row) => row.model !== null)?.model).toBe("model-second");
+      expect(secondExport.rows.map((row) => row.step)).toEqual([
+        6, 7, 8, 9, 10,
+      ]);
+      expect(firstExport.rows.find((row) => row.model !== null)?.model).toBe(
+        "model-first",
+      );
+      expect(secondExport.rows.find((row) => row.model !== null)?.model).toBe(
+        "model-second",
+      );
       expect(
-        firstExport.rows.every((row) => row.attempt_id === firstAllocation.attempt.attemptId),
+        firstExport.rows.every(
+          (row) => row.attempt_id === firstAllocation.attempt.attemptId,
+        ),
       ).toBe(true);
       expect(
-        secondExport.rows.every((row) => row.attempt_id === secondAllocation.attempt.attemptId),
+        secondExport.rows.every(
+          (row) => row.attempt_id === secondAllocation.attempt.attemptId,
+        ),
       ).toBe(true);
     } finally {
       Date.now = originalNow;
