@@ -1,5 +1,5 @@
 import { chmodSync } from "node:fs";
-import { type IpcServer, createIpcServer } from "@openomni/ipc";
+import { type IpcServer, createIpcServer, typedCall } from "@openomni/ipc";
 import { type BusEvent, Machine } from "@openomni/protocol";
 
 export interface MachineHostOptions {
@@ -14,9 +14,17 @@ export interface MachineHostOptions {
   readonly now: () => number;
 }
 
+export type RunCellOutcome =
+  | Machine.CellResult
+  | {
+      readonly status: "refused";
+      readonly reason: "machine_not_attached" | "kernel_not_available";
+    };
+
 export interface MachineHost {
   /** Effective capability set of a currently attached machine. */
   attached(machineId: Machine.MachineId): readonly Machine.CapabilityId[] | undefined;
+  runCell(machineId: Machine.MachineId, request: Machine.CellRequest): Promise<RunCellOutcome>;
   close(): void;
 }
 
@@ -56,7 +64,7 @@ export async function createMachineHost(options: MachineHostOptions): Promise<Ma
   const server: IpcServer = await createIpcServer(
     options.socketPath,
     (method, params, respond, _notify, connectionId) => {
-      if (method !== "machine.attach") {
+      if (method !== Machine.WireMethod.Attach) {
         throw new Error(`unknown method: ${method}`);
       }
       const offer = Machine.Offer.parse(params);
@@ -103,6 +111,20 @@ export async function createMachineHost(options: MachineHostOptions): Promise<Ma
       const connectionId = connectionByMachine.get(machineId);
       if (connectionId === undefined) return undefined;
       return attachments.get(connectionId)?.capabilities;
+    },
+    async runCell(machineId, request) {
+      const connectionId = connectionByMachine.get(machineId);
+      if (connectionId === undefined) {
+        return { status: "refused", reason: "machine_not_attached" };
+      }
+      const attachment = attachments.get(connectionId);
+      if (!attachment?.capabilities.includes("kernel.py")) {
+        return { status: "refused", reason: "kernel_not_available" };
+      }
+      server.useConnection(connectionId);
+      return Machine.CellResult.parse(
+        await typedCall(server, Machine.WireMethod.RunCell, request, request.timeoutMs + 1000),
+      );
     },
     close() {
       server.close();

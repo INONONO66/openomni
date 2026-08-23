@@ -106,7 +106,14 @@ The machine axis of `@openomni/placement` folds candidate machines against
 2. `packages/machines` daemon + localhost attach (driver band).
 3. `apps/openomni` slice 1: pure Resident chat loop (no memory, no delegation).
 4. **Agent-loop placement axis + tool catalog `requires` resolution — landed.**
-5. Code mode (`eval`) as a `kernel.py`-capability tool.
+5. Code mode, in two slices because the substrate and the batching payoff are
+   independently verifiable:
+   - **5a — kernel substrate: landed.** A machine offering `kernel.py` runs
+     code cells with interpreter state persisting across cells, each cell
+     under a required deadline, behind the effective-capability gate.
+   - 5b — the `tool.<name>()` bridge from inside a cell back to the host's
+     tool executor, and the `eval` tool spec that offers it. This is where
+     the batching win lands: one cell instead of N tool round trips.
 6. `DelegationPort` extraction from the agent loop.
 7. DelegationKernel with `inline`/`process` transport drivers, then the
    `machine` driver, then the `channel` driver on Wait resumption.

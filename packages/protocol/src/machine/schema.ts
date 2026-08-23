@@ -18,6 +18,12 @@ export type CapabilityId = z.infer<typeof CapabilityId>;
 export const MachineId = z.string().min(1);
 export type MachineId = z.infer<typeof MachineId>;
 
+/** One owner for the frozen machine wire method names used by both peers. */
+export const WireMethod = {
+  Attach: "machine.attach",
+  RunCell: "machine.run_cell",
+} as const;
+
 /** Shared by Enrollment/Offer arrays and the machine.attached event payload. */
 export function uniqueCapabilities(capabilities: string[], ctx: z.RefinementCtx): void {
   if (new Set(capabilities).size !== capabilities.length) {
@@ -78,3 +84,46 @@ export const AttachResult = z.discriminatedUnion("status", [
     .strict(),
 ]);
 export type AttachResult = z.infer<typeof AttachResult>;
+
+export const CellRequest = z
+  .object({
+    cellId: z.string().min(1),
+    code: z.string(),
+    timeoutMs: z.number().int().positive(),
+  })
+  .strict();
+export type CellRequest = z.infer<typeof CellRequest>;
+
+const CellOutput = z
+  .object({
+    stdout: z.string(),
+    stderr: z.string(),
+  })
+  .strict();
+
+/** Honest Python cell terminals: deadline expiry is never collapsed into a raise. */
+export const CellResult = z.discriminatedUnion("status", [
+  z
+    .object({
+      status: z.literal("completed"),
+      cellId: z.string().min(1),
+      output: CellOutput,
+      value: z.string().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      status: z.literal("raised"),
+      cellId: z.string().min(1),
+      output: CellOutput,
+      error: z.string(),
+    })
+    .strict(),
+  z
+    .object({
+      status: z.literal("timed_out"),
+      cellId: z.string().min(1),
+    })
+    .strict(),
+]);
+export type CellResult = z.infer<typeof CellResult>;
