@@ -11,6 +11,7 @@ type PackageKey =
   | "agent"
   | "openomni"
   | "coordinator"
+  | "machines"
   | "channels"
   | "server";
 
@@ -138,6 +139,15 @@ const RULES: Record<PackageKey, PackageRule> = {
     // Ring-2 process driver: protocol + ipc only (#462 step 1 made it
     // ledger-free; #496 moved the IPC transport into @openomni/ipc; this
     // ratchet keeps it that way — widening requires Owner sign-off).
+    allowedDeps: new Set(["@openomni/protocol", "@openomni/ipc"]),
+  },
+  machines: {
+    displayName: "machines",
+    packageJsonPath: "packages/machines/package.json",
+    packageName: "@openomni/machines",
+    // Driver band (docs/machines-and-delegation.md §2): daemon + host accept
+    // endpoint for body machines. Enrollment lookup and event sink are
+    // injected ports — no ledger, no telemetry, repo-extractable.
     allowedDeps: new Set(["@openomni/protocol", "@openomni/ipc"]),
   },
   channels: {

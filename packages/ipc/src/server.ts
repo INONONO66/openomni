@@ -9,6 +9,14 @@ function isMissingFileError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error && error.code === "ENOENT";
 }
 
+export interface IpcServerOptions {
+  /**
+   * Fires once per connection after it is torn down (close or error). The
+   * connection's in-flight requests have already been failed when this runs.
+   */
+  readonly onDisconnect?: (connectionId: string) => void;
+}
+
 type RequestHandler = (
   method: string,
   params: Record<string, unknown> | undefined,
@@ -62,6 +70,7 @@ function probeSocketLive(socketPath: string): Promise<boolean> {
 export async function createIpcServer(
   socketPath: string,
   handler: RequestHandler,
+  options: IpcServerOptions = {},
 ): Promise<IpcServer> {
   // A leftover socket file blocks Bun.listen with EADDRINUSE — but blindly
   // unlinking would steal a LIVE server's socket (new connections silently
@@ -183,6 +192,9 @@ export async function createIpcServer(
     // leaving them to age out would misreport the failure as a timeout. This
     // includes requests whose bytes were still sitting in the write queue.
     failPendingOf(id, new IpcConnectionError(reason));
+    // `state` guards double delivery: close always follows error, and the
+    // second call finds the connection already deleted.
+    if (state) options.onDisconnect?.(id);
   }
 
   function failPendingOf(connId: string, err: Error): void {

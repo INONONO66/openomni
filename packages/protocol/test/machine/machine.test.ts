@@ -143,3 +143,42 @@ describe("machine.attached event payload", () => {
     }
   });
 });
+
+describe("Machine.AttachResult", () => {
+  test("attached refuses a duplicated effective set", () => {
+    const result = Machine.AttachResult.safeParse({
+      status: "attached",
+      effectiveCapabilities: ["fs.read", "fs.read"],
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0]?.message).toBe("capabilities must be unique");
+      expect(result.error.issues[0]?.path.join(".")).toBe("effectiveCapabilities");
+    }
+  });
+
+  test("refused accepts only the enrollment refusal vocabulary", () => {
+    const result = Machine.AttachResult.safeParse({ status: "refused", reason: "bad_weather" });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0]?.code).toBe("invalid_enum_value");
+      expect(result.error.issues[0]?.path.join(".")).toBe("reason");
+    }
+  });
+
+  test("refused carries no capability set", () => {
+    const result = Machine.AttachResult.safeParse({
+      status: "refused",
+      reason: "machine_not_enrolled",
+      effectiveCapabilities: [],
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0]?.code).toBe("unrecognized_keys");
+      expect(result.error.issues[0]?.message).toBe(
+        "Unrecognized key(s) in object: 'effectiveCapabilities'",
+      );
+      expect(result.error.issues[0]?.path).toEqual([]);
+    }
+  });
+});

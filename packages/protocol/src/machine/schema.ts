@@ -57,3 +57,24 @@ export const Offer = z
   })
   .strict();
 export type Offer = z.infer<typeof Offer>;
+
+/**
+ * Host reply to a daemon's `machine.attach` wire call. `refused` is a typed
+ * outcome, not a transport error: the connection stays open and the daemon
+ * may re-offer after the Owner fixes the enrollment.
+ */
+export const AttachResult = z.discriminatedUnion("status", [
+  z
+    .object({
+      status: z.literal("attached"),
+      effectiveCapabilities: z.array(CapabilityId).superRefine(uniqueCapabilities),
+    })
+    .strict(),
+  z
+    .object({
+      status: z.literal("refused"),
+      reason: z.enum(["machine_not_enrolled", "machine_mismatch"]),
+    })
+    .strict(),
+]);
+export type AttachResult = z.infer<typeof AttachResult>;

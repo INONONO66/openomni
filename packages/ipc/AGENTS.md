@@ -29,11 +29,12 @@ Depends on `@openomni/protocol` **only** — enforced by `script/check-deps.ts`.
 - Failure classification is per connection: a dying connection rejects ITS in-flight server calls as `IpcConnectionError` immediately, even while other connections survive — never left to age out as a timeout. Response matching is scoped the same way: a response id is only honored on the connection its request was written to.
 - A malformed (non-JSON) frame costs only itself: every parseable frame in the same chunk still delivers immediately, in order. The server answers each malformed line with its own 4001 error frame and keeps the connection alive; the client stays conservative and tears the connection down — but only after draining the chunk's valid frames. An OVERSIZE frame (>16 MiB) is different by design: it is a DoS guard that resets the connection's entire decode buffer mid-frame, so after answering 4001 the server CLOSES the desynced connection (the client tears down on the FIN, failing its pendings as `IpcConnectionError` instead of burning timeouts).
 - Server writes are backpressure-safe: Bun sockets do not buffer partial writes, so every server write goes through a per-connection queue flushed on `drain`; frames arrive intact and in order regardless of frame size or reader speed. Requests whose bytes die queued fail as `IpcConnectionError` with their connection.
+- `createIpcServer` accepts an optional `onDisconnect(connectionId)` observer, fired exactly once per torn-down connection (close or error) after its in-flight requests were failed — the hook driver-band hosts (e.g. `packages/machines`) use to observe detach.
 - `createIpcServer` is async and never steals a live server's socket: an existing socket file is probed first and only unlinked when provably dead (`IpcConnectionError` otherwise). `notify()` returns `false` when it dropped the notification because no client is connected.
 
 ## CONSUMERS
 
-`packages/coordinator` (worker supervision client side; bootstrap uses `typedCall`), `apps/server/src/execution/worker-entry.ts` (worker-side server), test harnesses (`packages/openomni/test/harness/policy-echo-worker.ts`, coordinator fixtures), and the manual QA driver `apps/server/src/manual/ipc-worker-driver.ts`.
+`packages/coordinator` (worker supervision client side; bootstrap uses `typedCall`), `packages/machines` (daemon client + host server for `machine.attach`), `apps/server/src/execution/worker-entry.ts` (worker-side server), test harnesses (`packages/openomni/test/harness/policy-echo-worker.ts`, coordinator fixtures), and the manual QA driver `apps/server/src/manual/ipc-worker-driver.ts`.
 
 ## TESTS
 

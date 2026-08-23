@@ -16,6 +16,8 @@ export namespace Machine {
   export type Enrollment = Schema.Enrollment;
   export const Offer = Schema.Offer;
   export type Offer = Schema.Offer;
+  export const AttachResult = Schema.AttachResult;
+  export type AttachResult = Schema.AttachResult;
 
   export const effectiveCapabilities = Fold.effectiveCapabilities;
   export type EffectiveOutcome = Fold.EffectiveOutcome;

@@ -6,7 +6,7 @@ Last verified against `origin/main`: 2026-08-19 (paths, dependency graph, and sh
 
 OpenOmni — a single-Owner Agent OS. Agents earn autonomy through evidence, not self-report. See [Design Philosophy](docs/design-philosophy.md) (one page: three kernel primitives, two laws and a dial, four roles).
 
-The Owner talks to one Resident (a judgment partner that executes nothing), which delegates to Workers (internal agents, external AI, humans — uniformly) through one gate and isolated sessions; everything lands on one ledger. TypeScript monorepo (Bun + Turborepo) with 11 packages and 1 app (Server).
+The Owner talks to one Resident (a judgment partner that executes nothing), which delegates to Workers (internal agents, external AI, humans — uniformly) through one gate and isolated sessions; everything lands on one ledger. TypeScript monorepo (Bun + Turborepo) with 12 packages and 1 app (Server).
 
 The specification lives in [`docs/core-model.md`](docs/core-model.md) (actors/gate/ledger, roles incl. Governor and Jester, policy hook layer, three-tier vocabulary) and [`docs/architecture.md`](docs/architecture.md) (three communication verbs and package rings). Normative contract detail (guarantee split, authority evaluation, work-item/evidence contracts, Governor rules, memory port) lives in [`docs/kernel-contract.md`](docs/kernel-contract.md). The Owner-directed gateway pivot (channels = perimeter gateway, openomni = brain, SSOT single-ledger storage, engagement machine) is specified in [`docs/gateway-design.md`](docs/gateway-design.md) — stages 0–2 are wired (#718 contracts, #730 driver extraction, #736 router promotion): `packages/channels` IS the perimeter gateway, `packages/openomni` is the brain, and the two meet only in the protocol `Gateway.Deliver` contract plus ports injected by `apps/server`. ADRs are retired — absorbed into these docs; git history preserves the originals. **Design docs describe targets; `docs/implementation-status.md` is the single source of truth for what is actually wired.**
 
@@ -34,6 +34,7 @@ openomni/
 │   ├── openomni/        # Product kernel: messaging, access, orchestration, ledger/evidence gates, tools runtime
 │   ├── ipc/             # Worker-process IPC transport contract: NDJSON framing, bidirectional Unix-socket client/server, protocol errors — protocol-only deps (#496)
 │   ├── coordinator/     # Multiprocess worker driver: on-demand worker pool, supervision — protocol+ipc deps only, ports injected by the composition root
+│   ├── machines/        # Body-machine driver band: machine daemon + host accept endpoint (`machine.attach` handshake, enrollment∩offer effective fold) — protocol+ipc deps only, enrollment/event ports injected
 │   └── channels/        # Gateway (stage 2, #551/#707): Discord/Telegram/GitHub/WebSocket drivers + channel authn + perimeter router (resolve-route, wait service, #215 send kernel) — {protocol, ipc, policy, ledger} deps, S8 judgment-band confinement, observation sinks injected
 ├── turbo.json           # Build pipeline config
 └── package.json         # Workspace root (bun@1.3.6)
@@ -44,7 +45,7 @@ openomni/
 ```
 protocol  ←  policy, telemetry, ipc, placement (ring 0 → 1)
 telemetry ←  ledger, llm                      ledger adds durability
-ipc       ←  coordinator                      process driver, ledger-free
+ipc       ←  coordinator, machines            process/machine drivers, ledger-free
 protocol, ipc, policy, ledger    ←  channels  gateway drivers + router/authn (#707)
 policy, placement, llm, telemetry  ←  agent   the loop
 everything                       ←  openomni  ←  server
@@ -66,6 +67,7 @@ package's tests may reach further than its runtime code, and the gate holds
 | `ledger` | protocol, telemetry |
 | `llm` | protocol, telemetry — `src/` protocol only |
 | `coordinator` | protocol, ipc |
+| `machines` | protocol, ipc |
 | `channels` | protocol, ipc, policy, ledger — policy/ledger confined to the judgment band `src/router/` + `src/authn/` (S8 banding); the router may name only the perimeter ledger surfaces; tests may add telemetry |
 | `agent` | protocol, policy, placement, llm, telemetry — `src/` protocol, policy, placement, llm |
 | `openomni` | any except itself |
@@ -89,6 +91,7 @@ The package boundary rule is strict: product meaning belongs in `packages/openom
 | `packages/agent` | Stateless ChatAgent loop, agent policy built-ins/facade, tool invocation protocol, generic runtime primitives | OpenOmni session-backed worker lifecycle, external actor authority, channel routing, durable background/pending interaction semantics |
 | `packages/openomni` | Product kernel: messaging/routing, access control, Resident/Worker orchestration, worker lifecycle backed by session, ledger/evidence gates, tools runtime | Provider SDK behavior, raw channel transport, process supervision internals, storage adapter implementation |
 | `packages/ipc` | Worker-process IPC transport: NDJSON framing, bidirectional Unix-socket client/server (reverse server → owner-device connections included), typed transport errors | Kernel/ledger/policy imports, authorization decisions, run semantics, serializable message schemas (those stay in `protocol`) |
+| `packages/machines` | Machine daemon (offer + hold connection) and host accept endpoint: `machine.attach` wire handshake, live attachment table, attach/detach event emission through an injected sink | Enrollment storage (lookup is an injected port), capability execution semantics, kernel/ledger/policy imports |
 | `packages/coordinator` | Isolated worker process execution: spawn/slot/idle/restart/cancel, primitive run delivery, crash recovery | Actor authority, pending interactions, channel/session routing, worker grant policy, IPC transport internals (moved to `packages/ipc` in #496) |
 | `packages/channels` | Perimeter gateway (stage 2, #707): Discord/Telegram/GitHub/WebSocket drivers, envelope normalization, channel authn/trigger judgment, delivery clients, and the router band — external route resolution + `route.decided` recording, wait correlation/lifecycle (sole wait-store writer), blacklist/channel-grant/actor admission, routed pre-run authority, surface↔session map claims, #215 existing-agent send kernel (reply-grant instances, #219 egress-budget gate) | Session content, brain (`@openomni/openomni`) imports, storage engines, telemetry imports (observation sinks are injected), work placement / dispatch execution semantics (brain judgment behind the `Gateway.Deliver` seam) |
 | `apps/server` | Runtime host: config/bootstrap, channel registration, webhook/WebSocket/gateway transport wiring, connector process drivers and stored-installation wiring, server-owned MCP/custom tool wiring | PendingAsk/PendingInteraction lookup, agent/session routing, access decisions, tool selection policy, orchestration semantics, channel adapter implementations (moved to `packages/channels` in #551) |
@@ -148,6 +151,7 @@ raw channel event
 | Principal / actor identity | `packages/protocol/src/actor/` + `packages/ledger/src/actor/` + `packages/channels/src/router/actor-resolver.ts` | Schemas/storage are lower-level; inbound principal resolution is perimeter judgment in the gateway router since #707; dispatch-side actor semantics stay in `openomni` |
 | ChannelAccessRule / Blocklist | `packages/protocol/src/actor/` + `packages/ledger/src/{channel-grant,blacklist}/` | Storage lives in `ledger`; evaluation and precedence belong in `openomni` access |
 | PendingInteraction | `packages/protocol/src/communication/pending-interaction.ts` + `packages/ledger/src/pending-interaction/` + `packages/openomni/src/dispatch/pending-interaction-routing.ts` | Frozen legacy external-response correlation (#548): the store is read-only (writes throw the typed FrozenError), kernel owns match precedence via the upcast-on-read Wait view, and lifecycle transitions belong to the durable Wait primitive |
+| Machine attach (daemon + host) | `packages/machines/src/` | `attachMachineDaemon` / `createMachineHost` — `machine.attach` handshake over `@openomni/ipc`; enrollment lookup + event sink injected |
 | Coordinator (on-demand workers) | `packages/coordinator/src/worker-manager/worker-pool.ts` | `createWorkerManager(config, ports)` — spawn on demand, idle shutdown, max-active cap; verbs are `deliver`/`send`/`cancel`/`stats` (never `dispatch`), typed failures via `WorkerDeliveryError` codes |
 | Coordinator supervision | `packages/coordinator/src/worker-supervision/` | Process supervisor (`WorkerSupervisorOptions` config object; `events` sink required) |
 | Worker IPC transport | `packages/ipc/src/` | Unix socket transport, request/response framing — wire method names are frozen (Greg Young rule); standalone `@openomni/ipc` since #496, driver-band consumable |
