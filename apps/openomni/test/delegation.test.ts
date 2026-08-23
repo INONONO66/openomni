@@ -176,10 +176,10 @@ describe("inline driver", () => {
     });
   });
 
-  test("descending carries the depth, so the cap cannot be reset by recursing", async () => {
-    const depths: number[] = [];
+  test("descending carries who the child is, so nothing downstream decides it again", async () => {
+    const origins: DelegationOrigin[] = [];
     const driver = createInlineDriver(async (input) => {
-      depths.push(input.depth);
+      origins.push(input.origin);
       return "ok";
     });
     for (const parentDepth of [0, 1]) {
@@ -191,7 +191,13 @@ describe("inline driver", () => {
         new AbortController().signal,
       );
     }
-    expect(depths).toEqual([1, 2]);
+    // Both halves come from admission: the depth so the cap cannot be reset by
+    // recursing, and the role so nothing downstream gets to declare a child a
+    // worker on its own authority.
+    expect(origins).toEqual([
+      { role: "worker", depth: 1 },
+      { role: "worker", depth: 2 },
+    ]);
   });
 });
 

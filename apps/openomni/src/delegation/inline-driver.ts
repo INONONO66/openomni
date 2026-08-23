@@ -1,5 +1,5 @@
 import type { Delegation } from "@openomni/protocol";
-import type { Admitted } from "./admission";
+import type { Admitted, DelegationOrigin } from "./admission";
 import type { DelegationDriver, DriverOutcome } from "./kernel";
 
 /**
@@ -13,10 +13,12 @@ export type InlineWorkerRunner = (
     readonly instruction: string;
     readonly acceptanceCriteria: readonly string[];
     /**
-     * How deep this child sits. Carried from admission rather than recomputed,
-     * so the depth cap cannot be reset by the act of descending.
+     * Who this child runs as. Carried whole from admission rather than rebuilt
+     * downstream, so neither the role nor the depth is decided twice — the cap
+     * cannot be reset by the act of descending, and nothing else gets to
+     * declare that a delegated child is a worker.
      */
-    readonly depth: number;
+    readonly origin: DelegationOrigin;
     readonly signal: AbortSignal;
   },
 ) => Promise<string>;
@@ -33,7 +35,7 @@ export function createInlineDriver(run: InlineWorkerRunner): DelegationDriver {
         delegationId: handle.delegationId,
         instruction: admitted.request.payload.text,
         acceptanceCriteria: admitted.request.acceptanceCriteria ?? [],
-        depth: admitted.childOrigin.depth,
+        origin: admitted.childOrigin,
         signal,
       });
 

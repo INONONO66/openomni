@@ -1,7 +1,6 @@
 import { ChatAgent, type ChatAgentConfig } from "@openomni/agent";
 import type { Model, Tool } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
-import type { DelegationOrigin } from "./admission";
 import type { DelegationKernel } from "./kernel";
 import type { InlineWorkerRunner } from "./inline-driver";
 import { delegateToolSpec } from "./tool";
@@ -35,7 +34,6 @@ function instructionFor(input: Parameters<InlineWorkerRunner>[0]): string {
  */
 export function createInlineWorkerRunner(options: WorkerLoopOptions): InlineWorkerRunner {
   return async (input) => {
-    const origin: DelegationOrigin = { role: "worker", depth: input.depth };
     const tools: Tool.Spec[] = [delegateToolSpec()];
     const kernel = options.kernel();
 
@@ -43,7 +41,7 @@ export function createInlineWorkerRunner(options: WorkerLoopOptions): InlineWork
       events: Bus,
       systemPrompt: WORKER_SYSTEM_PROMPT,
       tools,
-      toolExecutor: delegationToolExecutor(kernel, origin),
+      toolExecutor: delegationToolExecutor(kernel, input.origin),
       model: options.model,
       auth: { type: "api", key: options.apiKey },
       signal: input.signal,
