@@ -258,6 +258,32 @@ describe("delegate tool", () => {
     expect(answer).toBe("delegate refused: Unrecognized key(s) in object: 'origin'");
   });
 
+  test("an assign reaches the worker carrying the criteria that define its completion", async () => {
+    let received: readonly string[] | undefined;
+    const kernel = createDelegationKernel({
+      drivers: {
+        inline: createInlineDriver((input) => {
+          received = input.acceptanceCriteria;
+          return Promise.resolve("criteria met");
+        }),
+      },
+      now: () => Date.now(),
+      newDelegationId: () => "d-assign",
+      limits: LIMITS,
+    });
+
+    const answer = await delegateToolExecutor(kernel, RESIDENT)({
+      instruction: "ship it",
+      mode: "assign",
+      scope: "inline",
+      acceptanceCriteria: ["build is green", "tests pass"],
+      timeoutMs: 3000,
+    });
+
+    expect(answer).toBe("criteria met");
+    expect(received).toEqual(["build is green", "tests pass"]);
+  });
+
   test("no_response is worded as an unknown outcome rather than a failure", async () => {
     const kernel = createDelegationKernel({
       drivers: { inline: { run: () => new Promise(() => undefined) } },
