@@ -44,9 +44,11 @@ export function exportWorkItemProjection(
   const adapter = Storage.getAdapter();
   const ledger = adapter.ledger;
   if (ledger === undefined) throw new Error("storage adapter does not implement ledger reads");
-  const attemptFacts = ledger
-    .factsByType("work_item.attempt_allocated")
-    .filter((fact) => fact.streamId === `work:${workItemId}`);
+  const ownerStream = `work:${workItemId}`;
+  const attemptFacts = [
+    ...ledger.factsByType("work_item.attempt_allocated"),
+    ...ledger.factsByType("work_item.attempt_finished"),
+  ].filter((fact) => fact.streamId === ownerStream);
   const transcriptRows =
     workItem.sessionId === undefined
       ? []

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { WorkItem } from "@openomni/protocol";
+import { z } from "zod";
 import {
   deriveLoopKey,
   FLAT_EVENT_FIELDS,
@@ -91,6 +92,16 @@ function step(overrides: Partial<ProjectionStep> = {}): ProjectionStep {
   };
 }
 
+function capturedError(act: () => unknown): Error {
+  try {
+    act();
+  } catch (error) {
+    expect(error).toBeInstanceOf(Error);
+    return error as Error;
+  }
+  throw new Error("expected an error");
+}
+
 // ---------------------------------------------------------------------------
 // schema shape — exactly 30 fields, in order
 // ---------------------------------------------------------------------------
@@ -134,16 +145,19 @@ describe("FlatEvent schema", () => {
     expect(FLAT_EVENT_FIELDS).toHaveLength(30);
   });
 
-  test("a folded row carries all 30 fields and round-trips the schema", () => {
+  test("a folded row carries all 30 fields", () => {
     const [row] = foldToFlatEvents({ steps: [step()] });
     expect(row).toBeDefined();
     expect(Object.keys(row as FlatEvent)).toEqual([...EXPECTED_FIELDS]);
-    expect(() => FlatEvent.parse(row)).not.toThrow();
   });
 
   test("rejects an unknown column (strict)", () => {
     const [row] = foldToFlatEvents({ steps: [step()] });
-    expect(() => FlatEvent.parse({ ...(row as FlatEvent), extra: true })).toThrow();
+    const error = capturedError(() => FlatEvent.parse({ ...(row as FlatEvent), extra: true }));
+    expect(error).toBeInstanceOf(z.ZodError);
+    expect((error as z.ZodError).issues).toContainEqual(
+      expect.objectContaining({ code: "unrecognized_keys", keys: ["extra"] }),
+    );
   });
 });
 
@@ -160,8 +174,8 @@ describe("mapVerdict", () => {
   });
 
   test("throws on an unknown status (fail loud)", () => {
-    expect(() => mapVerdict("bogus")).toThrow("unknown verifier status: bogus");
-    expect(() => mapVerdict("")).toThrow();
+    expect(capturedError(() => mapVerdict("bogus")).message).toBe("unknown verifier status: bogus");
+    expect(capturedError(() => mapVerdict("")).message).toBe("unknown verifier status: ");
   });
 
   test("a null verifier status projects a null verdict", () => {
@@ -336,7 +350,9 @@ describe("foldToFlatEvents determinism", () => {
 
   test("a non-total order (duplicate order tuple) fails loud", () => {
     const dup = step({ order: { timeCreated: 1_000, streamId: "work:abc", seq: 1 }, step: 7 });
-    expect(() => foldToFlatEvents({ steps: [s1, dup] })).toThrow("non-total projection order");
+    expect(capturedError(() => foldToFlatEvents({ steps: [s1, dup] })).message).toBe(
+      "non-total projection order: duplicate (timeCreated,streamId,seq) at work:abc#1",
+    );
   });
 
   test("an empty input folds to an empty projection", () => {

@@ -65,7 +65,11 @@ function workItem(): WorkItem.Info {
     changedFiles: [],
     blockers: [],
     evidence: [],
-    completionContract: { version: 1, revision: "1", basisRef: `${workItemId}:attempt:1` },
+    completionContract: {
+      version: 1,
+      revision: "1",
+      basisRef: `${workItemId}:attempt:1`,
+    },
     completionFacts: {
       ...WorkItemSchema.emptyCompletionFacts(),
       criteria: [
@@ -94,6 +98,20 @@ function allocation(
   };
 }
 
+function terminal(
+  attemptId: string,
+  endedAt: number,
+  seq: number,
+): Ledger.RecordedFact {
+  return {
+    streamId: "work:wi-projection",
+    seq,
+    type: "work_item.attempt_finished",
+    data: { attemptId, outcome: "succeeded", endedAt, revision: seq },
+    timeCreated: endedAt,
+  };
+}
+
 function assistantMessage(): Message.AssistantMessage {
   return {
     id: "message-1",
@@ -110,11 +128,16 @@ function assistantMessage(): Message.AssistantMessage {
   };
 }
 
-function row(fact: Transcript.Fact, timeCreated: number, seq: number): Storage.TranscriptFactRow {
+function row(
+  fact: Transcript.Fact,
+  timeCreated: number,
+  seq: number,
+): Storage.TranscriptFactRow {
   return {
     sessionID: "session-1",
     seq,
-    messageID: fact.type === "message.created" ? fact.message.id : fact.messageId,
+    messageID:
+      fact.type === "message.created" ? fact.message.id : fact.messageId,
     attemptID: fact.attemptId,
     type: fact.type,
     data: JSON.stringify(fact),
@@ -147,14 +170,25 @@ function capturedError(act: () => unknown): ProjectionAssemblyError {
 }
 
 describe("assembleProjectionInput", () => {
-  test("attributes steps to the latest allocated WorkItem attempt window", () => {
+  test("attributes only rows inside this WorkItem's recorded attempt windows", () => {
     const first = attempt("attempt-1", 1);
     const second = attempt("attempt-2", 2);
     const input = assembleProjectionInput(
       {
         workItem: workItem(),
-        attemptFacts: [allocation(first, 10, 2), allocation(second, 30, 3)],
-        transcriptRows: [row(created, 20, 1), row(created, 40, 2)],
+        attemptFacts: [
+          allocation(first, 10, 2),
+          terminal(first.attemptId, 25, 3),
+          allocation(second, 30, 4),
+          terminal(second.attemptId, 45, 5),
+        ],
+        transcriptRows: [
+          row(created, 5, 1),
+          row(created, 20, 3),
+          row(created, 27, 5),
+          row(created, 30, 7),
+          row(created, 50, 9),
+        ],
       },
       createInMemorySidecarStore(),
     );
@@ -163,13 +197,25 @@ describe("assembleProjectionInput", () => {
       first.attemptId,
       second.attemptId,
     ]);
+    expect(input.steps.map((step) => step.step)).toEqual([3, 7]);
   });
 
-  test("throws a typed error when a step predates the first allocation", () => {
-    const error = capturedError(() =>
-      assembleProjectionInput(materials([row(created, 5, 1)]), createInMemorySidecarStore()),
+  test("excludes rows before the first allocation as foreign session material", () => {
+    const input = assembleProjectionInput(
+      materials([row(created, 5, 1)]),
+      createInMemorySidecarStore(),
     );
-    expect(error.reason).toBe("step_before_first_attempt");
+    expect(input).toEqual({ steps: [] });
+  });
+
+  test("copies the recorded message agent", () => {
+    const input = assembleProjectionInput(
+      materials([row(created, 20, 4)]),
+      createInMemorySidecarStore(),
+    );
+    expect(input.steps[0]?.agent).toBe("agent-1");
+    expect(input.steps[0]?.step).toBe(4);
+    expect(input.steps[0]?.order.seq).toBe(4);
   });
 
   test("maps tool input and completed output through the sidecar", () => {
@@ -204,9 +250,63 @@ describe("assembleProjectionInput", () => {
     if (step?.observationHash === null || step?.observationHash === undefined) {
       throw new Error("expected observation digest");
     }
-    expect(store.getText(step.observationHash as Parameters<typeof store.getText>[0])).toBe(
-      JSON.stringify("/tmp"),
+    expect(
+      store.getText(
+        step.observationHash as Parameters<typeof store.getText>[0],
+      ),
+    ).toBe("/tmp");
+  });
+
+  test("carries tracked tool identity onto the completed observation row", () => {
+    const store = createInMemorySidecarStore();
+    const appended: Transcript.Fact = {
+      type: "part.appended",
+      attemptId: "llm-attempt",
+      messageId: "message-1",
+      part: {
+        id: "tool-advanced",
+        sessionID: "session-1",
+        messageID: "message-1",
+        type: "tool",
+        callID: "call-advanced",
+        tool: "bash",
+        state: { status: "pending", input: { command: "pwd" } },
+      },
+    };
+    const advanced: Transcript.Fact = {
+      type: "part.advanced",
+      attemptId: "llm-attempt",
+      messageId: "message-1",
+      partId: "tool-advanced",
+      transition: { to: "completed", at: 22, output: "/tmp" },
+    };
+    const input = assembleProjectionInput(
+      materials([
+        row(created, 18, 1),
+        row(appended, 20, 3),
+        row(advanced, 22, 9),
+      ]),
+      store,
     );
+    const observation = input.steps[2];
+
+    expect(observation).toMatchObject({
+      step: 9,
+      agent: "agent-1",
+      action: "bash",
+      actionArgs: { command: "pwd" },
+    });
+    if (
+      observation?.observationHash === null ||
+      observation?.observationHash === undefined
+    ) {
+      throw new Error("expected observation digest");
+    }
+    expect(
+      store.getText(
+        observation.observationHash as Parameters<typeof store.getText>[0],
+      ),
+    ).toBe("/tmp");
   });
 
   test("maps text and message-finished telemetry", () => {
@@ -228,7 +328,12 @@ describe("assembleProjectionInput", () => {
       messageId: "message-1",
       at: 30,
       finish: "length",
-      usage: { input: 12, output: 7, reasoning: 3, cache: { read: 1, write: 0 } },
+      usage: {
+        input: 12,
+        output: 7,
+        reasoning: 3,
+        cache: { read: 1, write: 0 },
+      },
     };
     const input = assembleProjectionInput(
       materials([row(text, 20, 1), row(finished, 30, 2)]),
@@ -236,7 +341,11 @@ describe("assembleProjectionInput", () => {
     );
 
     expect(input.steps[0]?.thought).toBe("thinking");
-    expect(input.steps[1]).toMatchObject({ inTokens: 12, outTokens: 7, finishReason: "length" });
+    expect(input.steps[1]).toMatchObject({
+      inTokens: 12,
+      outTokens: 7,
+      finishReason: "length",
+    });
   });
 
   test("returns empty input for empty material and fails loudly on corrupt JSON", () => {
@@ -249,7 +358,10 @@ describe("assembleProjectionInput", () => {
 
     const corrupt = { ...row(created, 20, 1), data: "{" };
     const error = capturedError(() =>
-      assembleProjectionInput(materials([corrupt]), createInMemorySidecarStore()),
+      assembleProjectionInput(
+        materials([corrupt]),
+        createInMemorySidecarStore(),
+      ),
     );
     expect(error.reason).toBe("corrupt_fact");
   });

@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { Message, Transcript } from "@openomni/protocol";
 import { WorkItem } from "@openomni/protocol";
-import { Session, Storage, TranscriptStore, WorkItemStore } from "@openomni/ledger";
+import {
+  Session,
+  Storage,
+  TranscriptStore,
+  WorkItemAttemptRun,
+  WorkItemStore,
+} from "@openomni/ledger";
 import { ProjectionExportError, exportWorkItemProjection } from "./export";
 import { FLAT_EVENT_FIELDS } from "./flat-event";
 import { createInMemorySidecarStore } from "./sidecar-store";
@@ -35,14 +41,14 @@ function attemptIdentity() {
   };
 }
 
-function assistant(sessionID: string): Message.AssistantMessage {
+function assistant(sessionID: string, suffix = "export"): Message.AssistantMessage {
   return {
-    id: "message-export",
+    id: `message-${suffix}`,
     sessionID,
     role: "assistant",
     time: { created: Date.now() },
     parentID: "user-1",
-    modelID: "model-1",
+    modelID: `model-${suffix}`,
     providerID: "test",
     agent: "agent-1",
     path: { cwd: "/tmp", root: "/tmp" },
@@ -51,41 +57,42 @@ function assistant(sessionID: string): Message.AssistantMessage {
   };
 }
 
-function transcriptFacts(sessionID: string): Transcript.Fact[] {
-  const message = assistant(sessionID);
+function transcriptFacts(sessionID: string, suffix = "export"): Transcript.Fact[] {
+  const message = assistant(sessionID, suffix);
+  const llmAttemptId = `llm-${suffix}`;
   return [
-    { type: "message.created", attemptId: "llm-export", message },
+    { type: "message.created", attemptId: llmAttemptId, message },
     {
       type: "part.appended",
-      attemptId: "llm-export",
+      attemptId: llmAttemptId,
       messageId: message.id,
       part: {
-        id: "tool-export",
+        id: `tool-${suffix}`,
         sessionID,
         messageID: message.id,
         type: "tool",
-        callID: "call-export",
+        callID: `call-${suffix}`,
         tool: "bash",
         state: { status: "pending", input: { command: "pwd" } },
       },
     },
     {
       type: "part.advanced",
-      attemptId: "llm-export",
+      attemptId: llmAttemptId,
       messageId: message.id,
-      partId: "tool-export",
+      partId: `tool-${suffix}`,
       transition: { to: "running", at: Date.now() },
     },
     {
       type: "part.advanced",
-      attemptId: "llm-export",
+      attemptId: llmAttemptId,
       messageId: message.id,
-      partId: "tool-export",
+      partId: `tool-${suffix}`,
       transition: { to: "completed", at: Date.now(), output: "/tmp", title: "pwd" },
     },
     {
       type: "message.finished",
-      attemptId: "llm-export",
+      attemptId: llmAttemptId,
       messageId: message.id,
       at: Date.now(),
       finish: "stop",
@@ -149,9 +156,106 @@ describe("exportWorkItemProjection", () => {
     expect(first.sidecarDigests).toHaveLength(1);
     const digest = first.sidecarDigests[0];
     if (digest === undefined) throw new Error("expected sidecar digest");
-    expect(sidecar.getText(digest as Parameters<typeof sidecar.getText>[0])).toBe(
-      JSON.stringify("/tmp"),
-    );
+    expect(sidecar.getText(digest as Parameters<typeof sidecar.getText>[0])).toBe("/tmp");
+  });
+
+  test("exports two WorkItems sharing one session as correct disjoint windows", async () => {
+    const originalNow = Date.now;
+    let now = 10;
+    Date.now = () => now;
+    try {
+      const session = Session.create({
+        traceId: "trace-shared",
+        title: "shared projection session",
+        model: { providerID: "test", modelID: "model-shared" },
+      });
+      now = 20;
+      const first = await WorkItemStore.create(
+        {
+          name: "first projection",
+          sourceMessageId: "source-first",
+          sourceChannel: "test",
+          sessionId: session.id,
+          workSessionId: session.id,
+          workerRunId: "run-first",
+          executorKind: "internal_chat_agent",
+          intent: "test",
+          goal: "export first window",
+          acceptanceCriteria: ["the first export is disjoint"],
+        },
+        "trace-shared",
+      );
+      now = 30;
+      await WorkItemStore.start(first.workItemId, "trace-shared");
+      now = 40;
+      const firstAllocation = await WorkItemStore.allocateAttempt(
+        first.workItemId,
+        attemptIdentity(),
+        "trace-shared",
+      );
+      if (firstAllocation === undefined) throw new Error("expected first allocation");
+      now = 50;
+      for (const fact of transcriptFacts(session.id, "first")) {
+        TranscriptStore.record(session.id, fact);
+      }
+      now = 60;
+      await WorkItemAttemptRun.finish(session.id, "run-first", "succeeded", "trace-shared", {
+        endedAt: now,
+      });
+
+      now = 100;
+      const second = await WorkItemStore.create(
+        {
+          name: "second projection",
+          sourceMessageId: "source-second",
+          sourceChannel: "test",
+          sessionId: session.id,
+          workSessionId: session.id,
+          workerRunId: "run-second",
+          executorKind: "internal_chat_agent",
+          intent: "test",
+          goal: "export second window",
+          acceptanceCriteria: ["the second export is disjoint"],
+        },
+        "trace-shared",
+      );
+      now = 110;
+      await WorkItemStore.start(second.workItemId, "trace-shared");
+      now = 120;
+      const secondAllocation = await WorkItemStore.allocateAttempt(
+        second.workItemId,
+        attemptIdentity(),
+        "trace-shared",
+      );
+      if (secondAllocation === undefined) throw new Error("expected second allocation");
+      now = 130;
+      for (const fact of transcriptFacts(session.id, "second")) {
+        TranscriptStore.record(session.id, fact);
+      }
+      now = 140;
+      await WorkItemAttemptRun.finish(session.id, "run-second", "succeeded", "trace-shared", {
+        endedAt: now,
+      });
+
+      const sidecar = createInMemorySidecarStore();
+      const firstExport = exportWorkItemProjection(first.workItemId, sidecar);
+      const secondExport = exportWorkItemProjection(second.workItemId, sidecar);
+
+      expect(firstExport.rows).toHaveLength(5);
+      expect(secondExport.rows).toHaveLength(5);
+      expect(firstExport.rows.map((row) => row.step)).toEqual([1, 2, 3, 4, 5]);
+      expect(secondExport.rows.map((row) => row.step)).toEqual([6, 7, 8, 9, 10]);
+      expect(firstExport.rows.find((row) => row.model !== null)?.model).toBe("model-first");
+      expect(secondExport.rows.find((row) => row.model !== null)?.model).toBe("model-second");
+      expect(
+        firstExport.rows.every((row) => row.attempt_id === firstAllocation.attempt.attemptId),
+      ).toBe(true);
+      expect(
+        secondExport.rows.every((row) => row.attempt_id === secondAllocation.attempt.attemptId),
+      ).toBe(true);
+    } finally {
+      Date.now = originalNow;
+    }
   });
 
   test("throws a typed not-found error", () => {
