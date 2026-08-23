@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787501141797,
+  "lastUpdate": 1787505690614,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -60965,6 +60965,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 511043,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "86672cf05a54a637594affcdf7ac87088f2247e8",
+          "message": "Stage 5b: code-mode tool bridge — tool.<name>() from inside a cell (#779)\n\n* feat(machines): let a cell call host tools in one round trip (#778)\n\nStage 5b of docs/machines-and-delegation.md §5. A running cell calls\ntool.<name>(**kwargs), the daemon forwards it to the host over the same\nattachment as machine.call_tool, and the interpreter blocks until the answer\ncomes back — so one cell replaces N tool round trips, which is the whole\npoint of code mode.\n\nThe host does not re-implement the placement gate. Its callTool port is\ninjected by the composition root, which supplies the same placement-gated\nexecutor the model-facing catalog uses, so a tool the fold refused cannot be\nreached by spelling its name in code. Only an attached connection may reach\nthe tool channel; the attachment table is the authority.\n\nA refusal or host-side failure becomes a catchable ToolError in the cell. A\ncell blocked on a tool keeps its deadline, so a slow tool cannot wedge the\ninterpreter. The driver reads with readline() rather than iterating stdin,\nbecause the iterator's read-ahead would swallow the tool answer.\n\nAlso fills a gap 5a left: packages/protocol/src/ipc/AGENTS.md documented no\nmachine wire methods at all.\n\n* test(machines): pin the stray-tool-answer guard, withdraw an unproven claim\n\nTwo follow-ups from mutation testing this slice.\n\nA cell can leave a tool call in flight by making it from a background thread\nand returning first. The interpreter has one stdin channel, so delivering that\nlate answer while another cell owns the interpreter hands the successor a value\nit never asked for. The guard in answerToolCall already prevented it, but\nnothing tested it: removing the guard crashes the kernel outright, and the\nsuite stayed green. Now it does not.\n\nThe read loop's comment claimed iteration's read-ahead would swallow tool\nanswers. Reverting to 'for _line in sys.stdin:' faithfully, every test still\npasses — cells are serialized, so the outer request read never overlaps an\nin-cell answer read. readline() stays because it keeps both reads on this\nstream in one style; the comment now says that rather than asserting a bug I\ncould not reproduce.\n\n* feat(machines): bind each tool call to a cell the host dispatched (#778)\n\nAn attached daemon could call machine.call_tool with any cellId, including one\nthat matched no live cell, and the host served it. That is not a privilege\nescalation — the same daemon can run cells, and the callTool port is already\nplacement-gated — but it made cellId a decorative field the daemon asserts\nrather than a fact the host can stand behind, so anything attributing a tool\ncall to a cell was forgeable.\n\nThe host now tracks the cells it has in flight per connection and serves a tool\ncall only for one of them. This is the host-side mirror of the kernel's\nstray-answer guard: a call leaking out of a cell that already settled is\nrefused here as well.\n\n* test(machines): prove a cell is retired, not merely unknown\n\nThe in-flight binding needed a test that a settled cellId stops working. The\nfirst attempt replayed it from a second connection and passed — but so did the\nmutation that never retires the cell, because inFlight is keyed by connection\nand the replay connection had no cells at all. It was testing per-connection\nisolation while claiming to test retirement.\n\nReplaying from the connection that ran the cell needs that connection to answer\nRunCell itself, so the test stands up a small daemon over the ipc client rather\nthan the real one. Removing the retirement now fails exactly this test, which\nis also what a background thread leaking a tool call after its cell returned\nlooks like from the host's side.\n\n* test(machines): pin what a superseded daemon may still do\n\nA second daemon claiming the same machineId detaches the first. A cell already\nrunning on that connection keeps going, but its remaining tool calls are\nrefused — it finishes without tools rather than hanging on an answer that will\nnever arrive. That was emergent; now it is deliberate and tested.\n\nAlso label the in-flight cleanup on detach for what it is. Removing it fails no\ntest, because the attachment check refuses a detached connection first; its\njob is to stop an empty set per dead connection from accumulating. The comment\nsays so, so nobody later reads it as the authorization step.",
+          "timestamp": "2026-08-24T02:20:20+09:00",
+          "tree_id": "125e38a5a9d9dcffac18e5b71df08e7b93be377b",
+          "url": "https://github.com/INONONO66/openomni/commit/86672cf05a54a637594affcdf7ac87088f2247e8"
+        },
+        "date": 1787505690173,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 501,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 679,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6227,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10416,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2684,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3088,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2525,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16318,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8673,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1030,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 938,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1576,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 52,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1598,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 782,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 43670,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2142,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 543865,
             "unit": "ns/op"
           }
         ]
