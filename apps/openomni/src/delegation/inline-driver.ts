@@ -7,8 +7,8 @@ import type { DelegationDriver, DriverOutcome } from "./kernel";
  * owns delegation shape rather than agent construction — the app already
  * knows how to build a loop, and the driver should not learn that twice.
  */
-export interface InlineWorkerRunner {
-  (input: {
+export type InlineWorkerRunner = (
+  input: {
     readonly delegationId: string;
     readonly instruction: string;
     readonly acceptanceCriteria: readonly string[];
@@ -18,8 +18,8 @@ export interface InlineWorkerRunner {
      */
     readonly depth: number;
     readonly signal: AbortSignal;
-  }): Promise<string>;
-}
+  },
+) => Promise<string>;
 
 /**
  * The inline transport: a child loop in this process, with its own session.

@@ -1,4 +1,4 @@
-import { Delegation } from "@openomni/protocol";
+import type { Delegation } from "@openomni/protocol";
 import { type Admitted, type AdmissionLimits, admit, type DelegationOrigin } from "./admission";
 
 /**
@@ -27,7 +27,7 @@ export interface DelegationKernelOptions {
   readonly limits?: AdmissionLimits;
 }
 
-export type DelegationResult =
+type DelegationResult =
   | { readonly refused: string }
   | { readonly handle: Delegation.Handle; readonly settled: Delegation.Settled };
 
