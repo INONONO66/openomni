@@ -24,6 +24,8 @@ export * from "./ipc/index.js";
 export * from "./worker-bootstrap/index.js";
 export * from "./work-item/index.js";
 export * from "./wait/index.js";
+export * from "./machine/index.js";
+export * from "./delegation/index.js";
 export * from "./engagement/index.js";
 export * from "./transcript/index.js";
 export * from "./ledger/index.js";

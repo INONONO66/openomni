@@ -124,6 +124,14 @@ Claims that are actually enforced in code today — docs may say "cannot" only a
 
 Role-specific judgment remains partly userland: Resident delegation choices, session hygiene, evidence-over-self-report framing, and tool restraint still rely on `packages/openomni/src/agents/resident/prompt/` until #218 attaches the explicit Resident policy plan and judgment-only catalog. The shared policy interception plane itself is production code and applies across actor loops and boundaries.
 
+## Machines and delegation (docs/machines-and-delegation.md)
+
+| Component | Status | Code | Notes |
+| --- | --- | --- | --- |
+| Machine contracts (`Machine.Enrollment`/`Offer`, `effectiveCapabilities` fold, capability grammar, attach events) | 🔌 | `packages/protocol/src/machine/` | Contracts only — no producer or consumer. The daemon (driver-band `packages/machines`), enrollment storage, and attach admission are planned |
+| Delegation contracts (`WorkerAddress`, `Request`/`Handle`/`Settled`, `delivery_failed`≠`no_response` terminals, events) | 🔌 | `packages/protocol/src/delegation/` | Contracts only — the DelegationKernel, its lane drivers, and the agent-loop `DelegationPort` are planned. Existing worker.spawn/child_agent/resident.ask lanes are untouched |
+| Tool placement axis (`Tool.Placement`, `Spec.placement`/`Spec.requires`) | 🔌 | `packages/protocol/src/tool/index.ts` | Additive-optional; no catalog resolver reads them yet (placement machine axis is planned). Mutation axis stays the existing `safe` field |
+
 ## Known schema/doc debt
 
 | Item | Action |
