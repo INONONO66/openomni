@@ -16,10 +16,15 @@ export namespace Storage {
     item: WorkItem.Info,
   ) => boolean;
 
-  /** One stored transcript fact: session-stream seq + the fact's JSON bytes. */
+  /** One stored transcript fact in immutable session-stream order. */
   export type TranscriptFactRow = {
+    sessionID: string;
     seq: number;
+    messageID: string;
+    attemptID: string;
+    type: string;
     data: string;
+    timeCreated: number;
   };
 
   export interface Adapter {

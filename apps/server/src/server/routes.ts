@@ -8,7 +8,12 @@ import {
   type Storage as ProtocolStorage,
   WorkItem,
 } from "@openomni/protocol";
-import { EffectRefusal, type EffectReconciler, type EffectService } from "@openomni/openomni";
+import {
+  EffectRefusal,
+  type EffectReconciler,
+  type EffectService,
+  Projection,
+} from "@openomni/openomni";
 import { BusQuery, EffectStore, EffectStoreError, Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 
@@ -57,6 +62,10 @@ type RouterOptions = {
   effects?: {
     service: EffectService;
     reconciler: Pick<EffectReconciler, "reconcile">;
+  };
+  /** #493 deterministic WorkItem projection export surface. */
+  projections?: {
+    export(workItemId: string): Projection.ProjectionExport;
   };
 };
 
@@ -161,6 +170,7 @@ export function createRouter(
   });
   registerAdminLedgerRoutes(app, options);
   registerAdminEffectRoutes(app, options);
+  registerAdminProjectionRoutes(app, options);
 
   if (githubWebhookHandler) {
     app.post("/github/webhook", async (c) => githubWebhookHandler(c.req.raw));
@@ -322,6 +332,48 @@ function registerAdminEffectRoutes(app: Hono<Env>, options: RouterOptions): void
       });
     }),
   );
+}
+
+/** #493 authenticated projection export under the shared fail-closed admin gate. */
+function registerAdminProjectionRoutes(app: Hono<Env>, options: RouterOptions): void {
+  const projections = options.projections;
+  if (projections === undefined) return;
+
+  app.get("/admin/projections/work-items/:workItemId/export", (c) =>
+    respondWithProjectionRead(c, () => {
+      const exported = projections.export(c.req.param("workItemId"));
+      return c.json({
+        workItemId: exported.workItemId,
+        rowCount: exported.rows.length,
+        sidecarDigests: exported.sidecarDigests,
+        jsonl: exported.jsonl,
+      });
+    }),
+  );
+}
+
+function respondWithProjectionRead(c: Context<Env>, read: () => Response): Response {
+  try {
+    return read();
+  } catch (error) {
+    if (
+      error instanceof Projection.ProjectionExportError &&
+      error.reason === "work_item_not_found"
+    ) {
+      return c.json({ error: "WorkItem not found" }, 404);
+    }
+    Bus.publish(
+      Operational.Events.Error,
+      Operational.envelope({
+        traceId: c.get("requestId"),
+        component: "server",
+        msg: "admin projection export failed",
+        error: error instanceof Error ? error.message : String(error),
+        context: { path: c.req.path },
+      }),
+    );
+    return c.json({ error: "Projection export unavailable" }, 503);
+  }
 }
 
 async function respondWithEffectWrite(

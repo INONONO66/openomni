@@ -54,7 +54,7 @@ src/
 │   ├── custom/           # CustomToolProvider — user-defined tool provider
 │   └── mcp/              # McpToolProvider — MCP-backed tool provider
 └── server/
-    └── routes.ts         # createRouter(githubWebhookHandler) — Hono app (health, /github/webhook, …)
+    └── routes.ts         # createRouter(githubWebhookHandler) — Hono app (health, /github/webhook, authenticated /admin/* ledger/effects/projections)
 ```
 
 Channel adapter implementations (discord/, telegram/, github/, websocket, authn, support helpers) moved to `packages/channels` (#551, gateway stage 1), and the perimeter router (resolveRoute external arms, wait service, #215 send kernel) followed at stage 2 (#707/#736); this app keeps only driver registration in `bootstrap/channels.ts` and router composition in `bootstrap/index.ts`.
@@ -73,7 +73,7 @@ OpenOmni always runs inbound execution through the coordinator. `OPENOMNI_MODE=l
 7. `createBrainEngine({ coordinator, residentRuntime, agentResolver, dispatchRuntime, externalAgentResolver, claimSurface })` — the brain's Deliver consumer + internal-route arm; internal surface-session claims cross the gateway router's `claimSurface` port (#708).
 8. `createGatewayRouter({ sink: Bus.publish, deliver: ingressEngine.deliver, messaging: { deliveryRoutes, grants, replyGrantRules, budgets } })` (#707 stage 2) — perimeter routing + wait service + the #215 send kernel; then `routingHandler = createMessageHandler({ ingress: gatewayRouter })`.
 9. `createChannelAdapters(config, routingHandler, deliveryRoutes)` — attach Discord / Telegram / GitHub / WebSocket (adapters fill the router's delivery-route map); `registerServerMessaging(...)` records the send-seam boot receipt.
-10. `createRouter(githubWebhookHandler)` + `Bun.serve()` — HTTP + WebSocket endpoints.
+10. Compose the archive-adjacent projection sidecar, then `createRouter(githubWebhookHandler)` + `Bun.serve()` — HTTP + WebSocket endpoints, including authenticated WorkItem projection export.
 11. Start each channel (`channel.start()` in parallel).
 12. `runRecovery(routingHandler, coordinator, traceId)` — resume sessions interrupted before last shutdown.
 13. `CronJobRunner.start({ fire: (job) => CronAdapter.fire(job, ingressEngine) })` — reload persisted schedules and fire due cron jobs through the injected ingress engine instance (#549).

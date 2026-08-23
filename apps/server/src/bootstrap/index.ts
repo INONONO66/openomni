@@ -17,6 +17,7 @@ import {
   SystemToolProvider,
   type BrainEngine,
   type DispatchRuntime,
+  Projection,
 } from "@openomni/openomni";
 import {
   createGatewayRouter,
@@ -334,6 +335,9 @@ export async function main(options: MainOptions = {}): Promise<void> {
   const mode = "coordinator";
   // #492: manifest composition + finish reconciliation + admin drive surface.
   const effectRuntime = assembleEffectRuntime();
+  const projectionSidecar = Projection.createFilesystemSidecarStore(
+    join(dirname(config.storage.dbPath), "projection-sidecar"),
+  );
   const app = createRouter(githubWebhookHandler, {
     observabilityToken: config.server.wsToken,
     // #510 D3: read-only ledger inspection; denies 401 until
@@ -342,6 +346,9 @@ export async function main(options: MainOptions = {}): Promise<void> {
     // D2a artifact convention: the manifest lives beside the database file.
     ledgerArchiveManifestPath: join(dirname(config.storage.dbPath), "ledger-archive-manifest.json"),
     effects: { service: effectRuntime.service, reconciler: effectRuntime.reconciler },
+    projections: {
+      export: (workItemId) => Projection.exportWorkItemProjection(workItemId, projectionSidecar),
+    },
   });
   const server = await startInboundSurfacesAfterRecovery({
     recover: () =>

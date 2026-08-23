@@ -98,6 +98,9 @@ export type {
 // namespace; the entry re-export keeps them public until archived replay lands)
 export * as VerifierConformance from "./evidence/verifier-conformance";
 
+// #493 deterministic recorded-fact projection, JSONL export, and sidecars.
+export * as Projection from "./projection";
+
 // Dispatch runtime (openomni product runtime for protocol Command submits)
 export {
   DEFAULT_DISPATCH_MODEL,
