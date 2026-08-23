@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787489364589,
+  "lastUpdate": 1787492109310,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -60623,6 +60623,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 397601,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b42dd1abd4f343c184fdcd0c469cf921fcd73627",
+          "message": "feat(apps/openomni): clean-room Resident chat slice 1 (#773)\n\n* feat(apps/openomni): clean-room Resident chat slice 1\n\nNew apps/openomni: pure Resident chat loop over the channels gateway --\nWebSocket driver -> GatewayRouter.ingest -> routed Gateway.Deliver ->\nChatAgent single turn (no tools) -> session/message/part persistence ->\nreply writeback via the driver return path. No memory, no delegation, no\ncoordinator, no @openomni/openomni import (clean-room fence enforced in\nscript/check-deps.ts via forbiddenDeps).\n\nE2E test boots the app on an ephemeral port with a deterministic injected\nLLM and a temp SQLite db, round-trips a real ws client message, and reads\npersisted messages back through the ledger.\n\n* fix(apps/openomni): fail closed on non-loopback ws bind without upgrade token\n\nReview round 1 blocker: every ws sender is granted owner tier, and the\nchannels websocket authn allows unauthenticated upgrades when no token is\nconfigured, so OPENOMNI_WS_HOST=<non-loopback> exposed owner-tier ingress\nto the network with no way to secure it.\n\n- config: OPENOMNI_WS_TOKEN; loadConfig refuses a non-loopback host\n  without it (single enforcement layer, pinned by config.test.ts)\n- bootstrap: pass the token to WebSocketHandler; drop the decorative\n  Response(101) fallback after handleUpgrade (undefined = upgraded,\n  Response = denied); assert the bound TCP port\n- e2e: clients authenticate via ?token=; wrong-token upgrade rejection\n  pinned; SurfaceKey claim asserted (review NIT)\n\n* fix(apps/openomni): enforce ws exposure invariant at startOpenOmni\n\nReview round 2 blocker: the fail-closed check lived only in loadConfig,\nso injected config (startOpenOmni({ config })) could bind a non-loopback\nhost without a token and reach owner-tier ingress unauthenticated.\n\nMove the invariant to assertWsExposure, called by startOpenOmni before\nany initialization/binding -- the single enforcement layer, now covering\nboth the env path and injected config. Pinned: direct guard tests (incl.\nempty-string token) and a startOpenOmni injected-config refusal test.",
+          "timestamp": "2026-08-23T22:34:00+09:00",
+          "tree_id": "508f735015a2a5d295572d77128e1585676adf23",
+          "url": "https://github.com/INONONO66/openomni/commit/b42dd1abd4f343c184fdcd0c469cf921fcd73627"
+        },
+        "date": 1787492108090,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 468,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 658,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6190,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9424,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2614,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2953,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2469,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16269,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8348,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1048,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 942,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1555,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1531,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 794,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 44030,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2316,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 516368,
             "unit": "ns/op"
           }
         ]
