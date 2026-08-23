@@ -12,12 +12,17 @@ export namespace Machine {
   export type CapabilityId = Schema.CapabilityId;
   export const MachineId = Schema.MachineId;
   export type MachineId = Schema.MachineId;
+  export const WireMethod = Schema.WireMethod;
   export const Enrollment = Schema.Enrollment;
   export type Enrollment = Schema.Enrollment;
   export const Offer = Schema.Offer;
   export type Offer = Schema.Offer;
   export const AttachResult = Schema.AttachResult;
   export type AttachResult = Schema.AttachResult;
+  export const CellRequest = Schema.CellRequest;
+  export type CellRequest = Schema.CellRequest;
+  export const CellResult = Schema.CellResult;
+  export type CellResult = Schema.CellResult;
 
   export const effectiveCapabilities = Fold.effectiveCapabilities;
   export type EffectiveOutcome = Fold.EffectiveOutcome;

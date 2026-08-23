@@ -50,9 +50,13 @@ const methods = {
    * carries no auth token — the Unix socket is the trust boundary; remote
    * transports add authentication as an additive field when they land.
    */
-  "machine.attach": {
+  [Machine.WireMethod.Attach]: {
     params: Machine.Offer,
     result: Machine.AttachResult,
+  },
+  [Machine.WireMethod.RunCell]: {
+    params: Machine.CellRequest,
+    result: Machine.CellResult,
   },
   "coordinator.spawn_run": {
     /**
