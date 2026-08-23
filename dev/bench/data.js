@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787505690614,
+  "lastUpdate": 1787510643713,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -61079,6 +61079,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 543865,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "36fde77f8b46a77d3f70ebb9f6751e3c2fffe1f8",
+          "message": "Delegation kernel: admission, deadline settlement, and the inline driver (#781)\n\n* feat(openomni-app): delegation kernel with admission, deadlines, and an inline driver\n\nThe Resident can now hand work to a worker. Admission is the single owner of\nwho may commission whom: a Worker may open a same-domain inline child, but\nindependent work is the Resident's call. It also owns turning an address (who)\ninto a transport (how), so drivers own only the wire.\n\nThe origin is bound to the loop that holds the tool rather than passed as an\nargument, so a model cannot assert its own authority. Inline chains carry\ntheir depth down from admission and stop at a cap, because the Worker rule\nalone permits an endless chain and a deadline bounds wall-clock, not fan-out.\n\nSilence past the deadline settles no_response, stamped at the deadline instant\nand worded as an unknown outcome — not as a worker who failed to act. A\ntransport with no driver settles delivery_failed, which the contract keeps\ndistinct from silence; asking for independent work is therefore admitted and\nthen honestly reported as undelivered until that driver lands.\n\nStage 6 of the design doc is struck rather than implemented: it planned to\nextract a DelegationPort from the agent loop, and the loop turns out to hold\nno delegation code at all. AGENTS.md advertised three agent/core directories\nthat do not exist; corrected.\n\nCloses #780\n\n* fix(openomni-app): stop exporting a type nobody imports, and import the contract as a type\n\ncheck-dead-exports flagged DelegationResult: it is the kernel's own return\nshape and no other module names it, so it is not part of any contract. The\nDelegation import is type-only, and the runner reads as a function type\nrather than a single-call interface.\n\n* test(openomni-app): drive an assign through the tool, not just through admission\n\nEvery prior test of assign stopped at the admission fold. This drives the\nmode the model actually uses: criteria in at the tool, criteria out at the\nworker, which is the only reason assign differs from ask.\n\n* test(openomni-app): prove the deadline stops the child, not just the waiting\n\nThe first version of this test asserted that a 5s worker had not finished\nyet — true at 80ms whether or not anything was cancelled, so it passed while\na mutation that severed the signal survived. It now asserts the child was\nactually signalled, which is the property that separates a deadline from\nbookkeeping: without it the parent stops waiting while the work keeps\nburning.\n\n* refactor(openomni-app): carry the child's origin whole instead of rebuilding it\n\nAdmission computes childOrigin, but only its depth crossed the driver seam and\nthe worker loop re-asserted role: \"worker\" on the far side. That is one rule —\na delegated child runs as a worker — written in two places, and the downstream\ncopy would have quietly won if admission ever decided otherwise.\n\nThe origin now travels whole, so admission stays the only thing that decides\nwho a child is. Found by attacking this PR's own claim that admission is the\nsingle owner; the claim was very nearly false.",
+          "timestamp": "2026-08-24T03:42:47+09:00",
+          "tree_id": "fc0d26c466154e7aff8bb1e9cb20812815be112d",
+          "url": "https://github.com/INONONO66/openomni/commit/36fde77f8b46a77d3f70ebb9f6751e3c2fffe1f8"
+        },
+        "date": 1787510643009,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 446,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 622,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5893,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9987,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2515,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2970,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2458,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15568,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8487,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1055,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 946,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1529,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1610,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 724,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 47163,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2417,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 516761,
             "unit": "ns/op"
           }
         ]
