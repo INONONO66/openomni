@@ -92,6 +92,41 @@ describe("agent tool placement catalog", () => {
     });
   });
 
+  it("refuses the underscore alias executors register for a filtered dotted tool", async () => {
+    const executed: string[] = [];
+    let refusal: Tool.Result | undefined;
+    await ChatAgent.create(
+      config([], [], executed, async (runInput) => {
+        refusal = await runInput.toolExecutor?.(
+          { id: "forged", tool: "screen_capture", input: {} },
+          { signal: new AbortController().signal },
+        );
+      }),
+    ).run(input);
+
+    expect(executed).toEqual([]);
+    expect(refusal).toMatchObject({
+      toolCallId: "forged",
+      toolName: "screen_capture",
+      isError: true,
+      output: 'tool "screen_capture" requires capabilities no attached target holds: screen.read',
+    });
+  });
+
+  it("leaves an unrelated dynamic name to the tool executor", async () => {
+    const executed: string[] = [];
+    await ChatAgent.create(
+      config([], [], executed, async (runInput) => {
+        await runInput.toolExecutor?.(
+          { id: "dynamic", tool: "mcp.relay.thing", input: {} },
+          { signal: new AbortController().signal },
+        );
+      }),
+    ).run(input);
+
+    expect(executed).toEqual(["mcp.relay.thing"]);
+  });
+
   it("still executes an offerable tool through the placement gate", async () => {
     const executed: string[] = [];
     let allowed: Tool.Result | undefined;
