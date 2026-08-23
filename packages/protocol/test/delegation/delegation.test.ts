@@ -70,6 +70,7 @@ describe("Delegation.Request mode rules", () => {
     if (!result.success) {
       expect(result.error.issues[0]?.code).toBe("unrecognized_keys");
       expect(result.error.issues[0]?.message).toBe("Unrecognized key(s) in object: 'transport'");
+      expect(result.error.issues[0]?.path).toEqual([]);
     }
   });
 });
@@ -95,6 +96,7 @@ describe("Delegation.Settled terminal vocabulary", () => {
     if (!crossed.success) {
       expect(crossed.error.issues[0]?.code).toBe("unrecognized_keys");
       expect(crossed.error.issues[0]?.message).toBe("Unrecognized key(s) in object: 'deadline'");
+      expect(crossed.error.issues[0]?.path).toEqual([]);
     }
   });
 

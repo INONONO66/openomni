@@ -6,7 +6,12 @@ describe("Tool.Placement", () => {
     for (const placement of ["machine", "host", "free"] as const) {
       expect(Tool.Placement.safeParse(placement).success).toBe(true);
     }
-    expect(Tool.Placement.safeParse("remote").success).toBe(false);
+    const bogus = Tool.Placement.safeParse("remote");
+    expect(bogus.success).toBe(false);
+    if (!bogus.success) {
+      expect(bogus.error.issues[0]?.code).toBe("invalid_enum_value");
+      expect(bogus.error.issues[0]?.path).toEqual([]);
+    }
   });
 
   test("a legacy spec stays valid and placement stays absent — the catalog resolver owns the free default", () => {

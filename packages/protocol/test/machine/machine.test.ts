@@ -31,6 +31,7 @@ describe("Machine.CapabilityId grammar", () => {
         expect(result.error.issues[0]?.message).toBe(
           "capability id must be dot-namespaced lowercase (e.g. fs.read)",
         );
+        expect(result.error.issues[0]?.path).toEqual([]);
       }
     }
   });
@@ -40,6 +41,7 @@ describe("Machine.CapabilityId grammar", () => {
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.error.issues[0]?.message).toBe("capability id must be at most 128 characters");
+      expect(result.error.issues[0]?.path).toEqual([]);
     }
   });
 });
@@ -71,6 +73,8 @@ describe("Machine.Enrollment", () => {
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.error.issues[0]?.code).toBe("unrecognized_keys");
+      expect(result.error.issues[0]?.message).toBe("Unrecognized key(s) in object: 'extra'");
+      expect(result.error.issues[0]?.path).toEqual([]);
     }
   });
 });
