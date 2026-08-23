@@ -1,5 +1,5 @@
 import { type IpcClient, connectIpcClient, typedCall } from "@openomni/ipc";
-import type { Machine } from "@openomni/protocol";
+import { Machine } from "@openomni/protocol";
 
 export interface MachineDaemonOptions {
   readonly socketPath: string;
@@ -22,11 +22,10 @@ export interface MachineDaemon {
 export async function attachMachineDaemon(options: MachineDaemonOptions): Promise<MachineDaemon> {
   const client: IpcClient = await connectIpcClient(options.socketPath);
   try {
-    const attachment = await typedCall(
-      client,
-      "machine.attach",
-      options.offer,
-      options.attachTimeoutMs,
+    // typedCall types the wire result but does not validate it; the host is
+    // across a trust boundary, so parse before believing it.
+    const attachment = Machine.AttachResult.parse(
+      await typedCall(client, "machine.attach", options.offer, options.attachTimeoutMs),
     );
     return {
       attachment,

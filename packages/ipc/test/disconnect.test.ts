@@ -42,3 +42,34 @@ test("onDisconnect fires exactly once per torn-down connection", async () => {
     server.close();
   }
 });
+
+test("onDisconnect fires exactly once on abrupt socket destruction", async () => {
+  const socketPath = `/tmp/omo-ipc-abrupt-${process.pid}.sock`;
+  const disconnects: string[] = [];
+  let notifyDisconnect: (() => void) | undefined;
+  const server = await createIpcServer(
+    socketPath,
+    (_method, _params, respond) => {
+      respond({ ok: true });
+    },
+    {
+      onDisconnect: (connectionId) => {
+        disconnects.push(connectionId);
+        notifyDisconnect?.();
+      },
+    },
+  );
+  try {
+    const { connect } = await import("node:net");
+    const raw = connect(socketPath);
+    await new Promise<void>((resolve) => raw.once("connect", () => resolve()));
+    const torn = new Promise<void>((resolve) => {
+      notifyDisconnect = resolve;
+    });
+    raw.destroy();
+    await torn;
+    expect(disconnects).toHaveLength(1);
+  } finally {
+    server.close();
+  }
+});

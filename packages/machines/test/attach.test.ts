@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { IpcRemoteError, connectIpcClient } from "@openomni/ipc";
+import { statSync } from "node:fs";
+import { IpcRemoteError, connectIpcClient, createIpcServer } from "@openomni/ipc";
 import type { BusEvent, Machine } from "@openomni/protocol";
 import { attachMachineDaemon } from "../src/daemon";
 import { type MachineHost, createMachineHost } from "../src/host";
@@ -140,6 +141,10 @@ describe("machine attach handshake", () => {
           await expect(
             client.call("machine.attach", { machineId: "mac-studio" }),
           ).rejects.toBeInstanceOf(IpcRemoteError);
+          expect(await client.call("machine.attach", offer())).toEqual({
+            status: "attached",
+            effectiveCapabilities: ["fs.read"],
+          });
         } finally {
           client.close();
         }
@@ -188,5 +193,28 @@ describe("machine attach handshake", () => {
         first.close();
       },
     );
+  });
+
+  test("host socket is owner-only — the localhost trust boundary is real", async () => {
+    await withHost(
+      () => enrollment,
+      async ({ path }) => {
+        expect(statSync(path).mode & 0o777).toBe(0o600);
+      },
+    );
+  });
+
+  test("daemon refuses a host reply that violates Machine.AttachResult", async () => {
+    const path = socketPath();
+    const rogue = await createIpcServer(path, (_method, _params, respond) => {
+      respond({ status: "bogus" });
+    });
+    try {
+      await expect(attachMachineDaemon({ socketPath: path, offer: offer() })).rejects.toMatchObject(
+        { name: "ZodError" },
+      );
+    } finally {
+      rogue.close();
+    }
   });
 });

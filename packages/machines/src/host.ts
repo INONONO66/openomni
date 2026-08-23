@@ -1,3 +1,4 @@
+import { chmodSync } from "node:fs";
 import { type IpcServer, createIpcServer } from "@openomni/ipc";
 import { type BusEvent, Machine } from "@openomni/protocol";
 
@@ -93,6 +94,9 @@ export async function createMachineHost(options: MachineHostOptions): Promise<Ma
       onDisconnect: (connectionId) => detach(connectionId, "connection_closed"),
     },
   );
+  // The localhost slice carries no auth token: the socket itself is the
+  // trust boundary, so it must not be connectable by other local users.
+  chmodSync(options.socketPath, 0o600);
 
   return {
     attached(machineId) {
