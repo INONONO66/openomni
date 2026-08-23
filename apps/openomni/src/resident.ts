@@ -2,14 +2,23 @@ import { ChatAgent, type ChatAgentConfig, type ChatAgentInput } from "@openomni/
 import { Session } from "@openomni/ledger";
 import type { Gateway, Ingress, Message, Model } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
+import type { DelegationOrigin } from "./delegation/admission";
+import type { DelegationKernel } from "./delegation/kernel";
+import { delegateToolSpec } from "./delegation/tool";
+import { delegationToolExecutor } from "./delegation/tool-executor";
 
 const RESIDENT_SYSTEM_PROMPT =
-  "You are the Owner's Resident. Provide clear judgment and conversation only. You have no tools and cannot delegate or act in the world.";
+  "You are the Owner's Resident. You judge and decide; you do not execute. When work needs doing, hand it to a worker with the delegate tool and state plainly how it ended — a deadline passing means the outcome is unknown, not that the work failed.";
 
 interface ResidentOptions {
   readonly model: Model.Ref;
   readonly apiKey: string;
   readonly llm?: ChatAgentConfig["llm"];
+  /**
+   * Absent means this Resident cannot delegate: it is handed no delegate tool
+   * at all, rather than being handed one that always refuses.
+   */
+  readonly delegation?: DelegationKernel;
 }
 
 function addTextPart(sessionId: string, messageId: string, text: string): void {
@@ -33,12 +42,18 @@ function history(sessionId: string): ChatAgentInput["messages"] {
   }));
 }
 
+const RESIDENT_ORIGIN: DelegationOrigin = { role: "resident", depth: 0 };
+
 export function createResident(options: ResidentOptions) {
+  const kernel = options.delegation;
+  const delegate = kernel === undefined ? undefined : delegationToolExecutor(kernel, RESIDENT_ORIGIN);
+
   const agent = ChatAgent.create({
     events: Bus,
     systemPrompt: RESIDENT_SYSTEM_PROMPT,
-    tools: [],
-    toolChoice: "none",
+    tools: delegate === undefined ? [] : [delegateToolSpec()],
+    toolChoice: delegate === undefined ? "none" : "auto",
+    ...(delegate === undefined ? {} : { toolExecutor: delegate }),
     model: options.model,
     auth: { type: "api", key: options.apiKey },
     ...(options.llm === undefined ? {} : { llm: options.llm }),
