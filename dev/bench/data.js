@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787472446618,
+  "lastUpdate": 1787487090318,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -60395,6 +60395,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 514964,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "dff997143961eb3f2ad24a8e932db23dbc5d3f5d",
+          "message": "feat(protocol): machine + delegation contracts and tool placement axis (#768) (#769)\n\n* feat(protocol): machine + delegation contracts and tool placement axis (#768)\n\nAxis A: Machine.Enrollment/Offer + effectiveCapabilities fold\n(enrollment ∩ offer, machine_mismatch refusal) + CapabilityId grammar +\nattach/detach events. Axis B: Delegation.WorkerAddress core|actor,\nask/assign mode rules, required deadline, Handle lane, Settled with\ndelivery_failed ≠ no_response terminals + events. Tool.Spec gains\nadditive-optional placement (machine|host|free) and requires\n(CapabilityId grammar); mutation axis stays the existing safe field.\n\nContracts only (stage 0, pattern of #718): no producer/consumer.\ndocs/machines-and-delegation.md is the design SOT; implementation-status\ngains a contracts-only section; core-model Tier 2 gains Machine and\nDelegation (Owner addition 2026-08-23 — vocab-ratchet sign-off surface).\n\n* fix(protocol): address adversarial review round 1 on #769\n\n- Rename Delegation.Lane -> Transport: the core-model Tier-2 Lane noun\n  names execution roles; the delegation wire never aliases it\n- no_response settles only at >= deadline (union-level refine, exact\n  message pinned)\n- Placement default de-contradicted: the catalog resolver is the single\n  owner of the absent-means-free read; schema stays additive-optional\n- effectiveCapabilities dedupes structurally-typed duplicate offers;\n  machine.attached event payload refuses duplicated sets\n- CapabilityId capped at 128 chars\n- Tests reworked to exact issue message + path assertions; parse-echo\n  shapes removed\n\n* fix(protocol): review round 2 residue — doc Lane rename, placement ownership wording, message+path test assertions\n\n* test(protocol): pin root path [] on unrecognized-key/grammar/enum rejections (review round 3)",
+          "timestamp": "2026-08-23T21:10:19+09:00",
+          "tree_id": "05168d9865c8c1e5ddc87eb17c6b61af242dc885",
+          "url": "https://github.com/INONONO66/openomni/commit/dff997143961eb3f2ad24a8e932db23dbc5d3f5d"
+        },
+        "date": 1787487089721,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 349,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 534,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 4825,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 8334,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2017,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2426,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1843,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 12432,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 6810,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 853,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 751,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1337,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 39,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1189,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 594,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 35400,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 1799,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 399119,
             "unit": "ns/op"
           }
         ]
