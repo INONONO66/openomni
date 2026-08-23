@@ -38,8 +38,9 @@ class _Tools:
 
 
 _scope = {"__name__": "__main__", "tool": _Tools(), "ToolError": ToolError}
-# readline() rather than iteration: a cell blocked on a tool call reads the
-# answer from the same stream, and the iterator's read-ahead would swallow it.
+# readline() rather than iteration: a cell blocked on a tool call reads its
+# answer from this same stream, so both reads use one style and no read-ahead
+# buffer is split between them.
 while True:
     _line = sys.__stdin__.readline()
     if not _line:

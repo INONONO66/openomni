@@ -3,6 +3,7 @@ import { connectIpcClient, typedCall } from "@openomni/ipc";
 import { Machine } from "@openomni/protocol";
 import { attachMachineDaemon } from "../src/daemon";
 import { type MachineHost, createMachineHost } from "../src/host";
+import { PythonKernel } from "../src/kernel";
 
 const silent = {
   publish() {
@@ -194,6 +195,49 @@ describe("code-mode tool bridge", () => {
     } finally {
       intruder.close();
       host.close();
+    }
+  });
+
+  test("a tool answer that outlives its cell never reaches the next one", async () => {
+    // A cell can leave a tool call in flight by making it from a background
+    // thread and returning first. The interpreter has one stdin channel, so
+    // delivering that late answer while another cell owns the interpreter
+    // would hand the successor a value it never asked for.
+    const kernel = new PythonKernel();
+    try {
+      const first = await kernel.run(
+        {
+          cellId: "one",
+          code: [
+            "import threading, time",
+            "threading.Thread(target=lambda: tool.slow(), daemon=True).start()",
+            "time.sleep(0.2)",
+            "'one done'",
+          ].join("\n"),
+          timeoutMs: 15_000,
+        },
+        async () => {
+          await new Promise((resolve) => setTimeout(resolve, 1200));
+          return { status: "completed", value: "stray" };
+        },
+      );
+      expect(first).toMatchObject({ status: "completed", value: "'one done'" });
+
+      // The successor settles on its own terms — never with "stray".
+      const second = await kernel.run(
+        { cellId: "two", code: "tool.mine()", timeoutMs: 2000 },
+        async () => ({ status: "completed", value: "mine" }),
+      );
+      expect(second.cellId).toBe("two");
+      expect(JSON.stringify(second)).not.toContain("stray");
+
+      // And the kernel is still usable afterwards.
+      const third = await kernel.run({ cellId: "three", code: "1 + 1", timeoutMs: 15_000 }, () =>
+        Promise.resolve({ status: "failed", error: "no tools" }),
+      );
+      expect(third).toMatchObject({ status: "completed", value: "2" });
+    } finally {
+      kernel.close();
     }
   });
 
