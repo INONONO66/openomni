@@ -6,7 +6,7 @@ Last verified against `origin/main`: 2026-08-19 (paths, dependency graph, and sh
 
 OpenOmni — a single-Owner Agent OS. Agents earn autonomy through evidence, not self-report. See [Design Philosophy](docs/design-philosophy.md) (one page: three kernel primitives, two laws and a dial, four roles).
 
-The Owner talks to one Resident (a judgment partner that executes nothing), which delegates to Workers (internal agents, external AI, humans — uniformly) through one gate and isolated sessions; everything lands on one ledger. TypeScript monorepo (Bun + Turborepo) with 12 packages and 1 app (Server).
+The Owner talks to one Resident (a judgment partner that executes nothing), which delegates to Workers (internal agents, external AI, humans — uniformly) through one gate and isolated sessions; everything lands on one ledger. TypeScript monorepo (Bun + Turborepo) with 12 packages and 2 apps (Server and the clean-room OpenOmni host).
 
 The specification lives in [`docs/core-model.md`](docs/core-model.md) (actors/gate/ledger, roles incl. Governor and Jester, policy hook layer, three-tier vocabulary) and [`docs/architecture.md`](docs/architecture.md) (three communication verbs and package rings). Normative contract detail (guarantee split, authority evaluation, work-item/evidence contracts, Governor rules, memory port) lives in [`docs/kernel-contract.md`](docs/kernel-contract.md). The Owner-directed gateway pivot (channels = perimeter gateway, openomni = brain, SSOT single-ledger storage, engagement machine) is specified in [`docs/gateway-design.md`](docs/gateway-design.md) — stages 0–2 are wired (#718 contracts, #730 driver extraction, #736 router promotion): `packages/channels` IS the perimeter gateway, `packages/openomni` is the brain, and the two meet only in the protocol `Gateway.Deliver` contract plus ports injected by `apps/server`. ADRs are retired — absorbed into these docs; git history preserves the originals. **Design docs describe targets; `docs/implementation-status.md` is the single source of truth for what is actually wired.**
 
@@ -17,7 +17,8 @@ Live delivery state, ordering, and checkpoints belong only in [GitHub #459](http
 ```
 openomni/
 ├── apps/
-│   └── server/          # Hono server — tool providers, ingress bridge, channel/webhook registration, composition root
+│   ├── server/          # Hono server — tool providers, ingress bridge, channel/webhook registration, production composition root
+│   └── openomni/        # Clean-room Resident chat composition — WebSocket gateway, ChatAgent, session persistence
 ├── packages/
 │   ├── protocol/        # Shared Zod schemas and cross-package contracts
 │   ├── policy/          # Protocol-only policy engine primitive: dispatch, effect composition, registry
@@ -49,6 +50,8 @@ ipc       ←  coordinator, machines            process/machine drivers, ledger-
 protocol, ipc, policy, ledger    ←  channels  gateway drivers + router/authn (#707)
 policy, placement, llm, telemetry  ←  agent   the loop
 everything                       ←  openomni  ←  server
+protocol, channels, agent, llm,
+ledger, telemetry                ←  openomni app
 ```
 
 Read as `X ← Y`: Y may depend on X. Exactly what `script/check-deps.ts`
@@ -72,6 +75,7 @@ package's tests may reach further than its runtime code, and the gate holds
 | `agent` | protocol, policy, placement, llm, telemetry — `src/` protocol, policy, placement, llm |
 | `openomni` | any except itself |
 | `server` | composition root |
+| `openomni app` | protocol, channels, agent, llm, ledger, telemetry, policy; never openomni or coordinator |
 
 `llm` and `agent` no longer reach the ledger at all: `Bus` moved to `telemetry` and the allowlists closed behind it (#606).
 
@@ -95,6 +99,7 @@ The package boundary rule is strict: product meaning belongs in `packages/openom
 | `packages/coordinator` | Isolated worker process execution: spawn/slot/idle/restart/cancel, primitive run delivery, crash recovery | Actor authority, pending interactions, channel/session routing, worker grant policy, IPC transport internals (moved to `packages/ipc` in #496) |
 | `packages/channels` | Perimeter gateway (stage 2, #707): Discord/Telegram/GitHub/WebSocket drivers, envelope normalization, channel authn/trigger judgment, delivery clients, and the router band — external route resolution + `route.decided` recording, wait correlation/lifecycle (sole wait-store writer), blacklist/channel-grant/actor admission, routed pre-run authority, surface↔session map claims, #215 existing-agent send kernel (reply-grant instances, #219 egress-budget gate) | Session content, brain (`@openomni/openomni`) imports, storage engines, telemetry imports (observation sinks are injected), work placement / dispatch execution semantics (brain judgment behind the `Gateway.Deliver` seam) |
 | `apps/server` | Runtime host: config/bootstrap, channel registration, webhook/WebSocket/gateway transport wiring, connector process drivers and stored-installation wiring, server-owned MCP/custom tool wiring | PendingAsk/PendingInteraction lookup, agent/session routing, access decisions, tool selection policy, orchestration semantics, channel adapter implementations (moved to `packages/channels` in #551) |
+| `apps/openomni` | Clean-room Resident chat composition: WebSocket ingest/writeback, gateway binding, judgment-only ChatAgent turns, session/message persistence | Import the legacy brain (`@openomni/openomni`), coordinator, memory, delegation, Worker behavior, or tools |
 
 ### Messaging Kernel Rule
 

@@ -30,6 +30,10 @@
       ],
       "project": ["src/**/*.ts", "test/**/*.ts"]
     },
+    "apps/openomni": {
+      "entry": ["src/index.ts", "test/**/*.test.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts"]
+    },
     "packages/channels": {
       "entry": ["test/**/*.test.ts"],
       "project": ["src/**/*.ts", "test/**/*.ts"]
