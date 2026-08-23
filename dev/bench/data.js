@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787492109310,
+  "lastUpdate": 1787496257818,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -60737,6 +60737,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 516368,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a10bd8bf4fa0785c90368bd72a1b9d7933fa88fb",
+          "message": "feat(placement,agent): machine placement axis + tool catalog requires resolution (#775)\n\n* feat(placement,agent): machine placement axis + tool catalog requires resolution\n\nPlacement gains the machine axis: Placement.resolveTools(tools, targets)\nfolds a tool catalog and caller-supplied host/machine effective capability\nsets into per-tool offerability plus eligible machine ids. It is the single\nowner of the 'absent placement means free' read, requires one candidate to\nhold the complete requires subset (never pools capabilities across\ncandidates), preserves catalog order, and sorts eligible machine ids.\n\nThe agent loop consumes it: ChatAgentConfig.toolTargets carries host and\nattached-machine capability facts into buildTurn, which filters unofferable\ntools before tool.catalog.pre, the tool prompt fragments, and the llm seam.\nAbsent context = one host with no declared capabilities and no attached\nmachines, so every existing requires-free tool stays offered.\n\nCloses the 'engine without a consumer' gap left by the PR #769 contracts.\n\n* fix(placement,agent): total fold, execution gate, no unconsumed decision surface\n\nReview round 1 blockers:\n\n1. resolveTools threw on an empty target list. Nothing attached is ordinary\n   placement state, not a programmer error -- the fold is now total and\n   folds every tool to unofferable.\n2. Filtering the catalog only controlled advertisement: a forged call naming\n   a filtered tool still reached config.toolExecutor. buildTurn now gates\n   execution with the SAME decisions, refusing exactly the tools placement\n   declared unofferable (an unlisted name stays the tool executor's business\n   -- dynamic MCP/host executors legitimately resolve names the loop never\n   listed).\n3. eligibleTargetIds had no consumer. Dropped; choosing WHICH eligible\n   machine executes belongs to the machine transport driver (stage 8), so\n   ToolDecision is now offerability only. NIT (duplicate ids) dissolves.\n\nDocs corrected accordingly (no eligible-id claim; execution refusal stated).\n\n* fix(agent): reserve every executable identity of a placement-refused tool\n\nReview round 2 blocker: tool executors register a dotted tool under its\nunderscore spelling (screen.capture -> screen_capture) for providers that\nreject dots, so a placement-refused tool could still execute through its\nalias. The gate now reserves both spellings for refused tools, while an\nofferable tool literally owning the alias name keeps it, and genuinely\nunknown dynamic names still pass through to the executor.\n\nAlso fixes the round-2 NIT: machine selection is §5 stage 7 (machine\ndriver), not stage 8 (memory).\n\n* fix(tool): make executable-name resolution order-independent and single-owned\n\nReview round 3 blocker: the placement gate exempted an offerable tool that\nliterally owned a refused tool's underscore alias, but the native dispatch\ntable is last-writer-wins, so catalog order [a_b, a.b] let the refused a.b\nexecute through the a_b entry the gate had waved through.\n\nProtocol now owns the convention (Tool.executableNames: catalog name plus\nits dot-to-underscore spelling). Both sides read it:\n- the native dispatch table never lets an alias displace the tool that\n  literally owns that name, so resolution no longer depends on catalog order;\n- the placement gate reserves every executable name of a refused tool\n  unconditionally, failing closed on an ambiguous catalog instead of\n  resolving it by order.\n\nRegression tests at each layer assert order-independence directly.\n\n* fix(child-agent): offer child tools under canonical names\n\nReview round 4 blocker: child-agent assembly handed the native executor\ncanonical dotted specs while giving ChatAgent separately rewritten\nunderscore specs. Placement then reserved only the rewritten name, so a\ncapability-refused tool still executed under its original dotted name.\n\nThe rewrite was a duplicate of a convention the provider wire boundary\nalready owns (it sanitizes names for the model and restores the catalog\nname before dispatch), so it is deleted rather than re-derived: the\ncatalog the loop gates on is now the identity the executor dispatches.",
+          "timestamp": "2026-08-23T23:43:06+09:00",
+          "tree_id": "25d101ba43844a2a65e2a71c8f28a21316fa8e66",
+          "url": "https://github.com/INONONO66/openomni/commit/a10bd8bf4fa0785c90368bd72a1b9d7933fa88fb"
+        },
+        "date": 1787496256489,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 372,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 473,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 4971,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 7099,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2046,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2158,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2125,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 14832,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8043,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 815,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 771,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1189,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 40,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1405,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 615,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 35399,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 1746,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 466061,
             "unit": "ns/op"
           }
         ]
