@@ -120,7 +120,20 @@ The machine axis of `@openomni/placement` folds candidate machines against
      attached connection and only for a cell the host itself dispatched and is
      still awaiting. The `eval` tool spec that offers code mode to the
      model belongs with the app that composes a catalog, and lands with it.
-6. `DelegationPort` extraction from the agent loop.
-7. DelegationKernel with `inline`/`process` transport drivers, then the
-   `machine` driver, then the `channel` driver on Wait resumption.
+6. ~~`DelegationPort` extraction from the agent loop.~~ **Nothing to extract.**
+   Re-checked against the tree at stage 6: `packages/agent/src` contains no
+   spawn, subagent, or delegation code at all — the loop already reaches
+   delegation the only way it reaches anything, as a tool in its catalog. The
+   legacy semantics live in `packages/openomni`, which the clean-room app
+   replaces rather than extracts from. This step is struck rather than
+   deleted so the correction stays visible.
+7. DelegationKernel with the `inline` transport driver **(landed)**, then
+   `process`, then the `machine` driver, then the `channel` driver on Wait
+   resumption. The kernel lives in `apps/openomni/src/delegation/` because
+   who may commission whom is product meaning; admission owns the depth rule
+   and the address→transport resolution, and drivers own only the wire.
+
+   Ordered ahead of the `eval` wiring in step 5 on purpose: code mode earns
+   its keep by batching tool calls, and until the app had a real tool to
+   batch, wiring `eval` would have shipped an engine with no consumer.
 8. Memory, last, referencing existing implementations.

@@ -3,6 +3,9 @@ import { WebSocketHandler } from "@openomni/channels";
 import { initialize, Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { assertWsExposure, loadConfig, type OpenOmniConfig } from "./config";
+import { createInlineDriver } from "./delegation/inline-driver";
+import { createDelegationKernel, type DelegationKernel } from "./delegation/kernel";
+import { createInlineWorkerRunner } from "./delegation/worker-loop";
 import { createResidentGateway } from "./gateway";
 import { buildInboundEvent } from "./inbound";
 import { createResident } from "./resident";
@@ -17,9 +20,29 @@ export function startOpenOmni(options: StartOptions = {}) {
   assertWsExposure(config);
   initialize({ dbPath: config.dbPath });
 
+  // A worker loop holds the same delegate tool the Resident does, so the
+  // runner needs the kernel that the kernel needs the runner to build. The
+  // cycle is closed by handing the runner a getter rather than a value.
+  let kernel: DelegationKernel | undefined;
+  const runner = createInlineWorkerRunner({
+    model: config.model,
+    apiKey: config.model.apiKey,
+    kernel: () => {
+      if (kernel === undefined) throw new Error("delegation kernel used before composition finished");
+      return kernel;
+    },
+    ...(options.llm === undefined ? {} : { llm: options.llm }),
+  });
+  kernel = createDelegationKernel({
+    drivers: { inline: createInlineDriver(runner) },
+    now: () => Date.now(),
+    newDelegationId: () => crypto.randomUUID(),
+  });
+
   const deliver = createResident({
     model: config.model,
     apiKey: config.model.apiKey,
+    delegation: kernel,
     ...(options.llm === undefined ? {} : { llm: options.llm }),
   });
   const gateway = createResidentGateway(deliver);

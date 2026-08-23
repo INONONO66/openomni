@@ -1,6 +1,6 @@
 # PROJECT KNOWLEDGE BASE
 
-Last verified against `origin/main`: 2026-08-19 (paths, dependency graph, and shipped-state claims re-checked; keep this stamp current when editing — doc-state sync law).
+Last verified against `origin/main`: 2026-08-23 (paths, dependency graph, and shipped-state claims re-checked; keep this stamp current when editing — doc-state sync law).
 
 ## OVERVIEW
 
@@ -18,7 +18,7 @@ Live delivery state, ordering, and checkpoints belong only in [GitHub #459](http
 openomni/
 ├── apps/
 │   ├── server/          # Hono server — tool providers, ingress bridge, channel/webhook registration, production composition root
-│   └── openomni/        # Clean-room Resident chat composition — WebSocket gateway, ChatAgent, session persistence
+│   └── openomni/        # Clean-room Resident composition — WebSocket gateway, ChatAgent, session persistence, delegation kernel
 ├── packages/
 │   ├── protocol/        # Shared Zod schemas and cross-package contracts
 │   ├── policy/          # Protocol-only policy engine primitive: dispatch, effect composition, registry
@@ -27,7 +27,7 @@ openomni/
 │   ├── ledger/          # Session CRUD, Storage adapter (in-memory + SQLite), BusPersistence, Artifact, SurfaceKey, frozen worker-run archive, WorkItemStore (universal work state)
 │   ├── llm/             # LLM abstraction: providers, auth (API key + proxy), streaming, retry, token/cost tracking, provider transforms
 │   ├── agent/           # ChatAgent core (middleware-driven ReAct loop) + MCP client runtime — depends on telemetry for observation
-│   │   ├── src/core/           # ChatAgent, budget, retry, policy engine, memory, delegation, telemetry
+│   │   ├── src/core/           # ChatAgent, budget, retry, message factory, agent policy facade
 │   │   │   ├── execution/      # StreamEngine, ToolExecutor, compaction, parallel-tools
 │   │   │   └── policy/         # Agent policy facade + the last builtin (compaction)
 │   │   └── src/runtime/        # MCP client runtime
@@ -142,7 +142,8 @@ raw channel event
 | Provider transforms | `packages/llm/src/transform/` | Message normalization + per-provider variants |
 | Token usage / cost | `packages/llm/src/token/` | `TokenTracker.extractUsage`, `calculateCost` |
 | Model catalog | `packages/llm/src/model/` | Fetches from models.dev |
-| ChatAgent core | `packages/agent/src/core/` | ChatAgent, budget, retry, policy engine, memory, delegation, telemetry |
+| ChatAgent core | `packages/agent/src/core/` | ChatAgent, budget, retry, message factory, agent policy facade. The loop owns no delegation: a worker is commissioned through a tool in its catalog, never through a loop primitive |
+| Delegation kernel | `apps/openomni/src/delegation/` | Admission fold (who may delegate what, and the address→transport resolution), deadline settlement, the `inline` driver, and the `delegate` tool. Product meaning, so it lives with the app rather than in a package |
 | Policy engine primitive | `packages/policy/src/` | `PolicyEngine.create()`, `PolicyRegistry.create()`, effect composition |
 | Agent policy built-ins | `packages/agent/src/core/policy/` | Agent-scoped facade + built-ins in `builtin/` |
 | Agent execution engine | `packages/agent/src/core/execution/` | StreamEngine, ToolExecutor, compaction, parallel-tools |
