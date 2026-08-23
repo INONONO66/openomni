@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787487090318,
+  "lastUpdate": 1787489364589,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -60509,6 +60509,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 399119,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ab7bcf680814d1fdc16710ba1e03ffd38b9b1950",
+          "message": "feat(machines): body-machine driver band — localhost attach + capability negotiation (#771)\n\n* feat(machines): body-machine driver band — localhost attach + capability negotiation\n\n- packages/machines: attachMachineDaemon (ipc client, offer + held\n  connection) and createMachineHost (accept endpoint: Offer parse,\n  enrollment-port lookup, effectiveCapabilities fold, typed\n  attached|refused reply, live attachment table, attach/detach events\n  through an injected sink; re-attach supersedes the stale connection)\n- protocol: Machine.AttachResult + machine.attach wire method registered\n  in the Ipc methods map (localhost slice carries no auth token; the\n  Unix socket is the trust boundary)\n- ipc: additive IpcServerOptions.onDisconnect — fired exactly once per\n  torn-down connection, tested at the owning layer\n- check-deps: machines allowlist {protocol, ipc}; AGENTS.md +\n  implementation-status.md moved in the same PR (doc-state sync law)\n\n* fix(machines): review round 1 — socket trust boundary + daemon-side wire validation\n\n- host chmods its socket 0600: the localhost slice claims the socket IS\n  the trust boundary, so other local users must not be able to connect\n- daemon parses the machine.attach reply through Machine.AttachResult\n  before believing it (typedCall types, never validates, and the host\n  is across a trust boundary)\n- tests: socket-mode pin, rogue-host refusal, same-connection recovery\n  after a malformed offer, abrupt-destroy onDisconnect exactly-once",
+          "timestamp": "2026-08-23T21:48:15+09:00",
+          "tree_id": "1d7e782cd2dc231d974123258ca7a6db72270a32",
+          "url": "https://github.com/INONONO66/openomni/commit/ab7bcf680814d1fdc16710ba1e03ffd38b9b1950"
+        },
+        "date": 1787489363568,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 325,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 430,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 4379,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 6554,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 1808,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2088,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1887,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 13470,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7226,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 735,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 670,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1007,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 36,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1218,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 550,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 29579,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 1590,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 397601,
             "unit": "ns/op"
           }
         ]
