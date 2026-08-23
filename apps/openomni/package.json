@@ -18,7 +18,9 @@
     "@openomni/llm": "workspace:*",
     "@openomni/protocol": "workspace:*",
     "@openomni/telemetry": "workspace:*",
-    "zod": "^3.22.0"
+    "zod": "^3.22.0",
+    "@openomni/placement": "workspace:*",
+    "@openomni/machines": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "latest"

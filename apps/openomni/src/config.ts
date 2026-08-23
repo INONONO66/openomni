@@ -1,5 +1,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { Machine } from "@openomni/protocol";
+import { z } from "zod";
 
 export interface OpenOmniConfig {
   readonly dbPath: string;
@@ -11,6 +13,15 @@ export interface OpenOmniConfig {
     readonly provider: string;
     readonly id: string;
     readonly apiKey: string;
+  };
+  /**
+   * Absent means this brain has no body: no socket is bound and machine-placed
+   * tools are simply not offered. Present requires at least one enrollment,
+   * because a socket nothing is allowed to attach to is a contradiction.
+   */
+  readonly machines?: {
+    readonly socketPath: string;
+    readonly enrolled: readonly Machine.Enrollment[];
   };
 }
 
@@ -44,9 +55,32 @@ export function assertWsExposure(config: Pick<OpenOmniConfig, "host" | "wsToken"
   }
 }
 
+const Enrollments = z.array(Machine.Enrollment).min(1);
+
+/**
+ * Enrollment is the Owner's admission decision, so it is read from config
+ * rather than inferred from whoever connects. Ledger-backed enrollment is a
+ * later slice; the shape the host consumes is already the protocol's.
+ */
+function machinesFromEnv(): OpenOmniConfig["machines"] {
+  const raw = process.env.OPENOMNI_MACHINES_ENROLLED?.trim();
+  if (raw === undefined || raw.length === 0) return undefined;
+
+  const parsed = Enrollments.safeParse(JSON.parse(raw));
+  if (!parsed.success) {
+    throw new Error(`OPENOMNI_MACHINES_ENROLLED is invalid: ${parsed.error.issues[0]?.message}`);
+  }
+  return {
+    socketPath:
+      process.env.OPENOMNI_MACHINES_SOCKET?.trim() || join(homedir(), ".openomni", "machines.sock"),
+    enrolled: parsed.data,
+  };
+}
+
 export function loadConfig(): OpenOmniConfig {
   const host = process.env.OPENOMNI_WS_HOST?.trim() || "127.0.0.1";
   const wsToken = process.env.OPENOMNI_WS_TOKEN?.trim();
+  const machines = machinesFromEnv();
   return {
     dbPath: process.env.OPENOMNI_DB_PATH?.trim() || join(homedir(), ".openomni", "storage.db"),
     host,
@@ -57,5 +91,6 @@ export function loadConfig(): OpenOmniConfig {
       id: required("OPENOMNI_MODEL_ID"),
       apiKey: required("OPENOMNI_MODEL_API_KEY"),
     },
+    ...(machines === undefined ? {} : { machines }),
   };
 }

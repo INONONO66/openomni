@@ -40,8 +40,10 @@ describe("ws exposure enforcement", () => {
     );
   });
 
-  it("refuses injected non-loopback config before binding", () => {
-    expect(() =>
+  it("refuses injected non-loopback config before binding", async () => {
+    // `/dev/null/...` cannot be opened: if the refusal ever stopped preceding
+    // the ledger and the bind, this would fail on that path instead.
+    await expect(
       startOpenOmni({
         config: {
           dbPath: "/dev/null/never-created.db",
@@ -50,7 +52,7 @@ describe("ws exposure enforcement", () => {
           model: { provider: "fake", id: "resident-test", apiKey: "test-key" },
         },
       }),
-    ).toThrow("OPENOMNI_WS_TOKEN is required when OPENOMNI_WS_HOST is not loopback");
+    ).rejects.toThrow("OPENOMNI_WS_TOKEN is required when OPENOMNI_WS_HOST is not loopback");
   });
 
   it("accepts a non-loopback host once a token is set", () => {

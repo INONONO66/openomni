@@ -28,6 +28,8 @@
         "@openomni/channels": "workspace:*",
         "@openomni/ledger": "workspace:*",
         "@openomni/llm": "workspace:*",
+        "@openomni/machines": "workspace:*",
+        "@openomni/placement": "workspace:*",
         "@openomni/protocol": "workspace:*",
         "@openomni/telemetry": "workspace:*",
         "zod": "^3.22.0",

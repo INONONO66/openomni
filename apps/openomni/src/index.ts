@@ -1,6 +1,9 @@
 import type { ChatAgentConfig } from "@openomni/agent";
 import { WebSocketHandler } from "@openomni/channels";
 import { initialize, Storage } from "@openomni/ledger";
+import { createMachineHost, type MachineHost } from "@openomni/machines";
+import type { Placement } from "@openomni/placement";
+import type { Machine } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { assertWsExposure, loadConfig, type OpenOmniConfig } from "./config";
 import { createInlineDriver } from "./delegation/inline-driver";
@@ -9,13 +12,36 @@ import { createInlineWorkerRunner } from "./delegation/worker-loop";
 import { createResidentGateway } from "./gateway";
 import { buildInboundEvent } from "./inbound";
 import { createResident } from "./resident";
+import { catalogEntries, HOST_TARGET } from "./tools/catalog";
+import { createCellRegistry } from "./tools/cell-registry";
+import type { CellPorts } from "./tools/run-code";
 
 interface StartOptions {
   readonly config?: OpenOmniConfig;
   readonly llm?: ChatAgentConfig["llm"];
 }
 
-export function startOpenOmni(options: StartOptions = {}) {
+/**
+ * The targets a turn may place tools on: the brain, plus every enrolled
+ * machine that is attached right now, each reduced to what it may actually
+ * do. Reading attachment per turn is what makes a machine that connects
+ * between two messages offerable on the second one.
+ */
+function attachedTargets(
+  host: MachineHost | undefined,
+  enrolled: readonly Machine.Enrollment[],
+): readonly Placement.ToolTarget[] {
+  if (host === undefined) return [HOST_TARGET];
+  const machines = enrolled.flatMap((enrollment): Placement.ToolTarget[] => {
+    const capabilities = host.attached(enrollment.machineId);
+    return capabilities === undefined
+      ? []
+      : [{ kind: "machine", id: enrollment.machineId, capabilities: [...capabilities] }];
+  });
+  return [HOST_TARGET, ...machines];
+}
+
+export async function startOpenOmni(options: StartOptions = {}) {
   const config = options.config ?? loadConfig();
   assertWsExposure(config);
   initialize({ dbPath: config.dbPath });
@@ -39,10 +65,38 @@ export function startOpenOmni(options: StartOptions = {}) {
     newDelegationId: () => crypto.randomUUID(),
   });
 
+  // The cell door is bound per cell rather than globally, so a cell serves
+  // exactly the tools its own dispatcher holds.
+  const registry = createCellRegistry();
+  const machines = config.machines;
+  const host =
+    machines === undefined
+      ? undefined
+      : await createMachineHost({
+          socketPath: machines.socketPath,
+          enrollment: (machineId) => machines.enrolled.find((e) => e.machineId === machineId),
+          events: Bus,
+          now: () => Date.now(),
+          callTool: registry.callTool,
+        });
+
+  // Self-referential: a cell's catalog is the same one that dispatches cells,
+  // and placement subtracts what a cell cannot reach.
+  const cells: CellPorts | undefined =
+    host === undefined
+      ? undefined
+      : {
+          registry,
+          runCell: (machineId, request) => host.runCell(machineId, request),
+          toolsFor: (origin) => catalogEntries({ delegation: kernel, cells }, origin),
+          newCellId: () => crypto.randomUUID(),
+        };
+
   const deliver = createResident({
     model: config.model,
     apiKey: config.model.apiKey,
-    delegation: kernel,
+    tools: { delegation: kernel, ...(cells === undefined ? {} : { cells }) },
+    targets: () => attachedTargets(host, machines?.enrolled ?? []),
     ...(options.llm === undefined ? {} : { llm: options.llm }),
   });
   const gateway = createResidentGateway(deliver);
@@ -70,6 +124,7 @@ export function startOpenOmni(options: StartOptions = {}) {
     port: server.port,
     stop(): void {
       server.stop();
+      host?.close();
       Storage.reset();
     },
   };
@@ -77,7 +132,7 @@ export function startOpenOmni(options: StartOptions = {}) {
 
 if (import.meta.main) {
   const config = loadConfig();
-  const app = startOpenOmni({ config });
+  const app = await startOpenOmni({ config });
   console.log(`OpenOmni Resident listening at ws://${config.host}:${app.port}/ws`);
   const stop = () => {
     app.stop();

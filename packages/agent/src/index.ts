@@ -20,6 +20,7 @@ export type {
   PolicyRegistrationFactory,
   PolicyRegistryInstance,
 } from "./core/policy";
+export { placementGatedExecutor } from "./core/execution/turn";
 export { McpClient } from "./runtime/mcp/index";
 export { createCompactionPolicy, isTimeCarriageMarkerPart } from "./compaction";
 export type { CompactionOptions } from "./compaction";
