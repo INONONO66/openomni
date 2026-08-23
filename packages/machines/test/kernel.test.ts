@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { BusEvent, Machine } from "@openomni/protocol";
 import { attachMachineDaemon } from "../src/daemon";
 import { type MachineHost, createMachineHost } from "../src/host";
+import { PythonKernel } from "../src/kernel";
 
 let socketCounter = 0;
 function socketPath(): string {
@@ -61,6 +62,31 @@ async function withMachine(
 function cell(code: string, timeoutMs = 15_000): Machine.CellRequest {
   return { cellId: `cell-${socketCounter}-${code.length}`, code, timeoutMs };
 }
+
+describe("cell settlement ownership", () => {
+  test("a replaced interpreter's exit never settles its successor's cell", async () => {
+    // Queued in the same microtask as the timing-out cell, so the successor is
+    // already pending when the killed interpreter's exit event lands. That is
+    // the interleaving where a process that settles "whatever is pending"
+    // instead of "its own cell" rejects work it never ran.
+    const kernel = new PythonKernel();
+    try {
+      const [timedOut, successor] = await Promise.all([
+        kernel.run({
+          cellId: "wedged",
+          code: "import time\nwhile True: time.sleep(0.05)",
+          timeoutMs: 700,
+        }),
+        kernel.run({ cellId: "successor", code: "6 * 7", timeoutMs: 15_000 }),
+      ]);
+
+      expect(timedOut).toMatchObject({ status: "timed_out", cellId: "wedged" });
+      expect(successor).toMatchObject({ status: "completed", cellId: "successor", value: "42" });
+    } finally {
+      kernel.close();
+    }
+  });
+});
 
 describe("code-mode kernel substrate", () => {
   test("interpreter state persists across cells in one attachment", async () => {
