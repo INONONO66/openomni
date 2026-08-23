@@ -80,18 +80,11 @@ export namespace Placement {
         readonly capabilities: readonly Machine.CapabilityId[];
       };
 
-  export type ToolDecision =
-    | {
-        readonly tool: Tool.Spec;
-        readonly placement: "machine";
-        readonly offerable: boolean;
-        readonly eligibleTargetIds: readonly Machine.MachineId[];
-      }
-    | {
-        readonly tool: Tool.Spec;
-        readonly placement: "host" | "free";
-        readonly offerable: boolean;
-      };
+  export type ToolDecision = {
+    readonly tool: Tool.Spec;
+    readonly placement: Tool.Placement;
+    readonly offerable: boolean;
+  };
 
   /**
    * Resolves tool offerability against candidate targets.
@@ -99,18 +92,19 @@ export namespace Placement {
    * This is the single owner of the additive contract's absent placement:
    * an omitted `Tool.Spec.placement` means `free`. Every required capability
    * must be present in one candidate's effective set; requirements are never
-   * pooled across candidates. Machine decisions additionally return eligible
-   * machine ids in lexical order so downstream dispatch has a stable choice
-   * set. The tool order remains the input catalog order.
+   * pooled across candidates. The tool order remains the input catalog order.
+   *
+   * Total: an empty target list is ordinary placement state (nothing attached)
+   * and folds to unofferable decisions rather than throwing.
+   *
+   * Offerability is the whole decision at this stage. Choosing WHICH eligible
+   * machine executes a tool belongs to the machine transport driver (§5 stage
+   * 8) and is deliberately absent here rather than shipped without a consumer.
    */
   export function resolveTools(
     tools: readonly Tool.Spec[],
     targets: readonly ToolTarget[],
   ): readonly ToolDecision[] {
-    if (targets.length === 0) {
-      throw new TypeError("tool placement requires a non-empty target list");
-    }
-
     return tools.map((tool): ToolDecision => {
       const placement = tool.placement ?? "free";
       const requires = tool.requires ?? [];
@@ -120,18 +114,10 @@ export namespace Placement {
       };
 
       if (placement === "machine") {
-        const eligibleTargetIds = targets
-          .filter(
-            (target): target is Extract<ToolTarget, { readonly kind: "machine" }> =>
-              target.kind === "machine" && satisfies(target),
-          )
-          .map((target) => target.id)
-          .sort();
         return {
           tool,
           placement,
-          offerable: eligibleTargetIds.length > 0,
-          eligibleTargetIds,
+          offerable: targets.some((target) => target.kind === "machine" && satisfies(target)),
         };
       }
 

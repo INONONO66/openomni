@@ -37,12 +37,7 @@ describe("Placement.resolveTools", () => {
       { tool: tool("implicit"), placement: "free", offerable: true },
       { tool: tool("free", "free", []), placement: "free", offerable: true },
       { tool: tool("host", "host"), placement: "host", offerable: true },
-      {
-        tool: tool("machine", "machine"),
-        placement: "machine",
-        offerable: true,
-        eligibleTargetIds: ["machine-a", "machine-z"],
-      },
+      { tool: tool("machine", "machine"), placement: "machine", offerable: true },
     ]);
   });
 
@@ -59,18 +54,8 @@ describe("Placement.resolveTools", () => {
       { tool: tools[0], placement: "free", offerable: true },
       { tool: tools[1], placement: "free", offerable: true },
       { tool: tools[2], placement: "host", offerable: false },
-      {
-        tool: tools[3],
-        placement: "machine",
-        offerable: true,
-        eligibleTargetIds: ["machine-z"],
-      },
-      {
-        tool: tools[4],
-        placement: "machine",
-        offerable: false,
-        eligibleTargetIds: [],
-      },
+      { tool: tools[3], placement: "machine", offerable: true },
+      { tool: tools[4], placement: "machine", offerable: false },
     ]);
   });
 
@@ -84,33 +69,45 @@ describe("Placement.resolveTools", () => {
     expect(Placement.resolveTools(tools, targets)).toEqual([
       { tool: tools[0], placement: "free", offerable: false },
       { tool: tools[1], placement: "host", offerable: false },
-      {
-        tool: tools[2],
-        placement: "machine",
-        offerable: false,
-        eligibleTargetIds: [],
-      },
+      { tool: tools[2], placement: "machine", offerable: false },
     ]);
   });
 
-  it("preserves catalog order and sorts multiple eligible machine ids", () => {
+  it("preserves catalog order and is deterministic across calls", () => {
     const tools = [tool("second", "machine", ["screen.read"]), tool("first", "free")] as const;
     const first = Placement.resolveTools(tools, targets);
-    const second = Placement.resolveTools(tools, targets);
 
-    expect(first).toEqual(second);
+    expect(first).toEqual(Placement.resolveTools(tools, targets));
     expect(first.map((decision) => decision.tool.name)).toEqual(["second", "first"]);
-    expect(first[0]).toEqual({
-      tool: tools[0],
-      placement: "machine",
-      offerable: true,
-      eligibleTargetIds: ["machine-a", "machine-z"],
-    });
+    expect(first[0]).toEqual({ tool: tools[0], placement: "machine", offerable: true });
   });
 
-  it("refuses an empty target list with an exact programmer error", () => {
-    expect(() => Placement.resolveTools([tool("free")], [])).toThrow(
-      new TypeError("tool placement requires a non-empty target list"),
-    );
+  it("folds an empty target list to unofferable decisions instead of throwing", () => {
+    const tools = [tool("implicit"), tool("host", "host"), tool("machine", "machine")] as const;
+
+    expect(Placement.resolveTools(tools, [])).toEqual([
+      { tool: tools[0], placement: "free", offerable: false },
+      { tool: tools[1], placement: "host", offerable: false },
+      { tool: tools[2], placement: "machine", offerable: false },
+    ]);
+    expect(Placement.resolveTools([], [])).toEqual([]);
+  });
+
+  it("does not let a host target satisfy machine placement, nor the reverse", () => {
+    const hostOnly: readonly Placement.ToolTarget[] = [
+      { kind: "host", capabilities: ["screen.read"] },
+    ];
+    const machineOnly: readonly Placement.ToolTarget[] = [
+      { kind: "machine", id: "machine-a", capabilities: ["screen.read"] },
+    ];
+    const machineTool = tool("machine", "machine", ["screen.read"]);
+    const hostTool = tool("host", "host", ["screen.read"]);
+
+    expect(Placement.resolveTools([machineTool], hostOnly)).toEqual([
+      { tool: machineTool, placement: "machine", offerable: false },
+    ]);
+    expect(Placement.resolveTools([hostTool], machineOnly)).toEqual([
+      { tool: hostTool, placement: "host", offerable: false },
+    ]);
   });
 });

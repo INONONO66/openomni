@@ -77,6 +77,43 @@ export function assertUnambiguousToolMetadata(config: ChatAgentConfig): void {
   buildToolMetadataMap(config.tools);
 }
 
+/**
+ * Placement decides EXECUTION, not just advertisement. Filtering the catalog
+ * only stops the model from being told about a tool; a model that names a
+ * placement-filtered tool anyway (forged call, stale transcript, cached
+ * catalog) must still be refused, or the capability requirement is
+ * decorative. This wrapper is the single enforcement point for that refusal.
+ *
+ * It refuses ONLY tools this run's placement fold declared unofferable. A
+ * name absent from the configured catalog is not a placement matter — dynamic
+ * executors (MCP relays, host-registered tools) legitimately resolve names
+ * the loop never listed, and rejecting those here would be placement
+ * overreaching into tool resolution.
+ */
+function placementGatedExecutor(
+  decisions: readonly Placement.ToolDecision[],
+  execute: NonNullable<ChatAgentConfig["toolExecutor"]>,
+): NonNullable<ChatAgentConfig["toolExecutor"]> {
+  const refused = new Map(
+    decisions
+      .filter((decision) => !decision.offerable)
+      .map((decision) => [decision.tool.name, decision.tool.requires ?? []] as const),
+  );
+  if (refused.size === 0) return execute;
+  return async (call, context) => {
+    const requires = refused.get(call.tool);
+    if (requires === undefined) return execute(call, context);
+    return {
+      id: call.id,
+      toolCallId: call.id,
+      toolName: call.tool,
+      output: `tool "${call.tool}" requires capabilities no attached target holds: ${requires.join(", ")}`,
+      isError: true,
+      settlement: "settled",
+    } as const;
+  };
+}
+
 type ToolPolicyMetadata = Pick<NonNullable<ChatAgentConfig["tools"]>[number], "descriptor"> & {
   readonly labels?: readonly string[];
 };
@@ -184,15 +221,17 @@ export async function buildTurn(
   if (config.signal?.aborted) throw Retry.abortError();
 
   const toolTargets = config.toolTargets ?? [{ kind: "host", capabilities: [] } as const];
-  const allTools = Placement.resolveTools(config.tools ?? [], toolTargets)
-    .filter((decision) => decision.offerable)
-    .map((decision) => decision.tool);
+  const placement = Placement.resolveTools(config.tools ?? [], toolTargets);
+  const allTools = placement.filter((decision) => decision.offerable).map((decision) => decision.tool);
+  const placedExecutor = config.toolExecutor
+    ? placementGatedExecutor(placement, config.toolExecutor)
+    : undefined;
   const toolPolicyDecisions: TurnArtifacts["toolPolicyDecisions"] = [];
   const toolMetadata = buildToolMetadataMap(allTools);
-  const hookedExecutor = config.toolExecutor
+  const hookedExecutor = placedExecutor
     ? createToolExecutor({
         events: config.events,
-        toolExecutor: config.toolExecutor,
+        toolExecutor: placedExecutor,
         engine,
         getPolicyToolName: (toolName) => resolvePolicyToolName(toolName, toolMetadata),
         getToolLabels: (toolName) => toolMetadata.get(toolName)?.labels,

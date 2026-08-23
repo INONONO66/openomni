@@ -27,6 +27,8 @@ const input: ChatAgentInput = {
 function config(
   machineCapabilities: readonly Machine.CapabilityId[],
   catalogs: string[][],
+  executed: string[] = [],
+  forge?: (input: RunInput) => Promise<unknown>,
 ): ChatAgentConfig {
   return {
     events: Bus,
@@ -36,11 +38,10 @@ function config(
       { kind: "host", capabilities: [] },
       { kind: "machine", id: "attached-machine", capabilities: machineCapabilities },
     ],
-    toolExecutor: async (call) => ({
-      id: "result-unused",
-      toolCallId: call.id,
-      output: "unused",
-    }),
+    toolExecutor: async (call) => {
+      executed.push(call.tool);
+      return { id: "result-unused", toolCallId: call.id, output: "unused" };
+    },
     llm: {
       resolveProviderModel: async () => ({
         id: "test-model",
@@ -49,6 +50,7 @@ function config(
       }),
       run: async (runInput: RunInput) => {
         catalogs.push(runInput.tools.map((tool) => tool.name));
+        if (forge !== undefined) await forge(runInput);
         return { type: "stop" };
       },
     },
@@ -67,5 +69,42 @@ describe("agent tool placement catalog", () => {
 
     expect(withoutCapability).toEqual([["network.fetch"]]);
     expect(withCapability).toEqual([["screen.capture", "network.fetch"]]);
+  });
+
+  it("refuses a forged call to a filtered tool instead of executing it", async () => {
+    const executed: string[] = [];
+    let refusal: Tool.Result | undefined;
+    await ChatAgent.create(
+      config([], [], executed, async (runInput) => {
+        refusal = await runInput.toolExecutor?.(
+          { id: "forged", tool: gatedTool.name, input: {} },
+          { signal: new AbortController().signal },
+        );
+      }),
+    ).run(input);
+
+    expect(executed).toEqual([]);
+    expect(refusal).toMatchObject({
+      toolCallId: "forged",
+      toolName: gatedTool.name,
+      isError: true,
+      output: 'tool "screen.capture" requires capabilities no attached target holds: screen.read',
+    });
+  });
+
+  it("still executes an offerable tool through the placement gate", async () => {
+    const executed: string[] = [];
+    let allowed: Tool.Result | undefined;
+    await ChatAgent.create(
+      config(["screen.read"], [], executed, async (runInput) => {
+        allowed = await runInput.toolExecutor?.(
+          { id: "real", tool: gatedTool.name, input: {} },
+          { signal: new AbortController().signal },
+        );
+      }),
+    ).run(input);
+
+    expect(executed).toEqual([gatedTool.name]);
+    expect(allowed).toMatchObject({ toolCallId: "real", output: "unused" });
   });
 });
