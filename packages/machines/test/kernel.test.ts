@@ -110,6 +110,10 @@ describe("code-mode kernel substrate", () => {
       if (result.status !== "raised") throw new Error("expected raised");
       expect(result.output.stdout).toContain("before the raise");
       expect(result.error).toContain("ValueError: boom");
+      // The traceback belongs to the caller's cell; the driver frame that ran it
+      // is an implementation detail and must not surface in the reported error.
+      expect(result.error).toContain("<cell ");
+      expect(result.error).not.toContain("exec(compile(");
     });
   });
 

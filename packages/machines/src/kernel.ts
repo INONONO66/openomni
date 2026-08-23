@@ -38,12 +38,15 @@ for _line in sys.stdin:
         }
         if _has_value:
             _result["value"] = repr(_value)
-    except BaseException:
+    except BaseException as _exc:
+        # Drop this driver's own exec/eval frame so the reported traceback starts
+        # at the caller's code rather than at the harness that ran it.
+        _tb = _exc.__traceback__.tb_next if _exc.__traceback__ else None
         _result = {
             "status": "raised",
             "cellId": _request["cellId"],
             "output": {"stdout": _stdout.getvalue(), "stderr": _stderr.getvalue()},
-            "error": traceback.format_exc(),
+            "error": "".join(traceback.format_exception(type(_exc), _exc, _tb)),
         }
     sys.__stdout__.write(json.dumps(_result) + "\n")
     sys.__stdout__.flush()
