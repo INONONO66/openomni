@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787496257818,
+  "lastUpdate": 1787501141797,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -60851,6 +60851,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 466061,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b92f905b2357efbb2ed5dc67f75ec253844b7dbd",
+          "message": "Stage 5a: code-mode kernel substrate (kernel.py capability, persistent cells) (#777)\n\n* feat(machines): code-mode kernel substrate (kernel.py capability, persistent cells)\n\nStage 5a of docs/machines-and-delegation.md §5. A machine whose effective\ncapabilities hold kernel.py can run code cells with interpreter state\npersisting across cells within an attachment.\n\n- protocol: Machine.CellRequest (required per-cell deadline) and\n  Machine.CellResult as completed | raised | timed_out, so a deadline\n  overrun is never reported as an error — the same honest split as\n  delivery_failed vs no_response. Wire method name has one owner.\n- machines daemon: one persistent python3 interpreter, cells executed in\n  order, stdout and stderr captured, last-expression value reported.\n  A cell that overruns its deadline is killed and the interpreter\n  replaced, so the next cell still runs; prior state is lost, which is\n  the documented tradeoff for guaranteeing forward progress against code\n  that cannot be cooperatively interrupted.\n- machines host: runCell refuses as a returned value, never a throw,\n  when the machine is unattached or does not hold the capability. The\n  gate reads the effective set attach already folded — no second copy.\n\nCell settlement is scoped to the interpreter that received it, so a\nreplaced interpreter's asynchronous exit can never settle the cell\nalready handed to its successor.\n\nTests are real: real unix socket, real python3, no transport mocks.\nCloses #776\n\n* test(machines): satisfy the lint rule on the empty telemetry sink\n\n* test(machines): pin cell-settlement ownership at its owning layer\n\nThe socket round trip between two host.runCell calls usually lets a killed\ninterpreter's exit fire before the successor is pending, so the end-to-end\ntimeout test only catches the ownership bug by timing luck. This drives the\nkernel directly and queues the successor in the same microtask, so the exit\nalways lands while the successor is pending — the interleaving where a\nprocess settling \"whatever is pending\" rejects work it never ran.\n\nMutation-proved: replacing the ownership guard with a bare pending check\nfails this test.\n\n* refactor(machines): drop an unreachable branch and name the reply grace\n\nast.parse does not store filename on the tree, so the hasattr(_tree,\n\"filename\") arm never ran; the cell filename is now built once and reused.\nThe host RPC deadline's +1000 becomes CELL_REPLY_GRACE_MS with the reason it\nmust outlast the cell deadline. The daemon's kernel-absent refusal no longer\nreports itself as an unknown method.\n\n* fix(machines): report the cell's traceback without the driver frame\n\nformat_exc() included the driver's own exec/eval frame, so a raising cell\nreported a traceback starting inside the harness instead of at the caller's\ncode. Formatting from tb_next drops that frame.\n\nMutation-proved: restoring format_exc() fails the raise test.",
+          "timestamp": "2026-08-24T01:04:27+09:00",
+          "tree_id": "ecdf0c1eae9ad24d9aba113d7307c299784c9873",
+          "url": "https://github.com/INONONO66/openomni/commit/b92f905b2357efbb2ed5dc67f75ec253844b7dbd"
+        },
+        "date": 1787501140853,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 452,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 640,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5941,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9897,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2532,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2924,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2473,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15642,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8156,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1072,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 979,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1527,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1607,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 733,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 48733,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2419,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 511043,
             "unit": "ns/op"
           }
         ]
