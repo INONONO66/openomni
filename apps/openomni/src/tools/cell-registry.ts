@@ -2,17 +2,19 @@ import type { Machine } from "@openomni/protocol";
 import type { ChatAgentConfig } from "@openomni/agent";
 
 /**
- * Which tools a running cell may reach back for, and on whose authority.
+ * Which tools a running cell may reach back for.
  *
- * A cell's `tool.<name>()` call carries a `cellId` and nothing about who
- * asked for the cell. Binding the catalog to the cell at dispatch time is
- * what keeps that from becoming an escalation: a cell serves exactly the
- * tools its own dispatcher holds, so giving code mode to a less privileged
- * loop later cannot silently hand it the Resident's reach.
+ * A `tool.<name>()` call arrives identified only by `cellId`, so binding the
+ * catalog to the cell at dispatch time is what lets a less privileged loop be
+ * given code mode later without inheriting the Resident's reach: each cell
+ * serves exactly the tools its own dispatcher held.
  *
- * The host has already established that the `cellId` belongs to a cell it
- * dispatched and still awaits; this answers the separate question of what
- * that cell is allowed to do.
+ * That binding is not itself the boundary, and this map must not be mistaken
+ * for one. Anyone who can name a live `cellId` here gets that cell's tools.
+ * What makes the id unforgeable is upstream: the cell's own code never states
+ * it — the daemon stamps the id of the cell it is running onto each frame,
+ * and the host serves a frame only from the connection that cell was
+ * dispatched to, and only while it is still in flight.
  */
 export interface CellRegistry {
   bind(cellId: string, execute: NonNullable<ChatAgentConfig["toolExecutor"]>): void;

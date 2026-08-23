@@ -3,8 +3,9 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Storage } from "@openomni/ledger";
+import { Bus } from "@openomni/telemetry";
 import type { RunInput, Sink } from "@openomni/llm";
-import { attachMachineDaemon, type MachineDaemon } from "@openomni/machines";
+import { attachMachineDaemon, createMachineHost, type MachineDaemon } from "@openomni/machines";
 import type { Machine, Message } from "@openomni/protocol";
 import { startOpenOmni } from "../src/index";
 
@@ -211,4 +212,79 @@ test("the machine tool is not offered while nothing is attached", async () => {
   expect(offered).toEqual(["delegate"]);
   // Refused by the one gate that owns this refusal, naming what was missing.
   expect(answer).toContain('tool "run_code" requires capabilities no attached target holds: kernel.py');
+}, 30_000);
+
+/**
+ * What actually makes a cell's identity unforgeable, pinned upstream of the
+ * registry: the cell's code never states its own id. A cell that tries to
+ * serve a call under another cell's id gets the daemon's stamp instead.
+ */
+test("a cell cannot present another cell's id when calling back", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "openomni-cell-id-"));
+  directories.push(directory);
+  const socketPath = join(directory, "machines.sock");
+  const served: string[] = [];
+
+  const host = await createMachineHost({
+    socketPath,
+    enrollment: (machineId) => (machineId === MACHINE_ID ? enrollment : undefined),
+    events: Bus,
+    now: () => Date.now(),
+    callTool: async (call) => {
+      served.push(call.cellId);
+      return { status: "completed", value: call.cellId };
+    },
+  });
+  daemon = await attachMachineDaemon({
+    socketPath,
+    offer: {
+      machineId: MACHINE_ID,
+      offeredCapabilities: ["kernel.py"],
+      daemonVersion: "test",
+      platform: "test",
+      offeredAt: 0,
+    },
+  });
+
+  const slow = host.runCell(MACHINE_ID, { cellId: "AAA", code: "import time\ntime.sleep(1.0)\n'a'", timeoutMs: 15_000 });
+  const forging = await host.runCell(MACHINE_ID, {
+    cellId: "BBB",
+    // The call carries no id of its own; naming one changes nothing.
+    code: "tool.delegate(cellId='AAA', instruction='borrow')",
+    timeoutMs: 15_000,
+  });
+  await slow;
+  host.close();
+
+  expect(served).toEqual(["BBB"]);
+  expect(forging.status).toBe("completed");
+}, 40_000);
+
+/** The Owner's enrollment is the ceiling: a daemon cannot claim its way past it. */
+test("a machine offering more than it is enrolled for keeps only the intersection", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "openomni-overclaim-"));
+  directories.push(directory);
+  const socketPath = join(directory, "machines.sock");
+
+  const host = await createMachineHost({
+    socketPath,
+    enrollment: () => ({ ...enrollment, allowedCapabilities: ["fs.read"] }),
+    events: Bus,
+    now: () => Date.now(),
+    callTool: async () => ({ status: "failed", error: "no tools" }),
+  });
+  daemon = await attachMachineDaemon({
+    socketPath,
+    offer: {
+      machineId: MACHINE_ID,
+      offeredCapabilities: ["fs.read", "kernel.py"],
+      daemonVersion: "test",
+      platform: "test",
+      offeredAt: 0,
+    },
+  });
+
+  // Without kernel.py in the effective set, run_code stays unofferable.
+  expect(host.attached(MACHINE_ID)).toEqual(["fs.read"]);
+  host.close();
 }, 30_000);
