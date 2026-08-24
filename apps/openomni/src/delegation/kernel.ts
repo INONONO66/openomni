@@ -9,7 +9,15 @@ import { type Admitted, type AdmissionLimits, admit, type DelegationOrigin } fro
 export type DriverOutcome =
   | { readonly status: "completed"; readonly output: string }
   | { readonly status: "failed"; readonly error: string }
-  | { readonly status: "cancelled"; readonly reason: string };
+  | { readonly status: "cancelled"; readonly reason: string }
+  /**
+   * The wire itself failed before a worker held the request: the process did
+   * not start, or died before acknowledging delivery. A worker who accepted
+   * and then broke is `failed`; silence past the deadline is the kernel's
+   * `no_response`. Only a driver can tell these apart, so only a driver may
+   * say so.
+   */
+  | { readonly status: "delivery_failed"; readonly reason: string };
 
 /**
  * A driver carries an admitted request to a worker. It owns the wire, never
