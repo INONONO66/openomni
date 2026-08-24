@@ -305,3 +305,84 @@ test("a worker may not open a process at all, so the driver is never reached", a
   if (!("refused" in result)) throw new Error("a worker opened a process");
   expect(result.refused).toContain("same-domain inline child");
 }, 30_000);
+
+/**
+ * Every delegation gets its own process and its own pipe pair, so nothing
+ * shared can cross wires. Worth pinning rather than assuming: the tests above
+ * all mint a constant delegation id, which would hide a correlation bug if
+ * one were ever introduced — so this one deliberately keeps the id constant
+ * AND runs concurrently, and still demands eight distinct answers.
+ */
+test("concurrent delegations sharing one id still get their own answers", async () => {
+  const entry = fakeEntry(`
+    const request = JSON.parse(await new Response(Bun.stdin.stream()).text());
+    console.log(JSON.stringify({ delivered: true }));
+    await Bun.sleep(Math.floor(Math.random() * 200));
+    console.log(JSON.stringify({ status: "completed", output: request.instruction }));
+  `);
+  const kernel = kernelWith(entry);
+
+  const settled = await Promise.all(
+    Array.from({ length: 8 }, (_, index) =>
+      kernel.delegate(independentAsk(`job-${index}`, Date.now() + 20_000), RESIDENT),
+    ),
+  );
+
+  const answers = settled.map((result) => {
+    if ("refused" in result) throw new Error(result.refused);
+    return (result.settled as { output: string }).output;
+  });
+  expect(new Set(answers).size).toBe(8);
+  answers.forEach((answer, index) => expect(answer).toBe(`job-${index}`));
+}, 60_000);
+
+/**
+ * The arm that says a worker took the request and then gave nothing back.
+ * Distinct from the deadline: this one is known immediately, because the
+ * child is gone, and settling it as `no_response` would make an honest
+ * crash indistinguishable from a worker still thinking.
+ */
+test("a child that acks and exits cleanly fails at once, not at the deadline", async () => {
+  const entry = fakeEntry(`
+    await new Response(Bun.stdin.stream()).text();
+    console.log(JSON.stringify({ delivered: true }));
+    process.exit(0);
+  `);
+  const kernel = kernelWith(entry);
+
+  const started = Date.now();
+  const result = await kernel.delegate(independentAsk("audit", Date.now() + 10_000), RESIDENT);
+
+  if ("refused" in result) throw new Error(result.refused);
+  expect(result.settled).toMatchObject({
+    status: "failed",
+    error: "worker process exited without a result",
+  });
+  expect(Date.now() - started).toBeLessThan(5_000);
+}, 30_000);
+
+/**
+ * Once the deadline settled a delegation, a result that shows up afterwards
+ * changes nothing: the caller already holds `no_response` and there is no
+ * second settlement to race for.
+ */
+test("a result arriving after the deadline cannot settle the delegation twice", async () => {
+  const entry = fakeEntry(`
+    await new Response(Bun.stdin.stream()).text();
+    console.log(JSON.stringify({ delivered: true }));
+    await Bun.sleep(900);
+    console.log(JSON.stringify({ status: "completed", output: "late" }));
+  `);
+  const kernel = kernelWith(entry);
+
+  const result = await kernel.delegate(independentAsk("audit", Date.now() + 400), RESIDENT);
+
+  if ("refused" in result) throw new Error(result.refused);
+  const settled = result.settled;
+  expect(settled.status).toBe("no_response");
+
+  // Outlive the child's own answer, then look again.
+  await Bun.sleep(1200);
+  expect(result.settled).toEqual(settled);
+}, 30_000);
+
