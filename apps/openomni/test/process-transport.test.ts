@@ -2,9 +2,11 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createInlineDriver } from "../src/delegation/inline-driver";
 import { createDelegationKernel } from "../src/delegation/kernel";
 import { createProcessDriver } from "../src/delegation/process-driver";
 import {
+  createChildKernel,
   PROCESS_WORKER_ACK,
   ProcessWorkerRequest,
   serveProcessWorker,
@@ -385,4 +387,39 @@ test("a result arriving after the deadline cannot settle the delegation twice", 
   await Bun.sleep(1200);
   expect(result.settled).toEqual(settled);
 }, 30_000);
+
+/**
+ * A child cannot turn into a process factory, and the two layers that stop it
+ * are tested separately because the outer one hid a surviving mutation:
+ * widening the child's driver map to include `process` broke no test at all.
+ */
+test("admission refuses a worker who asks for independent work", async () => {
+  const kernel = createDelegationKernel({
+    drivers: { inline: createInlineDriver(async () => "inner") },
+    now: () => Date.now(),
+    newDelegationId: () => "d-inner",
+  });
+
+  const result = await kernel.delegate(independentAsk("fork", Date.now() + 5_000), {
+    role: "worker",
+    depth: 1,
+  });
+
+  if (!("refused" in result)) throw new Error("a worker reached the process transport");
+  expect(result.refused).toContain("same-domain inline child");
+});
+
+test("the kernel the child actually builds has no process transport", async () => {
+  // The same factory `processWorkerRun` calls, so widening it there widens it
+  // here: a child that somehow presented a Resident origin still cannot spawn.
+  const kernel = createChildKernel(async () => "inner");
+
+  const result = await kernel.delegate(independentAsk("fork", Date.now() + 5_000), RESIDENT);
+
+  if ("refused" in result) throw new Error(result.refused);
+  expect(result.settled).toMatchObject({
+    status: "delivery_failed",
+    reason: "no driver for process transport",
+  });
+});
 
