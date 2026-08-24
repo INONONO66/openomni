@@ -8,6 +8,7 @@ import { Bus } from "@openomni/telemetry";
 import { assertWsExposure, loadConfig, type OpenOmniConfig } from "./config";
 import { createInlineDriver } from "./delegation/inline-driver";
 import { createDelegationKernel, type DelegationKernel } from "./delegation/kernel";
+import { createProcessDriver } from "./delegation/process-driver";
 import { createInlineWorkerRunner } from "./delegation/worker-loop";
 import { createResidentGateway } from "./gateway";
 import { buildInboundEvent } from "./inbound";
@@ -61,7 +62,19 @@ export async function startOpenOmni(options: StartOptions = {}) {
     ...(options.llm === undefined ? {} : { llm: options.llm }),
   });
   kernel = createDelegationKernel({
-    drivers: { inline: createInlineDriver(runner) },
+    drivers: {
+      inline: createInlineDriver(runner),
+      process: createProcessDriver({
+        command: [
+          process.execPath,
+          new URL("./delegation/process-entry.ts", import.meta.url).pathname,
+        ],
+        worker: {
+          model: { provider: config.model.provider, id: config.model.id },
+          apiKey: config.model.apiKey,
+        },
+      }),
+    },
     now: () => Date.now(),
     newDelegationId: () => crypto.randomUUID(),
   });
