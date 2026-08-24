@@ -117,7 +117,13 @@ export class WebSocketHandler {
     const hasConfiguredToken = this.config.token !== undefined && this.config.token.length > 0;
     const authenticated = hasConfiguredToken && auth.verdict.verdict === "allow";
 
-    const externalId = new URL(req.url).searchParams.get("actor")?.trim();
+    // An actor declaration binds this connection to a registered identity
+    // (delegated instructions are pushed to it, its replies settle Waits), so
+    // it requires the shared token — unlike plain owner chat, which loopback
+    // trust covers. On a tokenless bind the declaration is simply not taken.
+    const externalId = authenticated
+      ? new URL(req.url).searchParams.get("actor")?.trim()
+      : undefined;
     const ok = server.upgrade(req, {
       // `ws::dm:<uuid>` — empty namespace, so no workspace is derived and
       // actor endpoints registered as plain channel "ws" resolve.
