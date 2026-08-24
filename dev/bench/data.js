@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787554642837,
+  "lastUpdate": 1787561888812,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -61421,6 +61421,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 518696,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b304f65b5eb5e11e935bb1e145bf0c12b11072b9",
+          "message": "feat: channel delegation driver — delegate to external actors over ws (#788)\n\n* feat: channel delegation driver — delegate to external actors over ws\n\nThe fourth and last delegation transport: the Resident hands work to a\nregistered external actor (a human or an outside agent on a channel) and the\nreply settles the waiting delegate call.\n\n- packages/channels websocket driver: `?actor=<externalId>` declares who a\n  connection is, `push()` delivers outbound frames and mints the platform\n  message id, inbound frames carry `replyToId`, surfaceKey becomes\n  `ws::dm:<uuid>` so no bogus workspace is derived from the connection uuid\n- apps/openomni channel driver: sends the rendered instruction through the\n  gateway's #215 send kernel as an awaited message (grants, target\n  resolution, budgets, durable Wait all owned there), maps the receipt onto\n  the delegation settlement vocabulary — denied/throw = delivery_failed,\n  resume = completed, kernel deadline = no_response\n- DelegationOrigin gains sessionId: the Wait a channel delegation opens is\n  owned by the session that asked for the work; inherited unchanged down the\n  chain, threaded through the process-worker wire\n- delegate tool: exactly one of scope|actorId; actor addresses stay\n  assign-only (protocol refinement, admission keeps workers off the wire)\n- resume bridge in composition: a Deliver carrying waitContext settles the\n  pending delegation instead of opening a Resident turn; an unmatched wait\n  falls through to the Resident as an ordinary message\n- OPENOMNI_ACTORS config registers Owner-admitted actor identities/endpoints\n  (upserts, restart-safe) and derives the resident->actor awaited grants\n\nRefs #787\n\n* fix: drop the unreachable sessionId fallback in the resume bridge; drop timing crutches in driver tests\n\n* fix: actor declaration requires the authenticated upgrade; pin ws actor-connection behavior\n\nAn unauthenticated loopback connection could declare ?actor=alice and\nreceive alice's delegated instructions (adversarial review blocker). An\nactor declaration now binds only on an authenticated upgrade — plain owner\nchat keeps working tokenless on loopback, actor delegation requires\nOPENOMNI_WS_TOKEN. Pinned with channel-level tests (also restoring the\nchannels coverage ratchet): the gate, push delivery + minted id, last-wins\nreconnect with stale-close safety, loud push failure, replyToId/sender\npassthrough.",
+          "timestamp": "2026-08-24T17:57:02+09:00",
+          "tree_id": "26ad20487ad066f3c4b77105f5bc76d188d9b1f7",
+          "url": "https://github.com/INONONO66/openomni/commit/b304f65b5eb5e11e935bb1e145bf0c12b11072b9"
+        },
+        "date": 1787561888376,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 453,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 636,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6218,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9281,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2599,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2858,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2407,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16190,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8283,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1049,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 950,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1542,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1539,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 757,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 42884,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2324,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 521152,
             "unit": "ns/op"
           }
         ]
