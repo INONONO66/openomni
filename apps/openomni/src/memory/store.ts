@@ -76,7 +76,7 @@ function renderSnapshot(file: MemoryFile): string {
     // One line per entry: content cannot fake headings or entry structure,
     // so a stored note stays data even when it quotes markdown.
     const lines = entries.map(
-      (entry) => `- [${entry.id}] ${entry.content.replace(/\s*\n\s*/g, " ")}`,
+      (entry) => `- [${entry.id}] ${entry.content.replace(/\s*[\n\r\u2028\u2029]\s*/g, " ")}`,
     );
     return [`## ${STORE_TITLES[store]}\n${lines.join("\n")}`];
   });
