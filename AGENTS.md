@@ -143,6 +143,7 @@ raw channel event
 | Token usage / cost | `packages/llm/src/token/` | `TokenTracker.extractUsage`, `calculateCost` |
 | Model catalog | `packages/llm/src/model/` | Fetches from models.dev |
 | ChatAgent core | `packages/agent/src/core/` | ChatAgent, budget, retry, message factory, agent policy facade. The loop owns no delegation: a worker is commissioned through a tool in its catalog, never through a loop primitive |
+| Built-in curated memory | `apps/openomni/src/memory/` + `apps/openomni/src/tools/memory.ts` | kernel-contract §5 built-in layer: two hard-budgeted stores, Resident-only add/replace/remove tool, per-session frozen snapshot injection |
 | Delegation kernel | `apps/openomni/src/delegation/` | Admission fold (who may delegate what, and the address→transport resolution), deadline settlement, the `inline` driver, and the `delegate` tool. Product meaning, so it lives with the app rather than in a package |
 | Policy engine primitive | `packages/policy/src/` | `PolicyEngine.create()`, `PolicyRegistry.create()`, effect composition |
 | Agent policy built-ins | `packages/agent/src/core/policy/` | Agent-scoped facade + built-ins in `builtin/` |

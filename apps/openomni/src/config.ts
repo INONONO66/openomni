@@ -5,6 +5,8 @@ import { z } from "zod";
 
 export interface OpenOmniConfig {
   readonly dbPath: string;
+  /** The built-in curated memory file (kernel-contract §5). */
+  readonly memoryPath: string;
   readonly host: string;
   readonly wsPort: number;
   /** Required for non-loopback hosts; every ws sender is granted owner tier. */
@@ -127,6 +129,8 @@ export function loadConfig(): OpenOmniConfig {
   const actors = actorsFromEnv();
   return {
     dbPath: process.env.OPENOMNI_DB_PATH?.trim() || join(homedir(), ".openomni", "storage.db"),
+    memoryPath:
+      process.env.OPENOMNI_MEMORY_PATH?.trim() || join(homedir(), ".openomni", "memory.json"),
     host,
     wsPort: portFromEnv(),
     ...(wsToken === undefined || wsToken.length === 0 ? {} : { wsToken }),

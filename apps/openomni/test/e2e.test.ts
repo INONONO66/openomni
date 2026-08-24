@@ -101,6 +101,7 @@ async function bootApp(): Promise<{ port: number }> {
   const app = await startOpenOmni({
     config: {
       dbPath: join(directory, "chat.db"),
+      memoryPath: join(directory, "memory.json"),
       host: "127.0.0.1",
       wsPort: 0,
       wsToken: WS_TOKEN,

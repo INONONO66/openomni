@@ -13,6 +13,7 @@ import { createDelegationKernel, type DelegationKernel } from "./delegation/kern
 import { createProcessDriver } from "./delegation/process-driver";
 import { createInlineWorkerRunner } from "./delegation/worker-loop";
 import { createResidentGateway } from "./gateway";
+import { openCuratedMemory } from "./memory/store";
 import { buildInboundEvent } from "./inbound";
 import { createResident } from "./resident";
 import { catalogEntries } from "./tools/catalog";
@@ -135,6 +136,10 @@ export async function startOpenOmni(options: StartOptions = {}) {
 
   // Self-referential: a cell's catalog is the same one that dispatches cells,
   // and placement subtracts what a cell cannot reach.
+  // The Resident's one durable memory (kernel-contract §5): curated through
+  // the memory tool, frozen into the system prompt per session.
+  const memory = openCuratedMemory(config.memoryPath);
+
   // The Resident's view of its body: every enrolled machine, attached or
   // not, reduced to the effective (enrollment∩offer) capability fold the
   // host attachment table holds.
@@ -161,6 +166,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
                 delegation: kernel,
                 cells,
                 ...(machinesPort === undefined ? {} : { machines: machinesPort }),
+                memory,
               },
               origin,
             ),
@@ -174,6 +180,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       delegation: kernel,
       ...(cells === undefined ? {} : { cells }),
       ...(machinesPort === undefined ? {} : { machines: machinesPort }),
+      memory,
     },
     targets: () => attachedTargets(host, machines?.enrolled ?? []),
     ...(options.llm === undefined ? {} : { llm: options.llm }),
