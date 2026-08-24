@@ -109,7 +109,7 @@ test("a cell batches delegation into one turn", async () => {
               "  tool.delegate(instruction=f'check {name}', mode='ask', scope='inline', timeoutMs=5000)",
               "  for name in ('lint', 'types', 'tests')",
               "]",
-              "'; '.join(answers)",
+              "'; '.join(answers) + ' | body: ' + tool.machines()",
             ].join("\n"),
             timeoutMs: 20_000,
           },
@@ -169,6 +169,8 @@ test("a cell batches delegation into one turn", async () => {
   expect(residentTurns).toHaveLength(1);
   // The composed machines port read the live attachment table, not a snapshot.
   expect(answer).toContain(`machines=${MACHINE_ID} — attached, may: kernel.py`);
+  // The cell door offers the same discovery tool — production wiring, not a test-built catalog.
+  expect(answer).toContain(`| body: ${MACHINE_ID} — attached, may: kernel.py`);
 }, 60_000);
 
 test("the machine tool is not offered while nothing is attached", async () => {

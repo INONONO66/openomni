@@ -135,16 +135,6 @@ export async function startOpenOmni(options: StartOptions = {}) {
 
   // Self-referential: a cell's catalog is the same one that dispatches cells,
   // and placement subtracts what a cell cannot reach.
-  const cells: CellPorts | undefined =
-    host === undefined
-      ? undefined
-      : {
-          registry,
-          runCell: (machineId, request) => host.runCell(machineId, request),
-          toolsFor: (origin) => catalogEntries({ delegation: kernel, cells }, origin),
-          newCellId: () => crypto.randomUUID(),
-        };
-
   // The Resident's view of its body: every enrolled machine, attached or
   // not, reduced to the effective (enrollment∩offer) capability fold the
   // host attachment table holds.
@@ -158,6 +148,24 @@ export async function startOpenOmni(options: StartOptions = {}) {
               ? { machineId: enrollment.machineId, attached: false, capabilities: [] }
               : { machineId: enrollment.machineId, attached: true, capabilities: [...capabilities] };
           });
+
+  const cells: CellPorts | undefined =
+    host === undefined
+      ? undefined
+      : {
+          registry,
+          runCell: (machineId, request) => host.runCell(machineId, request),
+          toolsFor: (origin) =>
+            catalogEntries(
+              {
+                delegation: kernel,
+                cells,
+                ...(machinesPort === undefined ? {} : { machines: machinesPort }),
+              },
+              origin,
+            ),
+          newCellId: () => crypto.randomUUID(),
+        };
 
   const residentDeliver = createResident({
     model: config.model,
