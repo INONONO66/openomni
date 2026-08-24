@@ -51,6 +51,32 @@ function history(sessionId: string): ChatAgentInput["messages"] {
 }
 
 export function createResident(options: ResidentOptions) {
+  // The built-in curated memory (kernel-contract §5) reaches the Resident
+  // twice from ONE wiring point (tools.memory): as the memory tool in its
+  // catalog, and as a snapshot frozen per session at the first delivery and
+  // injected into the system prompt. A mid-session write renders from the
+  // next session only — the prompt prefix stays stable for caching and what
+  // the model read stays auditable.
+  // Bounded: a session evicted after many others re-freezes to current
+  // memory on its next turn — acceptable drift; unbounded growth is not.
+  const SNAPSHOT_CAP = 64;
+  const sessionSnapshots = new Map<string, string>();
+
+  function systemPromptFor(sessionId: string): string {
+    const memory = options.tools.memory;
+    if (memory === undefined) return RESIDENT_SYSTEM_PROMPT;
+    let snapshot = sessionSnapshots.get(sessionId);
+    if (snapshot === undefined) {
+      snapshot = memory.render();
+      if (sessionSnapshots.size >= SNAPSHOT_CAP) {
+        const oldest = sessionSnapshots.keys().next().value;
+        if (oldest !== undefined) sessionSnapshots.delete(oldest);
+      }
+      sessionSnapshots.set(sessionId, snapshot);
+    }
+    return snapshot === "" ? RESIDENT_SYSTEM_PROMPT : `${RESIDENT_SYSTEM_PROMPT}\n\n${snapshot}`;
+  }
+
   return async function deliver(delivery: Gateway.Deliver): Promise<Ingress.IngressResult> {
     const sessionId = delivery.sessionId;
     if (sessionId === undefined) {
@@ -67,7 +93,7 @@ export function createResident(options: ResidentOptions) {
     const catalog = createDispatcher(catalogEntries(options.tools, origin));
     const agent = ChatAgent.create({
       events: Bus,
-      systemPrompt: RESIDENT_SYSTEM_PROMPT,
+      systemPrompt: systemPromptFor(sessionId),
       tools: catalog.specs,
       toolTargets: targets,
       toolChoice: catalog.specs.length === 0 ? "none" : "auto",

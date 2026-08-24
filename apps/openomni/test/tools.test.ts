@@ -8,6 +8,7 @@ import { createDispatcher, HOST_TARGET } from "../src/tools/dispatch";
 import { createCellRegistry } from "../src/tools/cell-registry";
 import type { CellPorts } from "../src/tools/run-code";
 import { MACHINES_TOOL_NAME, type MachineStatus, type MachinesPort } from "../src/tools/machines";
+import { MEMORY_TOOL_NAME } from "../src/tools/memory";
 import { cellDoor, RUN_CODE_TOOL_NAME, runCodeToolExecutor } from "../src/tools/run-code";
 
 const RESIDENT = { role: "resident", depth: 0, sessionId: "session-origin" } as const;
@@ -325,5 +326,37 @@ describe("the machines tool", () => {
       .filter((decision) => decision.offerable)
       .map((decision) => decision.tool.name);
     expect(offeredOnMachine).not.toContain(MACHINES_TOOL_NAME);
+  });
+});
+
+describe("the memory tool in the catalog", () => {
+  const memory = {
+    add: () => "id",
+    replace: () => undefined,
+    remove: () => undefined,
+    render: () => "",
+  };
+
+  it("is absent when no memory port is wired", () => {
+    const { kernel } = recordingDelegation();
+    const names = catalogEntries({ delegation: kernel }, RESIDENT).map((entry) => entry.spec.name);
+    expect(names).not.toContain(MEMORY_TOOL_NAME);
+  });
+
+  it("is offered to the Resident", () => {
+    const { kernel } = recordingDelegation();
+    const names = catalogEntries({ delegation: kernel, memory }, RESIDENT).map(
+      (entry) => entry.spec.name,
+    );
+    expect(names).toContain(MEMORY_TOOL_NAME);
+  });
+
+  it("never reaches a worker — memory is owner-scoped", () => {
+    const { kernel } = recordingDelegation();
+    const worker = { role: "worker", depth: 1, sessionId: "session-origin" } as const;
+    const names = catalogEntries({ delegation: kernel, memory }, worker).map(
+      (entry) => entry.spec.name,
+    );
+    expect(names).not.toContain(MEMORY_TOOL_NAME);
   });
 });

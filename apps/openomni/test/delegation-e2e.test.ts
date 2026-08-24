@@ -66,6 +66,7 @@ test("a Resident turn hands work to an inline worker and reports what came back"
   const app = await startOpenOmni({
     config: {
       dbPath: join(directory, "chat.db"),
+      memoryPath: join(directory, "memory.json"),
       host: "127.0.0.1",
       wsPort: 0,
       wsToken: WS_TOKEN,

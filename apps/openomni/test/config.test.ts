@@ -47,6 +47,7 @@ describe("ws exposure enforcement", () => {
       startOpenOmni({
         config: {
           dbPath: "/dev/null/never-created.db",
+          memoryPath: "/dev/null/never-created.memory.json",
           host: "0.0.0.0",
           wsPort: 0,
           model: { provider: "fake", id: "resident-test", apiKey: "test-key" },
