@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787561888812,
+  "lastUpdate": 1787564812614,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -61535,6 +61535,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 521152,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "301da02d162a0499009e8a26bbfb6dcf50d25e36",
+          "message": "feat: machines catalog tool; strike the machine transport arm (#789)\n\n* feat: machines catalog tool; strike the machine transport arm (#786)\n\nA machine is a WHERE, never a WHO. Delegation addresses workers and actors;\nmachine execution is the tool axis — run_code cells already name a machineId.\nWhat was missing is discovery, so the Resident catalog gains a `machines`\ntool: every enrolled machine with its attach state and effective\n(enrollment∩offer) capability fold, read live per call.\n\nThe reserved `machine` Transport arm is removed rather than left dormant\n(Owner decision on #786): a worker whose tools should land on a machine is an\nordinary process worker whose catalog placement folds against that machine.\nStale \"machine transport driver\" references in placement docs and\nmachines-and-delegation.md are corrected, and implementation-status catches\nup with the #788 channel driver landing while recording this decision.\n\nCloses #786\n\n* test: exercise the composed machines port through the app e2e\n\nThe unit tests hold fake ports; these assertions make the composition-root\nenrollment-fold (index.ts machinesPort) the thing under test — a port that\nlied about attach state (mutation M1) now fails the e2e.\n\n* fix: offer the machines tool through the cell door too (review R1)\n\nThe production cell-door catalog omitted the machines port, so a cell's\ntool.machines() answered 'unknown tool' while the model-facing catalog held\nit — the whole-catalog contract of CellPorts.toolsFor broken by wiring, and\nmasked by a test-built catalog. The composition root now feeds the same port\nto both doors, and the attached e2e cell calls tool.machines() so the pin\nholds the production wiring, not a fixture.\n\nAlso resolves the implementation-status self-contradictions the review\nfound: the delegation-contracts row still called the kernel planned, and the\nplacement row still promised a machine transport driver.\n\n* docs: machines driver-band row catches up with landed app wiring (review R2)",
+          "timestamp": "2026-08-24T18:45:44+09:00",
+          "tree_id": "aa7e1c6f57bd79d888e80e292b469cee9aaa98af",
+          "url": "https://github.com/INONONO66/openomni/commit/301da02d162a0499009e8a26bbfb6dcf50d25e36"
+        },
+        "date": 1787564811687,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 338,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 438,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 4471,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 6468,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 1908,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2045,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1974,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 13859,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7363,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 788,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 702,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1035,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 37,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1289,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 556,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 31943,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 1698,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 426128,
             "unit": "ns/op"
           }
         ]
