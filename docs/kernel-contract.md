@@ -25,7 +25,7 @@ Documentation may use "guaranteed", "cannot", or "never" only for rows marked �
 | WorkItem terminal completion has one contract-closing admission authority | ✅ | `packages/openomni/src/work-item/` folds current contract/basis/facts/blockers, dispatches fail-closed `work.complete.pre`, records a CAS-bound admission before terminal completion, and resumes idempotently after restart. Session raw completion is a typed refusal. |
 | Retry exhaustion adds a blocker and reaches the current Owner-visible task surface | Implemented check | WorkItem retry enforcement and the authenticated local `show open tasks` surface; broader push notification remains target work. |
 | Worker memory recall is task-scoped | 📋 | Target `memory.recall.pre`; no memory engine or recall consumer is wired. |
-| Memory snapshot character budgets | 📋 | Target memory built-in layer; curated-memory snapshot injection is not wired. |
+| Memory snapshot character budgets | ✅ | The clean-room app's built-in layer (`apps/openomni/src/memory/`): hard write-time budgets and per-session frozen snapshot injection. The engine port and recall policy remain targets. |
 | Full boot contract (below) | 🚧 | Cron reload and interrupted-run marking are wired; final Wait restoration and resume-offer integration are incomplete. |
 
 ### Lanes and the effect-radius rule

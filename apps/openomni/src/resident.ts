@@ -57,6 +57,9 @@ export function createResident(options: ResidentOptions) {
   // injected into the system prompt. A mid-session write renders from the
   // next session only — the prompt prefix stays stable for caching and what
   // the model read stays auditable.
+  // Bounded: a session evicted after many others re-freezes to current
+  // memory on its next turn — acceptable drift; unbounded growth is not.
+  const SNAPSHOT_CAP = 64;
   const sessionSnapshots = new Map<string, string>();
 
   function systemPromptFor(sessionId: string): string {
@@ -65,6 +68,10 @@ export function createResident(options: ResidentOptions) {
     let snapshot = sessionSnapshots.get(sessionId);
     if (snapshot === undefined) {
       snapshot = memory.render();
+      if (sessionSnapshots.size >= SNAPSHOT_CAP) {
+        const oldest = sessionSnapshots.keys().next().value;
+        if (oldest !== undefined) sessionSnapshots.delete(oldest);
+      }
       sessionSnapshots.set(sessionId, snapshot);
     }
     return snapshot === "" ? RESIDENT_SYSTEM_PROMPT : `${RESIDENT_SYSTEM_PROMPT}\n\n${snapshot}`;
