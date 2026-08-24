@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787510643713,
+  "lastUpdate": 1787551721753,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -61193,6 +61193,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 516761,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5b329b39f3707836a1fb7334654f05360ea91c90",
+          "message": "Stage 5c: wire code mode into apps/openomni — one catalog, two doors (#783)\n\n* feat(app): wire code mode into apps/openomni - one catalog, two doors\n\nThe placement axis (#775) and the machine host (#777/#779) had no consumer:\nthe Resident tool list was a hardcoded array, so an attached machine could not\nmake a tool offerable and no model could run a cell.\n\nThe catalog is now built per turn from wired ports, and targets are read at\nthe start of each turn - attachment is a fact about the moment, and a machine\nthat connects between two messages must be offerable on the second one.\n\nPlacement decides only what may be OFFERED. Two doors need a call-time gate\nand they are not the same door: what the model calls is gated by the agent\nloop, and what a cell calls never passes through that loop at all. So\nplacementGatedExecutor is exported from @openomni/agent and reused for the\ncell door, rather than the app growing a second spelling of that refusal.\n\nThe cell door folds the whole catalog against the brain alone, which is why\nmachine-placed tools drop out of a cell without anyone restating the rule -\na cell already runs on a machine. It is bound per cell, so giving code mode\nto a less privileged loop later cannot silently hand it the Resident reach.\n\ndelegation/tool-executor.ts is deleted: name dispatch is the catalog job,\nnot one dispatcher per tool.\n\nCloses #782\n\n* refactor(app): split the tool dispatch leaf out of the catalog\n\ncheck-import-cycles caught a real cycle I had not run locally: catalog.ts\nvalue-imported run-code.ts for the run_code entry, and run-code.ts\nvalue-imported catalog.ts for cellDoor.\n\nThe fix is not a shim. Two different things were living in one file: what a\ntool entry IS and how a name runs one (dispatch.ts, which knows no tool), and\nWHICH tools this app has (catalog.ts, which knows every tool). The cell door\nmoved to run-code.ts, where its only consumer already was and where the\nmachine-tool question belongs.\n\n* test(app): pin what actually makes a cell id unforgeable\n\nMy own attack found the registry comment overclaiming. I probed it directly:\nanyone who can name a live cellId in that map gets that cell tools, so the\nmap is not the boundary the comment implied.\n\nWhat actually holds is upstream, and now has tests instead of a claim. The\ncell code never states its own id: the daemon stamps the id of the cell it is\nrunning onto each frame, and the host serves a frame only from the connection\nthat cell was dispatched to. A cell whose python passes cellId='AAA' is still\nserved as BBB.\n\nAlso pinned: an over-claiming daemon keeps only the intersection with the\nOwner enrollment, so a machine cannot claim its way into kernel.py and make\nrun_code offerable.\n\nComment corrected to say what the map is and is not.",
+          "timestamp": "2026-08-24T15:07:19+09:00",
+          "tree_id": "0f88caa44f4c6b648e807f536c421b195079bbd9",
+          "url": "https://github.com/INONONO66/openomni/commit/5b329b39f3707836a1fb7334654f05360ea91c90"
+        },
+        "date": 1787551721234,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 453,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 667,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5921,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 10485,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2537,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3263,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2552,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15664,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8415,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1120,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 992,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1659,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1623,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 764,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 52237,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2652,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 525996,
             "unit": "ns/op"
           }
         ]
