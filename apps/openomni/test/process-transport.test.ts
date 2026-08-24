@@ -333,7 +333,7 @@ test("concurrent delegations sharing one id still get their own answers", async 
     return (result.settled as { output: string }).output;
   });
   expect(new Set(answers).size).toBe(8);
-  answers.forEach((answer, index) => expect(answer).toBe(`job-${index}`));
+  expect(answers).toEqual(Array.from({ length: 8 }, (_, index) => `job-${index}`));
 }, 60_000);
 
 /**
