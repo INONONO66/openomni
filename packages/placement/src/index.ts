@@ -97,9 +97,10 @@ export namespace Placement {
    * Total: an empty target list is ordinary placement state (nothing attached)
    * and folds to unofferable decisions rather than throwing.
    *
-   * Offerability is the whole decision at this stage. Choosing WHICH eligible
-   * machine executes a tool belongs to the machine transport driver (§5 stage
-   * 8) and is deliberately absent here rather than shipped without a consumer.
+   * Offerability is the whole decision at this stage. WHICH eligible machine
+   * executes a tool is named by the caller (a `run_code` cell takes a
+   * `machineId`, discovered via the `machines` catalog tool) and is
+   * deliberately absent here.
    */
   export function resolveTools(
     tools: readonly Tool.Spec[],

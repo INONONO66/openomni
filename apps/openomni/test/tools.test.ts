@@ -7,6 +7,7 @@ import type { CatalogEntry } from "../src/tools/dispatch";
 import { createDispatcher, HOST_TARGET } from "../src/tools/dispatch";
 import { createCellRegistry } from "../src/tools/cell-registry";
 import type { CellPorts } from "../src/tools/run-code";
+import { MACHINES_TOOL_NAME, type MachineStatus, type MachinesPort } from "../src/tools/machines";
 import { cellDoor, RUN_CODE_TOOL_NAME, runCodeToolExecutor } from "../src/tools/run-code";
 
 const RESIDENT = { role: "resident", depth: 0, sessionId: "session-origin" } as const;
@@ -250,5 +251,79 @@ describe("the advertised schema and the runtime gate agree", () => {
 
     expect(schema.required.sort()).toEqual(["code", "machineId", "timeoutMs"]);
     expect(Object.keys(schema.properties).sort()).toEqual(["code", "machineId", "timeoutMs"]);
+  });
+});
+
+describe("the machines tool", () => {
+  const statuses: MachineStatus[] = [
+    { machineId: "alpha", attached: true, capabilities: ["kernel.py", "screen.capture"] },
+    { machineId: "beta", attached: false, capabilities: [] },
+    { machineId: "gamma", attached: true, capabilities: [] },
+  ];
+
+  function machinesCatalog(machines: MachinesPort) {
+    const { kernel } = recordingDelegation();
+    return createDispatcher(catalogEntries({ delegation: kernel, machines }, RESIDENT));
+  }
+
+  it("is absent from the catalog when no machines port is wired", () => {
+    const { kernel } = recordingDelegation();
+    const names = catalogEntries({ delegation: kernel }, RESIDENT).map((entry) => entry.spec.name);
+    expect(names).not.toContain(MACHINES_TOOL_NAME);
+  });
+
+  it("lists attach state and the effective capabilities per machine", async () => {
+    const catalog = machinesCatalog(() => statuses);
+    const result = await catalog.execute({ id: "m1", tool: MACHINES_TOOL_NAME, input: {} });
+    expect(result.isError).toBeUndefined();
+    expect(result.output).toBe(
+      [
+        "alpha — attached, may: kernel.py, screen.capture",
+        "beta — enrolled, not attached right now",
+        "gamma — attached, no effective capabilities",
+      ].join("\n"),
+    );
+  });
+
+  it("says so when nothing is enrolled", async () => {
+    const catalog = machinesCatalog(() => []);
+    const result = await catalog.execute({ id: "m2", tool: MACHINES_TOOL_NAME, input: {} });
+    expect(result.output).toBe("No machines are enrolled.");
+  });
+
+  it("reads attachment per call — a machine attaching between calls shows up", async () => {
+    let live: MachineStatus[] = [{ machineId: "alpha", attached: false, capabilities: [] }];
+    const catalog = machinesCatalog(() => live);
+    const before = await catalog.execute({ id: "m3", tool: MACHINES_TOOL_NAME, input: {} });
+    expect(String(before.output)).toContain("not attached");
+    live = [{ machineId: "alpha", attached: true, capabilities: ["kernel.py"] }];
+    const after = await catalog.execute({ id: "m4", tool: MACHINES_TOOL_NAME, input: {} });
+    expect(after.output).toBe("alpha — attached, may: kernel.py");
+  });
+
+  it("refuses arguments — the tool takes none", async () => {
+    const catalog = machinesCatalog(() => statuses);
+    const result = await catalog.execute({
+      id: "m5",
+      tool: MACHINES_TOOL_NAME,
+      input: { machineId: "alpha" },
+    });
+    expect(String(result.output)).toStartWith("machines refused:");
+  });
+
+  it("is host-placed: offerable on the brain, absent from a machine-only fold", () => {
+    const { kernel } = recordingDelegation();
+    const specs = catalogEntries(
+      { delegation: kernel, machines: () => statuses },
+      RESIDENT,
+    ).map((entry) => entry.spec);
+    const offeredOnHost = Placement.resolveTools(specs, [HOST_TARGET])
+      .filter((decision) => decision.offerable)
+      .map((decision) => decision.tool.name);
+    expect(offeredOnHost).toContain(MACHINES_TOOL_NAME);
+    const offeredOnMachine = Placement.resolveTools(specs, [machineTarget(["kernel.py"])])
+      .filter((decision) => decision.offerable)
+      .map((decision) => decision.tool.name);
+    expect(offeredOnMachine).not.toContain(MACHINES_TOOL_NAME);
   });
 });

@@ -56,7 +56,7 @@ enrollment storage is a ledger record; attach admission is kernel judgment.
   (epoch ms; no unbounded delegation exists — same law as `Wait.expiresAt`).
   `assign` requires acceptance criteria; `ask` forbids them.
 - `Delegation.Handle` — what the requester holds after admission: the
-  resolved `Transport` (`inline` | `process` | `machine` | `channel`) plus the
+  resolved `Transport` (`inline` | `process` | `channel`) plus the
   durable ids settlement arrives under. Progress is observed through
   Wait/WorkItem, never polled through the handle.
 - `Delegation.Settled` — five terminals. `delivery_failed` (never reached the
@@ -77,9 +77,16 @@ agent loop consumes it through an injected `DelegationPort` (same pattern as
   `Delegation.Request` is the commissioning act itself. An engagement may
   govern a delegation; neither absorbs the other.
 - **Transport ≠ Lane.** `Delegation.Transport` names the wire a commissioned
-  unit travels on (`inline`/`process`/`machine`/`channel`); the core-model
+  unit travels on (`inline`/`process`/`channel`); the core-model
   "Lane" noun names execution roles (Built-in/Action/Worker/Subagent). The
   two never alias.
+- **A machine is a WHERE, never a WHO.** Delegation addresses workers and
+  actors; a machine is a body execution lands on, and its addressing surface
+  is the tool axis (`run_code` cells name a `machineId`, discovered through
+  the `machines` catalog tool). The once-reserved `machine` transport arm was
+  removed rather than left dormant (Owner decision, #786): a worker whose
+  tools should land on a machine is an ordinary `process` worker whose
+  catalog placement folds against that machine.
 - **Wait is reused, not redefined.** Reply correlation, quorum, deadlines
   (`expiresAt`), and `delivery_recorded` already live in `protocol/src/wait/`.
   The `channel` transport opens a Wait; `Settled.no_response` is the delegation
@@ -128,8 +135,10 @@ The machine axis of `@openomni/placement` folds candidate machines against
    replaces rather than extracts from. This step is struck rather than
    deleted so the correction stays visible.
 7. DelegationKernel with the `inline` transport driver **(landed)**, then
-   `process`, then the `machine` driver, then the `channel` driver on Wait
-   resumption. The kernel lives in `apps/openomni/src/delegation/` because
+   `process` **(landed)**, then the `channel` driver on Wait resumption
+   **(landed)**. The `machine` driver was struck per the WHERE-never-WHO
+   fence above (#786) — machine execution ships as tool placement, not as a
+   delegation wire. The kernel lives in `apps/openomni/src/delegation/` because
    who may commission whom is product meaning; admission owns the depth rule
    and the address→transport resolution, and drivers own only the wire.
 

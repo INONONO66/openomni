@@ -155,7 +155,7 @@ test("a cell batches delegation into one turn", async () => {
   ws.close();
 
   // The machine was attached, so the machine-placed tool was offered.
-  expect(answer).toContain("offered=[delegate,run_code]");
+  expect(answer).toContain("offered=[delegate,machines,run_code]");
   // Three workers ran and their answers came back inside the cell. The value
   // is the cell's final expression as Python rendered it, quotes included.
   expect(answer).toContain("done(check lint); done(check types); done(check tests)");
@@ -209,7 +209,7 @@ test("the machine tool is not offered while nothing is attached", async () => {
   const answer = (JSON.parse(await reply) as { text: string }).text;
   ws.close();
 
-  expect(offered).toEqual(["delegate"]);
+  expect(offered).toEqual(["delegate", "machines"]);
   // Refused by the one gate that owns this refusal, naming what was missing.
   expect(answer).toContain('tool "run_code" requires capabilities no attached target holds: kernel.py');
 }, 30_000);

@@ -2,12 +2,15 @@ import type { DelegationOrigin } from "../delegation/admission";
 import type { DelegationKernel } from "../delegation/kernel";
 import { delegateToolExecutor, delegateToolSpec } from "../delegation/tool";
 import type { CatalogEntry } from "./dispatch";
+import type { MachinesPort } from "./machines";
+import { machinesToolExecutor, machinesToolSpec } from "./machines";
 import type { CellPorts } from "./run-code";
 import { runCodeToolExecutor, runCodeToolSpec } from "./run-code";
 
 export interface CatalogPorts {
   readonly delegation?: DelegationKernel;
   readonly cells?: CellPorts;
+  readonly machines?: MachinesPort;
 }
 
 /**
@@ -33,6 +36,12 @@ export function catalogEntries(
     entries.push({
       spec: runCodeToolSpec(),
       run: runCodeToolExecutor(ports.cells, origin),
+    });
+  }
+  if (ports.machines !== undefined) {
+    entries.push({
+      spec: machinesToolSpec(),
+      run: machinesToolExecutor(ports.machines),
     });
   }
   return entries;

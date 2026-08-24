@@ -1,6 +1,6 @@
 # packages/placement
 
-Ring-1 pure target-selection package (docs/architecture.md § Outbound target selection). `Placement.selectModel(chain, priorFailureReasons)` folds an ordered model-candidate chain and decided failure history into the next model. `Placement.resolveTools(tools, targets)` folds a tool catalog and caller-supplied host/machine effective capability sets into per-tool offerability decisions (total: an empty target list means nothing is offerable, not an error). Which eligible machine executes a tool belongs to the machine transport driver and is deliberately absent here. Both are pure protocol-fold decisions (no clock, no store, no I/O; deterministic and replayable).
+Ring-1 pure target-selection package (docs/architecture.md § Outbound target selection). `Placement.selectModel(chain, priorFailureReasons)` folds an ordered model-candidate chain and decided failure history into the next model. `Placement.resolveTools(tools, targets)` folds a tool catalog and caller-supplied host/machine effective capability sets into per-tool offerability decisions (total: an empty target list means nothing is offerable, not an error). Which eligible machine executes a tool is named by the caller (a `run_code` cell takes a `machineId`, discovered via the `machines` catalog tool) and is deliberately absent here. Both are pure protocol-fold decisions (no clock, no store, no I/O; deterministic and replayable).
 
 ## SEMANTICS
 
