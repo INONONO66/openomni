@@ -109,12 +109,18 @@ test("a cell batches delegation into one turn", async () => {
               "  tool.delegate(instruction=f'check {name}', mode='ask', scope='inline', timeoutMs=5000)",
               "  for name in ('lint', 'types', 'tests')",
               "]",
-              "'; '.join(answers)",
+              "'; '.join(answers) + ' | body: ' + tool.machines()",
             ].join("\n"),
             timeoutMs: 20_000,
           },
         });
-        sink.onMessage(message(input, `offered=[${offered.join(",")}] cell=${executed?.output ?? "nothing"}`));
+        const listed = await input.toolExecutor?.({ id: "call-2", tool: "machines", input: {} });
+        sink.onMessage(
+          message(
+            input,
+            `offered=[${offered.join(",")}] cell=${executed?.output ?? "nothing"} machines=${listed?.output ?? "nothing"}`,
+          ),
+        );
         return { type: "stop" };
       },
     },
@@ -155,12 +161,16 @@ test("a cell batches delegation into one turn", async () => {
   ws.close();
 
   // The machine was attached, so the machine-placed tool was offered.
-  expect(answer).toContain("offered=[delegate,run_code]");
+  expect(answer).toContain("offered=[delegate,machines,run_code]");
   // Three workers ran and their answers came back inside the cell. The value
   // is the cell's final expression as Python rendered it, quotes included.
   expect(answer).toContain("done(check lint); done(check types); done(check tests)");
   // One Resident turn, not three: that is what code mode bought.
   expect(residentTurns).toHaveLength(1);
+  // The composed machines port read the live attachment table, not a snapshot.
+  expect(answer).toContain(`machines=${MACHINE_ID} — attached, may: kernel.py`);
+  // The cell door offers the same discovery tool — production wiring, not a test-built catalog.
+  expect(answer).toContain(`| body: ${MACHINE_ID} — attached, may: kernel.py`);
 }, 60_000);
 
 test("the machine tool is not offered while nothing is attached", async () => {
@@ -188,7 +198,10 @@ test("the machine tool is not offered while nothing is attached", async () => {
           tool: "run_code",
           input: { machineId: MACHINE_ID, code: "1", timeoutMs: 1000 },
         });
-        sink.onMessage(message(input, `forced=${forced?.output ?? "nothing"}`));
+        const listed = await input.toolExecutor?.({ id: "call-2", tool: "machines", input: {} });
+        sink.onMessage(
+          message(input, `forced=${forced?.output ?? "nothing"} machines=${listed?.output ?? "nothing"}`),
+        );
         return { type: "stop" };
       },
     },
@@ -209,9 +222,11 @@ test("the machine tool is not offered while nothing is attached", async () => {
   const answer = (JSON.parse(await reply) as { text: string }).text;
   ws.close();
 
-  expect(offered).toEqual(["delegate"]);
+  expect(offered).toEqual(["delegate", "machines"]);
   // Refused by the one gate that owns this refusal, naming what was missing.
   expect(answer).toContain('tool "run_code" requires capabilities no attached target holds: kernel.py');
+  // Enrolled-but-detached is honestly reported, so the model knows why run_code is absent.
+  expect(answer).toContain(`machines=${MACHINE_ID} — enrolled, not attached right now`);
 }, 30_000);
 
 /**

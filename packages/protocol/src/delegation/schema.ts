@@ -38,7 +38,7 @@ export type Mode = z.infer<typeof Mode>;
  * onto. Distinct from the core-model "Lane" noun (Built-in/Action/Worker/
  * Subagent execution lanes) — this is the wire, not the role.
  */
-export const Transport = z.enum(["inline", "process", "machine", "channel"]);
+export const Transport = z.enum(["inline", "process", "channel"]);
 export type Transport = z.infer<typeof Transport>;
 
 export const Request = z

@@ -141,7 +141,7 @@ describe("Delegation.Settled terminal vocabulary", () => {
 });
 
 describe("Delegation.Handle", () => {
-  test("resolves onto one of the four transports and refuses anything else", () => {
+  test("resolves onto one of the three transports and refuses anything else", () => {
     expect(
       Delegation.Handle.safeParse({
         delegationId: "d-1",
@@ -159,7 +159,7 @@ describe("Delegation.Handle", () => {
     if (!bogus.success) {
       expect(bogus.error.issues[0]?.path.join(".")).toBe("transport");
       expect(bogus.error.issues[0]?.message).toBe(
-        "Invalid enum value. Expected 'inline' | 'process' | 'machine' | 'channel', received 'carrier-pigeon'",
+        "Invalid enum value. Expected 'inline' | 'process' | 'channel', received 'carrier-pigeon'",
       );
     }
   });

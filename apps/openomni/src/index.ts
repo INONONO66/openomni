@@ -6,6 +6,7 @@ import type { Placement } from "@openomni/placement";
 import type { Gateway, Ingress, Machine } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { assertWsExposure, loadConfig, type OpenOmniConfig, type RegisteredActor } from "./config";
+import type { MachinesPort } from "./tools/machines";
 import { createChannelDriver } from "./delegation/channel-driver";
 import { createInlineDriver } from "./delegation/inline-driver";
 import { createDelegationKernel, type DelegationKernel } from "./delegation/kernel";
@@ -134,20 +135,46 @@ export async function startOpenOmni(options: StartOptions = {}) {
 
   // Self-referential: a cell's catalog is the same one that dispatches cells,
   // and placement subtracts what a cell cannot reach.
+  // The Resident's view of its body: every enrolled machine, attached or
+  // not, reduced to the effective (enrollment∩offer) capability fold the
+  // host attachment table holds.
+  const machinesPort: MachinesPort | undefined =
+    host === undefined || machines === undefined
+      ? undefined
+      : () =>
+          machines.enrolled.map((enrollment) => {
+            const capabilities = host.attached(enrollment.machineId);
+            return capabilities === undefined
+              ? { machineId: enrollment.machineId, attached: false, capabilities: [] }
+              : { machineId: enrollment.machineId, attached: true, capabilities: [...capabilities] };
+          });
+
   const cells: CellPorts | undefined =
     host === undefined
       ? undefined
       : {
           registry,
           runCell: (machineId, request) => host.runCell(machineId, request),
-          toolsFor: (origin) => catalogEntries({ delegation: kernel, cells }, origin),
+          toolsFor: (origin) =>
+            catalogEntries(
+              {
+                delegation: kernel,
+                cells,
+                ...(machinesPort === undefined ? {} : { machines: machinesPort }),
+              },
+              origin,
+            ),
           newCellId: () => crypto.randomUUID(),
         };
 
   const residentDeliver = createResident({
     model: config.model,
     apiKey: config.model.apiKey,
-    tools: { delegation: kernel, ...(cells === undefined ? {} : { cells }) },
+    tools: {
+      delegation: kernel,
+      ...(cells === undefined ? {} : { cells }),
+      ...(machinesPort === undefined ? {} : { machines: machinesPort }),
+    },
     targets: () => attachedTargets(host, machines?.enrolled ?? []),
     ...(options.llm === undefined ? {} : { llm: options.llm }),
   });
