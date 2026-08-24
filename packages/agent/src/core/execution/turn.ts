@@ -95,7 +95,15 @@ export function assertUnambiguousToolMetadata(config: ChatAgentConfig): void {
  * resolve names the loop never listed, and rejecting those here would be
  * placement overreaching into tool resolution.
  */
-function placementGatedExecutor(
+/**
+ * Refuses a call to a tool the placement fold declined to offer, naming what
+ * was missing. `Placement.resolveTools` answers only what may be OFFERED, so
+ * this is the other half: exported because every door into a tool catalog
+ * needs it, and a second spelling of this refusal is how the two would drift.
+ * The loop applies it to what the model calls; a host that lets code call
+ * tools directly applies it to that door, which the loop never sees.
+ */
+export function placementGatedExecutor(
   decisions: readonly Placement.ToolDecision[],
   execute: NonNullable<ChatAgentConfig["toolExecutor"]>,
 ): NonNullable<ChatAgentConfig["toolExecutor"]> {

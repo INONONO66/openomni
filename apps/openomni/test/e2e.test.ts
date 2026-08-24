@@ -95,10 +95,10 @@ afterEach(() => {
 
 const WS_TOKEN = "e2e-upgrade-token";
 
-function bootApp(): { port: number } {
+async function bootApp(): Promise<{ port: number }> {
   const directory = mkdtempSync(join(tmpdir(), "openomni-resident-"));
   directories.push(directory);
-  const app = startOpenOmni({
+  const app = await startOpenOmni({
     config: {
       dbPath: join(directory, "chat.db"),
       host: "127.0.0.1",
@@ -124,7 +124,7 @@ function bootApp(): { port: number } {
 
 describe("OpenOmni Resident WebSocket", () => {
   it("routes one turn, writes the reply, and persists both messages", async () => {
-    const app = bootApp();
+    const app = await bootApp();
 
     const ws = new WebSocket(`ws://127.0.0.1:${app.port}/ws?token=${WS_TOKEN}`);
     await opened(ws);
@@ -160,7 +160,7 @@ describe("OpenOmni Resident WebSocket", () => {
   });
 
   it("rejects an upgrade carrying the wrong token", async () => {
-    const app = bootApp();
+    const app = await bootApp();
 
     const ws = new WebSocket(`ws://127.0.0.1:${app.port}/ws?token=wrong-token`);
     await expect(opened(ws)).rejects.toThrow("WebSocket failed before opening");

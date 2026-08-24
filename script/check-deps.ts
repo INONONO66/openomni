@@ -202,6 +202,10 @@ const RULES: Record<PackageKey, PackageRule> = {
       "@openomni/ledger",
       "@openomni/telemetry",
       "@openomni/policy",
+      "@openomni/placement",
+      // The app is where a brain acquires a body: it composes the machine
+      // host and owns the enrollments the host admits against.
+      "@openomni/machines",
     ]),
   },
 };

@@ -63,7 +63,7 @@ test("a Resident turn hands work to an inline worker and reports what came back"
   directories.push(directory);
   const seen: string[] = [];
 
-  const app = startOpenOmni({
+  const app = await startOpenOmni({
     config: {
       dbPath: join(directory, "chat.db"),
       host: "127.0.0.1",
