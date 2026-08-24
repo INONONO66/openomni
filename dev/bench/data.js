@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787564812614,
+  "lastUpdate": 1787567428311,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -61649,6 +61649,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 426128,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f12001e6707a28f405e05a00c23f1bf904cef1ef",
+          "message": "feat: built-in curated memory (kernel-contract §5) (#790)\n\n* feat: built-in curated memory (kernel-contract §5)\n\nThe Resident gains its one durable memory: two hard-budgeted curated\nstores — system notes (~800 tokens) and the Owner profile (~500 tokens) —\nin a single atomic-write JSON file, curated through a Resident-only\n`memory` tool (add/replace/remove, deliberately no read: the snapshot is\nalways already in context), and injected into the system prompt as a\nsnapshot frozen per session at first delivery. A mid-session write renders\nfrom the next session only, so the prompt prefix stays cacheable and what\nthe model read stays auditable.\n\nThe budgets are the point, not a safeguard: a store that is full refuses\nthe write and names the overage, forcing curation over accumulation. The\nbudget is enforced once, at write time, in the store. Memory is\nowner-scoped — a delegated worker's catalog never holds the tool; role is\nthe gate, wired once at the composition root.\n\nEngine port, memory candidates, recall policy points, and session search\nstay planned (kernel-contract §5 second layer).\n\n* fix: harden the memory store per adversarial review R1\n\n- The store holds no in-memory state: every operation reloads the file,\n  mutates, and persists atomically, so two handles (or two processes) on\n  one file never clobber committed entries with a stale snapshot. Pinned\n  with the reviewer's exact two-handle reproduction.\n- The per-session snapshot map is bounded (FIFO, 64): an evicted session\n  re-freezes to current memory on its next turn; unbounded growth is gone.\n- Snapshot renders one line per entry (newlines collapse) and labels\n  itself data-not-instructions, so a stored note cannot fake headings or\n  entry structure.\n- Minted ids re-roll on collision.\n- kernel-contract §5 status row caught up (budgets/injection wired in the\n  clean-room app; engine port and recall stay targets).\n\n* fix: normalize every line terminator in the snapshot render (review R2)\n\nCR, U+2028, and U+2029 collapse the same as LF, so an entry cannot fake\nheadings or entry lines with exotic separators; the pin covers all four.\n\n* fix: collapse every Unicode line-breaking character in the render (review R3)\n\nNEL (U+0085), VT, and FF join LF/CR/LS/PS in the normalized class; the\nstructure-forgery pin exercises all seven.",
+          "timestamp": "2026-08-24T19:29:19+09:00",
+          "tree_id": "fc9188a18a6144d0dddd96726529baf6c1bd547e",
+          "url": "https://github.com/INONONO66/openomni/commit/f12001e6707a28f405e05a00c23f1bf904cef1ef"
+        },
+        "date": 1787567427350,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 448,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 626,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5838,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9934,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2516,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2916,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2433,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15418,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8076,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1051,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 950,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1523,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1594,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 725,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 45971,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2318,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 523836,
             "unit": "ns/op"
           }
         ]
