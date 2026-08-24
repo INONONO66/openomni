@@ -12,6 +12,13 @@ export interface WebSocketConfig {
 interface WsConnectionData {
   surfaceKey: string;
   authenticated: boolean;
+  /** Present when the connection declared who it is (`?actor=<externalId>`). */
+  externalId?: string;
+}
+
+interface WsConnection {
+  data: WsConnectionData;
+  send(msg: string): void;
 }
 
 interface WebSocketUpgradeOptions {
@@ -20,16 +27,39 @@ interface WebSocketUpgradeOptions {
 }
 
 export class WebSocketHandler {
+  /**
+   * Live connections by declared externalId, last-wins: a reconnect replaces
+   * the previous socket as the delivery target. Everyone on this socket is
+   * already behind the owner-tier upgrade gate, so the declaration is an
+   * address, not an authentication.
+   */
+  private readonly connections = new Map<string, WsConnection>();
+
   constructor(
     private readonly handler: Channel.MessageHandler,
     private readonly publish: PublishPort,
     private readonly config: WebSocketConfig = {},
   ) {}
 
+  /**
+   * Outbound delivery to a declared connection. Mints the platform message id
+   * the client must echo back as `replyToId` — returning it lets the send
+   * kernel re-key the Wait's correlation to it.
+   */
+  push(externalId: string, body: string): { externalMessageId: string } {
+    const connection = this.connections.get(externalId);
+    if (connection === undefined) {
+      throw new Error(`no live websocket connection for actor ${externalId}`);
+    }
+    const messageId = crypto.randomUUID();
+    connection.send(JSON.stringify({ type: "message", messageId, text: body }));
+    return { externalMessageId: messageId };
+  }
+
   get ws() {
     const self = this;
     return {
-      message(ws: { data: WsConnectionData; send(msg: string): void }, data: string | Buffer) {
+      message(ws: WsConnection, data: string | Buffer) {
         const raw = typeof data === "string" ? data : new TextDecoder().decode(data);
         // Origin: the first frame of an inbound websocket message — this ONE
         // mint is the message's trace, carried to the run (D11).
@@ -43,7 +73,10 @@ export class WebSocketHandler {
         });
         void self.handleMessage(ws, raw, traceId);
       },
-      open(ws: { data: WsConnectionData }) {
+      open(ws: WsConnection) {
+        if (ws.data.externalId !== undefined) {
+          self.connections.set(ws.data.externalId, ws);
+        }
         self.publish(Operational.Events.Info, {
           traceId: newTraceId(),
           time: Date.now(),
@@ -52,7 +85,11 @@ export class WebSocketHandler {
           context: { surfaceKey: ws.data.surfaceKey },
         });
       },
-      close(ws: { data: WsConnectionData }) {
+      close(ws: WsConnection) {
+        const externalId = ws.data.externalId;
+        if (externalId !== undefined && self.connections.get(externalId) === ws) {
+          self.connections.delete(externalId);
+        }
         self.publish(Operational.Events.Info, {
           traceId: newTraceId(),
           time: Date.now(),
@@ -80,21 +117,29 @@ export class WebSocketHandler {
     const hasConfiguredToken = this.config.token !== undefined && this.config.token.length > 0;
     const authenticated = hasConfiguredToken && auth.verdict.verdict === "allow";
 
+    const externalId = new URL(req.url).searchParams.get("actor")?.trim();
     const ok = server.upgrade(req, {
-      data: { surfaceKey: `ws:${crypto.randomUUID()}`, authenticated } satisfies WsConnectionData,
+      // `ws::dm:<uuid>` — empty namespace, so no workspace is derived and
+      // actor endpoints registered as plain channel "ws" resolve.
+      data: {
+        surfaceKey: `ws::dm:${crypto.randomUUID()}`,
+        authenticated,
+        ...(externalId ? { externalId } : {}),
+      } satisfies WsConnectionData,
       ...(auth.headers !== undefined ? { headers: auth.headers } : {}),
     });
     if (ok) return undefined;
     return new Response("WebSocket upgrade failed", { status: 400 });
   }
 
-  private async handleMessage(
-    ws: { data: WsConnectionData; send(msg: string): void },
-    raw: string,
-    traceId: string,
-  ): Promise<void> {
+  private async handleMessage(ws: WsConnection, raw: string, traceId: string): Promise<void> {
     try {
-      const parsed = JSON.parse(raw) as { type?: string; text?: string; surfaceKey?: string };
+      const parsed = JSON.parse(raw) as {
+        type?: string;
+        text?: string;
+        surfaceKey?: string;
+        replyToId?: string;
+      };
 
       if (!parsed.text) {
         ws.send(JSON.stringify({ type: "error", message: "text field required" }));
@@ -108,7 +153,10 @@ export class WebSocketHandler {
         traceId,
         surfaceKey,
         text: parsed.text,
-        sender: { id: "ws", name: "WebSocket" },
+        sender: { id: ws.data.externalId ?? "ws", name: ws.data.externalId ?? "WebSocket" },
+        ...(typeof parsed.replyToId === "string" && parsed.replyToId.length > 0
+          ? { replyToId: parsed.replyToId }
+          : {}),
         raw: { websocket: { authenticated: ws.data.authenticated } },
       });
 

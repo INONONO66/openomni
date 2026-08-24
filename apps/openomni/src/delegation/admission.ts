@@ -13,6 +13,12 @@ import { Delegation } from "@openomni/protocol";
 export interface DelegationOrigin {
   readonly role: "resident" | "worker";
   readonly depth: number;
+  /**
+   * The durable session this delegation chain originates from — the owner of
+   * any Wait a transport opens on its behalf. Inherited unchanged down the
+   * chain: a child works FOR that session, it does not get its own claim.
+   */
+  readonly sessionId: string;
 }
 
 export interface Admitted {
@@ -88,6 +94,6 @@ export function admit(
     ok: true,
     request,
     transport,
-    childOrigin: { role: "worker", depth: origin.depth + 1 },
+    childOrigin: { role: "worker", depth: origin.depth + 1, sessionId: origin.sessionId },
   };
 }

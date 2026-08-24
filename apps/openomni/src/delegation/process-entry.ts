@@ -21,6 +21,7 @@ export const ProcessWorkerRequest = z
       .object({
         role: z.enum(["resident", "worker"]),
         depth: z.number().int().nonnegative(),
+        sessionId: z.string().min(1),
       })
       .strict(),
     model: Model.Ref,

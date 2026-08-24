@@ -1,11 +1,12 @@
 import type { ChatAgentConfig } from "@openomni/agent";
-import { WebSocketHandler } from "@openomni/channels";
-import { initialize, Storage } from "@openomni/ledger";
+import { type GatewayRouter, WebSocketHandler } from "@openomni/channels";
+import { ActorRegistry, initialize, Storage } from "@openomni/ledger";
 import { createMachineHost, type MachineHost } from "@openomni/machines";
 import type { Placement } from "@openomni/placement";
-import type { Machine } from "@openomni/protocol";
+import type { Gateway, Ingress, Machine } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
-import { assertWsExposure, loadConfig, type OpenOmniConfig } from "./config";
+import { assertWsExposure, loadConfig, type OpenOmniConfig, type RegisteredActor } from "./config";
+import { createChannelDriver } from "./delegation/channel-driver";
 import { createInlineDriver } from "./delegation/inline-driver";
 import { createDelegationKernel, type DelegationKernel } from "./delegation/kernel";
 import { createProcessDriver } from "./delegation/process-driver";
@@ -43,10 +44,34 @@ function attachedTargets(
   return [HOST_TARGET, ...machines];
 }
 
+/** How a correlated reply's payload reads when handed back to the waiting delegation. */
+function replyText(payload: unknown): string {
+  if (typeof payload === "string") return payload;
+  return JSON.stringify(payload);
+}
+
 export async function startOpenOmni(options: StartOptions = {}) {
   const config = options.config ?? loadConfig();
   assertWsExposure(config);
   initialize({ dbPath: config.dbPath });
+
+  // Owner-admitted delegation targets. Registration is an upsert, so a
+  // restart re-asserting the same actors is a no-op.
+  const actors: readonly RegisteredActor[] = config.actors ?? [];
+  for (const actor of actors) {
+    ActorRegistry.registerIdentity({
+      id: actor.actorId,
+      kind: actor.kind,
+      trustTier: actor.trustTier,
+      ...(actor.displayName === undefined ? {} : { displayName: actor.displayName }),
+    });
+    ActorRegistry.registerEndpoint({
+      id: `ws:${actor.externalId}`,
+      actorId: actor.actorId,
+      channel: "ws",
+      externalId: actor.externalId,
+    });
+  }
 
   // A worker loop holds the same delegate tool the Resident does, so the
   // runner needs the kernel that the kernel needs the runner to build. The
@@ -61,9 +86,22 @@ export async function startOpenOmni(options: StartOptions = {}) {
     },
     ...(options.llm === undefined ? {} : { llm: options.llm }),
   });
+  // The gateway owns the send kernel the channel driver speaks through, and
+  // the gateway needs the deliver chain the kernel is part of — the same
+  // late-binding the runner/kernel pair uses.
+  let gateway: GatewayRouter | undefined;
+  const channelDriver = createChannelDriver({
+    send: (input) => {
+      if (gateway === undefined) throw new Error("messaging used before composition finished");
+      return gateway.messaging.send(input);
+    },
+    now: () => Date.now(),
+    newWaitId: () => crypto.randomUUID(),
+  });
   kernel = createDelegationKernel({
     drivers: {
       inline: createInlineDriver(runner),
+      channel: channelDriver,
       process: createProcessDriver({
         command: [
           process.execPath,
@@ -106,16 +144,56 @@ export async function startOpenOmni(options: StartOptions = {}) {
           newCellId: () => crypto.randomUUID(),
         };
 
-  const deliver = createResident({
+  const residentDeliver = createResident({
     model: config.model,
     apiKey: config.model.apiKey,
     tools: { delegation: kernel, ...(cells === undefined ? {} : { cells }) },
     targets: () => attachedTargets(host, machines?.enrolled ?? []),
     ...(options.llm === undefined ? {} : { llm: options.llm }),
   });
-  const gateway = createResidentGateway(deliver);
-  const wsHandler = new WebSocketHandler(async (message) => {
-    const result = await gateway.ingest(buildInboundEvent(message));
+
+  // A delivery the perimeter correlated to an open Wait is an actor's answer
+  // to a delegation, not a message for the Resident: it settles the waiting
+  // delegate call. A waitContext nothing is waiting on (a resume after this
+  // process restarted) falls through to the Resident as an ordinary message.
+  const deliver = async (delivery: Gateway.Deliver): Promise<Ingress.IngressResult> => {
+    const wait = delivery.waitContext;
+    if (wait !== undefined && channelDriver.resume(wait.waitId, replyText(delivery.event.payload))) {
+      return {
+        mode: "direct",
+        target: { kind: "resident" },
+        sessionId: delivery.sessionId ?? "",
+        result: { output: "Reply received — the delegation it answers is settling.", finishReason: "stop" },
+      };
+    }
+    return residentDeliver(delivery);
+  };
+
+  // Late-binds the handler the route delivers through: the gateway needs the
+  // route before the ws handler that needs the gateway exists.
+  let wsHandler: WebSocketHandler | undefined;
+  const wsRoute = async (externalId: string, body: string) => {
+    if (wsHandler === undefined) throw new Error("ws delivery used before composition finished");
+    return wsHandler.push(externalId, body);
+  };
+  gateway = createResidentGateway(
+    deliver,
+    actors.length === 0
+      ? undefined
+      : {
+          deliveryRoutes: new Map([["ws", wsRoute]]),
+          grants: () =>
+            actors.map((actor) => ({
+              id: `resident->${actor.actorId}`,
+              senderId: "resident",
+              targetActorId: actor.actorId,
+              operations: ["awaited" as const],
+            })),
+        },
+  );
+  const boundGateway = gateway;
+  wsHandler = new WebSocketHandler(async (message) => {
+    const result = await boundGateway.ingest(buildInboundEvent(message));
     return result.kind === "dropped" ? null : { text: result.result.output };
   }, Bus.publish, config.wsToken === undefined ? {} : { token: config.wsToken });
 

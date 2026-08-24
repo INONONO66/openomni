@@ -4,8 +4,8 @@ import { createInlineDriver } from "../src/delegation/inline-driver";
 import { createDelegationKernel, type DelegationDriver } from "../src/delegation/kernel";
 import { DELEGATE_TOOL_NAME, delegateToolExecutor, delegateToolSpec } from "../src/delegation/tool";
 
-const RESIDENT: DelegationOrigin = { role: "resident", depth: 0 };
-const WORKER: DelegationOrigin = { role: "worker", depth: 1 };
+const RESIDENT: DelegationOrigin = { role: "resident", depth: 0, sessionId: "session-origin" };
+const WORKER: DelegationOrigin = { role: "worker", depth: 1, sessionId: "session-origin" };
 const LIMITS = { maxInlineDepth: 2 };
 
 function ask(overrides: Record<string, unknown> = {}) {
@@ -46,7 +46,7 @@ describe("admission", () => {
   });
 
   test("inline chains stop at the configured depth instead of running away", () => {
-    const atCap = admit(ask(), { role: "worker", depth: 2 }, 1000, LIMITS);
+    const atCap = admit(ask(), { role: "worker", depth: 2, sessionId: "session-origin" }, 1000, LIMITS);
     expect(atCap).toMatchObject({ ok: false, reason: "inline delegation is capped at depth 2" });
   });
 
@@ -79,7 +79,7 @@ describe("admission", () => {
 
   test("a child presents as a worker one step deeper than its parent", () => {
     const decision = admit(ask(), RESIDENT, 1000, LIMITS);
-    expect(decision).toMatchObject({ ok: true, childOrigin: { role: "worker", depth: 1 } });
+    expect(decision).toMatchObject({ ok: true, childOrigin: { role: "worker", depth: 1, sessionId: "session-origin" } });
   });
 
   test("contract violations are reported, not thrown", () => {
@@ -183,7 +183,7 @@ describe("inline driver", () => {
       return "ok";
     });
     for (const parentDepth of [0, 1]) {
-      const decision = admit(ask(), { role: "worker", depth: parentDepth }, 1000, LIMITS);
+      const decision = admit(ask(), { role: "worker", depth: parentDepth, sessionId: "session-origin" }, 1000, LIMITS);
       if (!decision.ok) throw new Error(`expected admission at depth ${parentDepth}`);
       await driver.run(
         decision,
@@ -195,8 +195,8 @@ describe("inline driver", () => {
     // recursing, and the role so nothing downstream gets to declare a child a
     // worker on its own authority.
     expect(origins).toEqual([
-      { role: "worker", depth: 1 },
-      { role: "worker", depth: 2 },
+      { role: "worker", depth: 1, sessionId: "session-origin" },
+      { role: "worker", depth: 2, sessionId: "session-origin" },
     ]);
   });
 });
@@ -221,8 +221,10 @@ describe("delegate tool", () => {
     };
     const kernel = kernelWith({ run: async () => ({ status: "completed", output: "green" }) });
     const execute = delegateToolExecutor(kernel, RESIDENT);
-    expect(Object.keys(advertised.properties).sort()).toEqual(Object.keys(full).sort());
-    expect(advertised.required.sort()).toEqual(["instruction", "mode", "scope", "timeoutMs"]);
+    expect(Object.keys(advertised.properties).sort()).toEqual(
+      [...Object.keys(full), "actorId"].sort(),
+    );
+    expect(advertised.required.sort()).toEqual(["instruction", "mode", "timeoutMs"]);
     expect(advertised.properties.mode?.enum).toEqual(["ask", "assign"]);
     expect(advertised.properties.scope?.enum).toEqual(["inline", "independent"]);
     return expect(execute(full)).resolves.toBe("green");
@@ -259,7 +261,7 @@ describe("delegate tool", () => {
       scope: "independent",
       acceptanceCriteria: ["done"],
       timeoutMs: 5000,
-      origin: { role: "resident", depth: 0 },
+      origin: { role: "resident", depth: 0, sessionId: "session-origin" },
     });
     expect(answer).toBe("delegate refused: Unrecognized key(s) in object: 'origin'");
   });

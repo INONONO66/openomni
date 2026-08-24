@@ -9,7 +9,7 @@ import { createCellRegistry } from "../src/tools/cell-registry";
 import type { CellPorts } from "../src/tools/run-code";
 import { cellDoor, RUN_CODE_TOOL_NAME, runCodeToolExecutor } from "../src/tools/run-code";
 
-const RESIDENT = { role: "resident", depth: 0 } as const;
+const RESIDENT = { role: "resident", depth: 0, sessionId: "session-origin" } as const;
 
 function machineTarget(capabilities: string[]): Placement.ToolTarget {
   return { kind: "machine", id: "alpha", capabilities };
@@ -169,7 +169,7 @@ describe("the cell door", () => {
   it("binds each cell to its own dispatcher, so one cell cannot borrow another's reach", async () => {
     const { kernel } = recordingDelegation();
     const registry = createCellRegistry();
-    const worker = { role: "worker", depth: 1 } as const;
+    const worker = { role: "worker", depth: 1, sessionId: "session-origin" } as const;
 
     // A worker with no delegation port holds an empty catalog.
     registry.bind("worker-cell", cellDoor(catalogEntries({}, worker)));

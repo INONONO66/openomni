@@ -50,14 +50,21 @@ function history(sessionId: string): ChatAgentInput["messages"] {
   }));
 }
 
-const RESIDENT_ORIGIN: DelegationOrigin = { role: "resident", depth: 0 };
-
 export function createResident(options: ResidentOptions) {
-  const entries = catalogEntries(options.tools, RESIDENT_ORIGIN);
-
   return async function deliver(delivery: Gateway.Deliver): Promise<Ingress.IngressResult> {
+    const sessionId = delivery.sessionId;
+    if (sessionId === undefined) {
+      throw new Error("Resident delivery requires a routed sessionId");
+    }
+    if (typeof delivery.event.payload !== "string") {
+      throw new Error("Resident delivery payload must be text");
+    }
+
+    // Built per delivery because the origin carries THIS session: a Wait a
+    // delegation opens must be owned by the session that asked for the work.
+    const origin: DelegationOrigin = { role: "resident", depth: 0, sessionId };
     const targets = options.targets();
-    const catalog = createDispatcher(entries);
+    const catalog = createDispatcher(catalogEntries(options.tools, origin));
     const agent = ChatAgent.create({
       events: Bus,
       systemPrompt: RESIDENT_SYSTEM_PROMPT,
@@ -69,14 +76,6 @@ export function createResident(options: ResidentOptions) {
       auth: { type: "api", key: options.apiKey },
       ...(options.llm === undefined ? {} : { llm: options.llm }),
     });
-
-    const sessionId = delivery.sessionId;
-    if (sessionId === undefined) {
-      throw new Error("Resident delivery requires a routed sessionId");
-    }
-    if (typeof delivery.event.payload !== "string") {
-      throw new Error("Resident delivery payload must be text");
-    }
 
     Session.materialize({
       id: sessionId,
