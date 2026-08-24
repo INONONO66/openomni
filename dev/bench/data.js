@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787551721753,
+  "lastUpdate": 1787554642837,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -61307,6 +61307,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 525996,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "65936f24199b5de7905320a9888ee03890bc3442",
+          "message": "feat(delegation): process transport driver (#785)\n\n* feat(delegation): process transport driver\n\ncore/independent delegations run in their own OS process instead of settling\n\"no driver for process transport\".\n\nThe wire is two lines: one JSON request down stdin, an ack then a result up\nstdout. The ack is the whole point. Without it a driver cannot tell a process\nthat never started from a worker who took the request and broke, and both\nwould land on the caller as the same vague failure. With it:\n\n  never started / died before ack  -> delivery_failed (new DriverOutcome arm)\n  acked, then bad exit or garbage  -> failed\n  acked, then silence              -> the kernel deadline, no_response\n\nThe child runs the same worker loop the inline driver runs, with the parent's\nadmitted origin carried whole, so the depth cap keeps binding across the\nprocess boundary. Its own kernel holds inline only. Secrets go over the stdin\npipe, never argv or env.\n\nTwo kills, both reachable, both pinned by watching the child rather than\ntrusting the driver: the deadline abort, and reaping a child that answered\nand then refused to exit. Each child heartbeats to a file, so \"we killed it\"\nis the file going quiet.\n\n* test(delegation): pin what the probes proved about the process wire\n\nI ran the attack list a reviewer would run and kept the three findings worth\nkeeping as permanent tests rather than as sentences in a PR body.\n\nConcurrency with a deliberately shared delegation id: every delegation gets\nits own process and its own pipe pair, so nothing correlates by id and eight\nconcurrent callers get eight distinct answers. The existing tests all mint a\nconstant id, which would have hidden a correlation bug; this one keeps the id\nconstant on purpose.\n\nAck-then-clean-exit: settles failed in about 13ms rather than waiting out the\ndeadline. A worker that took the request and crashed is known immediately,\nand calling that no_response would make an honest crash look like a worker\nstill thinking.\n\nLate result: once the deadline settled, a result arriving afterwards changes\nnothing.\n\nProbes that found nothing and are not kept: secrets absent from child argv\nand env, 5MB result line, 64MB of synchronous fd-2 stderr (no backpressure\ndeadlock), directory-as-command, result-before-ack, newline/CR/NUL in the\ninstruction, a child that never reads stdin, past deadline (admission refuses\nit before any driver runs), 40 sequential delegations (fd delta 0, zombies 0).\n\n* fix(test): assert the concurrent answers as a list, not a forEach\n\nWhole-repo ultracite rejects an arrow that returns a value inside forEach.\nI had only linted apps/openomni, which did not reach it. The replacement is\nalso a stronger assertion: it pins the order, not just the membership.\n\n* fix(delegation): make the child's driver map observable, and test it\n\nA mutation survived: widening the child kernel's driver map to include the\nprocess transport broke no test at all. The comment claimed a child cannot\nturn into a process factory; nothing held that claim up.\n\nTwo layers actually prevent it and they are now tested separately, because\nthey fail independently:\n\n  admission refuses a worker who asks for independent work  (the front door)\n  the child's kernel has no process driver                  (if that slipped)\n\nThe second layer was untestable as written, because processWorkerRun\nassembled its kernel inline where nothing could hold the same map. That\nassembly is now createChildKernel, one exported owner of \"what a child may\ndelegate onward\", and the test holds the very map the child holds — widen it\nthere and the test fails.\n\nMy first attempt at this test asserted against a kernel the test built\nitself, which re-ran the mutation and still passed. That version proved\nnothing about the child and is not what landed.",
+          "timestamp": "2026-08-24T15:56:15+09:00",
+          "tree_id": "fb8cf153526b55df00b1d236c07bc903b9a94b65",
+          "url": "https://github.com/INONONO66/openomni/commit/65936f24199b5de7905320a9888ee03890bc3442"
+        },
+        "date": 1787554642330,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 450,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 619,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6079,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9398,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2519,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2893,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2409,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15445,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8060,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1048,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 941,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1477,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1598,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 735,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 47274,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2316,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 518696,
             "unit": "ns/op"
           }
         ]
