@@ -158,12 +158,23 @@ export async function startOpenOmni(options: StartOptions = {}) {
   // process restarted) falls through to the Resident as an ordinary message.
   const deliver = async (delivery: Gateway.Deliver): Promise<Ingress.IngressResult> => {
     const wait = delivery.waitContext;
-    if (wait !== undefined && channelDriver.resume(wait.waitId, replyText(delivery.event.payload))) {
+    // A wait-correlated route always carries the wait owner's session label
+    // (resolve-route pins `sessionId: state.wait.sessionId`), so no fallback:
+    // a labelless delivery is ordinary traffic for the Resident.
+    const sessionId = delivery.sessionId;
+    if (
+      wait !== undefined &&
+      sessionId !== undefined &&
+      channelDriver.resume(wait.waitId, replyText(delivery.event.payload))
+    ) {
       return {
         mode: "direct",
         target: { kind: "resident" },
-        sessionId: delivery.sessionId ?? "",
-        result: { output: "Reply received — the delegation it answers is settling.", finishReason: "stop" },
+        sessionId,
+        result: {
+          output: "Reply received — the delegation it answers is settling.",
+          finishReason: "stop",
+        },
       };
     }
     return residentDeliver(delivery);

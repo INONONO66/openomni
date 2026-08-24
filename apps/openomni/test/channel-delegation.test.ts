@@ -74,8 +74,8 @@ describe("channel delegation driver", () => {
     });
 
     const outcome = driver.run(admitted(), HANDLE, new AbortController().signal);
-    // The send has been awaited by the time run is pending on the reply.
-    await Bun.sleep(0);
+    // The pending entry is registered synchronously BEFORE the send, so a
+    // reply may race the send's own return and still settle the delegation.
     expect(driver.resume("wait-1", "all sections reviewed")).toBe(true);
     expect(await outcome).toEqual({ status: "completed", output: "all sections reviewed" });
 
@@ -107,7 +107,6 @@ describe("channel delegation driver", () => {
       newWaitId: () => "wait-1",
     });
     const outcome = driver.run(admitted(), HANDLE, new AbortController().signal);
-    await Bun.sleep(0);
     expect(driver.resume("wait-1", "done")).toBe(true);
     expect(driver.resume("wait-1", "done again")).toBe(false);
     expect(await outcome).toEqual({ status: "completed", output: "done" });
