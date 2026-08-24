@@ -16,14 +16,29 @@ const Input = z
       .describe("ask = answer a question; assign = own a piece of work until its criteria are met."),
     scope: z
       .enum(["inline", "independent"])
+      .optional()
       .describe("inline = a child in this process sharing your domain; independent = its own worker."),
+    actorId: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("A registered external actor (a human or an outside agent) to hand the work to instead of an internal worker."),
     acceptanceCriteria: z
       .array(z.string().min(1))
       .optional()
       .describe("Required for assign, forbidden for ask: what makes the work done."),
     timeoutMs: z.number().int().positive().describe("How long to wait before giving up on an answer."),
   })
-  .strict();
+  .strict()
+  .superRefine((input, ctx) => {
+    if ((input.scope === undefined) === (input.actorId === undefined)) {
+      ctx.addIssue({
+        code: "custom",
+        message: "exactly one of scope or actorId must be given",
+        path: ["scope"],
+      });
+    }
+  });
 
 export const DELEGATE_TOOL_NAME = "delegate";
 
@@ -35,7 +50,7 @@ export const DELEGATE_TOOL_NAME = "delegate";
 const INPUT_JSON_SCHEMA: Record<string, unknown> = {
   type: "object",
   additionalProperties: false,
-  required: ["instruction", "mode", "scope", "timeoutMs"],
+  required: ["instruction", "mode", "timeoutMs"],
   properties: {
     instruction: {
       type: "string",
@@ -50,7 +65,14 @@ const INPUT_JSON_SCHEMA: Record<string, unknown> = {
     scope: {
       type: "string",
       enum: ["inline", "independent"],
-      description: "inline = a child in this process sharing your domain; independent = its own worker.",
+      description:
+        "inline = a child in this process sharing your domain; independent = its own worker. Exactly one of scope or actorId.",
+    },
+    actorId: {
+      type: "string",
+      minLength: 1,
+      description:
+        "A registered external actor (a human or an outside agent) to hand the work to instead of an internal worker. Exactly one of scope or actorId.",
     },
     acceptanceCriteria: {
       type: "array",
@@ -92,9 +114,11 @@ export function delegateToolExecutor(kernel: DelegationKernel, origin: Delegatio
     const result = await kernel.delegate(
       {
         address:
-          input.scope === "inline"
-            ? { kind: "core", scope: "inline" }
-            : { kind: "core", scope: "independent" },
+          input.actorId !== undefined
+            ? { kind: "actor", actorId: input.actorId }
+            : input.scope === "inline"
+              ? { kind: "core", scope: "inline" }
+              : { kind: "core", scope: "independent" },
         mode: input.mode,
         payload: { text: input.instruction },
         ...(input.acceptanceCriteria === undefined

@@ -13,7 +13,7 @@ import {
 } from "../src/delegation/process-entry";
 
 const WORKER = { model: { provider: "anthropic", id: "test-model" }, apiKey: "test-key" } as const;
-const RESIDENT = { role: "resident", depth: 0 } as const;
+const RESIDENT = { role: "resident", depth: 0, sessionId: "session-origin" } as const;
 
 /** A `core` worker asked for independent work: the address that resolves to `process`. */
 function independentAsk(text: string, deadline: number) {
@@ -52,7 +52,7 @@ test("the entry acks before it works, so delivery is observable separately from 
       delegationId: "d-1",
       instruction: "summarize",
       acceptanceCriteria: [],
-      origin: { role: "worker", depth: 1 },
+      origin: { role: "worker", depth: 1, sessionId: "session-origin" },
       model: WORKER.model,
       apiKey: WORKER.apiKey,
     }),
@@ -78,7 +78,7 @@ test("a worker that throws is a failed result, not a lost delivery", async () =>
       delegationId: "d-1",
       instruction: "summarize",
       acceptanceCriteria: [],
-      origin: { role: "worker", depth: 1 },
+      origin: { role: "worker", depth: 1, sessionId: "session-origin" },
       model: WORKER.model,
       apiKey: WORKER.apiKey,
     }),
@@ -288,6 +288,7 @@ test("the child receives the origin the parent admitted, so the depth cap crosse
   expect(JSON.parse((result.settled as { output: string }).output)).toEqual({
     role: "worker",
     depth: 1,
+    sessionId: "session-origin",
   });
 }, 30_000);
 
@@ -302,6 +303,7 @@ test("a worker may not open a process at all, so the driver is never reached", a
   const result = await kernel.delegate(independentAsk("audit", Date.now() + 20_000), {
     role: "worker",
     depth: 1,
+    sessionId: "session-origin",
   });
 
   if (!("refused" in result)) throw new Error("a worker opened a process");
@@ -403,6 +405,7 @@ test("admission refuses a worker who asks for independent work", async () => {
   const result = await kernel.delegate(independentAsk("fork", Date.now() + 5_000), {
     role: "worker",
     depth: 1,
+    sessionId: "session-origin",
   });
 
   if (!("refused" in result)) throw new Error("a worker reached the process transport");

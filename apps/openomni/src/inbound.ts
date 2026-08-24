@@ -6,7 +6,11 @@ function correlation(
   threadId: string | undefined,
 ): Wait.Correlation {
   return {
-    endpointId: descriptor.namespace || descriptor.surface,
+    // The convention every registered ActorEndpoint id follows
+    // (`<channel>:<externalId>`), so a reply's claim can meet the Wait's
+    // recorded endpoint. NOT the per-connection channel id — a reconnect
+    // must still correlate.
+    endpointId: `${descriptor.surface}:${message.sender.id}`,
     channelId: descriptor.id ?? message.surfaceKey,
     ...(message.replyToId === undefined ? {} : { replyToMessageId: message.replyToId }),
     ...(threadId === undefined ? {} : { threadId }),

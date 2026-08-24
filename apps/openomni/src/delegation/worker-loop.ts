@@ -3,6 +3,7 @@ import type { Model } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { catalogEntries } from "../tools/catalog";
 import { createDispatcher, HOST_TARGET } from "../tools/dispatch";
+import { renderInstruction } from "./instruction";
 import type { DelegationKernel } from "./kernel";
 import type { InlineWorkerRunner } from "./inline-driver";
 
@@ -15,16 +16,6 @@ export interface WorkerLoopOptions {
   readonly llm?: ChatAgentConfig["llm"];
   /** Resolved late: the kernel needs the runner this factory produces. */
   readonly kernel: () => DelegationKernel;
-}
-
-function instructionFor(input: Parameters<InlineWorkerRunner>[0]): string {
-  if (input.acceptanceCriteria.length === 0) return input.instruction;
-  return [
-    input.instruction,
-    "",
-    "It is done when all of these hold:",
-    ...input.acceptanceCriteria.map((criterion) => `- ${criterion}`),
-  ].join("\n");
 }
 
 /**
@@ -51,7 +42,13 @@ export function createInlineWorkerRunner(options: WorkerLoopOptions): InlineWork
     });
 
     const result = await agent.run({
-      messages: [{ role: "user", content: instructionFor(input), time: Date.now() }],
+      messages: [
+        {
+          role: "user",
+          content: renderInstruction(input.instruction, input.acceptanceCriteria),
+          time: Date.now(),
+        },
+      ],
       traceContext: {
         traceId: crypto.randomUUID(),
         sessionId: `delegation-${input.delegationId}`,
