@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787669106441,
+  "lastUpdate": 1787699545653,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -61991,6 +61991,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 526172,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c54a7c436e22d0241f6997d43db6d0bcf5a55f58",
+          "message": "fix(openomni): harden boot durability (#794)\n\n* fix(delegation): persist settlement wake receipts\n\n* fix(openomni): complete boot durability recovery\n\n* fix(openomni): round 2 review blockers — sweep isolation, wake-receipt pin, single wake-failure publisher, journal rollback/flush\n\n(a) Session.sweepExpired per-item fault isolation: one corrupt session\nrecords Operational.Events.Error and the sweep continues (the\nWaitService.sweepExpired contract). RED: the new ttl.test.ts case failed\nwith \"corrupt session row\" thrown out of sweepExpired (lifecycle.ts:140),\naborting the sweep.\n\n(b) Legacy wake-receipt upcast pinned: a raw-seeded pre-0024 settled row\n(JSON payload without wokenAt, woken_at NULL) decodes as unwoken and the\nreceipt CAS still stamps exactly once. RED (mutation probe — the\nreviewer's survived mutation): decoding settled NULL as wokenAt: 0 passed\nall 12 pre-existing store tests but failed the new legacy upcast test.\n\n(c) Queued wake path only rejects: the kernel's deliverWake is the single\nowner of wake-failure reporting; the composition root no longer\ndouble-publishes Operational.Events.Error. New boot-durability test\nasserts exactly one error per failed wake. RED (mutation probe): a\ncomposition-root publish alongside the kernel's reportFailure yielded\n\"Expected length: 1, Received length: 2\".\n\n(d) BusPersistence boot rollback + shutdown flush: startOpenOmni wraps\nboot after the journal start in try/catch (detach observer, stop kernel,\nclose host, reset storage on failure) and stop() awaits\nBusPersistence.flush() before detaching and resetting. RED: the rollback\ntest failed with Bus observerCount 1 vs 0 after a port-conflict boot\nfailure; the shutdown test lost the published event (expected one\njournal row after stop, got none).\n\n(e) docs/implementation-status.md sync: Wait row names the OpenOmni boot\nsweeps and per-item isolation; BusPersistence row says three process\ntypes plus the rollback/flush contract; delegation rows record the\nwoken_at receipt, the listSettledUnwoken boot rescan, and the pre-0024\nmissing-receipt upcast.\n\nAlso pins the OpenOmni Session boot sweep itself (mutation probe:\nremoving Session.sweepExpired from boot fails the new boot-durability\ntest).\n\n* fix(openomni): round 3 review blockers — awaited signal-handler shutdown, deterministic queued-wake exactly-once pin\n\nBlocker 1 (SIGINT/SIGTERM exit could precede BusPersistence.flush): the\nentry-point handler called async stop() without awaiting it (the R2\nhandler fix was lost to a failed edit batch; the old handler shipped).\nExtracted installShutdownHandlers(stop, exit, on) behind seams; the\nhandler exits only after stop() settles (0 on success, 1 on rejection).\nRED: shutdown-hooks.test.ts failed on the missing seam, and the\nimmediate-exit mutation probe fails both cases (\"exit must not precede\nstop completion\").\n\nBlocker 2 (exactly-once test missed the queued path + used fixed\nsetTimeout drains): extracted the pendingWakes mechanism into\napps/openomni/src/delegation/wake-delivery.ts (createWakeDeliveryQueue)\nand armed it AFTER kernel.start(), so boot-rescan wakes genuinely land\nin the queue — the R1 defect path is now live and covered. New\nwake-delivery.test.ts drives a real kernel + queue: a wake queued during\nrecover() rejects at arm; completion is awaited via the kernel's wake\npromise settlement (Promise.allSettled — the reviewer-suggested signal,\nno fixed sleeps); dual-sink assertion pins exactly one error via the\nkernel sink and zero via the composition root's Bus channel. RED\n(mutation re-run): reintroducing the composition-root publish in the\nqueued rejection flush fails the test (busErrors non-empty). The\nboot-level test keeps a bounded exact signal (no count assertion: the\nkernel's publish sits two promise hops downstream of any\ncomposition-root publish, so no app-level count is deterministic —\nverified empirically: the arm-callback publish mutation passed it).",
+          "timestamp": "2026-08-26T08:11:17+09:00",
+          "tree_id": "a257561df070644143eda8baf6f4f1886c410d1b",
+          "url": "https://github.com/INONONO66/openomni/commit/c54a7c436e22d0241f6997d43db6d0bcf5a55f58"
+        },
+        "date": 1787699544297,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 447,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 655,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6178,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9598,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2618,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 2948,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2434,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15997,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8380,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1051,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 953,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1622,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1531,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 791,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 45434,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2312,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 522054,
             "unit": "ns/op"
           }
         ]
