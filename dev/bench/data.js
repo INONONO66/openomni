@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787699545653,
+  "lastUpdate": 1787701627523,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -62105,6 +62105,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 522054,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9d1ef8f7c9e78b81fd79609a944571769ba73a3a",
+          "message": "fix(openomni): enforce gateway conduct contracts (#795)\n\n* fix(openomni): enforce gateway conduct contracts\n\n* docs: sync gateway security and durability status\n\n* fix(openomni): configure proactive send budgets\n\n* fix(openomni): enforce evidence-only turns at the execution boundary\n\nReview round 2 (PR #795 BLOCKERS):\n\n1. toolChoice \"none\" was only a provider hint — the turn still carried the\n   full catalog and a live executor, so a model emitting a tool call during\n   an evidence-only turn got it executed (reviewer persisted a memory\n   write). Evidence-only turns now offer zero tool specs and swap the\n   executor for a deny-all refusal, so no tool call can produce a side\n   effect regardless of what the model emits.\n\n2. Treatment was read only from optional event.meta.inboundTreatment while\n   the authoritative perimeter verdict lives on actorContext (schema.ts\n   §2a projection), and DeliverSchema does not require the duplicated\n   fields to agree — a crafted delivery with meta {} but actorContext\n   evidence_only reached tools. The deliver seam now fails closed: ANY\n   evidence_only stamp across actorContext, decision, or meta downgrades\n   the turn, so disagreement can only reduce authority, never elevate it.",
+          "timestamp": "2026-08-26T08:45:56+09:00",
+          "tree_id": "637b51489f2a775681945c9e938185ab43ba95b3",
+          "url": "https://github.com/INONONO66/openomni/commit/9d1ef8f7c9e78b81fd79609a944571769ba73a3a"
+        },
+        "date": 1787701626169,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 449,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 660,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 6192,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 9617,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2607,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3055,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2504,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16314,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8512,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1066,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 961,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1634,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1540,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 789,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 45819,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2298,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 520683,
             "unit": "ns/op"
           }
         ]
