@@ -1,7 +1,10 @@
-import { describe, expect, test } from "bun:test";
-import { DelegationStore } from "@openomni/ledger";
-import type { Delegation } from "@openomni/protocol";
+import { describe, expect, setSystemTime, test, vi } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { DelegationStore, SqliteStorageAdapter, Storage } from "@openomni/ledger";
 import { admit, type AdmissionLimits } from "../src/delegation/admission";
+import { createChannelDriver } from "../src/delegation/channel-driver";
 import { createDelegationKernel } from "../src/delegation/kernel";
 import {
   AWAIT_DELEGATION_TOOL_NAME,
@@ -11,6 +14,7 @@ import {
   delegateToolSpec,
 } from "../src/delegation/tool";
 import {
+  awaitedReceipt,
   eventCollector,
   RESIDENT,
   useDelegationStore,
@@ -100,6 +104,7 @@ describe("durable kernel", () => {
       },
       now: () => 1_000,
       newDelegationId: () => "d-1",
+      wake: () => undefined,
       events,
       limits: LIMITS,
     });
@@ -134,6 +139,7 @@ describe("durable kernel", () => {
       },
       now: () => 1_000,
       newDelegationId: () => "d-process",
+      wake: () => undefined,
       events,
       limits: LIMITS,
     });
@@ -174,6 +180,7 @@ describe("durable kernel", () => {
       },
       now: () => 1_000,
       newDelegationId: () => "d-cancel",
+      wake: () => undefined,
       events,
       limits: LIMITS,
     });
@@ -197,6 +204,7 @@ describe("durable kernel", () => {
       drivers: { inline: { run: () => new Promise(() => undefined) } },
       now: () => Date.now(),
       newDelegationId: () => "d-uncooperative",
+      wake: () => undefined,
       limits: LIMITS,
     });
     const result = await kernel.delegate(ask({ deadline: Date.now() + 25 }), RESIDENT);
@@ -210,6 +218,7 @@ describe("durable kernel", () => {
       drivers: { inline: { run: async () => ({ status: "completed", output: "ok" }) } },
       now: () => 1_000,
       newDelegationId: () => "d-stamped",
+      wake: () => undefined,
       limits: LIMITS,
     });
     const result = await kernel.delegate(ask(), { ...RESIDENT, rootDelegationId: "forged-root" });
@@ -229,6 +238,7 @@ describe("durable kernel", () => {
       },
       now: () => Date.now(),
       newDelegationId: () => "d-deadline",
+      wake: () => undefined,
       events,
       limits: LIMITS,
     });
@@ -236,6 +246,56 @@ describe("durable kernel", () => {
     if ("refused" in result) throw new Error(result.refused);
     expect(result.settled?.status).toBe("no_response");
     expect(result.settled).toMatchObject({ deadline: expect.any(Number) });
+  });
+
+  test("deadline and await timers re-arm instead of settling at the timer cap", async () => {
+    const timerCap = 2_147_000_000;
+    vi.useFakeTimers();
+    setSystemTime(0);
+    let wakes = 0;
+    let kernel: ReturnType<typeof createDelegationKernel> | undefined;
+    try {
+      kernel = createDelegationKernel({
+        drivers: { process: { run: () => new Promise(() => undefined) } },
+        now: () => Date.now(),
+        newDelegationId: () => "d-long-deadline",
+        wake: () => {
+          wakes += 1;
+        },
+        limits: LIMITS,
+      });
+      const started = await kernel.delegate(
+        {
+          address: { kind: "core", scope: "independent" },
+          operation: "ask",
+          payload: { text: "wait a long time" },
+          deadline: timerCap + 1_000,
+        },
+        RESIDENT,
+      );
+      if ("refused" in started) throw new Error(started.refused);
+      let awaited: unknown;
+      const waiting = kernel.awaitDelegation(started.handle.delegationId).then((result) => {
+        awaited = result;
+        return result;
+      });
+
+      vi.advanceTimersByTime(timerCap);
+      await Promise.resolve();
+      expect(DelegationStore.get(started.handle.delegationId)?.status).toBe("open");
+      expect(awaited).toBeUndefined();
+      expect(wakes).toBe(0);
+
+      vi.advanceTimersByTime(1_000);
+      await expect(waiting).resolves.toMatchObject({
+        kind: "settled",
+        settlement: { status: "no_response", deadline: timerCap + 1_000 },
+      });
+      expect(wakes).toBe(1);
+    } finally {
+      kernel?.stop();
+      vi.useRealTimers();
+    }
   });
 });
 
@@ -246,6 +306,7 @@ describe("delegation controls and tool surface", () => {
       drivers: { process: { run: () => new Promise(() => undefined) } },
       now: () => 1_000,
       newDelegationId: () => "d-tool",
+      wake: () => undefined,
       events,
       limits: LIMITS,
     });
@@ -265,84 +326,111 @@ describe("delegation controls and tool surface", () => {
     kernel.stop();
   });
 
-  test("restart sweep interrupts volatile work and preserves future channel correlation", () => {
-    const open = (record: Delegation.Record): void => {
-      DelegationStore.create(record);
-    };
-    open({
-      delegationId: "d-inline-restart",
-      operation: "ask",
-      address: { kind: "core", scope: "inline" },
-      transport: "inline",
-      deadline: 5_000,
-      rootDelegationId: "d-inline-restart",
-      origin: RESIDENT,
-      instruction: "volatile",
-      status: "open",
-      createdAt: 1_000,
-    });
-    let processWakes = 0;
-    const processKernel = createDelegationKernel({
-      drivers: {},
-      now: () => 2_000,
-      newDelegationId: () => "unused",
-      wake: () => {
-        processWakes += 1;
-      },
-    });
-    expect(DelegationStore.get("d-inline-restart")?.settled).toMatchObject({ status: "interrupted" });
-    expect(processWakes).toBe(0);
-    processKernel.stop();
+  test("SQLite restart sweep preserves channel correlation and interrupts volatile work", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "openomni-delegation-restart-"));
+    const dbPath = join(directory, "ledger.sqlite");
+    let kernelA: ReturnType<typeof createDelegationKernel> | undefined;
+    let kernelB: ReturnType<typeof createDelegationKernel> | undefined;
+    try {
+      Storage.reset();
+      Storage.configure(new SqliteStorageAdapter(dbPath));
+      kernelA = createDelegationKernel({
+        store: DelegationStore,
+        drivers: {
+          channel: createChannelDriver({
+            send: async (input) => awaitedReceipt(input),
+            now: () => 2_000,
+            newWaitId: () => "wait-restart",
+          }),
+        },
+        now: () => 2_000,
+        newDelegationId: () => "d-channel-restart",
+        wake: () => undefined,
+        limits: LIMITS,
+      });
+      const started = await kernelA.delegate(
+        {
+          address: { kind: "actor", actorId: "alice" },
+          operation: "ask",
+          payload: { text: "durable question" },
+          deadline: 5_000,
+        },
+        RESIDENT,
+      );
+      if ("refused" in started) throw new Error(started.refused);
+      expect(started.settled).toBeUndefined();
+      expect(started.handle.waitId).toBe("wait-restart");
+      kernelA.stop();
 
-    open({
-      delegationId: "d-process-restart",
-      operation: "ask",
-      address: { kind: "core", scope: "independent" },
-      transport: "process",
-      deadline: 5_000,
-      rootDelegationId: "d-process-restart",
-      origin: RESIDENT,
-      instruction: "process volatile",
-      status: "open",
-      createdAt: 1_000,
-    });
-    let processWakesAfterSweep = 0;
-    const processSweep = createDelegationKernel({
-      drivers: {},
-      now: () => 2_000,
-      newDelegationId: () => "unused-process",
-      wake: () => {
-        processWakesAfterSweep += 1;
-      },
-    });
-    expect(DelegationStore.get("d-process-restart")?.settled).toMatchObject({ status: "interrupted" });
-    expect(processWakesAfterSweep).toBe(1);
-    processSweep.stop();
+      DelegationStore.create({
+        delegationId: "d-inline-restart",
+        operation: "ask",
+        address: { kind: "core", scope: "inline" },
+        transport: "inline",
+        deadline: 5_000,
+        rootDelegationId: "d-inline-restart",
+        origin: { ...RESIDENT, sessionId: "volatile-inline" },
+        instruction: "volatile inline",
+        status: "open",
+        createdAt: 1_000,
+      });
+      DelegationStore.create({
+        delegationId: "d-process-restart",
+        operation: "ask",
+        address: { kind: "core", scope: "independent" },
+        transport: "process",
+        deadline: 5_000,
+        rootDelegationId: "d-process-restart",
+        origin: { ...RESIDENT, sessionId: "volatile-process" },
+        instruction: "volatile process",
+        status: "open",
+        createdAt: 1_000,
+      });
 
-    open({
-      delegationId: "d-channel-restart",
-      operation: "ask",
-      address: { kind: "actor", actorId: "alice" },
-      transport: "channel",
-      deadline: 5_000,
-      waitId: "wait-restart",
-      rootDelegationId: "d-channel-restart",
-      origin: RESIDENT,
-      instruction: "durable",
-      status: "open",
-      createdAt: 1_000,
-    });
-    const channelKernel = createDelegationKernel({
-      drivers: {},
-      now: () => 2_000,
-      newDelegationId: () => "unused-2",
-    });
-    expect(channelKernel.settleFromReply("wait-restart", "replied after restart")).toBe(true);
-    expect(DelegationStore.get("d-channel-restart")?.settled).toMatchObject({
-      status: "completed",
-      output: "replied after restart",
-    });
-    channelKernel.stop();
+      Storage.reset();
+      Storage.configure(new SqliteStorageAdapter(dbPath));
+      const events = eventCollector();
+      const wakes: Array<{ delegationId: string; sessionId: string }> = [];
+      kernelB = createDelegationKernel({
+        store: DelegationStore,
+        drivers: {},
+        now: () => 2_000,
+        newDelegationId: () => "unused-restart",
+        events,
+        wake: ({ record }) => {
+          wakes.push({ delegationId: record.delegationId, sessionId: record.origin.sessionId });
+        },
+        bootSweep: false,
+        limits: LIMITS,
+      });
+      kernelB.start();
+
+      expect(DelegationStore.get("d-channel-restart")?.status).toBe("open");
+      expect(DelegationStore.get("d-channel-restart")?.settled).toBeUndefined();
+      expect(DelegationStore.get("d-inline-restart")?.settled).toMatchObject({ status: "interrupted" });
+      expect(DelegationStore.get("d-process-restart")?.settled).toMatchObject({ status: "interrupted" });
+      expect(wakes).toEqual([{ delegationId: "d-process-restart", sessionId: "volatile-process" }]);
+
+      expect(kernelB.settleFromReply("wait-restart", "replied after restart")).toBe(true);
+      expect(DelegationStore.get("d-channel-restart")?.settled).toMatchObject({
+        status: "completed",
+        output: "replied after restart",
+      });
+      expect(
+        events.events.filter(
+          (event) => event.name === "delegation.settled" && (event.data as { delegationId: string }).delegationId === "d-channel-restart",
+        ),
+      ).toHaveLength(1);
+      expect(wakes.filter((wake) => wake.delegationId === "d-channel-restart")).toEqual([
+        { delegationId: "d-channel-restart", sessionId: "session-origin" },
+      ]);
+      expect(wakes).toHaveLength(2);
+    } finally {
+      kernelB?.stop();
+      kernelA?.stop();
+      Storage.reset();
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   test("restart sweep settles an expired channel as no_response and notify closes at acceptance", async () => {
@@ -363,6 +451,7 @@ describe("delegation controls and tool surface", () => {
       drivers: {},
       now: () => 2_000,
       newDelegationId: () => "unused-3",
+      wake: () => undefined,
     });
     expect(DelegationStore.get("d-expired-channel")?.settled).toMatchObject({
       status: "no_response",
@@ -382,6 +471,7 @@ describe("delegation controls and tool surface", () => {
       },
       now: () => 3_000,
       newDelegationId: () => "d-notify",
+      wake: () => undefined,
     });
     const result = await notify.delegate(
       {

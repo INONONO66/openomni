@@ -41,6 +41,7 @@ function kernelWith(entryPath: string, now = () => Date.now()) {
     },
     now,
     newDelegationId: () => `d-${++issued}`,
+    wake: () => undefined,
   });
 }
 
@@ -171,6 +172,7 @@ test("a command that cannot start is delivery_failed", async () => {
     },
     now: () => Date.now(),
     newDelegationId: () => "d-missing",
+    wake: () => undefined,
   });
   const result = await kernel.delegate(independentAsk("audit", Date.now() + 20_000), RESIDENT);
   if ("refused" in result) throw new Error(result.refused);

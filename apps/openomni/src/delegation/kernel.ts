@@ -71,8 +71,8 @@ export interface DelegationKernelOptions {
   readonly events?: BusEvent.Sink;
   /** Alias for callers that name the observation port `sink`. */
   readonly sink?: BusEvent.Sink;
-  /** Owner-session wake delivery, invoked after a non-inline settlement event. */
-  readonly wake?: (wake: DelegationWake) => void | Promise<void>;
+  /** Required owner-session wake delivery after every non-inline settlement. */
+  readonly wake: (wake: DelegationWake) => void | Promise<void>;
   /** Tests and composition roots may defer recovery until the wake target exists. */
   readonly bootSweep?: boolean;
 }
@@ -86,7 +86,12 @@ type DelegationAwaitResult =
   | { readonly kind: "timeout"; readonly delegationId: string; readonly deadline: number };
 
 const DEFAULT_LIMITS: Required<AdmissionLimits> = { maxInlineDepth: 2, maxFanout: 8 };
+const MAX_TIMER_DELAY_MS = 2_147_000_000;
 const NOOP_EVENTS: BusEvent.Sink = { publish: () => undefined };
+
+function nextTimerDelay(now: number, deadline: number): number {
+  return Math.min(Math.max(0, deadline - now), MAX_TIMER_DELAY_MS);
+}
 
 const DelegationControlError = NamedError.create(
   "DelegationControlError",
@@ -250,7 +255,6 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
   function settle(
     delegationId: string,
     candidate: Delegation.Settled,
-    wake = true,
   ): Delegation.Settled | undefined {
     const current = store.get(delegationId);
     if (current === undefined) return undefined;
@@ -292,15 +296,13 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
       controller.abort();
     }
 
-    if (wake && persisted.transport !== "inline") {
+    if (persisted.transport !== "inline") {
       const message = `delegation ${delegationId} settled: ${winner.status}: ${summaryOf(winner)}`;
       try {
-        const result = options.wake?.({ record: persisted, settlement: winner, message });
-        if (result !== undefined) {
-          void Promise.resolve(result).catch((error: unknown) => {
-            console.error(`delegation wake failed for ${delegationId}:`, error);
-          });
-        }
+        const result = options.wake({ record: persisted, settlement: winner, message });
+        void Promise.resolve(result).catch((error: unknown) => {
+          console.error(`delegation wake failed for ${delegationId}:`, error);
+        });
       } catch (error) {
         console.error(`delegation wake failed for ${delegationId}:`, error);
       }
@@ -310,18 +312,22 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
 
   function arm(record: Delegation.Record): void {
     if (record.status !== "open" || timers.has(record.delegationId)) return;
-    const delay = Math.max(0, record.deadline - options.now());
     const timer = setTimeout(() => {
       timers.delete(record.delegationId);
       const current = store.get(record.delegationId);
       if (current?.status !== "open") return;
-      settle(record.delegationId, {
+      const now = options.now();
+      if (now < current.deadline) {
+        arm(current);
+        return;
+      }
+      settle(current.delegationId, {
         status: "no_response",
-        delegationId: record.delegationId,
-        deadline: record.deadline,
-        at: Math.max(options.now(), record.deadline),
+        delegationId: current.delegationId,
+        deadline: current.deadline,
+        at: Math.max(now, current.deadline),
       });
-    }, Math.min(delay, 2_147_000_000));
+    }, nextTimerDelay(options.now(), record.deadline));
     // Timers are lifecycle guards, not process-liveness handles.
     const unref = (timer as unknown as { unref?: () => void }).unref;
     unref?.call(timer);
@@ -536,25 +542,33 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
         return;
       }
       const deadlineBound = end === record.deadline;
-      timer = setTimeout(() => {
-        waiters?.delete(onSettled);
-        if (waiters?.size === 0) settlementWaiters.delete(delegationId);
-        if (deadlineBound) {
-          const settled = settle(delegationId, {
-            status: "no_response",
-            delegationId,
-            deadline: record.deadline,
-            at: Math.max(options.now(), record.deadline),
-          });
-          if (settled !== undefined) {
-            resolve({ kind: "settled", settlement: settled });
+      const scheduleAwaitTimeout = (): void => {
+        timer = setTimeout(() => {
+          const currentNow = options.now();
+          if (currentNow < end) {
+            scheduleAwaitTimeout();
             return;
           }
-        }
-        resolve({ kind: "timeout", delegationId, deadline: record.deadline });
-      }, Math.min(end - now, 2_147_000_000));
-      const unref = (timer as unknown as { unref?: () => void }).unref;
-      unref?.call(timer);
+          waiters?.delete(onSettled);
+          if (waiters?.size === 0) settlementWaiters.delete(delegationId);
+          if (deadlineBound) {
+            const settled = settle(delegationId, {
+              status: "no_response",
+              delegationId,
+              deadline: record.deadline,
+              at: Math.max(currentNow, record.deadline),
+            });
+            if (settled !== undefined) {
+              resolve({ kind: "settled", settlement: settled });
+              return;
+            }
+          }
+          resolve({ kind: "timeout", delegationId, deadline: record.deadline });
+        }, nextTimerDelay(options.now(), end));
+        const unref = (timer as unknown as { unref?: () => void }).unref;
+        unref?.call(timer);
+      };
+      scheduleAwaitTimeout();
     });
   }
 

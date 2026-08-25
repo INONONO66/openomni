@@ -75,6 +75,7 @@ function refusal(code: RefusalCode, message: string): Refused {
 /**
  * An address says WHO, never HOW. Resolving the wire is admission's job, and
  * this is the only place that maps an address onto a transport.
+ * Admission's role fold IS the commissioning authority boundary; nothing else commissions delegation.
  */
 function transportFor(address: Delegation.WorkerAddress): Delegation.Transport {
   if (address.kind === "actor") return "channel";

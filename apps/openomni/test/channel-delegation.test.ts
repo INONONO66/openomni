@@ -143,6 +143,7 @@ describe("channel delegation driver", () => {
       drivers: { channel: driver },
       now: () => NOW,
       newDelegationId: () => "delegation-1",
+      wake: () => undefined,
       events,
     });
     const started = await kernel.delegate(

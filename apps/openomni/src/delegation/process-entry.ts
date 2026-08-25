@@ -35,6 +35,7 @@ export function createChildKernel(runner: InlineWorkerRunner): DelegationKernel 
   return createDelegationKernel({
     drivers: { inline: createInlineDriver(runner) },
     now: () => Date.now(),
+    wake: () => undefined,
     newDelegationId: () => crypto.randomUUID(),
     // This process is a worker, not a host restart. Its boot must not sweep
     // the parent host's open process row from the shared ledger.
