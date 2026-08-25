@@ -433,6 +433,91 @@ describe("delegation controls and tool surface", () => {
     }
   });
 
+  test("restart re-delivers a settled non-inline wake until its receipt is recorded", () => {
+    DelegationStore.create({
+      delegationId: "d-unwoken",
+      operation: "ask",
+      address: { kind: "core", scope: "independent" },
+      transport: "process",
+      deadline: 5_000,
+      rootDelegationId: "d-unwoken",
+      origin: RESIDENT,
+      instruction: "recover my wake",
+      status: "open",
+      createdAt: 1_000,
+    });
+    DelegationStore.settle("d-unwoken", {
+      status: "completed",
+      delegationId: "d-unwoken",
+      output: "durable result",
+      at: 1_500,
+    });
+    let wakeCount = 0;
+    const kernel = createDelegationKernel({
+      drivers: {},
+      now: () => 2_000,
+      newDelegationId: () => "unused-unwoken",
+      wake: () => {
+        wakeCount += 1;
+      },
+      bootSweep: false,
+    });
+
+    kernel.start();
+    expect(wakeCount).toBe(1);
+    expect(DelegationStore.get("d-unwoken")?.wokenAt).toBe(2_000);
+    expect(DelegationStore.listSettledUnwoken()).toEqual([]);
+    kernel.stop();
+
+    const restarted = createDelegationKernel({
+      drivers: {},
+      now: () => 3_000,
+      newDelegationId: () => "unused-restarted",
+      wake: () => {
+        wakeCount += 1;
+      },
+      bootSweep: false,
+    });
+    restarted.start();
+    expect(wakeCount).toBe(1);
+    restarted.stop();
+  });
+
+  test("publishes a typed operational error and leaves the wake retryable when delivery fails", async () => {
+    const events = eventCollector();
+    const kernel = createDelegationKernel({
+      drivers: {
+        process: { run: async () => ({ status: "completed", output: "done" }) },
+      },
+      now: () => 2_000,
+      newDelegationId: () => "d-wake-failure",
+      wake: () => Promise.reject(new Error("resident unavailable")),
+      events,
+      bootSweep: false,
+    });
+    const failed = events.waitFor("operational.error");
+    await kernel.delegate(
+      {
+        address: { kind: "core", scope: "independent" },
+        operation: "ask",
+        payload: { text: "background" },
+        deadline: 5_000,
+      },
+      RESIDENT,
+    );
+
+    await expect(failed).resolves.toMatchObject({
+      traceId: "d-wake-failure",
+      component: "delegation",
+      msg: "delegation wake failed for d-wake-failure",
+      error: "resident unavailable",
+    });
+    expect(DelegationStore.listSettledUnwoken().map((record) => record.delegationId)).toEqual([
+      "d-wake-failure",
+    ]);
+    kernel.stop();
+  });
+
   test("restart sweep settles an expired channel as no_response and notify closes at acceptance", async () => {
     DelegationStore.create({
       delegationId: "d-expired-channel",

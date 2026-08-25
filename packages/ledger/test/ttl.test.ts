@@ -1,6 +1,7 @@
 /// <reference types="bun" />
 
 import { describe, expect, test, beforeEach } from "bun:test";
+import { Operational } from "@openomni/protocol";
 import { Session } from "../src/session";
 import { Bus } from "@openomni/telemetry";
 import { Storage } from "../src/storage/storage";
@@ -230,6 +231,64 @@ describe("Session TTL", () => {
       expect(Storage.getAdapter().session.get(expired.id)).toBeUndefined();
       expect(Storage.getAdapter().session.get(active.id)).toBeDefined();
       expect(Storage.getAdapter().session.get(noExpiry.id)).toBeDefined();
+      unsub();
+    });
+
+    test("isolates one corrupt session: records Operational.Events.Error and keeps sweeping", async () => {
+      const corrupt = Session.create({
+        traceId: "trace-ttl-test",
+        title: "Corrupt",
+        model: { providerID: "test", modelID: "test-model" },
+        ttlMs: -1000,
+      });
+      const healthy = Session.create({
+        traceId: "trace-ttl-test",
+        title: "Healthy",
+        model: { providerID: "test", modelID: "test-model" },
+        ttlMs: -1000,
+      });
+      const active = Session.create({
+        traceId: "trace-ttl-test",
+        title: "Active",
+        model: { providerID: "test", modelID: "test-model" },
+        ttlMs: 5000,
+      });
+
+      const errors: Array<{ component?: string; context?: Record<string, unknown> }> = [];
+      const unsub = Bus.subscribe(Operational.Events.Error, (data) => {
+        errors.push({ component: data.component, context: data.context });
+      });
+
+      // One row's removal fails (e.g. a corrupt cascade): the adapter's
+      // session.remove throws only for that id.
+      const adapter = Storage.getAdapter();
+      const originalRemove = adapter.session.remove;
+      Storage.configure({
+        ...adapter,
+        // Prototype methods do not survive the spread; delegate them.
+        transaction: <T>(operation: () => T): T => adapter.transaction(operation),
+        close: () => adapter.close?.(),
+        session: {
+          ...adapter.session,
+          remove: (id: string) => {
+            if (id === corrupt.id) throw new Error("corrupt session row");
+            return originalRemove(id);
+          },
+        },
+      });
+
+      // One bad session never kills the sweep: the healthy expired session is
+      // still removed and the corrupt one is recorded as an error.
+      const swept = Session.sweepExpired("trace-ttl-test");
+
+      expect(swept.map((s) => s.id)).toEqual([healthy.id]);
+      expect(Storage.getAdapter().session.get(healthy.id)).toBeUndefined();
+      expect(Storage.getAdapter().session.get(corrupt.id)).toBeDefined();
+      expect(Storage.getAdapter().session.get(active.id)).toBeDefined();
+      await flushBus();
+      expect(errors).toEqual([
+        { component: "session", context: expect.objectContaining({ sessionId: corrupt.id }) },
+      ]);
       unsub();
     });
 

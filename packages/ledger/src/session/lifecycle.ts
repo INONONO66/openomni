@@ -1,4 +1,5 @@
 import type { SessionInfo } from "./info";
+import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { Storage } from "../storage/storage";
 import { Event } from "./events";
@@ -128,18 +129,41 @@ export function list(): SessionInfo[] {
  * Explicit expiry sweep: physically removes every expired session (message/
  * part cascade included, via remove()). Reads (get/list) only FILTER expired
  * rows; this is the single place expiry causes a write. Invoked from the boot
- * recovery sweep (apps/server/src/bootstrap/recovery.ts) alongside
- * WaitService.sweepExpired; there is no periodic scheduler yet, so long-lived
- * processes re-sweep only on restart.
+ * recovery sweeps (apps/server/src/bootstrap/recovery.ts and the OpenOmni app
+ * boot in apps/openomni/src/index.ts) alongside WaitService.sweepExpired;
+ * there is no periodic scheduler yet, so long-lived processes re-sweep only
+ * on restart.
+ *
+ * Per-session fault isolation (same contract as WaitService.sweepExpired):
+ * one corrupt session (e.g. a cascade row that disagrees with its session)
+ * records an Operational.Events.Error and the sweep continues — a single bad
+ * row must never kill boot recovery. Returns only the sessions actually
+ * removed.
  */
 export function sweepExpired(traceId: string, now = Date.now()): SessionInfo[] {
   const expired = Storage.getAdapter()
     .session.list()
     .filter((session) => isExpired(session, now));
+  const swept: SessionInfo[] = [];
   for (const session of expired) {
-    remove(session.id, traceId);
+    try {
+      remove(session.id, traceId);
+      swept.push(session);
+    } catch (error) {
+      Bus.publish(Operational.Events.Error, {
+        traceId,
+        sessionId: session.id,
+        time: Date.now(),
+        component: "session",
+        msg: `session expiry sweep failed for ${session.id}`,
+        context: {
+          sessionId: session.id,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+    }
   }
-  return expired;
+  return swept;
 }
 
 export function listChildren(parentSessionId: string): SessionInfo[] {
