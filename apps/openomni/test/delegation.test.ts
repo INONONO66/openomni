@@ -1,352 +1,517 @@
-import { describe, expect, test } from "bun:test";
-import { admit, type DelegationOrigin } from "../src/delegation/admission";
-import { createInlineDriver } from "../src/delegation/inline-driver";
-import { createDelegationKernel, type DelegationDriver } from "../src/delegation/kernel";
-import { DELEGATE_TOOL_NAME, delegateToolExecutor, delegateToolSpec } from "../src/delegation/tool";
+import { describe, expect, setSystemTime, test, vi } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { DelegationStore, SqliteStorageAdapter, Storage } from "@openomni/ledger";
+import { admit, type AdmissionLimits } from "../src/delegation/admission";
+import { createChannelDriver } from "../src/delegation/channel-driver";
+import { createDelegationKernel } from "../src/delegation/kernel";
+import {
+  AWAIT_DELEGATION_TOOL_NAME,
+  CANCEL_DELEGATION_TOOL_NAME,
+  DELEGATE_TOOL_NAME,
+  delegateToolExecutor,
+  delegateToolSpec,
+} from "../src/delegation/tool";
+import {
+  awaitedReceipt,
+  eventCollector,
+  RESIDENT,
+  useDelegationStore,
+  WORKER,
+} from "./helpers/delegation";
 
-const RESIDENT: DelegationOrigin = { role: "resident", depth: 0, sessionId: "session-origin" };
-const WORKER: DelegationOrigin = { role: "worker", depth: 1, sessionId: "session-origin" };
-const LIMITS = { maxInlineDepth: 2 };
+useDelegationStore();
+
+const LIMITS: AdmissionLimits = { maxInlineDepth: 2, maxFanout: 8 };
 
 function ask(overrides: Record<string, unknown> = {}) {
   return {
     address: { kind: "core", scope: "inline" },
-    mode: "ask",
+    operation: "ask",
     payload: { text: "what is the state of the build" },
     deadline: 10_000,
     ...overrides,
   };
 }
 
-function kernelWith(driver: DelegationDriver, transport: "inline" | "process" = "inline") {
-  let issued = 0;
-  return createDelegationKernel({
-    drivers: { [transport]: driver },
-    now: () => 1000,
-    newDelegationId: () => `d-${++issued}`,
-    limits: LIMITS,
+describe("admission fold", () => {
+  test("a worker may open only an inline child and the depth cap is typed", () => {
+    expect(admit(ask(), WORKER, 1_000, LIMITS)).toMatchObject({ ok: true, transport: "inline" });
+    expect(
+      admit(
+        ask({ address: { kind: "core", scope: "independent" } }),
+        WORKER,
+        1_000,
+        LIMITS,
+      ),
+    ).toMatchObject({ ok: false, error: { data: { code: "worker_transport" } } });
+    expect(admit(ask(), { ...WORKER, depth: 2 }, 1_000, LIMITS)).toMatchObject({
+      ok: false,
+      error: { data: { code: "inline_depth" } },
+    });
   });
-}
 
-describe("admission", () => {
-  test("a worker may open an inline child but may not commission independent work", () => {
-    const inline = admit(ask(), WORKER, 1000, LIMITS);
-    expect(inline.ok).toBe(true);
-
-    const independent = admit(
-      ask({ address: { kind: "core", scope: "independent" }, mode: "assign", acceptanceCriteria: ["done"] }),
-      WORKER,
-      1000,
+  test("the effective deadline is the minimum of request and durable parent", () => {
+    const result = admit(
+      ask({ deadline: 9_000 }),
+      { ...WORKER, parentDelegationId: "parent", rootDelegationId: "root" },
+      1_000,
       LIMITS,
+      {
+        delegationId: "child",
+        rootDelegationId: "root",
+        parent: {
+          delegationId: "parent",
+          rootDelegationId: "root",
+          deadline: 4_000,
+          status: "open",
+        },
+        openFanout: 1,
+      },
     );
-    expect(independent).toMatchObject({
-      ok: false,
-      reason: expect.stringContaining("ask the Resident for independent work"),
+    expect(result).toMatchObject({
+      ok: true,
+      effectiveDeadline: 4_000,
+      rootDelegationId: "root",
+      childOrigin: { parentDelegationId: "child", rootDelegationId: "root" },
     });
   });
 
-  test("inline chains stop at the configured depth instead of running away", () => {
-    const atCap = admit(ask(), { role: "worker", depth: 2, sessionId: "session-origin" }, 1000, LIMITS);
-    expect(atCap).toMatchObject({ ok: false, reason: "inline delegation is capped at depth 2" });
-  });
-
-  test("a deadline already in the past is refused, not silently extended", () => {
-    expect(admit(ask({ deadline: 900 }), RESIDENT, 1000, LIMITS)).toMatchObject({
-      ok: false,
-      reason: "deadline has already passed",
+  test("the pure fold refuses a full durable root fanout", () => {
+    const result = admit(ask(), RESIDENT, 1_000, LIMITS, {
+      delegationId: "new",
+      rootDelegationId: "root",
+      openFanout: 8,
     });
-  });
-
-  test("an address says who, and admission alone turns that into a wire", () => {
-    expect(admit(ask(), RESIDENT, 1000, LIMITS)).toMatchObject({ ok: true, transport: "inline" });
-    expect(
-      admit(
-        ask({ address: { kind: "core", scope: "independent" }, mode: "assign", acceptanceCriteria: ["done"] }),
-        RESIDENT,
-        1000,
-        LIMITS,
-      ),
-    ).toMatchObject({ ok: true, transport: "process" });
-    expect(
-      admit(
-        ask({ address: { kind: "actor", actorId: "a-1" }, mode: "assign", acceptanceCriteria: ["done"] }),
-        RESIDENT,
-        1000,
-        LIMITS,
-      ),
-    ).toMatchObject({ ok: true, transport: "channel" });
-  });
-
-  test("a child presents as a worker one step deeper than its parent", () => {
-    const decision = admit(ask(), RESIDENT, 1000, LIMITS);
-    expect(decision).toMatchObject({ ok: true, childOrigin: { role: "worker", depth: 1, sessionId: "session-origin" } });
-  });
-
-  test("contract violations are reported, not thrown", () => {
-    const refusal = admit(ask({ mode: "assign" }), RESIDENT, 1000, LIMITS);
-    expect(refusal).toMatchObject({ ok: false, reason: expect.stringContaining("acceptance criterion") });
+    expect(result).toMatchObject({ ok: false, error: { data: { code: "fanout_cap" } } });
   });
 });
 
-describe("kernel", () => {
-  test("a missing driver is delivery_failed, never a silent worker", async () => {
+describe("durable kernel", () => {
+  test("records before dispatching and emits admitted, delivered, settled in fact order", async () => {
+    const events = eventCollector();
+    let sawRecord = false;
     const kernel = createDelegationKernel({
-      drivers: {},
-      now: () => 1000,
+      drivers: {
+        inline: {
+          run: async (_admitted, handle, _signal, report) => {
+            sawRecord = DelegationStore.get(handle.delegationId)?.status === "open";
+            report?.delivered();
+            return { status: "completed", output: "done" };
+          },
+        },
+      },
+      now: () => 1_000,
       newDelegationId: () => "d-1",
+      wake: () => undefined,
+      events,
       limits: LIMITS,
     });
+
     const result = await kernel.delegate(ask(), RESIDENT);
+    expect(sawRecord).toBe(true);
     expect(result).toMatchObject({
-      settled: { status: "delivery_failed", reason: "no driver for inline transport" },
+      handle: { delegationId: "d-1", deadline: 10_000, rootDelegationId: "d-1" },
+      settled: { status: "completed", output: "done" },
     });
+    expect(DelegationStore.get("d-1")?.status).toBe("settled");
+    expect(events.events.map((event) => event.name)).toEqual([
+      "delegation.admitted",
+      "delegation.delivered",
+      "delegation.settled",
+    ]);
   });
 
-  test("a worker that stays silent settles as no_response at its deadline, not before", async () => {
+  test("process/channel work returns the handle before its outcome and can be awaited again", async () => {
+    const events = eventCollector();
+    let finish!: (outcome: { status: "completed"; output: string }) => void;
+    const kernel = createDelegationKernel({
+      drivers: {
+        process: {
+          run: (_admitted, _handle, _signal, report) => {
+            report?.delivered();
+            return new Promise((resolve) => {
+              finish = resolve as typeof finish;
+            });
+          },
+        },
+      },
+      now: () => 1_000,
+      newDelegationId: () => "d-process",
+      wake: () => undefined,
+      events,
+      limits: LIMITS,
+    });
+
+    const started = await kernel.delegate(
+      {
+        address: { kind: "core", scope: "independent" },
+        operation: "ask",
+        payload: { text: "audit" },
+        deadline: 10_000,
+      },
+      RESIDENT,
+    );
+    expect(started).toMatchObject({ handle: { transport: "process" } });
+    if ("refused" in started || started.settled !== undefined) throw new Error("background work blocked the caller");
+
+    const awaiting = kernel.awaitDelegation(started.handle.delegationId);
+    finish({ status: "completed", output: "audited" });
+    const settled = await awaiting;
+    expect(settled).toEqual({ kind: "settled", settlement: expect.objectContaining({ status: "completed", output: "audited" }) });
+    expect(events.events.map((event) => event.name)).toContain("delegation.settled");
+  });
+
+  test("cancel aborts local work and CAS-settles cancelled", async () => {
+    const events = eventCollector();
+    let aborted = false;
+    const kernel = createDelegationKernel({
+      drivers: {
+        process: {
+          run: (_admitted, _handle, signal) =>
+            new Promise((resolve) => {
+              signal.addEventListener("abort", () => {
+                aborted = true;
+                resolve({ status: "cancelled", reason: "stopped" });
+              });
+            }),
+        },
+      },
+      now: () => 1_000,
+      newDelegationId: () => "d-cancel",
+      wake: () => undefined,
+      events,
+      limits: LIMITS,
+    });
+    const started = await kernel.delegate(
+      {
+        address: { kind: "core", scope: "independent" },
+        operation: "ask",
+        payload: { text: "long" },
+        deadline: 10_000,
+      },
+      RESIDENT,
+    );
+    if ("refused" in started) throw new Error(started.refused);
+    await expect(kernel.cancelDelegation(started.handle.delegationId)).resolves.toMatchObject({ status: "cancelled" });
+    expect(aborted).toBe(true);
+    await expect(kernel.cancelDelegation(started.handle.delegationId)).resolves.toMatchObject({ status: "cancelled" });
+  });
+
+  test("an inline caller returns the deadline settlement even if its driver ignores abort", async () => {
+    const kernel = createDelegationKernel({
+      drivers: { inline: { run: () => new Promise(() => undefined) } },
+      now: () => Date.now(),
+      newDelegationId: () => "d-uncooperative",
+      wake: () => undefined,
+      limits: LIMITS,
+    });
+    const result = await kernel.delegate(ask({ deadline: Date.now() + 25 }), RESIDENT);
+    if ("refused" in result) throw new Error(result.refused);
+    expect(result.settled).toMatchObject({ status: "no_response" });
+    kernel.stop();
+  });
+
+  test("a forged root lineage is replaced by the admission-stamped root", async () => {
+    const kernel = createDelegationKernel({
+      drivers: { inline: { run: async () => ({ status: "completed", output: "ok" }) } },
+      now: () => 1_000,
+      newDelegationId: () => "d-stamped",
+      wake: () => undefined,
+      limits: LIMITS,
+    });
+    const result = await kernel.delegate(ask(), { ...RESIDENT, rootDelegationId: "forged-root" });
+    if ("refused" in result) throw new Error(result.refused);
+    expect(result.handle.rootDelegationId).toBe("d-stamped");
+    expect(DelegationStore.get("d-stamped")?.origin).toEqual(RESIDENT);
+  });
+
+  test("a deadline timer settles no_response at the effective deadline", async () => {
+    const events = eventCollector();
     const kernel = createDelegationKernel({
       drivers: {
         inline: {
           run: (_admitted, _handle, signal) =>
-            new Promise((resolve) => {
-              signal.addEventListener("abort", () => resolve({ status: "cancelled", reason: "aborted" }));
-            }),
+            new Promise((resolve) => signal.addEventListener("abort", () => resolve({ status: "cancelled", reason: "stopped" }))),
         },
       },
-      now: () => 1000,
-      newDelegationId: () => "d-1",
+      now: () => Date.now(),
+      newDelegationId: () => "d-deadline",
+      wake: () => undefined,
+      events,
       limits: LIMITS,
     });
-    const result = await kernel.delegate(ask({ deadline: 1030 }), RESIDENT);
-    expect(result).toMatchObject({ settled: { status: "no_response", deadline: 1030, at: 1030 } });
+    const result = await kernel.delegate(ask({ deadline: Date.now() + 25 }), RESIDENT);
+    if ("refused" in result) throw new Error(result.refused);
+    expect(result.settled?.status).toBe("no_response");
+    expect(result.settled).toMatchObject({ deadline: expect.any(Number) });
   });
 
-  test("a driver that throws settles as failed rather than escaping the kernel", async () => {
-    const kernel = kernelWith({
-      run: () => Promise.reject(new Error("child loop exploded")),
-    });
-    const result = await kernel.delegate(ask(), RESIDENT);
-    expect(result).toMatchObject({ settled: { status: "failed", error: "child loop exploded" } });
-  });
-
-  test("the handle carries the address it was admitted for", async () => {
-    const kernel = kernelWith({ run: async () => ({ status: "completed", output: "done" }) });
-    const result = await kernel.delegate(ask(), RESIDENT);
-    expect(result).toMatchObject({
-      handle: { delegationId: "d-1", address: { kind: "core", scope: "inline" }, transport: "inline" },
-      settled: { status: "completed", output: "done", delegationId: "d-1" },
-    });
-  });
-});
-
-describe("inline driver", () => {
-  test("a child that answers after the deadline is not reported as a completion", async () => {
-    const controller = new AbortController();
-    const driver = createInlineDriver(async () => {
-      controller.abort();
-      return "an answer nobody is waiting for any more";
-    });
-    const outcome = await driver.run(
-      { ok: true, request: ask() as never, transport: "inline", childOrigin: WORKER },
-      { delegationId: "d-1", address: { kind: "core", scope: "inline" }, transport: "inline" },
-      controller.signal,
-    );
-    expect(outcome).toMatchObject({ status: "cancelled", reason: "deadline reached" });
-  });
-
-  test("the child is handed the instruction and criteria, never the parent transcript", async () => {
-    let seen: unknown;
-    const driver = createInlineDriver(async (input) => {
-      seen = input;
-      return "ok";
-    });
-    await driver.run(
-      {
-        ok: true,
-        request: ask({ mode: "assign", acceptanceCriteria: ["build is green"] }) as never,
-        transport: "inline",
-        childOrigin: WORKER,
-      },
-      { delegationId: "d-7", address: { kind: "core", scope: "inline" }, transport: "inline" },
-      new AbortController().signal,
-    );
-    expect(seen).toMatchObject({
-      delegationId: "d-7",
-      instruction: "what is the state of the build",
-      acceptanceCriteria: ["build is green"],
-    });
-  });
-
-  test("descending carries who the child is, so nothing downstream decides it again", async () => {
-    const origins: DelegationOrigin[] = [];
-    const driver = createInlineDriver(async (input) => {
-      origins.push(input.origin);
-      return "ok";
-    });
-    for (const parentDepth of [0, 1]) {
-      const decision = admit(ask(), { role: "worker", depth: parentDepth, sessionId: "session-origin" }, 1000, LIMITS);
-      if (!decision.ok) throw new Error(`expected admission at depth ${parentDepth}`);
-      await driver.run(
-        decision,
-        { delegationId: "d-1", address: { kind: "core", scope: "inline" }, transport: "inline" },
-        new AbortController().signal,
+  test("deadline and await timers re-arm instead of settling at the timer cap", async () => {
+    const timerCap = 2_147_000_000;
+    vi.useFakeTimers();
+    setSystemTime(0);
+    let wakes = 0;
+    let kernel: ReturnType<typeof createDelegationKernel> | undefined;
+    try {
+      kernel = createDelegationKernel({
+        drivers: { process: { run: () => new Promise(() => undefined) } },
+        now: () => Date.now(),
+        newDelegationId: () => "d-long-deadline",
+        wake: () => {
+          wakes += 1;
+        },
+        limits: LIMITS,
+      });
+      const started = await kernel.delegate(
+        {
+          address: { kind: "core", scope: "independent" },
+          operation: "ask",
+          payload: { text: "wait a long time" },
+          deadline: timerCap + 1_000,
+        },
+        RESIDENT,
       );
+      if ("refused" in started) throw new Error(started.refused);
+      let awaited: unknown;
+      const waiting = kernel.awaitDelegation(started.handle.delegationId).then((result) => {
+        awaited = result;
+        return result;
+      });
+
+      vi.advanceTimersByTime(timerCap);
+      await Promise.resolve();
+      expect(DelegationStore.get(started.handle.delegationId)?.status).toBe("open");
+      expect(awaited).toBeUndefined();
+      expect(wakes).toBe(0);
+
+      vi.advanceTimersByTime(1_000);
+      await expect(waiting).resolves.toMatchObject({
+        kind: "settled",
+        settlement: { status: "no_response", deadline: timerCap + 1_000 },
+      });
+      expect(wakes).toBe(1);
+    } finally {
+      kernel?.stop();
+      vi.useRealTimers();
     }
-    // Both halves come from admission: the depth so the cap cannot be reset by
-    // recursing, and the role so nothing downstream gets to declare a child a
-    // worker on its own authority.
-    expect(origins).toEqual([
-      { role: "worker", depth: 1, sessionId: "session-origin" },
-      { role: "worker", depth: 2, sessionId: "session-origin" },
-    ]);
   });
 });
 
-describe("delegate tool", () => {
-  test("the advertised schema and the runtime gate accept the same calls", () => {
+describe("delegation controls and tool surface", () => {
+  test("start advertises v2 operation and durable controls return immediately", async () => {
+    const events = eventCollector();
+    const kernel = createDelegationKernel({
+      drivers: { process: { run: () => new Promise(() => undefined) } },
+      now: () => 1_000,
+      newDelegationId: () => "d-tool",
+      wake: () => undefined,
+      events,
+      limits: LIMITS,
+    });
     const spec = delegateToolSpec();
-    const advertised = spec.inputSchema as {
-      required: string[];
-      properties: Record<string, { enum?: string[] }>;
-    };
     expect(spec.name).toBe(DELEGATE_TOOL_NAME);
-    // Every advertised field must survive the runtime parse, and every
-    // required field must actually be required — otherwise the model is being
-    // told about a call the executor will reject.
-    const full = {
-      instruction: "check the build",
-      mode: "assign" as const,
-      scope: "inline" as const,
-      acceptanceCriteria: ["green"],
-      timeoutMs: 5000,
-    };
-    const kernel = kernelWith({ run: async () => ({ status: "completed", output: "green" }) });
-    const execute = delegateToolExecutor(kernel, RESIDENT);
-    expect(Object.keys(advertised.properties).sort()).toEqual(
-      [...Object.keys(full), "actorId"].sort(),
-    );
-    expect(advertised.required.sort()).toEqual(["instruction", "mode", "timeoutMs"]);
-    expect(advertised.properties.mode?.enum).toEqual(["ask", "assign"]);
-    expect(advertised.properties.scope?.enum).toEqual(["inline", "independent"]);
-    return expect(execute(full)).resolves.toBe("green");
-  });
-
-  test("the bound origin decides, so the same call refuses for a worker", async () => {
-    const independent = {
-      instruction: "commission independent work",
-      mode: "assign" as const,
-      scope: "independent" as const,
-      acceptanceCriteria: ["done"],
-      timeoutMs: 5000,
-    };
-    const forResident = kernelWith(
-      { run: async () => ({ status: "completed", output: "commissioned" }) },
-      "process",
-    );
-    await expect(delegateToolExecutor(forResident, RESIDENT)(independent)).resolves.toBe("commissioned");
-
-    const forWorker = kernelWith(
-      { run: async () => ({ status: "completed", output: "must not happen" }) },
-      "process",
-    );
-    await expect(delegateToolExecutor(forWorker, WORKER)(independent)).resolves.toContain(
-      "ask the Resident for independent work",
-    );
-  });
-
-  test("a model cannot smuggle its own origin in as an argument", async () => {
-    const kernel = kernelWith({ run: async () => ({ status: "completed", output: "unreachable" }) });
-    const answer = await delegateToolExecutor(kernel, WORKER)({
-      instruction: "commission independent work",
-      mode: "assign",
-      scope: "independent",
-      acceptanceCriteria: ["done"],
-      timeoutMs: 5000,
-      origin: { role: "resident", depth: 0, sessionId: "session-origin" },
-    });
-    expect(answer).toBe("delegate refused: Unrecognized key(s) in object: 'origin'");
-  });
-
-  test("an assign reaches the worker carrying the criteria that define its completion", async () => {
-    let received: readonly string[] | undefined;
-    const kernel = createDelegationKernel({
-      drivers: {
-        inline: createInlineDriver((input) => {
-          received = input.acceptanceCriteria;
-          return Promise.resolve("criteria met");
-        }),
-      },
-      now: () => Date.now(),
-      newDelegationId: () => "d-assign",
-      limits: LIMITS,
-    });
-
+    expect((spec.inputSchema as { properties: Record<string, unknown> }).properties.operation).toBeDefined();
     const answer = await delegateToolExecutor(kernel, RESIDENT)({
-      instruction: "ship it",
-      mode: "assign",
-      scope: "inline",
-      acceptanceCriteria: ["build is green", "tests pass"],
-      timeoutMs: 3000,
+      instruction: "send it",
+      operation: "ask",
+      scope: "independent",
+      timeoutMs: 5_000,
     });
-
-    expect(answer).toBe("criteria met");
-    expect(received).toEqual(["build is green", "tests pass"]);
+    expect(answer).toContain("settlement will arrive as a message");
+    expect(answer).toContain("d-tool");
+    expect(AWAIT_DELEGATION_TOOL_NAME).toBe("await_delegation");
+    expect(CANCEL_DELEGATION_TOOL_NAME).toBe("cancel_delegation");
+    kernel.stop();
   });
 
-  test("the deadline stops the running child rather than only bookkeeping it", async () => {
-    let childWasSignalled = false;
-    const kernel = createDelegationKernel({
-      drivers: {
-        inline: createInlineDriver(
-          (input) =>
-            new Promise<string>((resolve) => {
-              const timer = setTimeout(
-                () => resolve("an answer nobody is waiting for"),
-                5000,
-              );
-              input.signal.addEventListener("abort", () => {
-                childWasSignalled = true;
-                clearTimeout(timer);
-                resolve("stopped");
-              });
-            }),
-        ),
-      },
-      now: () => Date.now(),
-      newDelegationId: () => "d-cancel",
-      limits: LIMITS,
-    });
+  test("SQLite restart sweep preserves channel correlation and interrupts volatile work", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "openomni-delegation-restart-"));
+    const dbPath = join(directory, "ledger.sqlite");
+    let kernelA: ReturnType<typeof createDelegationKernel> | undefined;
+    let kernelB: ReturnType<typeof createDelegationKernel> | undefined;
+    try {
+      Storage.reset();
+      Storage.configure(new SqliteStorageAdapter(dbPath));
+      kernelA = createDelegationKernel({
+        store: DelegationStore,
+        drivers: {
+          channel: createChannelDriver({
+            send: async (input) => awaitedReceipt(input),
+            now: () => 2_000,
+            newWaitId: () => "wait-restart",
+          }),
+        },
+        now: () => 2_000,
+        newDelegationId: () => "d-channel-restart",
+        wake: () => undefined,
+        limits: LIMITS,
+      });
+      const started = await kernelA.delegate(
+        {
+          address: { kind: "actor", actorId: "alice" },
+          operation: "ask",
+          payload: { text: "durable question" },
+          deadline: 5_000,
+        },
+        RESIDENT,
+      );
+      if ("refused" in started) throw new Error(started.refused);
+      expect(started.settled).toBeUndefined();
+      expect(started.handle.waitId).toBe("wait-restart");
+      kernelA.stop();
 
-    const settledAt = Date.now();
-    const result = await kernel.delegate(
-      {
+      DelegationStore.create({
+        delegationId: "d-inline-restart",
+        operation: "ask",
         address: { kind: "core", scope: "inline" },
-        mode: "ask",
-        payload: { text: "a job longer than its deadline" },
-        deadline: Date.now() + 80,
+        transport: "inline",
+        deadline: 5_000,
+        rootDelegationId: "d-inline-restart",
+        origin: { ...RESIDENT, sessionId: "volatile-inline" },
+        instruction: "volatile inline",
+        status: "open",
+        createdAt: 1_000,
+      });
+      DelegationStore.create({
+        delegationId: "d-process-restart",
+        operation: "ask",
+        address: { kind: "core", scope: "independent" },
+        transport: "process",
+        deadline: 5_000,
+        rootDelegationId: "d-process-restart",
+        origin: { ...RESIDENT, sessionId: "volatile-process" },
+        instruction: "volatile process",
+        status: "open",
+        createdAt: 1_000,
+      });
+
+      Storage.reset();
+      Storage.configure(new SqliteStorageAdapter(dbPath));
+      const events = eventCollector();
+      const wakes: Array<{ delegationId: string; sessionId: string }> = [];
+      kernelB = createDelegationKernel({
+        store: DelegationStore,
+        drivers: {},
+        now: () => 2_000,
+        newDelegationId: () => "unused-restart",
+        events,
+        wake: ({ record }) => {
+          wakes.push({ delegationId: record.delegationId, sessionId: record.origin.sessionId });
+        },
+        bootSweep: false,
+        limits: LIMITS,
+      });
+      kernelB.start();
+
+      expect(DelegationStore.get("d-channel-restart")?.status).toBe("open");
+      expect(DelegationStore.get("d-channel-restart")?.settled).toBeUndefined();
+      expect(DelegationStore.get("d-inline-restart")?.settled).toMatchObject({ status: "interrupted" });
+      expect(DelegationStore.get("d-process-restart")?.settled).toMatchObject({ status: "interrupted" });
+      expect(wakes).toEqual([{ delegationId: "d-process-restart", sessionId: "volatile-process" }]);
+
+      expect(kernelB.settleFromReply("wait-restart", "replied after restart")).toBe(true);
+      expect(DelegationStore.get("d-channel-restart")?.settled).toMatchObject({
+        status: "completed",
+        output: "replied after restart",
+      });
+      expect(
+        events.events.filter(
+          (event) => event.name === "delegation.settled" && (event.data as { delegationId: string }).delegationId === "d-channel-restart",
+        ),
+      ).toHaveLength(1);
+      expect(wakes.filter((wake) => wake.delegationId === "d-channel-restart")).toEqual([
+        { delegationId: "d-channel-restart", sessionId: "session-origin" },
+      ]);
+      expect(wakes).toHaveLength(2);
+    } finally {
+      kernelB?.stop();
+      kernelA?.stop();
+      Storage.reset();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("restart sweep settles an expired channel as no_response and notify closes at acceptance", async () => {
+    DelegationStore.create({
+      delegationId: "d-expired-channel",
+      operation: "assign",
+      address: { kind: "actor", actorId: "alice" },
+      transport: "channel",
+      deadline: 1_000,
+      waitId: "wait-expired",
+      rootDelegationId: "d-expired-channel",
+      origin: RESIDENT,
+      instruction: "expired",
+      status: "open",
+      createdAt: 500,
+    });
+    const expired = createDelegationKernel({
+      drivers: {},
+      now: () => 2_000,
+      newDelegationId: () => "unused-3",
+      wake: () => undefined,
+    });
+    expect(DelegationStore.get("d-expired-channel")?.settled).toMatchObject({
+      status: "no_response",
+      deadline: 1_000,
+      at: 2_000,
+    });
+    expired.stop();
+
+    const notify = createDelegationKernel({
+      drivers: {
+        channel: {
+          run: async (_admitted, _handle, _signal, report) => {
+            report?.delivered();
+            return { status: "sent" };
+          },
+        },
+      },
+      now: () => 3_000,
+      newDelegationId: () => "d-notify",
+      wake: () => undefined,
+    });
+    const result = await notify.delegate(
+      {
+        address: { kind: "actor", actorId: "alice" },
+        operation: "notify",
+        payload: { text: "hello" },
+        deadline: 10_000,
       },
       RESIDENT,
     );
-
-    expect("handle" in result && result.settled.status).toBe("no_response");
-    expect(Date.now() - settledAt).toBeLessThan(4000);
-    // The child is told to stop. Without this the deadline would be bookkeeping:
-    // the parent stops waiting while the work keeps burning.
-    expect(childWasSignalled).toBe(true);
+    expect(result).toMatchObject({ handle: { delegationId: "d-notify" }, settled: { status: "sent" } });
+    notify.stop();
   });
 
-  test("no_response is worded as an unknown outcome rather than a failure", async () => {
-    const kernel = createDelegationKernel({
-      drivers: { inline: { run: () => new Promise(() => undefined) } },
-      now: () => Date.now(),
-      newDelegationId: () => "d-1",
-      limits: LIMITS,
-    });
-    const answer = await delegateToolExecutor(kernel, RESIDENT)({
-      instruction: "wait for nothing",
-      mode: "ask",
-      scope: "inline",
-      timeoutMs: 30,
-    });
-    expect(answer).toBe("no response before the deadline — the outcome is unknown, not a failure to act");
+  test("worker restriction remains inline-only while notify is actor-only", () => {
+    expect(
+      admit(
+        {
+          address: { kind: "actor", actorId: "a" },
+          operation: "notify",
+          payload: { text: "hello" },
+          deadline: 5_000,
+        },
+        WORKER,
+        1_000,
+        LIMITS,
+      ),
+    ).toMatchObject({ ok: false, error: { data: { code: "worker_transport" } } });
+    expect(
+      admit(
+        {
+          address: { kind: "core", scope: "inline" },
+          operation: "notify",
+          payload: { text: "hello" },
+          deadline: 5_000,
+        },
+        RESIDENT,
+        1_000,
+        LIMITS,
+      ),
+    ).toMatchObject({ ok: false });
   });
 });

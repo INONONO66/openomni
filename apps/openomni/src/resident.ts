@@ -89,6 +89,7 @@ export function createResident(options: ResidentOptions) {
     // Built per delivery because the origin carries THIS session: a Wait a
     // delegation opens must be owned by the session that asked for the work.
     const origin: DelegationOrigin = { role: "resident", depth: 0, sessionId };
+    const systemAuthored = delivery.event.meta?.kind === "delegation.settled";
     const targets = options.targets();
     const catalog = createDispatcher(catalogEntries(options.tools, origin));
     const agent = ChatAgent.create({
@@ -116,8 +117,9 @@ export function createResident(options: ResidentOptions) {
       sessionID: sessionId,
       role: "user",
       time: { created: Date.now() },
-      agent: "resident",
+      agent: systemAuthored ? "system" : "resident",
       model: { providerID: options.model.provider, modelID: options.model.id },
+      ...(systemAuthored ? { system: "delegation.settled" } : {}),
     });
     addTextPart(sessionId, userId, delivery.event.payload);
 

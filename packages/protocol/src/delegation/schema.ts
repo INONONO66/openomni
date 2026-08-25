@@ -25,13 +25,17 @@ export const WorkerAddress = z.discriminatedUnion("kind", [
 export type WorkerAddress = z.infer<typeof WorkerAddress>;
 
 /**
- * ask = a question; the reply settles it. assign = commissioned work held to
- * acceptance criteria. Core addresses take both; actor addresses take assign
- * only — the system cannot force an external actor to answer a question, it
- * can only hold commissioned work to its contract.
+ * What the requester wants from the address (replaces the v1 Mode ask|assign):
+ * - notify: fire-and-forget message; no Wait, no reply expected, terminal
+ *   `sent` at transport acceptance. Actor addresses only — a core loop exists
+ *   to be talked WITH, not AT.
+ * - ask: a question; the reply settles it. Core (inline|independent) or actor.
+ * - assign: commissioned work held to acceptance criteria. Core independent or
+ *   actor — never inline: an inline child is a volatile in-turn helper that
+ *   dies with the turn, too weak to hold a contract to.
  */
-export const Mode = z.enum(["ask", "assign"]);
-export type Mode = z.infer<typeof Mode>;
+export const Operation = z.enum(["notify", "ask", "assign"]);
+export type Operation = z.infer<typeof Operation>;
 
 /**
  * The four delegation transports a kernel driver can resolve an address
@@ -44,7 +48,7 @@ export type Transport = z.infer<typeof Transport>;
 export const Request = z
   .object({
     address: WorkerAddress,
-    mode: Mode,
+    operation: Operation,
     payload: z.object({ text: z.string().min(1) }).strict(),
     acceptanceCriteria: z.array(z.string().min(1)).optional(),
     /** Epoch ms. Required: no unbounded delegation exists (kernel-contract Wait law). */
@@ -52,24 +56,38 @@ export const Request = z
   })
   .strict()
   .superRefine((request, ctx) => {
-    if (request.address.kind === "actor" && request.mode === "ask") {
+    if (request.operation === "notify" && request.address.kind !== "actor") {
       ctx.addIssue({
         code: "custom",
-        message: "actor addresses accept assign only",
-        path: ["mode"],
+        message: "notify reaches actor addresses only",
+        path: ["operation"],
       });
     }
-    if (request.mode === "assign" && (request.acceptanceCriteria?.length ?? 0) === 0) {
+    if (
+      request.operation === "assign" &&
+      request.address.kind === "core" &&
+      request.address.scope === "inline"
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        message: "assign never runs inline; inline is a volatile in-turn helper for ask only",
+        path: ["address"],
+      });
+    }
+    if (
+      request.operation === "assign" &&
+      (request.acceptanceCriteria?.length ?? 0) === 0
+    ) {
       ctx.addIssue({
         code: "custom",
         message: "assign requires at least one acceptance criterion",
         path: ["acceptanceCriteria"],
       });
     }
-    if (request.mode === "ask" && request.acceptanceCriteria !== undefined) {
+    if (request.operation !== "assign" && request.acceptanceCriteria !== undefined) {
       ctx.addIssue({
         code: "custom",
-        message: "ask carries no acceptance criteria",
+        message: `${request.operation} carries no acceptance criteria`,
         path: ["acceptanceCriteria"],
       });
     }
@@ -77,17 +95,49 @@ export const Request = z
 export type Request = z.infer<typeof Request>;
 
 /**
- * What the requester holds after admission: the resolved transport plus the
- * durable ids the settlement will arrive under. Never the worker's state —
+ * Who is asking for work to be delegated, with the lineage the durable
+ * lifecycle needs: `parentDelegationId` is the delegation whose turn
+ * commissioned this one (absent at the tree root), `rootDelegationId`
+ * anchors the per-tree fanout cap count. Both are absent for a root origin
+ * and stamped by the admission fold for a child — never self-reported.
+ */
+export const Origin = z
+  .object({
+    role: z.enum(["resident", "worker"]),
+    /** How many inline children already stand between the Resident and this originator. */
+    depth: z.number().int().nonnegative(),
+    /**
+     * The durable session this delegation chain originates from — the owner
+     * of any Wait a transport opens on its behalf. Inherited unchanged down
+     * the chain: a child works FOR that session, it does not get its own claim.
+     */
+    sessionId: z.string().min(1),
+    parentDelegationId: z.string().min(1).optional(),
+    rootDelegationId: z.string().min(1).optional(),
+  })
+  .strict();
+export type Origin = z.infer<typeof Origin>;
+
+/**
+ * What the requester holds after DURABLE admission, before the work runs:
+ * the operation, the resolved transport, the effective deadline (admission
+ * clamps the requested deadline to the parent's when a parent exists), and
+ * the tree ids the settlement will arrive under. Never the worker's state —
  * progress is observed through Wait/WorkItem, not polled through the handle.
  */
 export const Handle = z
   .object({
     delegationId: z.string().min(1),
+    operation: Operation,
     address: WorkerAddress,
     transport: Transport,
+    /** Effective deadline (epoch ms): min(requested, parentDeadline) computed at admission. */
+    deadline: z.number().int().positive(),
     waitId: z.string().min(1).optional(),
     workItemId: z.string().min(1).optional(),
+    parentDelegationId: z.string().min(1).optional(),
+    /** Every delegation names its tree root; a root delegation names itself. */
+    rootDelegationId: z.string().min(1),
   })
   .strict();
 export type Handle = z.infer<typeof Handle>;
@@ -96,6 +146,18 @@ export type Handle = z.infer<typeof Handle>;
  * Terminal settlement. `delivery_failed` (the request never reached the
  * worker) and `no_response` (delivered, then silence past the deadline) are
  * DISTINCT terminals: unknown-outcome must never be read as did-not-happen.
+ *
+ * `completed` means the worker/actor REPORTED completion (or replied) —
+ * nothing more. Acceptance-criteria enforcement is deliberately OUT of this
+ * terminal; completion authority over assigned work is a future WorkItem
+ * integration, not a schema claim.
+ *
+ * `interrupted` is set only by the boot sweep: the host restarted while
+ * volatile (inline/process) transport work was still open.
+ *
+ * `sent` is transport acceptance of a notify — terminal for notify only.
+ * That rule is pinned where operation meets settlement (`Record`), because
+ * a bare terminal carries no operation to check itself against.
  */
 const SettledUnion = z.discriminatedUnion("status", [
   z
@@ -139,6 +201,20 @@ const SettledUnion = z.discriminatedUnion("status", [
       at: z.number(),
     })
     .strict(),
+  z
+    .object({
+      status: z.literal("interrupted"),
+      delegationId: z.string().min(1),
+      at: z.number(),
+    })
+    .strict(),
+  z
+    .object({
+      status: z.literal("sent"),
+      delegationId: z.string().min(1),
+      at: z.number(),
+    })
+    .strict(),
 ]);
 
 export const Settled = SettledUnion.superRefine((settled, ctx) => {
@@ -158,5 +234,68 @@ export const SettledStatus = z.enum([
   "cancelled",
   "delivery_failed",
   "no_response",
+  "interrupted",
+  "sent",
 ]);
 export type SettledStatus = z.infer<typeof SettledStatus>;
+
+/**
+ * The durable delegation row (record-before-act): the Handle fields plus the
+ * origin, an instruction summary, and the open|settled lifecycle. Written at
+ * admission BEFORE the work runs, settled exactly once by the kernel's
+ * open->settled compare-and-swap. Protocol owns the serializable shape; the
+ * store implementation lives in the ledger.
+ */
+const RecordBase = z
+  .object({
+    delegationId: z.string().min(1),
+    operation: Operation,
+    address: WorkerAddress,
+    transport: Transport,
+    /** Effective deadline (epoch ms) — the same instant the Handle carries. */
+    deadline: z.number().int().positive(),
+    waitId: z.string().min(1).optional(),
+    workItemId: z.string().min(1).optional(),
+    parentDelegationId: z.string().min(1).optional(),
+    rootDelegationId: z.string().min(1),
+    origin: Origin,
+    /** Summary of the request payload text (truncation is the writer's choice). */
+    instruction: z.string().min(1),
+    status: z.enum(["open", "settled"]),
+    settled: Settled.optional(),
+    createdAt: z.number(),
+    settledAt: z.number().optional(),
+  })
+  .strict();
+
+export const Record = RecordBase.superRefine((record, ctx) => {
+  if (record.status === "settled" && (record.settled === undefined || record.settledAt === undefined)) {
+    ctx.addIssue({
+      code: "custom",
+      message: "a settled record carries its settlement payload and settledAt",
+      path: ["settled"],
+    });
+  }
+  if (record.status === "open" && (record.settled !== undefined || record.settledAt !== undefined)) {
+    ctx.addIssue({
+      code: "custom",
+      message: "an open record carries no settlement",
+      path: ["settled"],
+    });
+  }
+  if (record.settled !== undefined && record.settled.delegationId !== record.delegationId) {
+    ctx.addIssue({
+      code: "custom",
+      message: "settlement payload belongs to a different delegation",
+      path: ["settled"],
+    });
+  }
+  if (record.settled?.status === "sent" && record.operation !== "notify") {
+    ctx.addIssue({
+      code: "custom",
+      message: "sent is terminal for notify only",
+      path: ["settled", "status"],
+    });
+  }
+});
+export type Record = z.infer<typeof Record>;

@@ -1,121 +1,121 @@
 import type { ExistingAgentMessaging } from "@openomni/channels";
-import type { Delegation } from "@openomni/protocol";
+import type { Delegation, Gateway } from "@openomni/protocol";
 import type { Admitted } from "./admission";
 import { renderInstruction } from "./instruction";
-import type { DelegationDriver, DriverOutcome } from "./kernel";
+import type {
+  DelegationDriver,
+  DriverOutcome,
+  DriverPreparation,
+  DriverReport,
+} from "./kernel";
 
 export interface ChannelDriverPorts {
-  /**
-   * The gateway's #215 send kernel, resolved late because the driver is
-   * composed before the gateway that owns it. Every grant/target/budget
-   * judgment lives behind this port — the driver only carries the request.
-   */
+  /** The gateway's #215 send kernel; every contact grant stays behind it. */
   readonly send: ExistingAgentMessaging["send"];
   readonly now: () => number;
   readonly newWaitId: () => string;
 }
 
-/**
- * The channel transport plus its resume half: `run` sends the instruction to
- * an external actor as an awaited message, `resume` is called by the ingress
- * bridge when the perimeter correlates that actor's reply back to the Wait.
- */
 export interface ChannelDelegationDriver extends DelegationDriver {
-  /** True when the waitId belonged to a delegation still awaiting its reply. */
-  resume(waitId: string, text: string): boolean;
+  prepare(admitted: Admitted, handle: Delegation.Handle): DriverPreparation;
+}
+
+function waitForAbort(signal: AbortSignal): Promise<DriverOutcome> {
+  if (signal.aborted) return Promise.resolve({ status: "cancelled", reason: "delegation stopped" });
+  return new Promise((resolve) => {
+    signal.addEventListener(
+      "abort",
+      () => resolve({ status: "cancelled", reason: "delegation stopped" }),
+      { once: true },
+    );
+  });
 }
 
 /**
- * The channel transport: delegation to an actor who lives OUTSIDE this
- * process — a human or an external agent on a channel. The send kernel owns
- * every authority judgment (grants, target resolution, budgets) and the
- * durable Wait; this driver owns only the mapping between that machinery and
- * the delegation contract's settlement vocabulary.
+ * Channel transport only. Correlation and settlement live in the kernel:
+ * there is deliberately no in-memory pending map here. `prepare` allocates
+ * the wait id before record creation; `run` opens/sends that exact Wait and
+ * reports only transport acceptance or a delivery failure.
  */
 export function createChannelDriver(ports: ChannelDriverPorts): ChannelDelegationDriver {
-  const pending = new Map<string, (text: string | undefined) => void>();
-
   return {
-    resume(waitId, text) {
-      const settle = pending.get(waitId);
-      if (settle === undefined) return false;
-      pending.delete(waitId);
-      settle(text);
-      return true;
+    prepare(admitted) {
+      if (admitted.request.address.kind !== "actor") {
+        throw new Error("channel transport carries actor addresses only");
+      }
+      return admitted.request.operation === "notify" ? {} : { waitId: ports.newWaitId() };
     },
 
-    async run(admitted: Admitted, handle: Delegation.Handle, signal: AbortSignal): Promise<DriverOutcome> {
+    async run(
+      admitted: Admitted,
+      handle: Delegation.Handle,
+      signal: AbortSignal,
+      report?: DriverReport,
+    ): Promise<DriverOutcome> {
+      if (signal.aborted) return { status: "cancelled", reason: "delegation stopped" };
       const address = admitted.request.address;
       if (address.kind !== "actor") {
-        // Admission maps only actor addresses onto this transport; reaching
-        // here with anything else is a composition fault, not a worker answer.
         throw new Error("channel transport carries actor addresses only");
       }
 
-      const waitId = ports.newWaitId();
-      // Registered BEFORE the send: the reply can race the send's own return,
-      // and a reply that finds no pending entry would fall through to the
-      // Resident as an ordinary message instead of settling this delegation.
-      const reply = new Promise<string | undefined>((resolve) => {
-        pending.set(waitId, resolve);
-      });
-      const abort = () => {
-        const settle = pending.get(waitId);
-        if (settle !== undefined) {
-          pending.delete(waitId);
-          settle(undefined);
-        }
-      };
-      signal.addEventListener("abort", abort, { once: true });
+      const common = {
+        messageId: handle.delegationId,
+        traceId: handle.delegationId,
+        senderId: "resident",
+        target: { actorId: address.actorId },
+        body: renderInstruction(
+          admitted.request.payload.text,
+          admitted.request.acceptanceCriteria ?? [],
+        ),
+        at: ports.now(),
+      } as const;
 
-      let receipt: Awaited<ReturnType<ExistingAgentMessaging["send"]>>;
-      try {
-        receipt = await ports.send({
-          messageId: handle.delegationId,
-          traceId: handle.delegationId,
-          senderId: "resident",
-          target: { actorId: address.actorId },
+      let input: Gateway.SendInput;
+      if (admitted.request.operation === "notify") {
+        input = { ...common, operation: "fire_and_forget", class: "notify" };
+      } else {
+        const waitId = handle.waitId;
+        if (waitId === undefined) {
+          throw new Error("awaited channel delegation reached dispatch without its prepared waitId");
+        }
+        input = {
+          ...common,
           operation: "awaited",
-          body: renderInstruction(
-            admitted.request.payload.text,
-            admitted.request.acceptanceCriteria ?? [],
-          ),
-          at: ports.now(),
+          class: "converse",
           waitSpec: {
             waitId,
             ownerRef: { kind: "session", id: admitted.childOrigin.sessionId },
             allowedActions: ["report_result"],
             expectedResponders: [address.actorId],
             resolutionPolicy: "first_reply",
-            expiresAt: admitted.request.deadline,
+            // The Handle carries admission's min-clamped instant. No driver
+            // clock or requested deadline is allowed to create another one.
+            expiresAt: handle.deadline,
             followUpWindow: 0,
           },
-        });
+        };
+      }
+
+      let receipt: Awaited<ReturnType<ExistingAgentMessaging["send"]>>;
+      try {
+        receipt = await ports.send(input);
       } catch (error) {
-        // The delivery effect itself broke (no live connection, transport
-        // fault): the actor never held the request. The Wait the kernel may
-        // have opened expires on its own schedule — send.ts blesses exactly
-        // this ordering ("a delivery failure leaves an open Wait").
-        pending.delete(waitId);
-        signal.removeEventListener("abort", abort);
         return {
           status: "delivery_failed",
           reason: error instanceof Error ? error.message : String(error),
         };
       }
-
       if (receipt.kind === "denied") {
-        pending.delete(waitId);
-        signal.removeEventListener("abort", abort);
         return { status: "delivery_failed", reason: receipt.reason };
       }
 
-      const text = await reply;
-      signal.removeEventListener("abort", abort);
-      // The kernel aborts on deadline and settles no_response itself; the
-      // driver only stops holding the pending entry.
-      if (text === undefined) return { status: "cancelled", reason: "deadline reached" };
-      return { status: "completed", output: text };
+      report?.delivered();
+      if (admitted.request.operation === "notify") return { status: "sent" };
+
+      // A reply enters DelegationKernel.settleFromReply through ingress. This
+      // promise exists only to keep the dispatch alive until settlement,
+      // cancellation, or deadline aborts its process-local controller.
+      return waitForAbort(signal);
     },
   };
 }

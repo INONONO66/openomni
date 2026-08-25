@@ -1,148 +1,257 @@
 import type { Tool } from "@openomni/protocol";
 import { z } from "zod";
 import type { DelegationOrigin } from "./admission";
-import type { DelegationKernel } from "./kernel";
+import { type DelegationKernel, formatSettlement } from "./kernel";
 
 /**
- * The model asks in relative time because it has no clock; the contract
- * records absolute time because a deadline outlives the turn that set it.
- * This boundary is the only place the two meet.
+ * The model asks in relative time; the kernel records an absolute deadline
+ * using its injected clock. This is the only boundary where those meet.
  */
-const Input = z
-  .object({
-    instruction: z.string().min(1).describe("What the worker must do, stated so it can be read alone."),
-    mode: z
-      .enum(["ask", "assign"])
-      .describe("ask = answer a question; assign = own a piece of work until its criteria are met."),
-    scope: z
-      .enum(["inline", "independent"])
-      .optional()
-      .describe("inline = a child in this process sharing your domain; independent = its own worker."),
-    actorId: z
-      .string()
-      .min(1)
-      .optional()
-      .describe("A registered external actor (a human or an outside agent) to hand the work to instead of an internal worker."),
-    acceptanceCriteria: z
-      .array(z.string().min(1))
-      .optional()
-      .describe("Required for assign, forbidden for ask: what makes the work done."),
-    timeoutMs: z.number().int().positive().describe("How long to wait before giving up on an answer."),
-  })
-  .strict()
-  .superRefine((input, ctx) => {
-    if ((input.scope === undefined) === (input.actorId === undefined)) {
-      ctx.addIssue({
-        code: "custom",
-        message: "exactly one of scope or actorId must be given",
-        path: ["scope"],
-      });
+const StartInput = z.preprocess(
+  (raw) => {
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return raw;
+    const value = raw as Record<string, unknown>;
+    // v1 callers used `mode`; accepting it at the boundary keeps old prompts
+    // readable while the advertised v2 surface names the protocol operation.
+    if (value.operation === undefined && value.mode !== undefined) {
+      const { mode: _mode, ...rest } = value;
+      return { ...rest, operation: value.mode };
     }
-  });
+    return raw;
+  },
+  z
+    .object({
+      instruction: z.string().min(1).describe("What the recipient must do, stated so it can stand alone."),
+      operation: z
+        .enum(["notify", "ask", "assign"])
+        .describe("notify = send and do not expect a reply; ask = request an answer; assign = commission work."),
+      scope: z
+        .enum(["inline", "independent"])
+        .optional()
+        .describe("inline = volatile same-domain child; independent = isolated process."),
+      actorId: z
+        .string()
+        .min(1)
+        .optional()
+        .describe("Registered external actor; use instead of scope."),
+      acceptanceCriteria: z
+        .array(z.string().min(1))
+        .optional()
+        .describe("Required for assign and forbidden for ask/notify."),
+      timeoutMs: z.number().int().positive().describe("How long the delegation may remain open."),
+    })
+    .strict()
+    .superRefine((input, ctx) => {
+      const hasScope = input.scope !== undefined;
+      const hasActor = input.actorId !== undefined;
+      if (hasScope === hasActor) {
+        ctx.addIssue({
+          code: "custom",
+          message: "exactly one of scope or actorId must be given",
+          path: ["scope"],
+        });
+      }
+      if (input.operation === "notify" && !hasActor) {
+        ctx.addIssue({
+          code: "custom",
+          message: "notify reaches actor addresses only",
+          path: ["actorId"],
+        });
+      }
+      if (input.operation === "assign" && input.scope === "inline") {
+        ctx.addIssue({
+          code: "custom",
+          message: "assign never runs inline; use ask for an inline helper",
+          path: ["scope"],
+        });
+      }
+      if (input.operation === "assign" && (input.acceptanceCriteria?.length ?? 0) === 0) {
+        ctx.addIssue({
+          code: "custom",
+          message: "assign requires at least one acceptance criterion",
+          path: ["acceptanceCriteria"],
+        });
+      }
+      if (input.operation !== "assign" && input.acceptanceCriteria !== undefined) {
+        ctx.addIssue({
+          code: "custom",
+          message: `${input.operation} carries no acceptance criteria`,
+          path: ["acceptanceCriteria"],
+        });
+      }
+    }),
+);
+
+type StartInput = z.infer<typeof StartInput>;
 
 export const DELEGATE_TOOL_NAME = "delegate";
+export const AWAIT_DELEGATION_TOOL_NAME = "await_delegation";
+export const CANCEL_DELEGATION_TOOL_NAME = "cancel_delegation";
 
-/**
- * Hand-written rather than derived: this repo is on zod 3, whose JSON Schema
- * conversion lives outside the library. The zod object above stays the
- * runtime gate so a malformed call is refused even if the two ever drift.
- */
-const INPUT_JSON_SCHEMA: Record<string, unknown> = {
+const START_INPUT_JSON_SCHEMA: Record<string, unknown> = {
   type: "object",
   additionalProperties: false,
-  required: ["instruction", "mode", "timeoutMs"],
+  required: ["instruction", "operation", "timeoutMs"],
   properties: {
-    instruction: {
-      type: "string",
-      minLength: 1,
-      description: "What the worker must do, stated so it can be read alone.",
-    },
-    mode: {
-      type: "string",
-      enum: ["ask", "assign"],
-      description: "ask = answer a question; assign = own a piece of work until its criteria are met.",
-    },
-    scope: {
-      type: "string",
-      enum: ["inline", "independent"],
-      description:
-        "inline = a child in this process sharing your domain; independent = its own worker. Exactly one of scope or actorId.",
-    },
-    actorId: {
-      type: "string",
-      minLength: 1,
-      description:
-        "A registered external actor (a human or an outside agent) to hand the work to instead of an internal worker. Exactly one of scope or actorId.",
-    },
-    acceptanceCriteria: {
-      type: "array",
-      items: { type: "string", minLength: 1 },
-      description: "Required for assign, forbidden for ask: what makes the work done.",
-    },
-    timeoutMs: {
-      type: "integer",
-      exclusiveMinimum: 0,
-      description: "How long to wait before giving up on an answer.",
-    },
+    instruction: { type: "string", minLength: 1 },
+    operation: { type: "string", enum: ["notify", "ask", "assign"] },
+    scope: { type: "string", enum: ["inline", "independent"] },
+    actorId: { type: "string", minLength: 1 },
+    acceptanceCriteria: { type: "array", items: { type: "string", minLength: 1 } },
+    timeoutMs: { type: "integer", exclusiveMinimum: 0 },
   },
+};
+
+const AWAIT_INPUT = z
+  .object({
+    delegationId: z.string().min(1),
+    timeoutMs: z.number().int().positive().optional(),
+  })
+  .strict();
+const AWAIT_INPUT_JSON_SCHEMA: Record<string, unknown> = {
+  type: "object",
+  additionalProperties: false,
+  required: ["delegationId"],
+  properties: {
+    delegationId: { type: "string", minLength: 1 },
+    timeoutMs: { type: "integer", exclusiveMinimum: 0 },
+  },
+};
+
+const CANCEL_INPUT = z.object({ delegationId: z.string().min(1) }).strict();
+const CANCEL_INPUT_JSON_SCHEMA: Record<string, unknown> = {
+  type: "object",
+  additionalProperties: false,
+  required: ["delegationId"],
+  properties: { delegationId: { type: "string", minLength: 1 } },
 };
 
 export function delegateToolSpec(): Tool.Spec {
   return {
     name: DELEGATE_TOOL_NAME,
     description:
-      "Hand a piece of work to a worker and wait for how it ends. Silence past the deadline is reported as no_response, which means the outcome is unknown — never that the work did not happen.",
-    inputSchema: INPUT_JSON_SCHEMA,
+      "Start durable delegated work. Inline ask waits in this turn; process/channel work returns a handle immediately and its settlement arrives as a message. Notify sends once to an actor and settles sent at transport acceptance.",
+    inputSchema: START_INPUT_JSON_SCHEMA,
     safe: false,
     placement: "host",
   };
 }
 
-/**
- * Binds the tool to one originator. Each loop gets its own executor because
- * the origin is a property of who is running, never of what they typed —
- * an argument the model could set would make the depth rule self-asserted.
- */
+export function awaitDelegationToolSpec(): Tool.Spec {
+  return {
+    name: AWAIT_DELEGATION_TOOL_NAME,
+    description:
+      "Re-invoke a durable delegation by id. It returns its settlement when available, or says it is still open until the supplied wait limit.",
+    inputSchema: AWAIT_INPUT_JSON_SCHEMA,
+    safe: false,
+    placement: "host",
+  };
+}
+
+export function cancelDelegationToolSpec(): Tool.Spec {
+  return {
+    name: CANCEL_DELEGATION_TOOL_NAME,
+    description: "Cancel open delegated work by id; cancelling settled work returns the existing settlement.",
+    inputSchema: CANCEL_INPUT_JSON_SCHEMA,
+    safe: false,
+    placement: "host",
+  };
+}
+
+function handleText(handle: {
+  delegationId: string;
+  operation: string;
+  transport: string;
+  deadline: number;
+  waitId?: string;
+}): string {
+  return [
+    `delegation ${handle.delegationId} accepted`,
+    `operation=${handle.operation}`,
+    `transport=${handle.transport}`,
+    `deadline=${handle.deadline}`,
+    ...(handle.waitId === undefined ? [] : [`waitId=${handle.waitId}`]),
+    "settlement will arrive as a message",
+  ].join("; ");
+}
+
+function refusalText(prefix: string, error: unknown): string {
+  const candidate: unknown = error;
+  if (typeof candidate === "object" && candidate !== null && "data" in candidate) {
+    const data = candidate.data;
+    if (typeof data === "object" && data !== null && "message" in data && typeof data.message === "string") {
+      return `${prefix} refused: ${data.message}`;
+    }
+  }
+  if (typeof candidate === "object" && candidate !== null && "message" in candidate && typeof candidate.message === "string") {
+    return `${prefix} refused: ${candidate.message}`;
+  }
+  return `${prefix} refused: ${String(candidate)}`;
+}
+
+/** Binds the start tool to one trusted originator. */
 export function delegateToolExecutor(kernel: DelegationKernel, origin: DelegationOrigin) {
   return async (rawInput: unknown): Promise<string> => {
-    const parsed = Input.safeParse(rawInput);
+    const parsed = StartInput.safeParse(rawInput);
     if (!parsed.success) {
       return `delegate refused: ${parsed.error.issues[0]?.message ?? "invalid input"}`;
     }
-    const input = parsed.data;
+    const input: StartInput = parsed.data;
+    const request = {
+      address:
+        input.actorId !== undefined
+          ? { kind: "actor" as const, actorId: input.actorId }
+          : input.scope === "inline"
+            ? { kind: "core" as const, scope: "inline" as const }
+            : { kind: "core" as const, scope: "independent" as const },
+      operation: input.operation,
+      payload: { text: input.instruction },
+      ...(input.acceptanceCriteria === undefined ? {} : { acceptanceCriteria: input.acceptanceCriteria }),
+      deadline: (typeof kernel.now === "function" ? kernel.now() : Date.now()) + input.timeoutMs,
+    };
 
-    const result = await kernel.delegate(
-      {
-        address:
-          input.actorId !== undefined
-            ? { kind: "actor", actorId: input.actorId }
-            : input.scope === "inline"
-              ? { kind: "core", scope: "inline" }
-              : { kind: "core", scope: "independent" },
-        mode: input.mode,
-        payload: { text: input.instruction },
-        ...(input.acceptanceCriteria === undefined
-          ? {}
-          : { acceptanceCriteria: input.acceptanceCriteria }),
-        deadline: Date.now() + input.timeoutMs,
-      },
-      origin,
-    );
-
+    let result: Awaited<ReturnType<DelegationKernel["delegate"]>>;
+    try {
+      result = await kernel.delegate(request, origin);
+    } catch (error) {
+      return refusalText("delegate", error);
+    }
     if ("refused" in result) return `delegate refused: ${result.refused}`;
+    if (result.settled !== undefined) {
+      return formatSettlement(result.settled);
+    }
+    return handleText(result.handle);
+  };
+}
 
-    const settled = result.settled;
-    switch (settled.status) {
-      case "completed":
-        return settled.output;
-      case "failed":
-        return `worker failed: ${settled.error}`;
-      case "cancelled":
-        return `worker cancelled: ${settled.reason}`;
-      case "delivery_failed":
-        return `never reached a worker: ${settled.reason}`;
-      case "no_response":
-        return "no response before the deadline — the outcome is unknown, not a failure to act";
+export function awaitDelegationToolExecutor(kernel: DelegationKernel) {
+  return async (rawInput: unknown): Promise<string> => {
+    const parsed = AWAIT_INPUT.safeParse(rawInput);
+    if (!parsed.success) {
+      return `await_delegation refused: ${parsed.error.issues[0]?.message ?? "invalid input"}`;
+    }
+    try {
+      const result = await kernel.awaitDelegation(parsed.data.delegationId, parsed.data.timeoutMs);
+      if (result.kind === "timeout") {
+        return `delegation ${result.delegationId} is still open; settlement will arrive as a message`;
+      }
+      return formatSettlement(result.settlement);
+    } catch (error) {
+      return refusalText("await_delegation", error);
+    }
+  };
+}
+
+export function cancelDelegationToolExecutor(kernel: DelegationKernel) {
+  return async (rawInput: unknown): Promise<string> => {
+    const parsed = CANCEL_INPUT.safeParse(rawInput);
+    if (!parsed.success) {
+      return `cancel_delegation refused: ${parsed.error.issues[0]?.message ?? "invalid input"}`;
+    }
+    try {
+      return formatSettlement(await kernel.cancelDelegation(parsed.data.delegationId));
+    } catch (error) {
+      return refusalText("cancel_delegation", error);
     }
   };
 }

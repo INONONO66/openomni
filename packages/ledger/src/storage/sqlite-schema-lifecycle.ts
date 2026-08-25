@@ -27,6 +27,7 @@ const ORDERED_MIGRATIONS: Migration.Definition[] = [
   { name: "0020_engagement/migration.sql" },
   { name: "0021_egress_budget/migration.sql" },
   { name: "0022_bus_event_payload_status/migration.sql" },
+  { name: "0023_delegation/migration.sql" },
 ];
 
 const CLEAR_ORDER = [
@@ -35,6 +36,7 @@ const CLEAR_ORDER = [
   "event_chain",
   "wait",
   "engagement",
+  "delegation",
   "app_connector_installation",
   "channel_grant",
   "blacklist",

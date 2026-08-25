@@ -2,6 +2,7 @@ import type { Actor } from "../actor/index.js";
 import type { AppConnector } from "../app-connector/index.js";
 import type { Communication } from "../communication/index.js";
 import type { CronJob } from "../cron/index.js";
+import type { Delegation } from "../delegation/index.js";
 import type { Engagement } from "../engagement/index.js";
 import type { Gateway } from "../gateway/index.js";
 import type { Ledger } from "../ledger/index.js";
@@ -84,6 +85,36 @@ export namespace Storage {
     list(filter?: EngagementListFilter): Engagement.Record[];
     /** Revision compare-and-set (UPDATE ... WHERE id AND revision): changes===1 receipt. */
     compareAndSet(id: string, expectedRevision: number, record: Engagement.Record): boolean;
+  }
+
+  /**
+   * Durable delegation rows (record-before-act): the kernel is the sole
+   * writer, recording the admission BEFORE the work runs and settling
+   * exactly once. Same discipline as Wait: INSERT receipt on create,
+   * compare-and-swap on the single terminal transition. `listOpenByRoot`
+   * is the fanout-cap count read at admission; `findByWaitId` is the
+   * reply-correlation read (`settleFromReply`).
+   */
+  export interface DelegationSubAdapter {
+    /** INSERT receipt: false when the id already exists. */
+    create(record: Delegation.Record): boolean;
+    get(delegationId: string): Delegation.Record | undefined;
+    /**
+     * open -> settled compare-and-swap: writes the settlement payload and
+     * `settledAt` and flips the status, only while the row is still open.
+     * false = already settled (lost race) — the existing settlement stands,
+     * which is what makes the settlement wake exactly-once.
+     */
+    compareAndSwapStatus(
+      delegationId: string,
+      settled: Delegation.Settled,
+      settledAt: number,
+    ): boolean;
+    listOpen(): Delegation.Record[];
+    /** Open rows of one delegation tree — the per-root fanout-cap count. */
+    listOpenByRoot(rootDelegationId: string): Delegation.Record[];
+    /** The open (or settled) row a correlated channel reply belongs to. */
+    findByWaitId(waitId: string): Delegation.Record | undefined;
   }
 
   export interface WaitSubAdapter {
