@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Delegation } from "@openomni/protocol";
+
+const legacyDirectories: string[] = [];
 import { DelegationStore, SqliteStorageAdapter, Storage } from "../../src/index";
 import { createMemoryDelegationAdapter } from "../../src/storage/memory-delegation-adapter";
 import { buildDelegationRecord } from "../helpers/delegation";
@@ -163,6 +169,74 @@ for (const { name, create } of adapters) {
     });
   });
 }
+
+describe("DelegationStore legacy wake-receipt upcast (SQLite)", () => {
+  beforeEach(() => {
+    Storage.reset();
+  });
+
+  afterEach(() => {
+    Storage.reset();
+    for (const directory of legacyDirectories.splice(0)) {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("a pre-0024 settled row (NULL woken_at, JSON without wokenAt) decodes as unwoken", () => {
+    const directory = mkdtempSync(join(tmpdir(), "openomni-legacy-wake-receipt-"));
+    legacyDirectories.push(directory);
+    const dbPath = join(directory, "legacy.db");
+    Storage.configure(new SqliteStorageAdapter(dbPath));
+
+    // Seed the pre-0024 shape directly, bypassing the current write path: the
+    // additive woken_at column did not exist before migration 0024, so an old
+    // settled row carries no wokenAt in its JSON payload and NULL in the
+    // column. Raw SQL keeps this pin honest against write-path drift.
+    const legacy = Delegation.Record.parse({
+      ...buildDelegationRecord(),
+      status: "settled",
+      settled: {
+        status: "completed",
+        delegationId: "delegation-1",
+        output: "done",
+        at: 200,
+      },
+      settledAt: 200,
+    });
+    const raw = new Database(dbPath);
+    raw
+      .query(
+        `INSERT INTO delegation (
+           delegation_id, status, root_delegation_id, wait_id, data, time_created, settled_at, woken_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL)`,
+      )
+      .run(
+        legacy.delegationId,
+        "settled",
+        legacy.rootDelegationId,
+        legacy.waitId ?? null,
+        JSON.stringify(legacy),
+        legacy.createdAt,
+        200,
+      );
+    raw.close();
+
+    // Missing receipt = unwoken: the NULL column upcasts to an ABSENT
+    // wokenAt, never a fabricated one, so boot recovery re-delivers the wake.
+    const decoded = DelegationStore.get("delegation-1");
+    expect(decoded?.status).toBe("settled");
+    expect(decoded?.wokenAt).toBeUndefined();
+    expect(DelegationStore.listSettledUnwoken().map((record) => record.delegationId)).toEqual([
+      "delegation-1",
+    ]);
+
+    // The receipt CAS treats the row as unwoken and stamps it exactly once.
+    expect(DelegationStore.markWoken("delegation-1", 201)).toBe(true);
+    expect(DelegationStore.markWoken("delegation-1", 202)).toBe(false);
+    expect(DelegationStore.get("delegation-1")?.wokenAt).toBe(201);
+    expect(DelegationStore.listSettledUnwoken()).toEqual([]);
+  });
+});
 
 describe("DelegationStore fail-closed floor", () => {
   beforeEach(() => {

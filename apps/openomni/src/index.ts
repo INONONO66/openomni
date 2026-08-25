@@ -3,7 +3,7 @@ import { type GatewayRouter, WaitService, WebSocketHandler } from "@openomni/cha
 import { ActorRegistry, BusPersistence, initialize, Session, Storage } from "@openomni/ledger";
 import { createMachineHost, type MachineHost } from "@openomni/machines";
 import type { Placement } from "@openomni/placement";
-import { Gateway, type Ingress, type Machine, newTraceId, Operational } from "@openomni/protocol";
+import { Gateway, type Ingress, type Machine, newTraceId } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { assertWsExposure, loadConfig, type OpenOmniConfig, type RegisteredActor } from "./config";
 import type { MachinesPort } from "./tools/machines";
@@ -96,260 +96,272 @@ export async function startOpenOmni(options: StartOptions = {}) {
   assertWsExposure(config);
   initialize({ dbPath: config.dbPath });
   const stopBusPersistence = BusPersistence.start();
-
-  // Owner-admitted delegation targets. Registration is an upsert, so a
-  // restart re-asserting the same actors is a no-op.
-  const actors: readonly RegisteredActor[] = config.actors ?? [];
-  for (const actor of actors) {
-    ActorRegistry.registerIdentity({
-      id: actor.actorId,
-      kind: actor.kind,
-      trustTier: actor.trustTier,
-      ...(actor.displayName === undefined ? {} : { displayName: actor.displayName }),
-    });
-    ActorRegistry.registerEndpoint({
-      id: `ws:${actor.externalId}`,
-      actorId: actor.actorId,
-      channel: "ws",
-      externalId: actor.externalId,
-    });
-  }
-
-  // A worker loop holds the same delegate tool the Resident does, so the
-  // runner needs the kernel that the kernel needs the runner to build. The
-  // cycle is closed by handing the runner a getter rather than a value.
+  // Boot owns the kernel and host handles from this scope so the rollback
+  // path below can tear down whatever a failed boot already built.
   let kernel: DelegationKernel | undefined;
-  let residentDeliver: ((delivery: Gateway.Deliver) => Promise<Ingress.IngressResult>) | undefined;
-  const pendingWakes: Array<{
-    readonly wake: DelegationWake;
-    readonly resolve: () => void;
-    readonly reject: (error: unknown) => void;
-  }> = [];
-  const runner = createInlineWorkerRunner({
-    model: config.model,
-    apiKey: config.model.apiKey,
-    kernel: () => {
-      if (kernel === undefined) throw new Error("delegation kernel used before composition finished");
-      return kernel;
-    },
-    ...(options.llm === undefined ? {} : { llm: options.llm }),
-  });
-  // The gateway owns the send kernel the channel driver speaks through, and
-  // the gateway needs the deliver chain the kernel is part of — the same
-  // late-binding the runner/kernel pair uses.
-  let gateway: GatewayRouter | undefined;
-  const channelDriver = createChannelDriver({
-    send: (input) => {
-      if (gateway === undefined) throw new Error("messaging used before composition finished");
-      return gateway.messaging.send(input);
-    },
-    now: () => Date.now(),
-    newWaitId: () => crypto.randomUUID(),
-  });
-  kernel = createDelegationKernel({
-    events: Bus,
-    wake: (wake) => {
-      if (residentDeliver === undefined) {
-        return new Promise<void>((resolve, reject) => {
-          pendingWakes.push({ wake, resolve, reject });
-        });
-      }
-      return residentDeliver(delegationWakeDelivery(wake)).then(() => undefined);
-    },
-    bootSweep: false,
-    drivers: {
-      inline: createInlineDriver(runner),
-      channel: channelDriver,
-      process: createProcessDriver({
-        command: [
-          process.execPath,
-          new URL("./delegation/process-entry.ts", import.meta.url).pathname,
-        ],
-        worker: {
-          model: { provider: config.model.provider, id: config.model.id },
-          apiKey: config.model.apiKey,
-        },
-        dbPath: config.dbPath,
-      }),
-    },
-    now: () => Date.now(),
-    newDelegationId: () => crypto.randomUUID(),
-  });
+  let host: MachineHost | undefined;
+  try {
 
-  // The cell door is bound per cell rather than globally, so a cell serves
-  // exactly the tools its own dispatcher holds.
-  const registry = createCellRegistry();
-  const machines = config.machines;
-  const host =
-    machines === undefined
-      ? undefined
-      : await createMachineHost({
-          socketPath: machines.socketPath,
-          enrollment: (machineId) => machines.enrolled.find((e) => e.machineId === machineId),
-          events: Bus,
-          now: () => Date.now(),
-          callTool: registry.callTool,
-        });
+    // Owner-admitted delegation targets. Registration is an upsert, so a
+    // restart re-asserting the same actors is a no-op.
+    const actors: readonly RegisteredActor[] = config.actors ?? [];
+    for (const actor of actors) {
+      ActorRegistry.registerIdentity({
+        id: actor.actorId,
+        kind: actor.kind,
+        trustTier: actor.trustTier,
+        ...(actor.displayName === undefined ? {} : { displayName: actor.displayName }),
+      });
+      ActorRegistry.registerEndpoint({
+        id: `ws:${actor.externalId}`,
+        actorId: actor.actorId,
+        channel: "ws",
+        externalId: actor.externalId,
+      });
+    }
 
-  // Self-referential: a cell's catalog is the same one that dispatches cells,
-  // and placement subtracts what a cell cannot reach.
-  // The Resident's one durable memory (kernel-contract §5): curated through
-  // the memory tool, frozen into the system prompt per session.
-  const memory = openCuratedMemory(config.memoryPath);
+    // A worker loop holds the same delegate tool the Resident does, so the
+    // runner needs the kernel that the kernel needs the runner to build. The
+    // cycle is closed by handing the runner a getter rather than a value.
+    let residentDeliver: ((delivery: Gateway.Deliver) => Promise<Ingress.IngressResult>) | undefined;
+    const pendingWakes: Array<{
+      readonly wake: DelegationWake;
+      readonly resolve: () => void;
+      readonly reject: (error: unknown) => void;
+    }> = [];
+    const runner = createInlineWorkerRunner({
+      model: config.model,
+      apiKey: config.model.apiKey,
+      kernel: () => {
+        if (kernel === undefined) throw new Error("delegation kernel used before composition finished");
+        return kernel;
+      },
+      ...(options.llm === undefined ? {} : { llm: options.llm }),
+    });
+    // The gateway owns the send kernel the channel driver speaks through, and
+    // the gateway needs the deliver chain the kernel is part of — the same
+    // late-binding the runner/kernel pair uses.
+    let gateway: GatewayRouter | undefined;
+    const channelDriver = createChannelDriver({
+      send: (input) => {
+        if (gateway === undefined) throw new Error("messaging used before composition finished");
+        return gateway.messaging.send(input);
+      },
+      now: () => Date.now(),
+      newWaitId: () => crypto.randomUUID(),
+    });
+    kernel = createDelegationKernel({
+      events: Bus,
+      wake: (wake) => {
+        if (residentDeliver === undefined) {
+          return new Promise<void>((resolve, reject) => {
+            pendingWakes.push({ wake, resolve, reject });
+          });
+        }
+        return residentDeliver(delegationWakeDelivery(wake)).then(() => undefined);
+      },
+      bootSweep: false,
+      drivers: {
+        inline: createInlineDriver(runner),
+        channel: channelDriver,
+        process: createProcessDriver({
+          command: [
+            process.execPath,
+            new URL("./delegation/process-entry.ts", import.meta.url).pathname,
+          ],
+          worker: {
+            model: { provider: config.model.provider, id: config.model.id },
+            apiKey: config.model.apiKey,
+          },
+          dbPath: config.dbPath,
+        }),
+      },
+      now: () => Date.now(),
+      newDelegationId: () => crypto.randomUUID(),
+    });
+    // Const capture for the closures below (the outer `let kernel` exists so
+    // boot rollback can stop a partially built kernel).
+    const delegationKernel = kernel;
 
-  // The Resident's view of its body: every enrolled machine, attached or
-  // not, reduced to the effective (enrollment∩offer) capability fold the
-  // host attachment table holds.
-  const machinesPort: MachinesPort | undefined =
-    host === undefined || machines === undefined
-      ? undefined
-      : () =>
-          machines.enrolled.map((enrollment) => {
-            const capabilities = host.attached(enrollment.machineId);
-            return capabilities === undefined
-              ? { machineId: enrollment.machineId, attached: false, capabilities: [] }
-              : { machineId: enrollment.machineId, attached: true, capabilities: [...capabilities] };
+    // The cell door is bound per cell rather than globally, so a cell serves
+    // exactly the tools its own dispatcher holds.
+    const registry = createCellRegistry();
+    const machines = config.machines;
+    host =
+      machines === undefined
+        ? undefined
+        : await createMachineHost({
+            socketPath: machines.socketPath,
+            enrollment: (machineId) => machines.enrolled.find((e) => e.machineId === machineId),
+            events: Bus,
+            now: () => Date.now(),
+            callTool: registry.callTool,
           });
 
-  const cells: CellPorts | undefined =
-    host === undefined
-      ? undefined
-      : {
-          registry,
-          runCell: (machineId, request) => host.runCell(machineId, request),
-          toolsFor: (origin) =>
-            catalogEntries(
-              {
-                delegation: kernel,
-                cells,
-                ...(machinesPort === undefined ? {} : { machines: machinesPort }),
-                memory,
-              },
-              origin,
-            ),
-          newCellId: () => crypto.randomUUID(),
+    // Self-referential: a cell's catalog is the same one that dispatches cells,
+    // and placement subtracts what a cell cannot reach.
+    // The Resident's one durable memory (kernel-contract §5): curated through
+    // the memory tool, frozen into the system prompt per session.
+    const memory = openCuratedMemory(config.memoryPath);
+
+    // The Resident's view of its body: every enrolled machine, attached or
+    // not, reduced to the effective (enrollment∩offer) capability fold the
+    // host attachment table holds.
+    // A const capture keeps the narrowing the closures below rely on (the
+    // outer `let host` exists only so boot rollback can reach the handle).
+    const machineHost = host;
+    const machinesPort: MachinesPort | undefined =
+      machineHost === undefined || machines === undefined
+        ? undefined
+        : () =>
+            machines.enrolled.map((enrollment) => {
+              const capabilities = machineHost.attached(enrollment.machineId);
+              return capabilities === undefined
+                ? { machineId: enrollment.machineId, attached: false, capabilities: [] }
+                : { machineId: enrollment.machineId, attached: true, capabilities: [...capabilities] };
+            });
+
+    const cells: CellPorts | undefined =
+      machineHost === undefined
+        ? undefined
+        : {
+            registry,
+            runCell: (machineId, request) => machineHost.runCell(machineId, request),
+            toolsFor: (origin) =>
+              catalogEntries(
+                {
+                  delegation: kernel,
+                  cells,
+                  ...(machinesPort === undefined ? {} : { machines: machinesPort }),
+                  memory,
+                },
+                origin,
+              ),
+            newCellId: () => crypto.randomUUID(),
+          };
+
+    residentDeliver = createResident({
+      model: config.model,
+      apiKey: config.model.apiKey,
+      tools: {
+        delegation: kernel,
+        ...(cells === undefined ? {} : { cells }),
+        ...(machinesPort === undefined ? {} : { machines: machinesPort }),
+        memory,
+      },
+      targets: () => attachedTargets(host, machines?.enrolled ?? []),
+      ...(options.llm === undefined ? {} : { llm: options.llm }),
+    });
+
+    // A delivery the perimeter correlated to an open Wait is an actor's answer
+    // to a delegation, not a message for the Resident: it settles the waiting
+    // delegate call. A waitContext nothing is waiting on (a resume after this
+    // process restarted) falls through to the Resident as an ordinary message.
+    const deliver = async (delivery: Gateway.Deliver): Promise<Ingress.IngressResult> => {
+      const wait = delivery.waitContext;
+      // A wait-correlated route always carries the wait owner's session label
+      // (resolve-route pins `sessionId: state.wait.sessionId`), so no fallback:
+      // a labelless delivery is ordinary traffic for the Resident.
+      const sessionId = delivery.sessionId;
+      if (
+        wait !== undefined &&
+        sessionId !== undefined &&
+        delegationKernel.settleFromReply(wait.waitId, replyText(delivery.event.payload))
+      ) {
+        return {
+          mode: "direct",
+          target: { kind: "resident" },
+          sessionId,
+          result: {
+            output: "Reply received — the delegation it answers is settling.",
+            finishReason: "stop",
+          },
         };
-
-  residentDeliver = createResident({
-    model: config.model,
-    apiKey: config.model.apiKey,
-    tools: {
-      delegation: kernel,
-      ...(cells === undefined ? {} : { cells }),
-      ...(machinesPort === undefined ? {} : { machines: machinesPort }),
-      memory,
-    },
-    targets: () => attachedTargets(host, machines?.enrolled ?? []),
-    ...(options.llm === undefined ? {} : { llm: options.llm }),
-  });
-
-  // A delivery the perimeter correlated to an open Wait is an actor's answer
-  // to a delegation, not a message for the Resident: it settles the waiting
-  // delegate call. A waitContext nothing is waiting on (a resume after this
-  // process restarted) falls through to the Resident as an ordinary message.
-  const deliver = async (delivery: Gateway.Deliver): Promise<Ingress.IngressResult> => {
-    const wait = delivery.waitContext;
-    // A wait-correlated route always carries the wait owner's session label
-    // (resolve-route pins `sessionId: state.wait.sessionId`), so no fallback:
-    // a labelless delivery is ordinary traffic for the Resident.
-    const sessionId = delivery.sessionId;
-    if (
-      wait !== undefined &&
-      sessionId !== undefined &&
-      kernel.settleFromReply(wait.waitId, replyText(delivery.event.payload))
-    ) {
-      return {
-        mode: "direct",
-        target: { kind: "resident" },
-        sessionId,
-        result: {
-          output: "Reply received — the delegation it answers is settling.",
-          finishReason: "stop",
-        },
-      };
-    }
-    return residentDeliver(delivery);
-  };
-
-  // Late-binds the handler the route delivers through: the gateway needs the
-  // route before the ws handler that needs the gateway exists.
-  let wsHandler: WebSocketHandler | undefined;
-  const wsRoute = async (externalId: string, body: string) => {
-    if (wsHandler === undefined) throw new Error("ws delivery used before composition finished");
-    return wsHandler.push(externalId, body);
-  };
-  gateway = createResidentGateway(
-    deliver,
-    actors.length === 0
-      ? undefined
-      : {
-          deliveryRoutes: new Map([["ws", wsRoute]]),
-          grants: () =>
-            actors.map((actor) => ({
-              id: `resident->${actor.actorId}`,
-              senderId: "resident",
-              targetActorId: actor.actorId,
-              operations: ["awaited" as const, "fire_and_forget" as const],
-            })),
-        },
-  );
-  // Recovery is deliberately after the Resident and gateway exist: boot
-  // settlements must be able to deliver their one owner-session wake.
-  const recoveryTraceId = newTraceId();
-  WaitService.sweepExpired(recoveryTraceId, Bus.publish);
-  Session.sweepExpired(recoveryTraceId);
-  kernel.start();
-  for (const pending of pendingWakes.splice(0)) {
-    void residentDeliver(delegationWakeDelivery(pending.wake))
-      .then(() => pending.resolve())
-      .catch((error: unknown) => {
-        const detail = error instanceof Error ? error.message : String(error);
-        Bus.publish(Operational.Events.Error, {
-          traceId: pending.wake.record.delegationId,
-          sessionId: pending.wake.record.origin.sessionId,
-          time: Date.now(),
-          component: "delegation",
-          msg: `delegation wake failed for ${pending.wake.record.delegationId}`,
-          error: detail,
-          context: { delegationId: pending.wake.record.delegationId },
-        });
-        pending.reject(error);
-      });
-  }
-
-  const boundGateway = gateway;
-  wsHandler = new WebSocketHandler(async (message) => {
-    const result = await boundGateway.ingest(buildInboundEvent(message));
-    return result.kind === "dropped" ? null : { text: result.result.output };
-  }, Bus.publish, config.wsToken === undefined ? {} : { token: config.wsToken });
-
-  const server = Bun.serve({
-    hostname: config.host,
-    port: config.wsPort,
-    websocket: wsHandler.ws,
-    fetch(request, bunServer) {
-      const url = new URL(request.url);
-      if (request.headers.get("upgrade") === "websocket" && url.pathname === "/ws") {
-        // undefined = the upgrade succeeded; a Response = the upgrade was denied.
-        return wsHandler.handleUpgrade(request, bunServer);
       }
-      return new Response("Not found", { status: 404 });
-    },
-  });
+      return residentDeliver(delivery);
+    };
 
-  if (server.port === undefined) throw new Error("OpenOmni ws server did not bind a TCP port");
-  return {
-    port: server.port,
-    stop(): void {
-      server.stop();
-      kernel.stop();
-      host?.close();
-      stopBusPersistence();
-      Storage.reset();
-    },
-  };
+    // Late-binds the handler the route delivers through: the gateway needs the
+    // route before the ws handler that needs the gateway exists.
+    let wsHandler: WebSocketHandler | undefined;
+    const wsRoute = async (externalId: string, body: string) => {
+      if (wsHandler === undefined) throw new Error("ws delivery used before composition finished");
+      return wsHandler.push(externalId, body);
+    };
+    gateway = createResidentGateway(
+      deliver,
+      actors.length === 0
+        ? undefined
+        : {
+            deliveryRoutes: new Map([["ws", wsRoute]]),
+            grants: () =>
+              actors.map((actor) => ({
+                id: `resident->${actor.actorId}`,
+                senderId: "resident",
+                targetActorId: actor.actorId,
+                operations: ["awaited" as const, "fire_and_forget" as const],
+              })),
+          },
+    );
+    // Recovery is deliberately after the Resident and gateway exist: boot
+    // settlements must be able to deliver their one owner-session wake.
+    const recoveryTraceId = newTraceId();
+    WaitService.sweepExpired(recoveryTraceId, Bus.publish);
+    Session.sweepExpired(recoveryTraceId);
+    kernel.start();
+    for (const pending of pendingWakes.splice(0)) {
+      void residentDeliver(delegationWakeDelivery(pending.wake))
+        .then(() => pending.resolve())
+        // Reject only: the kernel's deliverWake is the single owner of
+        // wake-failure reporting — publishing here would double-report.
+        .catch((error: unknown) => pending.reject(error));
+    }
+
+    const boundGateway = gateway;
+    wsHandler = new WebSocketHandler(async (message) => {
+      const result = await boundGateway.ingest(buildInboundEvent(message));
+      return result.kind === "dropped" ? null : { text: result.result.output };
+    }, Bus.publish, config.wsToken === undefined ? {} : { token: config.wsToken });
+
+    const server = Bun.serve({
+      hostname: config.host,
+      port: config.wsPort,
+      websocket: wsHandler.ws,
+      fetch(request, bunServer) {
+        const url = new URL(request.url);
+        if (request.headers.get("upgrade") === "websocket" && url.pathname === "/ws") {
+          // undefined = the upgrade succeeded; a Response = the upgrade was denied.
+          return wsHandler.handleUpgrade(request, bunServer);
+        }
+        return new Response("Not found", { status: 404 });
+      },
+    });
+
+    if (server.port === undefined) throw new Error("OpenOmni ws server did not bind a TCP port");
+    return {
+      port: server.port,
+      async stop(): Promise<void> {
+        server.stop();
+        kernel?.stop();
+        host?.close();
+        // Journal shutdown contract: every accepted event row is committed
+        // before the observer detaches and storage closes.
+        await BusPersistence.flush();
+        stopBusPersistence();
+        Storage.reset();
+      },
+    };
+  } catch (error) {
+    // Fail-closed boot rollback: a failure after the journal started leaves
+    // no leaked Bus observer, no armed kernel timer, and no configured
+    // storage behind — a later boot starts clean.
+    kernel?.stop();
+    host?.close();
+    stopBusPersistence();
+    Storage.reset();
+    throw error;
+  }
 }
-
 if (import.meta.main) {
   const config = loadConfig();
   const app = await startOpenOmni({ config });
@@ -361,3 +373,4 @@ if (import.meta.main) {
   process.once("SIGINT", stop);
   process.once("SIGTERM", stop);
 }
+
