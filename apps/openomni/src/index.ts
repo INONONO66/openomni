@@ -14,6 +14,7 @@ import {
   type DelegationKernel,
   type DelegationWake,
 } from "./delegation/kernel";
+import { createWakeDeliveryQueue } from "./delegation/wake-delivery";
 import { createProcessDriver } from "./delegation/process-driver";
 import { createInlineWorkerRunner } from "./delegation/worker-loop";
 import { createResidentGateway } from "./gateway";
@@ -101,7 +102,6 @@ export async function startOpenOmni(options: StartOptions = {}) {
   let kernel: DelegationKernel | undefined;
   let host: MachineHost | undefined;
   try {
-
     // Owner-admitted delegation targets. Registration is an upsert, so a
     // restart re-asserting the same actors is a no-op.
     const actors: readonly RegisteredActor[] = config.actors ?? [];
@@ -124,11 +124,9 @@ export async function startOpenOmni(options: StartOptions = {}) {
     // runner needs the kernel that the kernel needs the runner to build. The
     // cycle is closed by handing the runner a getter rather than a value.
     let residentDeliver: ((delivery: Gateway.Deliver) => Promise<Ingress.IngressResult>) | undefined;
-    const pendingWakes: Array<{
-      readonly wake: DelegationWake;
-      readonly resolve: () => void;
-      readonly reject: (error: unknown) => void;
-    }> = [];
+    // Boot-rescan wakes arrive before the Resident's deliver chain can be
+    // bound; they wait in this queue until the arm call below.
+    const wakeDelivery = createWakeDeliveryQueue();
     const runner = createInlineWorkerRunner({
       model: config.model,
       apiKey: config.model.apiKey,
@@ -152,14 +150,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
     });
     kernel = createDelegationKernel({
       events: Bus,
-      wake: (wake) => {
-        if (residentDeliver === undefined) {
-          return new Promise<void>((resolve, reject) => {
-            pendingWakes.push({ wake, resolve, reject });
-          });
-        }
-        return residentDeliver(delegationWakeDelivery(wake)).then(() => undefined);
-      },
+      wake: (wake) => wakeDelivery.deliver(wake),
       bootSweep: false,
       drivers: {
         inline: createInlineDriver(runner),
@@ -309,13 +300,12 @@ export async function startOpenOmni(options: StartOptions = {}) {
     WaitService.sweepExpired(recoveryTraceId, Bus.publish);
     Session.sweepExpired(recoveryTraceId);
     kernel.start();
-    for (const pending of pendingWakes.splice(0)) {
-      void residentDeliver(delegationWakeDelivery(pending.wake))
-        .then(() => pending.resolve())
-        // Reject only: the kernel's deliverWake is the single owner of
-        // wake-failure reporting — publishing here would double-report.
-        .catch((error: unknown) => pending.reject(error));
-    }
+    // Recovery wakes arrived during kernel.start() and queued; arming binds
+    // the Resident delivery and flushes them. Reject-only on failure: the
+    // kernel's deliverWake is the single owner of wake-failure reporting.
+    wakeDelivery.arm((wake) =>
+      residentDeliver(delegationWakeDelivery(wake)).then(() => undefined),
+    );
 
     const boundGateway = gateway;
     wsHandler = new WebSocketHandler(async (message) => {
@@ -362,15 +352,36 @@ export async function startOpenOmni(options: StartOptions = {}) {
     throw error;
   }
 }
+
+/**
+ * Entry-point shutdown wiring, extracted behind seams so tests can drive it
+ * deterministically. The handler awaits the full async stop (journal flush,
+ * observer detach, storage reset) before any exit — exiting earlier can
+ * precede BusPersistence.flush() and lose accepted journal rows.
+ */
+export function installShutdownHandlers(deps: {
+  readonly stop: () => Promise<void>;
+  readonly exit: (code: number) => void;
+  readonly on: (signal: "SIGINT" | "SIGTERM", handler: () => void) => void;
+}): void {
+  const handler = () => {
+    void deps.stop().then(
+      () => deps.exit(0),
+      () => deps.exit(1),
+    );
+  };
+  deps.on("SIGINT", handler);
+  deps.on("SIGTERM", handler);
+}
+
 if (import.meta.main) {
   const config = loadConfig();
   const app = await startOpenOmni({ config });
   console.log(`OpenOmni Resident listening at ws://${config.host}:${app.port}/ws`);
-  const stop = () => {
-    app.stop();
-    process.exit(0);
-  };
-  process.once("SIGINT", stop);
-  process.once("SIGTERM", stop);
+  installShutdownHandlers({
+    stop: () => app.stop(),
+    exit: (code) => process.exit(code),
+    on: (signal, handler) => process.once(signal, handler),
+  });
 }
 

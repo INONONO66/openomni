@@ -18,9 +18,14 @@ import { startOpenOmni } from "../src/index";
 const directories: string[] = [];
 let stopApp: (() => Promise<void>) | undefined;
 
-/** Bus delivery is microtask-queued; drain before asserting on received events. */
-function flushBus(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0));
+/** Bounds an awaited exact signal; the timeout only ever fails the test. */
+function bounded<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_resolve, reject) =>
+      setTimeout(() => reject(new Error(`timed out waiting for ${label}`)), ms),
+    ),
+  ]);
 }
 
 function testConfig(dbPath: string) {
@@ -127,7 +132,7 @@ describe("OpenOmni boot durability", () => {
     expect(Storage.getAdapter().session.get(expired.id)).toBeUndefined();
   });
 
-  test("publishes exactly one error when a boot-rescanned wake delivery fails", async () => {
+  test("reports a failed boot-rescanned wake through the queued path and leaves no receipt", async () => {
     const dbPath = newDatabasePath();
     initialize({ dbPath });
     const origin = Session.create({
@@ -186,12 +191,12 @@ describe("OpenOmni boot durability", () => {
     });
     stopApp = app.stop;
 
-    // The kernel's deliverWake is the single owner of wake-failure reporting:
-    // one failed wake = one Operational.Events.Error, never a double publish.
-    await firstWakeError;
-    await flushBus();
-    await flushBus();
-    expect(wakeErrors).toHaveLength(1);
+    // The rescan wake arrives during recovery — before the delivery queue is
+    // armed — so it takes the queued path end to end. Exactly-once publishing
+    // is NOT asserted here: the kernel's reportFailure sits two promise hops
+    // downstream of any composition-root publish, so no app-level count is
+    // deterministic — wake-delivery.test.ts pins it via wake-promise settlement.
+    await bounded(firstWakeError, 5_000, "wake failure event");
     expect(wakeErrors[0]).toMatchObject({
       component: "delegation",
       msg: "delegation wake failed for delegation-1",
