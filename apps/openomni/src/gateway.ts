@@ -12,6 +12,7 @@ const WEBSOCKET_GRANT_ID = "openomni-resident-websocket";
 export interface OutboundMessaging {
   readonly deliveryRoutes: ReadonlyMap<string, ChannelDeliveryRoute>;
   readonly grants: () => readonly Gateway.SenderTargetGrant[];
+  readonly budgets?: () => readonly Gateway.SocialBudget[];
 }
 
 export function createResidentGateway(
@@ -28,6 +29,16 @@ export function createResidentGateway(
   return createGatewayRouter({
     sink: Bus.publish,
     deliver,
-    ...(messaging === undefined ? {} : { messaging }),
+    ...(messaging === undefined
+      ? {}
+      : {
+          messaging: {
+            ...messaging,
+            // Engaging the gate with an empty Owner-declared source makes
+            // cold proactive outreach zero-by-default. Reply-scoped grants
+            // bypass this budget axis in the send kernel.
+            budgets: messaging.budgets ?? (() => []),
+          },
+        }),
   });
 }
