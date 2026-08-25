@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787585258806,
+  "lastUpdate": 1787669106441,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -61877,6 +61877,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 511769,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "99c68f06adbdf2ed8399977fe7f6cbce14244da8",
+          "message": "feat: async-lifecycle delegation kernel — immediate Handle, durable store, single settlement fold (#793)\n\n* feat(protocol): delegation schema v2 — operations, lineage, durable record contract\n\n- operation notify|ask|assign replaces Mode: notify is actor-only, assign\n  never runs inline, acceptance criteria required for assign and forbidden\n  otherwise — all pinned at the schema layer\n- Settled union gains interrupted (boot sweep) and sent (notify transport\n  acceptance); no_response.at >= deadline invariant preserved\n- Handle is the admission-time shape: operation, effective deadline, and\n  rootDelegationId required; waitId/parentDelegationId optional\n- Delegation.Origin carries parent/root lineage; Delegation.Record is the\n  protocol-owned durable row (open|settled, settlement coherence, sent is\n  terminal for notify only)\n- delegation.requested retired for delegation.admitted/delivered/settled —\n  a changed meaning is a new event type; snapshot diff kept as sign-off\n- Storage.DelegationSubAdapter: create/get/compareAndSwapStatus (open ->\n  settled CAS)/listOpen/listOpenByRoot/findByWaitId\n- apps/openomni: minimal mechanical compatibility only (handle fields,\n  settled-switch exhaustiveness, candidate renames); the async-lifecycle\n  kernel rework lands separately\n\n* feat(ledger): add durable delegation store\n\n* feat(openomni): complete durable async delegation lifecycle\n\n* docs: sync machines-and-delegation + implementation-status to async delegation kernel\n\n* fix(openomni): re-arm deadline timers, require wake port, real restart-matrix test",
+          "timestamp": "2026-08-25T23:43:48+09:00",
+          "tree_id": "1c3f3c37ebb353544349d21e5c4c0772d23e12d8",
+          "url": "https://github.com/INONONO66/openomni/commit/99c68f06adbdf2ed8399977fe7f6cbce14244da8"
+        },
+        "date": 1787669106019,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "background-queue/10-tasks/find-splice",
+            "value": 454,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/10-tasks/map-cycle",
+            "value": 679,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/find-splice",
+            "value": 5984,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/100-tasks/map-cycle",
+            "value": 11060,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/find-splice",
+            "value": 2532,
+            "unit": "ns/op"
+          },
+          {
+            "name": "background-queue/50-tasks/map-cycle",
+            "value": 3325,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2473,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15644,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8246,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1087,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 985,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1629,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1629,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 742,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 48693,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2396,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 526172,
             "unit": "ns/op"
           }
         ]
