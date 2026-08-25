@@ -5,6 +5,7 @@ import { join } from "node:path";
 import type { RunInput, Sink } from "@openomni/llm";
 import { Session, Storage, SurfaceKey } from "@openomni/ledger";
 import type { Message } from "@openomni/protocol";
+import type { OpenOmniConfig } from "../src/config";
 import { startOpenOmni } from "../src/index";
 
 const REPLY = "A deterministic Resident reply.";
@@ -95,7 +96,9 @@ afterEach(() => {
 
 const WS_TOKEN = "e2e-upgrade-token";
 
-async function bootApp(): Promise<{ port: number }> {
+async function bootApp(
+  channels?: NonNullable<OpenOmniConfig["channels"]>,
+): Promise<{ port: number }> {
   const directory = mkdtempSync(join(tmpdir(), "openomni-resident-"));
   directories.push(directory);
   const app = await startOpenOmni({
@@ -106,6 +109,7 @@ async function bootApp(): Promise<{ port: number }> {
       wsPort: 0,
       wsToken: WS_TOKEN,
       model: { provider: "fake", id: "resident-test", apiKey: "test-key" },
+      ...(channels === undefined ? {} : { channels }),
     },
     llm: {
       resolveProviderModel: async (model) => ({
@@ -124,8 +128,14 @@ async function bootApp(): Promise<{ port: number }> {
 }
 
 describe("OpenOmni Resident WebSocket", () => {
-  it("routes one turn, writes the reply, and persists both messages", async () => {
+  it("boots WebSocket-only when no channel credentials are configured", async () => {
     const app = await bootApp();
+
+    const webhook = await fetch(`http://127.0.0.1:${app.port}/github/webhook`, {
+      method: "POST",
+    });
+    expect(webhook.status).toBe(404);
+    expect(await webhook.text()).toBe("Not found");
 
     const ws = new WebSocket(`ws://127.0.0.1:${app.port}/ws?token=${WS_TOKEN}`);
     await opened(ws);
@@ -158,6 +168,18 @@ describe("OpenOmni Resident WebSocket", () => {
     expect(surfaceKeys).toHaveLength(1);
     expect(surfaceKeys[0]).toStartWith("ws:");
     ws.close();
+  });
+
+  it("mounts a configured GitHub driver on the existing HTTP server", async () => {
+    const app = await bootApp({ github: { secret: "github-webhook-secret" } });
+
+    const response = await fetch(`http://127.0.0.1:${app.port}/github/webhook`, {
+      method: "POST",
+      body: "{}",
+    });
+
+    expect(response.status).toBe(401);
+    expect(await response.text()).toBe("Missing signature");
   });
 
   it("rejects an upgrade carrying the wrong token", async () => {

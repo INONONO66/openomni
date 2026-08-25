@@ -31,6 +31,16 @@ export interface OpenOmniConfig {
    * ungranted rather than the driver being unwired.
    */
   readonly actors?: readonly RegisteredActor[];
+  /** External channel credentials. A missing credential leaves that driver unwired. */
+  readonly channels?: {
+    readonly discord?: { readonly token: string };
+    readonly telegram?: { readonly token: string };
+    readonly github?: {
+      readonly secret: string;
+      readonly token?: string;
+      readonly botUsername?: string;
+    };
+  };
   /** Owner-declared allowances for cold proactive sends; absent denies all. */
   readonly socialBudgets?: readonly Gateway.SocialBudget[];
 }
@@ -39,6 +49,8 @@ export interface RegisteredActor {
   readonly actorId: string;
   /** The identity the actor's connection declares (`?actor=<externalId>`). */
   readonly externalId: string;
+  /** The configured delivery surface; existing configs remain WebSocket actors. */
+  readonly channel?: "ws" | "discord" | "telegram";
   readonly trustTier: Actor.TrustTier;
   readonly kind: Actor.Kind;
   readonly displayName?: string;
@@ -83,6 +95,7 @@ const Actors = z
       .object({
         actorId: z.string().min(1),
         externalId: z.string().min(1),
+        channel: z.enum(["ws", "discord", "telegram"]).optional(),
         trustTier: Actor.TrustTier,
         kind: Actor.Kind.default("human"),
         displayName: z.string().min(1).optional(),
@@ -103,6 +116,28 @@ function actorsFromEnv(): OpenOmniConfig["actors"] {
     throw new Error(`OPENOMNI_ACTORS is invalid: ${parsed.error.issues[0]?.message}`);
   }
   return parsed.data;
+}
+
+function channelsFromEnv(): OpenOmniConfig["channels"] {
+  const discordToken = process.env.DISCORD_BOT_TOKEN?.trim();
+  const telegramToken = process.env.TELEGRAM_BOT_TOKEN?.trim();
+  const githubSecret = process.env.GITHUB_WEBHOOK_SECRET?.trim();
+  const githubToken = process.env.GITHUB_TOKEN?.trim();
+  const githubBotUsername = process.env.GITHUB_BOT_USERNAME?.trim();
+  if (!discordToken && !telegramToken && !githubSecret) return undefined;
+  return {
+    ...(discordToken ? { discord: { token: discordToken } } : {}),
+    ...(telegramToken ? { telegram: { token: telegramToken } } : {}),
+    ...(githubSecret
+      ? {
+          github: {
+            secret: githubSecret,
+            ...(githubToken ? { token: githubToken } : {}),
+            ...(githubBotUsername ? { botUsername: githubBotUsername } : {}),
+          },
+        }
+      : {}),
+  };
 }
 
 function socialBudgetsFromEnv(): OpenOmniConfig["socialBudgets"] {
@@ -140,6 +175,7 @@ export function loadConfig(): OpenOmniConfig {
   const wsToken = process.env.OPENOMNI_WS_TOKEN?.trim();
   const machines = machinesFromEnv();
   const actors = actorsFromEnv();
+  const channels = channelsFromEnv();
   const socialBudgets = socialBudgetsFromEnv();
   return {
     dbPath: process.env.OPENOMNI_DB_PATH?.trim() || join(homedir(), ".openomni", "storage.db"),
@@ -155,6 +191,7 @@ export function loadConfig(): OpenOmniConfig {
     },
     ...(machines === undefined ? {} : { machines }),
     ...(actors === undefined ? {} : { actors }),
+    ...(channels === undefined ? {} : { channels }),
     ...(socialBudgets === undefined ? {} : { socialBudgets }),
   };
 }

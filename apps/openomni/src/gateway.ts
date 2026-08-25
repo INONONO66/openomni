@@ -7,7 +7,8 @@ import { ChannelGrantStore } from "@openomni/ledger";
 import type { Gateway, Ingress } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 
-const WEBSOCKET_GRANT_ID = "openomni-resident-websocket";
+const CHANNEL_SURFACES = ["ws", "discord", "telegram", "github"] as const;
+type ChannelSurface = (typeof CHANNEL_SURFACES)[number];
 
 export interface OutboundMessaging {
   readonly deliveryRoutes: ReadonlyMap<string, ChannelDeliveryRoute>;
@@ -18,14 +19,17 @@ export interface OutboundMessaging {
 export function createResidentGateway(
   deliver: (delivery: Gateway.Deliver) => Promise<Ingress.IngressResult>,
   messaging?: OutboundMessaging,
+  surfaces: readonly ChannelSurface[] = ["ws"],
 ): GatewayRouter {
-  ChannelGrantStore.put({
-    id: WEBSOCKET_GRANT_ID,
-    surface: "ws",
-    kind: "trusted_channel",
-    defaultTier: "owner",
-    createdBy: "local-owner",
-  });
+  for (const surface of surfaces) {
+    ChannelGrantStore.put({
+      id: `openomni-resident-${surface}`,
+      surface,
+      kind: "trusted_channel",
+      defaultTier: "owner",
+      createdBy: "local-owner",
+    });
+  }
   return createGatewayRouter({
     sink: Bus.publish,
     deliver,
