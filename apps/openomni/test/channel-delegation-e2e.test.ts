@@ -97,6 +97,15 @@ test("the Resident delegates to an external actor over the channel and reports t
       wsToken: WS_TOKEN,
       model: { provider: "fake", id: "channel-delegation-test", apiKey: "test-key" },
       actors: [{ actorId: "alice", externalId: "alice", trustTier: "collaborator", kind: "human" }],
+      socialBudgets: [
+        {
+          id: "budget:alice",
+          targetActorId: "alice",
+          maxPerWindow: 2,
+          windowMs: 60_000,
+          cooldownMs: 0,
+        },
+      ],
     },
     llm: {
       resolveProviderModel: async (model) => ({

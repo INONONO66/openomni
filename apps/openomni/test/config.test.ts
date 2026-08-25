@@ -10,6 +10,7 @@ const ENV_KEYS = [
   "OPENOMNI_MODEL_PROVIDER",
   "OPENOMNI_MODEL_ID",
   "OPENOMNI_MODEL_API_KEY",
+  "OPENOMNI_SOCIAL_BUDGETS",
 ] as const;
 
 let saved: Record<string, string | undefined>;
@@ -68,5 +69,27 @@ describe("ws exposure enforcement", () => {
     const config = loadConfig();
     expect(config.host).toBe("127.0.0.1");
     expect("wsToken" in config).toBe(false);
+  });
+
+  it("reads explicit social budgets while keeping the default absent", () => {
+    expect(loadConfig().socialBudgets).toBeUndefined();
+    process.env.OPENOMNI_SOCIAL_BUDGETS = JSON.stringify([
+      {
+        id: "budget:alice",
+        targetActorId: "alice",
+        maxPerWindow: 2,
+        windowMs: 60_000,
+        cooldownMs: 0,
+      },
+    ]);
+    expect(loadConfig().socialBudgets).toEqual([
+      {
+        id: "budget:alice",
+        targetActorId: "alice",
+        maxPerWindow: 2,
+        windowMs: 60_000,
+        cooldownMs: 0,
+      },
+    ]);
   });
 });
