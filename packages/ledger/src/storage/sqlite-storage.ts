@@ -8,6 +8,7 @@ import { createSqliteChannelGrantAdapter } from "./sqlite-channel-grant-adapter"
 import { createSqliteArtifactAdapter } from "./sqlite-artifact-adapter";
 import { createSqliteCronJobAdapter } from "./sqlite-cron-job-adapter";
 import { createSqliteEgressBudgetAdapter } from "./sqlite-egress-budget-adapter";
+import { createSqliteDelegationAdapter } from "./sqlite-delegation-adapter";
 import { createSqliteMessageAdapter } from "./sqlite-message-adapter";
 import { createSqlitePartAdapter } from "./sqlite-part-adapter";
 import { createSqlitePendingAskAdapter } from "./sqlite-pending-ask-adapter";
@@ -52,6 +53,7 @@ export class SqliteStorageAdapter implements Storage.Adapter {
   readonly workItem: NonNullable<Storage.Adapter["workItem"]>;
   readonly wait: NonNullable<Storage.Adapter["wait"]>;
   readonly engagement: NonNullable<Storage.Adapter["engagement"]>;
+  readonly delegation: NonNullable<Storage.Adapter["delegation"]>;
   readonly ledger: NonNullable<Storage.Adapter["ledger"]>;
   readonly pendingAsk: NonNullable<Storage.Adapter["pendingAsk"]>;
   readonly pendingInteraction: NonNullable<Storage.Adapter["pendingInteraction"]>;
@@ -97,6 +99,7 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     this.workItem = createSqliteWorkItemAdapter(this.db);
     this.wait = createSqliteWaitAdapter(this.db);
     this.engagement = createSqliteEngagementAdapter(this.db);
+    this.delegation = createSqliteDelegationAdapter(this.db);
     // Decision-class append rides the adapter's own connection so append +
     // projection share one transaction (#510 phase B). The append core keeps
     // owning the SQL (raw prepared statements) — this is wiring only.

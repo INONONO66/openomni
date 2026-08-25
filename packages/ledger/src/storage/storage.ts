@@ -109,6 +109,9 @@ export namespace Storage {
     // as required (SqliteStorageAdapter). Brain-domain surface (#709): the
     // brain is its sole writer.
     engagement?: ProtocolStorage.EngagementSubAdapter;
+    // Optional for test fakes only — DelegationStore fails closed when it is
+    // missing; production adapters wire it as required (SqliteStorageAdapter).
+    delegation?: ProtocolStorage.DelegationSubAdapter;
     // #510 phase B: decision-class ledger append on the SAME connection as
     // the projection sub-adapters, so a decision-class store can commit
     // append + projection inside one `transaction()` call. Optional for test
@@ -149,6 +152,7 @@ export namespace Storage {
     "workItem",
     "wait",
     "engagement",
+    "delegation",
     "ledger",
     "workerRunState",
     "pendingAsk",
