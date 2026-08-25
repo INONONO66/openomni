@@ -1,9 +1,9 @@
 import type { ChatAgentConfig } from "@openomni/agent";
-import { type GatewayRouter, WebSocketHandler } from "@openomni/channels";
-import { ActorRegistry, initialize, Storage } from "@openomni/ledger";
+import { type GatewayRouter, WaitService, WebSocketHandler } from "@openomni/channels";
+import { ActorRegistry, BusPersistence, initialize, Session, Storage } from "@openomni/ledger";
 import { createMachineHost, type MachineHost } from "@openomni/machines";
 import type { Placement } from "@openomni/placement";
-import { Gateway, type Ingress, type Machine } from "@openomni/protocol";
+import { Gateway, type Ingress, type Machine, newTraceId, Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { assertWsExposure, loadConfig, type OpenOmniConfig, type RegisteredActor } from "./config";
 import type { MachinesPort } from "./tools/machines";
@@ -95,6 +95,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
   const config = options.config ?? loadConfig();
   assertWsExposure(config);
   initialize({ dbPath: config.dbPath });
+  const stopBusPersistence = BusPersistence.start();
 
   // Owner-admitted delegation targets. Registration is an upsert, so a
   // restart re-asserting the same actors is a no-op.
@@ -119,7 +120,11 @@ export async function startOpenOmni(options: StartOptions = {}) {
   // cycle is closed by handing the runner a getter rather than a value.
   let kernel: DelegationKernel | undefined;
   let residentDeliver: ((delivery: Gateway.Deliver) => Promise<Ingress.IngressResult>) | undefined;
-  const pendingWakes: DelegationWake[] = [];
+  const pendingWakes: Array<{
+    readonly wake: DelegationWake;
+    readonly resolve: () => void;
+    readonly reject: (error: unknown) => void;
+  }> = [];
   const runner = createInlineWorkerRunner({
     model: config.model,
     apiKey: config.model.apiKey,
@@ -145,8 +150,9 @@ export async function startOpenOmni(options: StartOptions = {}) {
     events: Bus,
     wake: (wake) => {
       if (residentDeliver === undefined) {
-        pendingWakes.push(wake);
-        return;
+        return new Promise<void>((resolve, reject) => {
+          pendingWakes.push({ wake, resolve, reject });
+        });
       }
       return residentDeliver(delegationWakeDelivery(wake)).then(() => undefined);
     },
@@ -289,11 +295,26 @@ export async function startOpenOmni(options: StartOptions = {}) {
   );
   // Recovery is deliberately after the Resident and gateway exist: boot
   // settlements must be able to deliver their one owner-session wake.
+  const recoveryTraceId = newTraceId();
+  WaitService.sweepExpired(recoveryTraceId, Bus.publish);
+  Session.sweepExpired(recoveryTraceId);
   kernel.start();
-  for (const wake of pendingWakes.splice(0)) {
-    void residentDeliver(delegationWakeDelivery(wake)).catch((error: unknown) => {
-      console.error(`delegation wake failed for ${wake.record.delegationId}:`, error);
-    });
+  for (const pending of pendingWakes.splice(0)) {
+    void residentDeliver(delegationWakeDelivery(pending.wake))
+      .then(() => pending.resolve())
+      .catch((error: unknown) => {
+        const detail = error instanceof Error ? error.message : String(error);
+        Bus.publish(Operational.Events.Error, {
+          traceId: pending.wake.record.delegationId,
+          sessionId: pending.wake.record.origin.sessionId,
+          time: Date.now(),
+          component: "delegation",
+          msg: `delegation wake failed for ${pending.wake.record.delegationId}`,
+          error: detail,
+          context: { delegationId: pending.wake.record.delegationId },
+        });
+        pending.reject(error);
+      });
   }
 
   const boundGateway = gateway;
@@ -323,6 +344,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       server.stop();
       kernel.stop();
       host?.close();
+      stopBusPersistence();
       Storage.reset();
     },
   };
