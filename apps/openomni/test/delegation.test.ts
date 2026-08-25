@@ -11,7 +11,7 @@ const LIMITS = { maxInlineDepth: 2 };
 function ask(overrides: Record<string, unknown> = {}) {
   return {
     address: { kind: "core", scope: "inline" },
-    mode: "ask",
+    operation: "ask",
     payload: { text: "what is the state of the build" },
     deadline: 10_000,
     ...overrides,
@@ -34,7 +34,7 @@ describe("admission", () => {
     expect(inline.ok).toBe(true);
 
     const independent = admit(
-      ask({ address: { kind: "core", scope: "independent" }, mode: "assign", acceptanceCriteria: ["done"] }),
+      ask({ address: { kind: "core", scope: "independent" }, operation: "assign", acceptanceCriteria: ["done"] }),
       WORKER,
       1000,
       LIMITS,
@@ -61,7 +61,7 @@ describe("admission", () => {
     expect(admit(ask(), RESIDENT, 1000, LIMITS)).toMatchObject({ ok: true, transport: "inline" });
     expect(
       admit(
-        ask({ address: { kind: "core", scope: "independent" }, mode: "assign", acceptanceCriteria: ["done"] }),
+        ask({ address: { kind: "core", scope: "independent" }, operation: "assign", acceptanceCriteria: ["done"] }),
         RESIDENT,
         1000,
         LIMITS,
@@ -69,7 +69,7 @@ describe("admission", () => {
     ).toMatchObject({ ok: true, transport: "process" });
     expect(
       admit(
-        ask({ address: { kind: "actor", actorId: "a-1" }, mode: "assign", acceptanceCriteria: ["done"] }),
+        ask({ address: { kind: "actor", actorId: "a-1" }, operation: "assign", acceptanceCriteria: ["done"] }),
         RESIDENT,
         1000,
         LIMITS,
@@ -83,7 +83,7 @@ describe("admission", () => {
   });
 
   test("contract violations are reported, not thrown", () => {
-    const refusal = admit(ask({ mode: "assign" }), RESIDENT, 1000, LIMITS);
+    const refusal = admit(ask({ address: { kind: "core", scope: "independent" }, operation: "assign" }), RESIDENT, 1000, LIMITS);
     expect(refusal).toMatchObject({ ok: false, reason: expect.stringContaining("acceptance criterion") });
   });
 });
@@ -132,7 +132,7 @@ describe("kernel", () => {
     const kernel = kernelWith({ run: async () => ({ status: "completed", output: "done" }) });
     const result = await kernel.delegate(ask(), RESIDENT);
     expect(result).toMatchObject({
-      handle: { delegationId: "d-1", address: { kind: "core", scope: "inline" }, transport: "inline" },
+      handle: { delegationId: "d-1", operation: "ask", address: { kind: "core", scope: "inline" }, transport: "inline", deadline: 10_000, rootDelegationId: "d-1" },
       settled: { status: "completed", output: "done", delegationId: "d-1" },
     });
   });
@@ -147,7 +147,7 @@ describe("inline driver", () => {
     });
     const outcome = await driver.run(
       { ok: true, request: ask() as never, transport: "inline", childOrigin: WORKER },
-      { delegationId: "d-1", address: { kind: "core", scope: "inline" }, transport: "inline" },
+      { delegationId: "d-1", operation: "ask", address: { kind: "core", scope: "inline" }, transport: "inline", deadline: 10_000, rootDelegationId: "d-1" },
       controller.signal,
     );
     expect(outcome).toMatchObject({ status: "cancelled", reason: "deadline reached" });
@@ -162,11 +162,11 @@ describe("inline driver", () => {
     await driver.run(
       {
         ok: true,
-        request: ask({ mode: "assign", acceptanceCriteria: ["build is green"] }) as never,
+        request: ask({ operation: "assign", acceptanceCriteria: ["build is green"] }) as never,
         transport: "inline",
         childOrigin: WORKER,
       },
-      { delegationId: "d-7", address: { kind: "core", scope: "inline" }, transport: "inline" },
+      { delegationId: "d-7", operation: "assign", address: { kind: "core", scope: "inline" }, transport: "inline", deadline: 10_000, rootDelegationId: "d-7" },
       new AbortController().signal,
     );
     expect(seen).toMatchObject({
@@ -187,7 +187,7 @@ describe("inline driver", () => {
       if (!decision.ok) throw new Error(`expected admission at depth ${parentDepth}`);
       await driver.run(
         decision,
-        { delegationId: "d-1", address: { kind: "core", scope: "inline" }, transport: "inline" },
+        { delegationId: "d-1", operation: "ask", address: { kind: "core", scope: "inline" }, transport: "inline", deadline: 10_000, rootDelegationId: "d-1" },
         new AbortController().signal,
       );
     }
@@ -212,14 +212,18 @@ describe("delegate tool", () => {
     // Every advertised field must survive the runtime parse, and every
     // required field must actually be required — otherwise the model is being
     // told about a call the executor will reject.
+    // assign never runs inline (schema v2), so the full call goes independent.
     const full = {
       instruction: "check the build",
       mode: "assign" as const,
-      scope: "inline" as const,
+      scope: "independent" as const,
       acceptanceCriteria: ["green"],
       timeoutMs: 5000,
     };
-    const kernel = kernelWith({ run: async () => ({ status: "completed", output: "green" }) });
+    const kernel = kernelWith(
+      { run: async () => ({ status: "completed", output: "green" }) },
+      "process",
+    );
     const execute = delegateToolExecutor(kernel, RESIDENT);
     expect(Object.keys(advertised.properties).sort()).toEqual(
       [...Object.keys(full), "actorId"].sort(),
@@ -268,9 +272,11 @@ describe("delegate tool", () => {
 
   test("an assign reaches the worker carrying the criteria that define its completion", async () => {
     let received: readonly string[] | undefined;
+    // assign is independent-or-actor only (schema v2): the driver stands in
+    // for the process transport the independent address resolves onto.
     const kernel = createDelegationKernel({
       drivers: {
-        inline: createInlineDriver((input) => {
+        process: createInlineDriver((input) => {
           received = input.acceptanceCriteria;
           return Promise.resolve("criteria met");
         }),
@@ -283,7 +289,7 @@ describe("delegate tool", () => {
     const answer = await delegateToolExecutor(kernel, RESIDENT)({
       instruction: "ship it",
       mode: "assign",
-      scope: "inline",
+      scope: "independent",
       acceptanceCriteria: ["build is green", "tests pass"],
       timeoutMs: 3000,
     });
@@ -320,7 +326,7 @@ describe("delegate tool", () => {
     const result = await kernel.delegate(
       {
         address: { kind: "core", scope: "inline" },
-        mode: "ask",
+        operation: "ask",
         payload: { text: "a job longer than its deadline" },
         deadline: Date.now() + 80,
       },

@@ -19,7 +19,7 @@ const RESIDENT = { role: "resident", depth: 0, sessionId: "session-origin" } as 
 function independentAsk(text: string, deadline: number) {
   return {
     address: { kind: "core", scope: "independent" },
-    mode: "ask",
+    operation: "ask",
     payload: { text },
     deadline,
   };

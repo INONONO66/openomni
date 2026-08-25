@@ -11,7 +11,7 @@ function admitted(): Admitted {
   const decision = admit(
     {
       address: { kind: "actor", actorId: "alice" },
-      mode: "assign",
+      operation: "assign",
       payload: { text: "review the report" },
       acceptanceCriteria: ["every section read"],
       deadline: DEADLINE,
@@ -26,8 +26,11 @@ function admitted(): Admitted {
 
 const HANDLE = {
   delegationId: "delegation-1",
+  operation: "assign",
   address: { kind: "actor", actorId: "alice" },
   transport: "channel",
+  deadline: DEADLINE,
+  rootDelegationId: "delegation-1",
 } as const;
 
 function sentReceipt(input: Gateway.SendInput): Gateway.SendReceipt {
@@ -174,7 +177,7 @@ describe("channel delegation driver", () => {
     const result = await kernel.delegate(
       {
         address: { kind: "actor", actorId: "alice" },
-        mode: "assign",
+        operation: "assign",
         payload: { text: "review the report" },
         acceptanceCriteria: ["every section read"],
         deadline: Date.now() + 30,
@@ -193,7 +196,7 @@ describe("channel delegation driver", () => {
     const decision = admit(
       {
         address: { kind: "actor", actorId: "alice" },
-        mode: "assign",
+        operation: "assign",
         payload: { text: "review the report" },
         acceptanceCriteria: ["every section read"],
         deadline: DEADLINE,

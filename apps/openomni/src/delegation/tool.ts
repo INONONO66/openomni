@@ -119,7 +119,7 @@ export function delegateToolExecutor(kernel: DelegationKernel, origin: Delegatio
             : input.scope === "inline"
               ? { kind: "core", scope: "inline" }
               : { kind: "core", scope: "independent" },
-        mode: input.mode,
+        operation: input.mode,
         payload: { text: input.instruction },
         ...(input.acceptanceCriteria === undefined
           ? {}
@@ -143,6 +143,12 @@ export function delegateToolExecutor(kernel: DelegationKernel, origin: Delegatio
         return `never reached a worker: ${settled.reason}`;
       case "no_response":
         return "no response before the deadline — the outcome is unknown, not a failure to act";
+      // Neither terminal is reachable through this blocking tool path (the
+      // v1 kernel never emits them); they exist for the durable lifecycle.
+      case "interrupted":
+        return "the host restarted while the work was in flight — the outcome is unknown";
+      case "sent":
+        return "message sent";
     }
   };
 }

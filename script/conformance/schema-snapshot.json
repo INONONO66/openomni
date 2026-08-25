@@ -207,6 +207,50 @@
     "target"
   ],
   "CronJob.Target": ["kind", "sessionId"],
+  "Delegation.Handle": [
+    "address",
+    "deadline",
+    "delegationId",
+    "operation",
+    "parentDelegationId",
+    "rootDelegationId",
+    "transport",
+    "waitId",
+    "workItemId"
+  ],
+  "Delegation.Origin": [
+    "depth",
+    "parentDelegationId",
+    "role",
+    "rootDelegationId",
+    "sessionId"
+  ],
+  "Delegation.Record": [
+    "address",
+    "createdAt",
+    "deadline",
+    "delegationId",
+    "instruction",
+    "operation",
+    "origin",
+    "parentDelegationId",
+    "rootDelegationId",
+    "settled",
+    "settledAt",
+    "status",
+    "transport",
+    "waitId",
+    "workItemId"
+  ],
+  "Delegation.Request": [
+    "acceptanceCriteria",
+    "address",
+    "deadline",
+    "operation",
+    "payload"
+  ],
+  "Delegation.WorkerAddress#0": ["kind", "scope"],
+  "Delegation.WorkerAddress#1": ["actorId", "kind"],
   "Engagement.Create": ["createdAt", "id", "ownerSessionId", "terms", "title"],
   "Engagement.Record": [
     "createdAt",
@@ -634,6 +678,28 @@
     "trustTier"
   ],
   "Ledger.RouteNotDelivered": ["inboundId", "reason"],
+  "Machine.AttachResult#0": ["effectiveCapabilities", "status"],
+  "Machine.AttachResult#1": ["reason", "status"],
+  "Machine.CellRequest": ["cellId", "code", "timeoutMs"],
+  "Machine.CellResult#0": ["cellId", "output", "status", "value"],
+  "Machine.CellResult#1": ["cellId", "error", "output", "status"],
+  "Machine.CellResult#2": ["cellId", "status"],
+  "Machine.Enrollment": [
+    "allowedCapabilities",
+    "enrolledAt",
+    "machineId",
+    "name"
+  ],
+  "Machine.Offer": [
+    "daemonVersion",
+    "machineId",
+    "offeredAt",
+    "offeredCapabilities",
+    "platform"
+  ],
+  "Machine.ToolCall": ["arguments", "cellId", "name"],
+  "Machine.ToolCallResult#0": ["status", "value"],
+  "Machine.ToolCallResult#1": ["error", "status"],
   "McpConfig.ServerConfig#0": [
     "args",
     "command",
@@ -853,6 +919,7 @@
   "Policy.PolicyEffect#18": ["required", "type"],
   "Policy.PolicyEffect#19": ["criterionIds", "type"],
   "Policy.PolicyEffect#2": ["prompt", "type"],
+  "Policy.PolicyEffect#20": ["id", "provider", "type"],
   "Policy.PolicyEffect#3": ["toolPattern", "type"],
   "Policy.PolicyEffect#4": ["input", "type"],
   "Policy.PolicyEffect#5": ["output", "type"],
@@ -952,7 +1019,9 @@
     "inputSchema",
     "labels",
     "name",
+    "placement",
     "prompt",
+    "requires",
     "safe"
   ],
   "Tool.State#0": ["input", "status"],

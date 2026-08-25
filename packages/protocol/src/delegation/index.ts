@@ -11,11 +11,14 @@ export namespace Delegation {
   export const WorkerAddress = Schema.WorkerAddress;
   export type WorkerAddress = Schema.WorkerAddress;
 
-  export const Mode = Schema.Mode;
-  export type Mode = Schema.Mode;
+  export const Operation = Schema.Operation;
+  export type Operation = Schema.Operation;
 
   export const Transport = Schema.Transport;
   export type Transport = Schema.Transport;
+
+  export const Origin = Schema.Origin;
+  export type Origin = Schema.Origin;
 
   export const Request = Schema.Request;
   export type Request = Schema.Request;
@@ -28,6 +31,9 @@ export namespace Delegation {
 
   export const SettledStatus = Schema.SettledStatus;
   export type SettledStatus = Schema.SettledStatus;
+
+  export const Record = Schema.Record;
+  export type Record = Schema.Record;
 
   export const Events = EventDescriptors;
 }

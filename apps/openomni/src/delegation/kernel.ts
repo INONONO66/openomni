@@ -53,10 +53,17 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
       const decision = admit(candidate, origin, options.now(), limits);
       if (!decision.ok) return { refused: decision.reason };
 
+      const delegationId = options.newDelegationId();
       const handle: Delegation.Handle = {
-        delegationId: options.newDelegationId(),
+        delegationId,
+        operation: decision.request.operation,
         address: decision.request.address,
         transport: decision.transport,
+        deadline: decision.request.deadline,
+        // This kernel predates durable lineage: with no parent id to inherit,
+        // every delegation it admits self-roots. The async-lifecycle kernel
+        // stamps real parent/root ids at admission.
+        rootDelegationId: delegationId,
       };
 
       const driver = options.drivers[decision.transport];
