@@ -60,8 +60,17 @@ export namespace DelegationStore {
     return settleOnce(delegationId, settlement).settlement;
   }
 
+  /** Records successful wake delivery once; false means another delivery already won. */
+  export function markWoken(delegationId: string, wokenAt: number): boolean {
+    return requireAdapter().compareAndSwapWoken(delegationId, wokenAt);
+  }
+
   export function listOpen(): Delegation.Record[] {
     return requireAdapter().listOpen();
+  }
+
+  export function listSettledUnwoken(): Delegation.Record[] {
+    return requireAdapter().listSettledUnwoken();
   }
 
   export function countOpenByRoot(rootDelegationId: string): number {

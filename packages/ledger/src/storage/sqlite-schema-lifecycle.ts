@@ -28,6 +28,7 @@ const ORDERED_MIGRATIONS: Migration.Definition[] = [
   { name: "0021_egress_budget/migration.sql" },
   { name: "0022_bus_event_payload_status/migration.sql" },
   { name: "0023_delegation/migration.sql" },
+  { name: "0024_delegation_wake_receipt/migration.sql" },
 ];
 
 const CLEAR_ORDER = [

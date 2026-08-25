@@ -1,4 +1,4 @@
-import { Delegation, NamedError, type BusEvent } from "@openomni/protocol";
+import { Delegation, NamedError, Operational, type BusEvent } from "@openomni/protocol";
 import { DelegationStore } from "@openomni/ledger";
 import { z } from "zod";
 import {
@@ -51,6 +51,8 @@ interface DelegationStorePort {
     settlement: Delegation.Settled,
   ): { readonly committed: boolean; readonly settlement?: Delegation.Settled };
   listOpen(): Delegation.Record[];
+  listSettledUnwoken(): Delegation.Record[];
+  markWoken(delegationId: string, wokenAt: number): boolean;
   countOpenByRoot(rootDelegationId: string): number;
   findByWaitId(waitId: string): Delegation.Record | undefined;
 }
@@ -296,18 +298,41 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
       controller.abort();
     }
 
-    if (persisted.transport !== "inline") {
-      const message = `delegation ${delegationId} settled: ${winner.status}: ${summaryOf(winner)}`;
-      try {
-        const result = options.wake({ record: persisted, settlement: winner, message });
-        void Promise.resolve(result).catch((error: unknown) => {
-          console.error(`delegation wake failed for ${delegationId}:`, error);
-        });
-      } catch (error) {
-        console.error(`delegation wake failed for ${delegationId}:`, error);
-      }
-    }
+    if (persisted.transport !== "inline") deliverWake(persisted, winner);
     return winner;
+  }
+
+  function deliverWake(record: Delegation.Record, settlement: Delegation.Settled): void {
+    const message = `delegation ${record.delegationId} settled: ${settlement.status}: ${summaryOf(settlement)}`;
+    const reportFailure = (error: unknown): void => {
+      const detail = error instanceof Error ? error.message : String(error);
+      events.publish(Operational.Events.Error, {
+        traceId: record.delegationId,
+        sessionId: record.origin.sessionId,
+        time: options.now(),
+        component: "delegation",
+        msg: `delegation wake failed for ${record.delegationId}`,
+        error: detail,
+        context: { delegationId: record.delegationId },
+      });
+    };
+    const recordSuccess = (): void => {
+      try {
+        store.markWoken(record.delegationId, options.now());
+      } catch (error) {
+        reportFailure(error);
+      }
+    };
+    try {
+      const delivery = options.wake({ record, settlement, message });
+      if (delivery === undefined) {
+        recordSuccess();
+        return;
+      }
+      void Promise.resolve(delivery).then(recordSuccess, reportFailure);
+    } catch (error) {
+      reportFailure(error);
+    }
   }
 
   function arm(record: Delegation.Record): void {
@@ -337,6 +362,11 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
   function recover(): void {
     if (recovered || stopped) return;
     recovered = true;
+    for (const record of store.listSettledUnwoken()) {
+      if (record.transport !== "inline" && record.settled !== undefined) {
+        deliverWake(record, record.settled);
+      }
+    }
     for (const record of store.listOpen()) {
       const now = options.now();
       if (record.deadline <= now) {

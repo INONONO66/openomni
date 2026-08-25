@@ -265,6 +265,8 @@ const RecordBase = z
     settled: Settled.optional(),
     createdAt: z.number(),
     settledAt: z.number().optional(),
+    /** Receipt written only after the owner-session settlement wake succeeds. */
+    wokenAt: z.number().optional(),
   })
   .strict();
 
@@ -281,6 +283,13 @@ export const Record = RecordBase.superRefine((record, ctx) => {
       code: "custom",
       message: "an open record carries no settlement",
       path: ["settled"],
+    });
+  }
+  if (record.status === "open" && record.wokenAt !== undefined) {
+    ctx.addIssue({
+      code: "custom",
+      message: "an open record carries no wake receipt",
+      path: ["wokenAt"],
     });
   }
   if (record.settled !== undefined && record.settled.delegationId !== record.delegationId) {

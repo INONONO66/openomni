@@ -3,7 +3,7 @@ import type { Database } from "bun:sqlite";
 
 /**
  * Durable delegation rows. The kernel owns admission and settlement meaning;
- * this adapter only records insert and open-to-settled CAS receipts.
+ * this adapter records admission, terminal, and successful-wake CAS receipts.
  */
 export function createSqliteDelegationAdapter(db: Database): ProtocolStorage.DelegationSubAdapter {
   return {
@@ -12,8 +12,8 @@ export function createSqliteDelegationAdapter(db: Database): ProtocolStorage.Del
       const result = db
         .query(
           `INSERT OR IGNORE INTO delegation (
-             delegation_id, status, root_delegation_id, wait_id, data, time_created, settled_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+             delegation_id, status, root_delegation_id, wait_id, data, time_created, settled_at, woken_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           parsed.delegationId,
@@ -23,18 +23,19 @@ export function createSqliteDelegationAdapter(db: Database): ProtocolStorage.Del
           JSON.stringify(parsed),
           parsed.createdAt,
           parsed.settledAt ?? null,
+          parsed.wokenAt ?? null,
         );
       return result.changes === 1;
     },
     get(delegationId) {
       const row = db
-        .query("SELECT delegation_id, data FROM delegation WHERE delegation_id = ?")
+        .query("SELECT delegation_id, data, woken_at FROM delegation WHERE delegation_id = ?")
         .get(delegationId) as DelegationRow | null;
       return row === null ? undefined : decodeRow(row);
     },
     compareAndSwapStatus(delegationId, settled, settledAt) {
       const row = db
-        .query("SELECT delegation_id, data FROM delegation WHERE delegation_id = ?")
+        .query("SELECT delegation_id, data, woken_at FROM delegation WHERE delegation_id = ?")
         .get(delegationId) as DelegationRow | null;
       if (row === null) return false;
       const current = decodeRow(row);
@@ -54,10 +55,37 @@ export function createSqliteDelegationAdapter(db: Database): ProtocolStorage.Del
         .run("settled", JSON.stringify(next), settledAt, delegationId);
       return result.changes === 1;
     },
+    compareAndSwapWoken(delegationId, wokenAt) {
+      const row = db
+        .query("SELECT delegation_id, data, woken_at FROM delegation WHERE delegation_id = ?")
+        .get(delegationId) as DelegationRow | null;
+      if (row === null || row.woken_at !== null) return false;
+      const current = decodeRow(row);
+      if (current.status !== "settled") return false;
+      const next = Delegation.Record.parse({ ...current, wokenAt });
+      const result = db
+        .query(
+          `UPDATE delegation
+           SET data = ?, woken_at = ?
+           WHERE delegation_id = ? AND status = 'settled' AND woken_at IS NULL`,
+        )
+        .run(JSON.stringify(next), wokenAt, delegationId);
+      return result.changes === 1;
+    },
     listOpen() {
       const rows = db
         .query(
-          "SELECT delegation_id, data FROM delegation WHERE status = 'open' ORDER BY time_created ASC",
+          "SELECT delegation_id, data, woken_at FROM delegation WHERE status = 'open' ORDER BY time_created ASC",
+        )
+        .all() as DelegationRow[];
+      return rows.map(decodeRow);
+    },
+    listSettledUnwoken() {
+      const rows = db
+        .query(
+          `SELECT delegation_id, data, woken_at FROM delegation
+           WHERE status = 'settled' AND woken_at IS NULL
+           ORDER BY settled_at ASC`,
         )
         .all() as DelegationRow[];
       return rows.map(decodeRow);
@@ -65,7 +93,7 @@ export function createSqliteDelegationAdapter(db: Database): ProtocolStorage.Del
     listOpenByRoot(rootDelegationId) {
       const rows = db
         .query(
-          `SELECT delegation_id, data FROM delegation
+          `SELECT delegation_id, data, woken_at FROM delegation
            WHERE status = 'open' AND root_delegation_id = ?
            ORDER BY time_created ASC`,
         )
@@ -74,17 +102,27 @@ export function createSqliteDelegationAdapter(db: Database): ProtocolStorage.Del
     },
     findByWaitId(waitId) {
       const row = db
-        .query("SELECT delegation_id, data FROM delegation WHERE wait_id = ?")
+        .query("SELECT delegation_id, data, woken_at FROM delegation WHERE wait_id = ?")
         .get(waitId) as DelegationRow | null;
       return row === null ? undefined : decodeRow(row);
     },
   };
 }
 
-type DelegationRow = Readonly<{ delegation_id: string; data: string }>;
+type DelegationRow = Readonly<{
+  delegation_id: string;
+  data: string;
+  woken_at: number | null;
+}>;
 
 function decodeRow(row: DelegationRow): Delegation.Record {
-  const record = Delegation.Record.parse(JSON.parse(row.data));
+  const stored = JSON.parse(row.data) as Record<string, unknown>;
+  // The additive receipt column is authoritative. Old JSON payloads omit it,
+  // which intentionally upcasts to unwoken while the column remains NULL.
+  const record = Delegation.Record.parse({
+    ...stored,
+    ...(row.woken_at === null ? {} : { wokenAt: row.woken_at }),
+  });
   if (record.delegationId !== row.delegation_id) {
     throw new Error(
       `Delegation id mismatch: key=${row.delegation_id} payload=${record.delegationId}`,

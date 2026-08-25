@@ -110,7 +110,11 @@ export namespace Storage {
       settled: Delegation.Settled,
       settledAt: number,
     ): boolean;
+    /** settled + no wake receipt compare-and-swap: false means already receipted or not settled. */
+    compareAndSwapWoken(delegationId: string, wokenAt: number): boolean;
     listOpen(): Delegation.Record[];
+    /** Settled rows whose owner-session wake has no successful-delivery receipt. */
+    listSettledUnwoken(): Delegation.Record[];
     /** Open rows of one delegation tree — the per-root fanout-cap count. */
     listOpenByRoot(rootDelegationId: string): Delegation.Record[];
     /** The open (or settled) row a correlated channel reply belongs to. */

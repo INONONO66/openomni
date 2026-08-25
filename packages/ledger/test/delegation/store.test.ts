@@ -78,6 +78,24 @@ for (const { name, create } of adapters) {
       });
     });
 
+    test("records wake delivery once and lists settled delegations without a receipt", () => {
+      DelegationStore.create(buildDelegationRecord());
+      DelegationStore.settle("delegation-1", {
+        status: "completed",
+        delegationId: "delegation-1",
+        output: "done",
+        at: 200,
+      });
+
+      expect(DelegationStore.listSettledUnwoken().map((record) => record.delegationId)).toEqual([
+        "delegation-1",
+      ]);
+      expect(DelegationStore.markWoken("delegation-1", 201)).toBe(true);
+      expect(DelegationStore.markWoken("delegation-1", 202)).toBe(false);
+      expect(DelegationStore.get("delegation-1")?.wokenAt).toBe(201);
+      expect(DelegationStore.listSettledUnwoken()).toEqual([]);
+    });
+
     test("finds a delegation by its linked Wait id after settlement", () => {
       DelegationStore.create(buildDelegationRecord());
       DelegationStore.settle("delegation-1", {

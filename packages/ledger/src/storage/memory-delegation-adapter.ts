@@ -37,8 +37,22 @@ export function createMemoryDelegationAdapter(): ProtocolStorage.DelegationSubAd
       records.set(delegationId, next);
       return true;
     },
+    compareAndSwapWoken(delegationId, wokenAt) {
+      const current = records.get(delegationId);
+      if (current === undefined || current.status !== "settled" || current.wokenAt !== undefined) {
+        return false;
+      }
+      records.set(delegationId, Delegation.Record.parse({ ...current, wokenAt }));
+      return true;
+    },
     listOpen() {
       return list(records.values());
+    },
+    listSettledUnwoken() {
+      return [...records.values()]
+        .filter((record) => record.status === "settled" && record.wokenAt === undefined)
+        .sort((left, right) => (left.settledAt ?? 0) - (right.settledAt ?? 0))
+        .map((record) => Delegation.Record.parse(record));
     },
     listOpenByRoot(rootDelegationId) {
       return list(
