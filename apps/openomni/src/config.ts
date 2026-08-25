@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { Actor, Machine } from "@openomni/protocol";
+import { Actor, Gateway, Machine } from "@openomni/protocol";
 import { z } from "zod";
 
 export interface OpenOmniConfig {
@@ -31,6 +31,8 @@ export interface OpenOmniConfig {
    * ungranted rather than the driver being unwired.
    */
   readonly actors?: readonly RegisteredActor[];
+  /** Owner-declared allowances for cold proactive sends; absent denies all. */
+  readonly socialBudgets?: readonly Gateway.SocialBudget[];
 }
 
 export interface RegisteredActor {
@@ -73,6 +75,7 @@ export function assertWsExposure(config: Pick<OpenOmniConfig, "host" | "wsToken"
 }
 
 const Enrollments = z.array(Machine.Enrollment).min(1);
+const SocialBudgets = z.array(Gateway.SocialBudget);
 
 const Actors = z
   .array(
@@ -102,6 +105,16 @@ function actorsFromEnv(): OpenOmniConfig["actors"] {
   return parsed.data;
 }
 
+function socialBudgetsFromEnv(): OpenOmniConfig["socialBudgets"] {
+  const raw = process.env.OPENOMNI_SOCIAL_BUDGETS?.trim();
+  if (raw === undefined || raw.length === 0) return undefined;
+  const parsed = SocialBudgets.safeParse(JSON.parse(raw));
+  if (!parsed.success) {
+    throw new Error(`OPENOMNI_SOCIAL_BUDGETS is invalid: ${parsed.error.issues[0]?.message}`);
+  }
+  return parsed.data;
+}
+
 /**
  * Enrollment is the Owner's admission decision, so it is read from config
  * rather than inferred from whoever connects. Ledger-backed enrollment is a
@@ -127,6 +140,7 @@ export function loadConfig(): OpenOmniConfig {
   const wsToken = process.env.OPENOMNI_WS_TOKEN?.trim();
   const machines = machinesFromEnv();
   const actors = actorsFromEnv();
+  const socialBudgets = socialBudgetsFromEnv();
   return {
     dbPath: process.env.OPENOMNI_DB_PATH?.trim() || join(homedir(), ".openomni", "storage.db"),
     memoryPath:
@@ -141,5 +155,6 @@ export function loadConfig(): OpenOmniConfig {
     },
     ...(machines === undefined ? {} : { machines }),
     ...(actors === undefined ? {} : { actors }),
+    ...(socialBudgets === undefined ? {} : { socialBudgets }),
   };
 }

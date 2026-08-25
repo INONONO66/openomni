@@ -292,6 +292,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
                 targetActorId: actor.actorId,
                 operations: ["awaited" as const, "fire_and_forget" as const],
               })),
+            budgets: () => config.socialBudgets ?? [],
           },
     );
     // Recovery is deliberately after the Resident and gateway exist: boot
