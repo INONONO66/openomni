@@ -48,27 +48,102 @@ enrollment storage is a ledger record; attach admission is kernel judgment.
 - `Delegation.WorkerAddress` — `core` (internal loop; scope `inline` =
   same-context child, `independent` = isolated session/process) or `actor`
   (an already-registered external actor). The address says WHO, never HOW.
-- `Delegation.Mode` — `ask` (a question; the reply settles it) or `assign`
-  (commissioned work held to acceptance criteria). Actor addresses accept
-  `assign` only: the system cannot force an external actor to answer, it can
-  only hold commissioned work to its contract.
-- `Delegation.Request` — address + mode + payload + **required deadline**
-  (epoch ms; no unbounded delegation exists — same law as `Wait.expiresAt`).
-  `assign` requires acceptance criteria; `ask` forbids them.
-- `Delegation.Handle` — what the requester holds after admission: the
-  resolved `Transport` (`inline` | `process` | `channel`) plus the
-  durable ids settlement arrives under. Progress is observed through
-  Wait/WorkItem, never polled through the handle.
-- `Delegation.Settled` — five terminals. `delivery_failed` (never reached the
-  worker) and `no_response` (delivered, silence past deadline) are distinct:
-  unknown-outcome is never read as did-not-happen.
-- Events: `delegation.requested` (admission settled onto a transport),
-  `delegation.settled`.
+- `Delegation.Operation`: `notify` (fire-and-forget message; no Wait, no
+  reply expected; terminal `sent` at transport acceptance; actor addresses
+  only), `ask` (a question; the reply settles it; core inline|independent or
+  actor), or `assign` (commissioned work held to acceptance criteria; core
+  independent or actor, never inline: an inline child is a volatile in-turn
+  helper, too weak to hold a contract to). `assign` requires acceptance
+  criteria; `ask` and `notify` forbid them.
+- `Delegation.Request`: address + operation + payload + **required deadline**
+  (epoch ms; no unbounded delegation exists, same law as `Wait.expiresAt`).
+- `Delegation.Origin`: who is asking (`role`, `depth`, `sessionId`) plus the
+  lineage the durable lifecycle needs: `parentDelegationId` and
+  `rootDelegationId`, stamped by the admission fold, never self-reported.
+- `Delegation.Handle`: what the requester holds after DURABLE admission,
+  before the work runs: the resolved `Transport` (`inline` | `process` |
+  `channel`), the effective deadline (admission clamps the requested deadline
+  to the parent's when a parent exists), the channel `waitId` when one was
+  prepared, and the tree ids settlement arrives under. Progress is observed
+  through Wait/WorkItem, never polled through the handle.
+- `Delegation.Settled`: seven terminals: `completed`, `failed`, `cancelled`,
+  `delivery_failed`, `no_response`, `interrupted`, `sent`.
+  `delivery_failed` (never reached the worker) and `no_response` (delivered,
+  silence past deadline; `at >= deadline` is a schema invariant) are distinct:
+  unknown-outcome is never read as did-not-happen. `interrupted` is set only
+  by the boot sweep: the host restarted while volatile (inline/process) work
+  was open. `sent` is transport acceptance of a notify, terminal for notify
+  only (pinned on `Delegation.Record`, where operation meets settlement).
+  `completed` means the worker/actor REPORTED completion (or replied);
+  acceptance-criteria enforcement is deliberately out of this terminal, a
+  future WorkItem completion-authority integration.
+- `Delegation.Record`: the durable row (record-before-act): the Handle
+  fields plus origin, instruction summary, and the `open|settled` lifecycle.
+  Written at admission before any work runs; settled exactly once by the
+  kernel's open→settled compare-and-swap.
+- Events: `delegation.admitted` (the durable record committed),
+  `delegation.delivered` (transport ack), `delegation.settled`. The v1
+  `delegation.requested` event was removed: its meaning changed from
+  "admission decided" to "admission persisted", and a changed meaning is a
+  new event type.
 
-Admission (depth-1 rule, record-before-act), the four transport drivers, and
-settlement authority form the **DelegationKernel** in `apps/openomni`; the
-agent loop consumes it through an injected `DelegationPort` (same pattern as
-`@openomni/placement`), removing spawn/subagent semantics from the loop.
+Admission (who may commission whom, address→transport resolution, deadline
+clamp, fanout cap), the three transport drivers, and sole settlement
+authority form the **DelegationKernel** in `apps/openomni`; the agent loop
+reaches it only through tools in its catalog (`delegate`, `await_delegation`,
+`cancel_delegation`).
+
+### Async lifecycle (shipped)
+
+- **Record-before-act, single settlement fold.** `kernel.delegate()` runs:
+  admit → driver `prepare` (the channel driver allocates its durable `waitId`
+  here, so the persisted Handle already links the Wait) → write the
+  `Delegation.Record` → emit `delegation.admitted` → dispatch. Only the
+  kernel settles: a CAS `open→settled` in the store, then the
+  `delegation.settled` event, then the wake. Drivers report outcomes; they
+  never mutate delegation state. The store lives in
+  `packages/ledger/src/delegation/` over `Storage.DelegationSubAdapter`
+  (get / create / compareAndSwapStatus / listOpen / listOpenByRoot /
+  findByWaitId), with memory and SQLite adapters.
+- **Immediate Handle.** Process and channel ask|assign return the Handle as
+  soon as the record commits; settlement arrives later. Inline stays volatile
+  and awaited (the tool call blocks and returns the settlement directly, but
+  the record is still written uniformly, so the boot sweep can mark an
+  interrupted inline). Notify sends, settles `sent` at transport acceptance,
+  and returns Handle plus settlement.
+- **Owner-session wake.** When a non-inline delegation settles, the kernel
+  synthesizes an internal delivery into the origin session: a system-authored
+  message `delegation <id> settled: <status>: <summary>` that runs a Resident
+  turn and is persisted to the transcript. The settle CAS makes the wake
+  exactly-once.
+- **Re-invocable await and cancel.** `await_delegation(delegationId)` returns
+  the settlement if settled, else subscribes until settlement or the await's
+  own timeout, never past the delegation deadline. `cancel_delegation` aborts
+  the in-flight controller and CAS-settles `cancelled`; cancelling an
+  already-settled delegation returns the existing settlement.
+- **Deadline.** The kernel arms one timer per open record; firing settles
+  `no_response` (at the deadline instant, never before). The channel driver's
+  `waitSpec.expiresAt` IS the same effective deadline: one clock, no second
+  spelling.
+- **Restart matrix.** Boot sweep on startup: open records past their deadline
+  settle `no_response`; open inline/process records settle `interrupted`
+  (volatile transports, no reattach); open channel records with a future
+  deadline re-arm the timer and keep correlating, because the Wait is durable
+  and the record links it by `waitId` (a reply after restart reaches
+  `settleFromReply` and settles `completed` plus wake). Notify settles `sent`
+  at acceptance, so nothing notify stays open across a restart.
+- **Lineage and limits.** Admission computes
+  `effectiveDeadline = min(requested, parentDeadline)` when a parent exists,
+  and enforces a fanout cap of open records per `rootDelegationId` (default
+  8), counted from the durable store at admission. Both live in the admission
+  fold only. Exceeding the cap, a missing parent, a lineage mismatch, or a
+  passed deadline is a typed `AdmissionRefusal`. The worker-origin
+  restriction stands: a Worker may open only a same-domain inline child
+  (therefore ask only), `maxInlineDepth` 2.
+- **Grants stay separate.** `may_contact` (the #215 send kernel's
+  sender-target grants) is not `may_commission` (admission). The channel
+  driver rides the send kernel for every actor contact; admission decides
+  whether the delegation may exist at all. Neither grant implies the other.
 
 ### Vocabulary fences
 
@@ -145,4 +220,9 @@ The machine axis of `@openomni/placement` folds candidate machines against
    Ordered ahead of the `eval` wiring in step 5 on purpose: code mode earns
    its keep by batching tool calls, and until the app had a real tool to
    batch, wiring `eval` would have shipped an engine with no consumer.
+
+   The kernel's lifecycle is now async-first and durable (§3 "Async
+   lifecycle"): record-before-act into the ledger delegation store, the
+   Handle returned at admission for process/channel work, one kernel-owned
+   settlement fold, owner-session wakes, and a tested restart matrix.
 8. Memory, last, referencing existing implementations.
