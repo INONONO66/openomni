@@ -33,6 +33,23 @@ export namespace DelegationStore {
   }
 
   /**
+   * Settles an open record exactly once and exposes the CAS receipt. The
+   * committed bit is necessary to keep event and wake emission exactly-once
+   * even when two callers propose byte-for-byte identical settlements.
+   */
+  export function settleOnce(
+    delegationId: string,
+    settlement: Delegation.Settled,
+  ): { readonly committed: boolean; readonly settlement?: Delegation.Settled } {
+    const parsed = Delegation.Settled.parse(settlement);
+    const adapter = requireAdapter();
+    if (adapter.compareAndSwapStatus(delegationId, parsed, parsed.at)) {
+      return { committed: true, settlement: parsed };
+    }
+    return { committed: false, settlement: adapter.get(delegationId)?.settled };
+  }
+
+  /**
    * Settles open records exactly once. A losing caller receives the recorded
    * settlement, never its attempted replacement.
    */
@@ -40,10 +57,7 @@ export namespace DelegationStore {
     delegationId: string,
     settlement: Delegation.Settled,
   ): Delegation.Settled | undefined {
-    const parsed = Delegation.Settled.parse(settlement);
-    const adapter = requireAdapter();
-    if (adapter.compareAndSwapStatus(delegationId, parsed, parsed.at)) return parsed;
-    return adapter.get(delegationId)?.settled;
+    return settleOnce(delegationId, settlement).settlement;
   }
 
   export function listOpen(): Delegation.Record[] {

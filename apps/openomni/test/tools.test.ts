@@ -57,7 +57,12 @@ describe("tool catalog placement", () => {
 
     // Unfiltered on purpose: the agent loop folds this against the turn's
     // targets and gates the calls, so a second fold here would be a copy.
-    expect(catalog.specs.map((s: Tool.Spec) => s.name)).toEqual(["delegate", RUN_CODE_TOOL_NAME]);
+    expect(catalog.specs.map((s: Tool.Spec) => s.name)).toEqual([
+      "delegate",
+      "await_delegation",
+      "cancel_delegation",
+      RUN_CODE_TOOL_NAME,
+    ]);
   });
 
   it("serves the machine tool only for a machine holding the capability it requires", async () => {

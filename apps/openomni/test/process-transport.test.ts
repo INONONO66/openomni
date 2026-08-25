@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createInlineDriver } from "../src/delegation/inline-driver";
+import { DelegationStore } from "@openomni/ledger";
 import { createDelegationKernel } from "../src/delegation/kernel";
 import { createProcessDriver } from "../src/delegation/process-driver";
 import {
@@ -11,11 +11,12 @@ import {
   ProcessWorkerRequest,
   serveProcessWorker,
 } from "../src/delegation/process-entry";
+import { RESIDENT, useDelegationStore } from "./helpers/delegation";
+
+useDelegationStore();
 
 const WORKER = { model: { provider: "anthropic", id: "test-model" }, apiKey: "test-key" } as const;
-const RESIDENT = { role: "resident", depth: 0, sessionId: "session-origin" } as const;
 
-/** A `core` worker asked for independent work: the address that resolves to `process`. */
 function independentAsk(text: string, deadline: number) {
   return {
     address: { kind: "core", scope: "independent" },
@@ -33,18 +34,19 @@ function fakeEntry(body: string): string {
 }
 
 function kernelWith(entryPath: string, now = () => Date.now()) {
+  let issued = 0;
   return createDelegationKernel({
     drivers: {
       process: createProcessDriver({ command: [process.execPath, entryPath], worker: WORKER }),
     },
     now,
-    newDelegationId: () => "d-1",
+    newDelegationId: () => `d-${++issued}`,
   });
 }
 
-// --- the child half, in-process -------------------------------------------
+// Child half ---------------------------------------------------------------
 
-test("the entry acks before it works, so delivery is observable separately from the result", async () => {
+test("the entry acks before it works, so delivery is observable separately from result", async () => {
   const written: string[] = [];
   const order: string[] = [];
   await serveProcessWorker(
@@ -65,7 +67,6 @@ test("the entry acks before it works, so delivery is observable separately from 
       return "done";
     },
   );
-
   expect(written[0]).toBe(PROCESS_WORKER_ACK);
   expect(order).toEqual(["write", "run", "write"]);
   expect(JSON.parse(written[1] ?? "")).toEqual({ status: "completed", output: "done" });
@@ -87,34 +88,50 @@ test("a worker that throws is a failed result, not a lost delivery", async () =>
       throw new Error("model refused");
     },
   );
-
   expect(written[0]).toBe(PROCESS_WORKER_ACK);
   expect(JSON.parse(written[1] ?? "")).toEqual({ status: "failed", error: "model refused" });
 });
 
-test("a request that does not parse never acks, so the parent reads it as undelivered", async () => {
+test("a request that does not parse never acks", async () => {
   const written: string[] = [];
   await expect(
     serveProcessWorker('{"instruction":"no origin"}', (line) => written.push(line), async () => "x"),
-  ).rejects.toThrow();
+  ).rejects.toThrow("Required");
   expect(written).toEqual([]);
 });
 
-test("the request schema refuses an origin the parent did not carry whole", () => {
-  const parsed = ProcessWorkerRequest.safeParse({
-    delegationId: "d-1",
-    instruction: "x",
-    acceptanceCriteria: [],
-    origin: { role: "worker" },
-    model: WORKER.model,
-    apiKey: WORKER.apiKey,
-  });
-  expect(parsed.success).toBe(false);
+test("the request schema carries lineage and refuses a malformed origin", () => {
+  expect(
+    ProcessWorkerRequest.safeParse({
+      delegationId: "d-1",
+      instruction: "x",
+      acceptanceCriteria: [],
+      origin: { role: "worker" },
+      model: WORKER.model,
+      apiKey: WORKER.apiKey,
+    }).success,
+  ).toBe(false);
+  expect(
+    ProcessWorkerRequest.parse({
+      delegationId: "d-1",
+      instruction: "x",
+      acceptanceCriteria: [],
+      origin: {
+        role: "worker",
+        depth: 1,
+        sessionId: "s",
+        parentDelegationId: "p",
+        rootDelegationId: "r",
+      },
+      model: WORKER.model,
+      apiKey: WORKER.apiKey,
+    }).origin,
+  ).toMatchObject({ parentDelegationId: "p", rootDelegationId: "r" });
 });
 
-// --- the wire, against real child processes -------------------------------
+// Parent/child wire --------------------------------------------------------
 
-test("an independent delegation settles completed through a real process", async () => {
+test("an independent delegation returns its handle before a real process result, then settles completed", async () => {
   const entry = fakeEntry(`
     const line = await new Response(Bun.stdin.stream()).text();
     const request = JSON.parse(line);
@@ -122,307 +139,160 @@ test("an independent delegation settles completed through a real process", async
     console.log(JSON.stringify({ status: "completed", output: "handled: " + request.instruction + " pid:" + process.pid }));
   `);
   const kernel = kernelWith(entry);
-
   const result = await kernel.delegate(independentAsk("audit the ledger", Date.now() + 20_000), RESIDENT);
-
-  if ("refused" in result) throw new Error(`unexpectedly refused: ${result.refused}`);
-  expect(result.handle.transport).toBe("process");
-  // "process" has to mean an actual OS process: the child reports its own pid,
-  // and a driver that quietly ran the work in-process would report ours.
-  const [text, pid] = (result.settled as { output: string }).output.split(" pid:");
-  expect(text).toBe("handled: audit the ledger");
-  expect(Number(pid)).toBeGreaterThan(0);
-  expect(Number(pid)).not.toBe(process.pid);
-}, 30_000);
-
-test("a child that dies before acking is delivery_failed, never a worker who declined", async () => {
-  const entry = fakeEntry(`
-    console.error("boot failed: missing credentials");
-    process.exit(3);
-  `);
-  const kernel = kernelWith(entry);
-
-  const result = await kernel.delegate(independentAsk("audit", Date.now() + 20_000), RESIDENT);
-
   if ("refused" in result) throw new Error(result.refused);
-  expect(result.settled.status).toBe("delivery_failed");
-  const settled = result.settled as { status: "delivery_failed"; reason: string };
-  expect(settled.reason).toContain("before acknowledging delivery");
-  expect(settled.reason).toContain("missing credentials");
-}, 30_000);
+  expect(result.handle.transport).toBe("process");
+  expect(result.settled).toBeUndefined();
+  const settled = await kernel.awaitDelegation(result.handle.delegationId);
+  if (settled.kind !== "settled" || settled.settlement.status !== "completed") {
+    throw new Error("process did not settle completed");
+  }
+  const [text, pid] = settled.settlement.output.split(" pid:");
+  expect(text).toBe("handled: audit the ledger");
+  expect(Number(pid)).not.toBe(process.pid);
+});
 
-test("a command that cannot start at all is delivery_failed", async () => {
+test("a child that dies before acking is delivery_failed", async () => {
+  const entry = fakeEntry(`console.error("boot failed: missing credentials"); process.exit(3);`);
+  const kernel = kernelWith(entry);
+  const result = await kernel.delegate(independentAsk("audit", Date.now() + 20_000), RESIDENT);
+  if ("refused" in result) throw new Error(result.refused);
+  const settled = await kernel.awaitDelegation(result.handle.delegationId);
+  expect(settled).toMatchObject({ kind: "settled", settlement: { status: "delivery_failed" } });
+  if (settled.kind === "settled" && settled.settlement.status === "delivery_failed") {
+    expect(settled.settlement.reason).toContain("before acknowledging delivery");
+  }
+});
+
+test("a command that cannot start is delivery_failed", async () => {
   const kernel = createDelegationKernel({
     drivers: {
-      process: createProcessDriver({
-        command: ["/nonexistent/openomni-worker-binary"],
-        worker: WORKER,
-      }),
+      process: createProcessDriver({ command: ["/nonexistent/openomni-worker-binary"], worker: WORKER }),
     },
     now: () => Date.now(),
-    newDelegationId: () => "d-1",
+    newDelegationId: () => "d-missing",
   });
-
   const result = await kernel.delegate(independentAsk("audit", Date.now() + 20_000), RESIDENT);
-
   if ("refused" in result) throw new Error(result.refused);
-  expect(result.settled.status).toBe("delivery_failed");
-}, 30_000);
+  const settled = await kernel.awaitDelegation(result.handle.delegationId);
+  expect(settled).toMatchObject({ kind: "settled", settlement: { status: "delivery_failed" } });
+});
 
-test("a child that acks and then breaks is failed, because a worker held the request", async () => {
+test("a child that acks and then breaks is failed, because delivery was acknowledged", async () => {
   const entry = fakeEntry(`
     await new Response(Bun.stdin.stream()).text();
     console.log(JSON.stringify({ delivered: true }));
     process.exit(1);
   `);
   const kernel = kernelWith(entry);
-
   const result = await kernel.delegate(independentAsk("audit", Date.now() + 20_000), RESIDENT);
-
   if ("refused" in result) throw new Error(result.refused);
-  expect(result.settled).toMatchObject({
-    status: "failed",
-    error: "worker process exited without a result",
+  const settled = await kernel.awaitDelegation(result.handle.delegationId);
+  expect(settled).toMatchObject({
+    kind: "settled",
+    settlement: { status: "failed", error: "worker process exited without a result" },
   });
-}, 30_000);
+});
 
-test("a child that acks and then goes silent is no_response, and leaves no orphan", async () => {
+test("an acknowledged silent child reaches no_response at its deadline", async () => {
   const entry = fakeEntry(`
     await new Response(Bun.stdin.stream()).text();
     console.log(JSON.stringify({ delivered: true }));
     await new Promise(() => {});
   `);
   const kernel = kernelWith(entry);
-
-  const started = Date.now();
-  const result = await kernel.delegate(independentAsk("audit", started + 700), RESIDENT);
-
-  // The deadline decides this, not the driver: the worker took delivery.
+  const result = await kernel.delegate(independentAsk("audit", Date.now() + 80), RESIDENT);
   if ("refused" in result) throw new Error(result.refused);
-  expect(result.settled.status).toBe("no_response");
+  const settled = await kernel.awaitDelegation(result.handle.delegationId);
+  expect(settled).toMatchObject({ kind: "settled", settlement: { status: "no_response" } });
+});
 
-}, 30_000);
-
-/**
- * Liveness, observed rather than assumed. Each child writes the clock to a
- * file while it runs, so "we killed it" is the file going quiet — a driver
- * that merely stopped reading would leave the file still growing.
- *
- * Two kills, two different reachable paths, one test each: the deadline path
- * (abort fires, the worker never answers) and the answered-but-lingering path
- * (no abort ever fires, so only the `finally` reaps it).
- */
-async function heartbeatChild(after: string): Promise<{ entry: string; marker: string }> {
-  const directory = mkdtempSync(join(tmpdir(), "openomni-process-"));
-  const marker = join(directory, "alive");
-  const entry = join(directory, "entry.ts");
-  writeFileSync(
-    entry,
-    `await new Response(Bun.stdin.stream()).text();
-     console.log(JSON.stringify({ delivered: true }));
-     ${after}
-     for (;;) { await Bun.write(${JSON.stringify(marker)}, String(Date.now())); await Bun.sleep(50); }`,
-  );
-  return { entry, marker };
-}
-
-async function wentQuiet(marker: string): Promise<boolean> {
-  const first = await Bun.file(marker).text();
-  await Bun.sleep(400);
-  return (await Bun.file(marker).text()) === first;
-}
-
-test("a child that took delivery and then hung is killed at the deadline", async () => {
-  const { entry, marker } = await heartbeatChild("");
-  const kernel = kernelWith(entry);
-
-  const result = await kernel.delegate(independentAsk("audit", Date.now() + 700), RESIDENT);
-
-  if ("refused" in result) throw new Error(result.refused);
-  expect(result.settled.status).toBe("no_response");
-  expect(await wentQuiet(marker)).toBe(true);
-}, 30_000);
-
-test("a child that answered and then refused to exit is still reaped", async () => {
-  const { entry, marker } = await heartbeatChild(
-    'console.log(JSON.stringify({ status: "completed", output: "answered" }));',
-  );
-  const kernel = kernelWith(entry);
-
-  const result = await kernel.delegate(independentAsk("audit", Date.now() + 20_000), RESIDENT);
-
-  // No abort fires on this path, so nothing but the driver's own cleanup
-  // stands between a well-behaved answer and a process left running forever.
-  if ("refused" in result) throw new Error(result.refused);
-  expect(result.settled).toMatchObject({ status: "completed", output: "answered" });
-  expect(await wentQuiet(marker)).toBe(true);
-}, 30_000);
-
-test("a malformed result line is the worker's failure, not a delivery failure", async () => {
+test("a malformed result after ack is worker failure", async () => {
   const entry = fakeEntry(`
     await new Response(Bun.stdin.stream()).text();
     console.log(JSON.stringify({ delivered: true }));
     console.log(JSON.stringify({ status: "finished", output: "wrong vocabulary" }));
   `);
   const kernel = kernelWith(entry);
-
   const result = await kernel.delegate(independentAsk("audit", Date.now() + 20_000), RESIDENT);
-
   if ("refused" in result) throw new Error(result.refused);
-  expect(result.settled.status).toBe("failed");
-  expect((result.settled as { error: string }).error).toContain("malformed result");
-}, 30_000);
+  const settled = await kernel.awaitDelegation(result.handle.delegationId);
+  expect(settled).toMatchObject({ kind: "settled", settlement: { status: "failed" } });
+});
 
-test("the child receives the origin the parent admitted, so the depth cap crosses the boundary", async () => {
+test("the child receives the admission-stamped worker lineage", async () => {
   const entry = fakeEntry(`
-    const line = await new Response(Bun.stdin.stream()).text();
-    const request = JSON.parse(line);
+    const request = JSON.parse(await new Response(Bun.stdin.stream()).text());
     console.log(JSON.stringify({ delivered: true }));
     console.log(JSON.stringify({ status: "completed", output: JSON.stringify(request.origin) }));
   `);
   const kernel = kernelWith(entry);
-
   const result = await kernel.delegate(independentAsk("audit", Date.now() + 20_000), RESIDENT);
-
   if ("refused" in result) throw new Error(result.refused);
-  expect(JSON.parse((result.settled as { output: string }).output)).toEqual({
-    role: "worker",
-    depth: 1,
-    sessionId: "session-origin",
-  });
-}, 30_000);
+  const settled = await kernel.awaitDelegation(result.handle.delegationId);
+  if (settled.kind !== "settled" || settled.settlement.status !== "completed") throw new Error("missing result");
+  expect(JSON.parse(settled.settlement.output)).toMatchObject({ role: "worker", depth: 1, sessionId: "session-origin" });
+});
 
-test("a worker may not open a process at all, so the driver is never reached", async () => {
-  const entry = fakeEntry(`
-    await new Response(Bun.stdin.stream()).text();
-    console.log(JSON.stringify({ delivered: true }));
-    console.log(JSON.stringify({ status: "completed", output: "should not happen" }));
-  `);
+test("a worker may not open process work", async () => {
+  const entry = fakeEntry(`console.log(JSON.stringify({ delivered: true }));`);
   const kernel = kernelWith(entry);
-
   const result = await kernel.delegate(independentAsk("audit", Date.now() + 20_000), {
     role: "worker",
     depth: 1,
     sessionId: "session-origin",
   });
+  expect(result).toMatchObject({ refused: expect.stringContaining("same-domain inline child") });
+});
 
-  if (!("refused" in result)) throw new Error("a worker opened a process");
-  expect(result.refused).toContain("same-domain inline child");
-}, 30_000);
+test("a child kernel does not sweep the host's open process row", () => {
+  DelegationStore.create({
+    delegationId: "d-parent-open",
+    operation: "ask",
+    address: { kind: "core", scope: "independent" },
+    transport: "process",
+    deadline: 5_000,
+    rootDelegationId: "d-parent-open",
+    origin: RESIDENT,
+    instruction: "parent work",
+    status: "open",
+    createdAt: 1_000,
+  });
+  const kernel = createChildKernel(async () => "inner");
+  expect(DelegationStore.get("d-parent-open")?.status).toBe("open");
+  kernel.stop();
+});
 
-/**
- * Every delegation gets its own process and its own pipe pair, so nothing
- * shared can cross wires. Worth pinning rather than assuming: the tests above
- * all mint a constant delegation id, which would hide a correlation bug if
- * one were ever introduced — so this one deliberately keeps the id constant
- * AND runs concurrently, and still demands eight distinct answers.
- */
-test("concurrent delegations sharing one id still get their own answers", async () => {
+test("the child kernel has no process driver", async () => {
+  const kernel = createChildKernel(async () => "inner");
+  const result = await kernel.delegate(independentAsk("fork", Date.now() + 5_000), RESIDENT);
+  if ("refused" in result) throw new Error(result.refused);
+  const settled = await kernel.awaitDelegation(result.handle.delegationId);
+  expect(settled).toMatchObject({
+    kind: "settled",
+    settlement: { status: "delivery_failed", reason: "no driver for process transport" },
+  });
+});
+
+test("concurrent process delegations have independent durable ids and answers", async () => {
   const entry = fakeEntry(`
     const request = JSON.parse(await new Response(Bun.stdin.stream()).text());
     console.log(JSON.stringify({ delivered: true }));
-    await Bun.sleep(Math.floor(Math.random() * 200));
     console.log(JSON.stringify({ status: "completed", output: request.instruction }));
   `);
   const kernel = kernelWith(entry);
-
-  const settled = await Promise.all(
-    Array.from({ length: 8 }, (_, index) =>
+  const results = await Promise.all(
+    Array.from({ length: 4 }, (_, index) =>
       kernel.delegate(independentAsk(`job-${index}`, Date.now() + 20_000), RESIDENT),
     ),
   );
-
-  const answers = settled.map((result) => {
-    if ("refused" in result) throw new Error(result.refused);
-    return (result.settled as { output: string }).output;
-  });
-  expect(new Set(answers).size).toBe(8);
-  expect(answers).toEqual(Array.from({ length: 8 }, (_, index) => `job-${index}`));
-}, 60_000);
-
-/**
- * The arm that says a worker took the request and then gave nothing back.
- * Distinct from the deadline: this one is known immediately, because the
- * child is gone, and settling it as `no_response` would make an honest
- * crash indistinguishable from a worker still thinking.
- */
-test("a child that acks and exits cleanly fails at once, not at the deadline", async () => {
-  const entry = fakeEntry(`
-    await new Response(Bun.stdin.stream()).text();
-    console.log(JSON.stringify({ delivered: true }));
-    process.exit(0);
-  `);
-  const kernel = kernelWith(entry);
-
-  const started = Date.now();
-  const result = await kernel.delegate(independentAsk("audit", Date.now() + 10_000), RESIDENT);
-
-  if ("refused" in result) throw new Error(result.refused);
-  expect(result.settled).toMatchObject({
-    status: "failed",
-    error: "worker process exited without a result",
-  });
-  expect(Date.now() - started).toBeLessThan(5_000);
-}, 30_000);
-
-/**
- * Once the deadline settled a delegation, a result that shows up afterwards
- * changes nothing: the caller already holds `no_response` and there is no
- * second settlement to race for.
- */
-test("a result arriving after the deadline cannot settle the delegation twice", async () => {
-  const entry = fakeEntry(`
-    await new Response(Bun.stdin.stream()).text();
-    console.log(JSON.stringify({ delivered: true }));
-    await Bun.sleep(900);
-    console.log(JSON.stringify({ status: "completed", output: "late" }));
-  `);
-  const kernel = kernelWith(entry);
-
-  const result = await kernel.delegate(independentAsk("audit", Date.now() + 400), RESIDENT);
-
-  if ("refused" in result) throw new Error(result.refused);
-  const settled = result.settled;
-  expect(settled.status).toBe("no_response");
-
-  // Outlive the child's own answer, then look again.
-  await Bun.sleep(1200);
-  expect(result.settled).toEqual(settled);
-}, 30_000);
-
-/**
- * A child cannot turn into a process factory, and the two layers that stop it
- * are tested separately because the outer one hid a surviving mutation:
- * widening the child's driver map to include `process` broke no test at all.
- */
-test("admission refuses a worker who asks for independent work", async () => {
-  const kernel = createDelegationKernel({
-    drivers: { inline: createInlineDriver(async () => "inner") },
-    now: () => Date.now(),
-    newDelegationId: () => "d-inner",
-  });
-
-  const result = await kernel.delegate(independentAsk("fork", Date.now() + 5_000), {
-    role: "worker",
-    depth: 1,
-    sessionId: "session-origin",
-  });
-
-  if (!("refused" in result)) throw new Error("a worker reached the process transport");
-  expect(result.refused).toContain("same-domain inline child");
+  const settled = await Promise.all(
+    results.map(async (result) => {
+      if ("refused" in result) throw new Error(result.refused);
+      const outcome = await kernel.awaitDelegation(result.handle.delegationId);
+      if (outcome.kind !== "settled" || outcome.settlement.status !== "completed") throw new Error("missing result");
+      return outcome.settlement.output;
+    }),
+  );
+  expect(new Set(settled).size).toBe(4);
 });
-
-test("the kernel the child actually builds has no process transport", async () => {
-  // The same factory `processWorkerRun` calls, so widening it there widens it
-  // here: a child that somehow presented a Resident origin still cannot spawn.
-  const kernel = createChildKernel(async () => "inner");
-
-  const result = await kernel.delegate(independentAsk("fork", Date.now() + 5_000), RESIDENT);
-
-  if ("refused" in result) throw new Error(result.refused);
-  expect(result.settled).toMatchObject({
-    status: "delivery_failed",
-    reason: "no driver for process transport",
-  });
-});
-

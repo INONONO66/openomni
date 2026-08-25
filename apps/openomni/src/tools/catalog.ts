@@ -1,6 +1,13 @@
 import type { DelegationOrigin } from "../delegation/admission";
 import type { DelegationKernel } from "../delegation/kernel";
-import { delegateToolExecutor, delegateToolSpec } from "../delegation/tool";
+import {
+  awaitDelegationToolExecutor,
+  awaitDelegationToolSpec,
+  cancelDelegationToolExecutor,
+  cancelDelegationToolSpec,
+  delegateToolExecutor,
+  delegateToolSpec,
+} from "../delegation/tool";
 import type { CuratedMemory } from "../memory/store";
 import type { CatalogEntry } from "./dispatch";
 import { memoryToolExecutor, memoryToolSpec } from "./memory";
@@ -30,10 +37,20 @@ export function catalogEntries(
 ): readonly CatalogEntry[] {
   const entries: CatalogEntry[] = [];
   if (ports.delegation !== undefined) {
-    entries.push({
-      spec: delegateToolSpec(),
-      run: delegateToolExecutor(ports.delegation, origin),
-    });
+    entries.push(
+      {
+        spec: delegateToolSpec(),
+        run: delegateToolExecutor(ports.delegation, origin),
+      },
+      {
+        spec: awaitDelegationToolSpec(),
+        run: awaitDelegationToolExecutor(ports.delegation),
+      },
+      {
+        spec: cancelDelegationToolSpec(),
+        run: cancelDelegationToolExecutor(ports.delegation),
+      },
+    );
   }
   if (ports.cells !== undefined) {
     entries.push({

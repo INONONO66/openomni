@@ -1,36 +1,33 @@
 import type { Delegation } from "@openomni/protocol";
 import type { Admitted, DelegationOrigin } from "./admission";
-import type { DelegationDriver, DriverOutcome } from "./kernel";
+import type { DelegationDriver, DriverOutcome, DriverReport } from "./kernel";
 
-/**
- * Runs one worker turn and returns what it produced. Injected so the driver
- * owns delegation shape rather than agent construction — the app already
- * knows how to build a loop, and the driver should not learn that twice.
- */
+/** Runs one isolated in-process worker turn. */
 export type InlineWorkerRunner = (
   input: {
     readonly delegationId: string;
     readonly instruction: string;
     readonly acceptanceCriteria: readonly string[];
-    /**
-     * Who this child runs as. Carried whole from admission rather than rebuilt
-     * downstream, so neither the role nor the depth is decided twice — the cap
-     * cannot be reset by the act of descending, and nothing else gets to
-     * declare that a delegated child is a worker.
-     */
+    /** Admission-stamped worker identity and delegation lineage. */
     readonly origin: DelegationOrigin;
     readonly signal: AbortSignal;
   },
 ) => Promise<string>;
 
 /**
- * The inline transport: a child loop in this process, with its own session.
- * "Same-domain, context-sharing" means it inherits the instruction and the
- * criteria — not the parent's transcript, which stays private to the parent.
+ * The volatile inline transport. The kernel still records it before this runs,
+ * but the calling tool awaits its settlement in the same turn.
  */
 export function createInlineDriver(run: InlineWorkerRunner): DelegationDriver {
   return {
-    async run(admitted: Admitted, handle: Delegation.Handle, signal: AbortSignal): Promise<DriverOutcome> {
+    async run(
+      admitted: Admitted,
+      handle: Delegation.Handle,
+      signal: AbortSignal,
+      report?: DriverReport,
+    ): Promise<DriverOutcome> {
+      if (signal.aborted) return { status: "cancelled", reason: "delegation stopped" };
+      report?.delivered();
       const output = await run({
         delegationId: handle.delegationId,
         instruction: admitted.request.payload.text,
@@ -39,11 +36,10 @@ export function createInlineDriver(run: InlineWorkerRunner): DelegationDriver {
         signal,
       });
 
-      // The kernel aborts on deadline and settles no_response itself. A child
-      // that notices the abort and returns anyway must not be reported as a
-      // completion the parent can act on.
-      if (signal.aborted) return { status: "cancelled", reason: "deadline reached" };
-
+      // A completion racing after cancellation/deadline cannot replace the
+      // kernel's terminal CAS. Reporting cancelled also avoids presenting it
+      // as usable output to a caller whose inline turn is still unwinding.
+      if (signal.aborted) return { status: "cancelled", reason: "delegation stopped" };
       return { status: "completed", output };
     },
   };

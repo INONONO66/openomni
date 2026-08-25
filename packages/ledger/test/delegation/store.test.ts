@@ -59,6 +59,25 @@ for (const { name, create } of adapters) {
       });
     });
 
+    test("settleOnce distinguishes an equal losing CAS from the winner", () => {
+      DelegationStore.create(buildDelegationRecord());
+      const settlement = Delegation.Settled.parse({
+        status: "completed",
+        delegationId: "delegation-1",
+        output: "same proposal",
+        at: 200,
+      });
+
+      expect(DelegationStore.settleOnce("delegation-1", settlement)).toEqual({
+        committed: true,
+        settlement,
+      });
+      expect(DelegationStore.settleOnce("delegation-1", settlement)).toEqual({
+        committed: false,
+        settlement,
+      });
+    });
+
     test("finds a delegation by its linked Wait id after settlement", () => {
       DelegationStore.create(buildDelegationRecord());
       DelegationStore.settle("delegation-1", {

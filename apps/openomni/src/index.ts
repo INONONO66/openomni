@@ -3,13 +3,17 @@ import { type GatewayRouter, WebSocketHandler } from "@openomni/channels";
 import { ActorRegistry, initialize, Storage } from "@openomni/ledger";
 import { createMachineHost, type MachineHost } from "@openomni/machines";
 import type { Placement } from "@openomni/placement";
-import type { Gateway, Ingress, Machine } from "@openomni/protocol";
+import { Gateway, type Ingress, type Machine } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { assertWsExposure, loadConfig, type OpenOmniConfig, type RegisteredActor } from "./config";
 import type { MachinesPort } from "./tools/machines";
 import { createChannelDriver } from "./delegation/channel-driver";
 import { createInlineDriver } from "./delegation/inline-driver";
-import { createDelegationKernel, type DelegationKernel } from "./delegation/kernel";
+import {
+  createDelegationKernel,
+  type DelegationKernel,
+  type DelegationWake,
+} from "./delegation/kernel";
 import { createProcessDriver } from "./delegation/process-driver";
 import { createInlineWorkerRunner } from "./delegation/worker-loop";
 import { createResidentGateway } from "./gateway";
@@ -52,6 +56,41 @@ function replyText(payload: unknown): string {
   return JSON.stringify(payload);
 }
 
+/** Builds the internal, persisted Resident turn used for one settlement wake. */
+function delegationWakeDelivery(wake: DelegationWake): Gateway.Deliver {
+  const traceId = `delegation:${wake.record.delegationId}`;
+  return Gateway.Deliver.parse({
+    sessionId: wake.record.origin.sessionId,
+    event: {
+      id: `${traceId}:${wake.settlement.at}`,
+      traceId,
+      surface: "internal",
+      userId: "system",
+      payload: wake.message,
+      target: { kind: "resident" },
+      meta: {
+        actor: { role: "system", id: "system" },
+        agentName: "system",
+        kind: "delegation.settled",
+      },
+      mode: "direct",
+    },
+    decision: {
+      traceId,
+      time: wake.settlement.at,
+      inboundId: `${traceId}:inbound`,
+      surface: "internal",
+      mode: "direct",
+      stage: "surface_default",
+      outcome: "route",
+      reason: "durable delegation settlement",
+      factsUsed: ["delegation.settled"],
+      target: "resident",
+      sessionId: wake.record.origin.sessionId,
+    },
+  });
+}
+
 export async function startOpenOmni(options: StartOptions = {}) {
   const config = options.config ?? loadConfig();
   assertWsExposure(config);
@@ -79,6 +118,8 @@ export async function startOpenOmni(options: StartOptions = {}) {
   // runner needs the kernel that the kernel needs the runner to build. The
   // cycle is closed by handing the runner a getter rather than a value.
   let kernel: DelegationKernel | undefined;
+  let residentDeliver: ((delivery: Gateway.Deliver) => Promise<Ingress.IngressResult>) | undefined;
+  const pendingWakes: DelegationWake[] = [];
   const runner = createInlineWorkerRunner({
     model: config.model,
     apiKey: config.model.apiKey,
@@ -101,6 +142,15 @@ export async function startOpenOmni(options: StartOptions = {}) {
     newWaitId: () => crypto.randomUUID(),
   });
   kernel = createDelegationKernel({
+    events: Bus,
+    wake: (wake) => {
+      if (residentDeliver === undefined) {
+        pendingWakes.push(wake);
+        return;
+      }
+      return residentDeliver(delegationWakeDelivery(wake)).then(() => undefined);
+    },
+    bootSweep: false,
     drivers: {
       inline: createInlineDriver(runner),
       channel: channelDriver,
@@ -113,6 +163,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
           model: { provider: config.model.provider, id: config.model.id },
           apiKey: config.model.apiKey,
         },
+        dbPath: config.dbPath,
       }),
     },
     now: () => Date.now(),
@@ -173,7 +224,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
           newCellId: () => crypto.randomUUID(),
         };
 
-  const residentDeliver = createResident({
+  residentDeliver = createResident({
     model: config.model,
     apiKey: config.model.apiKey,
     tools: {
@@ -199,7 +250,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
     if (
       wait !== undefined &&
       sessionId !== undefined &&
-      channelDriver.resume(wait.waitId, replyText(delivery.event.payload))
+      kernel.settleFromReply(wait.waitId, replyText(delivery.event.payload))
     ) {
       return {
         mode: "direct",
@@ -232,10 +283,19 @@ export async function startOpenOmni(options: StartOptions = {}) {
               id: `resident->${actor.actorId}`,
               senderId: "resident",
               targetActorId: actor.actorId,
-              operations: ["awaited" as const],
+              operations: ["awaited" as const, "fire_and_forget" as const],
             })),
         },
   );
+  // Recovery is deliberately after the Resident and gateway exist: boot
+  // settlements must be able to deliver their one owner-session wake.
+  kernel.start();
+  for (const wake of pendingWakes.splice(0)) {
+    void residentDeliver(delegationWakeDelivery(wake)).catch((error: unknown) => {
+      console.error(`delegation wake failed for ${wake.record.delegationId}:`, error);
+    });
+  }
+
   const boundGateway = gateway;
   wsHandler = new WebSocketHandler(async (message) => {
     const result = await boundGateway.ingest(buildInboundEvent(message));
@@ -261,6 +321,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
     port: server.port,
     stop(): void {
       server.stop();
+      kernel.stop();
       host?.close();
       Storage.reset();
     },

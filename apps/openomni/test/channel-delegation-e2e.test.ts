@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { RunInput, Sink } from "@openomni/llm";
-import { Storage } from "@openomni/ledger";
+import { Session, Storage } from "@openomni/ledger";
 import type { Message } from "@openomni/protocol";
 import { startOpenOmni } from "../src/index";
 
@@ -82,6 +82,11 @@ test("the Resident delegates to an external actor over the channel and reports t
   const directory = mkdtempSync(join(tmpdir(), "openomni-channel-delegation-"));
   directories.push(directory);
   const residentTexts: string[] = [];
+  let ownerSessionId: string | undefined;
+  let wake!: () => void;
+  const wakeSeen = new Promise<void>((resolve) => {
+    wake = resolve;
+  });
 
   const app = await startOpenOmni({
     config: {
@@ -105,6 +110,9 @@ test("the Resident delegates to an external actor over the channel and reports t
           .map((part) => ("text" in part && typeof part.text === "string" ? part.text : ""))
           .join("");
         residentTexts.push(asked);
+        if (ownerSessionId === undefined && !input.trace.sessionId.startsWith("delegation-")) {
+          ownerSessionId = input.trace.sessionId;
+        }
 
         if (asked.includes("please ask alice")) {
           const executed = await input.toolExecutor?.({
@@ -112,13 +120,18 @@ test("the Resident delegates to an external actor over the channel and reports t
             tool: "delegate",
             input: {
               instruction: "review the quarterly report",
-              mode: "assign",
+              operation: "assign",
               acceptanceCriteria: ["every section read"],
               actorId: "alice",
               timeoutMs: 10_000,
             },
           });
-          sink.onMessage(message(input, `alice reports: ${executed?.output ?? "nothing"}`));
+          sink.onMessage(message(input, `delegation started: ${executed?.output ?? "nothing"}`));
+          return { type: "stop" };
+        }
+        if (asked.startsWith("delegation ") && asked.includes(" settled:")) {
+          wake();
+          sink.onMessage(message(input, `wake observed: ${asked}`));
           return { type: "stop" };
         }
 
@@ -164,15 +177,17 @@ test("the Resident delegates to an external actor over the channel and reports t
 
   // The actor's reply settles the waiting delegation instead of opening a turn.
   expect(((await aliceAck) as { text: string }).text).toContain("Reply received");
-  expect(((await ownerAnswer) as { text: string }).text).toBe(
-    "alice reports: every section read, numbers check out",
-  );
+  expect(((await ownerAnswer) as { text: string }).text).toContain("settlement will arrive as a message");
 
-  // Exactly two Resident turns spoke: the owner's ask and bob's stray message.
-  // Alice's reply resumed the delegation without becoming a turn of its own.
+  // Settlement wakes exactly one Resident turn in the origin session. The
+  // wake is internal, so it is observed through the provider and transcript,
+  // not as a second channel response to the actor's reply.
+  await wakeSeen;
   expect(residentTexts.filter((text) => text.includes("please ask alice"))).toHaveLength(1);
   expect(residentTexts.filter((text) => text.includes("bob butting in"))).toHaveLength(1);
-  expect(residentTexts.filter((text) => text.includes("numbers check out"))).toHaveLength(0);
+  expect(residentTexts.filter((text) => text.includes("delegation ") && text.includes(" settled:"))).toHaveLength(1);
+  if (ownerSessionId === undefined) throw new Error("owner session was not materialized");
+  expect(Session.getMessages(ownerSessionId).some((entry) => entry.role === "user" && entry.agent === "system")).toBe(true);
 
   owner.close();
   alice.close();
