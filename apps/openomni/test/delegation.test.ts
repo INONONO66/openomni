@@ -317,7 +317,13 @@ describe("delegation controls and tool surface", () => {
     });
     const spec = delegateToolSpec();
     expect(spec.name).toBe(DELEGATE_TOOL_NAME);
-    expect((spec.inputSchema as { properties: Record<string, unknown> }).properties.operation).toBeDefined();
+    const variants = (
+      spec.inputSchema as { oneOf: readonly { properties: Record<string, unknown> }[] }
+    ).oneOf;
+    expect(variants.length).toBe(2);
+    for (const variant of variants) {
+      expect(variant.properties.operation).toBeDefined();
+    }
     const answer = await delegateToolExecutor(kernel, RESIDENT)({
       instruction: "send it",
       operation: "ask",

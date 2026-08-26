@@ -35,7 +35,9 @@ interface Violation {
 
 interface Baseline {
   readonly vocab: { readonly unmappedNamespaces: readonly string[] };
-  readonly tools: { readonly exceptions: Readonly<Record<string, readonly string[]>> };
+  // Absent when no tool needs an exception — an empty exceptions map cannot
+  // be written without an added baseline line, so the key simply disappears.
+  readonly tools?: { readonly exceptions: Readonly<Record<string, readonly string[]>> };
   readonly naming: { readonly grandfathered: readonly string[] };
 }
 
@@ -172,23 +174,14 @@ export function lintToolSurface(tool: ToolSurface): ToolLintFailure[] {
 }
 
 async function collectToolSurfaces(): Promise<ToolSurface[]> {
-  // The sole app capability-composes its catalog per actor, so the static
-  // surface is "every port wired": what the composition root could ship.
-  // Tool executors close over their ports without touching them at
-  // construction, so inert stand-ins suffice — the lint reads specs, it
-  // never runs a tool.
-  const { catalogEntries } = await import("../apps/openomni/src/tools/catalog.js");
-  const lintOnlyPorts = {
-    delegation: {} as never,
-    cells: {} as never,
-    machines: () => [],
-    memory: {} as never,
-  };
-  const resident = { role: "resident", depth: 0, sessionId: "lint-tools" } as const;
-  return catalogEntries(lintOnlyPorts, resident).map((entry) => ({
-    name: entry.spec.name,
-    description: entry.spec.description,
-    inputSchema: entry.spec.inputSchema as Record<string, unknown>,
+  // The sole app exposes its whole shippable surface as data through
+  // collectToolSpecs — the catalog table in apps/openomni/src/tools/catalog.ts
+  // is the single owner, so what the lint reads is what the app can ship.
+  const { collectToolSpecs } = await import("../apps/openomni/src/tools/catalog.js");
+  return collectToolSpecs().map((spec) => ({
+    name: spec.name,
+    description: spec.description,
+    inputSchema: spec.inputSchema,
   }));
 }
 
@@ -197,7 +190,7 @@ async function checkToolLint(baseline: Baseline): Promise<Violation[]> {
   const violations: Violation[] = [];
 
   for (const surface of surfaces) {
-    const exceptions = new Set(baseline.tools.exceptions[surface.name] ?? []);
+    const exceptions = new Set(baseline.tools?.exceptions[surface.name] ?? []);
     for (const failure of lintToolSurface(surface)) {
       if (!exceptions.has(failure.rule)) {
         violations.push({
@@ -272,8 +265,9 @@ export function unwiredToolSpecFactories(
     }
     for (const match of source.matchAll(TOOL_SPEC_FACTORY_PATTERN)) {
       const factory = match[1];
-      // Call form, not name mention: an unused import still names the factory.
-      if (factory !== undefined && !catalogSource.includes(`${factory}()`)) {
+      // Table-row form, not bare mention: an unused import still names the
+      // factory, but only the CATALOG_TOOLS table wires it as `spec: <factory>`.
+      if (factory !== undefined && !catalogSource.includes(`spec: ${factory}`)) {
         unwired.push(`${filePath}:${factory}`);
       }
     }
@@ -448,7 +442,7 @@ function selfTest(): void {
   }
 
   const wiredFiles = new Map([
-    ["apps/openomni/src/tools/catalog.ts", "machinesToolSpec(), memoryToolSpec()"],
+    ["apps/openomni/src/tools/catalog.ts", "spec: machinesToolSpec, spec: memoryToolSpec,"],
     ["apps/openomni/src/tools/machines.ts", "export function machinesToolSpec(): Tool.Spec {"],
     ["apps/openomni/src/tools/memory.ts", "export function memoryToolSpec(): Tool.Spec {"],
   ]);
@@ -456,7 +450,7 @@ function selfTest(): void {
     failures.push("earned-check flagged a fully wired catalog");
   }
   const unwiredFiles = new Map([
-    ["apps/openomni/src/tools/catalog.ts", "machinesToolSpec()"],
+    ["apps/openomni/src/tools/catalog.ts", "spec: machinesToolSpec,"],
     ["apps/openomni/src/tools/machines.ts", "export function machinesToolSpec(): Tool.Spec {"],
     ["apps/openomni/src/tools/memory.ts", "export function memoryToolSpec(): Tool.Spec {"],
   ]);
@@ -466,7 +460,7 @@ function selfTest(): void {
   const importOnlyFiles = new Map([
     [
       "apps/openomni/src/tools/catalog.ts",
-      'import { memoryToolSpec } from "./memory"; machinesToolSpec()',
+      'import { memoryToolSpec } from "./memory"; spec: machinesToolSpec,',
     ],
     ["apps/openomni/src/tools/machines.ts", "export function machinesToolSpec(): Tool.Spec {"],
     ["apps/openomni/src/tools/memory.ts", "export function memoryToolSpec(): Tool.Spec {"],

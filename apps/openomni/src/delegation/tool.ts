@@ -88,18 +88,38 @@ export const DELEGATE_TOOL_NAME = "delegate";
 export const AWAIT_DELEGATION_TOOL_NAME = "await_delegation";
 export const CANCEL_DELEGATION_TOOL_NAME = "cancel_delegation";
 
+const START_INPUT_PROPERTIES = {
+  instruction: { type: "string", minLength: 1 },
+  operation: { type: "string", enum: ["notify", "ask", "assign"] },
+  acceptanceCriteria: { type: "array", items: { type: "string", minLength: 1 } },
+  timeoutMs: { type: "integer", exclusiveMinimum: 0 },
+} as const;
+
+// Advertised as the addressing XOR the zod gate above enforces (exactly one
+// of scope / actorId): two variants of five public fields each. Every call
+// the runtime gate accepts still validates; calls it refuses (both or
+// neither addressing field) are now refused by the advertised schema too.
 const START_INPUT_JSON_SCHEMA: Record<string, unknown> = {
-  type: "object",
-  additionalProperties: false,
-  required: ["instruction", "operation", "timeoutMs"],
-  properties: {
-    instruction: { type: "string", minLength: 1 },
-    operation: { type: "string", enum: ["notify", "ask", "assign"] },
-    scope: { type: "string", enum: ["inline", "independent"] },
-    actorId: { type: "string", minLength: 1 },
-    acceptanceCriteria: { type: "array", items: { type: "string", minLength: 1 } },
-    timeoutMs: { type: "integer", exclusiveMinimum: 0 },
-  },
+  oneOf: [
+    {
+      type: "object",
+      additionalProperties: false,
+      required: ["instruction", "operation", "timeoutMs", "scope"],
+      properties: {
+        ...START_INPUT_PROPERTIES,
+        scope: { type: "string", enum: ["inline", "independent"] },
+      },
+    },
+    {
+      type: "object",
+      additionalProperties: false,
+      required: ["instruction", "operation", "timeoutMs", "actorId"],
+      properties: {
+        ...START_INPUT_PROPERTIES,
+        actorId: { type: "string", minLength: 1 },
+      },
+    },
+  ],
 };
 
 const AWAIT_INPUT = z
