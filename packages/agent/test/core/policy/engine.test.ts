@@ -1,424 +1,34 @@
-import { describe, expect, it, mock } from "bun:test";
-import {
-  atPoint,
-  policyContext,
-  registerAt,
-  toolPreContext,
-  turnPostContext,
-  turnPreContext,
-} from "../../helpers/policy-decision";
-import { PolicyDecision, Policy } from "@openomni/protocol";
+import { describe, expect, it } from "bun:test";
+import { Operational, Policy, PolicyDecision } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
-import { Operational } from "@openomni/protocol";
 import { PolicyEngine } from "../../../src/core/policy";
+import { atPoint, toolPreContext, turnPostContext } from "../../helpers/policy-decision";
 
-function env(): Record<string, string | undefined> {
-  return (globalThis as unknown as { process: { env: Record<string, string | undefined> } }).process
-    .env;
+async function withinTimeout<T>(promise: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error("expected Bus event")), 1_000);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
 }
 
-describe("PolicyEngine", () => {
-  it("executes policy in priority order (ascending)", async () => {
-    const order: number[] = [];
-    const engine = PolicyEngine.create();
-    registerAt(engine, "run.turn.pre", "third", 300, () => {
-      order.push(300);
-      return PolicyDecision.allow({ policyId: "test.allow" });
+function nextWarning(): Promise<unknown> {
+  return new Promise((resolve) => {
+    const unsubscribe = Bus.subscribe(Operational.Events.Warn, (event) => {
+      unsubscribe();
+      resolve(event);
     });
-    registerAt(engine, "run.turn.pre", "first", 100, () => {
-      order.push(100);
-      return PolicyDecision.allow({ policyId: "test.allow" });
-    });
-    registerAt(engine, "run.turn.pre", "second", 200, () => {
-      order.push(200);
-      return PolicyDecision.allow({ policyId: "test.allow" });
-    });
-
-    await engine.dispatchPoint("run.turn.pre", turnPreContext());
-    expect(order).toEqual([100, 200, 300]);
   });
+}
 
-  it("only runs policy registered at the dispatched point", async () => {
-    const engine = PolicyEngine.create();
-    const postFn = mock(() => PolicyDecision.allow({ policyId: "test.allow" }));
-    const preFn = mock(() => PolicyDecision.allow({ policyId: "test.allow" }));
-    registerAt(engine, "run.turn.post", "post", 100, postFn);
-    registerAt(engine, "run.turn.pre", "pre", 100, preFn);
-
-    await engine.dispatchPoint("run.turn.pre", turnPreContext());
-
-    expect(preFn).toHaveBeenCalledTimes(1);
-    expect(postFn).toHaveBeenCalledTimes(0);
-  });
-
-  it("short-circuits on non-continue verdict", async () => {
-    const engine = PolicyEngine.create();
-    const third = mock(() => PolicyDecision.allow({ policyId: "test.allow" }));
-    registerAt(engine, "run.turn.pre", "a", 100, () =>
-      PolicyDecision.allow({ policyId: "test.allow" }),
-    );
-    registerAt(
-      engine,
-      "run.turn.pre",
-      "b",
-      200,
-      () =>
-        PolicyDecision.deny({
-          policyId: "test.abort",
-          reasonCodes: ["stop"],
-          effects: [{ type: "run.abort", reason: "stop" }],
-        }),
-      ["run.abort"],
-    );
-    registerAt(engine, "run.turn.pre", "c", 300, third);
-
-    const verdict = await engine.dispatchPoint("run.turn.pre", turnPreContext());
-    expect(verdict.verdict).toBe("deny");
-    expect(verdict.reasonCodes).toContain("stop");
-    expect(third).toHaveBeenCalledTimes(0);
-  });
-
-  it("fail-open isolates thrown errors and continues chain", async () => {
-    const globalObj = globalThis as unknown as {
-      console: { warn: (...args: unknown[]) => void };
-    };
-    const originalWarn = globalObj.console.warn;
-    globalObj.console.warn = mock(() => undefined);
-    try {
-      const engine = PolicyEngine.create();
-      const after = mock(() => PolicyDecision.allow({ policyId: "test.allow" }));
-      engine.register(
-        atPoint("run.turn.pre", {
-          name: "boom",
-          priority: 100,
-          failPolicy: "fail-open",
-          fn: () => {
-            throw new Error("boom");
-          },
-        }),
-      );
-      engine.register(
-        atPoint("run.turn.pre", {
-          name: "after",
-          priority: 200,
-          fn: after,
-        }),
-      );
-
-      const verdict = await engine.dispatchPoint("run.turn.pre", turnPreContext());
-      expect(verdict.verdict).toBe("allow");
-      expect(after).toHaveBeenCalledTimes(1);
-    } finally {
-      globalObj.console.warn = originalWarn;
-    }
-  });
-
-  it("fail-closed aborts chain on thrown error", async () => {
-    const engine = PolicyEngine.create();
-    const after = mock(() => PolicyDecision.allow({ policyId: "test.allow" }));
-    registerAt(engine, "run.turn.pre", {
-      name: "boom",
-      priority: 100,
-      failPolicy: "fail-closed",
-      fn: () => {
-        throw new Error("boom");
-      },
-    });
-    registerAt(engine, "run.turn.pre", "after", 200, after);
-
-    const verdict = await engine.dispatchPoint("run.turn.pre", turnPreContext());
-    expect(verdict.verdict).toBe("deny");
-    expect(verdict.reasonCodes).toContain("middleware-error");
-    expect(after).toHaveBeenCalledTimes(0);
-  });
-
-  it("uses resolved policy point default fail-closed for pre-boundary errors", async () => {
-    const engine = PolicyEngine.create();
-    const after = mock(() => PolicyDecision.allow({ policyId: "test.allow" }));
-    registerAt(engine, "tool.native.pre", "boom", 100, () => {
-      throw new Error("boom");
-    });
-    registerAt(engine, "tool.native.pre", "after", 200, after);
-
-    const verdict = await engine.dispatchPoint("tool.native.pre", toolPreContext());
-
-    expect(verdict.verdict).toBe("deny");
-    expect(verdict.reasonCodes).toContain("middleware-error");
-    expect(verdict.effects).toContainEqual({ type: "run.abort", reason: "middleware-error" });
-    expect(after).toHaveBeenCalledTimes(0);
-  });
-
-  it("uses resolved policy point default fail-open for post-boundary errors", async () => {
-    const engine = PolicyEngine.create();
-    const after = mock(() => PolicyDecision.allow({ policyId: "test.allow" }));
-    registerAt(engine, "run.turn.post", "boom", 100, () => {
-      throw new Error("boom");
-    });
-    registerAt(engine, "run.turn.post", "after", 200, after);
-
-    const verdict = await engine.dispatchPoint("run.turn.post", turnPostContext());
-
-    expect(verdict.verdict).toBe("allow");
-    expect(after).toHaveBeenCalledTimes(1);
-  });
-
-  it("skips policy when agentType not in scope.agentType", async () => {
-    const engine = PolicyEngine.create();
-    const scoped = mock(() => PolicyDecision.allow({ policyId: "test.allow" }));
-    const unscoped = mock(() => PolicyDecision.allow({ policyId: "test.allow" }));
-    registerAt(engine, "run.turn.pre", {
-      name: "scoped",
-      priority: 100,
-      scope: { agentType: ["worker"] },
-      fn: scoped,
-    });
-    registerAt(engine, "run.turn.pre", "unscoped", 200, unscoped);
-
-    await engine.dispatchPoint("run.turn.pre", { ...turnPreContext(), agentType: "primary" });
-
-    expect(scoped).toHaveBeenCalledTimes(0);
-    expect(unscoped).toHaveBeenCalledTimes(1);
-  });
-
-  it("runs policy at multiple points when pointIds is an array", async () => {
-    const engine = PolicyEngine.create();
-    const fn = mock(() => PolicyDecision.allow({ policyId: "test.allow" }));
-    engine.register({
-      kind: "point",
-      name: "multi",
-      pointIds: ["run.turn.pre", "run.turn.post"],
-      effectCapabilities: { "run.turn.pre": [], "run.turn.post": [] },
-      priority: 100,
-      fn,
-    });
-
-    await engine.dispatchPoint("run.turn.pre", turnPreContext());
-    await engine.dispatchPoint("run.turn.post", turnPostContext());
-    await engine.dispatchPoint("run.error.error", {
-      ...policyContext(),
-      sessionId: "session",
-      runId: "run",
-      errorCode: "boom",
-      errorPhase: "turn",
-    });
-
-    expect(fn).toHaveBeenCalledTimes(2);
-  });
-
-  it("rejects non-canonical policy decision shapes fail-closed", async () => {
-    const engine = PolicyEngine.create();
-    registerAt(
-      engine,
-      "tool.native.pre",
-      "legacy-shape",
-      0,
-      () => ({ action: "abort", reason: "legacy abort", policyId: "legacy" }) as never,
-    );
-
-    const result = await engine.dispatchPoint("tool.native.pre", toolPreContext());
-
-    expect(result.verdict).toBe("deny");
-    expect(result.reasonCodes).toContain("policy.invalid_decision");
-    expect(result.effects).toContainEqual({ type: "run.abort", reason: "policy.invalid_decision" });
-  });
-
-  it("dispatchPoint merges prompt effects at prompt.context.pre", async () => {
-    const engine = PolicyEngine.create();
-    registerAt(
-      engine,
-      "prompt.context.pre",
-      "prompt-a",
-      100,
-      () =>
-        PolicyDecision.allow({
-          policyId: "test.prompt-a",
-          reasonCodes: ["prompt-a"],
-          effects: [
-            { type: "prompt.replace", prompt: "PROMPT_A" },
-            { type: "prompt.append_context", context: "append-a" },
-          ],
-        }),
-      ["prompt.replace", "prompt.append_context"],
-    );
-    registerAt(
-      engine,
-      "prompt.context.pre",
-      "prompt-b",
-      200,
-      () =>
-        PolicyDecision.allow({
-          policyId: "test.prompt-b",
-          reasonCodes: ["prompt-b"],
-          effects: [{ type: "prompt.append_context", context: "append-b" }],
-        }),
-      ["prompt.append_context"],
-    );
-    registerAt(
-      engine,
-      "prompt.context.pre",
-      "inject-c",
-      300,
-      () =>
-        PolicyDecision.allow({
-          policyId: "test.inject-c",
-          reasonCodes: ["inject-c"],
-          effects: [{ type: "prompt.inject_message", message: "append-c" }],
-        }),
-      ["prompt.inject_message"],
-    );
-
-    const result = await engine.dispatchPoint("prompt.context.pre", turnPreContext());
-    expect(result.verdict).toBe("allow");
-    expect(result.effects).toContainEqual({ type: "prompt.replace", prompt: "PROMPT_A" });
-    expect(result.effects).toContainEqual({ type: "prompt.append_context", context: "append-a" });
-    expect(result.effects).toContainEqual({ type: "prompt.append_context", context: "append-b" });
-    expect(result.effects).toContainEqual({ type: "prompt.inject_message", message: "append-c" });
-  });
-
-  it("prompt.context.pre fail-closed errors become deny decisions", async () => {
-    const engine = PolicyEngine.create();
-    const testError = new Error("system-prompt-error");
-    registerAt(engine, "prompt.context.pre", {
-      name: "boom",
-      priority: 100,
-      failPolicy: "fail-closed",
-      fn: () => {
-        throw testError;
-      },
-    });
-    registerAt(
-      engine,
-      "prompt.context.pre",
-      "after",
-      200,
-      () =>
-        PolicyDecision.allow({
-          policyId: "test.after",
-          reasonCodes: ["after"],
-          effects: [{ type: "prompt.inject_message", message: "should-not-run" }],
-        }),
-      ["prompt.inject_message"],
-    );
-
-    const decision = await engine.dispatchPoint("prompt.context.pre", turnPreContext());
-    expect(decision.verdict).toBe("deny");
-    expect(decision.reasonCodes).toContain("middleware-error");
-  });
-
-  it("prompt.context.pre isolates fail-open errors and continues", async () => {
-    const globalObj = globalThis as unknown as {
-      console: { warn: (...args: unknown[]) => void };
-    };
-    const originalWarn = globalObj.console.warn;
-    globalObj.console.warn = mock(() => undefined);
-    try {
-      const engine = PolicyEngine.create();
-      engine.register(
-        atPoint("prompt.context.pre", {
-          name: "boom",
-          priority: 100,
-          failPolicy: "fail-open",
-          fn: () => {
-            throw new Error("fail-open-error");
-          },
-        }),
-      );
-      engine.register(
-        atPoint("prompt.context.pre", {
-          name: "after",
-          effects: ["prompt.inject_message"],
-          priority: 200,
-          fn: () =>
-            PolicyDecision.allow({
-              policyId: "test.after",
-              reasonCodes: ["after"],
-              effects: [{ type: "prompt.inject_message", message: "append-after" }],
-            }),
-        }),
-      );
-
-      const result = await engine.dispatchPoint("prompt.context.pre", turnPreContext());
-      expect(result.effects).toContainEqual({
-        type: "prompt.inject_message",
-        message: "append-after",
-      });
-    } finally {
-      globalObj.console.warn = originalWarn;
-    }
-  });
-
-  it("allows deny decisions with no reason codes", async () => {
-    const previousNodeEnv = env().NODE_ENV;
-    env().NODE_ENV = "development";
-    try {
-      const engine = PolicyEngine.create();
-      engine.register(
-        atPoint("run.turn.pre", {
-          name: "missing-reason",
-          priority: 100,
-          fn: () => PolicyDecision.deny({ policyId: "unknown" }),
-        }),
-      );
-
-      const decision = await engine.dispatchPoint("run.turn.pre", turnPreContext());
-      expect(decision.verdict).toBe("deny");
-      expect(decision.reasonCodes).toEqual([]);
-    } finally {
-      if (previousNodeEnv === undefined) {
-        delete env().NODE_ENV;
-      } else {
-        env().NODE_ENV = previousNodeEnv;
-      }
-    }
-  });
-
-  it("passes canonical decisions to onDecision", async () => {
-    const previousNodeEnv = env().NODE_ENV;
-    env().NODE_ENV = "production";
-    const warnings: unknown[] = [];
-    const unsub = Bus.subscribe(Operational.Events.Warn, (data) => warnings.push(data));
-    try {
-      const decisions: Array<{ policyId: string; reasonCodes: string[] }> = [];
-      const engine = PolicyEngine.create({
-        onDecision: (decision) => {
-          decisions.push(decision);
-        },
-      });
-      engine.register(
-        atPoint("run.turn.post", {
-          name: "prod-metadata",
-          priority: 100,
-          fn: () => PolicyDecision.deny({ policyId: "unknown" }),
-        }),
-      );
-
-      const first = await engine.dispatchPoint("run.turn.post", turnPostContext());
-      const second = await engine.dispatchPoint("run.turn.post", turnPostContext());
-
-      expect(first.verdict).toBe("deny");
-      expect(second.verdict).toBe("deny");
-      expect(decisions).toHaveLength(2);
-      // policyId is re-attributed to the invoked registration at the trust
-      // boundary; a middleware's self-reported id is not trusted.
-      expect(decisions[0]?.policyId).toBe("prod-metadata");
-      expect(decisions[0]?.reasonCodes).toEqual([]);
-      expect(decisions[1]?.policyId).toBe("prod-metadata");
-      expect(decisions[1]?.reasonCodes).toEqual([]);
-      // Bus.publish is async (queueMicrotask), so warning count is verified via decisions
-    } finally {
-      unsub();
-      if (previousNodeEnv === undefined) {
-        delete env().NODE_ENV;
-      } else {
-        env().NODE_ENV = previousNodeEnv;
-      }
-    }
-  });
-
-  it("isolates onDecision observer errors from policy dispatch", async () => {
+describe("agent policy Bus integration", () => {
+  it("publishes synchronous onDecision observer errors as agent.policy warnings", async () => {
     Bus.reset();
-    const warnings: unknown[] = [];
-    const unsub = Bus.subscribe(Operational.Events.Warn, (data) => warnings.push(data));
+    const warning = nextWarning();
     try {
       const engine = PolicyEngine.create({
         onDecision: () => {
@@ -436,13 +46,15 @@ describe("PolicyEngine", () => {
 
       const decision = await engine.dispatchPoint("run.turn.post", {
         ...turnPostContext(),
-        traceContext: { traceId: "trace-observer", sessionId: "session-observer", runId: "run-1" },
+        traceContext: {
+          traceId: "trace-observer",
+          sessionId: "session-observer",
+          runId: "run-1",
+        },
       });
-      await new Promise((resolve) => queueMicrotask(resolve));
 
       expect(decision.verdict).toBe("allow");
-      expect(warnings).toHaveLength(1);
-      expect(warnings[0]).toMatchObject({
+      expect(await withinTimeout(warning)).toMatchObject({
         traceId: "trace-observer",
         sessionId: "session-observer",
         component: "agent.policy",
@@ -454,20 +66,16 @@ describe("PolicyEngine", () => {
         },
       });
     } finally {
-      unsub();
       Bus.reset();
     }
   });
 
-  it("isolates async onDecision observer rejections from policy dispatch", async () => {
+  it("publishes asynchronous onDecision rejections as agent.policy warnings", async () => {
     Bus.reset();
-    const warnings: unknown[] = [];
-    const unsub = Bus.subscribe(Operational.Events.Warn, (data) => warnings.push(data));
+    const warning = nextWarning();
     try {
       const engine = PolicyEngine.create({
-        // The publisher reports under the engine's trace or not at all, so an
-        // engine that emits audit has to be given one.
-        traceContext: { traceId: "trace-observer-isolation", sessionId: "session-1" },
+        traceContext: { traceId: "trace-async", sessionId: "session-async" },
         onDecision: async () => {
           throw new Error("async observer failed");
         },
@@ -482,11 +90,9 @@ describe("PolicyEngine", () => {
       );
 
       const decision = await engine.dispatchPoint("run.turn.post", turnPostContext());
-      await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(decision.verdict).toBe("allow");
-      expect(warnings).toHaveLength(1);
-      expect(warnings[0]).toMatchObject({
+      expect(await withinTimeout(warning)).toMatchObject({
         component: "agent.policy",
         msg: "onDecision observer error",
         context: {
@@ -496,39 +102,18 @@ describe("PolicyEngine", () => {
         },
       });
     } finally {
-      unsub();
       Bus.reset();
     }
   });
 
-  it("does not wait for async onDecision observers before returning decisions", async () => {
-    let observerStarted = false;
-    let releaseObserver: (() => void) | undefined;
-    const engine = PolicyEngine.create({
-      onDecision: async () => {
-        observerStarted = true;
-        await new Promise<void>((resolve) => {
-          releaseObserver = resolve;
-        });
-      },
+  it("publishes Policy.Events.Evaluated through Bus with agent attribution", async () => {
+    Bus.reset();
+    const evaluated = new Promise<unknown>((resolve) => {
+      const unsubscribe = Bus.subscribe(Policy.Events.Evaluated, (event) => {
+        unsubscribe();
+        resolve(event);
+      });
     });
-    registerAt(engine, "run.turn.post", "observer-latency-isolation", 100, () =>
-      PolicyDecision.allow({ policyId: "observer-latency-isolation" }),
-    );
-
-    const decision = await engine.dispatchPoint("run.turn.post", turnPostContext());
-
-    expect(decision.verdict).toBe("allow");
-    expect(observerStarted).toBe(true);
-    releaseObserver?.();
-  });
-
-  it("publishes Policy.Events.Evaluated via Bus when session context is available", async () => {
-    const published: unknown[] = [];
-    const unsub = Bus.subscribe(Policy.Events.Evaluated, (data) => {
-      published.push(data);
-    });
-
     try {
       const engine = PolicyEngine.create({
         traceContext: {
@@ -555,16 +140,10 @@ describe("PolicyEngine", () => {
 
       await engine.dispatchPoint("tool.native.pre", { ...toolPreContext(), toolName: "shell" });
 
-      // Bus.publish dispatches handlers via queueMicrotask
-      await Promise.resolve();
-
-      expect(published).toHaveLength(1);
-      expect(published[0]).toMatchObject({
+      expect(await withinTimeout(evaluated)).toMatchObject({
         traceId: "trace-policy",
         sessionId: "sess-policy",
         runId: "run-policy",
-        // Attributed to the invoked registration, not the middleware's
-        // self-reported "test.policy" id.
         policyId: "policy-check",
         actor: { kind: "agent", name: "policy-agent", runId: "run-policy" },
         action: "tool.call",
@@ -573,62 +152,7 @@ describe("PolicyEngine", () => {
         reason: "blocked_by_test_policy",
       });
     } finally {
-      unsub();
       Bus.reset();
     }
-  });
-
-  it("deny-wins: any deny policy aborts regardless of other effects", async () => {
-    const engine = PolicyEngine.create();
-    registerAt(engine, "run.turn.pre", "allow-and-label", 0, () =>
-      PolicyDecision.allow({ policyId: "test.allow", reasonCodes: ["allowed"] }),
-    );
-    registerAt(
-      engine,
-      "run.turn.pre",
-      "deny-policy",
-      10,
-      () =>
-        PolicyDecision.deny({
-          policyId: "test.deny",
-          reasonCodes: ["forbidden"],
-          effects: [{ type: "run.abort", reason: "forbidden" }],
-        }),
-      ["run.abort"],
-    );
-    const verdict = await engine.dispatchPoint("run.turn.pre", turnPreContext());
-    expect(verdict.verdict).toBe("deny");
-    expect(verdict.reasonCodes).toContain("forbidden");
-  });
-
-  it("scope filtering: only matching agentType policies execute", async () => {
-    const engine = PolicyEngine.create();
-    const executed: string[] = [];
-
-    registerAt(engine, "run.turn.pre", {
-      name: "coder-policy",
-      priority: 0,
-      scope: { agentType: ["coder"] },
-      fn: () => {
-        executed.push("coder");
-        return PolicyDecision.allow({ policyId: "test.allow" });
-      },
-    });
-    registerAt(engine, "run.turn.pre", {
-      name: "reviewer-policy",
-      priority: 0,
-      scope: { agentType: ["reviewer"] },
-      fn: () => {
-        executed.push("reviewer");
-        return PolicyDecision.allow({ policyId: "test.allow" });
-      },
-    });
-    registerAt(engine, "run.turn.pre", "unscoped-policy", 0, () => {
-      executed.push("unscoped");
-      return PolicyDecision.allow({ policyId: "test.allow" });
-    });
-
-    await engine.dispatchPoint("run.turn.pre", { ...turnPreContext(), agentType: "coder" });
-    expect(executed).toEqual(["coder", "unscoped"]);
   });
 });

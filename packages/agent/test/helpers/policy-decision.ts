@@ -18,11 +18,11 @@ export function policyContext(): Omit<PolicyContext, "timing"> {
   };
 }
 
-export function runContext() {
+function runContext() {
   return { ...policyContext(), sessionId: "session", runId: "run" };
 }
 
-export function turnPreContext() {
+function turnPreContext() {
   return { ...runContext(), turnIndex: 0 };
 }
 

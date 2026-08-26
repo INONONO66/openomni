@@ -52,6 +52,8 @@ describe("PolicyEngine canonical registration boundary", () => {
       { name: 1 },
       { priority: -1 },
       { priority: 1.5 },
+      { priority: Number.NaN },
+      { priority: Number.NEGATIVE_INFINITY },
       { fn: "not-a-function" },
       { scope: "resident" },
       { scope: { agentType: "resident" } },

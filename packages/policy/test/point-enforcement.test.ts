@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { PolicyEngine } from "@openomni/policy";
 import { type Policy, PolicyDecision } from "@openomni/protocol";
-import { dispatchContext } from "./point-test-fixtures";
+import { dispatchContext, turnPostContext } from "./point-test-fixtures";
 
 function assertDispatchPointRequiresPointInput(engine: ReturnType<typeof PolicyEngine.create>) {
   // @ts-expect-error dispatch.action.pre requires every field in its PolicyPointInputMap entry.
@@ -210,17 +210,23 @@ describe("PolicyEngine dispatchPoint", () => {
         throw new Error("guard exploded");
       },
     });
+    let survivorRuns = 0;
     engine.register({
       kind: "point",
       name: "surviving-policy",
       pointIds: ["dispatch.action.pre"],
       effectCapabilities: { "dispatch.action.pre": [] },
       priority: 1,
-      fn: () => PolicyDecision.allow({ policyId: "surviving-policy" }),
+      fn: () => {
+        survivorRuns += 1;
+        return PolicyDecision.allow({ policyId: "surviving-policy" });
+      },
     });
 
     const decision = await engine.dispatchPoint("dispatch.action.pre", dispatchContext);
 
+    // The chain must continue past a fail-open crash, not merely fail open.
+    expect(survivorRuns).toBe(1);
     expect(decision.verdict).toBe("allow");
     expect(decision.reasonCodes).toContain("policy.middleware_failed.fail_open:crashing-guard");
     const annotations = decision.effects.filter(
@@ -232,6 +238,40 @@ describe("PolicyEngine dispatchPoint", () => {
         effect.annotation.includes("policy.middleware_failed.fail_open:crashing-guard"),
       ),
     ).toBe(true);
+  });
+
+  test("applies the contract default fail-open to a post-boundary middleware crash", async () => {
+    const engine = PolicyEngine.create();
+    engine.register({
+      kind: "point",
+      name: "post-crasher",
+      pointIds: ["run.turn.post"],
+      effectCapabilities: { "run.turn.post": [] },
+      priority: 0,
+      // No explicit failPolicy: the run.turn.post contract default (fail-open)
+      // must decide, end-to-end through dispatch.
+      fn: () => {
+        throw new Error("post middleware exploded");
+      },
+    });
+    let successorRuns = 0;
+    engine.register({
+      kind: "point",
+      name: "post-successor",
+      pointIds: ["run.turn.post"],
+      effectCapabilities: { "run.turn.post": [] },
+      priority: 1,
+      fn: () => {
+        successorRuns += 1;
+        return PolicyDecision.allow({ policyId: "post-successor" });
+      },
+    });
+
+    const decision = await engine.dispatchPoint("run.turn.post", turnPostContext());
+
+    expect(decision.verdict).toBe("allow");
+    expect(decision.reasonCodes).toContain("policy.middleware_failed.fail_open:post-crasher");
+    expect(successorRuns).toBe(1);
   });
 
   test("re-attributes a spoofed middleware policyId to the invoked registration", async () => {

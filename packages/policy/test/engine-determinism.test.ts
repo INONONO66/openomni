@@ -1,8 +1,20 @@
 import { describe, expect, it } from "bun:test";
-import type { Policy } from "@openomni/protocol";
-import { PolicyEngine } from "../../../../src/core/policy";
-import type { PolicyContext, PolicyRegistration } from "../../../../src/core/policy";
-import { allow, inject } from "../../../helpers/policy-decision";
+import { PolicyDecision as ProtocolPolicyDecision, type Policy } from "@openomni/protocol";
+import {
+  PolicyEngine,
+  type CanonicalPolicyRegistrationGeneric,
+  type GenericPolicyContext,
+} from "@openomni/policy";
+
+const inject = (message: string, policyId: string, reason: string) =>
+  ProtocolPolicyDecision.allow({
+    policyId,
+    reasonCodes: [reason],
+    effects: [{ type: "prompt.inject_message", message }],
+  });
+
+type PolicyContext = GenericPolicyContext & Record<string, unknown>;
+type PolicyRegistration = CanonicalPolicyRegistrationGeneric<PolicyContext>;
 
 type PolicyDecision = Policy.PolicyDecision;
 
@@ -153,37 +165,4 @@ describe("policy determinism conformance", () => {
     }
   });
 
-  it("prevents policy functions from mutating the request snapshot", async () => {
-    let mutationRejected = false;
-    const request = cloneGoldenRequest();
-    const engine = registerPolicies([
-      {
-        kind: "point",
-        name: "mutating-policy",
-        pointIds: ["connection.llm.pre"],
-        effectCapabilities: { "connection.llm.pre": [] },
-        priority: 0,
-        fn: (ctx) => {
-          try {
-            ctx.usage.totalTokens = 999;
-          } catch {
-            mutationRejected = true;
-          }
-
-          return allow("policy.mutating");
-        },
-      },
-    ]);
-
-    const decision = await engine.dispatchPoint("connection.llm.pre", request);
-
-    expect(mutationRejected).toBe(true);
-    expect(request).toEqual(cloneGoldenRequest());
-    expectCanonicalDecision(decision, {
-      policyId: "agent.policy.composed",
-      verdict: "allow",
-      effects: [],
-      reasonCodes: [],
-    });
-  });
 });

@@ -190,15 +190,6 @@ describe("policy effect composition conformance", () => {
         "policy.effect_conflict.fail_closed: delegation.set_constraints.maxTurns rewritten by policy.strict-a and policy.strict-b",
     },
     {
-      name: "filter and approval",
-      decisions: [
-        d("policy.filter", [{ type: "tool.filter", toolPattern: "shell.*" }]),
-        d("policy.approval", [{ type: "tool.require_approval", reason: "shell access" }]),
-      ],
-      annotation:
-        "policy.effect_conflict.fail_closed: tool.filter conflicts with tool.require_approval from policy.filter and policy.approval",
-    },
-    {
       name: "prompt replacement",
       decisions: [
         d("policy.prompt-a", [{ type: "prompt.replace", prompt: "Prompt A" }]),

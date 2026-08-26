@@ -30,9 +30,9 @@
     "pct": 100
   },
   "packages/policy": {
-    "linesFound": 1622,
-    "linesHit": 1400,
-    "pct": 86.31
+    "linesFound": 1620,
+    "linesHit": 1569,
+    "pct": 96.85
   },
   "packages/protocol": {
     "linesFound": 6446,
