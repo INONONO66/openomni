@@ -8,9 +8,9 @@ import ts from "typescript";
  * Channels band import contract (#551 stage 1 — the extraction gate that
  * traveled with the driver-band extraction).
  *
- * The channels package whitelist at gateway stage 1 is {protocol, ipc,
- * policy} (docs/gateway-design.md §1/§9; ledger arrives at stage 2): channel
- * code observes through the injected publish port (src/types.ts), speaks the
+ * The channels package whitelist at gateway stage 1 is {protocol, policy}
+ * (docs/gateway-design.md §1/§9; ledger arrives at stage 2): channel code
+ * observes through the injected publish port (src/types.ts), speaks the
  * protocol Channel.SurfaceKey codec, and mints W3C trace ids via protocol's
  * newTraceId at its genuine trace origins (D11 — gateway events, inbound
  * frames). The pre-move telemetry allowance (PR #653) is DROPPED: since the
@@ -20,7 +20,7 @@ import ts from "typescript";
  */
 
 const CHANNEL_ROOT = fileURLToPath(new URL("../src", import.meta.url));
-const ALLOWED_PACKAGES = ["@openomni/protocol", "@openomni/ipc"] as const;
+const ALLOWED_PACKAGES = ["@openomni/protocol"] as const;
 
 /**
  * Gateway amendment (docs/gateway-design.md §1/§8.2, Owner 2026-08-18/19;
@@ -30,7 +30,7 @@ const ALLOWED_PACKAGES = ["@openomni/protocol", "@openomni/ipc"] as const;
  * ledger's perimeter store surfaces. Driver code may not (S8 banding; the
  * same rule plus the perimeter-surface pin is enforced repo-wide by
  * script/check-deps.ts). Everything else in src/** stays on the dumb-driver
- * contract {protocol, ipc}. Telemetry stays forbidden EVERYWHERE in src/**:
+ * contract {protocol}. Telemetry stays forbidden EVERYWHERE in src/**:
  * the band observes through the injected `BusEvent.Sink` port only.
  */
 const JUDGMENT_DIRS = ["src/router/", "src/authn/"] as const;
@@ -124,7 +124,7 @@ describe("channels band import boundary", () => {
     expect(channelSources().length).toBeGreaterThan(10);
   });
 
-  it("keeps src/* on the band contract: protocol, ipc, node builtins, relative only", () => {
+  it("keeps src/* on the band contract: protocol, node builtins, relative only", () => {
     expect(detectBandViolations(channelSources())).toEqual([]);
   });
 
@@ -206,10 +206,9 @@ describe("channels band import boundary", () => {
     });
   }
 
-  it("allows protocol, ipc, node builtin, and relative imports", () => {
+  it("allows protocol, node builtin, and relative imports", () => {
     const text = [
       'import { Channel, Operational, newTraceId } from "@openomni/protocol";',
-      'import { IpcConnectionError } from "@openomni/ipc";',
       'import { timingSafeEqual } from "node:crypto";',
       'import type { PublishPort } from "../types";',
       'import { GatewayOp } from "./types";',

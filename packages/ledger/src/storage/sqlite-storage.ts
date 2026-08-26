@@ -25,7 +25,6 @@ import { createSqliteEngagementAdapter } from "./sqlite-engagement-adapter";
 import { createSqliteWaitAdapter } from "./sqlite-wait-adapter";
 import { createSqliteWorkItemAdapter } from "./sqlite-work-item-adapter";
 import { createSqliteWorkerRunStateAdapter } from "./sqlite-worker-run-state-adapter";
-import { createSqliteWorkerGrantAdapter } from "./sqlite-worker-grant-adapter";
 import { productionStorageAdapterBrand, type Storage } from "./storage";
 
 export class SqliteStorageAdapter implements Storage.Adapter {
@@ -57,7 +56,6 @@ export class SqliteStorageAdapter implements Storage.Adapter {
   readonly ledger: NonNullable<Storage.Adapter["ledger"]>;
   readonly pendingAsk: NonNullable<Storage.Adapter["pendingAsk"]>;
   readonly pendingInteraction: NonNullable<Storage.Adapter["pendingInteraction"]>;
-  readonly workerGrant: NonNullable<Storage.Adapter["workerGrant"]>;
   readonly cronJob: NonNullable<Storage.Adapter["cronJob"]>;
   readonly egressBudget: NonNullable<Storage.Adapter["egressBudget"]>;
   readonly actorRegistry: NonNullable<Storage.Adapter["actorRegistry"]>;
@@ -113,7 +111,6 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     };
     this.pendingAsk = createSqlitePendingAskAdapter(this.db);
     this.pendingInteraction = createSqlitePendingInteractionAdapter(this.db);
-    this.workerGrant = createSqliteWorkerGrantAdapter(this.db);
     this.cronJob = createSqliteCronJobAdapter(this.db);
     this.egressBudget = createSqliteEgressBudgetAdapter(this.db);
     this.actorRegistry = createSqliteActorRegistryAdapter(this.db);

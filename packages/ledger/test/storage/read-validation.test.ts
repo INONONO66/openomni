@@ -4,18 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Communication, Message } from "@openomni/protocol";
 import { Database } from "bun:sqlite";
-import {
-  PendingAskStore,
-  PendingInteractionStore,
-  Session,
-  Storage,
-  WorkerGrantStore,
-} from "../../src/index";
+import { PendingAskStore, PendingInteractionStore, Session, Storage } from "../../src/index";
 import { Bus } from "@openomni/telemetry";
 
 // A corrupt persisted row must fail closed on READ — parse-don't-cast, matching
-// the wait/blacklist precedent. worker_grant is authz-critical: an unvalidated
-// row was previously handed straight to WorkerGrantStore.evaluate. message/part
+// the wait/blacklist precedent. message/part
 // are the same class (blind `JSON.parse(...) as T`). pending_interaction feeds
 // evaluatePendingInteractionScope ({allowed:true} for WorkerComplete/ActorReply)
 // and pending_ask is decision-adjacent — both fixed here (#585, same class).
@@ -135,38 +128,6 @@ describe("sqlite adapters fail closed on corrupt rows", () => {
     Bus.reset();
     removeSqliteFiles(dbPath);
     dbPath = "";
-  });
-
-  test("a corrupt worker_grant row rejects on read instead of reaching evaluate()", async () => {
-    await seedWorkerRun("run-corrupt");
-    WorkerGrantStore.create(
-      {
-        id: "grant-corrupt",
-        workerRunId: "run-corrupt",
-        allowedActions: ["worker.send"],
-        canCreateExternalTasks: false,
-      },
-      "trace-read-validation",
-    );
-
-    // Structurally-valid-looking but schema-invalid: missing id/workerRunId/
-    // version/timestamps. Before the fix this row parses to an object that
-    // evaluateRecord happily treats as an ACTIVE allow-all grant.
-    corruptRow(
-      dbPath,
-      "worker_grant",
-      "grant-corrupt",
-      JSON.stringify({ status: "active", allowedActions: ["worker.send"] }),
-    );
-
-    expect(() => WorkerGrantStore.get("grant-corrupt")).toThrow();
-    expect(() =>
-      WorkerGrantStore.evaluate({
-        traceId: "trace-read-validation",
-        workerRunId: "run-corrupt",
-        action: "worker.send",
-      }),
-    ).toThrow();
   });
 
   test("a corrupt message row rejects on read", () => {

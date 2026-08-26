@@ -15,7 +15,7 @@ src/
 ├── bus/                  # BusEvent.define() + injected BusEvent.Sink contract
 ├── channel/              # Channel surfaces, messages, config, and surface-key codec
 ├── command/              # Command request/result schemas
-├── communication/        # PendingAsk, PendingInteraction, and WorkerGrant legacy contracts
+├── communication/        # PendingAsk and PendingInteraction legacy contracts
 ├── cron/                 # Cron job schemas and event descriptors
 ├── engagement/           # Engagement schemas, events, and pure transition fold
 ├── error/                # NamedError factory and shared protocol errors
@@ -67,7 +67,7 @@ Allowed here:
 Not allowed here:
 
 - PendingInteraction/PendingAsk match precedence.
-- Actor trust, channel grant, worker grant, or blacklist evaluation.
+- Actor trust, channel grant, or blacklist evaluation.
 - Session or target resolution.
 - Dispatch/ingress handler routing.
 - Provider behavior, process supervision, storage implementation, or agent-loop execution.
