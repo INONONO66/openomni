@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787780785791,
+  "lastUpdate": 1787781238749,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -62921,6 +62921,90 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 553263,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5009fd18ad5156e5316047b01b0e778c859d86c3",
+          "message": "test(policy): relocate generic engine behavior coverage (#806)\n\n* test(policy): relocate generic engine behavior coverage\n\n* test(policy): pin chain continuation after fail-open crash and post-boundary default fail-open\n\nAdversarial review MEDIUM-1/MEDIUM-2: the fail-open crash test now asserts the\nsurviving policy actually ran, and a new test dispatches a throwing middleware\nat run.turn.post with no explicit failPolicy to pin the contract-default\nfail-open end-to-end (allow + successor executes).",
+          "timestamp": "2026-08-26T21:52:55Z",
+          "tree_id": "b361d12a76b627898426b548b52b47b80207e8fc",
+          "url": "https://github.com/INONONO66/openomni/commit/5009fd18ad5156e5316047b01b0e778c859d86c3"
+        },
+        "date": 1787781238084,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2211,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 14511,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7737,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1090,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 975,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1654,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1594,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 754,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 52041,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2431,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 518283,
             "unit": "ns/op"
           }
         ]
