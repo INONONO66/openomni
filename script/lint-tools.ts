@@ -178,26 +178,10 @@ export function lintToolSurface(tool: ToolSurface): ToolLintFailure[] {
 }
 
 async function collectToolSurfaces(): Promise<ToolSurface[]> {
-  const { SystemToolProvider, AgentToolProvider, createChildAgentTool } = await import(
-    "../packages/openomni/src/execution-runtime/tool/index.js"
-  );
-
-  const stubDispatchRuntime = {
-    submit: () => Promise.reject(new Error("lint-only stub")),
-  };
-  const stubChildRuntime = {} as never;
-
-  const tools = [
-    ...new SystemToolProvider("/").listTools(),
-    ...new AgentToolProvider({ dispatchRuntime: stubDispatchRuntime }).listTools(),
-    createChildAgentTool(stubChildRuntime),
-  ];
-
-  return tools.map((tool) => ({
-    name: tool.spec.name,
-    description: tool.spec.description,
-    inputSchema: tool.spec.inputSchema as Record<string, unknown>,
-  }));
+  // The provider-based legacy tool registry was deleted with its product
+  // tree. The sole app constructs a capability-dependent catalog per actor,
+  // so there is no static provider surface for this repository lint to load.
+  return [];
 }
 
 async function checkToolLint(baseline: Baseline): Promise<Violation[]> {
@@ -275,22 +259,6 @@ async function collectProductionSources(): Promise<Map<string, string>> {
   return sources;
 }
 
-function parseDispatchActions(source: string): Map<string, string> {
-  const actions = new Map<string, string>();
-  const block = source.match(/export const Actions = \{([\s\S]*?)\} as const/);
-  if (!block?.[1]) {
-    return actions;
-  }
-  for (const entry of block[1].matchAll(/(\w+):\s*"([^"]+)"/g)) {
-    const key = entry[1];
-    const value = entry[2];
-    if (key && value) {
-      actions.set(key, value);
-    }
-  }
-  return actions;
-}
-
 export function referenceCount(
   sources: ReadonlyMap<string, string>,
   needles: readonly string[],
@@ -312,32 +280,9 @@ async function checkEarned(baseline: Baseline): Promise<Violation[]> {
   const sources = await collectProductionSources();
   const violations: Violation[] = [];
 
-  const dispatchIndexPath = `${PROTOCOL_SRC}/command/index.ts`;
-  const actions = parseDispatchActions(readFileSync(dispatchIndexPath, "utf8"));
-  const dormantActions = new Set(baseline.earned.dormantActions);
-  for (const [key, value] of actions) {
-    const referenced =
-      referenceCount(sources, [`Actions.${key}`, `"${value}"`], dispatchIndexPath) > 0;
-    if (!referenced && !dormantActions.has(value)) {
-      violations.push({
-        check: "earned-check",
-        subject: value,
-        message:
-          "dispatch action constant has zero non-definition production references — a new verb needs a real consumer (abstraction is earned)",
-      });
-    }
-    if (referenced && dormantActions.has(value)) {
-      violations.push({
-        check: "earned-check",
-        subject: value,
-        message: "baselined-dormant action now has consumers — shrink the baseline",
-      });
-    }
-  }
-
   const surfaces = await collectToolSurfaces();
   const dormantTools = new Set(baseline.earned.dormantTools);
-  const toolDefinitionRoot = "packages/openomni/src/execution-runtime/tool/";
+  const toolDefinitionRoot = "apps/openomni/src/";
   for (const surface of surfaces) {
     const referencingFiles = Array.from(sources.entries()).filter(
       ([filePath, source]) =>

@@ -15,8 +15,9 @@ describe("verify-tsconfig-inheritance", () => {
     expect(result.problems).toEqual([]);
     expect(result.ok).toBe(true);
     expect(result.code).toBeNull();
-    // 29 tsconfig projects existed at the #501 baseline; discovery may only grow.
-    expect(result.projectCount).toBeGreaterThanOrEqual(29);
+    // 27 projects remain after #792 removed the three legacy workspaces;
+    // discovery may only grow from this post-decommission baseline.
+    expect(result.projectCount).toBeGreaterThanOrEqual(27);
     expect(result.claimedFileCount).toBeGreaterThan(0);
   });
 

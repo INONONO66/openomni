@@ -140,7 +140,7 @@ Not allowed here:
 - Persisting durable background task state or owning orchestration/scheduling; those are OpenOmni/ledger and host responsibilities.
 - Owning channel-specific or server-specific MCP/tool wiring.
 
-When in doubt, keep the agent package as a loop engine and put product semantics in `packages/openomni`.
+When in doubt, keep the agent package as a loop engine and put product semantics in `apps/openomni`.
 
 ## RUNTIME PRIMITIVES
 
@@ -157,7 +157,7 @@ When in doubt, keep the agent package as a loop engine and put product semantics
 
 ## ANTI-PATTERNS
 
-- Reaching for `@openomni/ledger` or `@openomni/telemetry` from `src/`. The loop owns no durable state and does not choose where its records go: it reports through `config.events`, and orchestration that needs session state lives in `@openomni/openomni`. `srcAllowedDeps` rejects both, so this fails the gate rather than review.
+- Reaching for `@openomni/ledger` or `@openomni/telemetry` from `src/`. The loop owns no durable state and does not choose where its records go: it reports through `config.events`, and orchestration that needs session state lives in the product app. `srcAllowedDeps` rejects both, so this fails the gate rather than review.
 - Do NOT extend behavior outside `middleware: [...]`. `PolicyEngine` is the single extension surface.
 - Do NOT bypass the policy engine by returning placeholder tool results in user code; use a `tool.native.pre` / `tool.mcp.pre` policy so behavior is uniform.
 - Do NOT add OpenOmni communication kernel logic here. No actor authority, PendingInteraction routing, channel grants, worker grants, SurfaceKey routing, or writeback decisions.

@@ -7,7 +7,7 @@ Documentation=https://github.com/openomni/openomni
 Type=simple
 WorkingDirectory=%h/.openomni/app
 Environment=PATH=%h/.bun/bin:/usr/local/bin:/usr/bin:/bin
-ExecStart=/usr/bin/env bun run apps/server/src/index.ts
+ExecStart=/usr/bin/env bun run apps/openomni/src/index.ts
 EnvironmentFile=-%h/.openomni/.env
 Environment=OPENOMNI_PROCESS=server
 Restart=on-failure

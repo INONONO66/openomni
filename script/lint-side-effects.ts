@@ -4,12 +4,7 @@
 // it runs on Bun globals alone.
 export {};
 
-type SideEffectRuleId =
-  | "tool-ledger-before-execute"
-  | "mcp-ledger-before-execute"
-  | "processor-projected-sink"
-  | "ingress-ledger-before-session-write"
-  | "session-mutation-ledger-before-storage-write";
+type SideEffectRuleId = "processor-projected-sink" | "session-mutation-ledger-before-storage-write";
 
 interface SideEffectViolation {
   readonly ruleId: SideEffectRuleId;
@@ -34,125 +29,9 @@ interface SourceMatch {
   readonly text: string;
 }
 
-const hotFiles = [
-  "packages/openomni/src/execution-runtime/tool/executor.ts",
-  "packages/openomni/src/execution-runtime/tool/executor-events.ts",
-  "apps/server/src/tool/mcp/provider-execution.ts",
-  "packages/llm/src/processor/index.ts",
-  "packages/openomni/src/ingress/event-projector.ts",
-  "packages/openomni/src/ingress/session-bridge.ts",
-  "packages/ledger/src/session/messages.ts",
-];
+const hotFiles = ["packages/llm/src/processor/index.ts", "packages/ledger/src/session/messages.ts"];
 
-const rules: readonly SideEffectRule[] = [
-  {
-    ruleId: "tool-ledger-before-execute",
-    filePath: "packages/openomni/src/execution-runtime/tool/executor.ts",
-    sideEffect:
-      /tool\.execute\(dispatchedCall(?:, (?:\{ signal: linkedAbort\.signal \}|executionContext))?\)/g,
-    scopeStart:
-      /return async \(call: Tool\.Call(?:, context\?: ToolExecutionContext)?\): Promise<Tool\.Result> => \{/g,
-    requiredBefore: ["publishToolStarted({", "toolCallId: call.id", "toolName: originalName"],
-    message: "tool.execute must be preceded by a before-side-effect audit publish",
-  },
-  {
-    ruleId: "tool-ledger-before-execute",
-    filePath: "packages/openomni/src/execution-runtime/tool/executor-events.ts",
-    sideEffect: /export function publishToolStarted\(args: \{/g,
-    requiredBefore: [],
-    requiredInScope: [
-      "Bus.publish(Tool.Events.Started, {",
-      "toolCallId: args.toolCallId",
-      "toolName: args.toolName",
-    ],
-    message: "publishToolStarted must append the tool execution started ledger event",
-  },
-  {
-    ruleId: "mcp-ledger-before-execute",
-    filePath: "apps/server/src/tool/mcp/provider-execution.ts",
-    sideEffect:
-      /tool\.execute\(\{ \.\.\.call, tool: tool\.spec\.name \}(?:, (?:context|executionContext))?\)/g,
-    scopeStart:
-      /export async function executeMcpTool\(input: ExecuteMcpToolInput\): Promise<Tool\.Result> \{/g,
-    requiredBefore: ["Bus.publish(Policy.Events.ActionRequested, {", "actionId", "tool.spec.name"],
-    message: "MCP tool execution must be preceded by a mandatory action_requested ledger append",
-  },
-  {
-    ruleId: "processor-projected-sink",
-    filePath: "packages/llm/src/processor/index.ts",
-    sideEffect: /\bsink\.on(?:Message|ToolCall|ToolResult|Snapshot)\(/g,
-    requiredBefore: [
-      "const sink = createProjectedSink(events, configuredSink, sessionID, trace.traceId);",
-    ],
-    message: "processor sink side effects must flow through createProjectedSink",
-  },
-  {
-    ruleId: "ingress-ledger-before-session-write",
-    filePath: "packages/openomni/src/ingress/event-projector.ts",
-    sideEffect: /Session\.addMessage\(sessionId, message\)/g,
-    scopeStart: /export function project\(/g,
-    requiredBefore: ["audit.append(", '"ingress.inbound.message.write"'],
-    message:
-      "projected inbound messages must append ingress.inbound.message.write before Session.addMessage",
-  },
-  {
-    ruleId: "ingress-ledger-before-session-write",
-    filePath: "packages/openomni/src/ingress/event-projector.ts",
-    sideEffect: /Session\.addPart\(message\.id, part\)/g,
-    scopeStart: /export function project\(/g,
-    requiredBefore: ["audit.append(", '"ingress.inbound.part.write"'],
-    message:
-      "projected inbound parts must append ingress.inbound.part.write before Session.addPart",
-  },
-  {
-    ruleId: "ingress-ledger-before-session-write",
-    filePath: "packages/openomni/src/ingress/session-bridge.ts",
-    sideEffect: /Session\.addMessage\(sessionId, message\)/g,
-    scopeStart: /export function store(?:Plan|Direct)Result\(/g,
-    requiredBefore: ["audit.append(", '"ingress.writeback.message.write"'],
-    message:
-      "session bridge writebacks must append ingress.writeback.message.write before Session.addMessage",
-  },
-  {
-    ruleId: "ingress-ledger-before-session-write",
-    filePath: "packages/openomni/src/ingress/session-bridge.ts",
-    sideEffect: /Session\.addPart\(message\.id, part\)/g,
-    scopeStart: /export function store(?:Plan|Direct)Result\(/g,
-    requiredBefore: ["audit.append(", '"ingress.writeback.part.write"'],
-    message:
-      "session bridge writebacks must append ingress.writeback.part.write before Session.addPart",
-  },
-  {
-    ruleId: "session-mutation-ledger-before-storage-write",
-    filePath: "packages/ledger/src/session/messages.ts",
-    sideEffect: /adapter\.message\.set\(sessionID, message\)/g,
-    scopeStart: /export function addMessage\(/g,
-    scopeEnd: /\nexport function /g,
-    requiredBefore: [],
-    requiredInScope: ["Bus.publish(Event.Updated, { info: updated })"],
-    message: "Session.addMessage must publish Event.Updated after adapter.message.set",
-  },
-  {
-    ruleId: "session-mutation-ledger-before-storage-write",
-    filePath: "packages/ledger/src/session/messages.ts",
-    sideEffect: /adapter\.session\.set\(sessionID, updated\)/g,
-    scopeStart: /export function addMessage\(/g,
-    scopeEnd: /\nexport function /g,
-    requiredBefore: [],
-    requiredInScope: ["Bus.publish(Event.Updated, { info: updated })"],
-    message: "Session.addMessage must publish Event.Updated after adapter.session.set",
-  },
-  {
-    ruleId: "session-mutation-ledger-before-storage-write",
-    filePath: "packages/ledger/src/session/messages.ts",
-    sideEffect: /adapter\.part\.set\(messageID, part\)/g,
-    scopeStart: /export function addPart\(/g,
-    scopeEnd: /\nexport function /g,
-    requiredBefore: [],
-    requiredInScope: ["Bus.publish(Event.Updated, { info:"],
-    message: "Session.addPart must publish Event.Updated after adapter.part.set",
-  },
-];
+const rules: readonly SideEffectRule[] = [];
 
 async function main(): Promise<void> {
   const violations: SideEffectViolation[] = [];

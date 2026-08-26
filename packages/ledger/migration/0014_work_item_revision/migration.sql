@@ -18,7 +18,7 @@
 -- revisions. An in-flight (non-terminal) completion resumed after the shift
 -- can therefore fail its head check; boot recovery surfaces each such
 -- failure as a loud Operational.Error carrying the work item id instead of
--- swallowing it (apps/server/src/bootstrap/recovery.ts).
+-- swallowing it during boot recovery.
 
 ALTER TABLE work_item ADD COLUMN revision INTEGER NOT NULL DEFAULT 1;
 

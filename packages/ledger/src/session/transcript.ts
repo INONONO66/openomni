@@ -38,7 +38,7 @@ import { Storage } from "../storage/storage";
  *     synthesizes message.created/part.appended/message.finished — #562);
  *   - resident direct runs: projection-only via
  *     SessionBridge.storeDirectResult (see defaultRunAgent in
- *     packages/openomni/src/resident/runtime.ts) — resident sessions have
+ *     the removed product kernel) — resident sessions have
  *     empty fact streams by design;
  *   - ingress writeback of worker output: projection-only, duplicating the
  *     worker's final fact-recorded turn;

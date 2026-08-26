@@ -157,7 +157,7 @@ describe("outbound adapter delivery dedupe capability", () => {
     await owner.deliver("recipient-1", "hello");
     await owner.deliver("recipient-1", "hello");
 
-    // This is the current production path: frozen apps/server wiring drops
+    // This is the production path: app composition drops
     // the key, so retries can create a second platform message.
     expect(outboundCalls()).toBe(2);
   });

@@ -11,7 +11,7 @@ The comments carry the per-leaf decision, integrated branch SHA, and evidence su
 
 ## Honest guarantees and blockers
 
-- Delivery is **at-least-once**. GitHub uses platform read-back reconciliation dedupe. Telegram and Discord currently can duplicate because `apps/server` does not forward the stable delivery key to adapters; their bounded in-process key dedupe also does not survive restart. The out-of-scope handoff is to pass `ChannelDeliveryRoute.idempotencyKey` to each adapter binding.
+- Delivery is **at-least-once**. GitHub uses platform read-back reconciliation dedupe. The final app forwards the stable delivery key to its Telegram and Discord adapter bindings (#796); process-local driver dedupe remains bounded and restart durability belongs to the gateway/ledger contract.
 - Reply authority is pinned to immutable endpoint evidence in the recorded `route.decided` fact. Restart replay does not consult mutable ActorRegistry bindings.
 - Agent owns inter-attempt count, backoff, and fallback selection. Agent calls configure zero nested LLM retries, while standalone `llm.run` retains its bounded default transport retry.
 - Todo 8 / D8 is **BLOCKED** until [#493](https://github.com/INONONO66/openomni/issues/493) closes with a current-attempt history projection/export receipt on the target SHA.
@@ -19,7 +19,7 @@ The comments carry the per-leaf decision, integrated branch SHA, and evidence su
 
 ## Current in-scope owner/export map
 
-This map was regenerated from the ten `src/index.ts` package barrels at the snapshot above. Names include value and type exports as resolved by the TypeScript compiler. It intentionally excludes `packages/openomni` and `apps/server`.
+This map was regenerated from the ten `src/index.ts` package barrels at the snapshot above. Names include value and type exports as resolved by the TypeScript compiler. It intentionally described only the core package barrels present at that historical snapshot.
 
 ### `@openomni/protocol`
 
@@ -69,7 +69,7 @@ Owner: bidirectional Unix-socket NDJSON transport, framing, typed transport fail
 
 Exports: `IpcClient`, `IpcConnectionError`, `IpcProtocolError`, `IpcRemoteError`, `IpcServer`, `IpcTimeoutError`, `connectIpcClient`, `createIpcServer`, `encode`, `typedCall`.
 
-### `@openomni/coordinator`
+### Removed local-process driver (historical)
 
 Owner: on-demand worker process lifecycle, primitive run delivery, and worker supervision; it does not own communication, actor authority, routing, grants, or writeback.
 

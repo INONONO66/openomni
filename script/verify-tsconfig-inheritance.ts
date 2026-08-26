@@ -13,7 +13,7 @@
  * - the protocol build project derives one `.d.ts` per input, and when
  *   `dist/` exists the emitted declaration set matches exactly.
  *
- * `packages/openomni/bench` and `packages/ledger/bench` are intentionally
+ * `packages/ledger/bench` is intentionally
  * absent from the source roots: no tsconfig project claimed them before the
  * shared base existed, and changing compilation membership is a #501 non-goal.
  *
@@ -377,21 +377,17 @@ export function repoManifest(): Manifest {
       "packages/llm/tsconfig.test.json": { noEmit: true },
     },
     sourceRoots: [
-      "apps/server/src",
-      "apps/server/test",
+      "apps/openomni/src",
+      "apps/openomni/test",
       "packages/agent/bench",
       "packages/agent/src",
       "packages/agent/test",
       "packages/channels/src",
       "packages/channels/test",
-      "packages/coordinator/src",
-      "packages/coordinator/test",
       "packages/ipc/src",
       "packages/ipc/test",
       "packages/llm/src",
       "packages/llm/test",
-      "packages/openomni/src",
-      "packages/openomni/test",
       "packages/placement/src",
       "packages/placement/test",
       "packages/policy/src",

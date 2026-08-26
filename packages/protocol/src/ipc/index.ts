@@ -71,7 +71,7 @@ const methods = {
   "coordinator.spawn_run": {
     /**
      * #500 B1: the params ARE the canonical spawn config — Execution.Request
-     * (parsed worker-side at apps/server worker-runner) plus the supervisor's
+     * (parsed by a process worker) plus the supervisor's
      * per-worker auth token. The previous inline clone had drifted from the
      * wire: it omitted required `mode`/`traceId` (every sender spreads the
      * full Execution.Request), and carried `softTimeoutMs`/`hardTimeoutMs`
@@ -84,7 +84,7 @@ const methods = {
     /**
      * #500 B3 drift fix: the worker has always responded with an
      * Execution.Result frame (status/output/error), never `{ accepted }` —
-     * the consumer (apps/server execution coordinator) parses exactly that.
+     * the process-driver consumer parses exactly that.
      */
     result: Execution.Result,
   },

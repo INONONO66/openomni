@@ -2,8 +2,8 @@
 
 Owner-directed target design (2026-08-23). This document supersedes the
 package-layout portions of [clean-room-blueprint.md](clean-room-blueprint.md)
-where they conflict: the Owner ruling of 2026-08-23 merges `packages/openomni`
-and `apps/server` into ONE deployable app `apps/openomni`, and unfreezes
+where they conflict: the Owner ruling of 2026-08-23 replaces the legacy brain
+and host with ONE deployable app `apps/openomni`, and unfreezes
 `placement` (the second execution-target kind — machines — now exists).
 Everything here is a target contract; [implementation-status.md](implementation-status.md)
 alone says what is wired.
@@ -206,7 +206,7 @@ The machine axis of `@openomni/placement` folds candidate machines against
    Re-checked against the tree at stage 6: `packages/agent/src` contains no
    spawn, subagent, or delegation code at all — the loop already reaches
    delegation the only way it reaches anything, as a tool in its catalog. The
-   legacy semantics live in `packages/openomni`, which the clean-room app
+   legacy semantics belonged to the removed product tree, which the final app
    replaces rather than extracts from. This step is struck rather than
    deleted so the correction stays visible.
 7. DelegationKernel with the `inline` transport driver **(landed)**, then

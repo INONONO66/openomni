@@ -21,9 +21,9 @@ context-resident).
 | Layer | Package | Owns | Must not |
 |---|---|---|---|
 | Gateway | `packages/channels` | drivers (envelope conversion), router (block → wait-correlate → session-map), delivery, perimeter store *semantics* (sole writing consumer of the perimeter surfaces in ledger) | read session content; import brain/agent; embed a storage engine |
-| Brain | `packages/openomni` | resident, agents, prompts/persona, subagent orchestration, native tools, work-items, engagement machine, evidence, conduct policy glue | touch an endpoint or platform id; open a socket outward |
+| Product app | `apps/openomni` | Resident, tools, delegation, memory, and gateway composition | bypass perimeter contracts or duplicate core-package primitives |
 | Loop | `packages/agent` | the pure run loop, compaction | know sessions, channels, or waits exist |
-| Composition | `apps/server` | driver registration, gateway↔brain wiring, config/grants | host logic |
+| Composition | `apps/openomni` | driver registration, gateway-to-Resident wiring, config/grants | reusable package logic |
 
 The package keeps the name `channels` (renaming to "gateway" is churn; the
 role name lives in docs and AGENTS.md). Dependency whitelist: channels =
@@ -31,9 +31,7 @@ role name lives in docs and AGENTS.md). Dependency whitelist: channels =
 perimeter rules through the shared engine (§3), ledger for its store
 surfaces. The `drivers/` sub-band inside channels stays at {protocol, ipc}
 (S8). Observation events publish through an injected `BusEvent.Sink` port —
-channels does not import telemetry (the llm/agent precedent). openomni may
-not import channels; channels may not import openomni — **both sides meet
-only in protocol contracts, wired by apps/server through injected ports.**
+channels does not import telemetry (the llm/agent precedent). the channels router and app Resident meet only in protocol contracts and injected ports; the app imports the channels public composition surface.
 
 ## 2. Contracts (protocol-owned, the only seam)
 
@@ -330,7 +328,7 @@ inventory above:
   gateway port for internal claims) — Owner-ruled, no concrete breakage,
   CAS-converged. **Resolved at #708**: the router exposes
   `claimSurface(surfaceKey, sessionId, expectedSessionId?)` (CAS receipt =
-  the owner after the attempt), apps/server injects it into the brain
+  the owner after the attempt), the app injects it into the Resident composition
   engine, and the brain's session resolver fails closed without it — the
   gateway is now the literal sole WRITER of the surface↔session map
   (brain-side reads stay recorded residue).
@@ -342,7 +340,7 @@ their row schemas move to `protocol`, their surfaces are marked perimeter-
 domain, and the gateway becomes their sole writing consumer — openomni loses
 direct access to them.
 
-Move `apps/server → channels`: `channel/*` drivers (#551 scope unchanged).
+Move the former host drivers into `channels` (#551 scope unchanged).
 
 Stays in openomni: `resident/`, `agents/`, `execution-runtime/`,
 `work-item/` (+ engagement machine), `evidence/`, `projection/`, `effect/`,

@@ -2,7 +2,7 @@
  * Channel — the band-facing DRIVER contract (#499, renamed from Adapter).
  *
  * This is the {protocol, ipc}-implementable, import-free vocabulary a channel
- * driver (Discord/Telegram/GitHub surface in apps/server) speaks: normalize a
+ * driver (Discord/Telegram/GitHub surface in the app) speaks: normalize a
  * platform payload into an in-process envelope, hand it to one handler, start
  * and stop. It is DISTINCT from the gateway↔brain seam (`Gateway.Deliver` /
  * `Gateway.Send*`), which is the stage-3 outbound/inbound successor.

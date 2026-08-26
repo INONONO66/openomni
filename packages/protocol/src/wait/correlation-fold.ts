@@ -5,7 +5,7 @@ import type * as Schema from "./schema.js";
  * Shared wait-correlation precedence core (batch ② commit 1). The full
  * lookup lives in the gateway router (@openomni/channels
  * router/wait/correlation.ts, `findWaitCandidates`) and the dispatch plane
- * keeps a read-only slice (@openomni/openomni
+ * keeps a read-only product slice
  * dispatch/frozen-interaction-correlation.ts,
  * `findFrozenPendingInteractionMatch`); the two may not import each other
  * (openomni↛channels = 0/0). Their PURE precedence logic — the scope pin

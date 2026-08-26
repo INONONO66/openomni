@@ -27,7 +27,8 @@
 // Four write surfaces are manifested:
 //   - streams: the ONE producer module per decision-class stream family
 //     (`wait:` / `work:` / `route:` / `command:` / `effect:` — the class
-//     vocabulary is protocol `Ledger.StreamRegistry`).
+//     vocabulary is protocol `Ledger.StreamRegistry`). A retained protocol
+//     class may have zero producers after its owning product path is removed.
 //   - appendCore: the modules allowed to touch `ledger_event`/`ledger_head`
 //     rows directly (raw prepared statements) plus the storage-adapter
 //     binding that exposes them as the ledger sub-adapter.
@@ -57,11 +58,7 @@ interface LedgerStreamProducer {
     | "gateway_send";
   /**
    * Repo-relative paths of the enumerated modules that append this class's
-   * facts. Every class has exactly one producer except `route`, which split
-   * at the #707 seam flip: the gateway router records external decisions and
-   * the brain records internal ones (cron, dispatch resident.ask) — same
-   * fact type, same stream family, two trust domains that may not import
-   * each other.
+   * facts. A retained protocol class may have no current producer.
    */
   readonly producers: readonly string[];
   /** Which ledger write APIs the producers use. */
@@ -92,14 +89,9 @@ export const LEDGER_PRODUCER_MANIFEST: LedgerProducerManifest = {
     },
     {
       streamClass: "route",
-      producers: [
-        // External arm: the gateway router (#707) — route.decided for
-        // channel-admitted events, recorded before anything acts.
-        "packages/channels/src/router/routing-resolution.ts",
-        // Internal arm: the brain's internal path (cron, dispatch
-        // resident.ask) — same fact strings, same stream family.
-        "packages/openomni/src/ingress/internal-route.ts",
-      ],
+      // The gateway router records channel-admitted route decisions before
+      // anything acts. The removed product kernel's internal arm is gone.
+      producers: ["packages/channels/src/router/routing-resolution.ts"],
       writes: "append",
     },
     {
@@ -113,8 +105,10 @@ export const LEDGER_PRODUCER_MANIFEST: LedgerProducerManifest = {
       writes: "append",
     },
     {
+      // Contract retained for compatibility; its legacy dispatch producer
+      // was removed with the old product kernel.
       streamClass: "command",
-      producers: ["packages/openomni/src/dispatch/runtime.ts"],
+      producers: [],
       writes: "append",
     },
     {

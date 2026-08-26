@@ -1,6 +1,6 @@
 # packages/channels
 
-Gateway band, stage 2 (`@openomni/channels` — drivers extracted from `apps/server/src/channel` in #551; the perimeter router, wait service, and send kernel promoted from `packages/openomni` in #707). This package IS the perimeter gateway of [docs/gateway-design.md](../../docs/gateway-design.md): platform drivers convert raw transport payloads to/from protocol `Channel` contracts, and the router band owns every perimeter judgment — external route resolution (`route.decided` recording), wait correlation and the sole wait-store writes, channel/blacklist/actor admission, routed pre-run authority, the surface↔session map claim, and the #215 existing-agent send kernel (with #708 reply-grant instance materialization and the #219 active-egress budget gate). The brain (`packages/openomni`) is reached only through the injected `deliver` port (protocol `Gateway.Deliver`); registration and composition stay in `apps/server` (`bootstrap/index.ts` + `bootstrap/channels.ts`): adding a platform = one driver folder here + one registration line there; the new driver gets normal review, but the router's judgment surface needs no re-review because the driver sub-band cannot reach it (S8 banding).
+Gateway band, stage 2 (`@openomni/channels`; drivers and perimeter judgment were consolidated here in #551/#707). This package IS the perimeter gateway of [docs/gateway-design.md](../../docs/gateway-design.md): platform drivers convert raw transport payloads to/from protocol `Channel` contracts, and the router band owns every perimeter judgment — external route resolution (`route.decided` recording), wait correlation and the sole wait-store writes, channel/blacklist/actor admission, routed pre-run authority, the surface↔session map claim, and the #215 existing-agent send kernel (with #708 reply-grant instance materialization and the #219 active-egress budget gate). The app brain is reached only through the injected `deliver` port (protocol `Gateway.Deliver`); registration and composition stay in `apps/openomni` (`index.ts` + `channels.ts`): adding a platform = one driver folder here + one registration line there; the new driver gets normal review, but the router's judgment surface needs no re-review because the driver sub-band cannot reach it (S8 banding).
 
 ## STRUCTURE
 
@@ -31,7 +31,7 @@ Whitelist at stage 2: **{`@openomni/protocol`, `@openomni/ipc`, `@openomni/polic
 - `script/check-deps.ts` — package-level whitelist (manifest **and** source imports), plus the **S8 intra-package banding check**: only the judgment band (`src/router/`, `src/authn/`) may import `@openomni/policy` or `@openomni/ledger`; the driver sub-band (`discord/`, `github/`, `telegram/`, `support/`, `websocket.ts`, `channel-authn.ts`) stays on the dumb-driver contract {protocol, ipc} and may not relative-import into `src/router/`. Router files importing the ledger may name ONLY the perimeter store surfaces (ActorRegistry, BlacklistStore, ChannelGrantStore, WaitStore, SurfaceKey, PendingAskStore, PendingInteractionStore, EgressBudgetStore — the #219 debit ledger, written only by the send kernel) plus the scoped `LedgerAppend` port (append + headFact — never the master `Storage` entry) — brain surfaces (Session, WorkItem*, transcripts, artifacts) are unreachable, and namespace/default imports, wholesale re-exports, dynamic `import()`, and `require()` of the ledger are all refused (the static named clause is the only road).
 - `test/channel-band-boundary.test.ts` — the AST-level scan: every import in `src/**` must be a whitelisted package, a node builtin, or relative; policy/ledger only under the judgment band. Telemetry is NOT allowed anywhere in `src/**` — observation goes through the injected sink (`PublishPort` for drivers, the router's `sink` port).
 
-No kernel (`@openomni/openomni`) either way — both sides meet only in protocol contracts (`Gateway.Deliver`, `Gateway.Send*`) plus the ports `apps/server` injects.
+No app import from this package: both sides meet in protocol contracts (`Gateway.Deliver`, `Gateway.Send*`) plus injected ports.
 
 ## CONTRACT
 
@@ -44,7 +44,7 @@ No kernel (`@openomni/openomni`) either way — both sides meet only in protocol
 
 ## CONSUMERS
 
-`apps/server/src/bootstrap/index.ts` (router construction + brain wiring), `bootstrap/channels.ts` (driver registration), `bootstrap/messaging.ts` (send-seam registry over the router's kernel), `bootstrap/recovery.ts` (WaitService.sweepExpired), `handler/conversation.ts` (router ingest); the brain's `message.send` tool reaches the send kernel only through an injected port (never an import).
+`apps/openomni/src/gateway.ts` (router construction + brain wiring), `channels.ts` (driver registration), and `index.ts` (boot recovery and composition); the brain's `message.send` tool reaches the send kernel only through an injected port (never an import).
 
 ## TESTS
 

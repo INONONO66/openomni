@@ -2,7 +2,7 @@
 
 Shared type foundation. Zero internal dependencies. All cross-package Zod schemas live here.
 
-Protocol defines schemas plus pure folds — no effects, storage, or I/O. It may describe communication, actor, dispatch, work, IPC, and storage contracts, but it must not decide routing, authority, lifecycle precedence, or execution policy. Runtime meaning belongs in `@openomni/openomni` or lower primitive packages as appropriate.
+Protocol defines schemas plus pure folds — no effects, storage, or I/O. It may describe communication, actor, dispatch, work, IPC, and storage contracts, but it must not decide routing, authority, lifecycle precedence, or execution policy. Product meaning belongs in `apps/openomni`; lower primitive behavior belongs in its owning package.
 
 ## STRUCTURE
 
@@ -50,7 +50,7 @@ Namespace additions are gated: `script/lint-tools.ts` (#467) enforces a grandfat
 - **Policy points**: `policy/point-registry.ts` registers 18 policy points (`dispatch.action.pre`, `run.lifecycle.pre/post`, `run.turn.pre/post`, `run.completion.pre`, `run.error.error`, `work.complete.pre`, `prompt.context.pre`, `connection.llm.pre/post`, `tool.catalog.pre`, `tool.native.pre/post`, `tool.mcp.pre/post`, `delegation.worker.pre/post`), each with allowed-effects whitelist, default fail policy (pre-boundary fail-closed, post fail-open), required context, and input schema (`point-contract.ts`). Generic agent-loop `run.completion.pre` and WorkItem contract-closing `work.complete.pre` are distinct points. `Policy.PolicyPlan` is defined in `policy/index.ts`. `Policy.PolicyDecision` verdict is one of `allow | deny | pending`. A legacy `Policy.Timing` alias survives for pre-v2 timing names; do not build new code on it.
 - **Storage sub-adapters**: `Storage.WorkItemSubAdapter` in `storage/index.ts` — pure interface contract with no runtime logic. Implementation lives in `@openomni/ledger`.
 - **WorkItem namespace**: `work-item/index.ts` is the public facade. `work-item/schemas.ts` defines `WorkItem.Info`; `attempt.ts` owns attempt, fingerprint, cache/replay key, and nondeterminism contracts; `completion-admission.ts` defines stable criteria, claims, observations, requests, admissions, and terminal receipts. Rows parse through `WorkItem.Info` directly. `work-item/events.ts` preserves the shipped `Completed` meaning and carries distinct request/admission/CompletedV2 descriptors; `status.ts`, `hash.ts`, and `terminal-linkage.ts` own pure lifecycle derivation and linkage validation.
-- **Execution/IPC contracts**: `execution/`, `ipc/`, and `worker-bootstrap/` describe worker requests, responses, and bootstrap payloads only. Runtime worker lifecycle lives in `@openomni/coordinator`.
+- **Execution/IPC contracts**: `execution/`, `ipc/`, and `worker-bootstrap/` describe worker requests, responses, and bootstrap payloads only. Process delegation lifecycle lives in the product app.
 - **AppConnector namespace**: `app-connector/index.ts` defines installed-app connector schema contracts. Runtime install, consent, and process execution live above protocol.
 - **Trace contract**: `trace/index.ts` defines `TraceContext` and the shared `newTraceId()` origin helper.
 
@@ -92,7 +92,7 @@ Future WorkItem-attempt and Jester-evaluation shapes are contracts only: they ad
 
 - Do NOT add effects, storage, or I/O here. Runtime helpers must remain pure folds or schema-local derivations.
 - Do NOT import from other `@openomni/*` packages — protocol is the dependency leaf.
-- Do NOT add authority or communication-kernel shortcuts here. Add the schema here, then implement semantics in `packages/openomni`.
+- Do NOT add authority or communication-kernel shortcuts here. Add the schema here, then implement semantics in `apps/openomni`.
 
 ## WHEN MODIFYING
 

@@ -22,9 +22,7 @@
     ]
   },
   "tools": {
-    "exceptions": {
-      "dispatch": ["tool-max-fields"]
-    }
+    "exceptions": {}
   },
   "naming": {
     "grandfathered": [
@@ -37,6 +35,6 @@
   },
   "earned": {
     "dormantActions": [],
-    "dormantTools": ["bash", "recall.output"]
+    "dormantTools": []
   }
 }

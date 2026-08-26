@@ -26,7 +26,7 @@ Identity is `ActorIdentity` (one canonical subject) with N `Endpoint`s (`channel
 
 All communication in the system reduces to three verbs:
 
-1. **`ingress.submit`** — the world enters. Channel adapters normalize everything (Owner messages, external humans, CLI apps, cron) into one schema. Adapters are defined and injected in `apps/server`; adding a channel touches nothing else.
+1. **`ingress.submit`** — the world enters. Channel adapters normalize everything (Owner messages, external humans, CLI apps, cron) into one schema. Adapters are defined in `packages/channels` and registered in `apps/openomni`; adding a channel touches only those composition surfaces.
 2. **`dispatch.submit`** — anything crosses a boundary. Delivering to the Resident, escalating to the Owner, messaging an external human or an already-existing agent, targeting a session, or cancelling a Worker uses the same verb with a different target. New Worker allocation is also dispatched, but only the Resident may originate it; a message never allocates work.
 3. **`bus.publish`** — an observation is projected. Observation only; the bus never carries commands or performs a durable ledger write.
 

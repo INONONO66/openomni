@@ -275,7 +275,7 @@ describe("run() streamText arguments", () => {
 
   // The real native tool catalog: dotted names a provider SDK rejects
   // (`^[a-zA-Z0-9_-]{1,128}$`). Kept as literals so this llm-package test does
-  // not depend on @openomni/openomni (the catalog's home).
+  // not depend on a product-level catalog implementation.
   const NATIVE_TOOL_NAMES = [
     "message.send",
     "engagement.open",

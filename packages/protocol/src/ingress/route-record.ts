@@ -4,7 +4,7 @@ import type { RoutingDecisionPayload } from "../event/ingress.js";
 /**
  * Shared route.decided recorder core (batch ② commit 1). The two ingress
  * arms — the gateway router (external, @openomni/channels) and the brain's
- * internal path (@openomni/openomni) — may not import each other
+ * internal product path — may not import each other
  * (openomni↛channels = 0/0), so the PURE parts of their once byte-identical
  * `route.decided` recorders are hoisted here: both arms import these and do
  * their OWN durable append (each through its own scoped `LedgerAppend.port()`

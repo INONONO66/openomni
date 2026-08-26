@@ -35,7 +35,7 @@ import { z } from "zod";
  * and non-JSON values fail loudly) hashed with sha256.
  *
  * TODO(#510 phase D / convention unification): the evidence conformance
- * canonical module (packages/openomni/src/evidence/verifier-conformance-
+ * canonical product verifier module (verifier-conformance-
  * canonical.ts `hashCanonicalJson`) owns an equivalent digest that protocol
  * cannot import (openomni depends on protocol, not the reverse). The
  * restructure audit's digest-owner finding (bare-hex vs `sha256:`-prefixed
