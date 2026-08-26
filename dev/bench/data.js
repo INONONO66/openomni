@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787703536493,
+  "lastUpdate": 1787707562217,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -62333,6 +62333,90 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 512236,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "955f9caa8b3fd0e507d32d8ae81be9d9286a90f2",
+          "message": "chore: decommission legacy brain and host (#797)\n\n* chore: decommission legacy brain and host\n\n* fix: restore surviving gates and app CI tests after adversarial review\n\n- ci.yml: run the apps/openomni suite (17 files) in the test job; no\n  --coverage since the ratchet baselines packages only\n- lint-side-effects: restore the rules for the two surviving hot files\n  (processor projected sink, session mutation ledger-before-publish)\n- lint-tools: collect tool surfaces from the surviving capability\n  catalog instead of returning []; re-aim the earned check at what is\n  statically decidable now (every spec factory must be catalog-wired,\n  call form so an unused import does not count)\n- baselines: knip baseline restored byte-identical to main (resolved\n  entries pass by ratchet design); lint-tools exceptions transfer the\n  pre-existing tool-max-fields exception from deleted dispatch to its\n  surviving successor delegate; dormantTools restored to main's content\n- drop the unused describe import in memory-e2e.test.ts\n\n* fix(test): make the timer-cap re-arm test toolchain-deterministic\n\nCI runs the pinned bun 1.3.6, where vi.advanceTimersByTime does not\nadvance the fake Date clock set by setSystemTime (fixed in 1.4.x). The\nkernel's injected now() then read real time and settled at the first\ntimer fire. Drive the kernel from a manual clock advanced in lockstep\nwith the fake timers instead — same re-arm-vs-settle behavior under\ntest, deterministic on both bun versions. Verified: app suite 110/110\non bun 1.3.6 and 1.4.0.\n\n* fix: make delegate pass tool-max-fields; pure spec seam for the lint\n\nRound 3 review:\n- delegate's advertised schema is now the addressing XOR the zod gate\n  always enforced: two oneOf variants of five public fields each (scope\n  variant, actorId variant). Every call the runtime gate accepts still\n  validates; calls it refused (both or neither addressing field) are now\n  refused by the advertised schema too. The tool passes tool-max-fields\n  on its own, so the lint-tools baseline loses the whole tools block:\n  no dispatch key, no delegate key, zero added lines (0/5 vs main).\n- catalog.ts owns one CATALOG_TOOLS table pairing each spec factory with\n  its port gate; the new collectToolSpecs() exposes the specs as data\n  and catalogEntries builds from the same table. lint-tools consumes the\n  seam — the three {} as never stubs are gone (inputSchema is already\n  Record<string, unknown>, so no cast at all). The earned check now\n  matches the table-row form (spec: <factory>) so an unused import still\n  does not count as wiring.\n\nMutation probes re-run: empty machines description fails tool-lint\n(exit 1); removing a catalog row fails earned-check (exit 1); restored\ntree exits 0. App suite 110/110 on bun 1.3.6 (CI toolchain) and 1.4.0;\nfull suite 2,491 pass / 0 fail.\n\n* fix: drop the resolved stale knip-baseline entry\n\nThe grandfathered entry names a contract-test file this PR deletes, so\nthe ratchet reported a resolved stale baseline and asked for --update.\nThe baseline is now the minimal empty representation ({}) — the entry\nremoval is the whole diff — and readBaseline tolerates the absent key,\nsince an empty array literal cannot be written without an added line.\ncheck-dead-exports: 0 known issues, none new, no stale entries.",
+          "timestamp": "2026-08-26T10:24:50+09:00",
+          "tree_id": "ed0319fbd87f59a4a4ec9ade6028ed050c6114a9",
+          "url": "https://github.com/INONONO66/openomni/commit/955f9caa8b3fd0e507d32d8ae81be9d9286a90f2"
+        },
+        "date": 1787707561189,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2110,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 14899,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7869,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 831,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 771,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1093,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 40,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1429,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 618,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 37473,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 1931,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 472843,
             "unit": "ns/op"
           }
         ]
