@@ -1,0 +1,181 @@
+import { join } from "node:path";
+
+/**
+ * TS-owned service management: launchd (macOS) and systemd user units
+ * (Linux) are generated and driven from this one module — there is no bash
+ * band to drift out of sync with the app.
+ */
+
+const LAUNCHD_LABEL = "ai.openomni.resident";
+const SYSTEMD_UNIT = "openomni";
+
+export interface DaemonTarget {
+  readonly platform: "darwin" | "linux";
+  readonly home: string;
+  readonly uid: number;
+  /** Absolute bun executable, resolved at install time (`process.execPath`). */
+  readonly bunPath: string;
+  /** Absolute CLI entry the service runs: `<bun> <entry> start`. */
+  readonly entryPath: string;
+}
+
+export interface ExecResult {
+  readonly code: number;
+  readonly stdout: string;
+  readonly stderr: string;
+}
+
+export interface DaemonIo {
+  readonly exec: (argv: readonly string[]) => ExecResult;
+  readonly writeFile: (path: string, content: string) => void;
+  readonly removeFile: (path: string) => void;
+  readonly fileExists: (path: string) => boolean;
+}
+
+export function unitPath(target: DaemonTarget): string {
+  return target.platform === "darwin"
+    ? join(target.home, "Library", "LaunchAgents", `${LAUNCHD_LABEL}.plist`)
+    : join(target.home, ".config", "systemd", "user", `${SYSTEMD_UNIT}.service`);
+}
+
+function logPath(target: DaemonTarget): string {
+  return join(target.home, ".openomni", "logs", "openomni.log");
+}
+
+function escapeXml(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+export function renderLaunchdPlist(target: DaemonTarget): string {
+  const log = escapeXml(logPath(target));
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+\t<key>Label</key>
+\t<string>${LAUNCHD_LABEL}</string>
+\t<key>ProgramArguments</key>
+\t<array>
+\t\t<string>${escapeXml(target.bunPath)}</string>
+\t\t<string>${escapeXml(target.entryPath)}</string>
+\t\t<string>start</string>
+\t</array>
+\t<key>RunAtLoad</key>
+\t<true/>
+\t<key>KeepAlive</key>
+\t<true/>
+\t<key>WorkingDirectory</key>
+\t<string>${escapeXml(target.home)}</string>
+\t<key>StandardOutPath</key>
+\t<string>${log}</string>
+\t<key>StandardErrorPath</key>
+\t<string>${log}</string>
+</dict>
+</plist>
+`;
+}
+
+export function renderSystemdUnit(target: DaemonTarget): string {
+  return `[Unit]
+Description=OpenOmni Resident
+After=network.target
+
+[Service]
+Type=simple
+ExecStart="${target.bunPath}" "${target.entryPath}" start
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=default.target
+`;
+}
+
+function run(io: DaemonIo, argv: readonly string[]): ExecResult {
+  const result = io.exec(argv);
+  if (result.code !== 0) {
+    const detail = result.stderr.trim() || result.stdout.trim() || `exit ${result.code}`;
+    throw new Error(`${argv.join(" ")} failed: ${detail}`);
+  }
+  return result;
+}
+
+function launchdDomainTarget(target: DaemonTarget): string {
+  return `gui/${target.uid}/${LAUNCHD_LABEL}`;
+}
+
+/** (Re)loads the service: idempotent, safe to run over an existing install. */
+export function daemonInstall(target: DaemonTarget, io: DaemonIo): string {
+  const path = unitPath(target);
+  if (target.platform === "darwin") {
+    io.writeFile(path, renderLaunchdPlist(target));
+    // A previous generation may be loaded; bootout is allowed to fail.
+    io.exec(["launchctl", "bootout", launchdDomainTarget(target)]);
+    run(io, ["launchctl", "bootstrap", `gui/${target.uid}`, path]);
+    return `installed and started (launchd: ${path})`;
+  }
+  io.writeFile(path, renderSystemdUnit(target));
+  run(io, ["systemctl", "--user", "daemon-reload"]);
+  run(io, ["systemctl", "--user", "enable", "--now", SYSTEMD_UNIT]);
+  return `installed and started (systemd user unit: ${path}). To survive logout: loginctl enable-linger ${process.env.USER ?? "<user>"}`;
+}
+
+export function daemonUninstall(target: DaemonTarget, io: DaemonIo): string {
+  const path = unitPath(target);
+  if (!io.fileExists(path)) return "not installed";
+  if (target.platform === "darwin") {
+    io.exec(["launchctl", "bootout", launchdDomainTarget(target)]);
+    io.removeFile(path);
+    return "stopped and uninstalled (launchd)";
+  }
+  io.exec(["systemctl", "--user", "disable", "--now", SYSTEMD_UNIT]);
+  io.removeFile(path);
+  run(io, ["systemctl", "--user", "daemon-reload"]);
+  return "stopped and uninstalled (systemd)";
+}
+
+export function daemonStart(target: DaemonTarget, io: DaemonIo): string {
+  const path = unitPath(target);
+  if (!io.fileExists(path)) {
+    throw new Error("not installed — run `openomni daemon install` first");
+  }
+  if (target.platform === "darwin") {
+    io.exec(["launchctl", "bootout", launchdDomainTarget(target)]);
+    run(io, ["launchctl", "bootstrap", `gui/${target.uid}`, path]);
+    return "started";
+  }
+  run(io, ["systemctl", "--user", "start", SYSTEMD_UNIT]);
+  return "started";
+}
+
+export function daemonStop(target: DaemonTarget, io: DaemonIo): string {
+  if (target.platform === "darwin") {
+    run(io, ["launchctl", "bootout", launchdDomainTarget(target)]);
+    return "stopped";
+  }
+  run(io, ["systemctl", "--user", "stop", SYSTEMD_UNIT]);
+  return "stopped";
+}
+
+export function daemonRestart(target: DaemonTarget, io: DaemonIo): string {
+  if (target.platform === "darwin") {
+    run(io, ["launchctl", "kickstart", "-k", launchdDomainTarget(target)]);
+    return "restarted";
+  }
+  run(io, ["systemctl", "--user", "restart", SYSTEMD_UNIT]);
+  return "restarted";
+}
+
+export function daemonActive(target: DaemonTarget, io: DaemonIo): boolean {
+  if (target.platform === "darwin") {
+    const result = io.exec(["launchctl", "print", launchdDomainTarget(target)]);
+    return result.code === 0 && result.stdout.includes("state = running");
+  }
+  const result = io.exec(["systemctl", "--user", "is-active", SYSTEMD_UNIT]);
+  return result.stdout.trim() === "active";
+}
+
+export function daemonStatus(target: DaemonTarget, io: DaemonIo): string {
+  if (!io.fileExists(unitPath(target))) return "not installed";
+  return daemonActive(target, io) ? "active" : "inactive";
+}

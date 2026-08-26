@@ -58,6 +58,19 @@ The core execution runtime is working. Inbound routing, session management, the 
 
 Component-level truth lives in [Implementation Status](docs/implementation-status.md) — design docs describe targets; that file says what actually runs.
 
+## Install & Run 24/7
+
+OpenOmni ships as an npm package running on the [Bun](https://bun.sh) runtime:
+
+```bash
+npm install -g openomni     # or: bun add -g openomni
+openomni onboard            # interactive setup -> ~/.openomni/env
+openomni daemon install     # launchd / systemd --user service, survives reboot
+openomni doctor             # read-only diagnostics
+```
+
+The publishable artifact is staged with `bun run --cwd apps/openomni build:npm` and published from `apps/openomni/dist-npm`.
+
 ## Development
 
 ```bash

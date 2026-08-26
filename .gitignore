@@ -28,6 +28,7 @@ source-metrics.json
 out/
 build
 dist
+dist-npm
 
 # Debug
 npm-debug.log*

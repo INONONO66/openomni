@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import type { ChatAgentConfig } from "@openomni/agent";
 import { type GatewayRouter, WaitService, WebSocketHandler } from "@openomni/channels";
 import { ActorRegistry, BusPersistence, initialize, Session, Storage } from "@openomni/ledger";
@@ -50,6 +52,18 @@ function attachedTargets(
       : [{ kind: "machine", id: enrollment.machineId, capabilities: [...capabilities] }];
   });
   return [HOST_TARGET, ...machines];
+}
+
+/**
+ * The process-transport worker entry. Two layouts exist: running from
+ * source (`src/delegation/process-entry.ts` beside this module) and running
+ * the npm bundle, where `process-entry.js` is a sibling bundle next to the
+ * one file this module was folded into. The bundled sibling wins when found.
+ */
+function processEntryPath(): string {
+  const bundled = fileURLToPath(new URL("./process-entry.js", import.meta.url));
+  if (existsSync(bundled)) return bundled;
+  return fileURLToPath(new URL("./delegation/process-entry.ts", import.meta.url));
 }
 
 /** How a correlated reply's payload reads when handed back to the waiting delegation. */
@@ -159,10 +173,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
         inline: createInlineDriver(runner),
         channel: channelDriver,
         process: createProcessDriver({
-          command: [
-            process.execPath,
-            new URL("./delegation/process-entry.ts", import.meta.url).pathname,
-          ],
+          command: [process.execPath, processEntryPath()],
           worker: {
             model: { provider: config.model.provider, id: config.model.id },
             apiKey: config.model.apiKey,
@@ -339,6 +350,9 @@ export async function startOpenOmni(options: StartOptions = {}) {
           // undefined = the upgrade succeeded; a Response = the upgrade was denied.
           return wsHandler.handleUpgrade(request, bunServer);
         }
+        if (request.method === "GET" && url.pathname === "/health") {
+          return Response.json({ ok: true, timestamp: new Date().toISOString() });
+        }
         if (
           request.method === "POST" &&
           url.pathname === "/github/webhook" &&
@@ -403,16 +417,5 @@ export function installShutdownHandlers(deps: {
   };
   deps.on("SIGINT", handler);
   deps.on("SIGTERM", handler);
-}
-
-if (import.meta.main) {
-  const config = loadConfig();
-  const app = await startOpenOmni({ config });
-  console.log(`OpenOmni Resident listening at ws://${config.host}:${app.port}/ws`);
-  installShutdownHandlers({
-    stop: () => app.stop(),
-    exit: (code) => process.exit(code),
-    on: (signal, handler) => process.once(signal, handler),
-  });
 }
 

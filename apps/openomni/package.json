@@ -5,8 +5,9 @@
   "type": "module",
   "main": "src/index.ts",
   "scripts": {
-    "dev": "bun run src/index.ts",
-    "start": "bun run src/index.ts",
+    "dev": "bun run src/cli/main.ts start",
+    "start": "bun run src/cli/main.ts start",
+    "build:npm": "bun run script/build-npm-package.ts",
     "build": "rm -rf dist && tsc -p tsconfig.build.json",
     "lint": "bunx biome check ./src ./test",
     "check-types": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json"
