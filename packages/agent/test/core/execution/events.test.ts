@@ -11,6 +11,26 @@ describe("RunEvents BusEvents", () => {
     expect(() => RunEvents.TurnStart.schema.parse({ ...base, turnIndex: 0 })).not.toThrow();
   });
 
+  // The run loop publishes every event with `actorId` in the payload
+  // (run.ts `agentBase`); the persisted schema must keep it, or audit
+  // attribution is stripped on parse.
+  test("published run events round-trip actorId through the schema", () => {
+    const actorId = "run-actor-1";
+    const parsed = RunEvents.TurnStart.schema.parse({ ...base, actorId, turnIndex: 0 });
+    expect(parsed.actorId).toBe(actorId);
+
+    const retried = RunEvents.ErrorRetry.schema.parse({
+      ...base,
+      actorId,
+      attempt: 2,
+      maxAttempts: 3,
+      error: "rate limit",
+      reason: "transient_error",
+      backoffMs: 2000,
+    });
+    expect(retried.actorId).toBe(actorId);
+  });
+
   test("TurnComplete parses", () => {
     expect(() =>
       RunEvents.TurnComplete.schema.parse({
