@@ -135,8 +135,8 @@ Not allowed here:
 
 - Creating, resolving, or mutating OpenOmni sessions for product orchestration.
 - Choosing whether a message targets Resident, Worker, external actor, schedule, or surface.
-- Looking up `PendingAskStore`, `PendingInteractionStore`, `SurfaceKey`, `WorkerGrantStore`, `ChannelGrantStore`, or `BlacklistStore` for routing.
-- Encoding OpenOmni actor trust, channel grants, worker grants, or external-response lifecycle rules.
+- Looking up `PendingAskStore`, `PendingInteractionStore`, `SurfaceKey`, `ChannelGrantStore`, or `BlacklistStore` for routing.
+- Encoding OpenOmni actor trust, channel grants, or external-response lifecycle rules.
 - Persisting durable background task state or owning orchestration/scheduling; those are OpenOmni/ledger and host responsibilities.
 - Owning channel-specific or server-specific MCP/tool wiring.
 

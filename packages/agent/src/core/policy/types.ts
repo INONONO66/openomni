@@ -15,6 +15,13 @@ export interface PolicyContext extends GenericPolicyContext {
    * it and buildLifecyclePolicyContext stamps it on each dispatch context.
    */
   sessionId?: string;
+  /**
+   * Optional at construction for the same reason as `sessionId`:
+   * buildLifecyclePolicyContext stamps it on every canonical dispatch
+   * (`agentBase.actorId`, never empty), so lifecycle policies may thread it
+   * into observation payloads for attribution.
+   */
+  actorId?: string;
   steps: AgentStep[];
   usage: TokenUsage;
   turnCount: number;

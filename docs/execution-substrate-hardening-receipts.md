@@ -43,7 +43,7 @@ Exports: `Bus`, `InvalidTraceScopeError`, `SpanOutcome`, `SpanPair`, `TraceScope
 
 Owner: the single durable storage engine and typed store surfaces; stores facts but does not decide product meaning.
 
-Exports: `ActorRegistry`, `AppConnectorInstallationStore`, `Artifact`, `BlacklistStore`, `BusPersistence`, `BusQuery`, `ChannelGrantStore`, `EffectStore`, `EffectStoreError`, `EgressBudgetStore`, `EngagementStore`, `LedgerAppend`, `PendingAskStore`, `PendingInteractionStore`, `Session`, `SqliteStorageAdapter`, `Storage`, `SurfaceKey`, `TranscriptStore`, `WaitStore`, `WorkItemAttemptRun`, `WorkItemStore`, `WorkerGrantStore`, `hasRetryExhaustionBlocker`, `initialize`.
+Exports: `ActorRegistry`, `AppConnectorInstallationStore`, `Artifact`, `BlacklistStore`, `BusPersistence`, `BusQuery`, `ChannelGrantStore`, `EffectStore`, `EffectStoreError`, `EgressBudgetStore`, `EngagementStore`, `LedgerAppend`, `PendingAskStore`, `PendingInteractionStore`, `Session`, `SqliteStorageAdapter`, `Storage`, `SurfaceKey`, `TranscriptStore`, `WaitStore`, `WorkItemAttemptRun`, `WorkItemStore`, `hasRetryExhaustionBlocker`, `initialize`.
 
 ### `@openomni/llm`
 
