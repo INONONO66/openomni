@@ -35,9 +35,8 @@ export namespace Bus {
   export function publish<T>(event: BusEvent.Descriptor<T>, data: T): void {
     const state = currentState();
     const subs = state.subscribers.get(event.name);
-    const observerSnapshot = [...state.observers];
-
-    if (observerSnapshot.length > 0) {
+    if (state.observers.size > 0) {
+      const observerSnapshot = [...state.observers];
       for (const observer of observerSnapshot) {
         queueMicrotask(() => {
           try {
