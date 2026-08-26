@@ -56,9 +56,17 @@ function assertUnitSafe(label: string, value: string): string {
   return value;
 }
 
-/** systemd quoted-argument escaping: backslash and quote escapes, `%` specifiers doubled. */
+/**
+ * systemd quoted-argument escaping: backslash and quote escapes, `%`
+ * specifiers doubled, `$` doubled so ExecStart never environment-expands a
+ * literal path segment.
+ */
 function escapeSystemdArg(value: string): string {
-  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/%/g, "%%");
+  return value
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/%/g, "%%")
+    .replace(/\$/g, "$$$$");
 }
 
 export function renderLaunchdPlist(target: DaemonTarget): string {
@@ -141,26 +149,41 @@ export function daemonInstall(target: DaemonTarget, io: DaemonIo): string {
   run(io, ["systemctl", "--user", "enable", SYSTEMD_UNIT]);
   // restart, not `enable --now`: an already-running previous generation must be replaced.
   run(io, ["systemctl", "--user", "restart", SYSTEMD_UNIT]);
-  // Without linger the user manager dies at logout and never starts at boot.
+  // Without linger the user manager dies at logout and never starts at
+  // boot — the advertised 24/7 contract is unmet, so this failure is hard.
   const linger = io.exec(["loginctl", "enable-linger"]);
-  const lingerNote =
-    linger.code === 0
-      ? "linger enabled — survives logout and starts at boot"
-      : "WARNING: could not enable linger; run `loginctl enable-linger` manually or the daemon dies at logout";
-  return `installed and started (systemd user unit: ${path}). ${lingerNote}`;
+  if (linger.code !== 0) {
+    throw new Error(
+      `installed and started (systemd user unit: ${path}), but linger could not be enabled — the daemon dies at logout and does not start at boot. Run \`loginctl enable-linger\` and re-run \`openomni daemon install\`.`,
+    );
+  }
+  return `installed and started (systemd user unit: ${path}); linger enabled — survives logout and starts at boot`;
 }
 
 export function daemonUninstall(target: DaemonTarget, io: DaemonIo): string {
   const path = unitPath(target);
   if (!io.fileExists(path)) return "not installed";
+  // The stop must either succeed or the job must be provably unloaded —
+  // transitional states (activating, loaded-but-waiting KeepAlive) are NOT
+  // license to delete the unit out from under a live daemon.
   if (target.platform === "darwin") {
-    io.exec(["launchctl", "bootout", launchdDomainTarget(target)]);
+    const bootout = io.exec(["launchctl", "bootout", launchdDomainTarget(target)]);
+    if (bootout.code !== 0) {
+      const print = io.exec(["launchctl", "print", launchdDomainTarget(target)]);
+      if (print.code === 0) {
+        throw new Error("daemon could not be stopped and is still loaded — unit left installed");
+      }
+    }
   } else {
-    io.exec(["systemctl", "--user", "disable", "--now", SYSTEMD_UNIT]);
-  }
-  // Never delete the unit out from under a daemon that refused to stop.
-  if (daemonActive(target, io)) {
-    throw new Error("daemon is still running after stop was attempted — unit left installed");
+    const disable = io.exec(["systemctl", "--user", "disable", "--now", SYSTEMD_UNIT]);
+    if (disable.code !== 0) {
+      const state = io.exec(["systemctl", "--user", "is-active", SYSTEMD_UNIT]).stdout.trim();
+      if (state !== "inactive" && state !== "failed") {
+        throw new Error(
+          `daemon could not be stopped (state: ${state || "unknown"}) — unit left installed`,
+        );
+      }
+    }
   }
   io.removeFile(path);
   if (target.platform === "darwin") return "stopped and uninstalled (launchd)";

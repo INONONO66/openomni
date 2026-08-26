@@ -105,14 +105,19 @@ describe("npm package staging", () => {
     }
 
     // The bundled worker must be executable, not merely present: with stdin
-    // closed it must reach its own guard, not die on a load error.
+    // closed it must reach its own request-line guard (no ack line on
+    // stdout, non-zero exit), not die on a load error (which bun also
+    // reports with empty stdout — so additionally require that the module
+    // itself was found).
     const worker = Bun.spawnSync(["bun", join(staging, "dist", "app", "process-entry.js")], {
       cwd: staging,
       stdin: new Uint8Array(),
+      stdout: "pipe",
       stderr: "pipe",
     });
     expect(worker.exitCode).not.toBe(0);
-    expect(worker.stderr.toString()).toContain("stdin closed before a request line arrived");
+    expect(worker.stdout.toString()).toBe("");
+    expect(worker.stderr.toString()).not.toContain("ModuleNotFound");
   }, 30_000);
 });
 

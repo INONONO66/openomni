@@ -63,7 +63,7 @@ export async function runDoctor(ports: DoctorPorts): Promise<DoctorReport> {
       checks.push({
         name: "linger",
         status: "warn",
-        detail: "disabled — daemon dies at logout; run `loginctl enable-linger`",
+        detail: "disabled or unverifiable — daemon dies at logout; run `loginctl enable-linger`",
       });
     }
   } else {

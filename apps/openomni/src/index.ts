@@ -1,5 +1,4 @@
-import { existsSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { processEntryPath } from "./process-entry-path";
 import type { ChatAgentConfig } from "@openomni/agent";
 import { type GatewayRouter, WaitService, WebSocketHandler } from "@openomni/channels";
 import { ActorRegistry, BusPersistence, initialize, Session, Storage } from "@openomni/ledger";
@@ -52,23 +51,6 @@ function attachedTargets(
       : [{ kind: "machine", id: enrollment.machineId, capabilities: [...capabilities] }];
   });
   return [HOST_TARGET, ...machines];
-}
-
-/**
- * The process-transport worker entry. Two layouts exist: running from
- * source (`src/delegation/process-entry.ts` beside this module) and running
- * the npm bundle, where `process-entry.js` is a sibling bundle next to the
- * one file this module was folded into. The bundled sibling wins when found.
- */
-function processEntryPath(): string {
-  // Bundled sibling first (npm layout), compiled tsc output second,
-  // TypeScript source last (running via bun from src/).
-  const candidates = ["./process-entry.js", "./delegation/process-entry.js"];
-  for (const candidate of candidates) {
-    const resolved = fileURLToPath(new URL(candidate, import.meta.url));
-    if (existsSync(resolved)) return resolved;
-  }
-  return fileURLToPath(new URL("./delegation/process-entry.ts", import.meta.url));
 }
 
 /** How a correlated reply's payload reads when handed back to the waiting delegation. */
@@ -178,7 +160,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
         inline: createInlineDriver(runner),
         channel: channelDriver,
         process: createProcessDriver({
-          command: [process.execPath, processEntryPath()],
+          command: [process.execPath, processEntryPath(import.meta.url)],
           worker: {
             model: { provider: config.model.provider, id: config.model.id },
             apiKey: config.model.apiKey,

@@ -1,5 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import {
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { pathToFileURL } from "node:url";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach } from "bun:test";
@@ -18,6 +28,7 @@ import {
 } from "../src/cli/daemon";
 import { applyEnvFile, parseEnvFile, renderEnvFile, writeEnvFile } from "../src/cli/env-file";
 import { runDoctor } from "../src/cli/doctor";
+import { processEntryPath } from "../src/process-entry-path";
 import type { DoctorPorts } from "../src/cli/doctor";
 import { gatherOnboarding } from "../src/cli/onboard";
 
@@ -54,10 +65,30 @@ describe("env file", () => {
   });
 
   test("render round-trips through parse and rejects line breaks", () => {
-    const entries = [{ key: "OPENOMNI_WS_PORT", value: "3000" }];
-    expect(parseEnvFile(renderEnvFile(entries)).get("OPENOMNI_WS_PORT")).toBe("3000");
+    // Values the parser would unquote must survive a write->read cycle intact.
+    const entries = [
+      { key: "OPENOMNI_WS_PORT", value: "3000" },
+      { key: "OPENOMNI_MODEL_API_KEY", value: '"secret"' },
+      { key: "OPENOMNI_MODEL_ID", value: "'quoted'" },
+    ];
+    const parsed = parseEnvFile(renderEnvFile(entries));
+    for (const entry of entries) {
+      expect(parsed.get(entry.key)).toBe(entry.value);
+    }
     expect(() => renderEnvFile([{ key: "A", value: "x\ny" }])).toThrow("line breaks");
     expect(() => renderEnvFile([{ key: "bad key", value: "x" }])).toThrow("invalid env key");
+  });
+
+  test("write replaces a symlink at the destination instead of following it", () => {
+    const dir = tempDir();
+    const victim = join(dir, "victim");
+    const path = join(dir, "env");
+    writeFileSync(victim, "untouched");
+    symlinkSync(victim, path);
+    writeEnvFile(path, [{ key: "OPENOMNI_MODEL_ID", value: "m" }]);
+    expect(readFileSync(victim, "utf-8")).toBe("untouched");
+    expect(lstatSync(path).isSymbolicLink()).toBe(false);
+    expect(readFileSync(path, "utf-8")).toBe("OPENOMNI_MODEL_ID=m\n");
   });
 
   test("write creates parents and enforces 0600 on overwrite", () => {
@@ -145,6 +176,11 @@ describe("daemon units", () => {
     };
     const unit = renderSystemdUnit(hostile);
     expect(unit).toContain('ExecStart="/opt/we\\"ird/bun" "/pkg/100%%/back\\\\slash/main.js" start');
+    // `$` must never reach systemd unescaped: ExecStart environment-expands it.
+    const curly = "{X}";
+    const dollar = renderSystemdUnit({ ...linuxTarget, entryPath: `/pkg/$VER/$${curly}/main.js` });
+    expect(dollar).toContain(`"/pkg/$$VER/$$${curly}/main.js"`);
+    expect(dollar).not.toContain("/pkg/$VER");
     expect(() => renderSystemdUnit({ ...linuxTarget, entryPath: "/pkg\nExecStart=/evil" })).toThrow(
       "control characters",
     );
@@ -179,11 +215,14 @@ describe("daemon units", () => {
     expect(message).toContain("linger enabled");
   });
 
-  test("linux install warns when linger cannot be enabled", () => {
+  test("linux install fails hard when linger cannot be enabled", () => {
+    // Exit 0 with an unmet 24/7 contract is a lie; the unit stays installed
+    // and running, but the command must fail with remediation.
     const io = fakeIo((argv) =>
       argv[0] === "loginctl" ? { code: 1, stdout: "", stderr: "denied" } : ok,
     );
-    expect(daemonInstall(linuxTarget, io)).toContain("could not enable linger");
+    expect(() => daemonInstall(linuxTarget, io)).toThrow("linger could not be enabled");
+    expect(io.files.has(unitPath(linuxTarget))).toBe(true);
   });
 
   test("install surfaces the failing command with stderr", () => {
@@ -199,22 +238,60 @@ describe("daemon units", () => {
     expect(io.commands).toEqual([]);
   });
 
-  test("uninstall stops, verifies inactivity, then removes the unit", () => {
-    const io = fakeIo((argv) =>
-      argv[2] === "is-active" ? { code: 3, stdout: "inactive\n", stderr: "" } : ok,
-    );
+  test("uninstall removes the unit after a successful stop", () => {
+    const io = fakeIo(() => ok);
     io.files.set(unitPath(linuxTarget), "unit");
     expect(daemonUninstall(linuxTarget, io)).toContain("uninstalled");
     expect(io.files.has(unitPath(linuxTarget))).toBe(false);
+    expect(io.commands).toEqual([
+      ["systemctl", "--user", "disable", "--now", "openomni"],
+      ["systemctl", "--user", "daemon-reload"],
+    ]);
   });
 
-  test("uninstall refuses to delete the unit while the daemon is still running", () => {
-    const io = fakeIo((argv) =>
-      argv[2] === "is-active" ? { code: 0, stdout: "active\n", stderr: "" } : ok,
-    );
+  test("uninstall after a failed stop proceeds only when the unit is provably inactive", () => {
+    const io = fakeIo((argv) => {
+      if (argv[2] === "disable") return { code: 1, stdout: "", stderr: "boom" };
+      if (argv[2] === "is-active") return { code: 3, stdout: "inactive\n", stderr: "" };
+      return ok;
+    });
     io.files.set(unitPath(linuxTarget), "unit");
-    expect(() => daemonUninstall(linuxTarget, io)).toThrow("still running");
+    expect(daemonUninstall(linuxTarget, io)).toContain("uninstalled");
+  });
+
+  test("uninstall keeps the unit when the stop fails and the state is transitional", () => {
+    // `activating` is not `inactive`: deleting the unit here orphans a
+    // daemon that is actively coming up.
+    const io = fakeIo((argv) => {
+      if (argv[2] === "disable") return { code: 1, stdout: "", stderr: "boom" };
+      if (argv[2] === "is-active") return { code: 0, stdout: "activating\n", stderr: "" };
+      return ok;
+    });
+    io.files.set(unitPath(linuxTarget), "unit");
+    expect(() => daemonUninstall(linuxTarget, io)).toThrow("could not be stopped");
     expect(io.files.has(unitPath(linuxTarget))).toBe(true);
+  });
+
+  test("darwin uninstall keeps the plist while the job is still loaded", () => {
+    const io = fakeIo((argv) => {
+      if (argv[1] === "bootout") return { code: 5, stdout: "", stderr: "busy" };
+      if (argv[1] === "print") return { code: 0, stdout: "state = waiting", stderr: "" };
+      return ok;
+    });
+    io.files.set(unitPath(darwinTarget), "plist");
+    expect(() => daemonUninstall(darwinTarget, io)).toThrow("still loaded");
+    expect(io.files.has(unitPath(darwinTarget))).toBe(true);
+  });
+
+  test("darwin uninstall proceeds when bootout fails because the job is not loaded", () => {
+    const io = fakeIo((argv) => {
+      if (argv[1] === "bootout") return { code: 3, stdout: "", stderr: "No such process" };
+      if (argv[1] === "print") return { code: 113, stdout: "", stderr: "not found" };
+      return ok;
+    });
+    io.files.set(unitPath(darwinTarget), "plist");
+    expect(daemonUninstall(darwinTarget, io)).toContain("uninstalled");
+    expect(io.files.has(unitPath(darwinTarget))).toBe(false);
   });
 
   test("stop failure propagates (launchctl bootout on unloaded service)", () => {
@@ -470,5 +547,22 @@ describe("cli dispatch", () => {
   test("doctor exit code follows the report verdict", async () => {
     const { deps: cli } = deps();
     expect(await runCli(["doctor"], cli)).toBe(1);
+  });
+});
+
+describe("processEntryPath", () => {
+  test("probes bundled sibling, then compiled output, then source", () => {
+    const dir = tempDir();
+    const base = pathToFileURL(join(dir, "main.js")).href;
+    const bundled = join(dir, "process-entry.js");
+    const compiled = join(dir, "delegation", "process-entry.js");
+    mkdirSync(join(dir, "delegation"), { recursive: true });
+    writeFileSync(bundled, "");
+    writeFileSync(compiled, "");
+    expect(processEntryPath(base)).toBe(bundled);
+    rmSync(bundled);
+    expect(processEntryPath(base)).toBe(compiled);
+    rmSync(compiled);
+    expect(processEntryPath(base)).toBe(join(dir, "delegation", "process-entry.ts"));
   });
 });

@@ -67,7 +67,7 @@ export async function serveProcessWorker(
 }
 
 /** Runs the same Worker loop in the child process. */
-export function processWorkerRun(request: ProcessWorkerRequest): Promise<string> {
+function processWorkerRun(request: ProcessWorkerRequest): Promise<string> {
   if (request.dbPath !== undefined && Storage.getInitializedDbPath() === null) {
     initialize({ dbPath: request.dbPath });
   }

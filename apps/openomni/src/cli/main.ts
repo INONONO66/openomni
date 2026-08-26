@@ -104,7 +104,8 @@ async function doctorPorts(): Promise<DoctorPorts> {
   const lingerEnabled = ((): boolean | undefined => {
     if (target.platform !== "linux") return undefined;
     const result = io.exec(["loginctl", "show-user", String(target.uid), "--property=Linger"]);
-    return result.code === 0 ? result.stdout.includes("Linger=yes") : undefined;
+    // An unverifiable linger state gets the warning, not the benefit of the doubt.
+    return result.code === 0 && result.stdout.includes("Linger=yes");
   })();
   return {
     bunVersion: Bun.version,

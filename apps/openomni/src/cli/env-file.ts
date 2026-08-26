@@ -1,4 +1,13 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname } from "node:path";
 
 /**
@@ -45,7 +54,14 @@ export function renderEnvFile(entries: readonly EnvEntry[]): string {
     if (/[\n\r]/.test(entry.value)) {
       throw new Error(`env value for ${entry.key} must not contain line breaks`);
     }
-    return `${entry.key}=${entry.value}`;
+    // Round-trip: a value the parser would unquote gets one protective
+    // quote layer, so `"secret"` reads back as `"secret"`, not `secret`.
+    const wouldUnquote =
+      entry.value.length >= 2 &&
+      ((entry.value.startsWith('"') && entry.value.endsWith('"')) ||
+        (entry.value.startsWith("'") && entry.value.endsWith("'")));
+    const value = wouldUnquote ? `"${entry.value}"` : entry.value;
+    return `${entry.key}=${value}`;
   });
   return `${lines.join("\n")}\n`;
 }
@@ -59,10 +75,17 @@ export function renderEnvFile(entries: readonly EnvEntry[]): string {
  */
 export function writeEnvFile(path: string, entries: readonly EnvEntry[]): void {
   mkdirSync(dirname(path), { recursive: true });
-  const temp = `${path}.tmp-${process.pid}`;
-  writeFileSync(temp, renderEnvFile(entries), { mode: 0o600 });
-  chmodSync(temp, 0o600);
-  renameSync(temp, path);
+  // Unpredictable name + O_EXCL: a planted symlink or file at the temp path
+  // fails the write instead of being followed or reused.
+  const temp = `${path}.${randomBytes(8).toString("hex")}.tmp`;
+  try {
+    writeFileSync(temp, renderEnvFile(entries), { mode: 0o600, flag: "wx" });
+    chmodSync(temp, 0o600);
+    renameSync(temp, path);
+  } catch (error) {
+    rmSync(temp, { force: true });
+    throw error;
+  }
 }
 
 /**
