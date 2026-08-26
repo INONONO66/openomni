@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787779797710,
+  "lastUpdate": 1787780071459,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -62585,6 +62585,90 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 518549,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9b440722f5ddeb0bfbb39dc035ca88aae88a6f05",
+          "message": "chore(channels): drop dead ipc band allowance, narrow barrel exports (#801)\n\n* chore(channels): narrow dependency band and exports\n\n* docs: reconcile band docs with the ipc-free channels whitelist\n\nAdversarial review caught gateway-design.md \\u00a71/S7 and both AGENTS.md\ntables still granting channels {ipc}; the band-boundary test comment\ncited the doc as authority while contradicting it. Also moved the\nresolve-route re-export below the import block (review nit).",
+          "timestamp": "2026-08-26T21:33:05Z",
+          "tree_id": "27381f05458e96399a107ed88d842740043ade49",
+          "url": "https://github.com/INONONO66/openomni/commit/9b440722f5ddeb0bfbb39dc035ca88aae88a6f05"
+        },
+        "date": 1787780070428,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2397,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16456,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8590,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 931,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 865,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1395,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 43,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1538,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 683,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 40365,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2161,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 501465,
             "unit": "ns/op"
           }
         ]
