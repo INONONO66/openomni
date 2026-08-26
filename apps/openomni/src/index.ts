@@ -3,8 +3,9 @@ import { type GatewayRouter, WaitService, WebSocketHandler } from "@openomni/cha
 import { ActorRegistry, BusPersistence, initialize, Session, Storage } from "@openomni/ledger";
 import { createMachineHost, type MachineHost } from "@openomni/machines";
 import type { Placement } from "@openomni/placement";
-import { Gateway, type Ingress, type Machine, newTraceId } from "@openomni/protocol";
+import { type Channel, Gateway, type Ingress, type Machine, newTraceId } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
+import { createChannelDrivers } from "./channels";
 import { assertWsExposure, loadConfig, type OpenOmniConfig, type RegisteredActor } from "./config";
 import type { MachinesPort } from "./tools/machines";
 import { createChannelDriver } from "./delegation/channel-driver";
@@ -101,6 +102,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
   // path below can tear down whatever a failed boot already built.
   let kernel: DelegationKernel | undefined;
   let host: MachineHost | undefined;
+  let externalSurfaces: Channel.Surface[] = [];
   try {
     // Owner-admitted delegation targets. Registration is an upsert, so a
     // restart re-asserting the same actors is a no-op.
@@ -112,10 +114,11 @@ export async function startOpenOmni(options: StartOptions = {}) {
         trustTier: actor.trustTier,
         ...(actor.displayName === undefined ? {} : { displayName: actor.displayName }),
       });
+      const channel = actor.channel ?? "ws";
       ActorRegistry.registerEndpoint({
-        id: `ws:${actor.externalId}`,
+        id: `${channel}:${actor.externalId}`,
         actorId: actor.actorId,
-        channel: "ws",
+        channel,
         externalId: actor.externalId,
       });
     }
@@ -272,19 +275,30 @@ export async function startOpenOmni(options: StartOptions = {}) {
       return residentDeliver(delivery);
     };
 
-    // Late-binds the handler the route delivers through: the gateway needs the
-    // route before the ws handler that needs the gateway exists.
+    // Every channel driver enters through the same gateway ingest seam. The
+    // closure is bound before the router exists but cannot be called until a
+    // surface starts after composition completes.
+    const routingHandler: Channel.MessageHandler = async (message) => {
+      if (gateway === undefined) throw new Error("channel delivery used before composition finished");
+      const result = await gateway.ingest(buildInboundEvent(message));
+      return result.kind === "dropped" ? null : { text: result.result.output };
+    };
+    const channelSetup = createChannelDrivers(config, routingHandler);
+    externalSurfaces = channelSetup.surfaces;
+
     let wsHandler: WebSocketHandler | undefined;
     const wsRoute = async (externalId: string, body: string) => {
       if (wsHandler === undefined) throw new Error("ws delivery used before composition finished");
       return wsHandler.push(externalId, body);
     };
+    const deliveryRoutes = new Map(channelSetup.deliveryRoutes);
+    deliveryRoutes.set("ws", wsRoute);
     gateway = createResidentGateway(
       deliver,
       actors.length === 0
         ? undefined
         : {
-            deliveryRoutes: new Map([["ws", wsRoute]]),
+            deliveryRoutes,
             grants: () =>
               actors.map((actor) => ({
                 id: `resident->${actor.actorId}`,
@@ -294,6 +308,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
               })),
             budgets: () => config.socialBudgets ?? [],
           },
+      ["ws", ...externalSurfaces.map((surface) => surface.id as "discord" | "telegram" | "github")],
     );
     // Recovery is deliberately after the Resident and gateway exist: boot
     // settlements must be able to deliver their one owner-session wake.
@@ -308,11 +323,11 @@ export async function startOpenOmni(options: StartOptions = {}) {
       residentDeliver(delegationWakeDelivery(wake)).then(() => undefined),
     );
 
-    const boundGateway = gateway;
-    wsHandler = new WebSocketHandler(async (message) => {
-      const result = await boundGateway.ingest(buildInboundEvent(message));
-      return result.kind === "dropped" ? null : { text: result.result.output };
-    }, Bus.publish, config.wsToken === undefined ? {} : { token: config.wsToken });
+    wsHandler = new WebSocketHandler(
+      routingHandler,
+      Bus.publish,
+      config.wsToken === undefined ? {} : { token: config.wsToken },
+    );
 
     const server = Bun.serve({
       hostname: config.host,
@@ -324,15 +339,29 @@ export async function startOpenOmni(options: StartOptions = {}) {
           // undefined = the upgrade succeeded; a Response = the upgrade was denied.
           return wsHandler.handleUpgrade(request, bunServer);
         }
+        if (
+          request.method === "POST" &&
+          url.pathname === "/github/webhook" &&
+          channelSetup.githubWebhookHandler !== undefined
+        ) {
+          return channelSetup.githubWebhookHandler(request);
+        }
         return new Response("Not found", { status: 404 });
       },
     });
 
     if (server.port === undefined) throw new Error("OpenOmni ws server did not bind a TCP port");
+    try {
+      await Promise.all(externalSurfaces.map((surface) => surface.start(recoveryTraceId)));
+    } catch (error) {
+      server.stop();
+      throw error;
+    }
     return {
       port: server.port,
       async stop(): Promise<void> {
         server.stop();
+        for (const surface of externalSurfaces) surface.stop(newTraceId());
         kernel?.stop();
         host?.close();
         // Journal shutdown contract: every accepted event row is committed
@@ -346,6 +375,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
     // Fail-closed boot rollback: a failure after the journal started leaves
     // no leaked Bus observer, no armed kernel timer, and no configured
     // storage behind — a later boot starts clean.
+    for (const surface of externalSurfaces) surface.stop(newTraceId());
     kernel?.stop();
     host?.close();
     stopBusPersistence();

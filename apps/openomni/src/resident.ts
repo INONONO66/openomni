@@ -1,4 +1,9 @@
-import { ChatAgent, type ChatAgentConfig, type ChatAgentInput } from "@openomni/agent";
+import {
+  ChatAgent,
+  type ChatAgentConfig,
+  type ChatAgentInput,
+  createCompactionPolicy,
+} from "@openomni/agent";
 import { Session } from "@openomni/ledger";
 import type { Placement } from "@openomni/placement";
 import type { Gateway, Ingress, Message, Model } from "@openomni/protocol";
@@ -144,6 +149,13 @@ export function createResident(options: ResidentOptions) {
       toolTargets: targets,
       toolChoice: evidenceOnly || tools.length === 0 ? "none" : "auto",
       toolExecutor: evidenceOnly ? refuseEvidenceOnlyToolCall : catalog.execute,
+      middleware: [
+        createCompactionPolicy({
+          events: Bus,
+          priority: 900,
+          elideToolOutputs: { minOutputChars: 4000, keepHeadChars: 500 },
+        }),
+      ],
       model: options.model,
       auth: { type: "api", key: options.apiKey },
       ...(options.llm === undefined ? {} : { llm: options.llm }),
