@@ -12,10 +12,17 @@ const PolicyBase = z.object({
   time: z.number(),
 });
 
-const PolicyObligation = z
-  .object({
-    type: z.string(),
-  })
+// Audit events retain upcast-on-read compatibility with historical obligations
+// that only guaranteed a free-form `type`. PolicyEffects.PolicyObligation is
+// the canonical owner; this derived shape keeps its fields optional and
+// preserves unknown fields. Acceptance is slightly NARROWER than the old
+// independent passthrough: canonical-owner keys (obligationId, description,
+// timeoutMs, resolvedBy) are now validated when present, so a payload carrying
+// one with a nonconforming value is rejected instead of passed through. The
+// sole producer (policy engine audit) already conforms, and no read path
+// re-parses persisted rows with this schema.
+const PolicyObligation = PolicyEffects.PolicyObligation.partial()
+  .extend({ type: z.string() })
   .passthrough();
 
 const PolicyAuditContext = z.object({
@@ -78,17 +85,5 @@ export const Events = {
       reason: z.string(),
     }),
     { visibility: "llm_reason" },
-  ),
-  ActionApproved: BusEvent.define(
-    "policy.action.approved",
-    PolicyBase.extend({
-      actionId: z.string(),
-      actor: z.record(z.string(), z.unknown()),
-      action: z.string(),
-      resource: z.string(),
-      verdict: z.enum(["allow", "deny", "pending"]),
-      reason: z.string(),
-    }),
-    { visibility: "ephemeral" },
   ),
 };
