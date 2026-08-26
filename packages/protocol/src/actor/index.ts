@@ -170,7 +170,6 @@ export namespace Actor {
       trustTier: TrustTier,
       blacklistEntryId: z.string().min(1).optional(),
       channelGrantIds: z.array(z.string().min(1)).optional(),
-      workerGrantIds: z.array(z.string().min(1)).optional(),
       systemPrompt: z.string().optional(),
       tools: z.array(Tool.Spec).optional(),
       model: Model.Ref.optional(),

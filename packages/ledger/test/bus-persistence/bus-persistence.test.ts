@@ -403,8 +403,8 @@ describe("BusPersistence", () => {
         time: z.number(),
       }),
     );
-    const workerGrantEvent = BusEvent.define(
-      "worker_grant.evaluated",
+    const workerRunEvent = BusEvent.define(
+      "worker_run.evaluated",
       z.object({
         id: z.string(),
         workerRunId: z.string(),
@@ -420,7 +420,7 @@ describe("BusPersistence", () => {
       traceId: "trace-ask",
       time: 1,
     });
-    Bus.publish(workerGrantEvent, {
+    Bus.publish(workerRunEvent, {
       id: "grant-1",
       workerRunId: "worker-run-1",
       traceId: "trace-grant",
@@ -431,7 +431,7 @@ describe("BusPersistence", () => {
     expect(persisted.map((row) => row.session_id)).toEqual([session.id, session.id]);
     expect(persisted.map((row) => row.event_type)).toEqual([
       "pending_ask.opened",
-      "worker_grant.evaluated",
+      "worker_run.evaluated",
     ]);
   });
 
@@ -461,7 +461,7 @@ describe("BusPersistence", () => {
       "trace-test",
     );
     const event = BusEvent.define(
-      "worker_grant.evaluated",
+      "worker_run.evaluated",
       z.object({
         workerRunId: z.string(),
         traceId: z.string(),
@@ -477,13 +477,13 @@ describe("BusPersistence", () => {
     });
 
     const persisted = await waitForRows(1);
-    const grantRow = persisted.find((row) => row.event_type === "worker_grant.evaluated");
-    expect(grantRow?.session_id).toBe(workSession.id);
+    const runRow = persisted.find((row) => row.event_type === "worker_run.evaluated");
+    expect(runRow?.session_id).toBe(workSession.id);
   });
 
   test("continues when worker run session lookup fails", async () => {
     const event = BusEvent.define(
-      "worker_grant.evaluated",
+      "worker_run.evaluated",
       z.object({
         workerRunId: z.string(),
         traceId: z.string(),

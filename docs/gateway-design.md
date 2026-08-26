@@ -346,9 +346,10 @@ Stays in openomni: `resident/`, `agents/`, `execution-runtime/`,
 `work-item/` (+ engagement machine), `evidence/`, `projection/`, `effect/`,
 `ledger/`, conduct policy glue.
 
-Stays in session: `session/`, `work-item/`, `worker-run/`, `worker-grant/`,
+Stays in session: `session/`, `work-item/`, `worker-run/`,
 `artifact/`, `effect/`, message/part/transcript adapters, `ledger-core/`,
-`bus-persistence/`, `app-connector/`.
+`bus-persistence/`, `app-connector/` (`worker-grant/` was deleted
+consumer-dead after the #797 decommission).
 
 ## 7. Slop guards (normative)
 

@@ -6,7 +6,6 @@ import { BusPersistence } from "../../src/bus-persistence/index.js";
 import { Session } from "../../src/session/index.js";
 import { Storage } from "../../src/storage/storage.js";
 import { WaitStore } from "../../src/wait/index.js";
-import { WorkerGrantStore } from "../../src/worker-grant/index.js";
 import { buildWaitCreate } from "../helpers/wait.js";
 import "../../src/storage/initialize.js";
 
@@ -91,53 +90,6 @@ describe("persistence attribution refuses to launder foreign ids", () => {
     expect(chain.map((row) => row.event_type)).toContain("session.deleted");
   });
 
-  test("worker_grant events persist, attributed through the seeded run's session", async () => {
-    // The old root-level `id` attribution stamped session_id = grantId and
-    // FK-dropped every worker_grant.* row. The payload carries workerRunId;
-    // the resolver walks it to the run's session (worker_run_state archive).
-    const session = Session.create({
-      traceId: "trace-grant-persist",
-      title: "Grant host",
-      model: { providerID: "test", modelID: "test-model" },
-    });
-    const workerRunState = Storage.getAdapter().workerRunState;
-    if (!workerRunState) throw new Error("workerRunState sub-adapter missing");
-    workerRunState.create(session.id, {
-      runId: "run-grant-persist",
-      agentName: "worker",
-      status: "queued",
-      executorKind: "internal_chat_agent",
-      title: "run-grant-persist",
-      prompt: "test",
-    });
-
-    WorkerGrantStore.create(
-      {
-        id: "grant-persist-1",
-        workerRunId: "run-grant-persist",
-        allowedActions: ["worker.send"],
-        canCreateExternalTasks: false,
-      },
-      "trace-grant-persist",
-    );
-    WorkerGrantStore.revoke("grant-persist-1", "trace-grant-persist");
-    await flushPersistence();
-
-    expect(rows("worker_grant.created")).toEqual([
-      {
-        session_id: session.id,
-        event_type: "worker_grant.created",
-        trace_id: "trace-grant-persist",
-      },
-    ]);
-    expect(rows("worker_grant.revoked")).toEqual([
-      {
-        session_id: session.id,
-        event_type: "worker_grant.revoked",
-        trace_id: "trace-grant-persist",
-      },
-    ]);
-  });
 });
 
 describe("persistence failure is loud and contained", () => {
