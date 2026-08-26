@@ -70,6 +70,37 @@ function cell(code: string, timeoutMs = 15_000): Machine.CellRequest {
 }
 
 describe("cell settlement ownership", () => {
+  test("a queued cell times out from its enqueue deadline without replacing the interpreter", async () => {
+    const kernel = new PythonKernel();
+    try {
+      const first = kernel.run(
+        {
+          cellId: "blocking",
+          code: "value = 42\nimport time\ntime.sleep(0.08)",
+          timeoutMs: 1_000,
+        },
+        noTools,
+      );
+      const queued = kernel.run(
+        { cellId: "queued", code: "value = 99", timeoutMs: 5 },
+        noTools,
+      );
+
+      expect(await first).toMatchObject({ status: "completed", cellId: "blocking" });
+      expect(await queued).toMatchObject({ status: "timed_out", cellId: "queued" });
+      // The queued timeout never ran, so it must not discard the persistent interpreter.
+      await expect(
+        kernel.run({ cellId: "after-queue", code: "value", timeoutMs: 1_000 }, noTools),
+      ).resolves.toMatchObject({
+        status: "completed",
+        cellId: "after-queue",
+        value: "42",
+      });
+    } finally {
+      kernel.close();
+    }
+  });
+
   test("a replaced interpreter's exit never settles its successor's cell", async () => {
     // Queued in the same microtask as the timing-out cell, so the successor is
     // already pending when the killed interpreter's exit event lands. That is
