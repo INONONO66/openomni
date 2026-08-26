@@ -20,26 +20,12 @@
       ],
       "project": ["script/**/*.ts", "*.json", "*.jsonc", "*.yml", "*.yaml"]
     },
-    "apps/server": {
-      "entry": [
-        "src/cli.ts",
-        "src/execution/worker-entry.ts",
-        "src/manual/*.ts",
-        "test/**/*.test.ts",
-        "test/e2e/*.ts"
-      ],
-      "project": ["src/**/*.ts", "test/**/*.ts"]
-    },
     "apps/openomni": {
       "entry": ["src/index.ts", "test/**/*.test.ts"],
       "project": ["src/**/*.ts", "test/**/*.ts"]
     },
     "packages/channels": {
       "entry": ["test/**/*.test.ts"],
-      "project": ["src/**/*.ts", "test/**/*.ts"]
-    },
-    "packages/coordinator": {
-      "entry": ["test/**/*.test.ts", "test/harness/*.ts"],
       "project": ["src/**/*.ts", "test/**/*.ts"]
     },
     "packages/ipc": {
@@ -50,14 +36,6 @@
     "packages/protocol": {
       "entry": ["test/**/*.test.ts"],
       "project": ["src/**/*.ts", "test/**/*.ts"]
-    },
-    "packages/openomni": {
-      "entry": [
-        "src/index.ts",
-        "bench/**/run.ts",
-        "src/**/*.test.ts",
-        "test/**/*.test.ts"
-      ]
     }
   }
 }

@@ -9,11 +9,8 @@ type PackageKey =
   | "ledger"
   | "llm"
   | "agent"
-  | "openomni"
-  | "coordinator"
   | "machines"
   | "channels"
-  | "server"
   | "openomniApp";
 
 type PackageRule = {
@@ -36,16 +33,9 @@ const SHOW_FIX_SUGGESTIONS = Bun.argv.includes("--fix-suggestions");
 
 // Known deep import violations (tracked tech debt — do not extend)
 // Keyed by "file:importPath" to avoid file-wide exemptions that could hide new violations.
-const KNOWN_DEEP_IMPORTS = new Set([
-  "apps/server/src/tool/mcp/provider.ts:@openomni/agent/src/runtime/mcp",
-  "apps/server/src/index.ts:@openomni/agent/src/runtime/mcp",
-]);
+const KNOWN_DEEP_IMPORTS = new Set<string>();
 
-const KNOWN_DEEP_RELATIVE_IMPORTS = new Set([
-  "packages/openomni/src/execution-runtime/tool/agent/provider.ts:../../../dispatch/index.js",
-  "packages/openomni/src/execution-runtime/tool/agent/tools/child-agent.ts:../../../child-agent/index.js",
-  "packages/openomni/src/execution-runtime/tool/agent/tools/dispatch.ts:../../../../dispatch/runtime.js",
-]);
+const KNOWN_DEEP_RELATIVE_IMPORTS = new Set<string>();
 
 const RULES: Record<PackageKey, PackageRule> = {
   protocol: {
@@ -128,21 +118,6 @@ const RULES: Record<PackageKey, PackageRule> = {
       "@openomni/llm",
     ]),
   },
-  openomni: {
-    displayName: "openomni",
-    packageJsonPath: "packages/openomni/package.json",
-    packageName: "@openomni/openomni",
-    allowedDeps: "any-except-self",
-  },
-  coordinator: {
-    displayName: "coordinator",
-    packageJsonPath: "packages/coordinator/package.json",
-    packageName: "@openomni/coordinator",
-    // Ring-2 process driver: protocol + ipc only (#462 step 1 made it
-    // ledger-free; #496 moved the IPC transport into @openomni/ipc; this
-    // ratchet keeps it that way — widening requires Owner sign-off).
-    allowedDeps: new Set(["@openomni/protocol", "@openomni/ipc"]),
-  },
   machines: {
     displayName: "machines",
     packageJsonPath: "packages/machines/package.json",
@@ -179,21 +154,12 @@ const RULES: Record<PackageKey, PackageRule> = {
       "@openomni/ledger",
     ]),
   },
-  server: {
-    displayName: "server",
-    packageJsonPath: "apps/server/package.json",
-    packageName: "@openomni/server",
-    allowedDeps: "any-except-self",
-  },
   openomniApp: {
     displayName: "openomni app",
     packageJsonPath: "apps/openomni/package.json",
     packageName: "@openomni/app",
-    // Clean-room fence: @openomni/openomni and @openomni/coordinator are
-    // deliberately absent. The existing S8 helper is channels-package-only;
-    // the global deep-import gate keeps this app on the channels barrel, and
-    // src/gateway.ts is the sole source consumer of its router exports.
-    forbiddenDeps: new Set(["@openomni/openomni", "@openomni/coordinator"]),
+    // The global deep-import gate keeps this app on package barrels, and
+    // src/gateway.ts is the sole source consumer of channels router exports.
     allowedDeps: new Set([
       "@openomni/protocol",
       "@openomni/channels",
@@ -462,7 +428,7 @@ function isChannelsDriverRouterEdge(filePath: string, importPath: string): boole
   if (!filePath.startsWith(CHANNELS_SRC_PREFIX)) return false;
   if (isChannelsJudgmentPath(filePath)) return false;
   // The package barrel is the composition root's export surface, not a
-  // driver — it is how apps/server reaches createGatewayRouter at all.
+  // driver — it is how apps/openomni reaches createGatewayRouter.
   if (filePath === "packages/channels/src/index.ts") return false;
   if (!importPath.startsWith(".")) return false;
   const baseDir = filePath.split("/").slice(0, -1);
@@ -676,10 +642,7 @@ async function validateDeepRelativeImports(): Promise<string[]> {
 
 // Allowed `as any` locations (pre-existing tech debt — do not extend).
 // protocol/error was removed 2026-08 (#552 item 5): zero remaining hits.
-const ALLOWED_AS_ANY_FILES = new Set([
-  "packages/openomni/src/ingress/event-projector.ts",
-  "packages/agent/src/runtime/messenger/transport.ts",
-]);
+const ALLOWED_AS_ANY_FILES = new Set(["packages/agent/src/runtime/messenger/transport.ts"]);
 
 // Known catch-all filenames (pre-existing tech debt)
 const KNOWN_CATCHALL_FILES = new Set<string>();
@@ -767,10 +730,7 @@ const TRACKED_DOCS = [
   "packages/llm/AGENTS.md",
   "packages/agent/AGENTS.md",
   "packages/placement/AGENTS.md",
-  "packages/openomni/AGENTS.md",
-  "packages/coordinator/AGENTS.md",
   "packages/channels/AGENTS.md",
-  "apps/server/AGENTS.md",
 ];
 
 const STALE_THRESHOLD = 50; // commits since last modification
@@ -853,12 +813,6 @@ function selfTest(): void {
     srcAllowedDeps: new Set(["@openomni/protocol"]),
   };
   const oneTier: PackageRule = { ...twoTier, srcAllowedDeps: undefined };
-  const cleanFence: PackageRule = {
-    ...twoTier,
-    allowedDeps: "any-except-self",
-    forbiddenDeps: new Set(["@openomni/openomni"]),
-  };
-
   const cases: Array<[string, boolean]> = [
     ["manifest permits what the manifest lists", isAllowedDep(twoTier, "@openomni/telemetry")],
     [
@@ -873,10 +827,6 @@ function selfTest(): void {
     ],
     ["external packages are never layered", isAllowedSourceDep(twoTier, "zod")],
     [
-      "an explicit clean-room fence overrides a broad allow rule",
-      !isAllowedDep(cleanFence, "@openomni/openomni"),
-    ],
-    [
       "S8: a channels driver may not import the policy engine",
       isChannelsBandingViolation("packages/channels/src/discord/surface.ts", "@openomni/policy"),
     ],
@@ -890,7 +840,7 @@ function selfTest(): void {
     ],
     [
       "S8: the banding rule scopes to the channels package only",
-      !isChannelsBandingViolation("packages/openomni/src/ingress/engine.ts", "@openomni/policy"),
+      !isChannelsBandingViolation("apps/openomni/src/gateway.ts", "@openomni/policy"),
     ],
     [
       "S8: a channels driver may not import the ledger",
@@ -971,7 +921,7 @@ function selfTest(): void {
     [
       "S8: the ledger surface pin scopes to the judgment band",
       channelsRouterLedgerViolations(
-        "packages/openomni/src/ingress/engine.ts",
+        "apps/openomni/src/gateway.ts",
         'import { Session } from "@openomni/ledger";',
       ).length === 0,
     ],

@@ -22,7 +22,7 @@ Documentation may use "guaranteed", "cannot", or "never" only for rows marked �
 | Append-only, record-before-act decisions through `Ledger.append(event, expectedHead)` | 📋 | Target contract; current Bus persistence is not the serialized/CAS write gate. |
 | WorkItem creation requires ≥1 acceptance criterion | Implemented check | WorkItem schema and `worker.spawn` handling; not promoted to the structural-guarantee set. |
 | Completion claims remain distinct from observations and scoped criterion results | ✅ | The Worker completion projector binds each criterion to durable WorkItem-local evidence, resolves verifier input from those records, executes deterministic verifier-registry checks, and never promotes claimant prose, process exit, an unbound artifact, or a check of a different predicate into a result. |
-| WorkItem terminal completion has one contract-closing admission authority | ✅ | `packages/openomni/src/work-item/` folds current contract/basis/facts/blockers, dispatches fail-closed `work.complete.pre`, records a CAS-bound admission before terminal completion, and resumes idempotently after restart. Session raw completion is a typed refusal. |
+| WorkItem terminal completion has one contract-closing admission authority | contract inherited; consumer removed | The durable contract still requires current basis/facts/blockers, fail-closed `work.complete.pre`, and a CAS-bound admission before terminal completion. #792 removed its only product implementation; session raw completion remains a typed refusal. |
 | Retry exhaustion adds a blocker and reaches the current Owner-visible task surface | Implemented check | WorkItem retry enforcement and the authenticated local `show open tasks` surface; broader push notification remains target work. |
 | Worker memory recall is task-scoped | 📋 | Target `memory.recall.pre`; no memory engine or recall consumer is wired. |
 | Memory snapshot character budgets | ✅ | The clean-room app's built-in layer (`apps/openomni/src/memory/`): hard write-time budgets and per-session frozen snapshot injection. The engine port and recall policy remain targets. |
@@ -38,7 +38,7 @@ What separates a plain tool from dispatch is the **radius of the effect**:
 - **Tool = sandbox-local effect.** Confined to the executor's own workspace and run (read/grep in its worktree, run its own tests). Guarded by fail-closed tool permission; legitimately invisible to the rest of the system, because nothing outside the sandbox can be affected.
 - **Dispatch = boundary-crossing effect.** Anything touching shared state or other actors: other sessions, humans, schedules, devices, the physical world. Must pass the gate (authorize → route → audit). A living-room light is shared world state; a file in your own worktree is not.
 
-Consequently, mutating MCP/custom tools sit behind dispatch handlers; read-only tools (search, lookups) may remain directly attached. A device driver, like a channel adapter, lives in `apps/server` plus one handler registration — the kernel stays unchanged.
+Consequently, mutating MCP/custom tools sit behind dispatch handlers; read-only tools (search, lookups) may remain directly attached. A device driver, like a channel adapter, is registered in `apps/openomni` behind a protocol port; core packages stay unchanged.
 
 Subagent vs Worker are different species, not tiers of one thing:
 

@@ -148,7 +148,7 @@ function claimResidentSurfaceSession(surfaceKey: string): string {
  *    the durable session. Only this field is stripped: the rest of
  *    `activation` (activationId, ...) is in-process routing residue the
  *    projection layer already re-derives or drops, and a legitimate caller
- *    never sets durableSessionId (apps/server ingress/bridge builds none).
+ *    never sets durableSessionId (the app gateway builds none).
  *  - `meta.channelGrantId` / `meta.channelGrantKind` / `meta.pendingAsk`: the
  *    channel-grant treatment + pending-ask projections the router stamps
  *    (authority.applyChannelGrantTreatment / routing-execution). They ride to
@@ -161,7 +161,7 @@ function claimResidentSurfaceSession(surfaceKey: string): string {
  *    message. Any other value ("full_access") is an elevation attempt and is
  *    stripped.
  *
- * Verified no legitimate producer sets these: apps/server ingress/bridge
+ * Verified no legitimate producer sets these: the app gateway
  * `buildInboundEvent` builds meta as { actor, surfaceKey, kind, sender,
  * replyToId, threadId, raw, agentName, correlation } and sets no `activation`.
  */

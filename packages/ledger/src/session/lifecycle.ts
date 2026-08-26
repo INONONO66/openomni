@@ -129,7 +129,7 @@ export function list(): SessionInfo[] {
  * Explicit expiry sweep: physically removes every expired session (message/
  * part cascade included, via remove()). Reads (get/list) only FILTER expired
  * rows; this is the single place expiry causes a write. Invoked from the boot
- * recovery sweeps (apps/server/src/bootstrap/recovery.ts and the OpenOmni app
+ * recovery sweeps (including the OpenOmni app
  * boot in apps/openomni/src/index.ts) alongside WaitService.sweepExpired;
  * there is no periodic scheduler yet, so long-lived processes re-sweep only
  * on restart.

@@ -5,7 +5,7 @@ import { createToolExecutor } from "../../../src/core/execution/tools";
 import { PolicyEngine } from "../../../src/core/policy";
 
 // #522 defect 2 — sole-emitter pin. The worker-side executor
-// (packages/openomni execution-runtime/tool/executor.ts) is the SOLE
+// The injected product executor is the SOLE
 // emitter of Tool.Events.Started/Completed. The agent-side wrapper keeps
 // policy dispatch and effect application only; it must not re-emit. This
 // composes the agent wrapper over a base executor that emits the worker

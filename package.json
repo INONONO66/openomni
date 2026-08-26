@@ -6,22 +6,9 @@
     "type": "git",
     "url": "git+https://github.com/INONONO66/openomni.git"
   },
-  "bin": {
-    "openomni": "dist/bin/cli.js"
-  },
-  "files": [
-    "dist/bin",
-    "migration"
-  ],
   "scripts": {
-    "build:dist": "bun run script/build-dist.ts",
-    "smoke:dist": "bun run script/smoke-dist.ts",
-    "prepack": "bun run build:dist && bun run smoke:dist",
-    "release": "bun run build:dist && bun run smoke:dist && bun publish",
     "build": "turbo run build",
     "dev": "turbo run dev",
-    "server": "bun run --cwd apps/server src/index.ts",
-    "server:dev": "bun --watch run --cwd apps/server src/index.ts",
     "prepare": "lefthook install",
     "lint": "bun run lint:guards && bun run lint:side-effects && bunx ultracite check --formatter-enabled=false .",
     "lint:guards": "bun run script/lint-guards.ts",
@@ -33,9 +20,6 @@
     "test": "turbo run test",
     "bench": "turbo run bench",
     "generate:models-snapshot": "bun run script/generate-models-snapshot.ts"
-  },
-  "dependencies": {
-    "opensearch-ai-sdk": "0.0.3"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.16",

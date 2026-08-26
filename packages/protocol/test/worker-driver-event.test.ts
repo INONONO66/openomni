@@ -30,4 +30,4 @@ describe("Worker.Events.RunSettled outcome", () => {
 });
 
 // #500 C3: the WorkerDeliveryError taxonomy suite moved to
-// packages/coordinator/test/error.test.ts with the error type.
+// the removed local-process driver tests with the error type.

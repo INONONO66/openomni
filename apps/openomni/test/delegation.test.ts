@@ -1,4 +1,4 @@
-import { describe, expect, setSystemTime, test, vi } from "bun:test";
+import { describe, expect, test, vi } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -251,13 +251,16 @@ describe("durable kernel", () => {
   test("deadline and await timers re-arm instead of settling at the timer cap", async () => {
     const timerCap = 2_147_000_000;
     vi.useFakeTimers();
-    setSystemTime(0);
+    // Injected clock, not setSystemTime: bun ≤1.3.6 (the pinned CI toolchain)
+    // does not advance the fake Date clock with advanceTimersByTime, so a
+    // Date.now()-backed kernel sees real time and settles at the first fire.
+    let now = 0;
     let wakes = 0;
     let kernel: ReturnType<typeof createDelegationKernel> | undefined;
     try {
       kernel = createDelegationKernel({
         drivers: { process: { run: () => new Promise(() => undefined) } },
-        now: () => Date.now(),
+        now: () => now,
         newDelegationId: () => "d-long-deadline",
         wake: () => {
           wakes += 1;
@@ -280,12 +283,14 @@ describe("durable kernel", () => {
         return result;
       });
 
+      now = timerCap;
       vi.advanceTimersByTime(timerCap);
       await Promise.resolve();
       expect(DelegationStore.get(started.handle.delegationId)?.status).toBe("open");
       expect(awaited).toBeUndefined();
       expect(wakes).toBe(0);
 
+      now = timerCap + 1_000;
       vi.advanceTimersByTime(1_000);
       await expect(waiting).resolves.toMatchObject({
         kind: "settled",
@@ -312,7 +317,13 @@ describe("delegation controls and tool surface", () => {
     });
     const spec = delegateToolSpec();
     expect(spec.name).toBe(DELEGATE_TOOL_NAME);
-    expect((spec.inputSchema as { properties: Record<string, unknown> }).properties.operation).toBeDefined();
+    const variants = (
+      spec.inputSchema as { oneOf: readonly { properties: Record<string, unknown> }[] }
+    ).oneOf;
+    expect(variants.length).toBe(2);
+    for (const variant of variants) {
+      expect(variant.properties.operation).toBeDefined();
+    }
     const answer = await delegateToolExecutor(kernel, RESIDENT)({
       instruction: "send it",
       operation: "ask",

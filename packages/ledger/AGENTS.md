@@ -6,7 +6,7 @@ SSOT directive ([docs/gateway-design.md](../../docs/gateway-design.md) §4, Owne
 
 `Bus` itself lives in `@openomni/telemetry` (#606) — every consumer imports it from there directly; this package keeps the durable journal that subscribes to it.
 
-This package stores facts; the kernel decides their product meaning. Communication routing, actor authority, PendingInteraction/PendingAsk precedence, worker grant semantics, and writeback belong in `@openomni/openomni`.
+This package stores facts; the kernel decides their product meaning. Communication routing, actor authority, PendingInteraction/PendingAsk precedence, worker grant semantics, and writeback belong in product composition.
 
 `WorkerRunStateStore`, `PendingAskStore`, and `PendingInteractionStore` are FROZEN legacy storage surfaces: every write throws a typed frozen error (#510 D2b / #548) and historical rows stay readable; the attempt-run view (`WorkItemAttemptRun`) read-upcasts them. New delegated-execution writes use the canonical WorkItem attempt and `Wait` contracts in the [kernel contract](../../docs/kernel-contract.md).
 
@@ -96,7 +96,7 @@ Stores must not own kernel decisions:
 - Do not route messages to Resident/Worker/session/surface.
 - Do not perform writeback or projection policy.
 
-If a store method starts combining multiple product facts into an allow/deny/routing result, move that logic to `packages/openomni` and keep only the indexed data access here.
+If a store method starts combining multiple product facts into an allow/deny/routing result, move that logic to `apps/openomni` and keep only the indexed data access here.
 
 ## ANTI-PATTERNS
 
@@ -105,6 +105,6 @@ If a store method starts combining multiple product facts into an allow/deny/rou
 - Do NOT persist ad-hoc delegated execution state alongside `Session`. `worker_run_state` is a frozen read-only archive; new writes use the canonical WorkItem attempt contract rather than reviving the legacy shape.
 - Do NOT write raw self-loop transcripts back into the original user session. Store internal work in child sessions and let `openomni` decide what distilled result belongs in the original session.
 - Do NOT add communication routing or authority evaluation here. The ledger is the durable substrate; OpenOmni is the kernel.
-- Do NOT add a second completion-admission append or terminal method here. The only product completion boundary is `packages/openomni/src/work-item/`.
+- Do NOT add a second completion-admission append or terminal method here. A future product completion boundary must consume the inherited contract rather than adding a ledger shortcut.
 
 _Edited 2026-08-10 per Owner-approved clean-room corpus (local docs/corpus, session record)._

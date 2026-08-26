@@ -49,8 +49,8 @@ jobs:
       # (needs the protocol dist built above).
       - if: matrix.task == 'check-types'
         run: bunx tsc -p script/tsconfig.json
-      # turbo run lint only visits packages/*/src (each package's lint script);
-      # it silently skips apps/server, script/, qa/, and every test file. Lint
+      # turbo run lint only visits workspace source trees; it silently skips
+      # script/, qa/, and every test file. Lint
       # the WHOLE repo so the ~420 test files + tooling are actually covered.
       - if: matrix.task == 'lint'
         run: bunx ultracite check --formatter-enabled=false .
@@ -122,18 +122,14 @@ jobs:
       - name: Test (ipc)
         run: bun test --timeout 15000 --coverage --coverage-reporter=lcov --coverage-dir=coverage
         working-directory: packages/ipc
-      - name: Test (openomni)
-        run: bun run test:ci
-        working-directory: packages/openomni
-      - name: Test (coordinator)
-        run: bun test --timeout 15000 --coverage --coverage-reporter=lcov --coverage-dir=coverage
-        working-directory: packages/coordinator
       - name: Test (channels)
         run: bun test --timeout 15000 --coverage --coverage-reporter=lcov --coverage-dir=coverage
         working-directory: packages/channels
-      - name: Test (server)
-        run: bun test --timeout 15000 --coverage --coverage-reporter=lcov --coverage-dir=coverage
-        working-directory: apps/server
+      - name: Test (openomni app)
+        # No --coverage: the coverage ratchet baselines packages only, so an
+        # apps/openomni report would fail it as an unbaselined package.
+        run: bun test --timeout 15000
+        working-directory: apps/openomni
       - name: Test (conformance)
         run: bun test --timeout 15000 script/conformance
       - name: Test (tsconfig inheritance verifier)
@@ -148,26 +144,6 @@ jobs:
             packages/*/coverage/
             apps/*/coverage/
           if-no-files-found: ignore
-
-  smoke-dist:
-    name: Dist Smoke
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          fetch-depth: 0
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version-file: package.json
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        with:
-          path: ~/.bun/install/cache
-          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
-          restore-keys: bun-${{ runner.os }}-
-      - run: bun install --frozen-lockfile
-      - run: bun run build:dist
-      - run: bun run smoke:dist
 
   quality:
     name: Quality

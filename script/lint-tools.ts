@@ -35,12 +35,10 @@ interface Violation {
 
 interface Baseline {
   readonly vocab: { readonly unmappedNamespaces: readonly string[] };
-  readonly tools: { readonly exceptions: Readonly<Record<string, readonly string[]>> };
+  // Absent when no tool needs an exception — an empty exceptions map cannot
+  // be written without an added baseline line, so the key simply disappears.
+  readonly tools?: { readonly exceptions: Readonly<Record<string, readonly string[]>> };
   readonly naming: { readonly grandfathered: readonly string[] };
-  readonly earned: {
-    readonly dormantActions: readonly string[];
-    readonly dormantTools: readonly string[];
-  };
 }
 
 type SchemaSnapshot = Readonly<Record<string, readonly string[]>>;
@@ -49,8 +47,6 @@ const BASELINE_PATH = "script/conformance/lint-tools-baseline.json";
 const SNAPSHOT_PATH = "script/conformance/schema-snapshot.json";
 const PROTOCOL_SRC = "packages/protocol/src";
 const CORE_MODEL_PATH = "docs/core-model.md";
-const PRODUCTION_ROOTS = ["packages", "apps"];
-const EXCLUDED_PATH_PARTS = ["/dist/", "/node_modules/", "/coverage/", "/generated/"];
 const TEST_SUFFIXES = [".test.ts", ".test.tsx", ".bench.ts"];
 
 // ---------------------------------------------------------------------------
@@ -178,25 +174,14 @@ export function lintToolSurface(tool: ToolSurface): ToolLintFailure[] {
 }
 
 async function collectToolSurfaces(): Promise<ToolSurface[]> {
-  const { SystemToolProvider, AgentToolProvider, createChildAgentTool } = await import(
-    "../packages/openomni/src/execution-runtime/tool/index.js"
-  );
-
-  const stubDispatchRuntime = {
-    submit: () => Promise.reject(new Error("lint-only stub")),
-  };
-  const stubChildRuntime = {} as never;
-
-  const tools = [
-    ...new SystemToolProvider("/").listTools(),
-    ...new AgentToolProvider({ dispatchRuntime: stubDispatchRuntime }).listTools(),
-    createChildAgentTool(stubChildRuntime),
-  ];
-
-  return tools.map((tool) => ({
-    name: tool.spec.name,
-    description: tool.spec.description,
-    inputSchema: tool.spec.inputSchema as Record<string, unknown>,
+  // The sole app exposes its whole shippable surface as data through
+  // collectToolSpecs — the catalog table in apps/openomni/src/tools/catalog.ts
+  // is the single owner, so what the lint reads is what the app can ship.
+  const { collectToolSpecs } = await import("../apps/openomni/src/tools/catalog.js");
+  return collectToolSpecs().map((spec) => ({
+    name: spec.name,
+    description: spec.description,
+    inputSchema: spec.inputSchema,
   }));
 }
 
@@ -205,7 +190,7 @@ async function checkToolLint(baseline: Baseline): Promise<Violation[]> {
   const violations: Violation[] = [];
 
   for (const surface of surfaces) {
-    const exceptions = new Set(baseline.tools.exceptions[surface.name] ?? []);
+    const exceptions = new Set(baseline.tools?.exceptions[surface.name] ?? []);
     for (const failure of lintToolSurface(surface)) {
       if (!exceptions.has(failure.rule)) {
         violations.push({
@@ -258,102 +243,53 @@ async function checkNaming(baseline: Baseline): Promise<Violation[]> {
 // check 6 — earned check
 // ---------------------------------------------------------------------------
 
-async function collectProductionSources(): Promise<Map<string, string>> {
-  const sources = new Map<string, string>();
-  for (const root of PRODUCTION_ROOTS) {
-    const glob = new Bun.Glob(`${root}/*/src/**/*.ts`);
-    for await (const filePath of glob.scan({ cwd: ".", onlyFiles: true })) {
-      if (
-        TEST_SUFFIXES.some((suffix) => filePath.endsWith(suffix)) ||
-        EXCLUDED_PATH_PARTS.some((part) => filePath.includes(part))
-      ) {
-        continue;
-      }
-      sources.set(filePath, await Bun.file(filePath).text());
-    }
-  }
-  return sources;
-}
+// The legacy registry's reference-count leg died with its product tree: the
+// sole app's tools are capability-composed at the catalog and consumed by the
+// model over the gateway, so no static string reference can ever mark a tool
+// "earned". What remains checkable is the other direction — every tool spec
+// the app defines must be wired into the catalog. The catalog is the only
+// registration path, so an unwired spec factory is surface no consumer can
+// ever reach.
+const CATALOG_PATH = "apps/openomni/src/tools/catalog.ts";
+const TOOL_SPEC_FACTORY_PATTERN = /export function (\w+ToolSpec)\(\): Tool\.Spec/g;
 
-function parseDispatchActions(source: string): Map<string, string> {
-  const actions = new Map<string, string>();
-  const block = source.match(/export const Actions = \{([\s\S]*?)\} as const/);
-  if (!block?.[1]) {
-    return actions;
-  }
-  for (const entry of block[1].matchAll(/(\w+):\s*"([^"]+)"/g)) {
-    const key = entry[1];
-    const value = entry[2];
-    if (key && value) {
-      actions.set(key, value);
-    }
-  }
-  return actions;
-}
-
-export function referenceCount(
-  sources: ReadonlyMap<string, string>,
-  needles: readonly string[],
-  definitionPath: string,
-): number {
-  let count = 0;
-  for (const [filePath, source] of sources) {
-    if (filePath === definitionPath) {
+export function unwiredToolSpecFactories(
+  files: ReadonlyMap<string, string>,
+  catalogPath: string,
+): string[] {
+  const catalogSource = files.get(catalogPath) ?? "";
+  const unwired: string[] = [];
+  for (const [filePath, source] of files) {
+    if (filePath === catalogPath) {
       continue;
     }
-    if (needles.some((needle) => source.includes(needle))) {
-      count += 1;
+    for (const match of source.matchAll(TOOL_SPEC_FACTORY_PATTERN)) {
+      const factory = match[1];
+      // Table-row form, not bare mention: an unused import still names the
+      // factory, but only the CATALOG_TOOLS table wires it as `spec: <factory>`.
+      if (factory !== undefined && !catalogSource.includes(`spec: ${factory}`)) {
+        unwired.push(`${filePath}:${factory}`);
+      }
     }
   }
-  return count;
+  return unwired.sort((a, b) => a.localeCompare(b));
 }
 
-async function checkEarned(baseline: Baseline): Promise<Violation[]> {
-  const sources = await collectProductionSources();
-  const violations: Violation[] = [];
-
-  const dispatchIndexPath = `${PROTOCOL_SRC}/command/index.ts`;
-  const actions = parseDispatchActions(readFileSync(dispatchIndexPath, "utf8"));
-  const dormantActions = new Set(baseline.earned.dormantActions);
-  for (const [key, value] of actions) {
-    const referenced =
-      referenceCount(sources, [`Actions.${key}`, `"${value}"`], dispatchIndexPath) > 0;
-    if (!referenced && !dormantActions.has(value)) {
-      violations.push({
-        check: "earned-check",
-        subject: value,
-        message:
-          "dispatch action constant has zero non-definition production references — a new verb needs a real consumer (abstraction is earned)",
-      });
+async function checkEarned(): Promise<Violation[]> {
+  const files = new Map<string, string>();
+  const glob = new Bun.Glob("apps/openomni/src/**/*.ts");
+  for await (const filePath of glob.scan({ cwd: ".", onlyFiles: true })) {
+    if (TEST_SUFFIXES.some((suffix) => filePath.endsWith(suffix))) {
+      continue;
     }
-    if (referenced && dormantActions.has(value)) {
-      violations.push({
-        check: "earned-check",
-        subject: value,
-        message: "baselined-dormant action now has consumers — shrink the baseline",
-      });
-    }
+    files.set(filePath, await Bun.file(filePath).text());
   }
-
-  const surfaces = await collectToolSurfaces();
-  const dormantTools = new Set(baseline.earned.dormantTools);
-  const toolDefinitionRoot = "packages/openomni/src/execution-runtime/tool/";
-  for (const surface of surfaces) {
-    const referencingFiles = Array.from(sources.entries()).filter(
-      ([filePath, source]) =>
-        !filePath.startsWith(toolDefinitionRoot) && source.includes(`"${surface.name}"`),
-    );
-    if (referencingFiles.length === 0 && !dormantTools.has(surface.name)) {
-      violations.push({
-        check: "earned-check",
-        subject: surface.name,
-        message:
-          "registered tool has zero references outside the tool pipeline — a new tool needs a real consumer",
-      });
-    }
-  }
-
-  return violations;
+  return unwiredToolSpecFactories(files, CATALOG_PATH).map((subject) => ({
+    check: "earned-check" as const,
+    subject,
+    message:
+      "tool spec factory is not wired into the catalog — the catalog is the only registration path, so an unwired spec is surface no consumer can reach",
+  }));
 }
 
 // ---------------------------------------------------------------------------
@@ -505,12 +441,32 @@ function selfTest(): void {
     failures.push("naming lint flagged a clean identifier");
   }
 
-  const sources = new Map([["a.ts", 'registry.register("worker.spawn", handler)']]);
-  if (referenceCount(sources, ['"worker.spawn"'], "def.ts") !== 1) {
-    failures.push("earned-check reference counter missed a real consumer");
+  const wiredFiles = new Map([
+    ["apps/openomni/src/tools/catalog.ts", "spec: machinesToolSpec, spec: memoryToolSpec,"],
+    ["apps/openomni/src/tools/machines.ts", "export function machinesToolSpec(): Tool.Spec {"],
+    ["apps/openomni/src/tools/memory.ts", "export function memoryToolSpec(): Tool.Spec {"],
+  ]);
+  if (unwiredToolSpecFactories(wiredFiles, "apps/openomni/src/tools/catalog.ts").length !== 0) {
+    failures.push("earned-check flagged a fully wired catalog");
   }
-  if (referenceCount(sources, ['"worker.never"'], "def.ts") !== 0) {
-    failures.push("earned-check reference counter hallucinated a consumer");
+  const unwiredFiles = new Map([
+    ["apps/openomni/src/tools/catalog.ts", "spec: machinesToolSpec,"],
+    ["apps/openomni/src/tools/machines.ts", "export function machinesToolSpec(): Tool.Spec {"],
+    ["apps/openomni/src/tools/memory.ts", "export function memoryToolSpec(): Tool.Spec {"],
+  ]);
+  if (unwiredToolSpecFactories(unwiredFiles, "apps/openomni/src/tools/catalog.ts").length !== 1) {
+    failures.push("earned-check did not flag an unwired tool spec factory");
+  }
+  const importOnlyFiles = new Map([
+    [
+      "apps/openomni/src/tools/catalog.ts",
+      'import { memoryToolSpec } from "./memory"; spec: machinesToolSpec,',
+    ],
+    ["apps/openomni/src/tools/machines.ts", "export function machinesToolSpec(): Tool.Spec {"],
+    ["apps/openomni/src/tools/memory.ts", "export function memoryToolSpec(): Tool.Spec {"],
+  ]);
+  if (unwiredToolSpecFactories(importOnlyFiles, "apps/openomni/src/tools/catalog.ts").length !== 1) {
+    failures.push("earned-check counted an unused import as wiring");
   }
 
   const snapshotViolations = diffSnapshots(
@@ -561,7 +517,7 @@ async function main(): Promise<void> {
     ...(await checkVocabRatchet(baseline)),
     ...(await checkToolLint(baseline)),
     ...(await checkNaming(baseline)),
-    ...(await checkEarned(baseline)),
+    ...(await checkEarned()),
     ...(await checkSchemaSnapshot()),
   ];
 

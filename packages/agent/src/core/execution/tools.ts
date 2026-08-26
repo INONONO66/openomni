@@ -209,10 +209,9 @@ export function createToolExecutor(
     const rewriteInput = effectOf(preDecision, "tool.rewrite_input");
     const effectiveCall = rewriteInput ? { ...call, input: rewriteInput.input } : call;
 
-    // #522 defect 2: Tool.Events.Started/Completed are emitted SOLELY by
-    // the worker-side executor this wrapper delegates to (packages/openomni
-    // execution-runtime/tool/executor.ts) — this layer keeps policy point
-    // dispatch, decision recording, and effect application only.
+    // #522 defect 2: execution telemetry belongs to the injected executor;
+    // this layer keeps policy dispatch, decision recording, and effect
+    // application only.
     const startMs = Date.now();
     let result: Tool.Result;
     try {

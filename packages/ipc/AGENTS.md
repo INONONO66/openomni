@@ -1,6 +1,6 @@
 # packages/ipc
 
-Standalone worker-process IPC transport (`@openomni/ipc`, extracted from `packages/coordinator` in #496). Pure transport over Unix sockets: NDJSON framing with a 16 MiB frame cap, bidirectional request/response/notification client + server, and typed transport errors. Serializable message schemas stay in `@openomni/protocol` (`Ipc` namespace); this package never validates run semantics or evaluates policy.
+Standalone IPC transport (`@openomni/ipc`, extracted from the former local-process stack in #496). Pure transport over Unix sockets: NDJSON framing with a 16 MiB frame cap, bidirectional request/response/notification client + server, and typed transport errors. Serializable message schemas stay in `@openomni/protocol` (`Ipc` namespace); this package never validates run semantics or evaluates policy.
 
 ## STRUCTURE
 
@@ -34,7 +34,7 @@ Depends on `@openomni/protocol` **only** — enforced by `script/check-deps.ts`.
 
 ## CONSUMERS
 
-`packages/coordinator` (worker supervision client side; bootstrap uses `typedCall`), `packages/machines` (daemon client + host server for `machine.attach`), `apps/server/src/execution/worker-entry.ts` (worker-side server), test harnesses (`packages/openomni/test/harness/policy-echo-worker.ts`, coordinator fixtures), and the manual QA driver `apps/server/src/manual/ipc-worker-driver.ts`.
+`packages/machines` (daemon client + host server for `machine.attach`) and `apps/openomni/src/delegation/` (process transport).
 
 ## TESTS
 
@@ -42,6 +42,6 @@ Depends on `@openomni/protocol` **only** — enforced by `script/check-deps.ts`.
 
 ## ANTI-PATTERNS
 
-- Do NOT add `@openomni/ledger`/`@openomni/openomni`/`@openomni/policy` imports — the dep ratchet will fail.
+- Do NOT add ledger, policy, or product-app imports — the dependency ratchet will fail.
 - Do NOT put message schemas here; they belong in `packages/protocol`.
 - Do NOT deep-import from `@openomni/ipc/src/*`; use the package barrel.

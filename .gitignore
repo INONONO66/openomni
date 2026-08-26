@@ -28,9 +28,6 @@ source-metrics.json
 out/
 build
 dist
-# publish-time copy of packages/ledger/migration (script/build-dist.ts)
-/migration
-
 
 # Debug
 npm-debug.log*

@@ -1,5 +1,5 @@
 /**
- * NOTE: `packages/openomni/src/dispatch/policy-registration.ts` maintains an
+ * NOTE: product composition maintains an
  * intentional duplicate of this registration boundary, pinned to the single
  * `dispatch.action.pre` point and surfacing its own error taxonomy
  * (`DispatchPolicyRegistrationError`). It delegates final acceptance to

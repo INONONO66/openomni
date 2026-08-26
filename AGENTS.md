@@ -1,335 +1,126 @@
 # PROJECT KNOWLEDGE BASE
 
-Last verified against `origin/main`: 2026-08-24 (paths, dependency graph, and shipped-state claims re-checked; keep this stamp current when editing — doc-state sync law).
+Last verified against `origin/main`: 2026-08-26 (legacy-tree decommission, paths, dependency graph, and shipped-state claims re-checked; keep this stamp current when editing - doc-state sync law).
 
 ## OVERVIEW
 
-OpenOmni — a single-Owner Agent OS. Agents earn autonomy through evidence, not self-report. See [Design Philosophy](docs/design-philosophy.md) (one page: three kernel primitives, two laws and a dial, four roles).
-
-The Owner talks to one Resident (a judgment partner that executes nothing), which delegates to Workers (internal agents, external AI, humans — uniformly) through one gate and isolated sessions; everything lands on one ledger. TypeScript monorepo (Bun + Turborepo) with 12 packages and 2 apps (Server and the clean-room OpenOmni host).
-
-The specification lives in [`docs/core-model.md`](docs/core-model.md) (actors/gate/ledger, roles incl. Governor and Jester, policy hook layer, three-tier vocabulary) and [`docs/architecture.md`](docs/architecture.md) (three communication verbs and package rings). Normative contract detail (guarantee split, authority evaluation, work-item/evidence contracts, Governor rules, memory port) lives in [`docs/kernel-contract.md`](docs/kernel-contract.md). The Owner-directed gateway pivot (channels = perimeter gateway, openomni = brain, SSOT single-ledger storage, engagement machine) is specified in [`docs/gateway-design.md`](docs/gateway-design.md) — stages 0–2 are wired (#718 contracts, #730 driver extraction, #736 router promotion): `packages/channels` IS the perimeter gateway, `packages/openomni` is the brain, and the two meet only in the protocol `Gateway.Deliver` contract plus ports injected by `apps/server`. ADRs are retired — absorbed into these docs; git history preserves the originals. **Design docs describe targets; `docs/implementation-status.md` is the single source of truth for what is actually wired.**
-
-Live delivery state, ordering, and checkpoints belong only in [GitHub #459](https://github.com/INONONO66/openomni/issues/459). Its milestones group work, dependency links define order, and leaf issues are the executable work; do not copy that inventory into this guide.
+OpenOmni is a single-Owner Agent OS: one Resident delegates through durable contracts and evidence, not self-report. The repository now contains core packages and one deployable app. Target contracts live in `docs/core-model.md`, `docs/kernel-contract.md`, and `docs/machines-and-delegation.md`; `docs/implementation-status.md` is authoritative for current wiring.
 
 ## STRUCTURE
 
-```
+```text
 openomni/
 ├── apps/
-│   ├── server/          # Hono server — tool providers, ingress bridge, channel/webhook registration, production composition root
-│   └── openomni/        # Clean-room Resident composition — WebSocket gateway, ChatAgent, session persistence, delegation kernel
+│   └── openomni/        # sole deployable app: Resident, gateway composition, machines, delegation, memory
 ├── packages/
-│   ├── protocol/        # Shared Zod schemas and cross-package contracts
-│   ├── policy/          # Protocol-only policy engine primitive: dispatch, effect composition, registry
-│   ├── placement/       # Ring-1 pure target selection: model fallback and tool machine-axis folds, consumed by the agent loop
-│   ├── telemetry/       # The observation channel: Bus pub/sub, trace-owning scoped emitter, span pairing, sink combinators — protocol-only deps (#606)
-│   ├── ledger/          # Session CRUD, Storage adapter (in-memory + SQLite), BusPersistence, Artifact, SurfaceKey, frozen worker-run archive, WorkItemStore (universal work state)
-│   ├── llm/             # LLM abstraction: providers, auth (API key + proxy), streaming, retry, token/cost tracking, provider transforms
-│   ├── agent/           # ChatAgent core (middleware-driven ReAct loop) + MCP client runtime — depends on telemetry for observation
-│   │   ├── src/core/           # ChatAgent, budget, retry, message factory, agent policy facade
-│   │   │   ├── execution/      # StreamEngine, ToolExecutor, compaction, parallel-tools
-│   │   │   └── policy/         # Agent policy facade + the last builtin (compaction)
-│   │   └── src/runtime/        # MCP client runtime
-│   │       └── mcp/            # McpClient
-│   ├── openomni/        # Product kernel: messaging, access, orchestration, ledger/evidence gates, tools runtime
-│   ├── ipc/             # Worker-process IPC transport contract: NDJSON framing, bidirectional Unix-socket client/server, protocol errors — protocol-only deps (#496)
-│   ├── coordinator/     # Multiprocess worker driver: on-demand worker pool, supervision — protocol+ipc deps only, ports injected by the composition root
-│   ├── machines/        # Body-machine driver band: machine daemon + host accept endpoint (`machine.attach` handshake, enrollment∩offer effective fold), `kernel.py` code cells and the in-cell `tool.<name>()` bridge — protocol+ipc deps only, enrollment/event/tool ports injected
-│   └── channels/        # Gateway (stage 2, #551/#707): Discord/Telegram/GitHub/WebSocket drivers + channel authn + perimeter router (resolve-route, wait service, #215 send kernel) — {protocol, ipc, policy, ledger} deps, S8 judgment-band confinement, observation sinks injected
-├── turbo.json           # Build pipeline config
-└── package.json         # Workspace root (bun@1.3.6)
+│   ├── protocol/        # Zod schemas and cross-package contracts
+│   ├── policy/          # pure policy engine and effect composition
+│   ├── placement/       # pure model/tool target selection
+│   ├── telemetry/       # observation channel
+│   ├── ledger/          # durable stores and journal persistence
+│   ├── llm/             # provider I/O, transforms, retry, token/cost accounting
+│   ├── agent/           # stateless ChatAgent loop and MCP client
+│   ├── ipc/             # protocol-only bidirectional IPC transport
+│   ├── machines/        # attached-machine driver band
+│   └── channels/        # channel drivers and perimeter gateway router
+├── script/              # conformance and repository gates
+├── turbo.json
+└── package.json
 ```
 
 ## DEPENDENCY GRAPH
 
-```
-protocol  ←  policy, telemetry, ipc, placement (ring 0 → 1)
-telemetry ←  ledger, llm                      ledger adds durability
-ipc       ←  coordinator, machines            process/machine drivers, ledger-free
-protocol, ipc, policy, ledger    ←  channels  gateway drivers + router/authn (#707)
-policy, placement, llm, telemetry  ←  agent   the loop
-everything                       ←  openomni  ←  server
-protocol, channels, agent, llm,
-ledger, telemetry                ←  openomni app
+Read `X <- Y` as Y may depend on X.
+
+```text
+protocol <- policy, telemetry, ipc, placement
+telemetry <- ledger, llm
+protocol, ipc <- machines
+protocol, ipc, policy, ledger <- channels
+policy, placement, llm, telemetry <- agent
+protocol, channels, agent, llm, ledger, telemetry, placement, machines <- apps/openomni
 ```
 
-Read as `X ← Y`: Y may depend on X. Exactly what `script/check-deps.ts`
-allows, package by package — the table is the contract, the sketch is a
-reading aid. Where a row names two sets, the second is `srcAllowedDeps`: the
-package's tests may reach further than its runtime code, and the gate holds
-`<pkg>/src/` to the narrower one.
-
-| package | may depend on |
+| Package | May depend on |
 | --- | --- |
-| `protocol` | — (leaf) |
-| `policy` | protocol |
-| `placement` | protocol |
-| `telemetry` | protocol |
-| `ipc` | protocol |
+| `protocol` | none |
+| `policy`, `placement`, `telemetry`, `ipc` | protocol |
 | `ledger` | protocol, telemetry |
-| `llm` | protocol, telemetry — `src/` protocol only |
-| `coordinator` | protocol, ipc |
+| `llm` | protocol, telemetry; `src/` uses protocol only |
 | `machines` | protocol, ipc |
-| `channels` | protocol, ipc, policy, ledger — policy/ledger confined to the judgment band `src/router/` + `src/authn/` (S8 banding); the router may name only the perimeter ledger surfaces; tests may add telemetry |
-| `agent` | protocol, policy, placement, llm, telemetry — `src/` protocol, policy, placement, llm |
-| `openomni` | any except itself |
-| `server` | composition root |
-| `openomni app` | protocol, channels, agent, llm, ledger, telemetry, policy; never openomni or coordinator |
+| `channels` | protocol, ipc, policy, ledger; policy/ledger are confined to `src/router/` and `src/authn/`; tests may use telemetry |
+| `agent` | protocol, policy, placement, llm, telemetry; `src/` excludes telemetry |
+| `apps/openomni` | protocol, channels, agent, llm, ledger, telemetry, placement, machines |
 
-`llm` and `agent` no longer reach the ledger at all: `Bus` moved to `telemetry` and the allowlists closed behind it (#606).
-
-`policy` owns the generic policy engine/effect composition primitive. `telemetry` depends only on protocol and owns the observation channel; it must stay a leaf, because replacing it with no-ops has to leave observed behavior identical — it can never reach for storage or decisions (#606). `agent` owns the loop and must not own OpenOmni product routing. `openomni` is the product kernel that owns messaging, access, and orchestration semantics. `ipc` is the protocol-only worker-process transport contract (#496) — driver-band consumable, never a kernel/ledger/policy import. `coordinator` is ledger-free since #477: its event sink, tool relay, and inbound-wait ports are injected by the composition root (`apps/server/src/execution/coordinator.ts`). `channels` is the perimeter gateway at stage 2 (#551/#707, [docs/gateway-design.md](docs/gateway-design.md)): platform drivers + channel authn + the router band (external `resolveRoute` arms with `route.decided` recording, wait correlation and the sole wait-store writes, blacklist/channel-grant/actor admission, routed pre-run authority, surface↔session map claims, the #215 send kernel with reply-grant instances and the #219 egress-budget gate), whitelist {protocol, ipc, policy, ledger} with policy/ledger confined to the judgment band (`src/router/`, `src/authn/`) by the S8 intra-package banding check — the router may name only the perimeter ledger surfaces, never brain surfaces; it observes through injected sinks and never imports the kernel or telemetry. `server` is the runtime host app and composition root. Enforced by `script/check-deps.ts` (package.json **and** source imports). See [Architecture](docs/architecture.md) — target rings; current split below.
+`script/check-deps.ts` is the executable contract. Product meaning is composed in `apps/openomni`; core packages remain independently consumable primitives.
 
 ## PACKAGE OWNERSHIP
 
-The package boundary rule is strict: product meaning belongs in `packages/openomni`; lower packages provide primitives. When adding code, first ask whether the change decides "who talks to whom, under what authority, in which session/run, with what durable lifecycle". If yes, it belongs in `packages/openomni` unless it is a pure schema in `packages/protocol`.
-
 | Package | Owns | Must not own |
 | --- | --- | --- |
-| `packages/protocol` | Zod schemas, wire contracts, event descriptors, storage adapter interfaces | Runtime decisions, routing helpers, authority evaluation, lifecycle orchestration |
-| `packages/policy` | Generic policy dispatch, effect composition, middleware registry primitives over protocol contracts | Agent-specific built-ins, OpenOmni authority semantics, session-backed lifecycle decisions |
-| `packages/placement` | Pure target selection: model fallback fold plus tool machine-axis fold `(catalog, host/machine effective capability sets) → per-tool offerability` — deterministic, clockless, protocol-only; which eligible machine executes a tool is named by the caller (`run_code` takes a `machineId`, discovered via the `machines` catalog tool), not decided by placement | Allow/deny (policy owns it), retry termination (retry policy owns it), capability negotiation/intersection (protocol owns it), any store/llm/telemetry import |
-| `packages/ledger` | Durable state substrate: session/message/part CRUD, Bus persistence (the journal writer; `Bus` itself is `packages/telemetry`), storage adapters, indexed record stores | Communication routing, actor trust decisions, worker grant evaluation semantics, pending-reply precedence |
-| `packages/llm` | Provider I/O, auth shape, message transforms, token/cost accounting, model catalog | Agent/session/workforce routing, policy, tool execution |
-| `packages/agent` | Stateless ChatAgent loop, agent policy built-ins/facade, tool invocation protocol, generic runtime primitives | OpenOmni session-backed worker lifecycle, external actor authority, channel routing, durable background/pending interaction semantics |
-| `packages/openomni` | Product kernel: messaging/routing, access control, Resident/Worker orchestration, worker lifecycle backed by session, ledger/evidence gates, tools runtime | Provider SDK behavior, raw channel transport, process supervision internals, storage adapter implementation |
-| `packages/ipc` | Worker-process IPC transport: NDJSON framing, bidirectional Unix-socket client/server (reverse server → owner-device connections included), typed transport errors | Kernel/ledger/policy imports, authorization decisions, run semantics, serializable message schemas (those stay in `protocol`) |
-| `packages/machines` | Machine daemon (offer + hold connection) and host accept endpoint: `machine.attach` wire handshake, live attachment table, attach/detach event emission through an injected sink, the `kernel.py` cell interpreter (`machine.run_cell`) and the in-cell tool bridge back to the host (`machine.call_tool`) | Enrollment storage (lookup is an injected port), which tools a cell may call (the `callTool` port is injected already placement-gated), capability execution semantics, kernel/ledger/policy imports |
-| `packages/coordinator` | Isolated worker process execution: spawn/slot/idle/restart/cancel, primitive run delivery, crash recovery | Actor authority, pending interactions, channel/session routing, worker grant policy, IPC transport internals (moved to `packages/ipc` in #496) |
-| `packages/channels` | Perimeter gateway (stage 2, #707): Discord/Telegram/GitHub/WebSocket drivers, envelope normalization, channel authn/trigger judgment, delivery clients, and the router band — external route resolution + `route.decided` recording, wait correlation/lifecycle (sole wait-store writer), blacklist/channel-grant/actor admission, routed pre-run authority, surface↔session map claims, #215 existing-agent send kernel (reply-grant instances, #219 egress-budget gate) | Session content, brain (`@openomni/openomni`) imports, storage engines, telemetry imports (observation sinks are injected), work placement / dispatch execution semantics (brain judgment behind the `Gateway.Deliver` seam) |
-| `apps/server` | Runtime host: config/bootstrap, channel registration, webhook/WebSocket/gateway transport wiring, connector process drivers and stored-installation wiring, server-owned MCP/custom tool wiring | PendingAsk/PendingInteraction lookup, agent/session routing, access decisions, tool selection policy, orchestration semantics, channel adapter implementations (moved to `packages/channels` in #551) |
-| `apps/openomni` | Clean-room Resident chat composition: WebSocket ingest/writeback, gateway binding, judgment-only ChatAgent turns, session/message persistence | Import the legacy brain (`@openomni/openomni`), coordinator, memory, delegation, Worker behavior, or tools |
-
-### Messaging Kernel Rule
-
-All durable messaging flows through the gateway router and the brain's Deliver consumer:
-
-```text
-raw channel event
-  -> channels gateway driver (packages/channels, registered by apps/server) normalizes transport payload
-  -> channels gateway router ingest: sanitizes gateway-derived fields, resolves the actor, resolves the route
-     (blacklist -> wait correlation -> channel ceiling -> actor identity -> surface default), records route.decided
-     before anything acts, applies wait/pending resumption, claims the surface session
-  -> brain (packages/openomni ingress) consumes the routed Gateway.Deliver: session materialization/placement,
-     projection, mode dispatch, execution
-  -> kernel projects messages/events and returns response/writeback instructions
-```
-
-`apps/server` must not decide whether an inbound message is a PendingInteraction/PendingAsk reply versus a normal conversation; it passes normalized transport facts to the gateway router (`handler/conversation.ts` → `GatewayRouter.ingest`). `ledger` may expose indexed lookups such as correlation queries, but match precedence and lifecycle transitions are kernel decisions. `coordinator` may deliver an input frame to a live run, but it must not decide why that run is the target.
+| `packages/protocol` | Schemas, wire contracts, pure folds | I/O, storage, product decisions |
+| `packages/policy` | Generic policy evaluation | Product-specific authority |
+| `packages/placement` | Pure target selection | Authorization or execution |
+| `packages/telemetry` | Bus, scoped observation, spans | Durable or decision state |
+| `packages/ledger` | Durable state and typed store surfaces | Routing and authority decisions |
+| `packages/llm` | Provider behavior and model accounting | Product routing or tools |
+| `packages/agent` | Stateless loop, compaction, MCP client | Durable session/product lifecycle |
+| `packages/ipc` | Framing and bidirectional transport | Run semantics or authorization |
+| `packages/machines` | Machine attach and cell execution driver | Enrollment policy or product judgment |
+| `packages/channels` | Drivers plus perimeter routing, waits, and admission | Session content or product execution |
+| `apps/openomni` | Product composition: Resident, gateway, delegation, memory, code mode, boot/shutdown | Reimplementation of package primitives |
 
 ## WHERE TO LOOK
 
-| Task | Location | Notes |
-| --- | --- | --- |
-| Add Zod schema / shared type | `packages/protocol/src/{domain}/index.ts` | Cross-package contracts only; runtime logic lives in upper packages |
-| Add/modify bus events | legacy families in `packages/protocol/src/event/`; new domains colocate `events.ts` beside their schema (e.g. `packages/protocol/src/wait/events.ts`) | `BusEvent.define()` pattern |
-| Add policy point | `packages/protocol/src/policy/point-registry.ts` | 18 registered points (`dispatch.action.pre`, `run.lifecycle/turn/completion/error.*`, `work.complete.pre`, `prompt.context.pre`, `connection.llm.pre/post`, `tool.catalog/native/mcp.*`, `delegation.worker.pre/post`), each with allowed effects, fail policy, required context. New points must pass the conformance gate (vocab/naming) |
-| Agent profile schema | `packages/protocol/src/agent/index.ts` | `AgentProfile.Definition`, `AgentProfile.AgentBudget` |
-| Session CRUD | `packages/ledger/src/session/` | Namespace-based API |
-| Storage backend | `packages/ledger/src/storage/` | Implement `Storage.Adapter` (core session/message/part plus optional `artifact`, `eventLog`, `surfaceKey`, `workItem`, `workerRunState`) |
-| Bus persistence observer | `packages/ledger/src/bus-persistence/` | Bus.observe() handler that persists non-ephemeral events to bus_event table |
-| Bus query API | `packages/ledger/src/bus-persistence/query.ts` | BusQuery namespace for reading persisted events |
-| Surface → session mapping | `packages/ledger/src/surface-key/` | N:1 SurfaceKey registry |
-| WorkItem schemas + events | `packages/protocol/src/work-item/` | `WorkItem.Info`, `Blocker`, `Evidence`, `Status`, `deriveStatus()`, `generateHash()`, `WorkItem.Events.*`; `index.ts` is the public facade (`VerificationGate` deleted in #498 — zero writers/readers) |
-| WorkItem storage interface | `packages/protocol/src/storage/index.ts` | `Storage.WorkItemSubAdapter` (get/create/compareAndSet/list/remove) |
-| WorkItemStore substrate | `packages/ledger/src/work-item/index.ts` | CRUD + non-completion lifecycle + blockers + evidence + dependency readiness + cycle detection; raw `complete()` is a typed refusal because product completion authority belongs in OpenOmni |
-| WorkItem completion authority | `packages/openomni/src/work-item/` | Pure durable+proposed fact fold, trusted Policy/Stakes/result/Owner authority resolver, origin projector, atomic record-before-terminal admission service (six-scenario Manual QA driver lives in `packages/openomni/test/harness/`) |
-| Windowed Stakes primitive | `packages/openomni/src/ledger/` | Deterministic consequence calculator, criterion treatment, and per-host capability seams (replay driver lives in `packages/openomni/test/harness/`); WorkItem completion now consumes the Stakes resolver seam while authorized Voice remains unwired |
-| Worker run records | `packages/ledger/src/worker-run/` | Direct DB table (worker_run_state), NOT event-sourced |
-| Worker-run frozen archive | `packages/ledger/src/worker-run/state-store.ts` | Session-internal read-only archive of `worker_run_state`; writes throw `worker_run_frozen` (#510 D2b), vocabulary owned here since #498 |
-| Add LLM provider | `packages/llm/src/provider/` (`index.ts` + `sdk.ts`) + auth/transform modules as needed | Register SDK in `getSDK()`; keep provider-specific request/auth behavior out of call sites |
-| Provider transforms | `packages/llm/src/transform/` | Message normalization + per-provider variants |
-| Token usage / cost | `packages/llm/src/token/` | `TokenTracker.extractUsage`, `calculateCost` |
-| Model catalog | `packages/llm/src/model/` | Fetches from models.dev |
-| ChatAgent core | `packages/agent/src/core/` | ChatAgent, budget, retry, message factory, agent policy facade. The loop owns no delegation: a worker is commissioned through a tool in its catalog, never through a loop primitive |
-| Built-in curated memory | `apps/openomni/src/memory/` + `apps/openomni/src/tools/memory.ts` | kernel-contract §5 built-in layer: two hard-budgeted stores, Resident-only add/replace/remove tool, per-session frozen snapshot injection |
-| Delegation kernel | `apps/openomni/src/delegation/` | Admission fold (who may delegate what, and the address→transport resolution), deadline settlement, the `inline` driver, and the `delegate` tool. Product meaning, so it lives with the app rather than in a package |
-| Policy engine primitive | `packages/policy/src/` | `PolicyEngine.create()`, `PolicyRegistry.create()`, effect composition |
-| Agent policy built-ins | `packages/agent/src/core/policy/` | Agent-scoped facade + built-ins in `builtin/` |
-| Agent execution engine | `packages/agent/src/core/execution/` | StreamEngine, ToolExecutor, compaction, parallel-tools |
-| MCP client | `packages/agent/src/runtime/mcp/` | McpClient |
-| Resident agent prompts | `packages/openomni/src/agents/resident/prompt/` | `ResidentAgent.getPrompt({ model })` — model-specific system prompt variants (Claude, GPT) |
-| Messaging kernel | `packages/channels/src/router/` (perimeter) + `packages/openomni/src/{ingress,dispatch}/` (brain) | Split at gateway stage 2 (#707/#736): the gateway router owns external envelope routing, admission, correlation, and the #215 send kernel; the brain owns Deliver-consumer execution, dispatch/egress authorization, session/target materialization, and projection |
-| Ingress routing | `packages/channels/src/router/` (external arms) + `packages/openomni/src/ingress/` (brain stage) | The `resolveRoute` five-stage pipeline (blacklist → wait correlation → channel ceiling → actor identity → surface default) records `route.decided` then publishes exactly one `RoutingDecision`; external arms live in the gateway router since #736, the brain keeps the Deliver consumer, `internal-route.ts` (cron/dispatch arm), session resolution/projection, and handlers |
-| Resident runtime (in-process) | `packages/openomni/src/resident/` | `ResidentRuntime` — handles resident-target ingress in-process, bypassing coordinator |
-| Doc ↔ code gap tracking | `docs/implementation-status.md` | Single source of truth for implemented / dormant / planned components — check before trusting design docs' present tense |
-| Owner-facing usage model | `docs/usage-model.md` | How the system is operated from the Owner's seat (target experience) |
-| Principal / actor identity | `packages/protocol/src/actor/` + `packages/ledger/src/actor/` + `packages/channels/src/router/actor-resolver.ts` | Schemas/storage are lower-level; inbound principal resolution is perimeter judgment in the gateway router since #707; dispatch-side actor semantics stay in `openomni` |
-| ChannelAccessRule / Blocklist | `packages/protocol/src/actor/` + `packages/ledger/src/{channel-grant,blacklist}/` | Storage lives in `ledger`; evaluation and precedence belong in `openomni` access |
-| PendingInteraction | `packages/protocol/src/communication/pending-interaction.ts` + `packages/ledger/src/pending-interaction/` + `packages/openomni/src/dispatch/pending-interaction-routing.ts` | Frozen legacy external-response correlation (#548): the store is read-only (writes throw the typed FrozenError), kernel owns match precedence via the upcast-on-read Wait view, and lifecycle transitions belong to the durable Wait primitive |
-| Machine attach (daemon + host) | `packages/machines/src/` | `attachMachineDaemon` / `createMachineHost` — `machine.attach` handshake over `@openomni/ipc`; enrollment lookup + event sink injected |
-| Coordinator (on-demand workers) | `packages/coordinator/src/worker-manager/worker-pool.ts` | `createWorkerManager(config, ports)` — spawn on demand, idle shutdown, max-active cap; verbs are `deliver`/`send`/`cancel`/`stats` (never `dispatch`), typed failures via `WorkerDeliveryError` codes |
-| Coordinator supervision | `packages/coordinator/src/worker-supervision/` | Process supervisor (`WorkerSupervisorOptions` config object; `events` sink required) |
-| Worker IPC transport | `packages/ipc/src/` | Unix socket transport, request/response framing — wire method names are frozen (Greg Young rule); standalone `@openomni/ipc` since #496, driver-band consumable |
-| Boot recovery | `apps/server/src/execution/recovery.ts` | Marks interrupted worker runs after restart (moved out of coordinator in #477; invoked from bootstrap) |
-| Gate-side policy stamping | `packages/openomni/src/policy/resolver.ts` + `dispatch/handlers/worker.ts` | `worker.spawn` stamps a `policyPlan` (default: required `builtin:tool-permission` + `builtin:idle-nudge`) resolved from actor/target labels; custom rules injected at the composition root |
-| Conformance gate | `script/lint-tools.ts` + `script/conformance/` | Vocab ratchet, tool lint, naming rules, earned check, Greg Young schema snapshot; runs pre-push + CI. `--self-test` proves discrimination; `--update` regenerates the schema snapshot (the diff is the Owner sign-off surface). The coverage and dead-export ratchets (`script/check-coverage-ratchet.ts`, `script/check-dead-exports.ts`) keep their baselines beside the schema snapshot under the same rule: shrinking is autonomous, growing needs Owner sign-off. `knip.json`'s `workspaces` map **overrides** knip's defaults per workspace — it does not select which workspaces are analysed. Every workspace matched by the root `package.json` globs is analysed either way, and an unlisted one gets the default `project` of `**/*.ts`, which is wider than most listed blocks. What the ratchet genuinely does not see is exports reachable from an entry file |
-| Server tool providers | `apps/server/src/tool/` + `packages/openomni/src/execution-runtime/tool/` | Server owns `custom/` and MCP wiring; OpenOmni owns system/agent providers |
-| Connector host seams | `apps/server/src/connector/` | Current process driver, persisted-installation resolution, question bridge, and read-back; first-party definitions/discovery/registry are absent, while discover/register/consent/smoke-verify remains planned. See `docs/implementation-status.md`. |
-| `dispatch` tool | `packages/openomni/src/execution-runtime/tool/agent/tools/dispatch.ts` | Runtime-to-runtime/system egress command authority and audit boundary |
-| Injection queue | `packages/openomni/src/execution-runtime/injection-queue.ts` | Async response delivery at turn.finish; keyed by runId |
-| CronJob registry | `packages/openomni/src/execution-runtime/cron-job-registry.ts` | Storage-backed cron job registry; populated by Dispatch `schedule.create` |
-| Channel drivers + gateway router | `packages/channels/src/` | Discord, Telegram, GitHub, WebSocket drivers plus the perimeter router (`src/router/`) — gateway stage 2, #551/#707; drivers registered in `apps/server/src/bootstrap/channels.ts`, router composed in `bootstrap/index.ts` |
-| Server inbound bridge | `apps/server/src/ingress/` | Adapter bridge supplying normalized transport facts only (server-side routing back doors were deleted by #485) |
-| Product model | `docs/core-model.md` + `docs/kernel-contract.md` | Resident, Workers, System Governor, controlled inbound authority |
-| Design philosophy | `docs/design-philosophy.md` | Why this project exists and the principles behind its design |
+| Task | Location |
+| --- | --- |
+| Shared schema or event | `packages/protocol/src/` |
+| Session/store behavior | `packages/ledger/src/` |
+| Policy mechanism | `packages/policy/src/` |
+| ChatAgent loop and compaction | `packages/agent/src/core/` |
+| Channel driver or perimeter route | `packages/channels/src/` |
+| Machine attach/cell execution | `packages/machines/src/` |
+| Resident and app composition | `apps/openomni/src/resident.ts`, `apps/openomni/src/index.ts` |
+| Gateway and channel registration | `apps/openomni/src/gateway.ts`, `apps/openomni/src/channels.ts` |
+| Delegation lifecycle and transports | `apps/openomni/src/delegation/` |
+| Product tools and memory | `apps/openomni/src/tools/`, `apps/openomni/src/memory/` |
+| Shipped-state truth | `docs/implementation-status.md` |
+| Conformance/ratchets | `script/`, `script/conformance/` |
 
 ## CONVENTIONS
 
-Operating rules live in this file and the tracked `docs/` — gitignored `*.local.md` files are machine-local exploration scratch and must never be load-bearing for issues, docs, or PRs (2026-07-09 handoff-hardening rule; normative content gets promoted into `docs/kernel-contract.md` / `docs/architecture.md` or pasted into the issue).
-
-Key patterns: Namespace exports (`Session.create()`), Zod-first types (`z.object` + `z.infer`), ESM only, discriminated unions, `BusEvent.define()` for events, `PolicyEngine` for agent-loop extension, OpenOmni kernel for messaging/orchestration decisions.
-
-### Module & file structure
-
-These rules exist because the 2026-08 repo-wide audit traced real defects (a dead
-policy path kept alive by its own tests, two Discord gateway bugs caused directly by
-a satellite split) to violations of each one.
-
-1. **A file is named for what it owns, not for its layer.** Role-noun suffixes that
-   could be swapped without changing meaning (`-manager`/`-service`/`-authority`/
-   `-boundary`/`-gateway`/`-coordinator`/`-helper`/`-util`) are a confession the seam
-   is fake. If two sibling files could trade names, merge them.
-2. **Split a module only when one of these is true**: (a) a second consumer exists
-   (abstraction is earned by the second consumer, never in advance); (b) a real trust
-   boundary separates the halves; (c) the halves have independent lifecycles (one can
-   change without the other). "The file is getting long" is not on this list — line
-   count is a review signal, never a split criterion.
-3. **Sub-30-LOC single-importer files get folded back** into their importer (#453
-   hygiene). A file that exists only to break an import cycle the split itself
-   created is the same defect — fix the shape instead.
-4. **One enforcement layer per invariant per phase.** Pick the owner (zod schema,
-   pure fold, service entry, or write time) and delete the other copies.
-   Re-validation is legitimate only across a real `await` or a trust boundary —
-   in-process re-checking of a value the same factory produced is slop. When deleting
-   a duplicated check, name the surviving layer in a comment and keep/add a pinning
-   test that fails if that layer regresses (assert the specific reason/error, not
-   just "it rejects").
-5. **One exported owner per convention.** Digest/canonical-JSON, reason-code strings,
-   idempotency keys, event-name literals, error base classes (`NamedError` across
-   package boundaries): defined once, imported everywhere. Two spellings of the same
-   convention in different packages is a bug seed even while all tests pass.
-6. **No smuggled fields, no unreachable fallbacks.** If a consumer needs a field, it
-   goes in the schema — never `as`-cast around it. `?? default` where the left side
-   cannot be nullish, defensive re-checks of what the type system already guarantees,
-   and `default:` branches after an exhaustive `never` check are deletions, not style.
-7. **Durable writes fail closed.** A storage seam that silently skips persistence
-   when an adapter is absent (warn-and-return) is forbidden; absence of the adapter
-   is an error. Optional sub-adapters exist for test fakes only and must never guard
-   a production write path.
-8. **Test structure mirrors these rules.** One shared fixture builder per package
-   (`test/helpers/`), no per-file clones; every invariant is tested at exactly its
-   owning layer; no bare `.toThrow()` (assert the message or typed code); no
-   parse-echo tests that feed a literal through zod and read the same literal back.
-9. **Vocabulary**: forbidden nouns `runtime`, `task`, `envelope` in new protocol/
-   kernel surfaces (#497 convergence); reserved single-meaning nouns `Outcome`,
-   `CompletionReport`, `Grant`, `Wait`. Korean names are path-level only (driver
-   band); exported symbols and protocol nouns stay English.
-
-## CODING BOUNDARY RULES
-
-- Do not add product routing to `apps/server`. Channel DRIVER code may authenticate transport, dedupe raw deliveries, normalize payloads, and send returned responses. Drivers must not query `PendingAskStore`, `PendingInteractionStore`, `SurfaceKey`, `WaitStore`, `WorkerGrantStore`, `ChannelGrantStore`, `BlacklistStore`, or choose worker/resident targets — that judgment lives in the channels gateway router band (`packages/channels/src/router/`), the sole perimeter-store consumer; work placement/dispatch stays brain judgment behind `Gateway.Deliver`.
-- Do not add authority decisions to `packages/ledger`. Store modules may persist records and provide indexed queries; `openomni` decides precedence, trust, grants, and lifecycle transitions.
-- Do not add OpenOmni-specific durable lifecycle to `packages/agent`. Session-backed worker/background execution belongs in `packages/openomni`.
-- Do not add process semantics to `packages/openomni`; worker process lifecycle and IPC stay in `packages/coordinator`.
-- Do not add provider behavior outside `packages/llm`.
-- Prefer narrowing public barrels. A symbol exported from a package is a contract; do not export helper stages just for convenience.
-- Driver-band packages (approved target: `remote` remote execution, `browser` browser use, `machines` machine handles) may import only `@openomni/protocol` and `@openomni/ipc`; registration happens only in `apps/server`, and each must build/test standalone (repo-extractable). Package names are path-level only — exported symbols, protocol nouns, and LLM tool names stay English. See [Architecture § Execution Targets and the Driver Band](docs/architecture.md).
-- `channels` is promoted from driver band to **gateway** (Owner 2026-08-18/19, [docs/gateway-design.md](docs/gateway-design.md)) — LANDED at #736 (stage 2): package whitelist {protocol, ipc, policy, ledger}, with the driver sub-band (`discord/`, `github/`, `telegram/`, `support/`, `websocket.ts`, `channel-authn.ts`) held to {protocol, ipc}. The external resolveRoute arms, wait service, and #215 send kernel live in `packages/channels/src/router/`; the internal-mode arm (cron/dispatch events that never cross the perimeter) stays brain-side in `packages/openomni/src/ingress/internal-route.ts`.
-- Outbound target selection (which model/machine/driver executes) is the ring-1 `@openomni/placement` pure decision package (model fallback is consumed per attempt; tool machine-axis offerability is consumed while assembling the agent catalog); do not grow placement decisions inside kernel dispatch or `apps/server`. Inbound routing (`resolveRoute`) is gateway-owned per docs/gateway-design.md §8.4 (external arms in `packages/channels/src/router/` since #736; the internal arm stays in the kernel).
-
-## EXECUTION DISCIPLINE
-
-These rules are model-independent and non-negotiable; they exist because each one has caught a real merged-or-nearly-merged defect (2026-07-09 alone: a retired-model fallback contradicting its own PR's regenerated catalog, a namespace-shadowed self-recursion spinning at 100% CPU through green typechecks, a stale assertion, and an inverted unlimited-budget sentinel — all found by review, not by the author's green runs).
-
-1. **Independent adversarial review before merge.** Every nontrivial PR gets a review by a separate agent/session that (a) reads the full diff skeptically, (b) re-runs the suites itself in a scratch worktree, and (c) tries to refute the PR body's claims rather than confirm them. The author's own green run is never sufficient — evidence-over-self-report is a repo law, and it applies to agents' reports about their own work first.
-2. **Tests run with an explicit per-test timeout**: `bun test --timeout 15000`. A hang is a finding, not an inconvenience — proper tail calls make infinite self-recursion silent (no stack overflow), and the default run masks it. If the suite doesn't finish in ~1 minute, something is wrong; kill it and bisect.
-3. **Verify your own side effects.** After committing, confirm with `git log`/`git status` — lefthook/biome can roll a commit back while printing success-looking output. After any tool claims success, prefer re-observing state (file on disk, PR state via `gh`, CI via checks API) over trusting the tool's report.
-4. **Reconcile-first.** Issue bodies and audit findings decay as `main` moves. Before deleting or changing anything an issue claims is true, re-verify the claim on the current tree (zero-consumer grep proof for deletions) and record deltas in the PR body. A claim that turned out false gets corrected in the issue, not silently ignored.
-5. **Conformance gate rules of engagement** (`bun run lint:tools`, pre-push + CI): shrinking a baseline in `script/conformance/` is autonomous and encouraged; **growing one requires Owner sign-off in review**. Schema evolution: field renames/re-meanings are forbidden — a changed meaning is a new event type, shapes evolve by upcast-on-read; removals go through `lint-tools --update`, whose diff is the sign-off surface.
-6. **Fresh clone/worktree**: run `bun install` and `turbo run build` (protocol `dist/`) before `lint-tools` or tests — otherwise they fail on missing build artifacts, which is not a code defect.
-7. **Doc-state sync law**: `docs/implementation-status.md` and the applicable leaf issue under [#459](https://github.com/INONONO66/openomni/issues/459) move in the same PR as the change. An engine without a consumer does not count as shipped; a shipped change that docs still call planned is a defect.
-
-## MODES
-
-Ingress supports a single execution mode: `direct`. All inbound events dispatch through `handleDirect` to the coordinator.
-
-Target direction: only the Resident originates a new Worker allocation. The Owner requests delegation through the Resident and may attach directly to existing actors as root. The Resident has no subagent lane. A Worker cannot spawn another Worker under any trust tier; it may use a same-domain, context-sharing `child_agent`, message an already-existing agent through policy-gated dispatch when granted, or ask the Resident via `resident.ask` to commission independent/cross-domain work. Existing-agent messaging transfers no allocation authority; its awaited form converges on the durable `Wait` contract in [`docs/kernel-contract.md`](docs/kernel-contract.md). Policy remains system-wide across actor profiles and communication boundaries, not Worker-owned.
-
-## PRODUCT MODEL
-
-> Product terminology: **Owner** (root), **Resident** (decides — judgment, no execution), **Worker** (does — internal AI, external AI, humans, even the Owner), **Governor** (fixes — post-hoc structural improvement), **Jester** (doubts — silence-first, seven-lens, and zero-authority). Three-tier vocabulary and role lanes live in [`docs/core-model.md`](docs/core-model.md); authority, Wait, Jester-host, and Governor-access detail lives in [`docs/kernel-contract.md`](docs/kernel-contract.md). These are target contracts; [`docs/implementation-status.md`](docs/implementation-status.md) alone says what is wired.
-
-### Subjects
-
-| Concept | Meaning | Current hooks |
-| --- | --- | --- |
-| Owner | The human operator | (No explicit type yet; identified by `ActorIdentity` with `TrustTier: owner`) |
-| Resident | Always-on user-facing judgment shell; no subagent lane | Ingress target agent + future Resident-selected policy plan and judgment-only tool catalog |
-| Worker | Delegated execution actor (internal AI, external AI, human) | `WorkItem` records plus the legacy `WorkerRun` store and `executorKind`; distinct `WorkItem` attempt records are a target contract |
-| Actor | Any external entity that interacts with the system | `ActorIdentity` / `ActorEndpoint` schemas, SQLite `ActorRegistry`, ingress `ActorResolver`, and canonical `trustTier` projection are wired |
-| Jester | Silence-first, seven-lens semantic cross-check with no dispatch authority | Target lifecycle is not wired; see `docs/implementation-status.md` |
-| System Governor | Read-omniscient/write-minimal post-hoc structural improvement; raw reads stay scoped, audited, and outside user-facing sessions | Policy engine and Bus observers exist; the Governor loop is not wired |
-
-### Lifecycle / authority
-
-| Concept | Meaning | Current hooks |
-| --- | --- | --- |
-| Self-loop session | Isolated internal work session for complex reasoning | `Session.createChild()`, `WorkerRun` |
-| Controlled inbound | Owner and explicitly authorized actors may submit top-level requests; only the Resident may turn a request into a new Worker assignment | `IngressAuthorityMiddleware` + Resident-only `worker.spawn` dispatch policy |
-| Worker promotion | Ephemeral worker becomes persistent after repeated value | Future lifecycle schema |
-| PendingInteraction | Frozen read-only archive of pre-#548 outbound-request correlation rows | `PendingInteractionStore` (writes frozen #548) and `PendingAskStore` (writes frozen #510 D2a) both answer correlation via upcast-on-read only; new correlation lives in the single `Wait { ownerRef }` primitive (#215) — see kernel-contract §2 |
-| ChannelAccessRule (legacy ChannelGrant) | Per-channel access policy and ceiling | `Actor.ChannelGrant` schema + `ChannelGrantStore`; OpenOmni access owns evaluation |
-| Blocklist (legacy Blacklist) | Absolute block list checked before all other access evaluation | `Actor.BlacklistEntry` schema + `BlacklistStore`; OpenOmni access owns evaluation |
-
-## ANTI-PATTERNS (THIS PROJECT)
-
-- **`as any` in protocol**: `NamedError.create()` uses `(this as any).cause = options.cause`. This is the ONE exception; do not add more.
+- ESM, strict TypeScript, Zod-first shared contracts, namespace-style public APIs.
+- One enforcement layer per invariant; durable writes fail closed.
+- No deep package imports. Driver-band code stays on published protocol/IPC contracts.
+- Product vocabulary avoids new `runtime`, `task`, and `envelope` nouns in protocol surfaces.
+- Tests use exact state/event completion rather than sleeps and assert typed errors or messages.
+- Baseline shrinkage is autonomous; baseline growth requires Owner sign-off.
+- Reconcile before deletion and update implementation docs in the same PR.
 
 ## COMMANDS
 
 ```bash
-# Install
 bun install
-
-# Build all packages
-bun run build          # or: turbo run build
-
-# Tests
-bun test               # direct Bun discovery, includes app tests
-bun run test           # turbo run test; only workspaces with test scripts
-
-# Type check
-bun run check-types    # or: turbo run check-types
-
-# Conformance gate (vocab ratchet, tool lint, naming, earned check, schema snapshot)
+bun run build
+bunx turbo run check-types
+bun run script/check-deps.ts
+bun run script/check-import-cycles.ts
 bun run lint:tools
-bun run lint:tools --self-test   # discrimination bench
-bun run script/check-deps.ts     # dependency direction + source-import scan
+bunx ultracite check --formatter-enabled=false .
+bun run script/check-dead-exports.ts
+bun test --timeout 15000
 
-# Quality ratchets + metrics (baselines in script/conformance/; --update rewrites a
-# baseline from current state — the diff is the sign-off surface)
-bun run script/check-coverage-ratchet.ts   # per-package line-coverage ratchet (reads coverage/lcov.info from prior `bun test --coverage` runs; --update, --self-test)
-bun run script/check-dead-exports.ts       # knip dead-export ratchet (--update, --self-test)
-bun run script/report-source-metrics.ts    # writes source-metrics.json (no gate; CI artifact)
-
-# Format
-bun run format         # biome
-
-# Run server
-bun run --cwd apps/server dev        # Hono server with channels (set env tokens first)
+# Sole app
+bun run --cwd apps/openomni dev
 ```
+
+Coverage baselines are updated after coverage-producing test runs with `bun run script/check-coverage-ratchet.ts --update`. Dead-export shrinkage uses `bun run script/check-dead-exports.ts --update`.
 
 ## NOTES
 
-- README.md describes the product model and design philosophy. Architecture details live in internal docs.
-- `packages/protocol` publishes built `dist/` artifacts (`main: ./dist/index.js`). Other packages point `main` at source (`./src/index.ts`) for Bun's native TS support.
-- Lint + format via Biome (`biome.json`). No ESLint.
-- CI pipeline: `.github/workflows/ci.yml` — build, check-types, dependency checks (incl. `lint:tools` + `--self-test` conformance gate), and direct Bun package/app tests; app manifests may not define test scripts.
-- `dist/` dirs are gitignored but some exist locally — they are build artifacts, not source.
-- `@ai-sdk/anthropic` and `@ai-sdk/openai` are the two bundled providers. Custom provider endpoints use the OpenAI provider with their catalog API URL as `baseURL`.
-- `packages/agent` is organized as `src/core/` (ChatAgent + policy facade/built-ins) and `src/runtime/` (mcp). It has no durable session state ownership; session-backed orchestration lives in `packages/openomni`.
-- `packages/openomni` is the product kernel. It owns messaging, access, Resident/Worker orchestration, ledger/evidence gates, and execution runtime tooling.
-- `packages/coordinator` owns multiprocess execution: on-demand worker pool (`worker-pool.ts`), supervision, and IPC transport (Unix socket). It depends **only on `@openomni/protocol`** — event sink / tool relay / inbound-wait ports are injected by the composition root, and boot recovery lives in `apps/server/src/execution/recovery.ts`. See `packages/coordinator/AGENTS.md` for its module map.
-- Worker-run lifecycle is WorkItem attempt facts (`work_item.attempt_*`); the protocol `worker-run` namespace and its telemetry events were retired in #498 (the frozen archive vocabulary lives ledger-internally in `packages/ledger/src/worker-run/state-store.ts`).
+- `apps/openomni` is the only deployable composition and production entry point.
+- `packages/channels` is the perimeter gateway; `apps/openomni` injects delivery and observation ports.
+- `packages/agent` owns no durable state. `packages/ledger` stores facts but does not decide product meaning.
+- WorkItem completion authority, Stakes, and effective-authority semantics remain contract-inherited in the design docs; their removed implementation is not reported as wired.
+- Connector installation/execution remains deferred; protocol and ledger primitives do not imply a live connector consumer.
+- CI lives in `.github/workflows/ci.yml`; whole-repository formatting is always `bunx ultracite check --formatter-enabled=false .`.

@@ -113,7 +113,7 @@ export namespace WorkItemStore {
   /**
    * No production caller reaches retry today (dispatch does not re-drive
    * failed items yet); it stays because multi-attempt admission flows are
-   * pinned through it (packages/openomni completion-admission tests) and it
+   * pinned through the former completion-admission tests) and it
    * is the only writer of the attempt/basisRef advance on a failed item.
    */
   export async function retry(hash: string, traceId: string): Promise<WorkItem.Info | undefined> {

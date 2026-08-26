@@ -21,11 +21,6 @@
       "worker-bootstrap"
     ]
   },
-  "tools": {
-    "exceptions": {
-      "dispatch": ["tool-max-fields"]
-    }
-  },
   "naming": {
     "grandfathered": [
       "packages/protocol/src/policy/point-contract.ts:PolicyPointContractModule",

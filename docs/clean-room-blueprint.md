@@ -18,7 +18,7 @@ Every piece of code answers exactly one question:
 Support tiers: `policy` (pure decision engine), `llm`, `agent` (loop), `ipc` (#496),
 `coordinator` (local-process Execution.Driver), driver band `channels`/`remote`/
 `browser`/`machines` ({protocol, ipc} deps only), `placement` (deferred until a
-second execution target kind exists). `apps/server` is the composition root (bootstrap-only
+second execution target kind exists). `apps/openomni` is the composition root
 ledger, see #503) plus userland (`agents/`, `worker/` — recorded #504 exception).
 `@openomni/core` is REJECTED: every candidate util already has a natural owner.
 
@@ -48,7 +48,7 @@ ledger, see #503) plus userland (`agents/`, `worker/` — recorded #504 exceptio
 J1 NamedError stays in protocol root. J2 ResidentRuntime (runner included) moves to
 server userland. J3 kernel folder is `command/`. J4/J6 access & injection: fold
 unless second consumer proven at implementation time. J5 no `core` package.
-J7 worker execution lives at `apps/server/src/worker/` (recorded #504 exception;
+The historical J7 worker execution exception was removed with the legacy host;
 promote to a package only when a second execution host exists). J8 loop/LLM event
 descriptors -> `execution/events.ts`, MCP -> `tool/events.ts`, pure telemetry
 defined package-locally (amended 2026-08-10: band-published telemetry

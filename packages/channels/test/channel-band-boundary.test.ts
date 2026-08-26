@@ -6,7 +6,7 @@ import ts from "typescript";
 
 /**
  * Channels band import contract (#551 stage 1 — the extraction gate that
- * traveled with the band move from apps/server/src/channel).
+ * traveled with the driver-band extraction).
  *
  * The channels package whitelist at gateway stage 1 is {protocol, ipc,
  * policy} (docs/gateway-design.md §1/§9; ledger arrives at stage 2): channel
@@ -181,11 +181,6 @@ describe("channels band import boundary", () => {
 
   // Forbidden EVERYWHERE in src/** — including the router judgment band.
   const everywhereViolationFixtures = [
-    [
-      "require of the kernel",
-      'const oo = require("@openomni/openomni");',
-      "imports @openomni/openomni",
-    ],
     ["arbitrary npm package", 'import { z } from "zod";', "imports zod"],
     [
       "telemetry import (observation goes through the injected sink)",

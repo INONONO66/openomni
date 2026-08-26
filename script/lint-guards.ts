@@ -33,8 +33,6 @@ const excludedSuffixes = [".d.ts", ".generated.ts", ".gen.ts"];
 const canonicalPolicyEvaluator = new Set(["packages/policy/src/permission-evaluate.ts"]);
 const canonicalPolicyRequiredFiles = new Set([
   "packages/channels/src/router/authority.ts",
-  "packages/openomni/src/execution-runtime/middleware/tool-permission-policy.ts",
-  "apps/server/src/tool/mcp/mcp-prefix-guard.ts",
   "packages/channels/src/authn/decision.ts",
 ]);
 const approvedAuthorizationFiles = new Set<string>([]);
@@ -85,10 +83,19 @@ const policyPointsWithoutProductionRegistration = new Set([
   "connection.llm.post",
   "delegation.worker.pre",
   "delegation.worker.post",
+  "dispatch.action.pre",
+  "prompt.context.pre",
+  "run.completion.pre",
   "run.error.error",
   "run.lifecycle.pre",
   "run.lifecycle.post",
+  "run.turn.pre",
+  "run.turn.post",
   "tool.catalog.pre",
+  "tool.mcp.pre",
+  "tool.mcp.post",
+  "tool.native.pre",
+  "tool.native.post",
   "work.complete.pre",
 ]);
 const pointIdsArrayPattern = /\bpointIds:\s*\[([^\]]*)\]/g;
@@ -96,7 +103,7 @@ const pointIdLiteralPattern = /["'`]([a-z][a-z._]+)["'`]/g;
 
 /**
  * D5's lock, restated after builtin/ dissolved (#641) and the last default
- * registration moved to openomni (#642): the agent package defines policy
+ * registration moved to the product composition (#642): the agent package defines policy
  * mechanism — the engine, the points, the factories — but never assembles a
  * registry of opinions. A registry populated inside the library is a default
  * the product did not choose.
@@ -286,7 +293,7 @@ function validateAgentRegistryAssembly(filePath: string, source: string): GuardV
     line: lineNumberForOffset(source, match.index),
     ruleId: "agent-registry-assembly",
     message:
-      "the agent package defines policy mechanism but never assembles a registry of opinions — registration belongs to the product (openomni)",
+      "the agent package defines policy mechanism but never assembles a registry of opinions — registration belongs to the product app",
   }));
 }
 

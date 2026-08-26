@@ -88,7 +88,7 @@ for (const file of trackedFiles) {
 // 5. From a real consumer package the old specifier must not resolve and the
 //    new one must import cleanly. (The workspace root declares no dependency
 //    on either name, so resolution is checked where consumers live.)
-const consumerDir = join(root, "apps/server");
+const consumerDir = join(root, "apps/openomni");
 try {
   const resolved = Bun.resolveSync(OLD_PACKAGE_NAME, consumerDir);
   failures.push(`"${OLD_PACKAGE_NAME}" unexpectedly resolves to ${resolved}`);
@@ -99,7 +99,7 @@ try {
   const resolved = Bun.resolveSync("@openomni/ledger", consumerDir);
   await import(resolved);
 } catch (err) {
-  failures.push(`import("@openomni/ledger") failed from apps/server: ${String(err)}`);
+  failures.push(`import("@openomni/ledger") failed from apps/openomni: ${String(err)}`);
 }
 
 if (failures.length > 0) {

@@ -69,5 +69,5 @@ export abstract class NamedError extends Error {
 // (ledger/schema.ts AdoptError, wait/schema.ts StoreError, communication
 // pending-ask/pending-interaction FrozenError). The concrete errors that
 // lived beside it moved to their caller-proven owners: APIError →
-// @openomni/llm (src/error.ts — llm-only callers), WorkerDeliveryError →
-// @openomni/coordinator (src/error.ts — coordinator + apps/server callers).
+// @openomni/llm (src/error.ts — llm-only callers). The removed local-process
+// worker stack owned its own delivery error rather than exporting it here.

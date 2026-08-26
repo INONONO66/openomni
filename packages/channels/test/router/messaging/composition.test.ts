@@ -13,7 +13,7 @@ import {
  * messaging ports composes the send kernel over Owner grants + live
  * reply-grant instances, and a routed admission of a registered actor on a
  * rule-covered channel materializes a bounded reply-scoped instance. These
- * lines are otherwise exercised only by the apps/server E2E; this pins them
+ * lines are exercised through the app composition; this pins them
  * in the channels standalone suite.
  */
 

@@ -22,8 +22,7 @@ import { deliveries, kernelRouter, resetRouterState, routingDecisions } from "./
  * (attachReply/expiry), ambiguity, blacklist suppression, and the projected
  * delivery shape. The dispatch-execution half (pending-interaction command
  * placement) is brain-side and lives in
- * packages/openomni/test/ingress/pending-interaction-delivery.test.ts; the
- * composed pipeline is pinned in apps/server/test/ingress/.
+ * the removed product pipeline; the surviving perimeter behavior is pinned here.
  */
 
 const correlation = {
