@@ -124,8 +124,31 @@ export class PythonKernel {
   private tail: Promise<void> = Promise.resolve();
 
   run(request: Machine.CellRequest, callTool: CellToolCaller): Promise<Machine.CellResult> {
-    const result = this.tail.then(() => this.execute(request, callTool));
-    this.tail = result.then(
+    const deadline = Date.now() + request.timeoutMs;
+    let queueExpired = false;
+    let resolveResult!: (result: Machine.CellResult) => void;
+    let rejectResult!: (error: Error) => void;
+    const result = new Promise<Machine.CellResult>((resolve, reject) => {
+      resolveResult = resolve;
+      rejectResult = reject;
+    });
+    const queueTimer = setTimeout(() => {
+      queueExpired = true;
+      resolveResult({ status: "timed_out", cellId: request.cellId });
+    }, request.timeoutMs);
+
+    const operation = this.tail.then(() => {
+      clearTimeout(queueTimer);
+      if (queueExpired) return;
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 0) {
+        queueExpired = true;
+        resolveResult({ status: "timed_out", cellId: request.cellId });
+        return;
+      }
+      return this.execute(request, callTool, remainingMs).then(resolveResult, rejectResult);
+    });
+    this.tail = operation.then(
       () => undefined,
       () => undefined,
     );
@@ -143,6 +166,7 @@ export class PythonKernel {
   private execute(
     request: Machine.CellRequest,
     callTool: CellToolCaller,
+    timeoutMs: number,
   ): Promise<Machine.CellResult> {
     const process = this.process ?? this.start();
     return new Promise((resolve, reject) => {
@@ -153,7 +177,7 @@ export class PythonKernel {
         // but the next queued cell is guaranteed a fresh, unwedgeable process.
         this.discard(process);
         resolve({ status: "timed_out", cellId: request.cellId });
-      }, request.timeoutMs);
+      }, timeoutMs);
       this.pending = { resolve, reject, timer, process, cellId: request.cellId, callTool };
       process.stdin.write(`${JSON.stringify(request)}\n`);
     });
