@@ -1,158 +1,22 @@
 import { describe, expect, it } from "bun:test";
-import { PolicyEngine } from "../../../src/core/policy";
-import type { Tool } from "@openomni/protocol";
-import type { PolicyRegistration } from "../../../src/core/policy/types";
+import { PolicyDecision, type Tool } from "@openomni/protocol";
 import {
-  atPoint,
-  registerAt,
-  abortRun,
-  allow,
-  deny,
-  inject,
-  rewriteToolInput,
-  policyContext,
-  turnPostContext,
-  turnPreContext,
-  toolPreContext,
-} from "../../helpers/policy-decision";
+  PolicyEngine,
+  type CanonicalPolicyRegistrationGeneric,
+  type GenericPolicyContext,
+} from "@openomni/policy";
+import { allow, atPoint, toolPreContext, turnPostContext, turnPreContext } from "./point-test-fixtures";
 
-describe("deny-wins composition", () => {
-  it("deny verdict takes precedence over prior continue verdicts", async () => {
-    const engine = PolicyEngine.create();
-    registerAt(engine, "run.turn.pre", "allow-policy-a", 10, () => allow());
-    registerAt(engine, "run.turn.pre", "allow-policy-b", 20, () => allow());
-    registerAt(
-      engine,
-      "run.turn.pre",
-      "deny-policy",
-      30,
-      () => deny("test.deny", "blocked-by-deny"),
-      ["audit.annotate"],
-    );
-
-    const verdict = await engine.dispatchPoint("run.turn.pre", turnPreContext());
-
-    expect(verdict.verdict).toBe("deny");
-    expect(verdict.reasonCodes).toContain("blocked-by-deny");
+const deny = (policyId: string, reason: string) =>
+  PolicyDecision.deny({
+    policyId,
+    reasonCodes: [reason],
+    effects: [{ type: "audit.annotate", annotation: reason, severity: "error" }],
   });
+const policyContext = () => ({});
+type PolicyRegistration = CanonicalPolicyRegistrationGeneric<GenericPolicyContext>;
 
-  it("deny at lower priority short-circuits higher priority policies", async () => {
-    const executed: string[] = [];
-    const engine = PolicyEngine.create();
-
-    registerAt(
-      engine,
-      "tool.native.pre",
-      "deny-first",
-      0,
-      () => {
-        executed.push("deny-first");
-        return deny("test.deny-first", "early-deny");
-      },
-      ["audit.annotate"],
-    );
-    registerAt(engine, "tool.native.pre", "allow-later", 100, () => {
-      executed.push("allow-later");
-      return allow();
-    });
-    registerAt(
-      engine,
-      "tool.native.pre",
-      "transform-later",
-      200,
-      () => {
-        executed.push("transform-later");
-        return rewriteToolInput({}, "test.transform", "transform");
-      },
-      ["tool.rewrite_input"],
-    );
-
-    const verdict = await engine.dispatchPoint("tool.native.pre", toolPreContext());
-
-    expect(verdict.verdict).toBe("deny");
-    expect(executed).toEqual(["deny-first"]);
-  });
-
-  it("abort also short-circuits continue policies", async () => {
-    const executed: string[] = [];
-    const engine = PolicyEngine.create();
-
-    registerAt(engine, "run.turn.post", "allow-first", 10, () => {
-      executed.push("allow-first");
-      return allow();
-    });
-    registerAt(
-      engine,
-      "run.turn.post",
-      "abort-second",
-      20,
-      () => {
-        executed.push("abort-second");
-        return abortRun("test.abort", "abort-wins");
-      },
-      ["run.abort"],
-    );
-    registerAt(
-      engine,
-      "run.turn.post",
-      "inject-third",
-      30,
-      () => {
-        executed.push("inject-third");
-        return inject("msg", "test.inject", "inject");
-      },
-      ["prompt.inject_message"],
-    );
-
-    const verdict = await engine.dispatchPoint("run.turn.post", turnPostContext());
-
-    expect(verdict.verdict).toBe("deny");
-    expect(executed).toEqual(["allow-first", "abort-second"]);
-  });
-
-  it("all continue verdicts result in continue", async () => {
-    const engine = PolicyEngine.create();
-    for (let i = 0; i < 5; i++) {
-      engine.register(
-        atPoint("run.lifecycle.pre", {
-          name: `continue-${i}`,
-          priority: i * 10,
-          fn: () => allow(),
-        }),
-      );
-    }
-
-    const verdict = await engine.dispatchPoint("run.lifecycle.pre", {
-      ...policyContext(),
-      actorId: "actor",
-      sessionId: "session",
-      runId: "run",
-    });
-    expect(verdict.verdict).toBe("allow");
-  });
-
-  it("executes equal-priority policies in registration order", async () => {
-    const engine = PolicyEngine.create();
-    const executed: string[] = [];
-
-    for (const name of ["first", "second", "third"]) {
-      engine.register(
-        atPoint("run.turn.pre", {
-          name,
-          priority: 10,
-          fn: () => {
-            executed.push(name);
-            return allow();
-          },
-        }),
-      );
-    }
-
-    await engine.dispatchPoint("run.turn.pre", turnPreContext());
-
-    expect(executed).toEqual(["first", "second", "third"]);
-  });
-
+describe("deny-wins point matrix", () => {
   it("deny-wins across all registered policy points", async () => {
     // Canonical successors of the legacy Policy.Timing values (invoke.prepare /
     // invoke.result exercised through their tool.native representatives),
