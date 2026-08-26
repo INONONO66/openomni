@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787780071459,
+  "lastUpdate": 1787780264355,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -62669,6 +62669,90 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 501465,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "18bcd6004eb74219ee6ee393d453088d890d92d4",
+          "message": "fix(agent): persist actorId in run events; test hygiene (#799)\n\n* fix(agent): persist actorId in run event schemas\n\nThe run loop computes actorId (run.ts agentBase) and every run-event\npublisher includes it in the payload, but the shared AgentBase schema\ndeclared only agentId — zod's strip-unknown parse dropped actorId from\npersisted/parsed events, losing audit attribution.\n\nAdd actorId (optional, upcast-on-read for pre-existing rows) to\nAgentBase and pin the round-trip with a schema test.\n\n* test(agent): zero retry backoff via run.retry_after seam in slow tests\n\n'retries transient errors up to the default max attempts' and 'throws\nwhen the LLM returns a fatal error outcome' hit the real retry path's\n1s+2s backoffs (~3s each). Inject delayMs: 0 through the existing\nrun.retry_after effect at run.error.error — same retry path, same\nattempt counts and terminal classification, no wall-clock sleep\n(each test now ~3ms).\n\n* test(agent): drop self-simulating budget-injection tests\n\nTwo tests reimplemented the injection flag logic in a local\ninjectIfNeeded and asserted on their own reimplementation — they could\nnever fail against the real loop. The real seams are already covered:\ndispatchBudgetCheck (lifecycle-budget.test.ts), budget events through\nbuildTurn (lifecycle-turn-pre.test.ts), and publishBudgetTelemetry's\nemit-once (budget.test.ts). Keep the pure-function tests of\ncheckBudget/describeBudgetRemaining.\n\n* docs(agent): merge doubled docblock on placementGatedExecutor\n\nTwo consecutive docblocks sat on the placement-refusal wrapper; fold\nthe second's summary (what the refusal is, why exported) into the\nfirst as a closing paragraph.\n\n* fix(agent): thread actorId through the compaction bracket identity\n\nAdversarial review found the schema comment overclaimed: the compaction\nbracket published identity without actorId, so persisted agent.compaction.*\nrows lost attribution. PolicyContext now declares the actorId that\nbuildLifecyclePolicyContext already stamps, and the compaction builtin\nthreads it into the bracket identity; bracket tests pin the round-trip.",
+          "timestamp": "2026-08-26T21:36:41Z",
+          "tree_id": "385ab37b10b01a20aab523bddd0d1a768ea8cec3",
+          "url": "https://github.com/INONONO66/openomni/commit/18bcd6004eb74219ee6ee393d453088d890d92d4"
+        },
+        "date": 1787780263343,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1457,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 10201,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 5383,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 606,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 538,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 909,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 33,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 862,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 435,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 25122,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 1343,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 301455,
             "unit": "ns/op"
           }
         ]
