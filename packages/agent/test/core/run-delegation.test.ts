@@ -183,7 +183,23 @@ describe("run() delegation contract", () => {
   it("throws when the LLM returns a fatal error outcome", async () => {
     mockRunFn = async () => createErrorOutcome("connection refused");
 
-    const agent = ChatAgent.create(defaultConfig);
+    // Zero the backoff through the run.retry_after effect seam: the subject
+    // is the terminal classification after the retry ceiling, not the
+    // wall-clock wait (1s + 2s by default).
+    const agent = ChatAgent.create({
+      ...defaultConfig,
+      middleware: [
+        {
+          kind: "point",
+          name: "test:no-backoff",
+          pointIds: ["run.error.error"],
+          effectCapabilities: { "run.error.error": ["run.retry_after"] },
+          priority: 100,
+          fn: () =>
+            allow("test.no-backoff", "no_backoff", [{ type: "run.retry_after", delayMs: 0 }]),
+        },
+      ],
+    });
 
     await expect(agent.run(defaultInput)).rejects.toThrow("connection refused");
   });
