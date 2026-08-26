@@ -12,8 +12,6 @@ import {
 import { LedgerAppend, SurfaceKey } from "@openomni/ledger";
 import { resolveIngressActor } from "./actor-resolver.js";
 import { IngressAuthorityMiddleware } from "./authority.js";
-
-export { resolveRoute, type RouteInbound, type RouteState } from "./resolve-route.js";
 import {
   createReplyGrantInstances,
   replyGrantEndpointFromFacts,
@@ -24,6 +22,8 @@ import { createExistingAgentMessaging, type DeliveryReceipt } from "./messaging/
 import type { ExistingAgentMessaging } from "./messaging/send.js";
 import { executeWaitRoute, requireRoutedDecision } from "./routing-execution.js";
 import { resolveAndRecordRoute, type KernelRouteResolution } from "./routing-resolution.js";
+
+export { resolveRoute, type RouteInbound, type RouteState } from "./resolve-route.js";
 
 /**
  * Existing-agent delivery route, keyed by ActorEndpoint channel: the concrete
