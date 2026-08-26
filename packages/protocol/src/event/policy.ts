@@ -15,7 +15,12 @@ const PolicyBase = z.object({
 // Audit events retain upcast-on-read compatibility with historical obligations
 // that only guaranteed a free-form `type`. PolicyEffects.PolicyObligation is
 // the canonical owner; this derived shape keeps its fields optional and
-// preserves unknown fields without changing the event wire meaning.
+// preserves unknown fields. Acceptance is slightly NARROWER than the old
+// independent passthrough: canonical-owner keys (obligationId, description,
+// timeoutMs, resolvedBy) are now validated when present, so a payload carrying
+// one with a nonconforming value is rejected instead of passed through. The
+// sole producer (policy engine audit) already conforms, and no read path
+// re-parses persisted rows with this schema.
 const PolicyObligation = PolicyEffects.PolicyObligation.partial()
   .extend({ type: z.string() })
   .passthrough();
