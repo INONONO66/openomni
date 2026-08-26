@@ -6,7 +6,7 @@ SSOT directive ([docs/gateway-design.md](../../docs/gateway-design.md) §4, Owne
 
 `Bus` itself lives in `@openomni/telemetry` (#606) — every consumer imports it from there directly; this package keeps the durable journal that subscribes to it.
 
-This package stores facts; the kernel decides their product meaning. Communication routing, actor authority, PendingInteraction/PendingAsk precedence, worker grant semantics, and writeback belong in product composition.
+This package stores facts; the kernel decides their product meaning. Communication routing, actor authority, PendingInteraction/PendingAsk precedence, and writeback belong in product composition.
 
 `WorkerRunStateStore`, `PendingAskStore`, and `PendingInteractionStore` are FROZEN legacy storage surfaces: every write throws a typed frozen error (#510 D2b / #548) and historical rows stay readable; the attempt-run view (`WorkItemAttemptRun`) read-upcasts them. New delegated-execution writes use the canonical WorkItem attempt and `Wait` contracts in the [kernel contract](../../docs/kernel-contract.md).
 
@@ -37,7 +37,6 @@ src/
 ├── channel-grant/        # ChannelGrant store (surface/workspace/channel ceilings)
 ├── pending-ask/          # PendingAskStore (legacy resident.ask path; #215 target freezes writes and read-upcasts to Wait)
 ├── pending-interaction/  # PendingInteractionStore (legacy correlation/follow-up records; #215 target read-upcasts to Wait)
-├── worker-grant/         # WorkerGrantStore (scoped worker-egress grants)
 ├── artifact/             # Artifact.store / get; reads normalize legacy invalid metadata into the current schema
 ├── app-connector/        # Installed-app lifecycle; installation and connector actor identity/endpoint change transactionally
 ├── surface-key/          # SurfaceKey — N:1 mapping from external surface keys to session IDs
@@ -86,7 +85,6 @@ Stores may provide CRUD and indexed queries:
 - `PendingInteractionStore.findByCorrelation(...)` may return candidate records.
 - `PendingAskStore.findByCorrelation(...)` may remain while the legacy resident.ask path exists.
 - `ChannelGrantStore` / `BlacklistStore` may persist and retrieve records.
-- `WorkerGrantStore` may persist grants and expose data needed for evaluation.
 
 Stores must not own kernel decisions:
 
