@@ -179,7 +179,12 @@ export namespace Compaction {
   export async function compact(
     messages: Message.WithParts[],
     options: ResolvedCompactionOptions,
-    identity: { readonly traceId: string; readonly sessionId: string; readonly runId?: string },
+    identity: {
+      readonly traceId: string;
+      readonly sessionId: string;
+      readonly runId?: string;
+      readonly actorId?: string;
+    },
     events: BusEvent.Sink,
     dispatch: {
       readonly trigger: "threshold" | "yield";

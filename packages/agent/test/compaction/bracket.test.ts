@@ -17,6 +17,7 @@ const IDENTITY = {
   traceId: "trace-bracket-test",
   sessionId: "session-bracket-test",
   runId: "run-bracket-test",
+  actorId: "actor-bracket-test",
 } as const;
 
 let idCounter = 0;
@@ -76,6 +77,7 @@ interface StartedEvent {
   traceId: string;
   sessionId: string;
   runId?: string;
+  actorId?: string;
   messagesBefore: number;
   trigger: string;
   summarizer: boolean;
@@ -85,6 +87,7 @@ interface CompletedEvent {
   traceId: string;
   sessionId: string;
   runId?: string;
+  actorId?: string;
   outcome: string;
   messagesBefore: number;
   messagesAfter: number;
@@ -157,6 +160,10 @@ describe("Compaction bracket", () => {
       // #702 rider: when the caller supplies a runId, the bracket records it.
       expect(capture.started[0]?.runId).toBe(IDENTITY.runId);
       expect(capture.completed[0]?.runId).toBe(IDENTITY.runId);
+      // Attribution survives the schema boundary: the compaction bracket
+      // carries the run's actorId like every other run-loop publisher.
+      expect(capture.started[0]?.actorId).toBe(IDENTITY.actorId);
+      expect(capture.completed[0]?.actorId).toBe(IDENTITY.actorId);
       expect(capture.completed[0]?.removedCount).toBeGreaterThan(0);
     } finally {
       capture.unsubscribe();

@@ -120,7 +120,6 @@ export namespace Storage {
     workerRunState?: WorkerRunStateStore.Adapter;
     pendingAsk?: ProtocolStorage.PendingAskSubAdapter;
     pendingInteraction?: ProtocolStorage.PendingInteractionSubAdapter;
-    workerGrant?: ProtocolStorage.WorkerGrantSubAdapter;
     cronJob?: ProtocolStorage.CronJobSubAdapter;
     // Active-egress debit ledger (#219, perimeter domain). Optional for test
     // fakes only — EgressBudgetStore fails closed when it is missing;
@@ -157,7 +156,6 @@ export namespace Storage {
     "workerRunState",
     "pendingAsk",
     "pendingInteraction",
-    "workerGrant",
     "cronJob",
     "egressBudget",
     "actorRegistry",

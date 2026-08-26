@@ -169,15 +169,6 @@ export namespace Storage {
     remove(id: string): boolean;
   }
 
-  export interface WorkerGrantSubAdapter {
-    create(record: Communication.WorkerGrant.Record): void;
-    get(id: string): Communication.WorkerGrant.Record | undefined;
-    list(workerRunId?: string): Communication.WorkerGrant.Record[];
-    /** Version-guarded upsert: false = an equal-or-newer version already persisted (lost race). */
-    set(record: Communication.WorkerGrant.Record): boolean;
-    remove(id: string): boolean;
-  }
-
   /**
    * Active-egress debit ledger (#219, perimeter domain): a per-(senderId,
    * targetActorId) append-only log of ADMITTED proactive sends. The gateway

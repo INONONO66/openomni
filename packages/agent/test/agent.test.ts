@@ -2,7 +2,7 @@ import { beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
 import type { Run, Sink } from "@openomni/llm";
 import type { Message, Tool } from "@openomni/protocol";
 import { RunEvents } from "../src/core/execution/events";
-import type { AgentStep } from "../src/core/types";
+import type { AgentStep, ChatAgentConfig } from "../src/core/types";
 import {
   createStopOutcome,
   createMockLlmConfig,
@@ -78,6 +78,19 @@ function createAgent() {
     llm: mockLlm,
   });
 }
+
+/**
+ * Zeroes the retry backoff through the loop's run.retry_after effect seam,
+ * so retry-path tests assert attempt counts without the default 1s/2s sleeps.
+ */
+const noBackoffMiddleware: NonNullable<ChatAgentConfig["middleware"]>[number] = {
+  kind: "point",
+  name: "test:no-backoff",
+  pointIds: ["run.error.error"],
+  effectCapabilities: { "run.error.error": ["run.retry_after"] },
+  priority: 100,
+  fn: () => allow("test.no-backoff", "no_backoff", [{ type: "run.retry_after", delayMs: 0 }]),
+};
 
 describe("ChatAgent", () => {
   beforeEach(() => {
@@ -235,9 +248,18 @@ describe("ChatAgent", () => {
       throw new Error("transient network error");
     };
 
+    // Zero the backoff through the run.retry_after effect seam: the subject
+    // is the attempt count, not the wall-clock wait (1s + 2s by default).
+    const agent = ChatAgent.create({
+      events: Bus,
+      model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      llm: mockLlm,
+      middleware: [noBackoffMiddleware],
+    });
+
     let retryError: unknown;
     try {
-      await createAgent().run(runInput([{ role: "user", content: "Hello" }]));
+      await agent.run(runInput([{ role: "user", content: "Hello" }]));
     } catch (error) {
       if (!(error instanceof Error)) throw error;
       retryError = error;

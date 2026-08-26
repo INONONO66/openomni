@@ -49,8 +49,7 @@
     "model",
     "systemPrompt",
     "tools",
-    "trustTier",
-    "workerGrantIds"
+    "trustTier"
   ],
   "Actor.ResolvedEndpoint": ["endpoint", "identity"],
   "AppConnector.Consent": [
@@ -240,6 +239,7 @@
     "status",
     "transport",
     "waitId",
+    "wokenAt",
     "workItemId"
   ],
   "Delegation.Request": [

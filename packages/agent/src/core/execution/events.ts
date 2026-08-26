@@ -6,6 +6,13 @@ const AgentBase = z.object({
   sessionId: z.string(),
   agentId: z.string().optional(),
   runId: z.string().optional(),
+  /**
+   * The run's audit attribution (run.ts `agentBase.actorId` — today actor ≡
+   * runId until a validated principal lane exists, #606). Every publisher
+   * emits it; optional only so rows recorded before the field existed still
+   * parse (upcast-on-read, same precedent as `CompactionCompleted.anchored`).
+   */
+  actorId: z.string().optional(),
   time: z.number(),
 });
 
