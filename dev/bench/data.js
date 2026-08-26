@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787781238749,
+  "lastUpdate": 1787782544971,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -63005,6 +63005,90 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 518283,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "73d146bc9f059766a6d008ec4c9d82a713441b64",
+          "message": "feat(openomni): npm-installable 24/7 deployment (#804)\n\n* feat(openomni): npm-installable 24/7 deployment (#803)\n\n- openomni CLI: start/onboard/daemon/doctor/logs with TS-owned\n  launchd + systemd user-unit generation (single implementation)\n- GET /health endpoint on the ws port\n- ~/.openomni/env loading in CLI start (process env wins; 0600 writes)\n- npm staging build: dependency-free package 'openomni', bin stub\n  re-executing under bun, bundle boot-tested against real migrations\n- delete stale deploy/ bash band and qa/server-daemon (targeted the\n  deleted apps/server: dead /health probe, dead config.json schema,\n  dead WS_AUTH_TOKEN/OPENOMNI_PROCESS envs, macOS stub)\n- doc-sync: README install section, implementation-status rows\n\n* fix(openomni): resolve adversarial review findings on the deployment slice\n\n- launchd: create ~/.openomni/logs before bootstrap (launchd opens the\n  configured log paths itself; missing parents kill the job) [BLOCKER]\n- onboard: secret prompts (API key, channel tokens) no longer echo\n- daemon uninstall: verify the daemon actually stopped before deleting\n  the unit; refuse and keep the unit if it is still running\n- systemd install: enable + restart (not enable --now) so a running old\n  generation is replaced after package upgrade; enable linger (with a\n  manual-fallback warning) so the service survives logout/boot\n- systemd unit: escape %, quotes, backslashes in ExecStart; reject\n  control characters in unit paths fail-closed\n- process-entry resolution: probe dist/delegation/process-entry.js so\n  the standard tsc build layout works, not only bundle and source\n- doctor: effective env = file merged under exported OPENOMNI_* vars\n  (env-file-less config supported, file absence is a warn); blank\n  required values fail like missing ones; linger check on systemd\n- env file: atomic 0600 temp+rename write (no mode window, symlinks\n  replaced not followed); parse 'export ' prefix and CRLF\n- onboard: reject port 0 (ephemeral bind is undiscoverable)\n- /health: liveness only ({ok:true}), no server time disclosure\n- npm smoke: execute the bundled worker (stdin-closed guard), not just\n  stat it\n- README: current-status prose rewritten to post-decommission reality\n\n* fix(openomni): round-2 review findings — systemd $ expansion, uninstall stop proof, hard linger contract\n\n- systemd ExecStart: double $ so literal path segments never\n  environment-expand; test pins $VER/${X}\n- uninstall: stop must succeed or the job must be provably unloaded —\n  linux checks is-active only after a failed disable and accepts only\n  inactive/failed (activating keeps the unit); darwin accepts a failed\n  bootout only when launchctl print says the job is not loaded at all\n- linux install: linger failure is now a hard error with remediation\n  (exit 0 no longer claims an unmet 24/7 contract); unverifiable linger\n  state maps to the doctor warning, not benefit of the doubt\n- env file: temp name is random and opened O_EXCL (planted symlink =\n  error, not a follow); render adds a protective quote layer so values\n  the parser would unquote round-trip intact; symlink-at-destination\n  replacement pinned by test\n- process-entry resolver extracted to src/process-entry-path.ts with\n  injectable base URL; probe order (bundle sibling -> tsc output ->\n  source) unit-tested; npm smoke now asserts machine state (no ack on\n  stdout, module found, non-zero exit) instead of pinning prose\n- process-entry: processWorkerRun un-exported (internal only)\n\n* fix(openomni): round-3 review findings — disable proof, launchctl not-found specificity, worker exit sentinel\n\n- linux uninstall: stop and disable are separately proven after a failed\n  `disable --now` — is-enabled must answer disabled/not-found, else the\n  unit stays installed (dangling enable symlink would resurrect the\n  service on reinstall)\n- darwin uninstall: a failed `launchctl print` is proof of nothing;\n  only the specific 'Could not find service' answer permits plist\n  removal (permission/IPC failures keep the unit)\n- process-entry: stdin-closed guard now exits with a dedicated machine\n  sentinel (PROCESS_WORKER_NO_REQUEST_EXIT = 78) instead of a thrown\n  prose error; the npm smoke asserts that exact code, which invalid JS,\n  load errors, and top-level exceptions (all exit 1) cannot fake",
+          "timestamp": "2026-08-27T07:14:36+09:00",
+          "tree_id": "eefcdb01b9ba637aca9d365fd91775db9a68ce3f",
+          "url": "https://github.com/INONONO66/openomni/commit/73d146bc9f059766a6d008ec4c9d82a713441b64"
+        },
+        "date": 1787782544098,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2115,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 14142,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7572,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1019,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 936,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1444,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1589,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 713,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 46340,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2306,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 513650,
             "unit": "ns/op"
           }
         ]
