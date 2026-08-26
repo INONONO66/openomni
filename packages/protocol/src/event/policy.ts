@@ -12,10 +12,12 @@ const PolicyBase = z.object({
   time: z.number(),
 });
 
-const PolicyObligation = z
-  .object({
-    type: z.string(),
-  })
+// Audit events retain upcast-on-read compatibility with historical obligations
+// that only guaranteed a free-form `type`. PolicyEffects.PolicyObligation is
+// the canonical owner; this derived shape keeps its fields optional and
+// preserves unknown fields without changing the event wire meaning.
+const PolicyObligation = PolicyEffects.PolicyObligation.partial()
+  .extend({ type: z.string() })
   .passthrough();
 
 const PolicyAuditContext = z.object({
@@ -78,17 +80,5 @@ export const Events = {
       reason: z.string(),
     }),
     { visibility: "llm_reason" },
-  ),
-  ActionApproved: BusEvent.define(
-    "policy.action.approved",
-    PolicyBase.extend({
-      actionId: z.string(),
-      actor: z.record(z.string(), z.unknown()),
-      action: z.string(),
-      resource: z.string(),
-      verdict: z.enum(["allow", "deny", "pending"]),
-      reason: z.string(),
-    }),
-    { visibility: "ephemeral" },
   ),
 };

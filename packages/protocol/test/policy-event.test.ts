@@ -130,20 +130,6 @@ describe("Policy.Events BusEvents", () => {
     );
   });
 
-  test("ActionApproved parses", () => {
-    expectParseOk(() =>
-      Policy.Events.ActionApproved.schema.parse({
-        ...base,
-        actionId: "action-1",
-        actor,
-        action: "tool.execute",
-        resource: "tool:shell",
-        verdict: "allow",
-        reason: "approved by policy",
-      }),
-    );
-  });
-
   test("all verdict types are accepted", () => {
     const verdicts = ["allow", "deny", "pending"] as const;
 
@@ -194,7 +180,6 @@ describe("Policy.Events BusEvents", () => {
     expect(Policy.Events.Evaluated.name).toBe("policy.evaluated");
     expect(Policy.Events.DecisionComposed.name).toBe("policy.decision.composed");
     expect(Policy.Events.ActionBlocked.name).toBe("policy.action.blocked");
-    expect(Policy.Events.ActionApproved.name).toBe("policy.action.approved");
   });
 
   test("event descriptors have schemas", () => {
@@ -202,7 +187,6 @@ describe("Policy.Events BusEvents", () => {
     expect(Policy.Events.Evaluated.schema != null).toBe(true);
     expect(Policy.Events.DecisionComposed.schema != null).toBe(true);
     expect(Policy.Events.ActionBlocked.schema != null).toBe(true);
-    expect(Policy.Events.ActionApproved.schema != null).toBe(true);
   });
 
   test("policy audit events are persistent", () => {
