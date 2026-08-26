@@ -54,9 +54,22 @@ Agent capability is no longer the bottleneck — reliability is. OpenOmni reduce
 
 ## Current Status
 
-The core execution runtime is working. Inbound routing, session management, the ChatAgent loop, tool execution, the on-demand worker runtime, and the in-process Resident all function. Completion-report evidence linkage and automatic read-back checks for supported URL, API, and citation claims are wired. The sandboxed verifier registry is wired into Worker admission and stale-head re-evaluation; the public driver exercises origin convergence and historical archive upcast. Transport adapters for actor-originated completion remain future consumers of the caller-authenticated kernel facade, as do the single-Resident operational model and System Governor feedback loop.
+The clean-room app is the sole deployable: a single Resident chat loop behind the channel gateway (WebSocket, plus env-gated Discord/Telegram/GitHub), a role-gated tool catalog with code mode and machine attach, the async delegation kernel (notify/ask/assign over inline, process, and channel transports with durable handles and boot recovery), curated built-in memory, and the npm-installable CLI with launchd/systemd daemon management. WorkItem completion authority, Stakes, the verifier registry, and the System Governor remain design-doc contracts without a wired implementation.
 
 Component-level truth lives in [Implementation Status](docs/implementation-status.md) — design docs describe targets; that file says what actually runs.
+
+## Install & Run 24/7
+
+OpenOmni ships as an npm package running on the [Bun](https://bun.sh) runtime:
+
+```bash
+npm install -g openomni     # or: bun add -g openomni
+openomni onboard            # interactive setup -> ~/.openomni/env
+openomni daemon install     # launchd / systemd --user service, survives reboot
+openomni doctor             # read-only diagnostics
+```
+
+The publishable artifact is staged with `bun run --cwd apps/openomni build:npm` and published from `apps/openomni/dist-npm`.
 
 ## Development
 

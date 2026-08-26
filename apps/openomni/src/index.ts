@@ -1,3 +1,4 @@
+import { processEntryPath } from "./process-entry-path";
 import type { ChatAgentConfig } from "@openomni/agent";
 import { type GatewayRouter, WaitService, WebSocketHandler } from "@openomni/channels";
 import { ActorRegistry, BusPersistence, initialize, Session, Storage } from "@openomni/ledger";
@@ -159,10 +160,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
         inline: createInlineDriver(runner),
         channel: channelDriver,
         process: createProcessDriver({
-          command: [
-            process.execPath,
-            new URL("./delegation/process-entry.ts", import.meta.url).pathname,
-          ],
+          command: [process.execPath, processEntryPath(import.meta.url)],
           worker: {
             model: { provider: config.model.provider, id: config.model.id },
             apiKey: config.model.apiKey,
@@ -339,6 +337,10 @@ export async function startOpenOmni(options: StartOptions = {}) {
           // undefined = the upgrade succeeded; a Response = the upgrade was denied.
           return wsHandler.handleUpgrade(request, bunServer);
         }
+        if (request.method === "GET" && url.pathname === "/health") {
+          // Unauthenticated liveness only: no clock, no version, no state.
+          return Response.json({ ok: true });
+        }
         if (
           request.method === "POST" &&
           url.pathname === "/github/webhook" &&
@@ -403,16 +405,5 @@ export function installShutdownHandlers(deps: {
   };
   deps.on("SIGINT", handler);
   deps.on("SIGTERM", handler);
-}
-
-if (import.meta.main) {
-  const config = loadConfig();
-  const app = await startOpenOmni({ config });
-  console.log(`OpenOmni Resident listening at ws://${config.host}:${app.port}/ws`);
-  installShutdownHandlers({
-    stop: () => app.stop(),
-    exit: (code) => process.exit(code),
-    on: (signal, handler) => process.once(signal, handler),
-  });
 }
 

@@ -2,7 +2,7 @@
 
 Single source of truth for current wiring between accepted design and running code. Target semantics live in [Core Model](core-model.md), [Kernel Contract](kernel-contract.md), [Architecture](architecture.md), and [Machines and Delegation](machines-and-delegation.md). Delivery ordering remains in [#459](https://github.com/INONONO66/openomni/issues/459).
 
-**Legend**: implemented and wired | dormant contract | designed, not implemented. Last verified: 2026-08-26 against the post-#796 tree and the #792 legacy-tree deletion.
+**Legend**: implemented and wired | dormant contract | designed, not implemented. Last verified: 2026-08-26 against the npm deployment slice (#803).
 
 ## Deployed shape
 
@@ -15,6 +15,7 @@ Single source of truth for current wiring between accepted design and running co
 | Session and journal durability | implemented and wired | `packages/ledger/src/`, `apps/openomni/src/index.ts` | SQLite storage, BusPersistence, session expiry, Wait expiry, and delegation recovery are composed at boot. Journal shutdown drains before storage closes. |
 | Machine body | implemented and wired | `packages/machines/`, `apps/openomni/src/tools/{machines,run-code}.ts` | Enrollment/offer intersection gates attached-machine capabilities. `kernel.py` cells and the in-cell tool bridge are available through placement-gated tools. |
 | Delegation kernel | implemented and wired | `apps/openomni/src/delegation/`, `packages/ledger/src/delegation/` | Durable record-before-act admission, inline/process/channel transports, one settlement fold, deadlines, restart recovery, await/cancel, and Owner-session wake delivery. |
+| CLI and npm deployment | implemented and wired | `apps/openomni/src/cli/`, `apps/openomni/script/build-npm-package.ts` | `openomni start/onboard/daemon/doctor/logs` with TS-owned launchd and systemd user-unit generation, `~/.openomni/env` loading, a `GET /health` endpoint, and a dependency-free npm staging build (`bun run --cwd apps/openomni build:npm`) whose bundle is boot-tested against real migrations. |
 | Curated memory | implemented and wired | `apps/openomni/src/memory/`, `apps/openomni/src/tools/memory.ts` | Bounded system/Owner stores, atomic writes, Resident-only add/replace/remove, snapshot frozen on first session delivery. |
 | Agent loop | implemented and wired | `packages/agent/src/core/` | Stateless loop, policy interception, placement gate, retry, budgets, parallel tools, and compaction. Product lifecycle remains outside the package. |
 | Policy engine | implemented and wired where consumed | `packages/policy/`, `packages/agent/src/core/policy/` | Generic evaluation and agent-loop points survive. Removed product-specific registration sites are not counted as wired. |
@@ -43,7 +44,7 @@ The legacy product kernel, local-process coordinator, and old server host were d
 | Projection/JSONL export from #766 | Deleted with its only implementation per the Owner no-slop ruling; re-fileable if the sole app earns a consumer. |
 | Old dispatch, WorkerGrant evaluation, completion service, verifier registry, read-back executors, effect reconciler | Deleted with the old product kernel. Their protocol/ledger contracts survive only where independently consumed or normatively inherited. |
 | Local worker pool/supervisor and worker-entry host | Deleted with the local-process coordinator/host. The app's delegation process transport is the live process path. |
-| Old CLI/onboard/systemd generator and bundled npm distribution | Deleted with the old host. Checked-in deployment templates now invoke the sole app directly. |
+| Old CLI/onboard/systemd generator and bundled npm distribution | Deleted with the old host, then re-owned by the sole app in #803: `openomni` CLI, launchd/systemd generation, and npm staging live in `apps/openomni`. The stale `deploy/` bash band and `qa/server-daemon` (both targeting the deleted apps/server) are deleted. |
 | Connector process host, question bridge, and product dispatch handlers | Deleted. Connector execution and #216-class installation lifecycle are deferred; schema and ledger installation primitives alone do not count as a consumer. |
 | Old cron registry/runner, injection queue, child-agent lane, broad tool providers, server admin/observability routes | Deleted with their only consumers; not reported as available in the sole app. |
 | Legacy compaction wrapper/bench | Deleted. The surviving app composes the core agent compaction path directly and has production-shaped tests. |
