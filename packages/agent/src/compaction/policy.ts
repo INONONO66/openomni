@@ -147,7 +147,12 @@ function buildRegistration(config: CompactionConfig): CanonicalPolicyRegistratio
       const result = await Compaction.compact(
         ctx.messages,
         resolved,
-        { traceId, sessionId, ...(runId === undefined ? {} : { runId }) },
+        {
+          traceId,
+          sessionId,
+          actorId: ctx.actorId,
+          ...(runId === undefined ? {} : { runId }),
+        },
         events,
         {
           trigger: ctx.contextYielded ? "yield" : "threshold",
