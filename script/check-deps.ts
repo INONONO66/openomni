@@ -132,15 +132,13 @@ const RULES: Record<PackageKey, PackageRule> = {
     packageJsonPath: "packages/channels/package.json",
     packageName: "@openomni/channels",
     // Gateway band at stage 2 (#707, docs/gateway-design.md §1/§9): protocol
-    // for the contracts, ipc as the driver-band transport contract, policy +
-    // ledger for the judgment band (S8 confines them to src/router/ +
-    // src/authn/ — see validateChannelsIntraPackageBanding, which also pins
-    // the router to the PERIMETER ledger surfaces only). The manifest may
-    // carry `telemetry` — the tests observe the real Bus (the llm/agent
-    // precedent), and `check-deps` counts devDependencies.
+    // for the contracts, policy + ledger for the judgment band (S8 confines
+    // them to src/router/ + src/authn/ — see validateChannelsIntraPackageBanding,
+    // which also pins the router to the PERIMETER ledger surfaces only). The
+    // manifest may carry `telemetry` — the tests observe the real Bus (the
+    // llm/agent precedent), and `check-deps` counts devDependencies.
     allowedDeps: new Set([
       "@openomni/protocol",
-      "@openomni/ipc",
       "@openomni/policy",
       "@openomni/ledger",
       "@openomni/telemetry",
@@ -149,7 +147,6 @@ const RULES: Record<PackageKey, PackageRule> = {
     // `BusEvent.Sink` port only. No kernel either way (openomni↔channels = 0).
     srcAllowedDeps: new Set([
       "@openomni/protocol",
-      "@openomni/ipc",
       "@openomni/policy",
       "@openomni/ledger",
     ]),

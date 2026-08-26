@@ -12,6 +12,8 @@ import {
 import { LedgerAppend, SurfaceKey } from "@openomni/ledger";
 import { resolveIngressActor } from "./actor-resolver.js";
 import { IngressAuthorityMiddleware } from "./authority.js";
+
+export { resolveRoute, type RouteInbound, type RouteState } from "./resolve-route.js";
 import {
   createReplyGrantInstances,
   replyGrantEndpointFromFacts,
@@ -22,35 +24,6 @@ import { createExistingAgentMessaging, type DeliveryReceipt } from "./messaging/
 import type { ExistingAgentMessaging } from "./messaging/send.js";
 import { executeWaitRoute, requireRoutedDecision } from "./routing-execution.js";
 import { resolveAndRecordRoute, type KernelRouteResolution } from "./routing-resolution.js";
-
-export { resolveIngressActor } from "./actor-resolver.js";
-export { IngressAuthorityMiddleware } from "./authority.js";
-export { resolveRoute, type RouteInbound, type RouteState } from "./resolve-route.js";
-export {
-  executeWaitRoute,
-  requireRoutedDecision,
-  type WaitRouteExecution,
-} from "./routing-execution.js";
-export {
-  IngressRoutingError,
-  resolveAndRecordRoute,
-  type IngressRoutingErrorCode,
-  type KernelRouteResolution,
-} from "./routing-resolution.js";
-export {
-  findWaitCandidates,
-  targetsOfWait,
-  WaitService,
-  type WaitResolution,
-} from "./wait/index.js";
-export { resolveSenderTargetGrant } from "./messaging/grant.js";
-export {
-  createExistingAgentMessaging,
-  type DeliveryReceipt,
-  type ExistingAgentMessaging,
-  type MessagingPorts,
-  type OutboundMessage,
-} from "./messaging/send.js";
 
 /**
  * Existing-agent delivery route, keyed by ActorEndpoint channel: the concrete
