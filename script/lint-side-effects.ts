@@ -31,7 +31,47 @@ interface SourceMatch {
 
 const hotFiles = ["packages/llm/src/processor/index.ts", "packages/ledger/src/session/messages.ts"];
 
-const rules: readonly SideEffectRule[] = [];
+const rules: readonly SideEffectRule[] = [
+  {
+    ruleId: "processor-projected-sink",
+    filePath: "packages/llm/src/processor/index.ts",
+    sideEffect: /\bsink\.on(?:Message|ToolCall|ToolResult|Snapshot)\(/g,
+    requiredBefore: [
+      "const sink = createProjectedSink(events, configuredSink, sessionID, trace.traceId);",
+    ],
+    message: "processor sink side effects must flow through createProjectedSink",
+  },
+  {
+    ruleId: "session-mutation-ledger-before-storage-write",
+    filePath: "packages/ledger/src/session/messages.ts",
+    sideEffect: /adapter\.message\.set\(sessionID, message\)/g,
+    scopeStart: /export function addMessage\(/g,
+    scopeEnd: /\nexport function /g,
+    requiredBefore: [],
+    requiredInScope: ["Bus.publish(Event.Updated, { info: updated })"],
+    message: "Session.addMessage must publish Event.Updated after adapter.message.set",
+  },
+  {
+    ruleId: "session-mutation-ledger-before-storage-write",
+    filePath: "packages/ledger/src/session/messages.ts",
+    sideEffect: /adapter\.session\.set\(sessionID, updated\)/g,
+    scopeStart: /export function addMessage\(/g,
+    scopeEnd: /\nexport function /g,
+    requiredBefore: [],
+    requiredInScope: ["Bus.publish(Event.Updated, { info: updated })"],
+    message: "Session.addMessage must publish Event.Updated after adapter.session.set",
+  },
+  {
+    ruleId: "session-mutation-ledger-before-storage-write",
+    filePath: "packages/ledger/src/session/messages.ts",
+    sideEffect: /adapter\.part\.set\(messageID, part\)/g,
+    scopeStart: /export function addPart\(/g,
+    scopeEnd: /\nexport function /g,
+    requiredBefore: [],
+    requiredInScope: ["Bus.publish(Event.Updated, { info:"],
+    message: "Session.addPart must publish Event.Updated after adapter.part.set",
+  },
+];
 
 async function main(): Promise<void> {
   const violations: SideEffectViolation[] = [];
