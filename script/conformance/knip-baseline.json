@@ -1,5 +1,1 @@
-{
-  "grandfathered": [
-    "files packages/openomni/test/dispatch/policy-registration.contract-test.ts"
-  ]
-}
+{}
