@@ -83,7 +83,6 @@ describe("Actor.Profile (#498 A3)", () => {
       trustTier: "assigned_worker",
       blacklistEntryId: "bl_1",
       channelGrantIds: ["cg_1", "cg_2"],
-      workerGrantIds: ["wg_1"],
       systemPrompt: "You are a coder.",
       tools: [
         {
