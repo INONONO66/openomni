@@ -87,11 +87,23 @@ function processWorkerRun(request: ProcessWorkerRequest): Promise<string> {
   });
 }
 
+/**
+ * Machine sentinel: stdin closed before a request line arrived. Distinct
+ * from generic load/runtime failures (exit 1) so callers and the package
+ * smoke test can prove the worker reached its own guard.
+ */
+export const PROCESS_WORKER_NO_REQUEST_EXIT = 78;
+
 if (import.meta.main) {
-  const readFirstLine = async (): Promise<string> => {
+  const readFirstLine = async (): Promise<string | null> => {
     for await (const line of console) return line;
-    throw new Error("stdin closed before a request line arrived");
+    return null;
   };
-  await serveProcessWorker(await readFirstLine(), (line) => console.log(line), processWorkerRun);
+  const requestLine = await readFirstLine();
+  if (requestLine === null) {
+    process.stderr.write("stdin closed before a request line arrived\n");
+    process.exit(PROCESS_WORKER_NO_REQUEST_EXIT);
+  }
+  await serveProcessWorker(requestLine, (line) => console.log(line), processWorkerRun);
   process.exit(0);
 }

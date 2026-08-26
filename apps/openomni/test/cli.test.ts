@@ -249,14 +249,30 @@ describe("daemon units", () => {
     ]);
   });
 
-  test("uninstall after a failed stop proceeds only when the unit is provably inactive", () => {
+  test("uninstall after a failed stop proceeds only when inactive AND disabled are proven", () => {
     const io = fakeIo((argv) => {
       if (argv[2] === "disable") return { code: 1, stdout: "", stderr: "boom" };
       if (argv[2] === "is-active") return { code: 3, stdout: "inactive\n", stderr: "" };
+      if (argv[2] === "is-enabled") return { code: 1, stdout: "disabled\n", stderr: "" };
       return ok;
     });
     io.files.set(unitPath(linuxTarget), "unit");
     expect(daemonUninstall(linuxTarget, io)).toContain("uninstalled");
+  });
+
+  test("uninstall keeps the unit when the process stopped but the enable symlink survived", () => {
+    // A dangling enable symlink resurrects the service on reinstall; a
+    // failed disable is not success just because the process is inactive.
+    const io = fakeIo((argv) => {
+      if (argv[2] === "disable")
+        return { code: 1, stdout: "", stderr: "could not remove default.target.wants" };
+      if (argv[2] === "is-active") return { code: 3, stdout: "inactive\n", stderr: "" };
+      if (argv[2] === "is-enabled") return { code: 0, stdout: "enabled\n", stderr: "" };
+      return ok;
+    });
+    io.files.set(unitPath(linuxTarget), "unit");
+    expect(() => daemonUninstall(linuxTarget, io)).toThrow("still enabled");
+    expect(io.files.has(unitPath(linuxTarget))).toBe(true);
   });
 
   test("uninstall keeps the unit when the stop fails and the state is transitional", () => {
@@ -279,14 +295,31 @@ describe("daemon units", () => {
       return ok;
     });
     io.files.set(unitPath(darwinTarget), "plist");
-    expect(() => daemonUninstall(darwinTarget, io)).toThrow("still loaded");
+    expect(() => daemonUninstall(darwinTarget, io)).toThrow("may still be loaded");
     expect(io.files.has(unitPath(darwinTarget))).toBe(true);
   });
 
-  test("darwin uninstall proceeds when bootout fails because the job is not loaded", () => {
+  test("darwin uninstall treats a failed query as unknown, not as proof of unload", () => {
+    // Permission or IPC failures prove nothing about the job's state.
+    const io = fakeIo((argv) => {
+      if (argv[1] === "bootout") return { code: 5, stdout: "", stderr: "busy" };
+      if (argv[1] === "print") return { code: 1, stdout: "", stderr: "Operation not permitted" };
+      return ok;
+    });
+    io.files.set(unitPath(darwinTarget), "plist");
+    expect(() => daemonUninstall(darwinTarget, io)).toThrow("may still be loaded");
+    expect(io.files.has(unitPath(darwinTarget))).toBe(true);
+  });
+
+  test("darwin uninstall proceeds when the job is specifically not found", () => {
     const io = fakeIo((argv) => {
       if (argv[1] === "bootout") return { code: 3, stdout: "", stderr: "No such process" };
-      if (argv[1] === "print") return { code: 113, stdout: "", stderr: "not found" };
+      if (argv[1] === "print")
+        return {
+          code: 113,
+          stdout: "",
+          stderr: 'Could not find service "ai.openomni.resident" in domain for uid: 501',
+        };
       return ok;
     });
     io.files.set(unitPath(darwinTarget), "plist");

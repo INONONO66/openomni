@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BusPersistence, Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
+import { PROCESS_WORKER_NO_REQUEST_EXIT } from "../src/delegation/process-entry";
 import { startOpenOmni } from "../src/index";
 
 const appDir = join(import.meta.dir, "..");
@@ -105,19 +106,17 @@ describe("npm package staging", () => {
     }
 
     // The bundled worker must be executable, not merely present: with stdin
-    // closed it must reach its own request-line guard (no ack line on
-    // stdout, non-zero exit), not die on a load error (which bun also
-    // reports with empty stdout — so additionally require that the module
-    // itself was found).
+    // closed it must reach its own request-line guard and exit with the
+    // dedicated sentinel code — load errors and top-level exceptions exit 1
+    // and cannot fake this.
     const worker = Bun.spawnSync(["bun", join(staging, "dist", "app", "process-entry.js")], {
       cwd: staging,
       stdin: new Uint8Array(),
       stdout: "pipe",
       stderr: "pipe",
     });
-    expect(worker.exitCode).not.toBe(0);
+    expect(worker.exitCode).toBe(PROCESS_WORKER_NO_REQUEST_EXIT);
     expect(worker.stdout.toString()).toBe("");
-    expect(worker.stderr.toString()).not.toContain("ModuleNotFound");
   }, 30_000);
 });
 
