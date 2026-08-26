@@ -27,10 +27,10 @@ context-resident).
 
 The package keeps the name `channels` (renaming to "gateway" is churn; the
 role name lives in docs and AGENTS.md). Dependency whitelist: channels =
-{protocol, ipc, policy, ledger} — policy because the router evaluates
+{protocol, policy, ledger} — policy because the router evaluates
 perimeter rules through the shared engine (§3), ledger for its store
-surfaces. The `drivers/` sub-band inside channels stays at {protocol, ipc}
-(S8). Observation events publish through an injected `BusEvent.Sink` port —
+surfaces. The `drivers/` sub-band inside channels stays at {protocol}
+(S8); ipc left the whitelist once no channels source imported it. Observation events publish through an injected `BusEvent.Sink` port —
 channels does not import telemetry (the llm/agent precedent). the channels router and app Resident meet only in protocol contracts and injected ports; the app imports the channels public composition surface.
 
 ## 2. Contracts (protocol-owned, the only seam)
@@ -370,8 +370,9 @@ consumer-dead after the #797 decommission).
   contract, not advisory; a brain that ignores `inboundTreatment` fails
   review.
 - **S7 no premature daemon** — gateway↔brain is an in-process injected port;
-  daemonizing channels is a separate later decision. ipc stays only for what
-  drivers need.
+  daemonizing channels is a separate later decision. ipc is out of the band
+  entirely — no channels source imports it today; re-admit it only with a
+  real driver consumer.
 - **S8 driver banding** — inside channels, `drivers/` may not import
   `router/` or store surfaces. check-deps today enforces package-level
   whitelists only; the intra-package banding check is **new machinery, a

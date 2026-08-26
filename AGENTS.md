@@ -36,7 +36,7 @@ Read `X <- Y` as Y may depend on X.
 protocol <- policy, telemetry, ipc, placement
 telemetry <- ledger, llm
 protocol, ipc <- machines
-protocol, ipc, policy, ledger <- channels
+protocol, policy, ledger <- channels
 policy, placement, llm, telemetry <- agent
 protocol, channels, agent, llm, ledger, telemetry, placement, machines <- apps/openomni
 ```
@@ -48,7 +48,7 @@ protocol, channels, agent, llm, ledger, telemetry, placement, machines <- apps/o
 | `ledger` | protocol, telemetry |
 | `llm` | protocol, telemetry; `src/` uses protocol only |
 | `machines` | protocol, ipc |
-| `channels` | protocol, ipc, policy, ledger; policy/ledger are confined to `src/router/` and `src/authn/`; tests may use telemetry |
+| `channels` | protocol, policy, ledger; policy/ledger are confined to `src/router/` and `src/authn/`; tests may use telemetry |
 | `agent` | protocol, policy, placement, llm, telemetry; `src/` excludes telemetry |
 | `apps/openomni` | protocol, channels, agent, llm, ledger, telemetry, placement, machines |
 
