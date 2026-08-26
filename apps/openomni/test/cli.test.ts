@@ -41,14 +41,16 @@ describe("env file", () => {
         "OPENOMNI_MODEL_ID=first",
         'OPENOMNI_MODEL_ID="second"',
         "OPENOMNI_MODEL_API_KEY='sk-123='",
+        "export OPENOMNI_WS_PORT=4001",
         "not a line",
         "lowercase=skipped",
-      ].join("\n"),
+      ].join("\r\n"),
     );
     expect(parsed.get("OPENOMNI_MODEL_ID")).toBe("second");
     expect(parsed.get("OPENOMNI_MODEL_API_KEY")).toBe("sk-123=");
+    expect(parsed.get("OPENOMNI_WS_PORT")).toBe("4001");
     expect(parsed.has("lowercase")).toBe(false);
-    expect(parsed.size).toBe(2);
+    expect(parsed.size).toBe(3);
   });
 
   test("render round-trips through parse and rejects line breaks", () => {
@@ -84,20 +86,24 @@ describe("env file", () => {
 interface FakeIo extends DaemonIo {
   readonly commands: string[][];
   readonly files: Map<string, string>;
+  readonly dirs: string[];
 }
 
 function fakeIo(respond: (argv: readonly string[]) => ExecResult): FakeIo {
   const commands: string[][] = [];
   const files = new Map<string, string>();
+  const dirs: string[] = [];
   return {
     commands,
     files,
+    dirs,
     exec: (argv) => {
       commands.push([...argv]);
       return respond(argv);
     },
     writeFile: (path, content) => files.set(path, content),
     removeFile: (path) => files.delete(path),
+    makeDir: (path) => dirs.push(path),
     fileExists: (path) => files.has(path),
   };
 }
@@ -131,9 +137,27 @@ describe("daemon units", () => {
     expect(unit).toContain("WantedBy=default.target");
   });
 
-  test("darwin install writes the plist, boots out the old generation, bootstraps", () => {
+  test("systemd unit escapes %, quotes, and backslashes; control chars are rejected", () => {
+    const hostile: DaemonTarget = {
+      ...linuxTarget,
+      bunPath: '/opt/we"ird/bun',
+      entryPath: "/pkg/100%/back\\slash/main.js",
+    };
+    const unit = renderSystemdUnit(hostile);
+    expect(unit).toContain('ExecStart="/opt/we\\"ird/bun" "/pkg/100%%/back\\\\slash/main.js" start');
+    expect(() => renderSystemdUnit({ ...linuxTarget, entryPath: "/pkg\nExecStart=/evil" })).toThrow(
+      "control characters",
+    );
+    expect(() => renderLaunchdPlist({ ...darwinTarget, bunPath: "/opt\nbun" })).toThrow(
+      "control characters",
+    );
+  });
+
+  test("darwin install creates the log dir, writes the plist, boots out the old generation, bootstraps", () => {
     const io = fakeIo(() => ok);
     const message = daemonInstall(darwinTarget, io);
+    // launchd opens the configured log paths itself; the dir must exist first.
+    expect(io.dirs).toEqual(["/Users/owner/.openomni/logs"]);
     expect(io.files.has(unitPath(darwinTarget))).toBe(true);
     expect(io.commands).toEqual([
       ["launchctl", "bootout", "gui/501/ai.openomni.resident"],
@@ -142,14 +166,24 @@ describe("daemon units", () => {
     expect(message).toContain("launchd");
   });
 
-  test("linux install writes the unit then daemon-reload + enable --now", () => {
+  test("linux install reloads, enables, restarts (replacing a running old generation), enables linger", () => {
     const io = fakeIo(() => ok);
-    daemonInstall(linuxTarget, io);
+    const message = daemonInstall(linuxTarget, io);
     expect(io.files.get(unitPath(linuxTarget))).toContain("ExecStart=");
     expect(io.commands).toEqual([
       ["systemctl", "--user", "daemon-reload"],
-      ["systemctl", "--user", "enable", "--now", "openomni"],
+      ["systemctl", "--user", "enable", "openomni"],
+      ["systemctl", "--user", "restart", "openomni"],
+      ["loginctl", "enable-linger"],
     ]);
+    expect(message).toContain("linger enabled");
+  });
+
+  test("linux install warns when linger cannot be enabled", () => {
+    const io = fakeIo((argv) =>
+      argv[0] === "loginctl" ? { code: 1, stdout: "", stderr: "denied" } : ok,
+    );
+    expect(daemonInstall(linuxTarget, io)).toContain("could not enable linger");
   });
 
   test("install surfaces the failing command with stderr", () => {
@@ -163,6 +197,24 @@ describe("daemon units", () => {
     const io = fakeIo(() => ok);
     expect(daemonUninstall(linuxTarget, io)).toBe("not installed");
     expect(io.commands).toEqual([]);
+  });
+
+  test("uninstall stops, verifies inactivity, then removes the unit", () => {
+    const io = fakeIo((argv) =>
+      argv[2] === "is-active" ? { code: 3, stdout: "inactive\n", stderr: "" } : ok,
+    );
+    io.files.set(unitPath(linuxTarget), "unit");
+    expect(daemonUninstall(linuxTarget, io)).toContain("uninstalled");
+    expect(io.files.has(unitPath(linuxTarget))).toBe(false);
+  });
+
+  test("uninstall refuses to delete the unit while the daemon is still running", () => {
+    const io = fakeIo((argv) =>
+      argv[2] === "is-active" ? { code: 0, stdout: "active\n", stderr: "" } : ok,
+    );
+    io.files.set(unitPath(linuxTarget), "unit");
+    expect(() => daemonUninstall(linuxTarget, io)).toThrow("still running");
+    expect(io.files.has(unitPath(linuxTarget))).toBe(true);
   });
 
   test("stop failure propagates (launchctl bootout on unloaded service)", () => {
@@ -209,7 +261,7 @@ describe("onboarding", () => {
     ]);
   });
 
-  test("rejects a missing API key and a non-numeric port", async () => {
+  test("rejects a missing API key, a non-numeric port, and port 0", async () => {
     await expect(gatherOnboarding(scriptedAsk({ "Model id": "m" }))).rejects.toThrow(
       "Model API key is required",
     );
@@ -218,13 +270,35 @@ describe("onboarding", () => {
         scriptedAsk({ "Model id": "m", "Model API key": "k", "WebSocket port": "http" }),
       ),
     ).rejects.toThrow("integer");
+    await expect(
+      gatherOnboarding(
+        scriptedAsk({ "Model id": "m", "Model API key": "k", "WebSocket port": "0" }),
+      ),
+    ).rejects.toThrow("1 to 65535");
+  });
+
+  test("secret prompts are flagged so the terminal never echoes them", async () => {
+    const secretQuestions: string[] = [];
+    await gatherOnboarding((question, options) => {
+      if (options?.secret) secretQuestions.push(question);
+      if (question.startsWith("Model id")) return Promise.resolve("m");
+      if (question.startsWith("Model API key")) return Promise.resolve("k");
+      return Promise.resolve("");
+    });
+    expect(secretQuestions).toEqual([
+      "Model API key",
+      "Discord bot token (optional)",
+      "Telegram bot token (optional)",
+      "GitHub webhook secret (optional)",
+    ]);
   });
 });
 
 describe("doctor", () => {
   const healthyPorts: DoctorPorts = {
     bunVersion: "1.3.0",
-    envFile: new Map([
+    envFilePresent: true,
+    effectiveEnv: new Map([
       ["OPENOMNI_MODEL_PROVIDER", "anthropic"],
       ["OPENOMNI_MODEL_ID", "m"],
       ["OPENOMNI_MODEL_API_KEY", "k"],
@@ -232,6 +306,7 @@ describe("doctor", () => {
     ]),
     unitInstalled: true,
     daemonActive: true,
+    lingerEnabled: undefined,
     probeHealth: () => Promise.resolve(true),
   };
 
@@ -255,25 +330,60 @@ describe("doctor", () => {
     ]);
   });
 
-  test("missing env file fails; uninstalled daemon and silent health only warn", async () => {
+  test("missing env file only warns; absent model config fails; silent health warns", async () => {
     const report = await runDoctor({
       bunVersion: "1.3.0",
-      envFile: undefined,
+      envFilePresent: false,
+      effectiveEnv: new Map(),
       unitInstalled: false,
       daemonActive: false,
+      lingerEnabled: undefined,
       probeHealth: () => Promise.resolve(false),
     });
     expect(report.ok).toBe(false);
     const byName = new Map(report.checks.map((check) => [check.name, check.status]));
-    expect(byName.get("env file")).toBe("fail");
+    expect(byName.get("env file")).toBe("warn");
+    expect(byName.get("model config")).toBe("fail");
     expect(byName.get("daemon")).toBe("warn");
     expect(byName.get("health")).toBe("warn");
+  });
+
+  test("exported environment alone satisfies model config without an env file", async () => {
+    const report = await runDoctor({
+      ...healthyPorts,
+      envFilePresent: false,
+      unitInstalled: false,
+      daemonActive: false,
+    });
+    const byName = new Map(report.checks.map((check) => [check.name, check.status]));
+    expect(byName.get("env file")).toBe("warn");
+    expect(byName.get("model config")).toBe("pass");
+  });
+
+  test("a blank required value fails exactly like a missing one", async () => {
+    const report = await runDoctor({
+      ...healthyPorts,
+      effectiveEnv: new Map([
+        ["OPENOMNI_MODEL_PROVIDER", "anthropic"],
+        ["OPENOMNI_MODEL_ID", "m"],
+        ["OPENOMNI_MODEL_API_KEY", "   "],
+      ]),
+    });
+    const byName = new Map(report.checks.map((check) => [check.name, check.status]));
+    expect(byName.get("model config")).toBe("fail");
+  });
+
+  test("installed daemon without linger warns", async () => {
+    const report = await runDoctor({ ...healthyPorts, lingerEnabled: false });
+    const byName = new Map(report.checks.map((check) => [check.name, check.status]));
+    expect(byName.get("linger")).toBe("warn");
+    expect(report.ok).toBe(true);
   });
 
   test("active daemon with unreachable health is a failure", async () => {
     const report = await runDoctor({
       ...healthyPorts,
-      envFile: new Map([["OPENOMNI_MODEL_PROVIDER", "anthropic"]]),
+      effectiveEnv: new Map([["OPENOMNI_MODEL_PROVIDER", "anthropic"]]),
       probeHealth: () => Promise.resolve(false),
     });
     expect(report.ok).toBe(false);
@@ -307,9 +417,11 @@ describe("cli dispatch", () => {
         doctorPorts: () =>
           Promise.resolve({
             bunVersion: "1.3.0",
-            envFile: undefined,
+            envFilePresent: false,
+            effectiveEnv: new Map<string, string>(),
             unitInstalled: false,
             daemonActive: false,
+            lingerEnabled: undefined,
             probeHealth: () => Promise.resolve(false),
           }),
         follow: () => Promise.resolve(0),

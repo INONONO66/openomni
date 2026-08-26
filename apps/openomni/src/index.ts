@@ -61,8 +61,13 @@ function attachedTargets(
  * one file this module was folded into. The bundled sibling wins when found.
  */
 function processEntryPath(): string {
-  const bundled = fileURLToPath(new URL("./process-entry.js", import.meta.url));
-  if (existsSync(bundled)) return bundled;
+  // Bundled sibling first (npm layout), compiled tsc output second,
+  // TypeScript source last (running via bun from src/).
+  const candidates = ["./process-entry.js", "./delegation/process-entry.js"];
+  for (const candidate of candidates) {
+    const resolved = fileURLToPath(new URL(candidate, import.meta.url));
+    if (existsSync(resolved)) return resolved;
+  }
   return fileURLToPath(new URL("./delegation/process-entry.ts", import.meta.url));
 }
 
@@ -351,7 +356,8 @@ export async function startOpenOmni(options: StartOptions = {}) {
           return wsHandler.handleUpgrade(request, bunServer);
         }
         if (request.method === "GET" && url.pathname === "/health") {
-          return Response.json({ ok: true, timestamp: new Date().toISOString() });
+          // Unauthenticated liveness only: no clock, no version, no state.
+          return Response.json({ ok: true });
         }
         if (
           request.method === "POST" &&

@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
 /**
@@ -13,12 +13,13 @@ export interface EnvEntry {
 
 const KEY_PATTERN = /^[A-Z][A-Z0-9_]*$/;
 
-/** KEY=VALUE lines; blank lines and `#` comments skipped; last duplicate wins. */
+/** KEY=VALUE lines (optional `export ` prefix); blank lines and `#` comments skipped; last duplicate wins. */
 export function parseEnvFile(text: string): ReadonlyMap<string, string> {
   const entries = new Map<string, string>();
-  for (const line of text.split("\n")) {
-    const trimmed = line.trim();
-    if (trimmed.length === 0 || trimmed.startsWith("#")) continue;
+  for (const line of text.split(/\r?\n/)) {
+    const raw = line.trim();
+    if (raw.length === 0 || raw.startsWith("#")) continue;
+    const trimmed = raw.startsWith("export ") ? raw.slice("export ".length).trim() : raw;
     const separator = trimmed.indexOf("=");
     if (separator <= 0) continue;
     const key = trimmed.slice(0, separator).trim();
@@ -49,11 +50,19 @@ export function renderEnvFile(entries: readonly EnvEntry[]): string {
   return `${lines.join("\n")}\n`;
 }
 
-/** Secrets file: created and kept at 0600 even when overwriting an existing file. */
+/**
+ * Secrets file: written 0600 from the first byte. The content lands in a
+ * fresh temp file (never world-readable, never a followed symlink) and is
+ * renamed over the destination atomically — a crash cannot leave a partial
+ * or loosely-moded env file, and a symlink at the path is replaced, not
+ * followed.
+ */
 export function writeEnvFile(path: string, entries: readonly EnvEntry[]): void {
   mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, renderEnvFile(entries), { mode: 0o600 });
-  chmodSync(path, 0o600);
+  const temp = `${path}.tmp-${process.pid}`;
+  writeFileSync(temp, renderEnvFile(entries), { mode: 0o600 });
+  chmodSync(temp, 0o600);
+  renameSync(temp, path);
 }
 
 /**

@@ -44,9 +44,8 @@ describe("health endpoint", () => {
     stopApp = () => app.stop();
     const response = await fetch(`http://127.0.0.1:${app.port}/health`);
     expect(response.status).toBe(200);
-    const body = (await response.json()) as { ok: boolean; timestamp: string };
-    expect(body.ok).toBe(true);
-    expect(Number.isNaN(Date.parse(body.timestamp))).toBe(false);
+    // Liveness only: any extra field on this unauthenticated surface is disclosure.
+    expect(await response.json()).toEqual({ ok: true });
   });
 });
 
@@ -104,6 +103,16 @@ describe("npm package staging", () => {
       proc.kill();
       await proc.exited;
     }
+
+    // The bundled worker must be executable, not merely present: with stdin
+    // closed it must reach its own guard, not die on a load error.
+    const worker = Bun.spawnSync(["bun", join(staging, "dist", "app", "process-entry.js")], {
+      cwd: staging,
+      stdin: new Uint8Array(),
+      stderr: "pipe",
+    });
+    expect(worker.exitCode).not.toBe(0);
+    expect(worker.stderr.toString()).toContain("stdin closed before a request line arrived");
   }, 30_000);
 });
 

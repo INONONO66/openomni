@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 /**
  * TS-owned service management: launchd (macOS) and systemd user units
@@ -28,6 +28,7 @@ export interface ExecResult {
 export interface DaemonIo {
   readonly exec: (argv: readonly string[]) => ExecResult;
   readonly writeFile: (path: string, content: string) => void;
+  readonly makeDir: (path: string) => void;
   readonly removeFile: (path: string) => void;
   readonly fileExists: (path: string) => boolean;
 }
@@ -46,7 +47,24 @@ function escapeXml(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+/** Unit files are line-oriented; a control character in a path is an injection, not a layout. */
+function assertUnitSafe(label: string, value: string): string {
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: rejecting control chars is the point
+  if (/[\u0000-\u001f\u007f]/.test(value)) {
+    throw new Error(`${label} contains control characters and cannot be written into a service unit`);
+  }
+  return value;
+}
+
+/** systemd quoted-argument escaping: backslash and quote escapes, `%` specifiers doubled. */
+function escapeSystemdArg(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/%/g, "%%");
+}
+
 export function renderLaunchdPlist(target: DaemonTarget): string {
+  assertUnitSafe("bun path", target.bunPath);
+  assertUnitSafe("entry path", target.entryPath);
+  assertUnitSafe("home path", target.home);
   const log = escapeXml(logPath(target));
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -76,13 +94,15 @@ export function renderLaunchdPlist(target: DaemonTarget): string {
 }
 
 export function renderSystemdUnit(target: DaemonTarget): string {
+  const bun = escapeSystemdArg(assertUnitSafe("bun path", target.bunPath));
+  const entry = escapeSystemdArg(assertUnitSafe("entry path", target.entryPath));
   return `[Unit]
 Description=OpenOmni Resident
 After=network.target
 
 [Service]
 Type=simple
-ExecStart="${target.bunPath}" "${target.entryPath}" start
+ExecStart="${bun}" "${entry}" start
 Restart=on-failure
 RestartSec=5s
 
@@ -108,6 +128,8 @@ function launchdDomainTarget(target: DaemonTarget): string {
 export function daemonInstall(target: DaemonTarget, io: DaemonIo): string {
   const path = unitPath(target);
   if (target.platform === "darwin") {
+    // launchd opens the configured log paths itself; missing parents kill the job at load.
+    io.makeDir(dirname(logPath(target)));
     io.writeFile(path, renderLaunchdPlist(target));
     // A previous generation may be loaded; bootout is allowed to fail.
     io.exec(["launchctl", "bootout", launchdDomainTarget(target)]);
@@ -116,8 +138,16 @@ export function daemonInstall(target: DaemonTarget, io: DaemonIo): string {
   }
   io.writeFile(path, renderSystemdUnit(target));
   run(io, ["systemctl", "--user", "daemon-reload"]);
-  run(io, ["systemctl", "--user", "enable", "--now", SYSTEMD_UNIT]);
-  return `installed and started (systemd user unit: ${path}). To survive logout: loginctl enable-linger ${process.env.USER ?? "<user>"}`;
+  run(io, ["systemctl", "--user", "enable", SYSTEMD_UNIT]);
+  // restart, not `enable --now`: an already-running previous generation must be replaced.
+  run(io, ["systemctl", "--user", "restart", SYSTEMD_UNIT]);
+  // Without linger the user manager dies at logout and never starts at boot.
+  const linger = io.exec(["loginctl", "enable-linger"]);
+  const lingerNote =
+    linger.code === 0
+      ? "linger enabled — survives logout and starts at boot"
+      : "WARNING: could not enable linger; run `loginctl enable-linger` manually or the daemon dies at logout";
+  return `installed and started (systemd user unit: ${path}). ${lingerNote}`;
 }
 
 export function daemonUninstall(target: DaemonTarget, io: DaemonIo): string {
@@ -125,11 +155,15 @@ export function daemonUninstall(target: DaemonTarget, io: DaemonIo): string {
   if (!io.fileExists(path)) return "not installed";
   if (target.platform === "darwin") {
     io.exec(["launchctl", "bootout", launchdDomainTarget(target)]);
-    io.removeFile(path);
-    return "stopped and uninstalled (launchd)";
+  } else {
+    io.exec(["systemctl", "--user", "disable", "--now", SYSTEMD_UNIT]);
   }
-  io.exec(["systemctl", "--user", "disable", "--now", SYSTEMD_UNIT]);
+  // Never delete the unit out from under a daemon that refused to stop.
+  if (daemonActive(target, io)) {
+    throw new Error("daemon is still running after stop was attempted — unit left installed");
+  }
   io.removeFile(path);
+  if (target.platform === "darwin") return "stopped and uninstalled (launchd)";
   run(io, ["systemctl", "--user", "daemon-reload"]);
   return "stopped and uninstalled (systemd)";
 }

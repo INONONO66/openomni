@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline/promises";
+import { Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { loadConfig } from "../config";
 import { installShutdownHandlers, startOpenOmni } from "../index";
@@ -45,6 +46,9 @@ const io: DaemonIo = {
     writeFileSync(path, content);
   },
   removeFile: (path: string): void => rmSync(path, { force: true }),
+  makeDir: (path: string): void => {
+    mkdirSync(path, { recursive: true });
+  },
   fileExists: existsSync,
 };
 
@@ -65,6 +69,20 @@ async function ask(question: string, options?: AskOptions): Promise<string> {
   if (!process.stdin.isTTY) {
     throw new Error("onboarding requires an interactive terminal");
   }
+  if (options?.secret) {
+    // Secrets must not echo: readline writes to a sink while the prompt
+    // itself goes straight to the real terminal.
+    const muted = new Writable({ write: (_chunk, _encoding, callback) => callback() });
+    const rl = createInterface({ input: process.stdin, output: muted, terminal: true });
+    try {
+      process.stdout.write(`${question}: `);
+      const answer = await rl.question("");
+      process.stdout.write("\n");
+      return answer;
+    } finally {
+      rl.close();
+    }
+  }
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   try {
     const suffix = options?.fallback === undefined ? "" : ` [${options.fallback}]`;
@@ -75,20 +93,26 @@ async function ask(question: string, options?: AskOptions): Promise<string> {
 }
 
 async function doctorPorts(): Promise<DoctorPorts> {
-  const fileEnv = existsSync(envPath)
-    ? parseEnvFile(await Bun.file(envPath).text())
-    : undefined;
-  const effective =
-    fileEnv === undefined
-      ? undefined
-      : new Map(
-          [...fileEnv].map(([key, value]) => [key, process.env[key] ?? value] as const),
-        );
+  const envFilePresent = existsSync(envPath);
+  const effectiveEnv = new Map<string, string>(
+    envFilePresent ? parseEnvFile(await Bun.file(envPath).text()) : [],
+  );
+  // A fully exported environment with no file is a supported shape.
+  for (const [key, value] of Object.entries(process.env)) {
+    if (key.startsWith("OPENOMNI_") && value !== undefined) effectiveEnv.set(key, value);
+  }
+  const lingerEnabled = ((): boolean | undefined => {
+    if (target.platform !== "linux") return undefined;
+    const result = io.exec(["loginctl", "show-user", String(target.uid), "--property=Linger"]);
+    return result.code === 0 ? result.stdout.includes("Linger=yes") : undefined;
+  })();
   return {
     bunVersion: Bun.version,
-    envFile: effective,
+    envFilePresent,
+    effectiveEnv,
     unitInstalled: existsSync(unitPath(target)),
     daemonActive: daemonActive(target, io),
+    lingerEnabled,
     probeHealth: async (port: number): Promise<boolean> => {
       try {
         const response = await fetch(`http://127.0.0.1:${port}/health`, {
