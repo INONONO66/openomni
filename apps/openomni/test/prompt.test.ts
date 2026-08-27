@@ -47,6 +47,24 @@ describe("buildAgentPrompt", () => {
     }
   });
 
+  test("assembles every populated section in stable-to-volatile order", () => {
+    const preset: RolePreset = {
+      name: "full",
+      identity: "IDENTITY",
+      mandate: "MANDATE",
+      policies: "POLICIES",
+      style: "STYLE",
+      tuning: () => "TUNING",
+    };
+
+    expect(
+      buildAgentPrompt(preset, {
+        model: { provider: "x", id: "model" },
+        memorySnapshot: "MEMORY",
+      }),
+    ).toBe("IDENTITY\n\nMANDATE\n\nPOLICIES\n\nSTYLE\n\nTUNING\n\nMEMORY");
+  });
+
   test("places model tuning before memory and omits unavailable tuning", () => {
     const preset: RolePreset = {
       name: "tuned",
