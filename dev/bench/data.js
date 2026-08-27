@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787782544971,
+  "lastUpdate": 1787847100287,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -63089,6 +63089,90 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 513650,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "da2b167a06228ba89ec05d4be73ff524347c972e",
+          "message": "chore(ledger,protocol): prune dead effect ledger and read-back writer surfaces (#812)\n\n* chore(ledger,protocol): prune dead effect ledger and read-back writer surfaces\n\nThe #492 effect chain lost its last production callers when the old\nproduct kernel was decommissioned (#797). Removed:\n\n- ledger EffectStore (src/effect/) and its tests — zero consumers\n  outside its own test file and effect-link\n- work-item effect-link.ts + WorkItemStore.recordEffect — the sole\n  completionFacts.effects writer; the completion contract schema stays\n  (admission fold still evaluates effects, wiring is the WorkItem\n  campaign's PR-B call)\n- WorkItemStore.addReadBackEvidence / addWorkItemReadBackEvidence —\n  convenience wrapper; readBack evidence still flows through\n  addEvidence, which owns the passed-consistency check\n- protocol Ledger.EffectIntended/Confirmed/Failed + the effect stream\n  registry entry (zero writers and zero readers after the above)\n- ledger-producer-manifest effect stream entry\n\nDead-surface pinning test extended (recordEffect, addReadBackEvidence)\nRED-first; schema snapshot regenerated (--update, shrink-only).\n\n* chore(ledger): drop trailing blank line left by read-back writer removal",
+          "timestamp": "2026-08-28T01:10:26+09:00",
+          "tree_id": "ae2ebcb57468d75187ce383a7bfe062cdb1fb27d",
+          "url": "https://github.com/INONONO66/openomni/commit/da2b167a06228ba89ec05d4be73ff524347c972e"
+        },
+        "date": 1787847099365,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2340,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 16228,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 9031,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1170,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 952,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1712,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1600,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 819,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 48512,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2417,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 531230,
             "unit": "ns/op"
           }
         ]
