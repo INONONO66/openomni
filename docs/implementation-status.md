@@ -2,7 +2,7 @@
 
 Single source of truth for current wiring between accepted design and running code. Target semantics live in [Core Model](core-model.md), [Kernel Contract](kernel-contract.md), [Architecture](architecture.md), and [Machines and Delegation](machines-and-delegation.md). Delivery ordering remains in [#459](https://github.com/INONONO66/openomni/issues/459).
 
-**Legend**: implemented and wired | dormant contract | designed, not implemented. Last verified: 2026-08-26 against the npm deployment slice (#803).
+**Legend**: implemented and wired | dormant contract | designed, not implemented. Last verified: 2026-08-27 against the WorkItem delegation wiring slice.
 
 ## Deployed shape
 
@@ -15,6 +15,7 @@ Single source of truth for current wiring between accepted design and running co
 | Session and journal durability | implemented and wired | `packages/ledger/src/`, `apps/openomni/src/index.ts` | SQLite storage, BusPersistence, session expiry, Wait expiry, and delegation recovery are composed at boot. Journal shutdown drains before storage closes. |
 | Machine body | implemented and wired | `packages/machines/`, `apps/openomni/src/tools/{machines,run-code}.ts` | Enrollment/offer intersection gates attached-machine capabilities. `kernel.py` cells and the in-cell tool bridge are available through placement-gated tools. |
 | Delegation kernel | implemented and wired | `apps/openomni/src/delegation/`, `packages/ledger/src/delegation/` | Durable record-before-act admission, inline/process/channel transports, one settlement fold, deadlines, restart recovery, await/cancel, and Owner-session wake delivery. |
+| WorkItem delegation wiring | implemented and wired | `apps/openomni/src/delegation/work-item-linkage.ts`, `apps/openomni/src/work-item/completion.ts`, `apps/openomni/src/tools/work-items.ts` | Every `assign` commissions a WorkItem with an allocated attempt at admission; settlement demotes worker output to unverified Evidence and closes the attempt via `Delegation.settlementToAttemptOutcome` — never auto-completing. The Resident-only `work_items`/`complete_work` tools admit completion solely through verified, evidence-backed criterion judgments under the ledger completion-admission writer. |
 | CLI and npm deployment | implemented and wired | `apps/openomni/src/cli/`, `apps/openomni/script/build-npm-package.ts` | `openomni start/onboard/daemon/doctor/logs` with TS-owned launchd and systemd user-unit generation, `~/.openomni/env` loading, a `GET /health` endpoint, and a dependency-free npm staging build (`bun run --cwd apps/openomni build:npm`) whose bundle is boot-tested against real migrations. |
 | Curated memory | implemented and wired | `apps/openomni/src/memory/`, `apps/openomni/src/tools/memory.ts` | Bounded system/Owner stores, atomic writes, Resident-only add/replace/remove, snapshot frozen on first session delivery. |
 | Agent loop | implemented and wired | `packages/agent/src/core/` | Stateless loop, policy interception, placement gate, retry, budgets, parallel tools, and compaction. Product lifecycle remains outside the package. |
@@ -26,8 +27,8 @@ Single source of truth for current wiring between accepted design and running co
 | Contract | Status after #792 | Notes |
 | --- | --- | --- |
 | `Wait` | implemented and wired | Protocol fold, ledger store, gateway correlation, app boot sweep, and channel-delegation resume remain live. |
-| `WorkItem` | durable substrate only | Protocol and ledger CRUD/attempt/evidence contracts remain. The deleted product completion service is no longer reported as wired. |
-| WorkItem completion authority | contract-inherited, not currently wired | The one-authority, basis-bound, record-before-terminal rules remain normative in `kernel-contract.md`. Reintroduction must consume that contract; no ledger shortcut is permitted. |
+| `WorkItem` | implemented and wired | Protocol and ledger CRUD/attempt/evidence contracts are consumed by the app's delegation wiring: `assign` is the live WorkItem producer. |
+| WorkItem completion authority | implemented and wired | The one-authority, basis-bound, record-before-terminal rules from `kernel-contract.md` are consumed by `apps/openomni/src/work-item/completion.ts` through the ledger completion-admission writer; no ledger shortcut exists. |
 | Stakes | contract-inherited, not currently wired | Consequence and escalation semantics remain normative. The deleted calculator/host seam is not claimed as shipped. |
 | `effectiveAuthority` | contract-inherited, not currently wired | Multi-axis authority semantics remain documented. Perimeter authority still runs in the channels gateway; the deleted dispatch implementation is gone. |
 | Frozen PendingAsk/PendingInteraction rows | read-only compatibility | Protocol upcasts and ledger read validation remain because the gateway Wait correlation still consumes their archived view. No writer is live. #585's surviving read-validation fixes remain in ledger and are not deleted. |
@@ -56,4 +57,5 @@ The legacy product kernel, local-process coordinator, and old server host were d
 - Connector installation/execution beyond retained protocol and storage primitives (#216 class).
 - Memory.Engine / FTS5 session search (#220).
 - P4 role surfaces (Governor, Jester, Voice).
-- A new WorkItem completion consumer in the sole app; any such work must inherit completion authority, Stakes, and effective-authority contracts rather than recreating legacy code.
+- Drive-loop continuation policy on inline/process delegation drivers and Attempt usage accounting (next WorkItem slice).
+- Stakes and effective-authority consumers; any such work must inherit their contracts rather than recreating legacy code.

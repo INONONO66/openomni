@@ -17,6 +17,8 @@ import {
   type DelegationWake,
 } from "./delegation/kernel";
 import { createWakeDeliveryQueue } from "./delegation/wake-delivery";
+import { createWorkItemLinkage } from "./delegation/work-item-linkage";
+import { createCompletionPort } from "./work-item/completion";
 import { createProcessDriver } from "./delegation/process-driver";
 import { createInlineWorkerRunner } from "./delegation/worker-loop";
 import { createResidentGateway } from "./gateway";
@@ -97,7 +99,7 @@ function delegationWakeDelivery(wake: DelegationWake): Gateway.Deliver {
 export async function startOpenOmni(options: StartOptions = {}) {
   const config = options.config ?? loadConfig();
   assertWsExposure(config);
-  initialize({ dbPath: config.dbPath });
+  const completionWriter = initialize({ dbPath: config.dbPath });
   const stopBusPersistence = BusPersistence.start();
   // Boot owns the kernel and host handles from this scope so the rollback
   // path below can tear down whatever a failed boot already built.
@@ -154,6 +156,10 @@ export async function startOpenOmni(options: StartOptions = {}) {
     });
     kernel = createDelegationKernel({
       events: Bus,
+      workItems: createWorkItemLinkage({
+        model: { provider: config.model.provider, id: config.model.id },
+        now: () => Date.now(),
+      }),
       wake: (wake) => wakeDelivery.deliver(wake),
       bootSweep: false,
       drivers: {
@@ -213,6 +219,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
                 : { machineId: enrollment.machineId, attached: true, capabilities: [...capabilities] };
             });
 
+    const completionPort = createCompletionPort({ writer: completionWriter, now: () => Date.now() });
     const cells: CellPorts | undefined =
       machineHost === undefined
         ? undefined
@@ -226,6 +233,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
                   cells,
                   ...(machinesPort === undefined ? {} : { machines: machinesPort }),
                   memory,
+                  workItems: completionPort,
                 },
                 origin,
               ),
@@ -240,6 +248,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
         ...(cells === undefined ? {} : { cells }),
         ...(machinesPort === undefined ? {} : { machines: machinesPort }),
         memory,
+        workItems: completionPort,
       },
       targets: () => attachedTargets(host, machines?.enrolled ?? []),
       ...(options.llm === undefined ? {} : { llm: options.llm }),

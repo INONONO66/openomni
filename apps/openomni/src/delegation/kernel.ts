@@ -1,5 +1,6 @@
 import { Delegation, NamedError, Operational, type BusEvent } from "@openomni/protocol";
 import { DelegationStore } from "@openomni/ledger";
+import type { WorkItemLinkage } from "./work-item-linkage";
 import { z } from "zod";
 import {
   admit,
@@ -77,6 +78,12 @@ export interface DelegationKernelOptions {
   readonly wake: (wake: DelegationWake) => void | Promise<void>;
   /** Tests and composition roots may defer recovery until the wake target exists. */
   readonly bootSweep?: boolean;
+  /**
+   * WorkItem commissioning for assign. A kernel without this port refuses
+   * assign at admission — an assign without a WorkItem violates the record
+   * schema, so the door stays closed rather than half-open.
+   */
+  readonly workItems?: WorkItemLinkage;
 }
 
 type DelegationResult =
@@ -298,6 +305,27 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
       controller.abort();
     }
 
+    // Settlement closes the commissioned attempt: the worker's report is
+    // demoted to Evidence and the attempt records its outcome. The fold stays
+    // synchronous, so the ledger write runs behind it and reports its own
+    // failure instead of blocking settlement.
+    const workItems = options.workItems;
+    if (persisted.operation === "assign" && persisted.workItemId !== undefined && workItems !== undefined) {
+      void Promise.resolve()
+        .then(() => workItems.closeAttempt({ record: persisted, settlement: winner }))
+        .catch((error: unknown) => {
+          events.publish(Operational.Events.Error, {
+            traceId: delegationId,
+            sessionId: persisted.origin.sessionId,
+            time: options.now(),
+            component: "delegation",
+            msg: `WorkItem attempt close failed for ${delegationId}`,
+            error: error instanceof Error ? error.message : String(error),
+            context: { delegationId, workItemId: persisted.workItemId ?? "" },
+          });
+        });
+    }
+
     if (persisted.transport !== "inline") deliverWake(persisted, winner);
     return winner;
   }
@@ -477,6 +505,26 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
       }
     }
 
+    let workItemId: string | undefined;
+    if (decision.request.operation === "assign") {
+      if (options.workItems === undefined) {
+        const message = "assign requires the WorkItem linkage and this kernel carries none";
+        return { refused: message, error: new AdmissionRefusal({ code: "work_item_failed", message }) };
+      }
+      try {
+        workItemId = await options.workItems.openAssign({
+          delegationId,
+          transport: decision.transport,
+          instruction: decision.request.payload.text,
+          acceptanceCriteria: decision.request.acceptanceCriteria ?? [],
+          sessionId: origin.sessionId,
+        });
+      } catch (error) {
+        const message = `WorkItem commissioning failed: ${error instanceof Error ? error.message : String(error)}`;
+        return { refused: message, error: new AdmissionRefusal({ code: "work_item_failed", message }) };
+      }
+    }
+
     const recordOrigin: DelegationOrigin = {
       role: origin.role,
       depth: origin.depth,
@@ -494,6 +542,7 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
       instruction: decision.request.payload.text,
       status: "open",
       createdAt: now,
+      ...(workItemId === undefined ? {} : { workItemId }),
     });
     store.create(record);
     publishAdmitted(record);

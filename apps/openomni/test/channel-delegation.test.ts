@@ -5,6 +5,7 @@ import { admit, type Admitted } from "../src/delegation/admission";
 import { createChannelDriver } from "../src/delegation/channel-driver";
 import { createDelegationKernel } from "../src/delegation/kernel";
 import { eventCollector, awaitedReceipt, RESIDENT, useDelegationStore } from "./helpers/delegation";
+import { fakeWorkItemLinkage } from "./helpers/fake-work-items";
 
 useDelegationStore();
 
@@ -145,6 +146,7 @@ describe("channel delegation driver", () => {
       newDelegationId: () => "delegation-1",
       wake: () => undefined,
       events,
+      workItems: fakeWorkItemLinkage(),
     });
     const started = await kernel.delegate(
       {

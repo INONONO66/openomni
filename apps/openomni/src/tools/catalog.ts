@@ -16,12 +16,20 @@ import type { MachinesPort } from "./machines";
 import { machinesToolExecutor, machinesToolSpec } from "./machines";
 import type { CellPorts } from "./run-code";
 import { runCodeToolExecutor, runCodeToolSpec } from "./run-code";
+import type { CompletionPort } from "../work-item/completion";
+import {
+  completeWorkToolExecutor,
+  completeWorkToolSpec,
+  workItemsToolExecutor,
+  workItemsToolSpec,
+} from "./work-items";
 
 export interface CatalogPorts {
   readonly delegation?: DelegationKernel;
   readonly cells?: CellPorts;
   readonly machines?: MachinesPort;
   readonly memory?: CuratedMemory;
+  readonly workItems?: CompletionPort;
 }
 
 type ToolRun = CatalogEntry["run"];
@@ -76,6 +84,23 @@ const CATALOG_TOOLS: readonly CatalogTool[] = [
       ports.memory === undefined || origin.role !== "resident"
         ? undefined
         : memoryToolExecutor(ports.memory),
+  },
+  {
+    // Completion authority is the Resident's alone (kernel-contract
+    // completion law): a worker never judges its own work, so the surface is
+    // role-gated exactly like memory.
+    spec: workItemsToolSpec,
+    wire: (ports, origin) =>
+      ports.workItems === undefined || origin.role !== "resident"
+        ? undefined
+        : workItemsToolExecutor(ports.workItems),
+  },
+  {
+    spec: completeWorkToolSpec,
+    wire: (ports, origin) =>
+      ports.workItems === undefined || origin.role !== "resident"
+        ? undefined
+        : completeWorkToolExecutor(ports.workItems),
   },
 ];
 
