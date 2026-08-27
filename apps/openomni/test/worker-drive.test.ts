@@ -110,4 +110,3 @@ test("an assigned worker that finishes naturally is not nannied", async () => {
   expect(runs).toBe(1);
   expect(output.text).toBe("done; the package is live");
 });
-

@@ -6,6 +6,8 @@
  * schema — the contract stays executor-agnostic.
  */
 
+import { RunReasonCode } from "@openomni/agent";
+
 export const DRIVE_CONTINUATION_CAP = 8;
 export const DRIVE_REPETITION_STREAK = 3;
 export const DRIVE_TOOLLESS_STALL_STREAK = 3;
@@ -60,7 +62,7 @@ export function decideDrive(state: DriveState, observation: DriveObservation): D
   if (repetitionStreak >= DRIVE_REPETITION_STREAK) return { action: "stop", reason: "repetition" };
   if (observation.finishReason === "stop" && !blocked) return { action: "done" };
 
-  const stallStreak = observation.finishReason === "stalled" ? state.stallStreak + 1 : 0;
+  const stallStreak = observation.finishReason === RunReasonCode.Stalled ? state.stallStreak + 1 : 0;
   if (stallStreak >= DRIVE_TOOLLESS_STALL_STREAK) return { action: "stop", reason: "toolless_stall" };
   if (runs >= DRIVE_CONTINUATION_CAP) return { action: "stop", reason: "continuation_cap" };
 
