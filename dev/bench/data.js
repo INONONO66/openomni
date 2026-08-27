@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787850540019,
+  "lastUpdate": 1787853428497,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -63425,6 +63425,90 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 506301,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "706b4b7e0627657c96f2ccf4bcbb80ceb92926c1",
+          "message": "feat: drive-loop policy for assigned native workers + attempt usage (#816)\n\n* feat: drive assigned native workers goal-style and record attempt usage\n\n* fix: review R1 — durable settlement usage, max-steps blocked reset, per-run runId, process-wire assign pin\n\n* test: review R2 — real spawned-child wire composition + genuine crash-window recovery pin\n\n* test: review R3 — portable child entry via import.meta.url, waiter correlated to work item\n\n* fix: review R4 — RunReasonCode.Stalled vocabulary + EOF hygiene",
+          "timestamp": "2026-08-27T17:56:02Z",
+          "tree_id": "618c1280ff4253afe213eae4d0257ae5ac814d73",
+          "url": "https://github.com/INONONO66/openomni/commit/706b4b7e0627657c96f2ccf4bcbb80ceb92926c1"
+        },
+        "date": 1787853427436,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2155,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 14717,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7921,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1023,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 921,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1538,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1510,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 778,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 43737,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2307,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 513688,
             "unit": "ns/op"
           }
         ]
