@@ -268,3 +268,52 @@ test("a restart sweep re-closes an attempt whose settlement write was lost", asy
   expect(after?.evidence).toHaveLength(1);
   expect(after?.attemptTerminal).toEqual(before?.attemptTerminal);
 });
+
+test("completion re-runs the whole admission recipe when the receipt loses a head race", async () => {
+  const writer = bootLedger();
+  const { driver, settle } = deferredDriver();
+  const kernel = bootKernel(driver);
+  await delegateAssign(kernel);
+  const workItemId = DelegationStore.get("dg-wiring-1")?.workItemId ?? "";
+  const closed = attemptClosed(workItemId);
+  settle({ status: "completed", output: "done" });
+  await kernel.awaitDelegation("dg-wiring-1", 5_000);
+  await closed;
+  kernel.stop();
+
+  // A hostile interleaving: the first terminal-receipt write both loses the
+  // race AND the head advances underneath (like a concurrent evidence write),
+  // so a receipt patched onto the new head would violate terminal linkage.
+  let raced = false;
+  const racingWriter: typeof writer = (id, expectedHead, next) => {
+    if (!raced && next.completionTerminalReceipt !== undefined) {
+      raced = true;
+      const advanced = WorkItem.Info.parse({
+        ...next,
+        completionTerminalReceipt: undefined,
+        completionReport: undefined,
+        timestamps: { ...next.timestamps, completed: undefined },
+      });
+      writer(id, expectedHead, advanced);
+      return false;
+    }
+    return writer(id, expectedHead, next);
+  };
+  const port = createCompletionPort({ writer: racingWriter, now: () => Date.now() });
+  const item = await WorkItemStore.get(workItemId);
+  const evidenceId = item?.evidence[0]?.id ?? "";
+  const outcome = await port.complete({
+    workItemId,
+    judgments: (item?.completionFacts.criteria ?? []).map((criterion) => ({
+      criterionId: criterion.id,
+      value: "verified" as const,
+      checkedPredicate: `checked: ${criterion.statement}`,
+      evidenceIds: [evidenceId],
+    })),
+  });
+  expect(outcome.admitted).toBe(true);
+  expect(raced).toBe(true);
+  const after = await WorkItemStore.get(workItemId);
+  expect(WorkItem.deriveStatus(after as WorkItem.Info)).toBe("completed");
+  expect(() => WorkItem.Info.parse(after)).not.toThrow();
+});

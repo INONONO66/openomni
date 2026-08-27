@@ -138,173 +138,195 @@ export function createCompletionPort(options: CompletionPortOptions): Completion
       }
       verificationEvidence.set(judgment.criterionId, verificationId);
     }
-    const base = WorkItemStore.get(input.workItemId) ?? current;
-    const now = options.now();
-    const basisRef = base.completionContract.basisRef;
-    const nextFactsRevision = base.completionFacts.revision + 1;
-    const observations: WorkItem.Observation[] = [];
-    const results: WorkItem.CriterionResult[] = [];
-    const claims: WorkItem.Claim[] = [];
-    for (const [index, judgment] of input.judgments.entries()) {
-      if (judgment.value === "asserted") {
+    // Terminal linkage requires the receipt to immediately follow its
+    // admission head, so a lost head race is never patched in place: the
+    // whole facts+admission+receipt recipe re-runs against the fresh head.
+    let admissionRecorded = false;
+    for (let round = 0; round < 2; round += 1) {
+      const settledLate = WorkItemStore.get(input.workItemId);
+      if (settledLate?.completionTerminalReceipt !== undefined) {
+        return { admitted: true, workItemId: input.workItemId };
+      }
+      const outcome = await finalize(settledLate ?? current);
+      if (outcome === "admission_race") continue;
+      if (outcome === "receipt_race") {
+        admissionRecorded = true;
+        continue;
+      }
+      return outcome;
+    }
+    return refuse(
+      admissionRecorded
+        ? `terminal receipt write kept losing the head race for ${input.workItemId}; the admission is recorded — re-run complete_work to finish`
+        : `completion admission write kept losing the head race for ${input.workItemId}`,
+    );
+
+    async function finalize(
+      base: WorkItem.Info,
+    ): Promise<CompletionOutcome | "admission_race" | "receipt_race"> {
+      const now = options.now();
+      const basisRef = base.completionContract.basisRef;
+      const nextFactsRevision = base.completionFacts.revision + 1;
+      const observations: WorkItem.Observation[] = [];
+      const results: WorkItem.CriterionResult[] = [];
+      const claims: WorkItem.Claim[] = [];
+      for (const [index, judgment] of input.judgments.entries()) {
+        if (judgment.value === "asserted") {
+          results.push(
+            WorkItem.CriterionResult.parse({
+              id: `result:${input.workItemId}:${nextFactsRevision}:${index}`,
+              criterionId: judgment.criterionId,
+              observationIds: [],
+              value: "asserted",
+              assumptions: [],
+              residualRisks: [],
+              basisRef,
+              createdAt: now,
+            }),
+          );
+          continue;
+        }
+        const verificationId = verificationEvidence.get(judgment.criterionId);
+        const observation = WorkItem.Observation.parse({
+          id: `observation:${input.workItemId}:${nextFactsRevision}:${index}`,
+          producer: "resident-completion",
+          subjectRef: input.workItemId,
+          basisRef,
+          artifactRefs:
+            verificationId === undefined
+              ? [...judgment.evidenceIds]
+              : [verificationId, ...judgment.evidenceIds],
+          provenanceRef: verificationId ?? judgment.evidenceIds[0],
+          ancestryRefs: [],
+          observedAt: now,
+        });
+        observations.push(observation);
+        if (judgment.value === "verified") {
+          claims.push(
+            WorkItem.Claim.parse({
+              id: `claim:${input.workItemId}:${nextFactsRevision}:${index}`,
+              criterionId: judgment.criterionId,
+              statement: criteria.get(judgment.criterionId)?.statement ?? judgment.criterionId,
+              observationIds: [observation.id],
+              basisRef,
+              createdAt: now,
+            }),
+          );
+        }
         results.push(
           WorkItem.CriterionResult.parse({
             id: `result:${input.workItemId}:${nextFactsRevision}:${index}`,
             criterionId: judgment.criterionId,
-            observationIds: [],
-            value: "asserted",
+            observationIds: [observation.id],
+            value: judgment.value,
+            checkedPredicate: judgment.checkedPredicate,
             assumptions: [],
             residualRisks: [],
             basisRef,
             createdAt: now,
           }),
         );
-        continue;
       }
-      const verificationId = verificationEvidence.get(judgment.criterionId);
-      const observation = WorkItem.Observation.parse({
-        id: `observation:${input.workItemId}:${nextFactsRevision}:${index}`,
-        producer: "resident-completion",
-        subjectRef: input.workItemId,
-        basisRef,
-        artifactRefs:
-          verificationId === undefined
-            ? [...judgment.evidenceIds]
-            : [verificationId, ...judgment.evidenceIds],
-        provenanceRef: verificationId ?? judgment.evidenceIds[0],
-        ancestryRefs: [],
-        observedAt: now,
-      });
-      observations.push(observation);
-      if (judgment.value === "verified") {
-        claims.push(
-          WorkItem.Claim.parse({
-            id: `claim:${input.workItemId}:${nextFactsRevision}:${index}`,
-            criterionId: judgment.criterionId,
-            statement: criteria.get(judgment.criterionId)?.statement ?? judgment.criterionId,
-            observationIds: [observation.id],
-            basisRef,
-            createdAt: now,
-          }),
-        );
-      }
-      results.push(
-        WorkItem.CriterionResult.parse({
-          id: `result:${input.workItemId}:${nextFactsRevision}:${index}`,
-          criterionId: judgment.criterionId,
-          observationIds: [observation.id],
-          value: judgment.value,
-          checkedPredicate: judgment.checkedPredicate,
-          assumptions: [],
-          residualRisks: [],
-          basisRef,
-          createdAt: now,
-        }),
+      const verifiedCriterionIds = new Set(
+        results.filter(({ value }) => value === "verified").map(({ criterionId }) => criterionId),
       );
-    }
-    const verifiedCriterionIds = new Set(
-      results.filter(({ value }) => value === "verified").map(({ criterionId }) => criterionId),
-    );
-    const refutedCriterionIds = results
-      .filter(({ value }) => value === "refuted")
-      .map(({ criterionId }) => criterionId);
-    const unresolved = base.completionFacts.criteria
-      .filter(({ id, required }) => required && !verifiedCriterionIds.has(id))
-      .map(({ id }) => id);
-    const admit = unresolved.length === 0 && refutedCriterionIds.length === 0;
-    const report = admit
-      ? WorkItem.canonicalCompletionReport(
-          WorkItem.CompletionReport.parse({
-            summary: `Resident verified ${verifiedCriterionIds.size} acceptance criteria for ${base.name}`,
-            claims: input.judgments.flatMap((judgment) => {
-              const verificationId =
-                judgment.value === "verified"
-                  ? verificationEvidence.get(judgment.criterionId)
-                  : undefined;
-              return verificationId === undefined
-                ? []
-                : [
-                    {
-                      statement: criteria.get(judgment.criterionId)?.statement ?? judgment.criterionId,
-                      evidenceIds: [verificationId],
-                    },
-                  ];
+      const refutedCriterionIds = results
+        .filter(({ value }) => value === "refuted")
+        .map(({ criterionId }) => criterionId);
+      const unresolved = base.completionFacts.criteria
+        .filter(({ id, required }) => required && !verifiedCriterionIds.has(id))
+        .map(({ id }) => id);
+      const admit = unresolved.length === 0 && refutedCriterionIds.length === 0;
+      const report = admit
+        ? WorkItem.canonicalCompletionReport(
+            WorkItem.CompletionReport.parse({
+              summary: `Resident verified ${verifiedCriterionIds.size} acceptance criteria for ${base.name}`,
+              claims: input.judgments.flatMap((judgment) => {
+                const verificationId =
+                  judgment.value === "verified"
+                    ? verificationEvidence.get(judgment.criterionId)
+                    : undefined;
+                return verificationId === undefined
+                  ? []
+                  : [
+                      {
+                        statement:
+                          criteria.get(judgment.criterionId)?.statement ?? judgment.criterionId,
+                        evidenceIds: [verificationId],
+                      },
+                    ];
+              }),
             }),
-          }),
-        )
-      : undefined;
-    const reportRef = report === undefined ? undefined : WorkItem.completionReportReference(report);
-    const requestId = `completion-request:${input.workItemId}:${base.revision}:resident`;
-    const effectiveResultIds = results
-      .filter(({ value }) => value === "verified")
-      .map(({ id }) => id);
-    const admission = WorkItem.CompletionAdmission.parse({
-      version: 1,
-      id: `admission:${input.workItemId}:${base.revision + 1}:resident`,
-      requestId,
-      workItemHash: input.workItemId,
-      origin: "resident",
-      contractRevision: base.completionContract.revision,
-      basisRef,
-      requestRoot: `request-root:${input.workItemId}:${base.revision}`,
-      proposedFactIds: {
-        claims: claims.map(({ id }) => id),
-        observations: observations.map(({ id }) => id),
-        results: results.map(({ id }) => id),
-        invalidations: [],
-        verificationErrors: [],
-        effects: [],
-      },
-      effectiveResultIds,
-      unresolvedCriterionIds: admit ? [] : unresolved,
-      decision: admit ? "admit" : "block",
-      reasonCodes: admit
-        ? ["resident_verified_all_required"]
-        : [
-            ...(unresolved.length > 0 ? ["unverified_required_criteria"] : []),
-            ...(refutedCriterionIds.length > 0 ? ["refuted_criteria"] : []),
-          ],
-      residualRisks: [],
-      policyRef: POLICY_REF,
-      ...(report === undefined
-        ? {}
-        : { completionReportSnapshot: report, completionReportRef: reportRef }),
-      expectedHead: base.revision,
-      recordedHead: base.revision + 1,
-      createdAt: now,
-    });
-    const recorded = WorkItem.Info.parse({
-      ...base,
-      revision: admission.recordedHead,
-      completionFacts: {
-        ...base.completionFacts,
-        revision: nextFactsRevision,
-        claims: [...base.completionFacts.claims, ...claims],
-        observations: [...base.completionFacts.observations, ...observations],
-        results: [...base.completionFacts.results, ...results],
-        admissions: [...base.completionFacts.admissions, admission],
-      },
-      timestamps: { ...base.timestamps, updated: now },
-    });
-    if (!options.writer(input.workItemId, base.revision, recorded)) {
-      return refuse(`completion admission write lost the head race for ${input.workItemId}`);
-    }
-    if (!admit) {
-      const why = [
-        ...(unresolved.length > 0
-          ? [`required criteria without a verified result: ${unresolved.join(", ")}`]
-          : []),
-        ...(refutedCriterionIds.length > 0
-          ? [`refuted criteria: ${refutedCriterionIds.join(", ")}`]
-          : []),
-      ].join("; ");
-      return refuse(`completion blocked — ${why}. Only verified results admit.`);
-    }
-    // The admission above is durable; the terminal receipt may lose a head
-    // race against a concurrent writer (e.g. an attempt-close), so re-read
-    // once and retry against the fresh head before giving up.
-    let head = recorded;
-    for (let attempt = 0; attempt < 2; attempt += 1) {
+          )
+        : undefined;
+      const reportRef =
+        report === undefined ? undefined : WorkItem.completionReportReference(report);
+      const requestId = `completion-request:${input.workItemId}:${base.revision}:resident`;
+      const effectiveResultIds = results
+        .filter(({ value }) => value === "verified")
+        .map(({ id }) => id);
+      const admission = WorkItem.CompletionAdmission.parse({
+        version: 1,
+        id: `admission:${input.workItemId}:${base.revision + 1}:resident`,
+        requestId,
+        workItemHash: input.workItemId,
+        origin: "resident",
+        contractRevision: base.completionContract.revision,
+        basisRef,
+        requestRoot: `request-root:${input.workItemId}:${base.revision}`,
+        proposedFactIds: {
+          claims: claims.map(({ id }) => id),
+          observations: observations.map(({ id }) => id),
+          results: results.map(({ id }) => id),
+          invalidations: [],
+          verificationErrors: [],
+          effects: [],
+        },
+        effectiveResultIds,
+        unresolvedCriterionIds: admit ? [] : unresolved,
+        decision: admit ? "admit" : "block",
+        reasonCodes: admit
+          ? ["resident_verified_all_required"]
+          : [
+              ...(unresolved.length > 0 ? ["unverified_required_criteria"] : []),
+              ...(refutedCriterionIds.length > 0 ? ["refuted_criteria"] : []),
+            ],
+        residualRisks: [],
+        policyRef: POLICY_REF,
+        ...(report === undefined
+          ? {}
+          : { completionReportSnapshot: report, completionReportRef: reportRef }),
+        expectedHead: base.revision,
+        recordedHead: base.revision + 1,
+        createdAt: now,
+      });
+      const recorded = WorkItem.Info.parse({
+        ...base,
+        revision: admission.recordedHead,
+        completionFacts: {
+          ...base.completionFacts,
+          revision: nextFactsRevision,
+          claims: [...base.completionFacts.claims, ...claims],
+          observations: [...base.completionFacts.observations, ...observations],
+          results: [...base.completionFacts.results, ...results],
+          admissions: [...base.completionFacts.admissions, admission],
+        },
+        timestamps: { ...base.timestamps, updated: now },
+      });
+      if (!options.writer(input.workItemId, base.revision, recorded)) {
+        return "admission_race";
+      }
+      if (!admit) {
+        const why = [
+          ...(unresolved.length > 0
+            ? [`required criteria without a verified result: ${unresolved.join(", ")}`]
+            : []),
+          ...(refutedCriterionIds.length > 0
+            ? [`refuted criteria: ${refutedCriterionIds.join(", ")}`]
+            : []),
+        ].join("; ");
+        return refuse(`completion blocked — ${why}. Only verified results admit.`);
+      }
       const receipt: WorkItem.CompletionTerminalReceipt = {
         version: 1,
         hash: input.workItemId,
@@ -313,29 +335,21 @@ export function createCompletionPort(options: CompletionPortOptions): Completion
         contractRevision: admission.contractRevision,
         basisRef,
         ...(reportRef === undefined ? {} : { completionReportRef: reportRef }),
-        recordedHead: head.revision + 1,
+        recordedHead: recorded.revision + 1,
       };
-      const completedAt = options.now() + 1;
+      const completedAt = now + 1;
       const completed = WorkItem.Info.parse({
-        ...head,
-        revision: head.revision + 1,
+        ...recorded,
+        revision: recorded.revision + 1,
         ...(report === undefined ? {} : { completionReport: report }),
         completionTerminalReceipt: receipt,
-        timestamps: { ...head.timestamps, completed: completedAt, updated: completedAt },
+        timestamps: { ...recorded.timestamps, completed: completedAt, updated: completedAt },
       });
-      if (options.writer(input.workItemId, head.revision, completed)) {
-        return { admitted: true, workItemId: input.workItemId };
+      if (!options.writer(input.workItemId, recorded.revision, completed)) {
+        return "receipt_race";
       }
-      const reread = WorkItemStore.get(input.workItemId);
-      if (reread === undefined) break;
-      if (reread.completionTerminalReceipt !== undefined) {
-        return { admitted: true, workItemId: input.workItemId };
-      }
-      head = reread;
+      return { admitted: true, workItemId: input.workItemId };
     }
-    return refuse(
-      `terminal receipt write lost the head race for ${input.workItemId}; the admission is recorded — re-run complete_work to finish`,
-    );
   }
 
   return {
