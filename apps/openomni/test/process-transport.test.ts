@@ -307,9 +307,10 @@ test("concurrent process delegations have independent durable ids and answers", 
 });
 
 
+const DELEGATION_SRC = new URL("../src/delegation", import.meta.url).pathname;
 const CHILD_DRIVE_ENTRY = `
-import { createChildKernel, serveProcessWorker } from "/Users/ino/Develop/openomni-wt-prc/apps/openomni/src/delegation/process-entry";
-import { createInlineWorkerRunner } from "/Users/ino/Develop/openomni-wt-prc/apps/openomni/src/delegation/worker-loop";
+import { createChildKernel, serveProcessWorker } from "${DELEGATION_SRC}/process-entry";
+import { createInlineWorkerRunner } from "${DELEGATION_SRC}/worker-loop";
 
 const tokens = { input: 4, output: 5, reasoning: 0, cache: { read: 0, write: 0 } };
 const llm = {
@@ -379,14 +380,19 @@ test("an assign rides the real wire: parent driver, spawned child, drive loop, u
     RESIDENT,
   );
   if ("refused" in result) throw new Error(result.refused);
-  // Subscribe after admission: attempt ALLOCATION also publishes an Updated
-  // event whose fields clear `attemptTerminal` — only the post-settlement
-  // closure event is the one this test waits for.
-  const closed = new Promise<string>((resolve) => {
+  const workItemId = DelegationStore.get("d-wire-drive")?.workItemId ?? "";
+  expect(workItemId).not.toBe("");
+  // Subscribe after admission, correlated to THIS work item: attempt
+  // ALLOCATION also publishes an Updated event whose fields clear
+  // `attemptTerminal` — only the post-settlement closure event counts.
+  const closed = new Promise<void>((resolve) => {
     const unsubscribe = Bus.subscribe(WorkItem.Events.Updated, (event) => {
-      if (event.payload.fields.includes("attemptTerminal")) {
+      if (
+        event.payload.workItemId === workItemId &&
+        event.payload.fields.includes("attemptTerminal")
+      ) {
         unsubscribe();
-        resolve(event.payload.workItemId);
+        resolve();
       }
     });
   });
@@ -397,8 +403,7 @@ test("an assign rides the real wire: parent driver, spawned child, drive loop, u
   // Drive loop ran in the child: three driven runs, blocked stop, summed spend.
   expect(settled.settlement.output).toBe("[drive stopped: blocked]\nBLOCKED: the registry is unreachable");
   expect(settled.settlement.usage).toEqual({ tokens: 27 });
-  const workItemId = await closed;
-  expect(workItemId).toBe(DelegationStore.get("d-wire-drive")?.workItemId ?? "");
+  await closed;
   const item = await WorkItemStore.get(workItemId);
   expect(item?.attemptTerminal).toMatchObject({ usage: { tokens: 27 } });
   kernel.stop();
