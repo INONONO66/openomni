@@ -536,16 +536,6 @@
     "targetKind",
     "verdict"
   ],
-  "Ledger.EffectConfirmed": ["effectId", "receipt"],
-  "Ledger.EffectFailed": ["effectId", "reason"],
-  "Ledger.EffectIntended": [
-    "attemptId",
-    "effectId",
-    "kind",
-    "replay",
-    "target",
-    "workItemHash"
-  ],
   "Ledger.Input": ["data", "streamId", "timeCreated", "type"],
   "Ledger.Outcome#0": ["eventHash", "kind", "seq"],
   "Ledger.Outcome#1": ["currentHead", "kind"],

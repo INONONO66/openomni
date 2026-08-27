@@ -265,30 +265,3 @@ function assertEvidenceScope(
   }
 }
 
-export async function addWorkItemReadBackEvidence(
-  hash: string,
-  check: WorkItem.ReadBackCheck,
-  traceId: string,
-  expectedScope?: Readonly<{
-    expectedAttempt: number;
-    expectedBasisRef: string;
-    criterionId: string;
-    evidenceId?: string;
-  }>,
-): Promise<WorkItem.Info | undefined> {
-  const readBack = WorkItem.ReadBackCheck.parse(check);
-  return addWorkItemEvidence(
-    hash,
-    {
-      kind: "verification",
-      description: `${readBack.kind} read-back ${readBack.passed ? "passed" : "failed"} for ${readBack.target}`,
-      passed: readBack.passed,
-      detail: JSON.stringify(readBack),
-      readBack,
-      criterionId: expectedScope?.criterionId,
-      id: expectedScope?.evidenceId,
-    },
-    traceId,
-    expectedScope,
-  );
-}

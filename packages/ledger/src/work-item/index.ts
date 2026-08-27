@@ -1,11 +1,9 @@
 import type { WorkItem } from "@openomni/protocol";
 import { createWorkItem } from "./create.js";
-import { recordWorkItemEffect, type RecordEffectInput } from "./effect-link.js";
 import { getWorkItem, listWorkItems } from "./crud.js";
 import {
   addWorkItemBlocker,
   addWorkItemEvidence,
-  addWorkItemReadBackEvidence,
   allocateWorkItemAttempt,
   assignWorkItemExecution,
   cancelWorkItem,
@@ -84,30 +82,6 @@ export namespace WorkItemStore {
     expectedScope?: Readonly<{ expectedAttempt: number; expectedBasisRef: string }>,
   ): Promise<WorkItem.Info | undefined> {
     return addWorkItemEvidence(hash, evidence, traceId, expectedScope);
-  }
-
-  export async function addReadBackEvidence(
-    hash: string,
-    check: WorkItem.ReadBackCheck,
-    traceId: string,
-    expectedScope?: Readonly<{
-      expectedAttempt: number;
-      expectedBasisRef: string;
-      criterionId: string;
-      evidenceId?: string;
-    }>,
-  ): Promise<WorkItem.Info | undefined> {
-    return addWorkItemReadBackEvidence(hash, check, traceId, expectedScope);
-  }
-
-  /**
-   * #492 ↔ #490 — projects one effect intent's state onto the WorkItem's
-   * completion facts so admission blocks until the effect reaches a terminal
-   * outcome. Called by the OpenOmni effect service/reconciler; the durable
-   * effect audit lives on the `effect:<effectId>` stream.
-   */
-  export function recordEffect(hash: string, input: RecordEffectInput): WorkItem.Info | undefined {
-    return recordWorkItemEffect(hash, input);
   }
 
   /**

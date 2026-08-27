@@ -26,7 +26,7 @@
 //
 // Four write surfaces are manifested:
 //   - streams: the ONE producer module per decision-class stream family
-//     (`wait:` / `work:` / `route:` / `command:` / `effect:` — the class
+//     (`wait:` / `work:` / `route:` / `command:` — the class
 //     vocabulary is protocol `Ledger.StreamRegistry`). A retained protocol
 //     class may have zero producers after its owning product path is removed.
 //   - appendCore: the modules allowed to touch `ledger_event`/`ledger_head`
@@ -53,7 +53,6 @@ interface LedgerStreamProducer {
     | "route"
     | "route_correction"
     | "command"
-    | "effect"
     | "engagement"
     | "gateway_send";
   /**
@@ -109,11 +108,6 @@ export const LEDGER_PRODUCER_MANIFEST: LedgerProducerManifest = {
       // was removed with the old product kernel.
       streamClass: "command",
       producers: [],
-      writes: "append",
-    },
-    {
-      streamClass: "effect",
-      producers: ["packages/ledger/src/effect/index.ts"],
       writes: "append",
     },
     {
