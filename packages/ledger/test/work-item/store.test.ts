@@ -717,40 +717,23 @@ describe("WorkItemStore", () => {
     );
   });
 
-  test("adds read-back verification evidence", async () => {
-    configureSqlite();
-    const item = await createItem("read-back");
-
-    const updated = await WorkItemStore.addReadBackEvidence(
-      item.workItemId,
-      {
-        kind: "citation_match",
-        target: "https://example.com/source",
-        passed: true,
-        observedAt: 4,
-        quotedText: "source sentence",
-        matchedText: "source sentence",
-      },
-      "trace-test",
-    );
-
-    expect(updated?.evidence).toHaveLength(1);
-    expect(updated?.evidence[0]).toMatchObject({
-      kind: "verification",
-      description: "citation_match read-back passed for https://example.com/source",
-      passed: true,
-      readBack: {
-        kind: "citation_match",
-        quotedText: "source sentence",
-      },
-    });
-  });
-
   test("dead surface stays dead: removed store members are not exposed", () => {
     // #606 dead-surface removal — update/remove/complete/recordOutcome/
     // areDependenciesMet had zero production callers; completion goes ONLY
     // through the admission writer (Storage.configure receipt).
-    for (const member of ["update", "remove", "complete", "recordOutcome", "areDependenciesMet"]) {
+    // recordEffect / addReadBackEvidence: the #492 effect projection and the
+    // read-back convenience writer lost their last production callers when the
+    // old product kernel was decommissioned (#797); evidence with a readBack
+    // payload still flows through addEvidence, which owns the consistency check.
+    for (const member of [
+      "update",
+      "remove",
+      "complete",
+      "recordOutcome",
+      "areDependenciesMet",
+      "recordEffect",
+      "addReadBackEvidence",
+    ]) {
       expect(Reflect.get(WorkItemStore, member)).toBeUndefined();
     }
   });
