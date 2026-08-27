@@ -243,6 +243,35 @@ test("work_items and complete_work are a Resident-only catalog surface", () => {
   expect(workerNames).not.toContain("complete_work");
 });
 
+test("a crash between settlement and closure loses nothing: the sweep rebuilds the terminal with its tokens", async () => {
+  bootLedger();
+  const { driver } = deferredDriver();
+  const kernel = bootKernel(driver);
+  await delegateAssign(kernel);
+  const workItemId = DelegationStore.get("dg-wiring-1")?.workItemId ?? "";
+  // The settlement CAS commits directly against the store — the kernel's
+  // closeAttempt hook never fires, exactly the crash window recovery covers.
+  DelegationStore.settleOnce("dg-wiring-1", {
+    status: "completed",
+    delegationId: "dg-wiring-1",
+    output: "done before the crash",
+    at: Date.now(),
+    usage: { tokens: 777 },
+  });
+  kernel.stop();
+  expect((await WorkItemStore.get(workItemId))?.attemptTerminal).toBeUndefined();
+
+  const linkage = createWorkItemLinkage({
+    model: { provider: "fake", id: "fake-model" },
+    now: () => Date.now(),
+  });
+  await linkage.recoverAttempts((id) => DelegationStore.get(id));
+  const after = await WorkItemStore.get(workItemId);
+  expect(after?.attemptTerminal).toMatchObject({ usage: { tokens: 777 } });
+  expect(after?.evidence).toHaveLength(1);
+  expect(after?.evidence[0]?.passed).toBe(false);
+});
+
 test("a restart sweep re-closes an attempt whose settlement write was lost", async () => {
   bootLedger();
   const { driver, settle } = deferredDriver();

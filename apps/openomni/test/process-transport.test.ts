@@ -2,9 +2,12 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DelegationStore } from "@openomni/ledger";
+import { DelegationStore, WorkItemStore } from "@openomni/ledger";
+import { WorkItem } from "@openomni/protocol";
+import { Bus } from "@openomni/telemetry";
 import { createDelegationKernel } from "../src/delegation/kernel";
 import { createProcessDriver } from "../src/delegation/process-driver";
+import { createWorkItemLinkage } from "../src/delegation/work-item-linkage";
 import {
   createChildKernel,
   PROCESS_WORKER_ACK,
@@ -302,3 +305,101 @@ test("concurrent process delegations have independent durable ids and answers", 
   );
   expect(new Set(settled).size).toBe(4);
 });
+
+
+const CHILD_DRIVE_ENTRY = `
+import { createChildKernel, serveProcessWorker } from "/Users/ino/Develop/openomni-wt-prc/apps/openomni/src/delegation/process-entry";
+import { createInlineWorkerRunner } from "/Users/ino/Develop/openomni-wt-prc/apps/openomni/src/delegation/worker-loop";
+
+const tokens = { input: 4, output: 5, reasoning: 0, cache: { read: 0, write: 0 } };
+const llm = {
+  resolveProviderModel: async (model) => ({ id: model.id, name: model.id, providerID: model.provider }),
+  run: async (input, sink) => {
+    const id = "fake-" + input.messages.length;
+    const sessionID = input.trace.sessionId;
+    sink.onMessage({
+      info: {
+        id, sessionID, role: "assistant", time: { created: Date.now() }, parentID: "",
+        modelID: input.model.id, providerID: input.model.providerID, agent: "worker",
+        path: { cwd: "", root: "" }, cost: 0, tokens,
+      },
+      parts: [
+        { id: id + "-text", sessionID, messageID: id, type: "text", text: "BLOCKED: the registry is unreachable" },
+        { id: id + "-finish", sessionID, messageID: id, type: "step-finish", reason: "stop", cost: 0, tokens },
+      ],
+    });
+    return { type: "stop" };
+  },
+};
+
+const line = await new Response(Bun.stdin.stream()).text();
+let kernel;
+const runner = createInlineWorkerRunner({
+  model: { provider: "fake", id: "drive-test" },
+  apiKey: "test-key",
+  llm,
+  kernel: () => kernel,
+});
+kernel = createChildKernel(runner);
+await serveProcessWorker(line, (out) => console.log(out), (request) =>
+  runner({
+    delegationId: request.delegationId,
+    operation: request.operation,
+    instruction: request.instruction,
+    acceptanceCriteria: request.acceptanceCriteria,
+    origin: request.origin,
+    signal: new AbortController().signal,
+  }),
+);
+process.exit(0);
+`;
+
+test("an assign rides the real wire: parent driver, spawned child, drive loop, usage, settlement", async () => {
+  // The child OS process runs the REAL serveProcessWorker and the REAL worker
+  // drive loop; only the provider call is stubbed, exactly where
+  // processWorkerRun would talk to a model.
+  const entry = fakeEntry(CHILD_DRIVE_ENTRY);
+  const kernel = createDelegationKernel({
+    drivers: {
+      process: createProcessDriver({ command: [process.execPath, entry], worker: WORKER }),
+    },
+    now: () => Date.now(),
+    newDelegationId: () => "d-wire-drive",
+    wake: () => undefined,
+    workItems: createWorkItemLinkage({ model: WORKER.model, now: () => Date.now() }),
+  });
+  const result = await kernel.delegate(
+    {
+      operation: "assign",
+      address: { kind: "core", scope: "independent" },
+      payload: { text: "publish the package" },
+      acceptanceCriteria: ["the package is live"],
+      deadline: Date.now() + 20_000,
+    },
+    RESIDENT,
+  );
+  if ("refused" in result) throw new Error(result.refused);
+  // Subscribe after admission: attempt ALLOCATION also publishes an Updated
+  // event whose fields clear `attemptTerminal` — only the post-settlement
+  // closure event is the one this test waits for.
+  const closed = new Promise<string>((resolve) => {
+    const unsubscribe = Bus.subscribe(WorkItem.Events.Updated, (event) => {
+      if (event.payload.fields.includes("attemptTerminal")) {
+        unsubscribe();
+        resolve(event.payload.workItemId);
+      }
+    });
+  });
+  const settled = await kernel.awaitDelegation(result.handle.delegationId, 20_000);
+  if (settled.kind !== "settled" || settled.settlement.status !== "completed") {
+    throw new Error(`process did not settle completed: ${JSON.stringify(settled)}`);
+  }
+  // Drive loop ran in the child: three driven runs, blocked stop, summed spend.
+  expect(settled.settlement.output).toBe("[drive stopped: blocked]\nBLOCKED: the registry is unreachable");
+  expect(settled.settlement.usage).toEqual({ tokens: 27 });
+  const workItemId = await closed;
+  expect(workItemId).toBe(DelegationStore.get("d-wire-drive")?.workItemId ?? "");
+  const item = await WorkItemStore.get(workItemId);
+  expect(item?.attemptTerminal).toMatchObject({ usage: { tokens: 27 } });
+  kernel.stop();
+}, 20_000);
