@@ -264,4 +264,3 @@ function assertEvidenceScope(
     throw new Error("WorkItem attempt changed before evidence recording");
   }
 }
-
