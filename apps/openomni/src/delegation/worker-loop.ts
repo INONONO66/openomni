@@ -5,6 +5,7 @@ import { buildAgentPrompt } from "../prompt/build";
 import { WORKER_PRESET } from "../prompt/roles";
 import { catalogEntries } from "../tools/catalog";
 import { createDispatcher, HOST_TARGET } from "../tools/dispatch";
+import { decideDrive, initialDriveState, type DriveState } from "./drive-loop";
 import { renderInstruction } from "./instruction";
 import type { DelegationKernel } from "./kernel";
 import type { InlineWorkerRunner } from "./inline-driver";
@@ -40,22 +41,41 @@ export function createInlineWorkerRunner(options: WorkerLoopOptions): InlineWork
       ...(options.llm === undefined ? {} : { llm: options.llm }),
     });
 
-    const result = await agent.run({
-      messages: [
-        {
-          role: "user",
-          content: renderInstruction(input.instruction, input.acceptanceCriteria),
-          time: Date.now(),
-        },
-      ],
-      traceContext: {
-        traceId: crypto.randomUUID(),
-        sessionId: `delegation-${input.delegationId}`,
-        runId: crypto.randomUUID(),
-        agentName: "worker",
+    const messages: Array<{ role: "user" | "assistant"; content: string; time: number }> = [
+      {
+        role: "user",
+        content: renderInstruction(input.instruction, input.acceptanceCriteria),
+        time: Date.now(),
       },
-    });
+    ];
+    const traceContext = {
+      traceId: crypto.randomUUID(),
+      sessionId: `delegation-${input.delegationId}`,
+      runId: crypto.randomUUID(),
+      agentName: "worker",
+    };
 
-    return result.text;
+    // Assigned work is driven goal-style (drive-loop.ts); ask/notify runs
+    // once — a question is answered, never nannied.
+    let tokens = 0;
+    let state: DriveState = initialDriveState();
+    for (;;) {
+      const result = await agent.run({ messages, traceContext });
+      tokens += result.usage.totalTokens;
+      if (input.operation !== "assign") return { text: result.text, tokens };
+      const decision = decideDrive(state, {
+        text: result.text,
+        finishReason: result.finishReason,
+      });
+      if (decision.action === "done") return { text: result.text, tokens };
+      if (decision.action === "stop") {
+        return { text: `[drive stopped: ${decision.reason}]\n${result.text}`, tokens };
+      }
+      state = decision.state;
+      messages.push(
+        { role: "assistant", content: result.text, time: Date.now() },
+        { role: "user", content: decision.prompt, time: Date.now() },
+      );
+    }
   };
 }

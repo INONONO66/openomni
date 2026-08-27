@@ -12,7 +12,12 @@ import {
 
 /** What a transport reports after it has been dispatched. */
 export type DriverOutcome =
-  | { readonly status: "completed"; readonly output: string }
+  | {
+      readonly status: "completed";
+      readonly output: string;
+      /** Transport-reported spend; visibility only, never an admission input. */
+      readonly usage?: { readonly tokens: number };
+    }
   | { readonly status: "failed"; readonly error: string }
   | { readonly status: "cancelled"; readonly reason: string }
   | { readonly status: "delivery_failed"; readonly reason: string }
@@ -264,6 +269,7 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
   function settle(
     delegationId: string,
     candidate: Delegation.Settled,
+    usage?: { readonly tokens: number },
   ): Delegation.Settled | undefined {
     const current = store.get(delegationId);
     if (current === undefined) return undefined;
@@ -312,7 +318,13 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
     const workItems = options.workItems;
     if (persisted.operation === "assign" && persisted.workItemId !== undefined && workItems !== undefined) {
       void Promise.resolve()
-        .then(() => workItems.closeAttempt({ record: persisted, settlement: winner }))
+        .then(() =>
+          workItems.closeAttempt({
+            record: persisted,
+            settlement: winner,
+            ...(usage === undefined ? {} : { usage }),
+          }),
+        )
         .catch((error: unknown) => {
           events.publish(Operational.Events.Error, {
             traceId: delegationId,
@@ -460,7 +472,11 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
         const outcome = await driver.run(admitted, handle, controller.signal, report);
         if (stopped) return undefined;
         const settlement = outcomeToSettlement(handle.delegationId, outcome, options.now());
-        return settle(handle.delegationId, settlement);
+        return settle(
+          handle.delegationId,
+          settlement,
+          outcome.status === "completed" ? outcome.usage : undefined,
+        );
       } catch (error) {
         if (stopped) return undefined;
         return settle(handle.delegationId, {

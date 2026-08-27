@@ -103,7 +103,11 @@ test("settlement demotes worker output to Evidence and closes the attempt withou
   const workItemId = DelegationStore.get("dg-wiring-1")?.workItemId ?? "";
   const closed = attemptClosed(workItemId);
 
-  settle({ status: "completed", output: "widget assembled; report at /tmp/report.md" });
+  settle({
+    status: "completed",
+    output: "widget assembled; report at /tmp/report.md",
+    usage: { tokens: 4321 },
+  });
   const settlement = await kernel.awaitDelegation("dg-wiring-1", 5_000);
   expect(settlement.kind).toBe("settled");
   await closed;
@@ -119,6 +123,10 @@ test("settlement demotes worker output to Evidence and closes the attempt withou
   // The kernel never auto-completes: completion is admission-only.
   expect(WorkItem.deriveStatus(item as WorkItem.Info)).not.toBe("completed");
   expect(item?.completionTerminalReceipt).toBeUndefined();
+  // Usage is visibility only: recorded on the attempt terminal, never an
+  // admission input.
+  expect(item?.attemptTerminal?.usage?.tokens).toBe(4321);
+  expect(item?.attemptTerminal?.usage?.seconds).toBeGreaterThanOrEqual(0);
 });
 
 test("a failed settlement fails the WorkItem with failing evidence", async () => {

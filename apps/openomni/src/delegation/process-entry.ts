@@ -9,6 +9,7 @@ import { createInlineWorkerRunner } from "./worker-loop";
 export const ProcessWorkerRequest = z
   .object({
     delegationId: z.string().min(1),
+    operation: Delegation.Operation,
     instruction: z.string().min(1),
     acceptanceCriteria: z.array(z.string()),
     origin: Delegation.Origin,
@@ -23,12 +24,20 @@ export type ProcessWorkerRequest = z.infer<typeof ProcessWorkerRequest>;
 export const PROCESS_WORKER_ACK = JSON.stringify({ delivered: true });
 
 export const ProcessWorkerResult = z.discriminatedUnion("status", [
-  z.object({ status: z.literal("completed"), output: z.string() }).strict(),
+  z
+    .object({
+      status: z.literal("completed"),
+      output: z.string(),
+      usage: z.object({ tokens: z.number().int().nonnegative() }).strict().optional(),
+    })
+    .strict(),
   z.object({ status: z.literal("failed"), error: z.string() }).strict(),
 ]);
 export type ProcessWorkerResult = z.infer<typeof ProcessWorkerResult>;
 
-export type ProcessWorkerRun = (request: ProcessWorkerRequest) => Promise<string>;
+export type ProcessWorkerRun = (
+  request: ProcessWorkerRequest,
+) => Promise<{ readonly text: string; readonly tokens: number }>;
 
 /** Child processes may only open inline children; independent work is refused. */
 export function createChildKernel(runner: InlineWorkerRunner): DelegationKernel {
@@ -56,7 +65,8 @@ export async function serveProcessWorker(
   writeLine(PROCESS_WORKER_ACK);
   let result: ProcessWorkerResult;
   try {
-    result = { status: "completed", output: await run(request) };
+    const output = await run(request);
+    result = { status: "completed", output: output.text, usage: { tokens: output.tokens } };
   } catch (error) {
     result = {
       status: "failed",
@@ -67,7 +77,9 @@ export async function serveProcessWorker(
 }
 
 /** Runs the same Worker loop in the child process. */
-function processWorkerRun(request: ProcessWorkerRequest): Promise<string> {
+function processWorkerRun(
+  request: ProcessWorkerRequest,
+): Promise<{ readonly text: string; readonly tokens: number }> {
   if (request.dbPath !== undefined && Storage.getInitializedDbPath() === null) {
     initialize({ dbPath: request.dbPath });
   }
@@ -80,6 +92,7 @@ function processWorkerRun(request: ProcessWorkerRequest): Promise<string> {
   kernel = createChildKernel(runner);
   return runner({
     delegationId: request.delegationId,
+    operation: request.operation,
     instruction: request.instruction,
     acceptanceCriteria: request.acceptanceCriteria,
     origin: request.origin,

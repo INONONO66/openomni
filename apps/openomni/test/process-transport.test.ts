@@ -53,6 +53,7 @@ test("the entry acks before it works, so delivery is observable separately from 
   await serveProcessWorker(
     JSON.stringify({
       delegationId: "d-1",
+      operation: "ask",
       instruction: "summarize",
       acceptanceCriteria: [],
       origin: { role: "worker", depth: 1, sessionId: "session-origin" },
@@ -65,12 +66,12 @@ test("the entry acks before it works, so delivery is observable separately from 
     },
     async () => {
       order.push("run");
-      return "done";
+      return { text: "done", tokens: 7 };
     },
   );
   expect(written[0]).toBe(PROCESS_WORKER_ACK);
   expect(order).toEqual(["write", "run", "write"]);
-  expect(JSON.parse(written[1] ?? "")).toEqual({ status: "completed", output: "done" });
+  expect(JSON.parse(written[1] ?? "")).toEqual({ status: "completed", output: "done", usage: { tokens: 7 } });
 });
 
 test("a worker that throws is a failed result, not a lost delivery", async () => {
@@ -78,6 +79,7 @@ test("a worker that throws is a failed result, not a lost delivery", async () =>
   await serveProcessWorker(
     JSON.stringify({
       delegationId: "d-1",
+      operation: "ask",
       instruction: "summarize",
       acceptanceCriteria: [],
       origin: { role: "worker", depth: 1, sessionId: "session-origin" },
@@ -96,7 +98,7 @@ test("a worker that throws is a failed result, not a lost delivery", async () =>
 test("a request that does not parse never acks", async () => {
   const written: string[] = [];
   await expect(
-    serveProcessWorker('{"instruction":"no origin"}', (line) => written.push(line), async () => "x"),
+    serveProcessWorker('{"instruction":"no origin"}', (line) => written.push(line), async () => ({ text: "x", tokens: 0 })),
   ).rejects.toThrow("Required");
   expect(written).toEqual([]);
 });
@@ -105,6 +107,7 @@ test("the request schema carries lineage and refuses a malformed origin", () => 
   expect(
     ProcessWorkerRequest.safeParse({
       delegationId: "d-1",
+      operation: "ask",
       instruction: "x",
       acceptanceCriteria: [],
       origin: { role: "worker" },
@@ -115,6 +118,7 @@ test("the request schema carries lineage and refuses a malformed origin", () => 
   expect(
     ProcessWorkerRequest.parse({
       delegationId: "d-1",
+      operation: "ask",
       instruction: "x",
       acceptanceCriteria: [],
       origin: {
@@ -260,13 +264,13 @@ test("a child kernel does not sweep the host's open process row", () => {
     status: "open",
     createdAt: 1_000,
   });
-  const kernel = createChildKernel(async () => "inner");
+  const kernel = createChildKernel(async () => ({ text: "inner", tokens: 0 }));
   expect(DelegationStore.get("d-parent-open")?.status).toBe("open");
   kernel.stop();
 });
 
 test("the child kernel has no process driver", async () => {
-  const kernel = createChildKernel(async () => "inner");
+  const kernel = createChildKernel(async () => ({ text: "inner", tokens: 0 }));
   const result = await kernel.delegate(independentAsk("fork", Date.now() + 5_000), RESIDENT);
   if ("refused" in result) throw new Error(result.refused);
   const settled = await kernel.awaitDelegation(result.handle.delegationId);
