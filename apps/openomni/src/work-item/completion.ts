@@ -1,6 +1,6 @@
 import type { Storage } from "@openomni/ledger";
 import { WorkItemStore } from "@openomni/ledger";
-import { WorkItem } from "@openomni/protocol";
+import { newTraceId, WorkItem } from "@openomni/protocol";
 
 /**
  * Resident-side completion admission (kernel-contract completion law): a
@@ -104,9 +104,44 @@ export function createCompletionPort(options: CompletionPortOptions): Completion
       seen.add(judgment.criterionId);
     }
     const evidenceIds = new Set(current.evidence.map(({ id }) => id));
+    for (const judgment of input.judgments) {
+      if (judgment.value === "asserted") continue;
+      if (judgment.evidenceIds.length === 0) {
+        return refuse(`a ${judgment.value} judgment consumes at least one piece of evidence`);
+      }
+      const missing = judgment.evidenceIds.find((id) => !evidenceIds.has(id));
+      if (missing !== undefined) {
+        return refuse(`judgment references evidence not on the WorkItem: ${missing}`);
+      }
+    }
+    // Terminal linkage only rides evidence that passed, and worker-reported
+    // settlement evidence never does: each verified judgment records durable
+    // Resident verification evidence naming the predicate actually checked.
+    const verificationRevision = current.completionFacts.revision + 1;
+    const verificationEvidence = new Map<string, string>();
+    for (const [index, judgment] of input.judgments.entries()) {
+      if (judgment.value !== "verified") continue;
+      const verificationId = `evidence:verification:${input.workItemId}:${verificationRevision}:${index}`;
+      const written = await WorkItemStore.addEvidence(
+        input.workItemId,
+        {
+          id: verificationId,
+          kind: "custom",
+          description: `resident verification: ${judgment.checkedPredicate}`,
+          passed: true,
+          detail: `checked evidence: ${judgment.evidenceIds.join(", ")}`,
+        },
+        newTraceId(),
+      );
+      if (written === undefined) {
+        return refuse(`WorkItem vanished while recording verification: ${input.workItemId}`);
+      }
+      verificationEvidence.set(judgment.criterionId, verificationId);
+    }
+    const base = WorkItemStore.get(input.workItemId) ?? current;
     const now = options.now();
-    const basisRef = current.completionContract.basisRef;
-    const nextFactsRevision = current.completionFacts.revision + 1;
+    const basisRef = base.completionContract.basisRef;
+    const nextFactsRevision = base.completionFacts.revision + 1;
     const observations: WorkItem.Observation[] = [];
     const results: WorkItem.CriterionResult[] = [];
     const claims: WorkItem.Claim[] = [];
@@ -126,20 +161,17 @@ export function createCompletionPort(options: CompletionPortOptions): Completion
         );
         continue;
       }
-      if (judgment.evidenceIds.length === 0) {
-        return refuse(`a ${judgment.value} judgment consumes at least one piece of evidence`);
-      }
-      const missing = judgment.evidenceIds.find((id) => !evidenceIds.has(id));
-      if (missing !== undefined) {
-        return refuse(`judgment references evidence not on the WorkItem: ${missing}`);
-      }
+      const verificationId = verificationEvidence.get(judgment.criterionId);
       const observation = WorkItem.Observation.parse({
         id: `observation:${input.workItemId}:${nextFactsRevision}:${index}`,
         producer: "resident-completion",
         subjectRef: input.workItemId,
         basisRef,
-        artifactRefs: [...judgment.evidenceIds],
-        provenanceRef: judgment.evidenceIds[0],
+        artifactRefs:
+          verificationId === undefined
+            ? [...judgment.evidenceIds]
+            : [verificationId, ...judgment.evidenceIds],
+        provenanceRef: verificationId ?? judgment.evidenceIds[0],
         ancestryRefs: [],
         observedAt: now,
       });
@@ -176,41 +208,45 @@ export function createCompletionPort(options: CompletionPortOptions): Completion
     const refutedCriterionIds = results
       .filter(({ value }) => value === "refuted")
       .map(({ criterionId }) => criterionId);
-    const unresolved = current.completionFacts.criteria
+    const unresolved = base.completionFacts.criteria
       .filter(({ id, required }) => required && !verifiedCriterionIds.has(id))
       .map(({ id }) => id);
     const admit = unresolved.length === 0 && refutedCriterionIds.length === 0;
     const report = admit
       ? WorkItem.canonicalCompletionReport(
           WorkItem.CompletionReport.parse({
-            summary: `Resident verified ${verifiedCriterionIds.size} acceptance criteria for ${current.name}`,
-            claims: input.judgments.flatMap((judgment) =>
-              judgment.value === "verified"
-                ? [
+            summary: `Resident verified ${verifiedCriterionIds.size} acceptance criteria for ${base.name}`,
+            claims: input.judgments.flatMap((judgment) => {
+              const verificationId =
+                judgment.value === "verified"
+                  ? verificationEvidence.get(judgment.criterionId)
+                  : undefined;
+              return verificationId === undefined
+                ? []
+                : [
                     {
                       statement: criteria.get(judgment.criterionId)?.statement ?? judgment.criterionId,
-                      evidenceIds: [...judgment.evidenceIds],
+                      evidenceIds: [verificationId],
                     },
-                  ]
-                : [],
-            ),
+                  ];
+            }),
           }),
         )
       : undefined;
     const reportRef = report === undefined ? undefined : WorkItem.completionReportReference(report);
-    const requestId = `completion-request:${input.workItemId}:${current.revision}:resident`;
+    const requestId = `completion-request:${input.workItemId}:${base.revision}:resident`;
     const effectiveResultIds = results
       .filter(({ value }) => value === "verified")
       .map(({ id }) => id);
     const admission = WorkItem.CompletionAdmission.parse({
       version: 1,
-      id: `admission:${input.workItemId}:${current.revision + 1}:resident`,
+      id: `admission:${input.workItemId}:${base.revision + 1}:resident`,
       requestId,
       workItemHash: input.workItemId,
       origin: "resident",
-      contractRevision: current.completionContract.revision,
+      contractRevision: base.completionContract.revision,
       basisRef,
-      requestRoot: `request-root:${input.workItemId}:${current.revision}`,
+      requestRoot: `request-root:${input.workItemId}:${base.revision}`,
       proposedFactIds: {
         claims: claims.map(({ id }) => id),
         observations: observations.map(({ id }) => id),
@@ -233,24 +269,24 @@ export function createCompletionPort(options: CompletionPortOptions): Completion
       ...(report === undefined
         ? {}
         : { completionReportSnapshot: report, completionReportRef: reportRef }),
-      expectedHead: current.revision,
-      recordedHead: current.revision + 1,
+      expectedHead: base.revision,
+      recordedHead: base.revision + 1,
       createdAt: now,
     });
     const recorded = WorkItem.Info.parse({
-      ...current,
+      ...base,
       revision: admission.recordedHead,
       completionFacts: {
-        ...current.completionFacts,
+        ...base.completionFacts,
         revision: nextFactsRevision,
-        claims: [...current.completionFacts.claims, ...claims],
-        observations: [...current.completionFacts.observations, ...observations],
-        results: [...current.completionFacts.results, ...results],
-        admissions: [...current.completionFacts.admissions, admission],
+        claims: [...base.completionFacts.claims, ...claims],
+        observations: [...base.completionFacts.observations, ...observations],
+        results: [...base.completionFacts.results, ...results],
+        admissions: [...base.completionFacts.admissions, admission],
       },
-      timestamps: { ...current.timestamps, updated: now },
+      timestamps: { ...base.timestamps, updated: now },
     });
-    if (!options.writer(input.workItemId, current.revision, recorded)) {
+    if (!options.writer(input.workItemId, base.revision, recorded)) {
       return refuse(`completion admission write lost the head race for ${input.workItemId}`);
     }
     if (!admit) {
@@ -264,28 +300,42 @@ export function createCompletionPort(options: CompletionPortOptions): Completion
       ].join("; ");
       return refuse(`completion blocked — ${why}. Only verified results admit.`);
     }
-    const receipt: WorkItem.CompletionTerminalReceipt = {
-      version: 1,
-      hash: input.workItemId,
-      requestId,
-      admissionId: admission.id,
-      contractRevision: admission.contractRevision,
-      basisRef,
-      ...(reportRef === undefined ? {} : { completionReportRef: reportRef }),
-      recordedHead: recorded.revision + 1,
-    };
-    const completedAt = now + 1;
-    const completed = WorkItem.Info.parse({
-      ...recorded,
-      revision: recorded.revision + 1,
-      ...(report === undefined ? {} : { completionReport: report }),
-      completionTerminalReceipt: receipt,
-      timestamps: { ...recorded.timestamps, completed: completedAt, updated: completedAt },
-    });
-    if (!options.writer(input.workItemId, recorded.revision, completed)) {
-      return refuse(`terminal receipt write lost the head race for ${input.workItemId}`);
+    // The admission above is durable; the terminal receipt may lose a head
+    // race against a concurrent writer (e.g. an attempt-close), so re-read
+    // once and retry against the fresh head before giving up.
+    let head = recorded;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const receipt: WorkItem.CompletionTerminalReceipt = {
+        version: 1,
+        hash: input.workItemId,
+        requestId,
+        admissionId: admission.id,
+        contractRevision: admission.contractRevision,
+        basisRef,
+        ...(reportRef === undefined ? {} : { completionReportRef: reportRef }),
+        recordedHead: head.revision + 1,
+      };
+      const completedAt = options.now() + 1;
+      const completed = WorkItem.Info.parse({
+        ...head,
+        revision: head.revision + 1,
+        ...(report === undefined ? {} : { completionReport: report }),
+        completionTerminalReceipt: receipt,
+        timestamps: { ...head.timestamps, completed: completedAt, updated: completedAt },
+      });
+      if (options.writer(input.workItemId, head.revision, completed)) {
+        return { admitted: true, workItemId: input.workItemId };
+      }
+      const reread = WorkItemStore.get(input.workItemId);
+      if (reread === undefined) break;
+      if (reread.completionTerminalReceipt !== undefined) {
+        return { admitted: true, workItemId: input.workItemId };
+      }
+      head = reread;
     }
-    return { admitted: true, workItemId: input.workItemId };
+    return refuse(
+      `terminal receipt write lost the head race for ${input.workItemId}; the admission is recorded — re-run complete_work to finish`,
+    );
   }
 
   return {

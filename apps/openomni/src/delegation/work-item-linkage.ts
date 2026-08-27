@@ -12,6 +12,11 @@ export interface WorkItemLinkage {
   openAssign(input: OpenAssignInput): Promise<string>;
   /** Close the attempt from the settlement fold. Unknown items are a no-op. */
   closeAttempt(input: CloseAttemptInput): Promise<void>;
+  /**
+   * Restart sweep: re-close attempts whose settlement committed but whose
+   * ledger write was lost (closeAttempt is idempotent, so re-runs are safe).
+   */
+  recoverAttempts(lookup: (delegationId: string) => Delegation.Record | undefined): Promise<void>;
 }
 
 interface OpenAssignInput {
@@ -62,8 +67,23 @@ export function createWorkItemLinkage(options: WorkItemLinkageOptions): WorkItem
       },
       traceId,
     );
+    try {
+      await commission(item.workItemId, input, traceId);
+    } catch (error) {
+      // Never leave an orphan pending item behind a refused admission.
+      await WorkItemStore.cancel(item.workItemId, traceId);
+      throw error;
+    }
+    return item.workItemId;
+  }
+
+  async function commission(
+    workItemId: string,
+    input: OpenAssignInput,
+    traceId: string,
+  ): Promise<void> {
     await WorkItemStore.assignExecution(
-      item.workItemId,
+      workItemId,
       {
         executorKind: executorKindOf(input.transport),
         workerRunId: input.delegationId,
@@ -72,7 +92,7 @@ export function createWorkItemLinkage(options: WorkItemLinkageOptions): WorkItem
       traceId,
     );
     const allocated = await WorkItemStore.allocateAttempt(
-      item.workItemId,
+      workItemId,
       {
         contentFingerprint: WorkItem.contentFingerprintOf({
           workInput: input.instruction,
@@ -102,9 +122,8 @@ export function createWorkItemLinkage(options: WorkItemLinkageOptions): WorkItem
       traceId,
     );
     if (allocated === undefined) {
-      throw new Error(`WorkItem ${item.workItemId} refused an attempt at admission`);
+      throw new Error(`WorkItem ${workItemId} refused an attempt at admission`);
     }
-    return item.workItemId;
   }
 
   async function closeAttempt(input: CloseAttemptInput): Promise<void> {
@@ -114,7 +133,6 @@ export function createWorkItemLinkage(options: WorkItemLinkageOptions): WorkItem
     // Unknown item: a legacy record upcast points at nothing durable — no-op.
     if (item === undefined || item.attemptTerminal !== undefined) return;
     const traceId = newTraceId();
-    const completed = settlement.status === "completed";
     const detail =
       settlement.status === "completed"
         ? settlement.output
@@ -123,12 +141,16 @@ export function createWorkItemLinkage(options: WorkItemLinkageOptions): WorkItem
           : "reason" in settlement
             ? settlement.reason
             : undefined;
+    // The worker's report never passes verification by itself: `passed`
+    // stays false so terminal linkage can only ride Resident-verified
+    // evidence. The explicit id makes a re-run of this close a no-op write.
     await WorkItemStore.addEvidence(
       record.workItemId,
       {
+        id: `evidence:delegation:${record.delegationId}:settlement`,
         kind: "custom",
         description: `delegation ${settlement.status}: worker-reported, unverified`,
-        passed: completed,
+        passed: false,
         ...(detail === undefined || detail.length === 0 ? {} : { detail }),
       },
       traceId,
@@ -142,5 +164,23 @@ export function createWorkItemLinkage(options: WorkItemLinkageOptions): WorkItem
     );
   }
 
-  return { openAssign, closeAttempt };
+  async function recoverAttempts(
+    lookup: (delegationId: string) => Delegation.Record | undefined,
+  ): Promise<void> {
+    for (const item of WorkItemStore.list()) {
+      if (
+        item.sourceChannel !== "delegation" ||
+        item.attemptTerminal !== undefined ||
+        item.timestamps.cancelled !== undefined
+      ) {
+        continue;
+      }
+      const record = lookup(item.sourceMessageId);
+      if (record?.status === "settled" && record.settled !== undefined) {
+        await closeAttempt({ record, settlement: record.settled });
+      }
+    }
+  }
+
+  return { openAssign, closeAttempt, recoverAttempts };
 }

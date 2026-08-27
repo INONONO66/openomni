@@ -9,5 +9,6 @@ export function fakeWorkItemLinkage(): WorkItemLinkage {
       return Promise.resolve(`wi-fake-${sequence}`);
     },
     closeAttempt: () => Promise.resolve(),
+    recoverAttempts: () => Promise.resolve(),
   };
 }

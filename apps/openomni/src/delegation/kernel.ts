@@ -1,4 +1,4 @@
-import { Delegation, NamedError, Operational, type BusEvent } from "@openomni/protocol";
+import { Delegation, NamedError, newTraceId, Operational, type BusEvent } from "@openomni/protocol";
 import { DelegationStore } from "@openomni/ledger";
 import type { WorkItemLinkage } from "./work-item-linkage";
 import { z } from "zod";
@@ -390,6 +390,23 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
   function recover(): void {
     if (recovered || stopped) return;
     recovered = true;
+    const workItems = options.workItems;
+    if (workItems !== undefined) {
+      // Re-close attempts whose settlement committed but whose ledger write
+      // was lost before the restart (closeAttempt is idempotent).
+      void workItems.recoverAttempts((delegationId) => store.get(delegationId)).catch(
+        (error: unknown) => {
+          events.publish(Operational.Events.Error, {
+            traceId: newTraceId(),
+            time: options.now(),
+            component: "delegation",
+            msg: "WorkItem attempt recovery sweep failed",
+            error: error instanceof Error ? error.message : String(error),
+            context: {},
+          });
+        },
+      );
+    }
     for (const record of store.listSettledUnwoken()) {
       if (record.transport !== "inline" && record.settled !== undefined) {
         deliverWake(record, record.settled);

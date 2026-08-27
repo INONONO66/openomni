@@ -62,6 +62,7 @@ test("a Resident turn hands work to an inline worker and reports what came back"
   const directory = mkdtempSync(join(tmpdir(), "openomni-delegation-"));
   directories.push(directory);
   const seen: string[] = [];
+  let workerTools: string[] = [];
 
   const app = await startOpenOmni({
     config: {
@@ -79,6 +80,9 @@ test("a Resident turn hands work to an inline worker and reports what came back"
         seen.push(isWorker ? "worker" : "resident");
 
         if (isWorker) {
+          // Composition-root door check: the worker door must never offer
+          // the Resident-only completion surface.
+          workerTools = (input.tools ?? []).map((tool) => tool.name);
           sink.onMessage(message(input, [{ type: "text", text: WORKER_ANSWER } as never]));
           return { type: "stop" };
         }
@@ -125,4 +129,7 @@ test("a Resident turn hands work to an inline worker and reports what came back"
   // Proof the worker was a loop of its own rather than the Resident answering
   // itself: a second provider turn ran in a delegation session.
   expect(seen).toEqual(["resident", "worker"]);
+  expect(workerTools).not.toContain("work_items");
+  expect(workerTools).not.toContain("complete_work");
+  expect(workerTools.length).toBeGreaterThan(0);
 });

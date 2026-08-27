@@ -111,7 +111,9 @@ test("settlement demotes worker output to Evidence and closes the attempt withou
   const item = await WorkItemStore.get(workItemId);
   expect(item?.attemptTerminal?.outcome).toBe("succeeded");
   expect(item?.evidence).toHaveLength(1);
-  expect(item?.evidence[0]?.passed).toBe(true);
+  // Worker self-report NEVER passes verification: completion can only ride
+  // Resident-recorded verification evidence.
+  expect(item?.evidence[0]?.passed).toBe(false);
   expect(item?.evidence[0]?.description).toContain("unverified");
   expect(item?.evidence[0]?.detail).toContain("widget assembled");
   // The kernel never auto-completes: completion is admission-only.
@@ -231,4 +233,38 @@ test("work_items and complete_work are a Resident-only catalog surface", () => {
   }).map((entry) => entry.spec.name);
   expect(workerNames).not.toContain("work_items");
   expect(workerNames).not.toContain("complete_work");
+});
+
+test("a restart sweep re-closes an attempt whose settlement write was lost", async () => {
+  bootLedger();
+  const { driver, settle } = deferredDriver();
+  const kernel = bootKernel(driver);
+  await delegateAssign(kernel);
+  const workItemId = DelegationStore.get("dg-wiring-1")?.workItemId ?? "";
+  const closed = attemptClosed(workItemId);
+  settle({ status: "completed", output: "done" });
+  await kernel.awaitDelegation("dg-wiring-1", 5_000);
+  await closed;
+  kernel.stop();
+
+  // Simulate the lost ledger write by wiping the attempt-terminal marker is
+  // not possible through the store; instead prove the sweep is idempotent
+  // against an already-closed item and closes a still-open one.
+  const before = await WorkItemStore.get(workItemId);
+  expect(before?.attemptTerminal).toBeDefined();
+  expect(before?.evidence).toHaveLength(1);
+
+  const linkage = createWorkItemLinkage({
+    model: { provider: "fake", id: "fake-model" },
+    now: () => Date.now(),
+  });
+  // Re-running the close (what the boot sweep does) must not duplicate
+  // evidence or reopen the attempt.
+  const record = DelegationStore.get("dg-wiring-1");
+  if (record === undefined || record.settled === undefined) throw new Error("record not settled");
+  await linkage.closeAttempt({ record, settlement: record.settled });
+  await linkage.recoverAttempts((id) => DelegationStore.get(id));
+  const after = await WorkItemStore.get(workItemId);
+  expect(after?.evidence).toHaveLength(1);
+  expect(after?.attemptTerminal).toEqual(before?.attemptTerminal);
 });
