@@ -31,6 +31,7 @@ const RefusalCode = z.enum([
   "worker_transport",
   "inline_depth",
   "prepare_failed",
+  "work_item_failed",
 ]);
 type RefusalCode = z.infer<typeof RefusalCode>;
 

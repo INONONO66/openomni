@@ -299,6 +299,20 @@ export const Record = RecordBase.superRefine((record, ctx) => {
       path: ["settled"],
     });
   }
+  if (record.operation === "assign" && record.workItemId === undefined) {
+    ctx.addIssue({
+      code: "custom",
+      message: "an assign record carries the WorkItem it commissioned",
+      path: ["workItemId"],
+    });
+  }
+  if (record.operation !== "assign" && record.workItemId !== undefined) {
+    ctx.addIssue({
+      code: "custom",
+      message: "only assign commissions a WorkItem",
+      path: ["workItemId"],
+    });
+  }
   if (record.settled?.status === "sent" && record.operation !== "notify") {
     ctx.addIssue({
       code: "custom",

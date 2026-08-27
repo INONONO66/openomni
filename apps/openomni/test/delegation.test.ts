@@ -533,6 +533,7 @@ describe("delegation controls and tool surface", () => {
     DelegationStore.create({
       delegationId: "d-expired-channel",
       operation: "assign",
+      workItemId: "wi-expired-channel",
       address: { kind: "actor", actorId: "alice" },
       transport: "channel",
       deadline: 1_000,

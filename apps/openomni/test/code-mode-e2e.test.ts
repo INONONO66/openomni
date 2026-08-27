@@ -162,7 +162,7 @@ test("a cell batches delegation into one turn", async () => {
   ws.close();
 
   // The machine was attached, so the machine-placed tool was offered.
-  expect(answer).toContain("offered=[await_delegation,cancel_delegation,delegate,machines,memory,run_code]");
+  expect(answer).toContain("offered=[await_delegation,cancel_delegation,complete_work,delegate,machines,memory,run_code,work_items]");
   // Three workers ran and their answers came back inside the cell. The value
   // is the cell's final expression as Python rendered it, quotes included.
   expect(answer).toContain("done(check lint); done(check types); done(check tests)");
@@ -224,7 +224,7 @@ test("the machine tool is not offered while nothing is attached", async () => {
   const answer = (JSON.parse(await reply) as { text: string }).text;
   ws.close();
 
-  expect(offered).toEqual(["delegate", "await_delegation", "cancel_delegation", "machines", "memory"]);
+  expect(offered).toEqual(["delegate", "await_delegation", "cancel_delegation", "machines", "memory", "work_items", "complete_work"]);
   // Refused by the one gate that owns this refusal, naming what was missing.
   expect(answer).toContain('tool "run_code" requires capabilities no attached target holds: kernel.py');
   // Enrolled-but-detached is honestly reported, so the model knows why run_code is absent.
