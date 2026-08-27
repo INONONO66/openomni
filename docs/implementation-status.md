@@ -20,6 +20,7 @@ Single source of truth for current wiring between accepted design and running co
 | Curated memory | implemented and wired | `apps/openomni/src/memory/`, `apps/openomni/src/tools/memory.ts` | Bounded system/Owner stores, atomic writes, Resident-only add/replace/remove, snapshot frozen on first session delivery. |
 | Agent loop | implemented and wired | `packages/agent/src/core/` | Stateless loop, policy interception, placement gate, retry, budgets, parallel tools, and compaction. Product lifecycle remains outside the package. |
 | Policy engine | implemented and wired where consumed | `packages/policy/`, `packages/agent/src/core/policy/` | Generic evaluation and agent-loop points survive. Removed product-specific registration sites are not counted as wired. |
+| Drive-loop worker policy | implemented and wired | `apps/openomni/src/delegation/drive-loop.ts`, `apps/openomni/src/delegation/worker-loop.ts` | Assigned native worker runs (inline/process transports) are driven goal-style: continuation cap 8, repetition streak 3, toolless-stall streak 3, live work counts as progress, and a blocked claim is believed only on its third recurrence. Ask/notify runs once; the channel driver is never driven. Attempt terminals record transport-reported usage (tokens, seconds) as visibility only. |
 | IPC transport | implemented and wired | `packages/ipc/`, `packages/machines/`, `apps/openomni/src/delegation/process-driver.ts` | Thin bidirectional transport used by machines and process delegation. |
 
 ## Durable contracts retained in core packages
@@ -57,5 +58,4 @@ The legacy product kernel, local-process coordinator, and old server host were d
 - Connector installation/execution beyond retained protocol and storage primitives (#216 class).
 - Memory.Engine / FTS5 session search (#220).
 - P4 role surfaces (Governor, Jester, Voice).
-- Drive-loop continuation policy on inline/process delegation drivers and Attempt usage accounting (next WorkItem slice).
 - Stakes and effective-authority consumers; any such work must inherit their contracts rather than recreating legacy code.

@@ -303,12 +303,22 @@ export type AttemptOutcome = z.infer<typeof AttemptOutcome>;
  * execution instance). The legacy `lastMessageId` extra was NOT carried
  * over: it never had a production writer, so it earns no vocabulary here.
  */
+/** Transport-reported spend. Visibility only — never an admission input. */
+export const AttemptUsage = z
+  .object({
+    tokens: z.number().int().nonnegative().optional(),
+    seconds: z.number().nonnegative(),
+  })
+  .strict();
+export type AttemptUsage = z.infer<typeof AttemptUsage>;
+
 export const AttemptTerminal = z
   .object({
     attemptId: AttemptId,
     outcome: AttemptOutcome,
     endedAt: z.number(),
     error: z.string().optional(),
+    usage: AttemptUsage.optional(),
   })
   .strict();
 export type AttemptTerminal = z.infer<typeof AttemptTerminal>;

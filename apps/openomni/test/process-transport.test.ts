@@ -2,9 +2,12 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DelegationStore } from "@openomni/ledger";
+import { DelegationStore, WorkItemStore } from "@openomni/ledger";
+import { WorkItem } from "@openomni/protocol";
+import { Bus } from "@openomni/telemetry";
 import { createDelegationKernel } from "../src/delegation/kernel";
 import { createProcessDriver } from "../src/delegation/process-driver";
+import { createWorkItemLinkage } from "../src/delegation/work-item-linkage";
 import {
   createChildKernel,
   PROCESS_WORKER_ACK,
@@ -53,6 +56,7 @@ test("the entry acks before it works, so delivery is observable separately from 
   await serveProcessWorker(
     JSON.stringify({
       delegationId: "d-1",
+      operation: "ask",
       instruction: "summarize",
       acceptanceCriteria: [],
       origin: { role: "worker", depth: 1, sessionId: "session-origin" },
@@ -65,12 +69,12 @@ test("the entry acks before it works, so delivery is observable separately from 
     },
     async () => {
       order.push("run");
-      return "done";
+      return { text: "done", tokens: 7 };
     },
   );
   expect(written[0]).toBe(PROCESS_WORKER_ACK);
   expect(order).toEqual(["write", "run", "write"]);
-  expect(JSON.parse(written[1] ?? "")).toEqual({ status: "completed", output: "done" });
+  expect(JSON.parse(written[1] ?? "")).toEqual({ status: "completed", output: "done", usage: { tokens: 7 } });
 });
 
 test("a worker that throws is a failed result, not a lost delivery", async () => {
@@ -78,6 +82,7 @@ test("a worker that throws is a failed result, not a lost delivery", async () =>
   await serveProcessWorker(
     JSON.stringify({
       delegationId: "d-1",
+      operation: "ask",
       instruction: "summarize",
       acceptanceCriteria: [],
       origin: { role: "worker", depth: 1, sessionId: "session-origin" },
@@ -96,7 +101,7 @@ test("a worker that throws is a failed result, not a lost delivery", async () =>
 test("a request that does not parse never acks", async () => {
   const written: string[] = [];
   await expect(
-    serveProcessWorker('{"instruction":"no origin"}', (line) => written.push(line), async () => "x"),
+    serveProcessWorker('{"instruction":"no origin"}', (line) => written.push(line), async () => ({ text: "x", tokens: 0 })),
   ).rejects.toThrow("Required");
   expect(written).toEqual([]);
 });
@@ -105,6 +110,7 @@ test("the request schema carries lineage and refuses a malformed origin", () => 
   expect(
     ProcessWorkerRequest.safeParse({
       delegationId: "d-1",
+      operation: "ask",
       instruction: "x",
       acceptanceCriteria: [],
       origin: { role: "worker" },
@@ -115,6 +121,7 @@ test("the request schema carries lineage and refuses a malformed origin", () => 
   expect(
     ProcessWorkerRequest.parse({
       delegationId: "d-1",
+      operation: "ask",
       instruction: "x",
       acceptanceCriteria: [],
       origin: {
@@ -260,13 +267,13 @@ test("a child kernel does not sweep the host's open process row", () => {
     status: "open",
     createdAt: 1_000,
   });
-  const kernel = createChildKernel(async () => "inner");
+  const kernel = createChildKernel(async () => ({ text: "inner", tokens: 0 }));
   expect(DelegationStore.get("d-parent-open")?.status).toBe("open");
   kernel.stop();
 });
 
 test("the child kernel has no process driver", async () => {
-  const kernel = createChildKernel(async () => "inner");
+  const kernel = createChildKernel(async () => ({ text: "inner", tokens: 0 }));
   const result = await kernel.delegate(independentAsk("fork", Date.now() + 5_000), RESIDENT);
   if ("refused" in result) throw new Error(result.refused);
   const settled = await kernel.awaitDelegation(result.handle.delegationId);
@@ -298,3 +305,106 @@ test("concurrent process delegations have independent durable ids and answers", 
   );
   expect(new Set(settled).size).toBe(4);
 });
+
+
+const DELEGATION_SRC = new URL("../src/delegation", import.meta.url).pathname;
+const CHILD_DRIVE_ENTRY = `
+import { createChildKernel, serveProcessWorker } from "${DELEGATION_SRC}/process-entry";
+import { createInlineWorkerRunner } from "${DELEGATION_SRC}/worker-loop";
+
+const tokens = { input: 4, output: 5, reasoning: 0, cache: { read: 0, write: 0 } };
+const llm = {
+  resolveProviderModel: async (model) => ({ id: model.id, name: model.id, providerID: model.provider }),
+  run: async (input, sink) => {
+    const id = "fake-" + input.messages.length;
+    const sessionID = input.trace.sessionId;
+    sink.onMessage({
+      info: {
+        id, sessionID, role: "assistant", time: { created: Date.now() }, parentID: "",
+        modelID: input.model.id, providerID: input.model.providerID, agent: "worker",
+        path: { cwd: "", root: "" }, cost: 0, tokens,
+      },
+      parts: [
+        { id: id + "-text", sessionID, messageID: id, type: "text", text: "BLOCKED: the registry is unreachable" },
+        { id: id + "-finish", sessionID, messageID: id, type: "step-finish", reason: "stop", cost: 0, tokens },
+      ],
+    });
+    return { type: "stop" };
+  },
+};
+
+const line = await new Response(Bun.stdin.stream()).text();
+let kernel;
+const runner = createInlineWorkerRunner({
+  model: { provider: "fake", id: "drive-test" },
+  apiKey: "test-key",
+  llm,
+  kernel: () => kernel,
+});
+kernel = createChildKernel(runner);
+await serveProcessWorker(line, (out) => console.log(out), (request) =>
+  runner({
+    delegationId: request.delegationId,
+    operation: request.operation,
+    instruction: request.instruction,
+    acceptanceCriteria: request.acceptanceCriteria,
+    origin: request.origin,
+    signal: new AbortController().signal,
+  }),
+);
+process.exit(0);
+`;
+
+test("an assign rides the real wire: parent driver, spawned child, drive loop, usage, settlement", async () => {
+  // The child OS process runs the REAL serveProcessWorker and the REAL worker
+  // drive loop; only the provider call is stubbed, exactly where
+  // processWorkerRun would talk to a model.
+  const entry = fakeEntry(CHILD_DRIVE_ENTRY);
+  const kernel = createDelegationKernel({
+    drivers: {
+      process: createProcessDriver({ command: [process.execPath, entry], worker: WORKER }),
+    },
+    now: () => Date.now(),
+    newDelegationId: () => "d-wire-drive",
+    wake: () => undefined,
+    workItems: createWorkItemLinkage({ model: WORKER.model, now: () => Date.now() }),
+  });
+  const result = await kernel.delegate(
+    {
+      operation: "assign",
+      address: { kind: "core", scope: "independent" },
+      payload: { text: "publish the package" },
+      acceptanceCriteria: ["the package is live"],
+      deadline: Date.now() + 20_000,
+    },
+    RESIDENT,
+  );
+  if ("refused" in result) throw new Error(result.refused);
+  const workItemId = DelegationStore.get("d-wire-drive")?.workItemId ?? "";
+  expect(workItemId).not.toBe("");
+  // Subscribe after admission, correlated to THIS work item: attempt
+  // ALLOCATION also publishes an Updated event whose fields clear
+  // `attemptTerminal` — only the post-settlement closure event counts.
+  const closed = new Promise<void>((resolve) => {
+    const unsubscribe = Bus.subscribe(WorkItem.Events.Updated, (event) => {
+      if (
+        event.payload.workItemId === workItemId &&
+        event.payload.fields.includes("attemptTerminal")
+      ) {
+        unsubscribe();
+        resolve();
+      }
+    });
+  });
+  const settled = await kernel.awaitDelegation(result.handle.delegationId, 20_000);
+  if (settled.kind !== "settled" || settled.settlement.status !== "completed") {
+    throw new Error(`process did not settle completed: ${JSON.stringify(settled)}`);
+  }
+  // Drive loop ran in the child: three driven runs, blocked stop, summed spend.
+  expect(settled.settlement.output).toBe("[drive stopped: blocked]\nBLOCKED: the registry is unreachable");
+  expect(settled.settlement.usage).toEqual({ tokens: 27 });
+  await closed;
+  const item = await WorkItemStore.get(workItemId);
+  expect(item?.attemptTerminal).toMatchObject({ usage: { tokens: 27 } });
+  kernel.stop();
+}, 20_000);

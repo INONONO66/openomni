@@ -103,7 +103,11 @@ test("settlement demotes worker output to Evidence and closes the attempt withou
   const workItemId = DelegationStore.get("dg-wiring-1")?.workItemId ?? "";
   const closed = attemptClosed(workItemId);
 
-  settle({ status: "completed", output: "widget assembled; report at /tmp/report.md" });
+  settle({
+    status: "completed",
+    output: "widget assembled; report at /tmp/report.md",
+    usage: { tokens: 4321 },
+  });
   const settlement = await kernel.awaitDelegation("dg-wiring-1", 5_000);
   expect(settlement.kind).toBe("settled");
   await closed;
@@ -119,6 +123,10 @@ test("settlement demotes worker output to Evidence and closes the attempt withou
   // The kernel never auto-completes: completion is admission-only.
   expect(WorkItem.deriveStatus(item as WorkItem.Info)).not.toBe("completed");
   expect(item?.completionTerminalReceipt).toBeUndefined();
+  // Usage is visibility only: recorded on the attempt terminal, never an
+  // admission input.
+  expect(item?.attemptTerminal?.usage?.tokens).toBe(4321);
+  expect(item?.attemptTerminal?.usage?.seconds).toBeGreaterThanOrEqual(0);
 });
 
 test("a failed settlement fails the WorkItem with failing evidence", async () => {
@@ -235,6 +243,35 @@ test("work_items and complete_work are a Resident-only catalog surface", () => {
   expect(workerNames).not.toContain("complete_work");
 });
 
+test("a crash between settlement and closure loses nothing: the sweep rebuilds the terminal with its tokens", async () => {
+  bootLedger();
+  const { driver } = deferredDriver();
+  const kernel = bootKernel(driver);
+  await delegateAssign(kernel);
+  const workItemId = DelegationStore.get("dg-wiring-1")?.workItemId ?? "";
+  // The settlement CAS commits directly against the store — the kernel's
+  // closeAttempt hook never fires, exactly the crash window recovery covers.
+  DelegationStore.settleOnce("dg-wiring-1", {
+    status: "completed",
+    delegationId: "dg-wiring-1",
+    output: "done before the crash",
+    at: Date.now(),
+    usage: { tokens: 777 },
+  });
+  kernel.stop();
+  expect((await WorkItemStore.get(workItemId))?.attemptTerminal).toBeUndefined();
+
+  const linkage = createWorkItemLinkage({
+    model: { provider: "fake", id: "fake-model" },
+    now: () => Date.now(),
+  });
+  await linkage.recoverAttempts((id) => DelegationStore.get(id));
+  const after = await WorkItemStore.get(workItemId);
+  expect(after?.attemptTerminal).toMatchObject({ usage: { tokens: 777 } });
+  expect(after?.evidence).toHaveLength(1);
+  expect(after?.evidence[0]?.passed).toBe(false);
+});
+
 test("a restart sweep re-closes an attempt whose settlement write was lost", async () => {
   bootLedger();
   const { driver, settle } = deferredDriver();
@@ -242,7 +279,7 @@ test("a restart sweep re-closes an attempt whose settlement write was lost", asy
   await delegateAssign(kernel);
   const workItemId = DelegationStore.get("dg-wiring-1")?.workItemId ?? "";
   const closed = attemptClosed(workItemId);
-  settle({ status: "completed", output: "done" });
+  settle({ status: "completed", output: "done", usage: { tokens: 555 } });
   await kernel.awaitDelegation("dg-wiring-1", 5_000);
   await closed;
   kernel.stop();
@@ -262,6 +299,9 @@ test("a restart sweep re-closes an attempt whose settlement write was lost", asy
   // evidence or reopen the attempt.
   const record = DelegationStore.get("dg-wiring-1");
   if (record === undefined || record.settled === undefined) throw new Error("record not settled");
+  // Tokens ride the durable settlement, so a crash between settlement and
+  // attempt closure loses nothing: the sweep re-closes from this record alone.
+  expect(record.settled).toMatchObject({ status: "completed", usage: { tokens: 555 } });
   await linkage.closeAttempt({ record, settlement: record.settled });
   await linkage.recoverAttempts((id) => DelegationStore.get(id));
   const after = await WorkItemStore.get(workItemId);
@@ -276,7 +316,7 @@ test("completion re-runs the whole admission recipe when the receipt loses a hea
   await delegateAssign(kernel);
   const workItemId = DelegationStore.get("dg-wiring-1")?.workItemId ?? "";
   const closed = attemptClosed(workItemId);
-  settle({ status: "completed", output: "done" });
+  settle({ status: "completed", output: "done", usage: { tokens: 555 } });
   await kernel.awaitDelegation("dg-wiring-1", 5_000);
   await closed;
   kernel.stop();

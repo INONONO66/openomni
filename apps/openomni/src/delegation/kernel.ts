@@ -12,7 +12,12 @@ import {
 
 /** What a transport reports after it has been dispatched. */
 export type DriverOutcome =
-  | { readonly status: "completed"; readonly output: string }
+  | {
+      readonly status: "completed";
+      readonly output: string;
+      /** Transport-reported spend; visibility only, never an admission input. */
+      readonly usage?: { readonly tokens: number };
+    }
   | { readonly status: "failed"; readonly error: string }
   | { readonly status: "cancelled"; readonly reason: string }
   | { readonly status: "delivery_failed"; readonly reason: string }
@@ -166,7 +171,13 @@ function outcomeToSettlement(
 ): Delegation.Settled {
   switch (outcome.status) {
     case "completed":
-      return { status: "completed", delegationId, output: outcome.output, at };
+      return {
+        status: "completed",
+        delegationId,
+        output: outcome.output,
+        at,
+        ...(outcome.usage === undefined ? {} : { usage: outcome.usage }),
+      };
     case "failed":
       return { status: "failed", delegationId, error: outcome.error, at };
     case "cancelled":
@@ -261,10 +272,7 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
    * waiter notification, timer cleanup, and wake delivery happen only after
    * that CAS has recorded the settlement.
    */
-  function settle(
-    delegationId: string,
-    candidate: Delegation.Settled,
-  ): Delegation.Settled | undefined {
+  function settle(delegationId: string, candidate: Delegation.Settled): Delegation.Settled | undefined {
     const current = store.get(delegationId);
     if (current === undefined) return undefined;
     if (current.status === "settled") return current.settled;
@@ -312,7 +320,9 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
     const workItems = options.workItems;
     if (persisted.operation === "assign" && persisted.workItemId !== undefined && workItems !== undefined) {
       void Promise.resolve()
-        .then(() => workItems.closeAttempt({ record: persisted, settlement: winner }))
+        .then(() =>
+          workItems.closeAttempt({ record: persisted, settlement: winner }),
+        )
         .catch((error: unknown) => {
           events.publish(Operational.Events.Error, {
             traceId: delegationId,

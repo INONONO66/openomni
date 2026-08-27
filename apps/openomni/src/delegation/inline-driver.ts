@@ -6,13 +6,14 @@ import type { DelegationDriver, DriverOutcome, DriverReport } from "./kernel";
 export type InlineWorkerRunner = (
   input: {
     readonly delegationId: string;
+    readonly operation: Delegation.Operation;
     readonly instruction: string;
     readonly acceptanceCriteria: readonly string[];
     /** Admission-stamped worker identity and delegation lineage. */
     readonly origin: DelegationOrigin;
     readonly signal: AbortSignal;
   },
-) => Promise<string>;
+) => Promise<{ readonly text: string; readonly tokens: number }>;
 
 /**
  * The volatile inline transport. The kernel still records it before this runs,
@@ -30,6 +31,7 @@ export function createInlineDriver(run: InlineWorkerRunner): DelegationDriver {
       report?.delivered();
       const output = await run({
         delegationId: handle.delegationId,
+        operation: admitted.request.operation,
         instruction: admitted.request.payload.text,
         acceptanceCriteria: admitted.request.acceptanceCriteria ?? [],
         origin: admitted.childOrigin,
@@ -40,7 +42,7 @@ export function createInlineDriver(run: InlineWorkerRunner): DelegationDriver {
       // kernel's terminal CAS. Reporting cancelled also avoids presenting it
       // as usable output to a caller whose inline turn is still unwinding.
       if (signal.aborted) return { status: "cancelled", reason: "delegation stopped" };
-      return { status: "completed", output };
+      return { status: "completed", output: output.text, usage: { tokens: output.tokens } };
     },
   };
 }

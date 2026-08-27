@@ -51,6 +51,7 @@ interface AttemptRunView {
 type AttemptRunTerminalExtra = Readonly<{
   endedAt?: number;
   error?: string;
+  usage?: WorkItem.AttemptUsage;
 }>;
 
 /** Acquire/finish contention resolves as "not acquired", never as a crash. */
@@ -309,6 +310,7 @@ export namespace WorkItemAttemptRun {
         outcome,
         endedAt: extra.endedAt ?? now,
         ...(extra.error === undefined ? {} : { error: extra.error }),
+        ...(extra.usage === undefined ? {} : { usage: extra.usage }),
       });
       const failed = outcome === "failed" || outcome === "interrupted";
       const cancelled = outcome === "cancelled";
