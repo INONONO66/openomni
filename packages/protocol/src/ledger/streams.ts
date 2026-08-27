@@ -122,13 +122,6 @@ export const StreamRegistry = {
     factTypes: ["gateway.send.admitted"],
     status: "shipped",
   },
-  effect: {
-    stream: "effect:<effectId>",
-    heads: "intent at seq 1 (effectId is the idempotency key), exactly one outcome fact after",
-    conflictMeans: "effect id already intended — reconciliation owns the retry (#492)",
-    factTypes: ["effect.intended", "effect.confirmed", "effect.failed"],
-    status: "shipped (#492 — writers at session effect/index.ts, callers in openomni effect/)",
-  },
 } as const;
 
 /**
@@ -206,49 +199,3 @@ export const CommandDenied = CommandVerdictBase.extend({
   verdict: z.enum(["deny", "pending"]),
 }).strict();
 export type CommandDenied = z.infer<typeof CommandDenied>;
-
-/**
- * Effect intent/outcome vocabulary (C3 ruling 3) — SHIPPED by #492: the
- * writers live in the session EffectStore (intent at head 0, terminal fact at
- * head 1) and the drivers/reconcilers in openomni effect/. The normative
- * sequence is `intent(pending) -> idempotent effect -> confirmed|failed` on
- * the stream `effect:<effectId>`, where `effectId` (the intent event id) is
- * the idempotency key reconciliation resolves under after a crash.
- */
-export const EffectIntended = z
-  .object({
-    effectId: z.string().min(1),
-    kind: z.string().min(1),
-    target: z.string().min(1).optional(),
-    workItemHash: z.string().min(1).optional(),
-    attemptId: z.string().min(1).optional(),
-    /**
-     * Whether a replay/recovery consumer may re-execute this effect ("safe")
-     * or must only read back its recorded outcome ("never"). Written at
-     * record time by the effect service from the driver's declaration — the
-     * one party that knows the effect's nature. Optional ONLY as a
-     * persisted-data boundary: rows recorded before this vocabulary existed
-     * carry no tag, and every consumer must treat absence as "never".
-     */
-    replay: z.enum(["never", "safe"]).optional(),
-  })
-  .strict();
-export type EffectIntended = z.infer<typeof EffectIntended>;
-
-/** `effect.confirmed` — the driver's definite success receipt (#492-wired). */
-export const EffectConfirmed = z
-  .object({
-    effectId: z.string().min(1),
-    receipt: z.string().min(1).optional(),
-  })
-  .strict();
-export type EffectConfirmed = z.infer<typeof EffectConfirmed>;
-
-/** `effect.failed` — the driver's definite failure, distinct from unknown (#492-wired). */
-export const EffectFailed = z
-  .object({
-    effectId: z.string().min(1),
-    reason: z.string().min(1),
-  })
-  .strict();
-export type EffectFailed = z.infer<typeof EffectFailed>;

@@ -55,12 +55,4 @@ export namespace Ledger {
   export const CommandDenied = Streams.CommandDenied;
   export type CommandDenied = Streams.CommandDenied;
 
-  export const EffectIntended = Streams.EffectIntended;
-  export type EffectIntended = Streams.EffectIntended;
-
-  export const EffectConfirmed = Streams.EffectConfirmed;
-  export type EffectConfirmed = Streams.EffectConfirmed;
-
-  export const EffectFailed = Streams.EffectFailed;
-  export type EffectFailed = Streams.EffectFailed;
 }
