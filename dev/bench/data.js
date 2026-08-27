@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787847100287,
+  "lastUpdate": 1787847499659,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -63173,6 +63173,90 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 531230,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "84490b6228e59136c7ff43da1e1a4c770014b552",
+          "message": "feat(protocol): settlementToAttemptOutcome — single owner of settlement→attempt terminal mapping (#813)\n\nDelegation.settlementToAttemptOutcome (delegation/attempt-linkage.ts):\npure fold, exhaustive over Exclude<SettledStatus,'sent'> —\ncompleted→succeeded, failed→failed, cancelled→cancelled,\ndelivery_failed|no_response|interrupted→interrupted. sent is excluded\nfrom the domain (notify carries no WorkItem attempt); a forced runtime\ncall throws a pinned refusal.\n\nRED-first: 7 fail before implementation, 7 pass after.\n\nNote: the assign⇒workItemId superRefine planned for this slice moves to\nthe app-wiring PR — the invariant must be born in the same PR as its\nwriter (the kernel does not stamp workItemId yet; landing the refinement\nnow would break every existing assign path).",
+          "timestamp": "2026-08-28T01:17:08+09:00",
+          "tree_id": "9e07537632f57112d824503b90f0f10d56afe1cc",
+          "url": "https://github.com/INONONO66/openomni/commit/84490b6228e59136c7ff43da1e1a4c770014b552"
+        },
+        "date": 1787847498671,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1798,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 13093,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 6907,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 759,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 699,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1028,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 37,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1276,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 530,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 31384,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 1678,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 422592,
             "unit": "ns/op"
           }
         ]
