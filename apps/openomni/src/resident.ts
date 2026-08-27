@@ -9,12 +9,11 @@ import type { Placement } from "@openomni/placement";
 import type { Gateway, Ingress, Message, Model } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import type { DelegationOrigin } from "./delegation/admission";
+import { buildAgentPrompt } from "./prompt/build";
+import { RESIDENT_PRESET } from "./prompt/roles";
 import type { CatalogPorts } from "./tools/catalog";
 import { catalogEntries } from "./tools/catalog";
 import { createDispatcher } from "./tools/dispatch";
-
-const RESIDENT_SYSTEM_PROMPT =
-  "You are the Owner's Resident. You judge and decide; you do not execute. When work needs doing, hand it to a worker with the delegate tool and state plainly how it ended — a deadline passing means the outcome is unknown, not that the work failed.";
 
 const EVIDENCE_ONLY_TOOL_REFUSAL =
   "tool execution denied: this turn is evidence-only and may not drive tools";
@@ -96,17 +95,19 @@ export function createResident(options: ResidentOptions) {
 
   function systemPromptFor(sessionId: string): string {
     const memory = options.tools.memory;
-    if (memory === undefined) return RESIDENT_SYSTEM_PROMPT;
-    let snapshot = sessionSnapshots.get(sessionId);
-    if (snapshot === undefined) {
-      snapshot = memory.render();
-      if (sessionSnapshots.size >= SNAPSHOT_CAP) {
-        const oldest = sessionSnapshots.keys().next().value;
-        if (oldest !== undefined) sessionSnapshots.delete(oldest);
+    let snapshot: string | undefined;
+    if (memory !== undefined) {
+      snapshot = sessionSnapshots.get(sessionId);
+      if (snapshot === undefined) {
+        snapshot = memory.render();
+        if (sessionSnapshots.size >= SNAPSHOT_CAP) {
+          const oldest = sessionSnapshots.keys().next().value;
+          if (oldest !== undefined) sessionSnapshots.delete(oldest);
+        }
+        sessionSnapshots.set(sessionId, snapshot);
       }
-      sessionSnapshots.set(sessionId, snapshot);
     }
-    return snapshot === "" ? RESIDENT_SYSTEM_PROMPT : `${RESIDENT_SYSTEM_PROMPT}\n\n${snapshot}`;
+    return buildAgentPrompt(RESIDENT_PRESET, { memorySnapshot: snapshot });
   }
 
   return async function deliver(delivery: Gateway.Deliver): Promise<Ingress.IngressResult> {

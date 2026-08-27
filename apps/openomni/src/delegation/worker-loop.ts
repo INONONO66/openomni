@@ -1,14 +1,13 @@
 import { ChatAgent, type ChatAgentConfig } from "@openomni/agent";
 import type { Model } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
+import { buildAgentPrompt } from "../prompt/build";
+import { WORKER_PRESET } from "../prompt/roles";
 import { catalogEntries } from "../tools/catalog";
 import { createDispatcher, HOST_TARGET } from "../tools/dispatch";
 import { renderInstruction } from "./instruction";
 import type { DelegationKernel } from "./kernel";
 import type { InlineWorkerRunner } from "./inline-driver";
-
-const WORKER_SYSTEM_PROMPT =
-  "You are a Worker. Do the work you were handed and report what you found, plainly and without asking for confirmation. You may open a same-domain child worker for a piece of it; commissioning independent work is the Resident's call, not yours.";
 
 export interface WorkerLoopOptions {
   readonly model: Model.Ref;
@@ -31,7 +30,7 @@ export function createInlineWorkerRunner(options: WorkerLoopOptions): InlineWork
 
     const agent = ChatAgent.create({
       events: Bus,
-      systemPrompt: WORKER_SYSTEM_PROMPT,
+      systemPrompt: buildAgentPrompt(WORKER_PRESET),
       tools: catalog.specs,
       toolTargets: [HOST_TARGET],
       toolExecutor: catalog.execute,
