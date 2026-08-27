@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787847863716,
+  "lastUpdate": 1787850540019,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -63341,6 +63341,90 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 527132,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "623f39a177bd0d1990a4e89bf6fc8c3fbe815790",
+          "message": "feat: wire assign delegation onto the WorkItem contract (#815)\n\n* feat: wire assign delegation onto the WorkItem contract\n\nassign commissions a WorkItem+Attempt at admission, settlement demotes\ndriver output to unverified Evidence and closes the attempt via the\nsettlementToAttemptOutcome fold, and Resident-only work_items/\ncomplete_work tools admit completion only through verified evidence-\nbacked judgments under the ledger completion-admission writer.\n\n* fix: harden WorkItem wiring per adversarial review\n\n- settlement evidence never passes verification; completion admits only\n  through durable Resident verification evidence (BLOCKER)\n- openAssign cancels the WorkItem when commissioning fails (orphans)\n- closeAttempt idempotent via explicit evidence id; boot recover sweep\n  re-closes attempts whose ledger write was lost\n- terminal receipt retries once on a lost head race, admission preserved\n- worker-door e2e assertion: completion surface never offered\n\n* fix: re-run the full completion recipe on a lost receipt head race\n\nTerminal linkage requires the receipt to immediately follow its\nadmission head, so a receipt can never be patched onto an advanced\nhead: a lost race now re-reads and re-runs facts+admission+receipt\nagainst the fresh head (bounded), pinned by a hostile-interleaving\nregression test.",
+          "timestamp": "2026-08-27T17:07:45Z",
+          "tree_id": "cd23601d1e8bca906d06298a1a652198b5c92f00",
+          "url": "https://github.com/INONONO66/openomni/commit/623f39a177bd0d1990a4e89bf6fc8c3fbe815790"
+        },
+        "date": 1787850538365,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2218,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15796,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8255,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 954,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 859,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1523,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 44,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1512,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 678,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 45318,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2234,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 506301,
             "unit": "ns/op"
           }
         ]
