@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787847499659,
+  "lastUpdate": 1787847863716,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -63257,6 +63257,90 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 422592,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "743d6c5fe58e03295af8031dc84e6630cb255571",
+          "message": "feat(openomni): shared prompt-assembly layer (#814)\n\n* feat(openomni): add shared prompt assembly\n\n* test(openomni): pin section order and snapshot-cap eviction\n\nAdversarial review mutation probes survived on two invariants: the\npolicies->style section order in buildAgentPrompt and the SNAPSHOT_CAP\neviction in the resident snapshot map. Pin both — a full-preset exact\nassembly assertion, and a direct-seam lifecycle test that freezes,\nevicts past the cap, and re-freezes to current memory.",
+          "timestamp": "2026-08-27T16:23:09Z",
+          "tree_id": "5b639cab859e62d614a8ae949b0599a622e987fa",
+          "url": "https://github.com/INONONO66/openomni/commit/743d6c5fe58e03295af8031dc84e6630cb255571"
+        },
+        "date": 1787847862698,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2222,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15108,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8002,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1100,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 970,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1737,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1557,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 776,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 46147,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2439,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 527132,
             "unit": "ns/op"
           }
         ]
