@@ -30,8 +30,6 @@ interface OpenAssignInput {
 interface CloseAttemptInput {
   readonly record: Delegation.Record;
   readonly settlement: Delegation.Settled;
-  /** Transport-reported spend; visibility only, never an admission input. */
-  readonly usage?: { readonly tokens: number };
 }
 
 export interface WorkItemLinkageOptions {
@@ -129,7 +127,10 @@ export function createWorkItemLinkage(options: WorkItemLinkageOptions): WorkItem
   }
 
   async function closeAttempt(input: CloseAttemptInput): Promise<void> {
-    const { record, settlement, usage } = input;
+    const { record, settlement } = input;
+    // Spend rides the durable settlement itself, so a restart-sweep re-close
+    // recovers the same tokens the live fold would have recorded.
+    const tokens = settlement.status === "completed" ? settlement.usage?.tokens : undefined;
     if (record.workItemId === undefined || settlement.status === "sent") return;
     const item = await WorkItemStore.get(record.workItemId);
     // Unknown item: a legacy record upcast points at nothing durable — no-op.
@@ -166,7 +167,7 @@ export function createWorkItemLinkage(options: WorkItemLinkageOptions): WorkItem
         endedAt: options.now(),
         usage: WorkItem.AttemptUsage.parse({
           seconds: Math.max(0, (settlement.at - record.createdAt) / 1000),
-          ...(usage === undefined ? {} : { tokens: usage.tokens }),
+          ...(tokens === undefined ? {} : { tokens }),
         }),
       },
     );

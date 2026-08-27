@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import type { RunInput, Sink } from "@openomni/llm";
 import type { Message } from "@openomni/protocol";
 import type { DelegationKernel } from "../src/delegation/kernel";
-import { createChildKernel } from "../src/delegation/process-entry";
+import { createChildKernel, PROCESS_WORKER_ACK, serveProcessWorker } from "../src/delegation/process-entry";
 import { createInlineWorkerRunner } from "../src/delegation/worker-loop";
 
 const ORIGIN = { role: "worker", depth: 1, sessionId: "session-drive" } as const;
@@ -109,4 +109,42 @@ test("an assigned worker that finishes naturally is not nannied", async () => {
   stop();
   expect(runs).toBe(1);
   expect(output.text).toBe("done; the package is live");
+});
+
+test("the process wire drives an assign end to end: request line in, driven usage out", async () => {
+  const { runner, stop } = bootRunner(async (input, sink) => {
+    sink.onMessage(reply(input, "BLOCKED: the registry is unreachable"));
+    return { type: "stop" };
+  });
+  const written: string[] = [];
+  // The run callback mirrors processWorkerRun: the parsed wire request feeds
+  // the same runner the child process builds, operation included.
+  await serveProcessWorker(
+    JSON.stringify({
+      delegationId: "d-wire-assign",
+      operation: "assign",
+      instruction: "publish the package",
+      acceptanceCriteria: ["the package is live"],
+      origin: ORIGIN,
+      model: { provider: "fake", id: "drive-test" },
+      apiKey: "test-key",
+    }),
+    (line) => written.push(line),
+    (request) =>
+      runner({
+        delegationId: request.delegationId,
+        operation: request.operation,
+        instruction: request.instruction,
+        acceptanceCriteria: request.acceptanceCriteria,
+        origin: request.origin,
+        signal: new AbortController().signal,
+      }),
+  );
+  stop();
+  expect(written[0]).toBe(PROCESS_WORKER_ACK);
+  expect(JSON.parse(written[1] ?? "")).toEqual({
+    status: "completed",
+    output: "[drive stopped: blocked]\nBLOCKED: the registry is unreachable",
+    usage: { tokens: 27 },
+  });
 });

@@ -166,6 +166,8 @@ const SettledUnion = z.discriminatedUnion("status", [
       delegationId: z.string().min(1),
       output: z.string(),
       at: z.number(),
+      /** Transport-reported spend; visibility only, never an admission input. */
+      usage: z.object({ tokens: z.number().int().nonnegative() }).strict().optional(),
     })
     .strict(),
   z

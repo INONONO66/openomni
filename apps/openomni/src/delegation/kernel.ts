@@ -171,7 +171,13 @@ function outcomeToSettlement(
 ): Delegation.Settled {
   switch (outcome.status) {
     case "completed":
-      return { status: "completed", delegationId, output: outcome.output, at };
+      return {
+        status: "completed",
+        delegationId,
+        output: outcome.output,
+        at,
+        ...(outcome.usage === undefined ? {} : { usage: outcome.usage }),
+      };
     case "failed":
       return { status: "failed", delegationId, error: outcome.error, at };
     case "cancelled":
@@ -266,11 +272,7 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
    * waiter notification, timer cleanup, and wake delivery happen only after
    * that CAS has recorded the settlement.
    */
-  function settle(
-    delegationId: string,
-    candidate: Delegation.Settled,
-    usage?: { readonly tokens: number },
-  ): Delegation.Settled | undefined {
+  function settle(delegationId: string, candidate: Delegation.Settled): Delegation.Settled | undefined {
     const current = store.get(delegationId);
     if (current === undefined) return undefined;
     if (current.status === "settled") return current.settled;
@@ -319,11 +321,7 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
     if (persisted.operation === "assign" && persisted.workItemId !== undefined && workItems !== undefined) {
       void Promise.resolve()
         .then(() =>
-          workItems.closeAttempt({
-            record: persisted,
-            settlement: winner,
-            ...(usage === undefined ? {} : { usage }),
-          }),
+          workItems.closeAttempt({ record: persisted, settlement: winner }),
         )
         .catch((error: unknown) => {
           events.publish(Operational.Events.Error, {
@@ -472,11 +470,7 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
         const outcome = await driver.run(admitted, handle, controller.signal, report);
         if (stopped) return undefined;
         const settlement = outcomeToSettlement(handle.delegationId, outcome, options.now());
-        return settle(
-          handle.delegationId,
-          settlement,
-          outcome.status === "completed" ? outcome.usage : undefined,
-        );
+        return settle(handle.delegationId, settlement);
       } catch (error) {
         if (stopped) return undefined;
         return settle(handle.delegationId, {

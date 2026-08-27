@@ -60,6 +60,17 @@ test("a blocked claim needs three recurrences before the loop believes it", () =
   if (early.action === "continue") expect(early.prompt).toContain("BLOCKED");
 });
 
+test("a truncated run opening with BLOCKED is still live work: the blocked streak resets", () => {
+  const truncated: DriveObservation = { text: "BLOCKED: retrying the registry", finishReason: "max-steps" };
+  // The mid-flight run resets the streak, so a third stop-claim continues...
+  expect(drive([blocked("BLOCKED: a"), truncated, blocked("BLOCKED: b")]).action).toBe("continue");
+  // ...and only three consecutive settled claims after the reset stop the loop.
+  expect(drive([blocked("BLOCKED: a"), truncated, blocked("BLOCKED: b"), blocked("BLOCKED: c"), blocked("BLOCKED: d")])).toEqual({
+    action: "stop",
+    reason: "blocked",
+  });
+});
+
 test("real progress resets a blocked streak", () => {
   const outcome = drive([blocked("BLOCKED: a"), working, blocked("BLOCKED: b"), working, blocked("BLOCKED: c")]);
   expect(outcome.action).toBe("continue");

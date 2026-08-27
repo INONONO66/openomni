@@ -48,19 +48,20 @@ export function createInlineWorkerRunner(options: WorkerLoopOptions): InlineWork
         time: Date.now(),
       },
     ];
-    const traceContext = {
-      traceId: crypto.randomUUID(),
-      sessionId: `delegation-${input.delegationId}`,
-      runId: crypto.randomUUID(),
-      agentName: "worker",
-    };
+    const traceId = crypto.randomUUID();
+    const sessionId = `delegation-${input.delegationId}`;
 
     // Assigned work is driven goal-style (drive-loop.ts); ask/notify runs
     // once — a question is answered, never nannied.
     let tokens = 0;
     let state: DriveState = initialDriveState();
     for (;;) {
-      const result = await agent.run({ messages, traceContext });
+      // Each driven run is its own run identity so telemetry never conflates
+      // two agent runs under one runId.
+      const result = await agent.run({
+        messages,
+        traceContext: { traceId, sessionId, runId: crypto.randomUUID(), agentName: "worker" },
+      });
       tokens += result.usage.totalTokens;
       if (input.operation !== "assign") return { text: result.text, tokens };
       const decision = decideDrive(state, {

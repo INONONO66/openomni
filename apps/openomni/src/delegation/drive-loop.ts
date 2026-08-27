@@ -47,7 +47,11 @@ const BLOCKED_PROMPT =
 
 export function decideDrive(state: DriveState, observation: DriveObservation): DriveDecision {
   const runs = state.runs + 1;
-  const blocked = BLOCKED_CLAIM.test(observation.text);
+  // "max-steps" is live work: the step budget ended mid-flight, which is
+  // progress — it resets the stall and blocked streaks even when the
+  // truncated text happens to open with a BLOCKED claim.
+  const liveWork = observation.finishReason === "max-steps";
+  const blocked = !liveWork && BLOCKED_CLAIM.test(observation.text);
   const repetitionStreak = state.lastText === observation.text ? state.repetitionStreak + 1 : 1;
   const blockedStreak = blocked ? state.blockedStreak + 1 : 0;
   // A recurring blocker is the truthful stop reason even when its wording
@@ -56,8 +60,6 @@ export function decideDrive(state: DriveState, observation: DriveObservation): D
   if (repetitionStreak >= DRIVE_REPETITION_STREAK) return { action: "stop", reason: "repetition" };
   if (observation.finishReason === "stop" && !blocked) return { action: "done" };
 
-  // "max-steps" is live work: the step budget ended mid-flight, which is
-  // progress — it resets the stall and blocked streaks.
   const stallStreak = observation.finishReason === "stalled" ? state.stallStreak + 1 : 0;
   if (stallStreak >= DRIVE_TOOLLESS_STALL_STREAK) return { action: "stop", reason: "toolless_stall" };
   if (runs >= DRIVE_CONTINUATION_CAP) return { action: "stop", reason: "continuation_cap" };

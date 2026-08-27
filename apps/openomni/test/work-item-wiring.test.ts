@@ -250,7 +250,7 @@ test("a restart sweep re-closes an attempt whose settlement write was lost", asy
   await delegateAssign(kernel);
   const workItemId = DelegationStore.get("dg-wiring-1")?.workItemId ?? "";
   const closed = attemptClosed(workItemId);
-  settle({ status: "completed", output: "done" });
+  settle({ status: "completed", output: "done", usage: { tokens: 555 } });
   await kernel.awaitDelegation("dg-wiring-1", 5_000);
   await closed;
   kernel.stop();
@@ -270,6 +270,9 @@ test("a restart sweep re-closes an attempt whose settlement write was lost", asy
   // evidence or reopen the attempt.
   const record = DelegationStore.get("dg-wiring-1");
   if (record === undefined || record.settled === undefined) throw new Error("record not settled");
+  // Tokens ride the durable settlement, so a crash between settlement and
+  // attempt closure loses nothing: the sweep re-closes from this record alone.
+  expect(record.settled).toMatchObject({ status: "completed", usage: { tokens: 555 } });
   await linkage.closeAttempt({ record, settlement: record.settled });
   await linkage.recoverAttempts((id) => DelegationStore.get(id));
   const after = await WorkItemStore.get(workItemId);
@@ -284,7 +287,7 @@ test("completion re-runs the whole admission recipe when the receipt loses a hea
   await delegateAssign(kernel);
   const workItemId = DelegationStore.get("dg-wiring-1")?.workItemId ?? "";
   const closed = attemptClosed(workItemId);
-  settle({ status: "completed", output: "done" });
+  settle({ status: "completed", output: "done", usage: { tokens: 555 } });
   await kernel.awaitDelegation("dg-wiring-1", 5_000);
   await closed;
   kernel.stop();
