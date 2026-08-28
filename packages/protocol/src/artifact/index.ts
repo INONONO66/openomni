@@ -1,13 +1,15 @@
 import { z } from "zod";
 
 export namespace Artifact {
+  const nonEmptyString = z.string().refine((value) => value.trim().length > 0);
+
   export const Meta = z.object({
-    id: z.string(),
-    sessionId: z.string(),
-    mimeType: z.string().refine((value) => value.trim().length > 0),
-    title: z.string(),
+    id: nonEmptyString,
+    sessionId: nonEmptyString,
+    mimeType: nonEmptyString,
+    title: nonEmptyString,
     version: z.number().int().positive().default(1),
-    createdAt: z.string().refine((value) => value.trim().length > 0),
+    createdAt: nonEmptyString,
   });
   export type Meta = z.infer<typeof Meta>;
 }

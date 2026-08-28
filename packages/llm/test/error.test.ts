@@ -53,7 +53,7 @@ describe("NamedError", () => {
   test("isInstance works", () => {
     const err = new NamedError.Unknown({ message: "test" });
     expect(NamedError.Unknown.isInstance(err)).toBe(true);
-    expect(NamedError.Unknown.isInstance({ name: "UnknownError" })).toBe(true);
+    expect(NamedError.Unknown.isInstance({ name: "UnknownError" })).toBe(false);
     expect(NamedError.Unknown.isInstance({ name: "Other" })).toBe(false);
     expect(NamedError.Unknown.isInstance(null)).toBe(false);
   });

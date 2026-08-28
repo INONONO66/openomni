@@ -1,4 +1,4 @@
-import { Delegation, NamedError } from "@openomni/protocol";
+import { Deadline, Delegation, NamedError } from "@openomni/protocol";
 import { z } from "zod";
 
 /**
@@ -127,12 +127,15 @@ export function admit(
 
   // The schema proves the requested deadline is a positive instant. Holding a
   // clock here is what lets the fold reject an already-expired request.
-  if (request.deadline <= now) {
+  if (Deadline.isExpired(now, request.deadline)) {
     return refusal("deadline_passed", "deadline has already passed");
   }
 
-  const effectiveDeadline = Math.min(request.deadline, context?.parent?.deadline ?? Number.POSITIVE_INFINITY);
-  if (effectiveDeadline <= now) {
+  const effectiveDeadline = Deadline.clampToParent(
+    request.deadline,
+    context?.parent?.deadline ?? request.deadline,
+  );
+  if (Deadline.isExpired(now, effectiveDeadline)) {
     return refusal("deadline_passed", "parent deadline has already passed");
   }
 

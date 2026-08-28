@@ -392,7 +392,8 @@ function resolveKernelRoute<Event extends Gateway.DeliveredEvent>(
 // one EQUIVALENCE-GATED replay carve-out (review fix F2): a cas_conflict
 // means this inbound was already decided, and a redelivered inbound may
 // proceed only when the fresh decision matches the recorded one on every
-// execution-shaping field (see routeDecisionsEquivalent). Equivalent →
+// execution- and authority-shaping field (see routeDecisionsEquivalent).
+// Equivalent →
 // execution proceeds with the FRESH resolution and fresh decision (identical
 // anyway), so recorded payload and fresh waitExecution/selectedTarget can
 // never mix: an accepted route re-executes idempotently (the wait fold's
@@ -472,7 +473,7 @@ function recordRouteDecided(
   if (!Ingress.routeDecisionsEquivalent(recorded, decision) || !endpointEquivalent) {
     throw new IngressRoutingError(
       "route_replay_divergent",
-      `redelivered inbound diverges from its recorded routing decision: recorded ${recorded.stage}/${recorded.outcome}, fresh ${decision.stage}/${decision.outcome}`,
+      `redelivered inbound diverges from its recorded routing decision: recorded ${recorded.stage}/${recorded.outcome}/${recorded.actorId ?? "anonymous"}/${recorded.trustTier ?? "untiered"}/${recorded.inboundTreatment ?? "untreated"}, fresh ${decision.stage}/${decision.outcome}/${decision.actorId ?? "anonymous"}/${decision.trustTier ?? "untiered"}/${decision.inboundTreatment ?? "untreated"}`,
       decision,
     );
   }

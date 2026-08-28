@@ -1,6 +1,51 @@
 import { z } from "zod";
 
 export namespace PolicyEffects {
+  type JsonPlainValue =
+    | null
+    | boolean
+    | number
+    | string
+    | JsonPlainValue[]
+    | { readonly [key: string]: JsonPlainValue };
+
+  function isJsonPlainValue(value: unknown): value is JsonPlainValue {
+    if (value === null || typeof value === "boolean" || typeof value === "string") return true;
+    if (typeof value === "number") return Number.isFinite(value) && !Object.is(value, -0);
+    if (Array.isArray(value)) {
+      // Dense-array proof without own-property probes: a JSON-plain array's
+      // enumerable keys are exactly the canonical indices "0".."n-1". This
+      // also refuses the cancellation shape (one hole + one named property)
+      // that a bare keys-count comparison would admit.
+      const keys = Object.keys(value);
+      return (
+        keys.length === value.length &&
+        keys.every((key, index) => key === String(index)) &&
+        value.every((item) => isJsonPlainValue(item))
+      );
+    }
+    if (typeof value !== "object" || Object.getPrototypeOf(value) !== Object.prototype)
+      return false;
+    const object = value as Record<string, unknown>;
+    return Object.keys(object).every(
+      (key) =>
+        !["__proto__", "constructor", "prototype"].includes(key) && isJsonPlainValue(object[key]),
+    );
+  }
+
+  const JsonPlainObject = z.custom<Record<string, unknown>>(
+    (value): value is Record<string, unknown> =>
+      typeof value === "object" &&
+      value !== null &&
+      !Array.isArray(value) &&
+      isJsonPlainValue(value),
+    { message: "Expected a JSON-plain object" },
+  );
+  const JsonPlainArray = z.custom<unknown[]>(
+    (value): value is unknown[] => Array.isArray(value) && isJsonPlainValue(value),
+    { message: "Expected a JSON-plain array" },
+  );
+
   export const PolicyEffectType = z.enum([
     "prompt.append_context",
     "prompt.inject_message",
@@ -46,7 +91,7 @@ export namespace PolicyEffects {
     }),
     z.object({
       type: z.literal("tool.rewrite_input"),
-      input: z.record(z.string(), z.unknown()),
+      input: JsonPlainObject,
     }),
     z.object({
       type: z.literal("tool.rewrite_output"),
@@ -75,11 +120,11 @@ export namespace PolicyEffects {
     }),
     z.object({
       type: z.literal("run.replace_messages"),
-      messages: z.array(z.unknown()),
+      messages: JsonPlainArray,
     }),
     z.object({
       type: z.literal("delegation.set_constraints"),
-      constraints: z.record(z.string(), z.unknown()),
+      constraints: JsonPlainObject,
     }),
     z.object({
       type: z.literal("delegation.require_approval"),

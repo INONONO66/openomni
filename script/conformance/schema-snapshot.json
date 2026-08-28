@@ -84,7 +84,6 @@
     "id",
     "registeredBy",
     "status",
-    "testedVersions",
     "updatedAt",
     "workspace"
   ],
@@ -1131,7 +1130,14 @@
     "retryOf",
     "reusedFromAttemptId"
   ],
-  "WorkItem.AttemptTerminal": ["attemptId", "endedAt", "error", "outcome"],
+  "WorkItem.AttemptTerminal": [
+    "attemptId",
+    "endedAt",
+    "error",
+    "outcome",
+    "usage"
+  ],
+  "WorkItem.AttemptUsage": ["seconds", "tokens"],
   "WorkItem.Blocker": ["createdAt", "description", "id", "kind", "resolvedAt"],
   "WorkItem.CacheKey": [
     "contentDigest",

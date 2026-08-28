@@ -66,12 +66,30 @@ describe("NamedError.create", () => {
     expect(MyError.isInstance(null)).toBe(false);
   });
 
-  test("isInstance accepts plain objects with the same name", () => {
-    expect(MyError.isInstance({ name: "MyError" })).toBe(true);
+  test("isInstance rejects plain objects with the same name", () => {
+    expect(MyError.isInstance({ name: "MyError" })).toBe(false);
   });
 
   test("isInstance rejects plain objects with a different name", () => {
     expect(MyError.isInstance({ name: "OtherError" })).toBe(false);
+  });
+
+  test("isInstance recognizes instances from an independent copy of the class", () => {
+    // bun resolves each workspace symlink to @openomni/protocol separately,
+    // so one process can hold two copies of the same generated class; the
+    // guard must match across copies. A second create() with the same name
+    // reproduces that dual-load shape.
+    const CopyError = NamedError.create(
+      "MyError",
+      z.object({ message: z.string(), detail: z.number() }),
+    );
+    expect(MyError.isInstance(new CopyError({ message: "ok", detail: 1 }))).toBe(true);
+  });
+
+  test("isInstance rejects a real Error whose name merely matches", () => {
+    const impostor = new Error("boom");
+    impostor.name = "MyError";
+    expect(MyError.isInstance(impostor)).toBe(false);
   });
 });
 
