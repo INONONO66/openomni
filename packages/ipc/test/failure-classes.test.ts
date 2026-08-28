@@ -1,16 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import net from "node:net";
-import os from "node:os";
-import path from "node:path";
 import { Ipc } from "@openomni/protocol";
 import { connectIpcClient } from "../src/client";
 import { IpcConnectionError, IpcRemoteError } from "../src/errors";
 import { LineDecoder, encode } from "../src/framing";
 import { createIpcServer } from "../src/server";
-
-function tmpSocketPath(label: string): string {
-  return path.join(os.tmpdir(), `omo-ipc-classes-${label}-${process.pid}.sock`);
-}
+import { socketPath as socketPathForTest } from "./helpers/socket-path";
 
 describe("failure classes stay honest (#606 re-audit)", () => {
   const servers: Awaited<ReturnType<typeof createIpcServer>>[] = [];
@@ -25,7 +20,7 @@ describe("failure classes stay honest (#606 re-audit)", () => {
   });
 
   test("a dying connection fails ITS in-flight calls as connection loss, not timeout", async () => {
-    const socketPath = tmpSocketPath("per-conn");
+    const socketPath = socketPathForTest("per-conn");
     let survivorConnectionId: string | undefined;
     const srv = await createIpcServer(
       socketPath,
@@ -74,7 +69,7 @@ describe("failure classes stay honest (#606 re-audit)", () => {
   });
 
   test("a handlerless client answers server calls with a typed remote failure", async () => {
-    const socketPath = tmpSocketPath("no-handler");
+    const socketPath = socketPathForTest("no-handler");
     const srv = await createIpcServer(socketPath, (_method, _params, respond) => {
       respond({ ok: true });
     });
@@ -94,7 +89,7 @@ describe("failure classes stay honest (#606 re-audit)", () => {
   });
 
   test("a valid response sharing a chunk with a bad line still resolves the call", async () => {
-    const socketPath = tmpSocketPath("shared-chunk");
+    const socketPath = socketPathForTest("shared-chunk");
     const srv = await createIpcServer(socketPath, (_method, _params, respond) => {
       respond({ ok: true });
     });
@@ -124,7 +119,7 @@ describe("failure classes stay honest (#606 re-audit)", () => {
   });
 
   test("each malformed line is answered with its own 4001 error frame", async () => {
-    const socketPath = tmpSocketPath("per-line-4001");
+    const socketPath = socketPathForTest("per-line-4001");
     const srv = await createIpcServer(socketPath, (_method, _params, respond) => {
       respond({ ok: true });
     });
@@ -161,7 +156,7 @@ describe("failure classes stay honest (#606 re-audit)", () => {
   });
 
   test("an oversize frame gets a 4001 and then the server CLOSES the connection", async () => {
-    const socketPath = tmpSocketPath("oversize-close");
+    const socketPath = socketPathForTest("oversize-close");
     const srv = await createIpcServer(socketPath, (_method, _params, respond) =>
       respond({ ok: true }),
     );
@@ -190,7 +185,7 @@ describe("failure classes stay honest (#606 re-audit)", () => {
   }, 10_000);
 
   test("a client that sent an oversize frame fails fast, not by burning its timeout", async () => {
-    const socketPath = tmpSocketPath("oversize-client");
+    const socketPath = socketPathForTest("oversize-client");
     const srv = await createIpcServer(socketPath, (_method, _params, respond) =>
       respond({ ok: true }),
     );
@@ -208,7 +203,7 @@ describe("failure classes stay honest (#606 re-audit)", () => {
   }, 10_000);
 
   test("an error frame carrying the request's id settles the requester's pending", async () => {
-    const socketPath = tmpSocketPath("correlated-4000");
+    const socketPath = socketPathForTest("correlated-4000");
     // Raw peer: answers ANY request with a 4000 error echoing the request id —
     // the shape the server now emits for schema-invalid frames that carry one.
     const rawServer = net.createServer((conn) => {
@@ -240,7 +235,7 @@ describe("failure classes stay honest (#606 re-audit)", () => {
   });
 
   test("a response arriving on a connection that does not own the request is ignored", async () => {
-    const socketPath = tmpSocketPath("cross-conn");
+    const socketPath = socketPathForTest("cross-conn");
     const srv = await createIpcServer(socketPath, (_method, _params, respond) =>
       respond({ ok: true }),
     );
@@ -324,7 +319,7 @@ describe("client remote-error path (#606 audit)", () => {
   });
 
   test("an error frame REJECTS the call as IpcRemoteError — never resolves undefined", async () => {
-    const socketPath = tmpSocketPath("reject");
+    const socketPath = socketPathForTest("reject");
     const srv = await createIpcServer(socketPath, (method, _params, _respond) => {
       // A throwing handler produces the server's typed error frame (code 1000).
       throw new Error(`remote refused ${method}`);
@@ -346,7 +341,7 @@ describe("client remote-error path (#606 audit)", () => {
   });
 
   test("the SERVER side of the socket files remote failures the same way (#677 review)", async () => {
-    const socketPath = tmpSocketPath("server-side");
+    const socketPath = socketPathForTest("server-side");
     const srv = await createIpcServer(socketPath, () => undefined);
     servers.push(srv);
     const client = await connectIpcClient(socketPath, {

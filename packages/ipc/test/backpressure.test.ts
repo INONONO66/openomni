@@ -1,14 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import net from "node:net";
-import os from "node:os";
-import path from "node:path";
 import { Ipc } from "@openomni/protocol";
 import { LineDecoder } from "../src/framing";
 import { createIpcServer } from "../src/server";
-
-function tmpSocketPath(label: string): string {
-  return path.join(os.tmpdir(), `omo-ipc-bp-${label}-${process.pid}.sock`);
-}
+import { socketPath as socketPathForTest } from "./helpers/socket-path";
 
 // Big enough to overflow any kernel socket buffer: Bun sockets do NOT buffer
 // partial writes, so pre-fix the tail of this frame was silently dropped.
@@ -25,7 +20,7 @@ describe("server write backpressure (Bun partial writes)", () => {
   });
 
   test("a multi-megabyte response reaches a slow reader byte-exact", async () => {
-    const socketPath = tmpSocketPath("big-frame");
+    const socketPath = socketPathForTest("big-frame");
     const srv = await createIpcServer(socketPath, (_method, _params, respond) => {
       respond({ data: BIG_PAYLOAD });
     });
@@ -61,7 +56,7 @@ describe("server write backpressure (Bun partial writes)", () => {
   }, 15_000);
 
   test("a frame written while earlier bytes are still queued arrives after them, intact", async () => {
-    const socketPath = tmpSocketPath("ordering");
+    const socketPath = socketPathForTest("ordering");
     const srv = await createIpcServer(socketPath, (_method, _params, respond) => {
       respond({ data: BIG_PAYLOAD });
     });

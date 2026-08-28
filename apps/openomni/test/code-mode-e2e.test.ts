@@ -9,6 +9,7 @@ import { attachMachineDaemon, createMachineHost, type MachineDaemon } from "@ope
 import type { Machine } from "@openomni/protocol";
 import { startOpenOmni } from "../src/index";
 import { assistantMessage } from "./helpers/assistant-message";
+import { socketPath as testSocketPath } from "./helpers/socket-path";
 
 const WS_TOKEN = "code-mode-e2e-token";
 const MACHINE_ID = "alpha";
@@ -41,7 +42,7 @@ const enrollment: Machine.Enrollment = {
 test("a cell batches delegation into one turn", async () => {
   const directory = mkdtempSync(join(tmpdir(), "openomni-code-mode-"));
   directories.push(directory);
-  const socketPath = join(directory, "machines.sock");
+  const socketPath = testSocketPath();
   const residentTurns: string[] = [];
 
   const app = await startOpenOmni({
@@ -155,7 +156,7 @@ test("the machine tool is not offered while nothing is attached", async () => {
       wsPort: 0,
       wsToken: WS_TOKEN,
       model: { provider: "fake", id: "code-mode-test", apiKey: "test-key" },
-      machines: { socketPath: join(directory, "machines.sock"), enrolled: [enrollment] },
+      machines: { socketPath: testSocketPath(), enrolled: [enrollment] },
     },
     llm: {
       resolveProviderModel: async (model) => ({ id: model.id, name: model.id, providerID: model.provider }),
@@ -209,7 +210,7 @@ test("the machine tool is not offered while nothing is attached", async () => {
 test("a cell cannot present another cell's id when calling back", async () => {
   const directory = mkdtempSync(join(tmpdir(), "openomni-cell-id-"));
   directories.push(directory);
-  const socketPath = join(directory, "machines.sock");
+  const socketPath = testSocketPath();
   const served: string[] = [];
 
   const host = await createMachineHost({
@@ -251,7 +252,7 @@ test("a cell cannot present another cell's id when calling back", async () => {
 test("a machine offering more than it is enrolled for keeps only the intersection", async () => {
   const directory = mkdtempSync(join(tmpdir(), "openomni-overclaim-"));
   directories.push(directory);
-  const socketPath = join(directory, "machines.sock");
+  const socketPath = testSocketPath();
 
   const host = await createMachineHost({
     socketPath,

@@ -1,15 +1,10 @@
 import { describe, test, expect, afterEach } from "bun:test";
 import fs from "node:fs";
 import net from "node:net";
-import os from "node:os";
-import path from "node:path";
 import { connectIpcClient } from "../src/client";
 import { IpcConnectionError, IpcRemoteError } from "../src/errors";
 import { createIpcServer } from "../src/server";
-
-function tmpSocketPath(label: string): string {
-  return path.join(os.tmpdir(), `omo-ipc-resil-${label}-${process.pid}.sock`);
-}
+import { socketPath as socketPathForTest } from "./helpers/socket-path";
 
 describe("IPC transport resilience (#QB1)", () => {
   const servers: Awaited<ReturnType<typeof createIpcServer>>[] = [];
@@ -22,7 +17,7 @@ describe("IPC transport resilience (#QB1)", () => {
   });
 
   test("throwing onRequest handler → typed error frame, not a process crash", async () => {
-    const socketPath = tmpSocketPath("throw");
+    const socketPath = socketPathForTest("throw");
     const srv = await createIpcServer(socketPath, () => undefined);
     servers.push(srv);
 
@@ -43,7 +38,7 @@ describe("IPC transport resilience (#QB1)", () => {
   });
 
   test("removing the active connection lets the next connection bind", async () => {
-    const socketPath = tmpSocketPath("active");
+    const socketPath = socketPathForTest("active");
     const srv = await createIpcServer(socketPath, () => undefined);
     servers.push(srv);
 
@@ -73,7 +68,7 @@ describe("IPC transport resilience (#QB1)", () => {
   });
 
   test("ASYNC-rejecting server handler → typed error frame, not a burned timeout", async () => {
-    const socketPath = tmpSocketPath("async-throw-server");
+    const socketPath = socketPathForTest("async-throw-server");
     const srv = await createIpcServer(socketPath, async (method, _params, respond) => {
       if (method === "boom") throw new TypeError("async handler blew up");
       respond({ ok: method });
@@ -93,7 +88,7 @@ describe("IPC transport resilience (#QB1)", () => {
   });
 
   test("ASYNC-rejecting client onRequest → typed error frame, not a burned timeout", async () => {
-    const socketPath = tmpSocketPath("async-throw-client");
+    const socketPath = socketPathForTest("async-throw-client");
     const srv = await createIpcServer(socketPath, () => undefined);
     servers.push(srv);
     const client = await connectIpcClient(socketPath, {
@@ -111,7 +106,7 @@ describe("IPC transport resilience (#QB1)", () => {
   });
 
   test("a schema-mismatch frame is logged by the client, not silently dropped", async () => {
-    const socketPath = tmpSocketPath("schema-warn");
+    const socketPath = socketPathForTest("schema-warn");
     // Raw peer that emits valid JSON matching no message schema.
     const rawServer = net.createServer((conn) => {
       conn.write('{"v":2,"type":"mystery"}\n');
@@ -137,7 +132,7 @@ describe("IPC transport resilience (#QB1)", () => {
   });
 
   test("createIpcServer refuses to steal a LIVE server's socket", async () => {
-    const socketPath = tmpSocketPath("live-probe");
+    const socketPath = socketPathForTest("live-probe");
     const incumbent = await createIpcServer(socketPath, (_method, _params, respond) =>
       respond({ owner: "incumbent" }),
     );
@@ -156,7 +151,7 @@ describe("IPC transport resilience (#QB1)", () => {
   });
 
   test("a provably dead socket path is reclaimed", async () => {
-    const socketPath = tmpSocketPath("stale-file");
+    const socketPath = socketPathForTest("stale-file");
     fs.writeFileSync(socketPath, ""); // stale leftover: connecting to it fails
     const srv = await createIpcServer(socketPath, (_method, _params, respond) =>
       respond({ ok: true }),
@@ -169,7 +164,7 @@ describe("IPC transport resilience (#QB1)", () => {
   });
 
   test("notify() reports a drop (false) vs a delivery (true)", async () => {
-    const socketPath = tmpSocketPath("notify-signal");
+    const socketPath = socketPathForTest("notify-signal");
     const srv = await createIpcServer(socketPath, () => undefined);
     servers.push(srv);
 
