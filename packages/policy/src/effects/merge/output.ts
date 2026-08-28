@@ -26,7 +26,6 @@ export interface EffectAccumulatorSet {
   readonly delegationApproval?: ApprovalAccumulator;
   readonly writebackRewrite?: MergedEffect;
   readonly writebackSuppress?: PriorityApprovalAccumulator;
-  readonly timeout?: { readonly timeoutMs: number; readonly order: number };
   readonly workspaceLock?: { readonly required: boolean; readonly order: number };
 }
 
@@ -111,13 +110,6 @@ function appendWritebackEffects(merged: MergedEffect[], accumulators: EffectAccu
 }
 
 function appendRuntimeEffects(merged: MergedEffect[], accumulators: EffectAccumulatorSet): void {
-  if (accumulators.timeout) {
-    merged.push({
-      effect: { type: "runtime.set_timeout", timeoutMs: accumulators.timeout.timeoutMs },
-      order: accumulators.timeout.order,
-      priority: 0,
-    });
-  }
   if (accumulators.workspaceLock) {
     merged.push({
       effect: { type: "runtime.workspace_lock", required: accumulators.workspaceLock.required },

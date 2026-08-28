@@ -36,7 +36,6 @@ export function mergeEntries(entries: readonly EffectEntry[]): MergeResult {
   let modelOverride: MergedEffect | undefined;
   let writebackRewrite: MergedEffect | undefined;
   let writebackSuppress: PriorityApprovalAccumulator | undefined;
-  let timeout: { readonly timeoutMs: number; readonly order: number } | undefined;
   let workspaceLock: { readonly required: boolean; readonly order: number } | undefined;
   let allowAsserted:
     | { readonly criterionIds: string[]; readonly order: number; readonly priority: number }
@@ -110,12 +109,6 @@ export function mergeEntries(entries: readonly EffectEntry[]): MergeResult {
           entry.priority,
         );
         break;
-      case "runtime.set_timeout":
-        timeout = {
-          timeoutMs: Math.min(timeout?.timeoutMs ?? effect.timeoutMs, effect.timeoutMs),
-          order: Math.min(timeout?.order ?? entry.order, entry.order),
-        };
-        break;
       case "runtime.workspace_lock":
         workspaceLock = {
           required: (workspaceLock?.required ?? false) || effect.required,
@@ -163,7 +156,6 @@ export function mergeEntries(entries: readonly EffectEntry[]): MergeResult {
     delegationApproval,
     writebackRewrite,
     writebackSuppress,
-    timeout,
     workspaceLock,
   });
 

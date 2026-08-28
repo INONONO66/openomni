@@ -905,11 +905,10 @@
   "Policy.PolicyEffect#14": ["annotation", "severity", "type"],
   "Policy.PolicyEffect#15": ["output", "type"],
   "Policy.PolicyEffect#16": ["reason", "type"],
-  "Policy.PolicyEffect#17": ["timeoutMs", "type"],
-  "Policy.PolicyEffect#18": ["required", "type"],
-  "Policy.PolicyEffect#19": ["criterionIds", "type"],
+  "Policy.PolicyEffect#17": ["required", "type"],
+  "Policy.PolicyEffect#18": ["criterionIds", "type"],
+  "Policy.PolicyEffect#19": ["id", "provider", "type"],
   "Policy.PolicyEffect#2": ["prompt", "type"],
-  "Policy.PolicyEffect#20": ["id", "provider", "type"],
   "Policy.PolicyEffect#3": ["toolPattern", "type"],
   "Policy.PolicyEffect#4": ["input", "type"],
   "Policy.PolicyEffect#5": ["output", "type"],
@@ -1131,7 +1130,14 @@
     "retryOf",
     "reusedFromAttemptId"
   ],
-  "WorkItem.AttemptTerminal": ["attemptId", "endedAt", "error", "outcome"],
+  "WorkItem.AttemptTerminal": [
+    "attemptId",
+    "endedAt",
+    "error",
+    "outcome",
+    "usage"
+  ],
+  "WorkItem.AttemptUsage": ["seconds", "tokens"],
   "WorkItem.Blocker": ["createdAt", "description", "id", "kind", "resolvedAt"],
   "WorkItem.CacheKey": [
     "contentDigest",
