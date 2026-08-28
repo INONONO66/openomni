@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787898143916,
+  "lastUpdate": 1787900574489,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -65189,6 +65189,90 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 514527,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5349950ecb1f292359d7536ca01023b4dbb05aab",
+          "message": "fix(channels): Discord dedupe release-on-failure + typed errors + signal tests (audit PR-7) (#838)\n\n* fix(channels): Discord dedupe release-on-failure, typed gateway errors, test signal conversion (audit PR-7)\n\n- discord/surface.ts: release the dedupe mark when async handling\n  rejects so a legitimate redelivery of a failed event is handled\n  again (was: permanently swallowed); in-flight suppression preserved\n- new discord/error.ts: DiscordGatewayFetchError / DiscordApiError /\n  DiscordHandlerMissingError (NamedError vocabulary) replace plain\n  Error on the gateway-fetch, API, and handler-missing failure paths\n- discord-gateway.test.ts: wall-clock polls converted to exact event\n  signals; sole remaining timer is a labeled bounded failure guard\n- routing-resolution.ts: review-history comments reduced to current\n  invariants; TODO #708 residue replaced with tracked issue #837\n- router test pins: typed authority-denial/invalid-schema assertions,\n  persisted surface-default routing evidence instead of echoes\n\n* fix(channels): generation-aware dedupe release (adversarial round 1)\n\nDedupe.acquire() returns an opaque symbol generation token per accepted\nmark; forget(id, token) deletes only when the stored entry owns that\ntoken, so a stale rejection (after expiry or capacity eviction\nre-acceptance) can no longer delete a newer generation's mark.\nDiscord/Telegram/GitHub surfaces thread tokens through failure paths;\nisDuplicate() keeps its boolean contract for existing callers.",
+          "timestamp": "2026-08-28T07:01:44Z",
+          "tree_id": "8ee77aea9db7c755d1177eca853afc025bac6d4f",
+          "url": "https://github.com/INONONO66/openomni/commit/5349950ecb1f292359d7536ca01023b4dbb05aab"
+        },
+        "date": 1787900573245,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2212,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 14679,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7796,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1062,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 974,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1523,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1601,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 732,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 49408,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2366,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 512520,
             "unit": "ns/op"
           }
         ]
