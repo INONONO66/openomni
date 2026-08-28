@@ -1,12 +1,12 @@
 {
   "packages/agent": {
-    "linesFound": 2726,
-    "linesHit": 2651,
-    "pct": 97.25
+    "linesFound": 2883,
+    "linesHit": 2831,
+    "pct": 98.2
   },
   "packages/channels": {
-    "linesFound": 3261,
-    "linesHit": 3123,
+    "linesFound": 3266,
+    "linesHit": 3128,
     "pct": 95.77
   },
   "packages/ipc": {
@@ -15,18 +15,18 @@
     "pct": 92.5
   },
   "packages/ledger": {
-    "linesFound": 4850,
-    "linesHit": 4669,
-    "pct": 96.27
+    "linesFound": 4860,
+    "linesHit": 4679,
+    "pct": 96.28
   },
   "packages/llm": {
-    "linesFound": 1971,
-    "linesHit": 1914,
-    "pct": 97.11
+    "linesFound": 2022,
+    "linesHit": 1966,
+    "pct": 97.23
   },
   "packages/placement": {
-    "linesFound": 22,
-    "linesHit": 22,
+    "linesFound": 44,
+    "linesHit": 44,
     "pct": 100
   },
   "packages/policy": {

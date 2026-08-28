@@ -47,23 +47,6 @@ export namespace Operational {
       { visibility: "llm_reason" },
     );
 
-    export const BootstrapCompleted = BusEvent.define(
-      "operational.bootstrap.completed",
-      Base.extend({
-        mode: z.enum(["local", "coordinator"]),
-        channelCount: z.number(),
-      }),
-      { visibility: "internal" },
-    );
-
-    export const ShutdownInitiated = BusEvent.define(
-      "operational.shutdown.initiated",
-      Base.extend({
-        reason: z.string(),
-      }),
-      { visibility: "internal" },
-    );
-
     /**
      * #510 — a structural incident addressed to the Governor role (the
      * post-hoc fix actor; see docs/core-model.md). Persisted as
@@ -85,17 +68,5 @@ export namespace Operational {
       { visibility: "internal" },
     );
 
-    export const RecoveryStarted = BusEvent.define("operational.recovery.started", Base, {
-      visibility: "ephemeral",
-    });
-
-    export const RecoveryCompleted = BusEvent.define(
-      "operational.recovery.completed",
-      Base.extend({
-        sessionsRecovered: z.number(),
-        durationMs: z.number(),
-      }),
-      { visibility: "internal" },
-    );
   }
 }
