@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { Ingress, type Gateway, type Wait } from "@openomni/protocol";
-import { ActorRegistry, BlacklistStore, Storage, WaitStore } from "@openomni/ledger";
+import { extractSurfaceKey, Ingress, type Gateway, type Wait } from "@openomni/protocol";
+import { ActorRegistry, BlacklistStore, Storage, SurfaceKey, WaitStore } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { IngressRoutingError } from "../../src/router/routing-resolution";
 import { createExistingAgentMessaging } from "../../src/router/messaging/send";
@@ -90,6 +90,8 @@ describe("GatewayRouter durable wait routing", () => {
   test("attaches a matched reply to the durable wait and delivers it to the owner session", async () => {
     registerResponder("actor-external-worker", "seller-1");
     const wait = openSessionWait("wait-session-owner");
+    // A conflicting surface-key mapping must lose to the wait owner's session.
+    SurfaceKey.claim(extractSurfaceKey(replyEvent("inbound-wait-reply")), "session-surface-conflict");
 
     const result = await kernelRouter().ingest(replyEvent("inbound-wait-reply"));
 

@@ -3,6 +3,7 @@ import { Actor } from "../actor/index.js";
 import { Channel } from "../channel/index.js";
 import {
   Events as EventDescriptors,
+  recordedRoutingDecision as recordedRoutingDecisionReader,
   type RoutingDecisionPayload as RoutingDecisionPayloadType,
 } from "../event/ingress.js";
 import { Model } from "../model/index.js";
@@ -250,6 +251,7 @@ export namespace Ingress {
 
   /** #499 observation descriptors — published via Bus; event name strings frozen. */
   export const Events = EventDescriptors;
+  export const recordedRoutingDecision = recordedRoutingDecisionReader;
   export type RoutingDecisionPayload = RoutingDecisionPayloadType;
 
   /**

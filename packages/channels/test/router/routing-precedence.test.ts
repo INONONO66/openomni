@@ -39,6 +39,7 @@ interface PrecedenceCase {
   readonly state: RouteState;
   readonly stage: Ingress.RoutingDecisionPayload["stage"];
   readonly outcome: Ingress.RoutingDecisionPayload["outcome"];
+  readonly sessionId?: string;
 }
 
 const precedenceCases = Object.freeze([
@@ -68,6 +69,8 @@ const precedenceCases = Object.freeze([
     }),
     stage: "wait_correlation",
     outcome: "route",
+    // The wait OWNER's session wins over the conflicting surface-key mapping.
+    sessionId: "session-wait",
   },
   {
     name: "channel ceiling before actor identity",
@@ -108,6 +111,7 @@ const precedenceCases = Object.freeze([
     }),
     stage: "surface_default",
     outcome: "route",
+    sessionId: "session-surface",
   },
 ]) satisfies readonly PrecedenceCase[];
 
@@ -123,6 +127,9 @@ describe("resolveRoute precedence", () => {
       // Then
       expect(decision.stage).toBe(testCase.stage);
       expect(decision.outcome).toBe(testCase.outcome);
+      if (testCase.sessionId !== undefined) {
+        expect(decision.sessionId).toBe(testCase.sessionId);
+      }
     });
   }
 

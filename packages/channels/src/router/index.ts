@@ -249,7 +249,12 @@ function replayReplyGrantAdmissions(): readonly ReplyGrantAdmission[] {
   const facts = ledger.factsByType(Ingress.ROUTE_DECIDED_FACT_TYPE) as Ledger.RecordedFact[];
   return facts
     .map((fact): ReplyGrantAdmission | undefined => {
-      const decision = Ingress.Events.RoutingDecision.schema.parse(fact.data);
+      // Upcast-on-read: pre-0025 facts carry dead optional fields the strict
+      // write schema rejects; the reader strips them so historical wait routes
+      // keep producing their reply grants. Bytes no era can parse fail closed
+      // as "no grant" — replay never crashes router construction on one row.
+      const decision = Ingress.recordedRoutingDecision(fact.data);
+      if (decision === undefined) return undefined;
       if (decision.outcome !== "route" || decision.actorId === undefined) return undefined;
 
       const parts = fact.streamId.split(":");

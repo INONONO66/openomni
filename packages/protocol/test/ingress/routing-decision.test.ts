@@ -194,3 +194,75 @@ describe("Ingress.Events.RoutingDecision", () => {
     expect(() => routingDecisionSchema.parse(input)).toThrow(ZodError);
   });
 });
+
+describe("Ingress.recordedRoutingDecision (upcast-on-read)", () => {
+  test("strips the dead runId/pendingInteractionId fields from pre-0025 facts", () => {
+    // Given — a persisted wait route recorded before the pending-stack
+    // deletion, carrying both dead optional fields the strict schema rejects.
+    const legacyFact = {
+      ...baseDecision,
+      stage: "wait_correlation",
+      outcome: "route",
+      target: "resident",
+      sessionId: "session-1",
+      actorId: "actor-1",
+      runId: "run-legacy-1",
+      pendingInteractionId: "ask_legacy-1",
+    };
+    expect(() => routingDecisionSchema.parse(legacyFact)).toThrow(ZodError);
+
+    // When
+    const upcast = Ingress.recordedRoutingDecision(legacyFact);
+
+    // Then — the modern payload survives, minus the dead fields.
+    expect(upcast).toEqual({
+      ...baseDecision,
+      stage: "wait_correlation",
+      outcome: "route",
+      target: "resident",
+      sessionId: "session-1",
+      actorId: "actor-1",
+    });
+  });
+
+  test("reads legacy pending-prefixed ambiguous candidates verbatim", () => {
+    // Given — a pre-0025 ambiguous decision whose candidates mix wait and
+    // pending sources; the write schema's wait-only regex rejects it.
+    const legacyAmbiguous = {
+      ...baseDecision,
+      stage: "wait_correlation" as const,
+      outcome: "ambiguous" as const,
+      candidateInteractionIds: ["wait:wait-1", "pending_ask:ask-1", "pending_interaction:pi-1"],
+    };
+    expect(() => routingDecisionSchema.parse(legacyAmbiguous)).toThrow(ZodError);
+
+    // When
+    const upcast = Ingress.recordedRoutingDecision(legacyAmbiguous);
+
+    // Then — candidates are preserved as written (comparison-only vocabulary).
+    expect(upcast).toEqual(legacyAmbiguous);
+  });
+
+  test("parses modern facts unchanged", () => {
+    for (const terminal of terminalCases) {
+      expect(Ingress.recordedRoutingDecision(terminal)).toEqual(
+        routingDecisionSchema.parse(terminal),
+      );
+    }
+  });
+
+  test("returns undefined for bytes no era could parse", () => {
+    expect(Ingress.recordedRoutingDecision(undefined)).toBeUndefined();
+    expect(Ingress.recordedRoutingDecision(null)).toBeUndefined();
+    expect(Ingress.recordedRoutingDecision("route")).toBeUndefined();
+    expect(Ingress.recordedRoutingDecision({ stage: "blacklist" })).toBeUndefined();
+    expect(
+      Ingress.recordedRoutingDecision({
+        ...baseDecision,
+        stage: "wait_correlation",
+        outcome: "ambiguous",
+        candidateInteractionIds: ["unqualified-1", "unqualified-2"],
+      }),
+    ).toBeUndefined();
+  });
+});

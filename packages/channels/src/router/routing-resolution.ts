@@ -340,7 +340,14 @@ function recordRouteDecided(
     if (fact === undefined || fact.type !== Ingress.ROUTE_DECIDED_FACT_TYPE) {
       throw new Error(`stream ${streamId} conflicted without a recorded route.decided fact`);
     }
-    recorded = Ingress.Events.RoutingDecision.schema.parse(fact.data);
+    // Upcast-on-read: pre-0025 facts carry dead optional fields the strict
+    // write schema rejects; the reader strips them. `undefined` means the
+    // bytes were never a valid route.decided of any era.
+    const upcast = Ingress.recordedRoutingDecision(fact.data);
+    if (upcast === undefined) {
+      throw new Error(`stream ${streamId} recorded route.decided fact failed to parse`);
+    }
+    recorded = upcast;
   } catch (error) {
     throw new IngressRoutingError(
       "route_record_failed",
