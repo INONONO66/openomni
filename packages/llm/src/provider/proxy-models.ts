@@ -30,6 +30,12 @@ function normalizeModelsURL(baseURL: string): string {
   return `${root}/v1/models`;
 }
 
+function credentialFingerprint(apiKey: string | undefined): string {
+  return new Bun.CryptoHasher("sha256")
+    .update(apiKey === undefined ? "no-api-key" : `api-key:${apiKey}`)
+    .digest("hex");
+}
+
 function readModelIds(value: unknown): string[] {
   if (typeof value !== "object" || value === null || !("data" in value)) return [];
   const data = value.data;
@@ -44,7 +50,8 @@ function readModelIds(value: unknown): string[] {
 
 export async function fetchProxyModels(baseURL: string, apiKey?: string): Promise<string[]> {
   const url = normalizeModelsURL(baseURL);
-  const cached = modelCache.get(url);
+  const cacheKey = `${url}:${credentialFingerprint(apiKey)}`;
+  const cached = modelCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.ids;
 
   const headers: Record<string, string> = {};
@@ -80,7 +87,7 @@ export async function fetchProxyModels(baseURL: string, apiKey?: string): Promis
   }
 
   const ids = readModelIds(body);
-  modelCache.set(url, { ids, expiresAt: Date.now() + CACHE_TTL_MS });
+  modelCache.set(cacheKey, { ids, expiresAt: Date.now() + CACHE_TTL_MS });
   return ids;
 }
 

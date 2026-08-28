@@ -1,16 +1,16 @@
 import { describe, test, expect, afterEach } from "bun:test";
 import { connectIpcClient } from "../src/client";
 import { createIpcServer } from "../src/server";
+import { deferred, within } from "./helpers/signal";
 import { socketPath as socketPathForTest } from "./helpers/socket-path";
 
 describe("IPC bidirectional", () => {
   const servers: Awaited<ReturnType<typeof createIpcServer>>[] = [];
   const clients: Awaited<ReturnType<typeof connectIpcClient>>[] = [];
 
-  afterEach(async () => {
+  afterEach(() => {
     for (const c of clients.splice(0)) c.close();
     for (const s of servers.splice(0)) s.close();
-    await Bun.sleep(10);
   });
 
   test("client receives incoming Request → onRequest fires → response sent back", async () => {
@@ -43,19 +43,18 @@ describe("IPC bidirectional", () => {
     let notifMethod = "";
     let notifParams: Record<string, unknown> | undefined;
 
-    const notifReceived = new Promise<void>((resolve) => {
-      connectIpcClient(socketPath, {
-        onNotification(method, params) {
-          notifMethod = method;
-          notifParams = params;
-          resolve();
-        },
-      }).then((c) => clients.push(c));
+    const notifReceived = deferred();
+    const client = await connectIpcClient(socketPath, {
+      onNotification(method, params) {
+        notifMethod = method;
+        notifParams = params;
+        notifReceived.resolve();
+      },
     });
+    clients.push(client);
 
-    await Bun.sleep(20);
-    srv.notify("event.fired", { key: "value" });
-    await notifReceived;
+    expect(srv.notify("event.fired", { key: "value" })).toBe(true);
+    await within(notifReceived.promise, "client notification");
 
     expect(notifMethod).toBe("event.fired");
     expect(notifParams).toEqual({ key: "value" });
@@ -70,20 +69,21 @@ describe("IPC bidirectional", () => {
     servers.push(srv);
 
     const seen: string[] = [];
+    const drained = deferred();
     const client = await connectIpcClient(socketPath, {
       onNotification(method) {
         seen.push(method);
         if (method === "boom.sync") throw new Error("sync handler failure");
         if (method === "boom.async") return Promise.reject(new Error("async handler failure"));
+        if (method === "after.failures") drained.resolve();
       },
     });
     clients.push(client);
 
-    await Bun.sleep(20);
     expect(srv.notify("boom.sync", {})).toBe(true);
     expect(srv.notify("boom.async", {})).toBe(true);
     expect(srv.notify("after.failures", {})).toBe(true);
-    await Bun.sleep(30);
+    await within(drained.promise, "notification drain after handler failures");
 
     // Both failures were contained and the connection kept draining: the
     // frame AFTER the failures still reached the handler on the same socket.

@@ -4,16 +4,16 @@ import net from "node:net";
 import { connectIpcClient } from "../src/client";
 import { IpcConnectionError, IpcRemoteError } from "../src/errors";
 import { createIpcServer } from "../src/server";
+import { deferred, within } from "./helpers/signal";
 import { socketPath as socketPathForTest } from "./helpers/socket-path";
 
 describe("IPC transport resilience (#QB1)", () => {
   const servers: Awaited<ReturnType<typeof createIpcServer>>[] = [];
   const clients: Awaited<ReturnType<typeof connectIpcClient>>[] = [];
 
-  afterEach(async () => {
+  afterEach(() => {
     for (const c of clients.splice(0)) c.close();
     for (const s of servers.splice(0)) s.close();
-    await Bun.sleep(10);
   });
 
   test("throwing onRequest handler → typed error frame, not a process crash", async () => {
@@ -39,28 +39,39 @@ describe("IPC transport resilience (#QB1)", () => {
 
   test("removing the active connection lets the next connection bind", async () => {
     const socketPath = socketPathForTest("active");
-    const srv = await createIpcServer(socketPath, () => undefined);
+    const disconnected = deferred<string>();
+    const connectionIds = new Map<string, string>();
+    const srv = await createIpcServer(
+      socketPath,
+      (method, params, respond, _notify, connectionId) => {
+        if (method === "register") connectionIds.set(String(params?.name), connectionId);
+        respond({ ok: true });
+      },
+      { onDisconnect: disconnected.resolve },
+    );
     servers.push(srv);
 
     const c1 = await connectIpcClient(socketPath, {
       onRequest: (_m, _p, respond) => respond({ from: "c1" }),
     });
     clients.push(c1);
-    await Bun.sleep(20);
-    srv.useConnection("conn-1");
+    await c1.call("register", { name: "c1" });
+    const c1ConnectionId = connectionIds.get("c1");
+    if (!c1ConnectionId) throw new Error("c1 connection id was not captured");
+    srv.useConnection(c1ConnectionId);
 
     const c2 = await connectIpcClient(socketPath, {
       onRequest: (_m, _p, respond) => respond({ from: "c2" }),
     });
     clients.push(c2);
-    await Bun.sleep(20);
+    await c2.call("register", { name: "c2" });
 
     // Active connection routes to c1.
     expect(await srv.call("ping")).toEqual({ from: "c1" });
 
     // Drop the active connection.
     c1.close();
-    await Bun.sleep(40);
+    expect(await within(disconnected.promise, "active connection removal")).toBe(c1ConnectionId);
 
     // activeConnectionId is cleared on close, so the surviving connection
     // binds (pre-fix it stayed pinned to the dead conn-1 and found no socket).
@@ -114,14 +125,16 @@ describe("IPC transport resilience (#QB1)", () => {
     await new Promise<void>((resolve) => rawServer.listen(socketPath, () => resolve()));
 
     const warnings: string[] = [];
+    const warned = deferred();
     const originalWarn = console.warn;
     console.warn = (...args: unknown[]) => {
       warnings.push(args.map(String).join(" "));
+      warned.resolve();
     };
     try {
       const client = await connectIpcClient(socketPath);
       clients.push(client);
-      await Bun.sleep(50);
+      await within(warned.promise, "schema mismatch warning");
       expect(warnings.some((w) => w.includes("matched no message schema"))).toBe(true);
       // A drifted peer is surfaced, not fatal: the connection stays usable.
       expect(client.connected).toBe(true);
@@ -171,15 +184,14 @@ describe("IPC transport resilience (#QB1)", () => {
     // No connection: the notification is dropped and the caller can tell.
     expect(srv.notify("event.fired", {})).toBe(false);
 
-    const delivered = new Promise<void>((resolve) => {
-      connectIpcClient(socketPath, {
-        onNotification: (method) => {
-          if (method === "event.fired") resolve();
-        },
-      }).then((c) => clients.push(c));
+    const delivered = deferred();
+    const client = await connectIpcClient(socketPath, {
+      onNotification: (method) => {
+        if (method === "event.fired") delivered.resolve();
+      },
     });
-    await Bun.sleep(20);
+    clients.push(client);
     expect(srv.notify("event.fired", {})).toBe(true);
-    await delivered;
+    await within(delivered.promise, "notification delivery");
   });
 });

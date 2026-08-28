@@ -5,6 +5,7 @@ import { connectIpcClient } from "../src/client";
 import { IpcConnectionError, IpcRemoteError } from "../src/errors";
 import { LineDecoder, encode } from "../src/framing";
 import { createIpcServer } from "../src/server";
+import { deferred, within } from "./helpers/signal";
 import { socketPath as socketPathForTest } from "./helpers/socket-path";
 
 describe("failure classes stay honest (#606 re-audit)", () => {
@@ -12,16 +13,16 @@ describe("failure classes stay honest (#606 re-audit)", () => {
   const clients: Awaited<ReturnType<typeof connectIpcClient>>[] = [];
   const rawSockets: net.Socket[] = [];
 
-  afterEach(async () => {
+  afterEach(() => {
     for (const s of rawSockets.splice(0)) s.destroy();
     for (const c of clients.splice(0)) c.close();
     for (const s of servers.splice(0)) s.close();
-    await Bun.sleep(10);
   });
 
   test("a dying connection fails ITS in-flight calls as connection loss, not timeout", async () => {
     const socketPath = socketPathForTest("per-conn");
     let survivorConnectionId: string | undefined;
+    const dyingReceivedRequest = deferred();
     const srv = await createIpcServer(
       socketPath,
       (method, _params, respond, _notify, connectionId) => {
@@ -34,14 +35,14 @@ describe("failure classes stay honest (#606 re-audit)", () => {
     // First connection never answers server calls; it will die mid-flight.
     const dying = await connectIpcClient(socketPath, {
       onRequest: () => {
-        /* deliberately never responds */
+        dyingReceivedRequest.resolve();
+        // Deliberately never responds.
       },
     });
     clients.push(dying);
-    await Bun.sleep(10);
 
     const inFlight = srv.call("hang", {}, 5_000);
-    await Bun.sleep(10);
+    await within(dyingReceivedRequest.promise, "dying peer receiving in-flight request");
 
     // A second connection joins; the pool is not empty when the first dies.
     const survivor = await connectIpcClient(socketPath, {
@@ -50,7 +51,6 @@ describe("failure classes stay honest (#606 re-audit)", () => {
       },
     });
     clients.push(survivor);
-    await Bun.sleep(10);
 
     // Learn the survivor's connection id from the RequestHandler's own
     // connection-id argument rather than hardcoding the counter's "conn-2".
@@ -77,7 +77,6 @@ describe("failure classes stay honest (#606 re-audit)", () => {
 
     const client = await connectIpcClient(socketPath, {});
     clients.push(client);
-    await Bun.sleep(10);
 
     // Pre-fix: the request was silently dropped and the server's call aged
     // out as a timeout.
@@ -110,7 +109,6 @@ describe("failure classes stay honest (#606 re-audit)", () => {
         socket.write(`this is not json\n${response}\n`);
       }
     });
-    await Bun.sleep(10);
 
     // Pre-fix: the malformed line's throw re-queued the trailing response for
     // the NEXT data event that never came, so the call stalled to
@@ -177,12 +175,12 @@ describe("failure classes stay honest (#606 re-audit)", () => {
     // the decoder MID-frame — everything after would parse as garbage, so the
     // server must not keep the desynced connection alive (pre-fix it did).
     socket.write("x".repeat(17 * 1024 * 1024));
-    await serverClosed;
+    await within(serverClosed, "server FIN after oversize frame", 12_000);
 
     const errorFrame = frames.at(-1) as { id?: string; error?: { code?: number } } | undefined;
     expect(errorFrame?.error?.code).toBe(4001);
     expect(errorFrame?.id).toBe("unknown");
-  }, 10_000);
+  }, 15_000);
 
   test("a client that sent an oversize frame fails fast, not by burning its timeout", async () => {
     const socketPath = socketPathForTest("oversize-client");
@@ -196,11 +194,12 @@ describe("failure classes stay honest (#606 re-audit)", () => {
     // Pre-fix the server kept the desynced connection open and the pending
     // aged out over the full 30s timeout; now the symmetric close rejects it
     // as a connection loss within the test's own budget.
-    const error = await client
+    const disconnected = client
       .call("big", { data: "y".repeat(17 * 1024 * 1024) }, 30_000)
       .catch((e: unknown) => e);
+    const error = await within(disconnected, "client rejection after oversize frame", 12_000);
     expect(error).toBeInstanceOf(IpcConnectionError);
-  }, 10_000);
+  }, 15_000);
 
   test("an error frame carrying the request's id settles the requester's pending", async () => {
     const socketPath = socketPathForTest("correlated-4000");
@@ -236,9 +235,11 @@ describe("failure classes stay honest (#606 re-audit)", () => {
 
   test("a response arriving on a connection that does not own the request is ignored", async () => {
     const socketPath = socketPathForTest("cross-conn");
-    const srv = await createIpcServer(socketPath, (_method, _params, respond) =>
-      respond({ ok: true }),
-    );
+    const forgedResponseProcessed = deferred();
+    const srv = await createIpcServer(socketPath, (method, _params, respond) => {
+      if (method === "forged-response-barrier") forgedResponseProcessed.resolve();
+      respond({ ok: true });
+    });
     servers.push(srv);
 
     // conn A receives the server's request and answers LAST.
@@ -277,9 +278,14 @@ describe("failure classes stay honest (#606 re-audit)", () => {
     await gotRequest;
     if (!requestId) throw new Error("request id was never captured");
 
-    // conn B echoes conn A's request id — pre-fix this settled the pending.
-    connB.write(`${JSON.stringify(Ipc.createResponse(requestId, { from: "B" }))}\n`);
-    await Bun.sleep(50);
+    // conn B echoes conn A's request id. A following notification on the
+    // same stream is an exact processing barrier for the forged response.
+    connB.write(
+      `${JSON.stringify(Ipc.createResponse(requestId, { from: "B" }))}\n${JSON.stringify(
+        Ipc.createNotification("forged-response-barrier", {}),
+      )}\n`,
+    );
+    await within(forgedResponseProcessed.promise, "foreign response processing barrier");
     expect(settled).toBe(false);
 
     // Only the owning connection's answer resolves it.
@@ -312,10 +318,9 @@ describe("client remote-error path (#606 audit)", () => {
   const servers: Awaited<ReturnType<typeof createIpcServer>>[] = [];
   const clients: Awaited<ReturnType<typeof connectIpcClient>>[] = [];
 
-  afterEach(async () => {
+  afterEach(() => {
     for (const c of clients.splice(0)) c.close();
     for (const s of servers.splice(0)) s.close();
-    await Bun.sleep(10);
   });
 
   test("an error frame REJECTS the call as IpcRemoteError — never resolves undefined", async () => {

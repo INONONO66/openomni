@@ -1,9 +1,17 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { anthropicModel as model, assistantMessage as buildAssistantMessage } from "../helpers/fixtures";
 import type { Message, Tool } from "@openomni/protocol";
 import type { Sink } from "../../src/sink";
 import { Bus } from "@openomni/telemetry";
 import { Processor } from "../../src/processor";
+
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
 
 describe("Processor tool result projection", () => {
   afterEach(() => {
@@ -14,9 +22,14 @@ describe("Processor tool result projection", () => {
     const toolCalls: Tool.Call[] = [];
     const toolResults: Tool.Result[] = [];
     const messages: Message.WithParts[] = [];
+    const toolCallObserved = deferred();
+    const toolResultReleased = deferred();
     const sink: Sink = {
       onMessage: (message) => messages.push(message),
-      onToolCall: (call) => toolCalls.push(call),
+      onToolCall: (call) => {
+        toolCalls.push(call);
+        toolCallObserved.resolve();
+      },
       onToolResult: (result) => toolResults.push(result),
     };
 
@@ -36,7 +49,7 @@ describe("Processor tool result projection", () => {
             toolName: "weather",
             input: { city: "Seoul" },
           };
-          await Bun.sleep(10);
+          await toolResultReleased.promise;
           yield {
             type: "tool-result",
             toolCallId: "call-weather",
@@ -49,7 +62,14 @@ describe("Processor tool result projection", () => {
       }),
     });
 
-    await processor.process({ system: "" });
+    const processing = processor.process({ system: "" });
+    await toolCallObserved.promise;
+    const runningSnapshot = messages
+      .flatMap((message) => message.parts)
+      .find((part) => part.type === "tool" && part.state.status === "running");
+    expect(runningSnapshot).toBeDefined();
+    toolResultReleased.resolve();
+    await processing;
 
     expect(toolCalls).toEqual([{ id: "call-weather", tool: "weather", input: { city: "Seoul" } }]);
     expect(toolResults).toHaveLength(1);
@@ -68,12 +88,7 @@ describe("Processor tool result projection", () => {
     // the call event, so the part reports a real duration.
     const state = toolPart?.type === "tool" ? toolPart.state : undefined;
     if (state?.status !== "completed") throw new Error("expected completed tool state");
-    expect(state.time.end - state.time.start).toBeGreaterThanOrEqual(5);
-
-    const runningSnapshot = messages
-      .flatMap((message) => message.parts)
-      .find((part) => part.type === "tool" && part.state.status === "running");
-    expect(runningSnapshot).toBeDefined();
+    expect(state.time.end).toBeGreaterThanOrEqual(state.time.start);
   });
 
   test("restores the dotted internal name on the recorded part via the reverse map", async () => {
@@ -366,6 +381,7 @@ describe("Processor tool error normalization", () => {
 describe("Processor abort settlement grace (#532 candidate 2)", () => {
   afterEach(() => {
     Bus.reset();
+    mock.restore();
   });
 
   function captureSink(messages: Message.WithParts[]): Sink {
@@ -427,9 +443,17 @@ describe("Processor abort settlement grace (#532 candidate 2)", () => {
     }
   });
 
-  test("tool result that never arrives settles as interrupted after the grace window", async () => {
+  test("tool result that never arrives settles as interrupted when the grace timer fires", async () => {
     const messages: Message.WithParts[] = [];
     const abortController = new AbortController();
+    const scheduledDelays: number[] = [];
+    spyOn(globalThis, "setTimeout").mockImplementation(
+      ((callback: Parameters<typeof setTimeout>[0], delay?: number) => {
+        scheduledDelays.push(delay ?? 0);
+        queueMicrotask(() => callback());
+        return 0 as unknown as ReturnType<typeof setTimeout>;
+      }) as unknown as typeof setTimeout,
+    );
 
     const processor = Processor.create({
       assistantMessage: buildAssistantMessage("msg-tool-result", "session-tool-result", "parent-tool-result"),
@@ -455,15 +479,10 @@ describe("Processor abort settlement grace (#532 candidate 2)", () => {
       }),
     });
 
-    const startedAt = Date.now();
     await expect(processor.process({ system: "" })).rejects.toMatchObject({
       name: "AbortError",
     });
-    const elapsed = Date.now() - startedAt;
-    // The grace window was actually attempted (~250ms) AND is bounded —
-    // abort must not hang on a dead stream nor return before the grace.
-    expect(elapsed).toBeGreaterThanOrEqual(200);
-    expect(elapsed).toBeLessThan(1500);
+    expect(scheduledDelays).toContain(250);
 
     const state = lastToolState(messages);
     expect(state?.status).toBe("error");

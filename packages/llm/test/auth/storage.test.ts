@@ -53,6 +53,20 @@ describe("Auth Storage", () => {
     });
   });
 
+  it("preserves both credentials when set calls overlap", async () => {
+    await withTestAuthFile(async () => {
+      await Promise.all([
+        Auth.set("anthropic", { type: "api", key: "sk-ant" }),
+        Auth.set("openai", { type: "api", key: "sk-openai" }),
+      ]);
+
+      expect(await Auth.all()).toEqual({
+        anthropic: { type: "api", key: "sk-ant" },
+        openai: { type: "api", key: "sk-openai" },
+      });
+    });
+  });
+
   it("should return all entries", async () => {
     await withTestAuthFile(async () => {
       await Auth.set("anthropic", { type: "proxy", baseURL: "http://localhost:8317/v1" });

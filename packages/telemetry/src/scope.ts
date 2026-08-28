@@ -1,7 +1,5 @@
 import type { BusEvent } from "@openomni/protocol";
-import { createSpanHandle, failedOutcome, type SpanHandle, type SpanPair } from "./span";
 import {
-  newSpanId,
   requireTraceScope,
   type EmitPayload,
   type SpanId,
@@ -29,20 +27,6 @@ export interface Emitter {
     descriptor: BusEvent.Descriptor<TPayload>,
     payload: EmitPayload<TPayload>,
   ): void;
-
-  /**
-   * Wraps `body` in a child span. The child gets a fresh `spanId` with this
-   * scope's span as its parent, so emitted events form a tree an OpenTelemetry
-   * exporter reconstructs without further work.
-   *
-   * Every exit emits exactly one terminal event: a normal return, a `settle()`
-   * recording a policy block or exhausted budget, or a throw.
-   */
-  span<TStart extends object, TEnd extends object, TResult>(
-    pair: SpanPair<TStart, TEnd>,
-    start: EmitPayload<TStart>,
-    body: (span: SpanHandle, child: Emitter) => Promise<TResult>,
-  ): Promise<TResult>;
 
   /** A narrower scope — a child run or a delegated actor, same trace and span. */
   child(narrowing: ScopeNarrowing): Emitter;
@@ -75,8 +59,8 @@ export interface ScopeOptions {
  * Validation happens at construction: a malformed scope is a wiring error the
  * process should not start with, while a throw from inside a run would be
  * telemetry cancelling observed work. {@link Emitter.child} and
- * {@link Emitter.span} derive their identity from an already-valid one, so
- * neither can fail.
+ * {@link Emitter.child} derives its identity from an already-valid one, so it
+ * cannot fail.
  */
 export function scope(
   trace: Omit<TraceScope, "spanId"> & { readonly spanId?: SpanId },
@@ -125,42 +109,10 @@ export function scope(
     }
   }
 
-  async function span<TStart extends object, TEnd extends object, TResult>(
-    pair: SpanPair<TStart, TEnd>,
-    start: EmitPayload<TStart>,
-    body: (handle: SpanHandle, child: Emitter) => Promise<TResult>,
-  ): Promise<TResult> {
-    const childIdentity: TraceScope = {
-      ...identity,
-      spanId: newSpanId(),
-      parentSpanId: identity.spanId,
-    };
-    const child = scope(childIdentity, sink, options);
-    const startedAt = now();
-    publish(childIdentity, pair.start, () => start);
-    const handle = createSpanHandle();
-    try {
-      const result = await body(handle, child);
-      publish(childIdentity, pair.end, () =>
-        pair.terminal(handle.outcome() ?? { kind: "completed" }, now() - startedAt),
-      );
-      return result;
-    } catch (error) {
-      // A settled outcome wins over the throw. A denial that carries an abort
-      // effect leaves through this branch, and reporting it as `failed` would
-      // lose the reason — the distinction the outcome type exists to keep.
-      publish(childIdentity, pair.end, () =>
-        pair.terminal(handle.outcome() ?? failedOutcome(error), now() - startedAt),
-      );
-      throw error;
-    }
-  }
-
   return {
     emit(descriptor, payload) {
       publish(identity, descriptor, () => payload);
     },
-    span,
     child(narrowing) {
       return scope({ ...identity, ...narrowedFields(narrowing) }, sink, options);
     },

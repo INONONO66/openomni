@@ -61,7 +61,7 @@ protocol, channels, agent, llm, ledger, telemetry, placement, machines <- apps/o
 | `packages/protocol` | Schemas, wire contracts, pure folds | I/O, storage, product decisions |
 | `packages/policy` | Generic policy evaluation | Product-specific authority |
 | `packages/placement` | Pure target selection | Authorization or execution |
-| `packages/telemetry` | Bus, scoped observation, spans | Durable or decision state |
+| `packages/telemetry` | Bus and scoped observation | Durable or decision state |
 | `packages/ledger` | Durable state and typed store surfaces | Routing and authority decisions |
 | `packages/llm` | Provider behavior and model accounting | Product routing or tools |
 | `packages/agent` | Stateless loop, compaction, MCP client | Durable session/product lifecycle |

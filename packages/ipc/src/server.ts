@@ -2,9 +2,9 @@ import fs from "node:fs";
 import net from "node:net";
 import { Ipc } from "@openomni/protocol";
 
-import { IpcConnectionError, IpcProtocolError, IpcRemoteError, IpcTimeoutError } from "./errors";
+import { IpcConnectionError, IpcProtocolError } from "./errors";
 import { LineDecoder, encode } from "./framing";
-import { PendingCalls } from "./pending-calls";
+import { PeerRequestTable } from "./peer-request-table";
 
 function isMissingFileError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error && error.code === "ENOENT";
@@ -115,7 +115,6 @@ export async function createIpcServer(
   };
 
   const connections = new Map<string, ConnectionState>();
-  const pending = new PendingCalls<string>();
   let connCounter = 0;
   let activeConnectionId: string | undefined;
 
@@ -136,6 +135,21 @@ export async function createIpcServer(
   function sendFrame(state: ConnectionState, msg: unknown): void {
     send(state, encode(msg));
   }
+
+  const peer = new PeerRequestTable<ConnectionState>({
+    send: sendFrame,
+    samePeer: (pendingPeer, inboundPeer) => pendingPeer.id === inboundPeer.id,
+    onRequest: (state, method, params, respond, notify) =>
+      handler(method, params, respond, notify, state.id),
+    onNotification: (state, method, params) =>
+      handler(
+        method,
+        params,
+        () => undefined,
+        () => undefined,
+        state.id,
+      ),
+  });
 
   function flushQueued(state: ConnectionState): void {
     if (state.closed) return;
@@ -185,18 +199,10 @@ export async function createIpcServer(
     // A dead connection fails ITS in-flight requests as a connection loss —
     // leaving them to age out would misreport the failure as a timeout. This
     // includes requests whose bytes were still sitting in the write queue.
-    failPendingOf(id, new IpcConnectionError(reason));
+    if (state) peer.disconnect(state, new IpcConnectionError(reason));
     // `state` guards double delivery: close always follows error, and the
     // second call finds the connection already deleted.
     if (state) options.onDisconnect?.(id);
-  }
-
-  function failPendingOf(connId: string, err: Error): void {
-    pending.failAll(err, (connectionId) => connectionId === connId);
-  }
-
-  function failAllPending(err: Error): void {
-    pending.failAll(err);
   }
 
   const server = Bun.listen({
@@ -260,64 +266,7 @@ export async function createIpcServer(
             continue;
           }
 
-          if (parsed.type === "response") {
-            // Response matching is scoped to the connection that owns the
-            // request: another connection echoing (or guessing) the id must
-            // not settle a pending it was never asked about.
-            pending.settle(
-              parsed.id,
-              parsed.error
-                ? { ok: false, error: new IpcRemoteError(parsed.error.code, parsed.error.message) }
-                : { ok: true, value: parsed.result },
-              (connectionId) => connectionId === state.id,
-            );
-          } else if (parsed.type === "request") {
-            const respond = (result: unknown) => {
-              sendFrame(state, Ipc.createResponse(parsed.id, result));
-            };
-            const notify = (method: string, params?: Record<string, unknown>) => {
-              sendFrame(state, Ipc.createNotification(method, params));
-            };
-            const failRequest = (err: unknown) => {
-              sendFrame(
-                state,
-                Ipc.createErrorResponse(
-                  parsed.id,
-                  1000,
-                  err instanceof Error ? err.message : String(err),
-                ),
-              );
-            };
-            // Both sync throws AND async rejections become the typed code-1000
-            // error frame — an escaping rejection would leave the requester
-            // burning its timeout with no error response.
-            try {
-              const result = handler(parsed.method, parsed.params, respond, notify, state.id);
-              if (result instanceof Promise) result.catch(failRequest);
-            } catch (err) {
-              failRequest(err);
-            }
-          } else if (parsed.type === "notification") {
-            // notifications don't get error responses per the protocol spec
-            const warnFailure = (error: unknown) => {
-              console.warn(
-                "IPC notification handler failed:",
-                error instanceof Error ? error.message : String(error),
-              );
-            };
-            try {
-              const result = handler(
-                parsed.method,
-                parsed.params,
-                () => undefined,
-                () => undefined,
-                state.id,
-              );
-              if (result instanceof Promise) result.catch(warnFailure);
-            } catch (error) {
-              warnFailure(error);
-            }
-          }
+          peer.dispatch(parsed, state);
         }
 
         // A malformed line costs only itself: every parseable frame above was
@@ -355,13 +304,7 @@ export async function createIpcServer(
       if (!conn) {
         return Promise.reject(new IpcConnectionError("no connected client"));
       }
-      const req = Ipc.createRequest(method, params);
-      return pending.register(
-        req.id,
-        timeoutMs,
-        () => new IpcTimeoutError(`request timeout: ${method}`),
-        { meta: conn.id, send: () => sendFrame(conn, req) },
-      );
+      return peer.call(conn, method, params, timeoutMs);
     },
     notify(method, params) {
       const conn = getActiveConnection();
@@ -373,7 +316,7 @@ export async function createIpcServer(
       if (connections.has(id)) activeConnectionId = id;
     },
     close() {
-      failAllPending(new IpcConnectionError("server closed"));
+      peer.disconnectAll(new IpcConnectionError("server closed"));
       server.stop(true);
       try {
         fs.unlinkSync(socketPath);

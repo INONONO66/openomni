@@ -3,7 +3,7 @@ import { LlmCall, Operational, type Message, type Tool } from "@openomni/protoco
 import type { Sink } from "../../src/sink";
 import { collector } from "@openomni/telemetry";
 import { Processor } from "../../src/processor";
-import { APIError } from "../../src/error";
+import { APIError, InvalidUsageError } from "../../src/error";
 import type { Provider } from "../../src/provider";
 
 type OperationalInfoPayload = {
@@ -14,6 +14,14 @@ type OperationalInfoPayload = {
   msg: string;
   context?: Record<string, unknown>;
 };
+
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
 
 function streamOf(chunks: Array<Record<string, unknown>>) {
   return async () => ({
@@ -261,6 +269,36 @@ describe("Processor", () => {
         reasoning: 4,
         cache: { read: 2, write: 6 },
       });
+    });
+
+    test("fails on invalid step-finish usage without fabricated totals", async () => {
+      const capture = capturingSink();
+      const processor = createProcessor({
+        sink: capture.sink,
+        createStream: streamOf([
+          {
+            type: "step-finish",
+            finishReason: "end_turn",
+            usage: { inputTokens: -1 },
+            providerMetadata: {},
+          },
+          { type: "finish" },
+        ]),
+      });
+
+      try {
+        await processor.process({ system: "" });
+        throw new Error("expected InvalidUsageError");
+      } catch (error) {
+        expect(InvalidUsageError.isInstance(error)).toBe(true);
+      }
+      expect(processor.usageTotals).toEqual({
+        input: 0,
+        output: 0,
+        reasoning: 0,
+        cache: { read: 0, write: 0 },
+      });
+      expect(capture.finalParts().some((part) => part.type === "step-finish")).toBe(false);
     });
 
     test("trims trailing whitespace from text and reasoning at block end", async () => {
@@ -571,24 +609,33 @@ describe("Processor", () => {
         }),
       });
 
+      const warnPublished = deferred();
+      const originalPublish = events.publish;
+      events.publish = (event, data) => {
+        originalPublish(event, data);
+        if (
+          event.name === Operational.Events.Warn.name &&
+          (data as OperationalInfoPayload).component === "llm.retry"
+        ) {
+          warnPublished.resolve();
+        }
+      };
+
       const settled = processor.process({ system: "" }).then(
         () => undefined,
         (error: unknown) => error,
       );
-      // The warn publishes before the backoff sleep; abort so the test does
-      // not wait the multi-second backoff out.
+      // The warn publishes before the backoff sleep; abort on that exact event.
+      await warnPublished.promise;
+      abortController.abort();
+      await settled;
+      events.publish = originalPublish;
+
       const warns = () =>
         events
           .named(Operational.Events.Warn.name)
           .map((event) => event as OperationalInfoPayload)
           .filter((data) => data.component === "llm.retry");
-      const deadline = Date.now() + 2000;
-      while (warns().length === 0 && Date.now() < deadline) {
-        await Bun.sleep(5);
-      }
-      abortController.abort();
-      await settled;
-
       expect(warns()).toHaveLength(1);
       expect(warns()[0]).toMatchObject({
         component: "llm.retry",
