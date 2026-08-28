@@ -1,4 +1,5 @@
 import { Delegation, type Storage as ProtocolStorage } from "@openomni/protocol";
+import { claimWithinCountedWindow } from "../storage/counted-window-claim.js";
 import { Storage } from "../storage/storage";
 
 function requireAdapter(): ProtocolStorage.DelegationSubAdapter {
@@ -26,6 +27,34 @@ export namespace DelegationStore {
       throw new Error(`Delegation already exists: ${parsed.delegationId}`);
     }
     return parsed;
+  }
+
+  /** Atomically commits an open record only while its root has fanout capacity. */
+  export function claimOpenWithinRoot(
+    record: Delegation.Record,
+    maxFanout: number,
+  ): Delegation.Record | undefined {
+    const parsed = Delegation.Record.parse(record);
+    const adapter = requireAdapter();
+    const result = claimWithinCountedWindow({
+      transaction: (operation) => Storage.get().transaction(operation),
+      alreadyClaimed: () => {
+        const existing = adapter.get(parsed.delegationId);
+        if (existing === undefined) return false;
+        if (JSON.stringify(existing) !== JSON.stringify(parsed)) {
+          throw new Error(`Delegation already exists: ${parsed.delegationId}`);
+        }
+        return true;
+      },
+      readWindowState: () => adapter.listOpenByRoot(parsed.rootDelegationId).length,
+      canClaim: (openFanout) => openFanout < maxFanout,
+      append: () => {
+        if (!adapter.create(parsed)) {
+          throw new Error(`Delegation already exists: ${parsed.delegationId}`);
+        }
+      },
+    });
+    return result === "claimed" ? parsed : undefined;
   }
 
   export function get(delegationId: string): Delegation.Record | undefined {

@@ -27,6 +27,7 @@ const RefusalCode = z.enum([
   "deadline_passed",
   "parent_missing",
   "parent_lineage",
+  "parent_settled",
   "fanout_cap",
   "worker_transport",
   "inline_depth",
@@ -123,6 +124,12 @@ export function admit(
         trustedOrigin.rootDelegationId !== context.rootDelegationId))
   ) {
     return refusal("parent_lineage", "delegation lineage does not match the durable parent");
+  }
+  if (context?.parent?.status === "settled") {
+    return refusal(
+      "parent_settled",
+      `parent delegation ${context.parent.delegationId} is already settled`,
+    );
   }
 
   // The schema proves the requested deadline is a positive instant. Holding a

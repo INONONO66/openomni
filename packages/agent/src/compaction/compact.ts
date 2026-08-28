@@ -22,7 +22,11 @@ export interface CompactionOptions {
    * merges, it never regenerates. The mechanism owns the exclusions and the
    * threading; what the summarizer does with them is strategy.
    */
-  onSummarize?: (messages: Message.WithParts[], previousAnchor?: string) => Promise<string>;
+  onSummarize?: (
+    messages: Message.WithParts[],
+    previousAnchor?: string,
+    signal?: AbortSignal,
+  ) => Promise<string>;
   /**
    * Budget (chars) of most-recent user messages carried verbatim through a
    * cut. The newest user message is always preserved even when it alone

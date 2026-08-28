@@ -389,8 +389,22 @@ export async function startOpenOmni(options: StartOptions = {}) {
     for (const surface of externalSurfaces) surface.stop(newTraceId());
     kernel?.stop();
     host?.close();
-    stopBusPersistence();
-    Storage.reset();
+    let flushError: unknown;
+    try {
+      await BusPersistence.flush();
+    } catch (caught) {
+      flushError = caught;
+    } finally {
+      stopBusPersistence();
+      Storage.reset();
+    }
+    if (flushError !== undefined) {
+      const rollbackFailure = new Error("OpenOmni boot failed and journal rollback flush failed") as Error & {
+        errors: readonly unknown[];
+      };
+      rollbackFailure.errors = [error, flushError];
+      throw rollbackFailure;
+    }
     throw error;
   }
 }

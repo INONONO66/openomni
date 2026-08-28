@@ -2,10 +2,11 @@ import { describe, expect, test, vi } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DelegationStore, SqliteStorageAdapter, Storage } from "@openomni/ledger";
+import { DelegationStore, SqliteStorageAdapter, Storage, WorkItemStore } from "@openomni/ledger";
 import { admit, type AdmissionLimits } from "../src/delegation/admission";
 import { createChannelDriver } from "../src/delegation/channel-driver";
 import { createDelegationKernel } from "../src/delegation/kernel";
+import { createWorkItemLinkage } from "../src/delegation/work-item-linkage";
 import {
   AWAIT_DELEGATION_TOOL_NAME,
   CANCEL_DELEGATION_TOOL_NAME,
@@ -115,6 +116,31 @@ describe("admission fold", () => {
     });
     expect(result).toMatchObject({ ok: false, error: { data: { code: "fanout_cap" } } });
   });
+
+  test("a settled parent cannot commission another child", () => {
+    const result = admit(
+      ask(),
+      { ...WORKER, parentDelegationId: "parent", rootDelegationId: "root" },
+      1_000,
+      LIMITS,
+      {
+        delegationId: "child",
+        rootDelegationId: "root",
+        parent: {
+          delegationId: "parent",
+          rootDelegationId: "root",
+          deadline: 10_000,
+          status: "settled",
+        },
+        openFanout: 0,
+      },
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { data: { code: "parent_settled" } },
+    });
+  });
 });
 
 describe("durable kernel", () => {
@@ -150,6 +176,163 @@ describe("durable kernel", () => {
       "delegation.delivered",
       "delegation.settled",
     ]);
+  });
+
+  test("atomically admits at most one concurrent child into the last fanout slot", async () => {
+    DelegationStore.create({
+      delegationId: "root",
+      operation: "ask",
+      address: { kind: "core", scope: "independent" },
+      transport: "process",
+      deadline: 10_000,
+      rootDelegationId: "root",
+      origin: RESIDENT,
+      instruction: "root",
+      status: "open",
+      createdAt: 1,
+    });
+    for (let index = 1; index <= 6; index += 1) {
+      DelegationStore.create({
+        delegationId: `existing-${index}`,
+        operation: "ask",
+        address: { kind: "core", scope: "inline" },
+        transport: "inline",
+        deadline: 10_000,
+        parentDelegationId: "root",
+        rootDelegationId: "root",
+        origin: {
+          ...WORKER,
+          parentDelegationId: "root",
+          rootDelegationId: "root",
+        },
+        instruction: "existing child",
+        status: "open",
+        createdAt: index + 1,
+      });
+    }
+
+    let prepared = 0;
+    let releasePreparation!: () => void;
+    const bothPreparing = new Promise<void>((resolve) => {
+      releasePreparation = resolve;
+    });
+    let nextId = 0;
+    const kernel = createDelegationKernel({
+      store: DelegationStore,
+      drivers: {
+        inline: {
+          prepare: async () => {
+            prepared += 1;
+            if (prepared === 2) releasePreparation();
+            await bothPreparing;
+            return {};
+          },
+          run: async () => ({ status: "completed", output: "done" }),
+        },
+      },
+      now: () => 1_000,
+      newDelegationId: () => `candidate-${++nextId}`,
+      wake: () => undefined,
+      bootSweep: false,
+      limits: LIMITS,
+    });
+    const origin = {
+      ...WORKER,
+      parentDelegationId: "root",
+      rootDelegationId: "root",
+    };
+
+    const results = await Promise.all([kernel.delegate(ask(), origin), kernel.delegate(ask(), origin)]);
+
+    expect(results.filter((result) => "refused" in result)).toHaveLength(1);
+    kernel.stop();
+  });
+
+  test("cancels the commissioned WorkItem when a concurrent assign loses the final fanout claim", async () => {
+    DelegationStore.create({
+      delegationId: "assign-root",
+      operation: "ask",
+      address: { kind: "core", scope: "independent" },
+      transport: "process",
+      deadline: 10_000,
+      rootDelegationId: "assign-root",
+      origin: RESIDENT,
+      instruction: "root",
+      status: "open",
+      createdAt: 1,
+    });
+    for (let index = 1; index <= 6; index += 1) {
+      DelegationStore.create({
+        delegationId: `assign-existing-${index}`,
+        operation: "ask",
+        address: { kind: "core", scope: "inline" },
+        transport: "inline",
+        deadline: 10_000,
+        parentDelegationId: "assign-root",
+        rootDelegationId: "assign-root",
+        origin: {
+          ...WORKER,
+          parentDelegationId: "assign-root",
+          rootDelegationId: "assign-root",
+        },
+        instruction: "existing child",
+        status: "open",
+        createdAt: index + 1,
+      });
+    }
+
+    let prepared = 0;
+    let releasePreparation!: () => void;
+    const bothPreparing = new Promise<void>((resolve) => {
+      releasePreparation = resolve;
+    });
+    let nextId = 0;
+    const kernel = createDelegationKernel({
+      store: DelegationStore,
+      drivers: {
+        process: {
+          prepare: async () => {
+            prepared += 1;
+            if (prepared === 2) releasePreparation();
+            await bothPreparing;
+            return {};
+          },
+          run: () => new Promise(() => undefined),
+        },
+      },
+      workItems: createWorkItemLinkage({
+        model: { provider: "fake", id: "fanout-test" },
+        now: () => 1_000,
+      }),
+      now: () => 1_000,
+      newDelegationId: () => `assign-candidate-${++nextId}`,
+      wake: () => undefined,
+      bootSweep: false,
+      limits: LIMITS,
+    });
+    const origin = {
+      ...RESIDENT,
+      parentDelegationId: "assign-root",
+      rootDelegationId: "assign-root",
+    };
+    const request = ask({
+      operation: "assign",
+      address: { kind: "core", scope: "independent" },
+      acceptanceCriteria: ["result is verified"],
+    });
+
+    const results = await Promise.all([
+      kernel.delegate(request, origin),
+      kernel.delegate(request, origin),
+    ]);
+
+    expect(results.filter((result) => "refused" in result)).toHaveLength(1);
+    const commissioned = WorkItemStore.list().filter(
+      (item) => item.sourceChannel === "delegation" && item.sourceMessageId.startsWith("assign-candidate-"),
+    );
+    expect(commissioned).toHaveLength(2);
+    expect(commissioned.filter((item) => item.timestamps.cancelled !== undefined)).toHaveLength(1);
+    kernel.stop();
   });
 
   test("process/channel work returns the handle before its outcome and can be awaited again", async () => {
@@ -226,6 +409,34 @@ describe("durable kernel", () => {
     await expect(kernel.cancelDelegation(started.handle.delegationId)).resolves.toMatchObject({ status: "cancelled" });
     expect(aborted).toBe(true);
     await expect(kernel.cancelDelegation(started.handle.delegationId)).resolves.toMatchObject({ status: "cancelled" });
+  });
+
+  test("stop rejects and removes a pending delegation awaiter", async () => {
+    const kernel = createDelegationKernel({
+      drivers: { process: { run: () => new Promise(() => undefined) } },
+      now: () => 1_000,
+      newDelegationId: () => "d-stop-waiter",
+      wake: () => undefined,
+      limits: LIMITS,
+    });
+    const started = await kernel.delegate(
+      {
+        address: { kind: "core", scope: "independent" },
+        operation: "ask",
+        payload: { text: "long-running" },
+        deadline: 10_000,
+      },
+      RESIDENT,
+    );
+    if ("refused" in started) throw new Error(started.refused);
+    const stopped = kernel.awaitDelegation(started.handle.delegationId).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+
+    kernel.stop();
+
+    expect(await stopped).toEqual(new Error("delegation kernel has been stopped"));
   });
 
   test("an inline caller returns the deadline settlement even if its driver ignores abort", async () => {

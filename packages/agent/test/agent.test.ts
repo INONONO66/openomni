@@ -380,6 +380,64 @@ it("handles toolExecutor errors by setting isError: true", async () => {
   expect(result.finishReason).toBe("stop");
 });
 
+it("records an unknown object outcome as a terminal failure", async () => {
+  mockRunFn = async () => ({}) as never;
+
+  await expect(
+    createAgent().run(runInput([{ role: "user", content: "unknown outcome" }])),
+  ).rejects.toThrow("Unknown outcome type: unknown");
+});
+
+it("records an unknown named outcome as a terminal failure", async () => {
+  mockRunFn = async () => ({ type: "unexpected" }) as never;
+
+  await expect(
+    createAgent().run(runInput([{ role: "user", content: "named outcome" }])),
+  ).rejects.toThrow("Unknown outcome type: unexpected");
+});
+
+it("fails with a terminal record when the default provider is missing", async () => {
+  process.env.OPENOMNI_DISABLE_MODELS_FETCH = "1";
+  try {
+    await expect(
+      ChatAgent.create({
+        events: Bus,
+        model: { provider: "missing-provider", id: "missing-model" },
+      }).run(runInput([{ role: "user", content: "lookup" }])),
+    ).rejects.toThrow("Provider not found: missing-provider");
+  } finally {
+    delete process.env.OPENOMNI_DISABLE_MODELS_FETCH;
+  }
+});
+
+it("fails with a terminal record when the default model is missing", async () => {
+  process.env.OPENOMNI_DISABLE_MODELS_FETCH = "1";
+  try {
+    await expect(
+      ChatAgent.create({
+        events: Bus,
+        model: { provider: "anthropic", id: "missing-model" },
+      }).run(runInput([{ role: "user", content: "lookup" }])),
+    ).rejects.toThrow("Model not found: missing-model for provider anthropic");
+  } finally {
+    delete process.env.OPENOMNI_DISABLE_MODELS_FETCH;
+  }
+});
+
+it("resolves a known model through the default provider path", async () => {
+  process.env.OPENOMNI_DISABLE_MODELS_FETCH = "1";
+  try {
+    const result = await ChatAgent.create({
+      events: Bus,
+      model: { provider: "anthropic", id: "claude-opus-4-5" },
+      llm: { run: async () => createStopOutcome() },
+    }).run(runInput([{ role: "user", content: "hello" }]));
+    expect(result.finishReason).toBe("stop");
+  } finally {
+    delete process.env.OPENOMNI_DISABLE_MODELS_FETCH;
+  }
+});
+
 it("throws when tools are configured without toolExecutor", async () => {
   const agent = ChatAgent.create({
     events: Bus,

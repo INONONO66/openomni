@@ -49,6 +49,10 @@ export interface DelegationDriver {
 
 interface DelegationStorePort {
   create(record: Delegation.Record): Delegation.Record;
+  claimOpenWithinRoot(
+    record: Delegation.Record,
+    maxFanout: number,
+  ): Delegation.Record | undefined;
   get(delegationId: string): Delegation.Record | undefined;
   /** Legacy test-port shape; production uses settleOnce for the CAS receipt. */
   settle?(delegationId: string, settlement: Delegation.Settled): Delegation.Settled | undefined;
@@ -118,7 +122,10 @@ const DelegationControlError = NamedError.create(
 
 // A module-level notification registry lets a fresh kernel in the same host
 // await a record settled by the previous kernel without polling or sleeps.
-type SettlementWaiter = (settlement: Delegation.Settled) => void;
+interface SettlementWaiter {
+  readonly settle: (settlement: Delegation.Settled) => void;
+  readonly stop: () => void;
+}
 const settlementWaiters = new Map<string, Set<SettlementWaiter>>();
 
 function settlementKey(settlement: Delegation.Settled): string {
@@ -226,6 +233,7 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
   const controllers = new Map<string, AbortController>();
   const delivered = new Set<string>();
   const emittedSettlements = new Set<string>();
+  const ownedWaiters = new Set<SettlementWaiter>();
   let recovered = false;
   let stopped = false;
 
@@ -257,7 +265,7 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
     const waiters = settlementWaiters.get(settlement.delegationId);
     if (waiters === undefined) return;
     settlementWaiters.delete(settlement.delegationId);
-    for (const waiter of waiters) waiter(settlement);
+    for (const waiter of waiters) waiter.settle(settlement);
   }
 
   function clearTimer(delegationId: string): void {
@@ -571,7 +579,15 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
       createdAt: now,
       ...(workItemId === undefined ? {} : { workItemId }),
     });
-    store.create(record);
+    const claimed = store.claimOpenWithinRoot(record, limits.maxFanout);
+    if (claimed === undefined) {
+      if (workItemId !== undefined) await options.workItems?.cancelAssign(workItemId);
+      const message = `delegation fanout is capped at ${limits.maxFanout} open records for root ${record.rootDelegationId}`;
+      return {
+        refused: message,
+        error: new AdmissionRefusal({ code: "fanout_cap", message }),
+      };
+    }
     publishAdmitted(record);
     arm(record);
 
@@ -625,26 +641,39 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
       return Promise.resolve({ kind: "timeout", delegationId, deadline: record.deadline });
     }
 
-    return new Promise<DelegationAwaitResult>((resolve) => {
+    return new Promise<DelegationAwaitResult>((resolve, reject) => {
       let timer: ReturnType<typeof setTimeout> | undefined;
       let waiters = settlementWaiters.get(delegationId);
       if (waiters === undefined) {
         waiters = new Set();
         settlementWaiters.set(delegationId, waiters);
       }
-      const onSettled: SettlementWaiter = (settlement) => {
-        if (timer !== undefined) clearTimeout(timer);
-        resolve({ kind: "settled", settlement });
+      const removeWaiter = (): void => {
+        waiters?.delete(waiter);
+        ownedWaiters.delete(waiter);
+        if (waiters?.size === 0) settlementWaiters.delete(delegationId);
       };
-      waiters.add(onSettled);
+      const waiter: SettlementWaiter = {
+        settle: (settlement) => {
+          if (timer !== undefined) clearTimeout(timer);
+          ownedWaiters.delete(waiter);
+          resolve({ kind: "settled", settlement });
+        },
+        stop: () => {
+          if (timer !== undefined) clearTimeout(timer);
+          removeWaiter();
+          reject(new Error("delegation kernel has been stopped"));
+        },
+      };
+      waiters.add(waiter);
+      ownedWaiters.add(waiter);
       // Close the check/register race without polling: settlement is a sync
       // fold, so a settled row here can only have won between the first read
       // and registration in another host/kernel.
       const latest = store.get(delegationId);
       if (latest?.status === "settled" && latest.settled !== undefined) {
-        waiters.delete(onSettled);
-        if (waiters.size === 0) settlementWaiters.delete(delegationId);
-        onSettled(latest.settled);
+        removeWaiter();
+        waiter.settle(latest.settled);
         return;
       }
       const deadlineBound = end === record.deadline;
@@ -655,8 +684,7 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
             scheduleAwaitTimeout();
             return;
           }
-          waiters?.delete(onSettled);
-          if (waiters?.size === 0) settlementWaiters.delete(delegationId);
+          removeWaiter();
           if (deadlineBound) {
             const settled = settle(delegationId, {
               status: "no_response",
@@ -716,6 +744,7 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
     timers.clear();
     for (const controller of controllers.values()) controller.abort();
     controllers.clear();
+    for (const waiter of [...ownedWaiters]) waiter.stop();
   }
 
   const kernel: DelegationKernel = {

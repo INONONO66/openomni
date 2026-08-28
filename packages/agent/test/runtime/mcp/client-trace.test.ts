@@ -40,6 +40,29 @@ describe("McpClient call audit trace", () => {
     Bus.reset();
   });
 
+  test("publishes the exact success payload for a completed tool call", async () => {
+    const client = createClient(async () => ({ content: [{ type: "text", text: "found it" }] }));
+    const completed = nextEvent(Mcp.Events.ToolCompleted);
+
+    const result = await client.callTool("search-server.search", {}, "call-complete", {
+      traceContext: {
+        traceId: "trace-mcp-complete",
+        sessionId: "session-mcp-complete",
+        runId: "run-mcp-complete",
+      },
+    });
+
+    expect(result.output).toBe("found it");
+    expect(await completed).toMatchObject({
+      traceId: "trace-mcp-complete",
+      serverName: "search-server",
+      toolName: "search",
+      toolCallId: "call-complete",
+      resultSummary: "found it",
+    });
+    expect((await completed).durationMs).toBeGreaterThanOrEqual(0);
+  });
+
   test("uses the execution trace for called and failed events", async () => {
     // Given
     Bus.reset();
