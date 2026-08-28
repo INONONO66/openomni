@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { Ingress, Ledger } from "@openomni/protocol";
-import { Storage } from "@openomni/ledger";
+import { ActorRegistry, ChannelGrantStore, Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { IngressRoutingError } from "../../src/router/routing-resolution";
 import {
@@ -85,6 +85,75 @@ describe("GatewayRouter durable routing resolution", () => {
 
     expect(thrownCode(thrown)).toBe("route_replay_divergent");
     expect(deliveries).toHaveLength(0);
+    expect(Storage.get().ledger?.headFact(streamId())?.seq).toBe(1);
+    expect(routingDecisions()).toHaveLength(projections);
+  });
+
+  test.each([
+    [
+      "actorId",
+      () => {
+        ActorRegistry.registerIdentity({
+          id: "actor-replacement",
+          kind: "human",
+          trustTier: "owner",
+        });
+        ActorRegistry.registerEndpoint({
+          id: "endpoint-owner-dm",
+          actorId: "actor-replacement",
+          channel: ownerEvent.surface,
+          externalId: ownerEvent.userId,
+          workspace: ownerEvent.workspace,
+        });
+      },
+    ],
+    [
+      "trustTier",
+      () => {
+        ActorRegistry.registerIdentity({
+          id: "actor-owner",
+          kind: "human",
+          trustTier: "manager",
+        });
+      },
+    ],
+    [
+      "inboundTreatment",
+      () => {
+        ChannelGrantStore.put({
+          id: "grant-owner-dm",
+          surface: ownerEvent.surface,
+          workspace: ownerEvent.workspace,
+          channel: ownerEvent.channel,
+          kind: "trusted_channel",
+          inboundTreatment: "evidence_only",
+          createdBy: "actor-owner",
+        });
+      },
+    ],
+  ] as const)("redelivery with mutated %s authority refuses as divergent", async (_field, mutate) => {
+    registerOwnerDm();
+    createMappedOwnerSession();
+    const router = makeRouter();
+    await router.ingest(ownerEvent);
+    const projections = routingDecisions().length;
+
+    mutate();
+
+    let thrown: unknown;
+    try {
+      await router.ingest(ownerEvent);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrownCode(thrown)).toBe("route_replay_divergent");
+    // The refusal must not disclose perimeter-resolved authority values
+    // (actor ids, trust tiers, treatments) to whoever triggered redelivery.
+    const message = thrown instanceof Error ? thrown.message : String(thrown);
+    for (const secret of ["actor-owner", "actor-replacement", "owner", "manager", "evidence_only"]) {
+      expect(message).not.toContain(secret);
+    }
+    expect(deliveries).toHaveLength(1);
     expect(Storage.get().ledger?.headFact(streamId())?.seq).toBe(1);
     expect(routingDecisions()).toHaveLength(projections);
   });

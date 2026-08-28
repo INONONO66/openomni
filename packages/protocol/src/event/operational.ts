@@ -24,18 +24,12 @@ export namespace Operational {
     readonly error?: string;
   }
 
-  /**
-   * Builds a `LogBase` operational envelope, stamping `time: Date.now()` at
-   * the call site. Replaces the inline `{ traceId, time: Date.now(),
-   * component, msg }` literal repeated across producers with a single shape
-   * that lives next to the schema. Only the keys passed are emitted (an
-   * absent optional is never injected as `undefined`), so it is a drop-in for
-   * the literals — same fields, same values.
-   */
+  /** Builds a `LogBase` operational envelope with the producer's timestamp. */
   export function envelope<Fields extends LogFields>(
     fields: Fields,
+    time: number,
   ): Fields & { readonly time: number } {
-    return { ...fields, time: Date.now() };
+    return { ...fields, time };
   }
 
   export namespace Events {

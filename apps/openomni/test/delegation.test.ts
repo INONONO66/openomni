@@ -78,6 +78,35 @@ describe("admission fold", () => {
     });
   });
 
+  test("the exact deadline is already expired for requests and inherited parent authority", () => {
+    expect(admit(ask({ deadline: 1_000 }), RESIDENT, 1_000, LIMITS)).toMatchObject({
+      ok: false,
+      error: { data: { code: "deadline_passed" } },
+    });
+
+    const inherited = admit(
+      ask({ deadline: 9_000 }),
+      { ...WORKER, parentDelegationId: "parent", rootDelegationId: "root" },
+      1_000,
+      LIMITS,
+      {
+        delegationId: "child",
+        rootDelegationId: "root",
+        parent: {
+          delegationId: "parent",
+          rootDelegationId: "root",
+          deadline: 1_000,
+          status: "open",
+        },
+        openFanout: 1,
+      },
+    );
+    expect(inherited).toMatchObject({
+      ok: false,
+      error: { data: { code: "deadline_passed" } },
+    });
+  });
+
   test("the pure fold refuses a full durable root fanout", () => {
     const result = admit(ask(), RESIDENT, 1_000, LIMITS, {
       delegationId: "new",

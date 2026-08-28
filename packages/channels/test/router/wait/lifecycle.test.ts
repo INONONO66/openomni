@@ -129,6 +129,21 @@ describe("WaitService", () => {
     expect(events).toContainEqual({ name: "wait.expired", partial: true });
   });
 
+  test("sweepExpired expires a wait at exactly its deadline (inclusive boundary)", () => {
+    // Deadline contract: expired when now >= deadline. The sweep guard must
+    // share the fold's boundary — a sweep at now === expiresAt expires the
+    // wait instead of leaving it for the next tick.
+    WaitService.open(
+      buildWaitCreate("wait-boundary", { originMessageId: "out-boundary", expiresAt: 10_000 }),
+      "trace-test",
+    );
+
+    const expired = WaitService.sweepExpired("trace-test", Bus.publish, 10_000);
+
+    expect(expired.map((record) => record.id)).toEqual(["wait-boundary"]);
+    expect(WaitStore.get("wait-boundary")?.status).toBe("expired");
+  });
+
   test("sweepExpired isolates one corrupt wait: records Operational.Events.Error and keeps sweeping", async () => {
     const events: { name: string; msg?: string }[] = [];
     Bus.observe((event, payload) =>

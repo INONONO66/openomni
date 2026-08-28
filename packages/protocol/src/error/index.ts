@@ -1,5 +1,18 @@
 import { z } from "zod";
 
+// Cross-copy identity brand: bun resolves each workspace package's
+// node_modules symlink to @openomni/protocol independently, so one process
+// can hold two copies of a generated error class. `instanceof` alone is
+// therefore unsound across package boundaries; the Symbol.for-registered
+// brand carries the error name and is set only by this factory, so the
+// guard recognizes instances from any copy while still rejecting plain
+// objects that merely mimic the `name` property. The brand alone cannot
+// distinguish same-named factories with different schemas, so isInstance
+// additionally validates the candidate's `data` against this factory's
+// schema — the guard's type predicate is only sound when the payload
+// actually has the promised shape.
+const NAMED_ERROR_BRAND = Symbol.for("openomni.protocol.namedError");
+
 export abstract class NamedError extends Error {
   abstract schema(): z.ZodType;
   abstract toObject(): { name: string; data: unknown };
@@ -37,9 +50,11 @@ export abstract class NamedError extends Error {
       }
 
       static isInstance(input: unknown): input is InstanceType<typeof result> {
-        return (
-          typeof input === "object" && input !== null && "name" in input && input.name === name
-        );
+        if (!(input instanceof Error)) return false;
+        if ((input as unknown as Partial<Record<symbol, unknown>>)[NAMED_ERROR_BRAND] !== name) {
+          return false;
+        }
+        return data.safeParse((input as { data?: unknown }).data).success;
       }
 
       schema() {
@@ -54,6 +69,7 @@ export abstract class NamedError extends Error {
       }
     };
     Object.defineProperty(result, "name", { value: name });
+    Object.defineProperty(result.prototype, NAMED_ERROR_BRAND, { value: name });
     return result;
   }
 

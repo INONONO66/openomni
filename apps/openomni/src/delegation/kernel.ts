@@ -1,4 +1,4 @@
-import { Delegation, NamedError, newTraceId, Operational, type BusEvent } from "@openomni/protocol";
+import { Deadline, Delegation, NamedError, newTraceId, Operational, type BusEvent } from "@openomni/protocol";
 import { DelegationStore } from "@openomni/ledger";
 import type { WorkItemLinkage } from "./work-item-linkage";
 import { z } from "zod";
@@ -380,7 +380,7 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
       const current = store.get(record.delegationId);
       if (current?.status !== "open") return;
       const now = options.now();
-      if (now < current.deadline) {
+      if (!Deadline.isExpired(now, current.deadline)) {
         arm(current);
         return;
       }
@@ -424,7 +424,7 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
     }
     for (const record of store.listOpen()) {
       const now = options.now();
-      if (record.deadline <= now) {
+      if (Deadline.isExpired(now, record.deadline)) {
         settle(record.delegationId, {
           status: "no_response",
           delegationId: record.delegationId,
@@ -611,9 +611,9 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
 
     const now = options.now();
     const requestedEnd = timeoutMs === undefined ? record.deadline : now + timeoutMs;
-    const end = Math.min(record.deadline, requestedEnd);
-    if (end <= now) {
-      if (record.deadline <= now) {
+    const end = Deadline.clampToParent(requestedEnd, record.deadline);
+    if (Deadline.isExpired(now, end)) {
+      if (Deadline.isExpired(now, record.deadline)) {
         const settled = settle(delegationId, {
           status: "no_response",
           delegationId,
@@ -651,7 +651,7 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
       const scheduleAwaitTimeout = (): void => {
         timer = setTimeout(() => {
           const currentNow = options.now();
-          if (currentNow < end) {
+          if (!Deadline.isExpired(currentNow, end)) {
             scheduleAwaitTimeout();
             return;
           }

@@ -1,4 +1,4 @@
-import { Operational, type Wait, type BusEvent } from "@openomni/protocol";
+import { Deadline, Operational, type Wait, type BusEvent } from "@openomni/protocol";
 import { WaitStore } from "@openomni/ledger";
 
 /**
@@ -69,7 +69,7 @@ export namespace WaitService {
   ): Wait.Record[] {
     const expired: Wait.Record[] = [];
     for (const record of WaitStore.list(["open"])) {
-      if (now <= record.expiresAt) continue;
+      if (!Deadline.isExpired(now, record.expiresAt)) continue;
       try {
         const outcome = expire(record.id, traceId, now);
         if (outcome.kind === "expired") expired.push(outcome.record);
