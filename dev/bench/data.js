@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787895489368,
+  "lastUpdate": 1787898143916,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -65105,6 +65105,90 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 513358,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f9a19c785ffeeb82d5d6abb21e020ac96ef24049",
+          "message": "fix(llm,ipc,machines,telemetry): package hardening + dedupe + span purge (audit PR-6) (#836)\n\n* fix(llm,ipc,machines,telemetry): audit PR-6 package hardening\n\npackages/llm:\n- serialize Auth.set read-merge-write (concurrent sets no longer drop keys)\n- scope proxy model cache by credential identity\n- usage validation: finite nonnegative safe integers, deterministic alias\n  precedence without || truthiness (legitimate 0 preserved)\n- audit's retry-accounting contamination claim NOT reproducible on current\n  main: pinned with a retry-sum test instead of a forced change\n\npackages/ipc:\n- extract shared peer request table (request-id issuance, pending registry,\n  reply correlation, disconnect rejection, inbound dispatch) from client and\n  server; behavior-identical (64/64 unchanged before assertion strengthening)\n\npackages/machines:\n- typed refusal for duplicate in-flight cellId per connection (was silent\n  merge) with real wire-path reachability test; typed error module\n\npackages/telemetry:\n- delete dormant span surface (zero external consumers; scan evidence in\n  lane report); telemetry baseline recomputed by shrinkage\n\nTiming tests across all four packages converted to exact event/state\nsignals; remaining bounded timers are labeled failure guards.\n\n* fix(llm): fail-closed usage accounting (adversarial rounds 1-2)\n\nNumber-typed invalid usage values (negative, NaN, infinite, fractional,\nunsafe integer) now raise typed TokenInvalidUsageError instead of being\nsilently recorded as zero; providerMetadata positions validate even when\ntop-level usage is absent. Absent/null/non-number keep absent->0.",
+          "timestamp": "2026-08-28T06:21:22Z",
+          "tree_id": "608df95103f61ec74a929c6743d415502d3d3745",
+          "url": "https://github.com/INONONO66/openomni/commit/f9a19c785ffeeb82d5d6abb21e020ac96ef24049"
+        },
+        "date": 1787898143552,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2122,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 14685,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7871,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1024,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 917,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1516,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1528,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 805,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 43568,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2305,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 514527,
             "unit": "ns/op"
           }
         ]
