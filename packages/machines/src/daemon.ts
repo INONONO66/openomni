@@ -17,13 +17,30 @@ export interface MachineDaemon {
 /**
  * Machine-side daemon for the localhost slice: connect to the host socket,
  * offer the capability set, and hold the connection open — the live
- * connection IS the attachment. A daemon that offers the Python-kernel capability serves cells
- * over the reverse request channel using one attachment-scoped interpreter.
+ * connection IS the attachment. A daemon that offers the Python-kernel
+ * capability serves cells over the reverse request channel with one
+ * interpreter PER TENANT: a Python process gives no in-process isolation, so
+ * the only way to keep one session's cells (their state, and any thread they
+ * leave behind) out of another session's way is a process boundary.
  */
 export async function attachMachineDaemon(options: MachineDaemonOptions): Promise<MachineDaemon> {
-  const kernel = options.offer.offeredCapabilities.includes(Machine.WellKnownCapability.pythonKernel)
-    ? new PythonKernel()
-    : undefined;
+  const offersKernel = options.offer.offeredCapabilities.includes(
+    Machine.WellKnownCapability.pythonKernel,
+  );
+  const kernels = new Map<string, PythonKernel>();
+  const kernelFor = (tenant: string | undefined): PythonKernel => {
+    const key = tenant ?? "default";
+    let kernel = kernels.get(key);
+    if (kernel === undefined) {
+      kernel = new PythonKernel();
+      kernels.set(key, kernel);
+    }
+    return kernel;
+  };
+  const closeKernels = () => {
+    for (const kernel of kernels.values()) kernel.close();
+    kernels.clear();
+  };
   // Assigned before any request can arrive: the host can only send RunCell
   // over a connection this call establishes.
   let client!: IpcClient;
@@ -34,12 +51,12 @@ export async function attachMachineDaemon(options: MachineDaemonOptions): Promis
       }
       // The host gate owns this refusal; a daemon that never offered the Python-kernel capability
       // still re-checks because the host is across a trust boundary.
-      if (kernel === undefined) {
+      if (!offersKernel) {
         throw new Error(`${Machine.WellKnownCapability.pythonKernel} was not offered by this machine`);
       }
       const request = Machine.CellRequest.parse(params);
       respond(
-        await kernel.run(request, async (call) =>
+        await kernelFor(request.tenant).run(request, async (call) =>
           Machine.ToolCallResult.parse(
             await typedCall(client, Machine.WireMethod.CallTool, call, request.timeoutMs),
           ),
@@ -56,12 +73,12 @@ export async function attachMachineDaemon(options: MachineDaemonOptions): Promis
     return {
       attachment,
       close() {
-        kernel?.close();
+        closeKernels();
         client.close();
       },
     };
   } catch (error) {
-    kernel?.close();
+    closeKernels();
     client.close();
     throw error;
   }

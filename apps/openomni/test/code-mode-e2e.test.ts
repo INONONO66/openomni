@@ -221,13 +221,25 @@ test("a cell cannot present another cell's id when calling back", async () => {
   const socketPath = testSocketPath();
   const served: string[] = [];
 
+  // AAA (tenant one) blocks inside a tool call the host holds until BBB
+  // (tenant two — a separate interpreter, so the two genuinely overlap) has
+  // been served. No sleeps: the deferred IS the overlap proof.
+  let announceServed!: () => void;
+  const forgingServed = new Promise<void>((resolve) => {
+    announceServed = resolve;
+  });
   const host = await createMachineHost({
     socketPath,
     enrollment: (machineId) => (machineId === MACHINE_ID ? enrollment : undefined),
     events: Bus,
     now: () => Date.now(),
     callTool: async (call) => {
-      served.push(call.cellId);
+      served.push(`${call.name}@${call.cellId}`);
+      if (call.name === "hold") {
+        await forgingServed;
+        return { status: "completed", value: "held" };
+      }
+      announceServed();
       return { status: "completed", value: call.cellId };
     },
   });
@@ -242,17 +254,25 @@ test("a cell cannot present another cell's id when calling back", async () => {
     },
   });
 
-  const slow = host.runCell(MACHINE_ID, { cellId: "AAA", code: "import time\ntime.sleep(1.0)\n'a'", timeoutMs: 15_000 });
+  const slow = host.runCell(MACHINE_ID, {
+    cellId: "AAA",
+    code: "tool.hold()",
+    timeoutMs: 15_000,
+    tenant: "tenant-one",
+  });
   const forging = await host.runCell(MACHINE_ID, {
     cellId: "BBB",
     // The call carries no id of its own; naming one changes nothing.
     code: "tool.delegate(cellId='AAA', instruction='borrow')",
     timeoutMs: 15_000,
+    tenant: "tenant-two",
   });
   await slow;
   host.close();
 
-  expect(served).toEqual(["BBB"]);
+  // Completion itself proves the overlap: on one interpreter AAA's hold would
+  // wait forever for a BBB that cannot start until AAA settles.
+  expect([...served].sort()).toEqual(["delegate@BBB", "hold@AAA"]);
   expect(forging.status).toBe("completed");
 }, 40_000);
 
@@ -294,8 +314,27 @@ async function startCellHarness(ports: CatalogPorts) {
   return {
     host,
     run: (code: string) => execute({ machineId: MACHINE_ID, code, timeoutMs: 15_000 }),
+    runWith: (origin: DelegationOrigin, code: string) =>
+      runCodeToolExecutor(cells, origin)({ machineId: MACHINE_ID, code, timeoutMs: 15_000 }),
   };
 }
+
+test("cells from different sessions never share interpreter state", async () => {
+  const { host, runWith } = await startCellHarness({ llm: async () => "ok" });
+  const sessionA: DelegationOrigin = { role: "resident", depth: 0, sessionId: "session-a" };
+  const sessionB: DelegationOrigin = { role: "resident", depth: 0, sessionId: "session-b" };
+
+  await runWith(sessionA, "shared = 'mine'\n'set'");
+  const sameSession = await runWith(sessionA, "shared");
+  const otherSession = await runWith(sessionB, "shared");
+  host.close();
+
+  // Same session: state persists. Other session: a separate interpreter, so
+  // the name simply does not exist there.
+  expect(sameSession).toContain("mine");
+  expect(otherSession).toContain("the cell raised");
+  expect(otherSession).toContain("NameError");
+}, 40_000);
 
 test("a cell's llm(prompt) is answered by the LlmPort wired into the catalog", async () => {
   const prompts: string[] = [];

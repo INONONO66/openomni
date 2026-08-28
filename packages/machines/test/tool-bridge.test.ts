@@ -765,6 +765,41 @@ describe("code-mode tool bridge", () => {
     });
   });
 
+  test("each tenant gets its own interpreter: state persists within, never across", async () => {
+    await withBridge(async ({ host }) => {
+      const set = await host.runCell("m-1", {
+        cellId: "a-1",
+        code: "x = 41\n'set'",
+        timeoutMs: 15_000,
+        tenant: "session-a",
+      });
+      expect(set).toMatchObject({ status: "completed" });
+
+      const sameTenant = await host.runCell("m-1", {
+        cellId: "a-2",
+        code: "x + 1",
+        timeoutMs: 15_000,
+        tenant: "session-a",
+      });
+      expect(sameTenant).toMatchObject({ status: "completed", value: "42" });
+
+      const otherTenant = await host.runCell("m-1", {
+        cellId: "b-1",
+        code: "x",
+        timeoutMs: 15_000,
+        tenant: "session-b",
+      });
+      expect(otherTenant.status).toBe("raised");
+      expect(otherTenant.status === "raised" && otherTenant.error).toContain("NameError");
+
+      // Back-compat: a tenantless request reads as the "default" tenant and
+      // shares one interpreter with other tenantless requests.
+      await host.runCell("m-1", { cellId: "d-1", code: "y = 7", timeoutMs: 15_000 });
+      const defaulted = await host.runCell("m-1", { cellId: "d-2", code: "y", timeoutMs: 15_000 });
+      expect(defaulted).toMatchObject({ status: "completed", value: "7" });
+    });
+  });
+
   test("a host wired without a tool port says so instead of pretending", async () => {
     const path = socketPath();
     const host = await createMachineHost({
