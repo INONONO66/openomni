@@ -10,6 +10,7 @@ import { Events as MachineEvents } from "./events.js";
 export namespace Machine {
   export const CapabilityId = Schema.CapabilityId;
   export type CapabilityId = Schema.CapabilityId;
+  export const WellKnownCapability = Schema.WellKnownCapability;
   export const MachineId = Schema.MachineId;
   export type MachineId = Schema.MachineId;
   export const WireMethod = Schema.WireMethod;
