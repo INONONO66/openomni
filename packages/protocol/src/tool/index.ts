@@ -138,9 +138,7 @@ export namespace Tool {
      * #500 C4: denormalized tool name, populated by producers that have the
      * name in hand at result construction. Additive-optional — readers must
      * tolerate absence (older producers, and paths where only the call id
-     * survives). Also crosses the worker UDS boundary inside the
-     * `worker.tool_call` result frame; an optional added field is a safe wire
-     * evolution there (receivers parse with the same schema).
+     * survives).
      */
     toolName: z.string().optional(),
     output: z.string(),

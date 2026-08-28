@@ -385,9 +385,15 @@ const toolResult = z.object({
 });
 
 
+// Structural validator shape, written inline at every type position: a named
+// interface here either leaks a private name into the emitted declaration
+// file (TS4023) or becomes an export with no cross-module consumer.
 function validator<Schema extends z.ZodTypeAny>(
   schema: Schema,
-): PolicyPointModule.PolicyPointInputValidator<z.infer<Schema>> {
+): {
+  readonly parse: (input: unknown) => z.infer<Schema>;
+  readonly safeParse: (input: unknown) => z.SafeParseReturnType<unknown, z.infer<Schema>>;
+} {
   return Object.freeze({
     parse: (input: unknown) => schema.parse(input),
     safeParse: (input: unknown) => schema.safeParse(input),
@@ -504,12 +510,15 @@ const policyPointInputSchemas = Object.freeze({
   "run.error.error": validator(
     z.object({ sessionId: id, runId: id, errorCode: id, errorPhase: id }).passthrough(),
   ),
-} satisfies Record<RegisteredPolicyPointId, PolicyPointModule.PolicyPointInputValidator<unknown>>);
+} satisfies Record<
+  RegisteredPolicyPointId,
+  Readonly<{ parse: (input: unknown) => unknown; safeParse: (input: unknown) => unknown }>
+>);
 
 type PolicyPointInputMapType = {
-  readonly [PointId in keyof typeof policyPointInputSchemas]: (typeof policyPointInputSchemas)[PointId] extends PolicyPointModule.PolicyPointInputValidator<
-    infer Output
-  >
+  readonly [PointId in keyof typeof policyPointInputSchemas]: (typeof policyPointInputSchemas)[PointId] extends Readonly<{
+    parse: (input: unknown) => infer Output;
+  }>
     ? Output
     : never;
 };
@@ -518,11 +527,6 @@ type PolicyPointInputMapType = {
 // public namespace
 // ---------------------------------------------------------------------------
 export namespace PolicyPointModule {
-  export interface PolicyPointInputValidator<Output> {
-    readonly parse: (input: unknown) => Output;
-    readonly safeParse: (input: unknown) => z.SafeParseReturnType<unknown, Output>;
-  }
-
   export const PolicyPoint = Object.assign(policyPoint, {
     version: policyKernelVersion,
     Id: PolicyPointId,

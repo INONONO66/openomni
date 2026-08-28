@@ -39,7 +39,6 @@ const Terms = z
     speakTriggers: z.array(z.string().min(1)).optional(),
   })
   .strict();
-type Terms = z.infer<typeof Terms>;
 
 export const Record = z
   .object({

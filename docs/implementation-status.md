@@ -35,7 +35,8 @@ Single source of truth for current wiring between accepted design and running co
 | Frozen PendingAsk/PendingInteraction rows | read-only compatibility | Protocol upcasts and ledger read validation remain because the gateway Wait correlation still consumes their archived view. No writer is live. #585's surviving read-validation fixes remain in ledger and are not deleted. |
 | Frozen WorkerRun rows | read-only compatibility | Ledger archive compatibility remains; no local worker manager writes them. |
 | Effect streams | substrate only | Protocol/ledger intent storage remains, but the removed product driver/reconciler and admin surface are not wired. |
-| Command stream vocabulary | dormant contract | The protocol stream class remains for compatibility; #792 removes its sole producer. |
+| Command stream vocabulary | deleted | Dormant contract deleted (2026-08-28 deslop): #792 removed its sole producer and no reader ever shipped, so no surviving path parses persisted `command.authorized/denied` facts. Re-files with a real producer+reader pair. |
+| WorkItem replay/cache vocabulary | deleted | `cacheKey`/`replayKey`/`nondeterminismManifest` and their helpers were schema-only with no writer; deleted with #493's closure (superseded). Re-files with the writer per the #459 track; `EnvironmentFingerprint` and `reusedFromAttemptId` remain live. |
 
 ## Removed or absorbed with #792
 
