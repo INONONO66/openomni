@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787885010492,
+  "lastUpdate": 1787885235100,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -63845,6 +63845,90 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 523288,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d39605028c4534257431e6d4bdad5e95ed3f1229",
+          "message": "test(channels): migrate router suites onto shared router/store fixtures (#821)\n\nInline store/router assemblies duplicated the shared _router-fixture\nsetup across eight sibling suites (audit finding T2). Migrate them:\n\n- integration, authority-validation (e2e arm), conformance/no-bypass:\n  resetRouterState + kernelRouter + fixture deliveries/routingDecisions\n- messaging/composition: fixture makeRouter with messaging port overrides\n- messaging/send, messaging/social-budget, messaging/scoped-grant,\n  wait/lifecycle: new resetStores() export (the store half of\n  resetRouterState, without the router)\n\nBehavior-preserving: 254 channels tests green, 901 expect() calls\nbefore and after. Mutation proof: dropping the fixture sink recording\nfails the migrated authority-validation e2e arm; revert restores green.\n\nLeft as-is (bespoke shape): kernel-routing-persistence (file-backed db\n+ real Session rows for the bus_event FK) and wait/matcher (per-test\nstorage init is the assertion surface).",
+          "timestamp": "2026-08-28T11:46:08+09:00",
+          "tree_id": "728416647d105d7eee9ffad69e397fe18d03b7a3",
+          "url": "https://github.com/INONONO66/openomni/commit/d39605028c4534257431e6d4bdad5e95ed3f1229"
+        },
+        "date": 1787885234394,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1656,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 11643,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 6086,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 844,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 747,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1298,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 39,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1181,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 607,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 35254,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 1867,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 397156,
             "unit": "ns/op"
           }
         ]
