@@ -1,5 +1,6 @@
 import type { Token } from "@openomni/protocol";
 import type { LanguageModelUsage } from "ai";
+import { InvalidUsageError } from "../error";
 
 type UsageInput = Partial<LanguageModelUsage>;
 
@@ -8,10 +9,9 @@ export namespace TokenTracker {
     readonly usage?: UsageInput | unknown;
     readonly providerMetadata?: unknown;
   }): Token.ProviderUsage {
-    const usage = response.usage;
-    if (!isRecord(usage)) {
-      return zeroUsage();
-    }
+    // Absent/non-record usage still validates providerMetadata-sourced positions:
+    // an empty record makes every usage-field lookup absent without skipping metadata.
+    const usage = isRecord(response.usage) ? response.usage : {};
 
     const inputDetails = recordField(usage, "inputTokenDetails");
     const outputDetails = recordField(usage, "outputTokenDetails");
@@ -69,27 +69,34 @@ export namespace TokenTracker {
     };
   }
 
-  function zeroUsage(): Token.ProviderUsage {
-    return {
-      inputTokens: 0,
-      outputTokens: 0,
-      reasoningTokens: 0,
-      cacheReadTokens: 0,
-      cacheWriteTokens: 0,
-    };
-  }
-
   function firstCount(...values: Array<number | undefined>): number | undefined {
     return values.find((value) => value !== undefined);
   }
 
   function numberField(record: Record<string, unknown>, key: string): number | undefined {
     const value = record[key];
-    return isCount(value) ? value : undefined;
+    if (typeof value !== "number") return undefined;
+    if (isCount(value)) return value;
+
+    const valueClass = classifyInvalidCount(value);
+    throw new InvalidUsageError({
+      key,
+      value: String(value),
+      valueClass,
+      message: `invalid token usage ${key}: ${valueClass} value (${String(value)})`,
+    });
   }
 
-  function isCount(value: unknown): value is number {
-    return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+  function isCount(value: number): value is number {
+    return Number.isSafeInteger(value) && value >= 0;
+  }
+
+  function classifyInvalidCount(value: number): string {
+    if (Number.isNaN(value)) return "NaN";
+    if (!Number.isFinite(value)) return "infinite";
+    if (value < 0) return "negative";
+    if (!Number.isInteger(value)) return "fractional";
+    return "unsafe integer";
   }
 
   function recordField(record: Record<string, unknown>, key: string): Record<string, unknown> {
@@ -112,7 +119,7 @@ export namespace TokenTracker {
     if (!isRecord(raw)) return undefined;
     const details = raw.completion_tokens_details;
     if (!isRecord(details)) return undefined;
-    return isCount(details.reasoning_tokens) ? details.reasoning_tokens : undefined;
+    return numberField(details, "reasoning_tokens");
   }
 
   function isRecord(value: unknown): value is Record<string, unknown> {

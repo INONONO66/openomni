@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { InvalidUsageError } from "../../src/error";
 import { TokenTracker } from "../../src/token/index";
 
 const usageCases: Array<{
@@ -57,49 +58,20 @@ const usageCases: Array<{
     },
     expected: [0, 0, 0, 0, 0],
   },
-  {
-    name: "rejects negative token counts",
-    response: {
-      usage: {
-        inputTokens: -1,
-        outputTokens: -2,
-        reasoningTokens: -3,
-        cacheReadTokens: -4,
-        cacheWriteTokens: -5,
-      },
-    },
-    expected: [0, 0, 0, 0, 0],
-  },
-  {
-    name: "rejects NaN and infinite token counts",
-    response: {
-      usage: {
-        inputTokens: Number.NaN,
-        outputTokens: Number.POSITIVE_INFINITY,
-        reasoningTokens: Number.NEGATIVE_INFINITY,
-      },
-      providerMetadata: {
-        anthropic: {
-          cacheReadInputTokens: Number.NaN,
-          cacheCreationInputTokens: Number.POSITIVE_INFINITY,
-        },
-      },
-    },
-    expected: [0, 0, 0, 0, 0],
-  },
-  {
-    name: "rejects fractional and unsafe token counts",
-    response: {
-      usage: {
-        inputTokens: 1.5,
-        outputTokens: Number.MAX_SAFE_INTEGER + 1,
-        cacheReadTokens: 2.5,
-        cacheWriteTokens: Number.MAX_SAFE_INTEGER + 1,
-      },
-    },
-    expected: [0, 0, 0, 0, 0],
-  },
   { name: "returns zeros when usage is missing", response: {}, expected: [0, 0, 0, 0, 0] },
+  {
+    name: "ignores non-number usage values",
+    response: {
+      usage: {
+        inputTokens: "100",
+        outputTokens: null,
+        reasoningTokens: false,
+        cacheReadTokens: undefined,
+        cacheWriteTokens: {},
+      },
+    },
+    expected: [0, 0, 0, 0, 0],
+  },
 ];
 
 describe("TokenTracker.extractUsage", () => {
@@ -110,5 +82,33 @@ describe("TokenTracker.extractUsage", () => {
     expect(result.reasoningTokens).toBe(expected[2]);
     expect(result.cacheReadTokens).toBe(expected[3]);
     expect(result.cacheWriteTokens).toBe(expected[4]);
+  });
+
+  it.each([
+    ["inputTokens", -1, "negative"],
+    ["outputTokens", Number.POSITIVE_INFINITY, "infinite"],
+    ["reasoningTokens", 1.5, "fractional"],
+    ["cacheReadTokens", Number.NaN, "NaN"],
+    ["cacheWriteTokens", Number.MAX_SAFE_INTEGER + 1, "unsafe integer"],
+  ] as const)("throws for invalid %s (%s)", (key, value, valueClass) => {
+    try {
+      TokenTracker.extractUsage({ usage: { [key]: value } });
+      throw new Error("expected InvalidUsageError");
+    } catch (error) {
+      expect(InvalidUsageError.isInstance(error)).toBe(true);
+      expect(error).toMatchObject({ data: { key, valueClass } });
+    }
+  });
+
+  it("throws for invalid provider metadata even when usage is absent", () => {
+    try {
+      TokenTracker.extractUsage({
+        providerMetadata: { anthropic: { cacheReadInputTokens: Number.NaN } },
+      });
+      throw new Error("expected InvalidUsageError");
+    } catch (error) {
+      expect(InvalidUsageError.isInstance(error)).toBe(true);
+      expect(error).toMatchObject({ data: { key: "cacheReadInputTokens", valueClass: "NaN" } });
+    }
   });
 });

@@ -3,7 +3,7 @@ import { LlmCall, Operational, type Message, type Tool } from "@openomni/protoco
 import type { Sink } from "../../src/sink";
 import { collector } from "@openomni/telemetry";
 import { Processor } from "../../src/processor";
-import { APIError } from "../../src/error";
+import { APIError, InvalidUsageError } from "../../src/error";
 import type { Provider } from "../../src/provider";
 
 type OperationalInfoPayload = {
@@ -269,6 +269,36 @@ describe("Processor", () => {
         reasoning: 4,
         cache: { read: 2, write: 6 },
       });
+    });
+
+    test("fails on invalid step-finish usage without fabricated totals", async () => {
+      const capture = capturingSink();
+      const processor = createProcessor({
+        sink: capture.sink,
+        createStream: streamOf([
+          {
+            type: "step-finish",
+            finishReason: "end_turn",
+            usage: { inputTokens: -1 },
+            providerMetadata: {},
+          },
+          { type: "finish" },
+        ]),
+      });
+
+      try {
+        await processor.process({ system: "" });
+        throw new Error("expected InvalidUsageError");
+      } catch (error) {
+        expect(InvalidUsageError.isInstance(error)).toBe(true);
+      }
+      expect(processor.usageTotals).toEqual({
+        input: 0,
+        output: 0,
+        reasoning: 0,
+        cache: { read: 0, write: 0 },
+      });
+      expect(capture.finalParts().some((part) => part.type === "step-finish")).toBe(false);
     });
 
     test("trims trailing whitespace from text and reasoning at block end", async () => {
