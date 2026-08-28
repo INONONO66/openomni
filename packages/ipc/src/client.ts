@@ -1,19 +1,14 @@
 import net from "node:net";
 import { Ipc } from "@openomni/protocol";
-import { LineDecoder, encode } from "./framing";
 import { IpcConnectionError, IpcProtocolError, IpcRemoteError, IpcTimeoutError } from "./errors";
+import { LineDecoder, encode } from "./framing";
+import { PendingCalls } from "./pending-calls";
 
 export interface IpcClient {
   call(method: string, params?: Record<string, unknown>, timeoutMs?: number): Promise<unknown>;
   close(): void;
   readonly connected: boolean;
 }
-
-type PendingRequest = {
-  resolve: (value: unknown) => void;
-  reject: (err: Error) => void;
-  timer: ReturnType<typeof setTimeout>;
-};
 
 export type ConnectIpcClientOptions = {
   connectTimeoutMs?: number;
@@ -38,7 +33,7 @@ export function connectIpcClient(
   return new Promise((resolve, reject) => {
     const socket = net.createConnection(socketPath);
     const decoder = new LineDecoder();
-    const pending = new Map<string, PendingRequest>();
+    const pending = new PendingCalls();
     let connected = false;
 
     const connectTimer = setTimeout(() => {
@@ -47,11 +42,7 @@ export function connectIpcClient(
     }, connectTimeoutMs);
 
     function failAllPending(err: Error): void {
-      for (const [, handler] of pending) {
-        clearTimeout(handler.timer);
-        handler.reject(err);
-      }
-      pending.clear();
+      pending.failAll(err);
     }
 
     socket.on("connect", () => {
@@ -76,15 +67,12 @@ export function connectIpcClient(
         const response = Ipc.Response.safeParse(raw);
         if (response.success) {
           const { id, result, error } = response.data;
-          const handler = pending.get(id);
-          if (!handler) continue;
-          clearTimeout(handler.timer);
-          pending.delete(id);
-          if (error) {
-            handler.reject(new IpcRemoteError(error.code, error.message));
-          } else {
-            handler.resolve(result);
-          }
+          pending.settle(
+            id,
+            error
+              ? { ok: false, error: new IpcRemoteError(error.code, error.message) }
+              : { ok: true, value: result },
+          );
           continue;
         }
 
@@ -207,15 +195,13 @@ export function connectIpcClient(
         if (!connected) {
           return Promise.reject(new IpcConnectionError("not connected"));
         }
-        return new Promise((res, rej) => {
-          const req = Ipc.createRequest(method, params);
-          const timer = setTimeout(() => {
-            pending.delete(req.id);
-            rej(new IpcTimeoutError(`request timeout: ${method}`));
-          }, timeoutMs);
-          pending.set(req.id, { resolve: res, reject: rej, timer });
-          socket.write(encode(req));
-        });
+        const req = Ipc.createRequest(method, params);
+        return pending.register(
+          req.id,
+          timeoutMs,
+          () => new IpcTimeoutError(`request timeout: ${method}`),
+          { send: () => socket.write(encode(req)) },
+        );
       },
       close() {
         connected = false;

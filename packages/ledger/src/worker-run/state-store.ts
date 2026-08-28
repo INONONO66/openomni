@@ -1,5 +1,6 @@
 import { NamedError, type WorkItem } from "@openomni/protocol";
 import { z } from "zod";
+import { frozenWriteRefusal } from "../storage/frozen";
 import { Storage } from "../storage/storage";
 import { requireSubAdapter } from "../storage/timestamped-store";
 
@@ -22,14 +23,6 @@ function requireAdapter(): WorkerRunStateStore.Adapter {
     Storage.get().workerRunState,
     "Storage adapter does not implement workerRunState",
   );
-}
-
-function frozenWrite(method: WorkerRunStateStore.WriteMethod): never {
-  throw new WorkerRunStateStore.FrozenError({
-    message: `WorkerRunStateStore is frozen (#510 D2b): ${method} is retired — historical worker_run_state rows are read-only archive`,
-    code: "worker_run_frozen",
-    method,
-  });
 }
 
 export namespace WorkerRunStateStore {
@@ -136,3 +129,15 @@ export namespace WorkerRunStateStore {
     return requireAdapter().get(sessionId, runId);
   }
 }
+
+// Declared after the namespace because the FrozenError class it closes over
+// is defined inside it; the namespace's write methods only call it at
+// invocation time, so module-evaluation order is safe. Explicit annotation
+// required: TS only treats the call as never-returning (TS2534) when the
+// variable carries an explicit `=> never` type.
+const frozenWrite: (method: WorkerRunStateStore.WriteMethod) => never = frozenWriteRefusal(
+  WorkerRunStateStore.FrozenError,
+  "worker_run_frozen",
+  (method: WorkerRunStateStore.WriteMethod) =>
+    `WorkerRunStateStore is frozen (#510 D2b): ${method} is retired — historical worker_run_state rows are read-only archive`,
+);
