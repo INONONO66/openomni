@@ -100,6 +100,17 @@ describe("EgressBudgetStore", () => {
     expect(adapter.claim(first, NOW - WINDOW, () => false)).toBe("claimed");
   });
 
+  test("retrying an id with different fields is refused as a conflicting claim", () => {
+    const adapter = Storage.get().egressBudget;
+    if (adapter === undefined) throw new Error("egress budget adapter missing");
+
+    expect(adapter.claim(row("conflict-a"), NOW - WINDOW, () => true)).toBe("claimed");
+    const conflicting = { ...row("conflict-a"), targetActorId: "act_someone_else" };
+    expect(() => adapter.claim(conflicting, NOW - WINDOW, () => true)).toThrow(
+      "already identifies a different claim",
+    );
+  });
+
   test("the claim holds one write transaction across read and append", () => {
     // Discriminating atomicity proof: canClaim runs between the projection
     // read and the append. While it runs, a second connection with zero busy

@@ -238,6 +238,31 @@ describe("Hash Chain", () => {
     expect(result.totalVerified).toBe(2);
   });
 
+  test("verifyChainIntegrity walks the sessionless chain when no session is given", async () => {
+    const session = createSession();
+    BusPersistence.start();
+
+    for (let i = 0; i < 2; i++) {
+      Bus.publish(testEvent, {
+        sessionId: session.id,
+        traceId: `trace-sessionless-${i}`,
+        time: 3700 + i,
+        index: i,
+      });
+    }
+
+    await waitForRows(2);
+    BusPersistence.stop();
+    // session_id is not part of the hash input, so detaching the rows from
+    // the session moves them onto the sessionless chain without breaking it.
+    db().query("UPDATE bus_event SET session_id = NULL").run();
+
+    const result = await BusQuery.verifyChainIntegrity();
+
+    expect(result.valid).toBe(true);
+    expect(result.totalVerified).toBe(2);
+  });
+
   test("verifyChainIntegrity detects tampered event_hash", async () => {
     const session = createSession();
     BusPersistence.start();

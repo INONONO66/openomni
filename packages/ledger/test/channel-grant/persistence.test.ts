@@ -128,6 +128,64 @@ describe("ChannelGrantStore SQLite persistence", () => {
     ]);
   });
 
+  test("equal-treatment conflicts fall through tier, kind, then id tie-breaks", () => {
+    const surfaceInput = { surface: "discord" } as const;
+    const resolveBothOrders = (
+      first: ChannelGrantStore.Grant,
+      second: ChannelGrantStore.Grant,
+    ): (string | undefined)[] =>
+      [
+        [first, second],
+        [second, first],
+      ].map((grants) => {
+        configureChannelGrantAdapter(createInsertionOrderedChannelGrantAdapter());
+        for (const grant of grants) ChannelGrantStore.put(grant);
+        return ChannelGrantStore.resolve(surfaceInput)?.grant.id;
+      });
+
+    // Same effective treatment (full_access): the lower default tier wins,
+    // even though its id sorts later.
+    const observerTier = {
+      id: "b-observer",
+      surface: "discord",
+      kind: "trusted_channel",
+      defaultTier: "observer",
+      createdBy: "act_owner",
+    } as const satisfies ChannelGrantStore.Grant;
+    const ownerTier = { ...observerTier, id: "a-owner", defaultTier: "owner" } as const;
+    expect(resolveBothOrders(observerTier, ownerTier)).toEqual(["b-observer", "b-observer"]);
+
+    // Same treatment and no tiers: the intrinsically more restrictive kind
+    // wins, again against id order.
+    const broadcastKind = {
+      id: "b-broadcast",
+      surface: "discord",
+      kind: "broadcast_channel",
+      createdBy: "act_owner",
+    } as const satisfies ChannelGrantStore.Grant;
+    const trustedEvidence = {
+      id: "a-trusted",
+      surface: "discord",
+      kind: "trusted_channel",
+      inboundTreatment: "evidence_only",
+      createdBy: "act_owner",
+    } as const satisfies ChannelGrantStore.Grant;
+    expect(resolveBothOrders(broadcastKind, trustedEvidence)).toEqual([
+      "b-broadcast",
+      "b-broadcast",
+    ]);
+
+    // Fully tied grants resolve by grant id code-unit order as the stable key.
+    const firstId = {
+      id: "a-first",
+      surface: "discord",
+      kind: "trusted_channel",
+      createdBy: "act_owner",
+    } as const satisfies ChannelGrantStore.Grant;
+    const secondId = { ...firstId, id: "b-second" } as const;
+    expect(resolveBothOrders(firstId, secondId)).toEqual(["a-first", "a-first"]);
+  });
+
   test("explicit inbound treatment overrides kind default", () => {
     ChannelGrantStore.put({
       id: "grant-override",
