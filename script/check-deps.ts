@@ -160,6 +160,7 @@ const RULES: Record<PackageKey, PackageRule> = {
     allowedDeps: new Set([
       "@openomni/protocol",
       "@openomni/channels",
+      "@openomni/ipc",
       "@openomni/agent",
       "@openomni/llm",
       "@openomni/ledger",

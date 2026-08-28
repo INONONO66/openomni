@@ -1,8 +1,19 @@
 import { describe, test, expect } from "bun:test";
-import { LineDecoder } from "../src/framing";
+import { LineDecoder, LineSplitter } from "../src/framing";
 import { IpcProtocolError } from "../src/errors";
 
 const FRAME_LIMIT_BYTES = 16 * 1024 * 1024;
+
+describe("LineSplitter", () => {
+  test("buffers partial lines, emits complete siblings, and returns trailing data", () => {
+    const splitter = new LineSplitter();
+    const encoder = new TextEncoder();
+
+    expect(splitter.push(encoder.encode("first\nsecond\npart"))).toEqual(["first", "second"]);
+    expect(splitter.push(encoder.encode("ial"))).toEqual([]);
+    expect(splitter.finish()).toBe("partial");
+  });
+});
 
 describe("LineDecoder", () => {
   test("decodes complete lines", () => {
