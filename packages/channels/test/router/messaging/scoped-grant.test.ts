@@ -1,6 +1,6 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import type { Gateway } from "@openomni/protocol";
-import { ActorRegistry, Storage } from "@openomni/ledger";
+import { ActorRegistry } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import {
   deliverySurfaceKey,
@@ -9,6 +9,7 @@ import {
 } from "../../../src/router/messaging/grant.js";
 import { createExistingAgentMessaging } from "../../../src/router/messaging/send.js";
 import { buildSendInput, messagingNow, registerAgentFixture } from "../../helpers/messaging.js";
+import { resetStores } from "../_router-fixture";
 
 /**
  * #708 scope-aware grant arm: a rule-materialized (reply-scoped) instance is
@@ -104,19 +105,12 @@ describe("send kernel over reply-scoped instances", () => {
   }
 
   beforeEach(() => {
-    Bus.reset();
-    Storage.reset();
-    Storage.initialize({ dbPath: ":memory:" });
+    resetStores();
     delivered = [];
     grants = [scopedInstance()];
     registerAgentFixture("actor:sender");
     // channel "qa", externalId "target-1" → surface key "qa:target-1".
     registerAgentFixture("actor:target", [{ id: "endpoint:target", externalId: "target-1" }]);
-  });
-
-  afterEach(() => {
-    Storage.reset();
-    Bus.reset();
   });
 
   test("a send into the initiating container is granted by the scoped instance", async () => {
