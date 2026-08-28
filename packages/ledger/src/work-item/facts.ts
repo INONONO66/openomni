@@ -1,5 +1,5 @@
 import { Ledger, type Storage as ProtocolStorage, type WorkItem } from "@openomni/protocol";
-import { isSqliteBusyError } from "../storage/sqlite-busy.js";
+import { isSqliteBusyError, StorageUnavailableError } from "../storage/sqlite-busy.js";
 
 /**
  * #510 C1 — every WorkItem lifecycle write is a decision-class fact on the
@@ -41,20 +41,6 @@ export class WorkItemDuplicateError extends Error {
   }
 }
 
-export class WorkItemUnavailableError extends Error {
-  readonly name = "WorkItemUnavailableError";
-  readonly code = "unavailable";
-
-  constructor(
-    readonly hash: string,
-    cause: unknown,
-  ) {
-    super(
-      `WorkItem storage busy: ${hash} — ${cause instanceof Error ? cause.message : String(cause)}`,
-    );
-  }
-}
-
 /**
  * Store transaction entry (#510 review fix minor): a SQLITE_BUSY at the
  * write unit (see storage/sqlite-busy.ts for how bun:sqlite surfaces it)
@@ -70,7 +56,9 @@ export function runWorkItemTransaction<T>(
   try {
     return storage.transaction(write);
   } catch (error) {
-    if (isSqliteBusyError(error)) throw new WorkItemUnavailableError(hash, error);
+    if (isSqliteBusyError(error)) {
+      throw new StorageUnavailableError("work-item", hash, error);
+    }
     throw error;
   }
 }

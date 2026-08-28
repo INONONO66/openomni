@@ -117,7 +117,7 @@ describe("WorkItemAttemptRun", () => {
     if (!workItem) throw new Error("workItem adapter missing");
     const original = workItem.compareAndSet.bind(workItem);
     // SQLITE_BUSY shape as pinned by sqlite-busy.test.ts; facts.ts maps it to
-    // WorkItemUnavailableError. The old catch swallowed it into `false`, which
+    // StorageUnavailableError. The old catch swallowed it into `false`, which
     // callers discard — a busy DB silently lost the terminal attempt fact.
     Object.defineProperty(workItem, "compareAndSet", {
       configurable: true,
