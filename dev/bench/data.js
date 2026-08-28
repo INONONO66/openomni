@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787884308596,
+  "lastUpdate": 1787884544446,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -63593,6 +63593,90 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 362746,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fea2aa4f38452e96219ed082b144518416539647",
+          "message": "refactor(ipc): extract shared PendingCalls registry from client and server (#825)\n\nclient.ts and server.ts each hand-rolled the same request-id correlation\nregistry (Map of resolve/reject/timer entries, per-request timeout,\nteardown-fails-all-pendings). Extract it into src/pending-calls.ts as a\nsingle PendingCalls owner — register/settle/failAll with timer cleanup on\nevery removal path and optional per-entry metadata. The server stores the\nowning connectionId as metadata, preserving connection-scoped response\nmatching and per-connection teardown via failAll's where predicate.\n\nObservable behavior is unchanged: same error classes/messages, same\ntimeout semantics, send still runs inside the promise executor so a\nthrowing write rejects the call instead of escaping synchronously.",
+          "timestamp": "2026-08-28T11:34:40+09:00",
+          "tree_id": "5c64f445faa4219e5bbc3e41b52ef1c61db74a3f",
+          "url": "https://github.com/INONONO66/openomni/commit/fea2aa4f38452e96219ed082b144518416539647"
+        },
+        "date": 1787884544106,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1564,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 11254,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 5878,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 631,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 583,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 853,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 32,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1106,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 473,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 25241,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 1379,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 354085,
             "unit": "ns/op"
           }
         ]
