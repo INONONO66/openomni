@@ -36,12 +36,6 @@ export function createSqliteActorRegistryAdapter(
         identity.updatedAt ?? now,
       );
     },
-    listIdentities() {
-      const rows = SqliteJsonDataRowsSchema.parse(
-        db.query("SELECT data FROM actor_identity ORDER BY time_created ASC, id ASC").all(),
-      );
-      return rows.map((row) => Actor.Identity.parse(JSON.parse(row.data)));
-    },
     removeIdentity(id) {
       return db.query("DELETE FROM actor_identity WHERE id = ?").run(id).changes > 0;
     },

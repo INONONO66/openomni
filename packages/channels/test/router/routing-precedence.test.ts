@@ -14,11 +14,10 @@ const inbound = Object.freeze({
 
 const matchedWait = Object.freeze({
   kind: "match",
-  backing: "pending_interaction",
-  key: "pending_interaction:interaction-match",
-  recordId: "interaction-match",
-  sessionId: "session-wait",
-  runId: "run-wait",
+  backing: "wait",
+  key: "wait:wait-match",
+  recordId: "wait-match",
+  owner: Object.freeze({ kind: "session", id: "session-wait" }),
   allowed: Object.freeze(["report_result"]),
 });
 
@@ -132,10 +131,7 @@ describe("resolveRoute precedence", () => {
     const state = Object.freeze({
       wait: Object.freeze({
         kind: "ambiguous",
-        candidateInteractionIds: Object.freeze([
-          "pending_ask:ask-a",
-          "pending_interaction:interaction-a",
-        ]),
+        candidateInteractionIds: Object.freeze(["wait:wait-a", "wait:wait-b"]),
       }),
       channel: trustedChannel,
       actor: registeredActor,
@@ -149,11 +145,9 @@ describe("resolveRoute precedence", () => {
     expect(decision).toMatchObject({
       stage: "wait_correlation",
       outcome: "ambiguous",
-      candidateInteractionIds: ["pending_ask:ask-a", "pending_interaction:interaction-a"],
+      candidateInteractionIds: ["wait:wait-a", "wait:wait-b"],
     });
-    expect(decision.pendingInteractionId).toBeUndefined();
     expect(decision.sessionId).toBeUndefined();
-    expect(decision.runId).toBeUndefined();
   });
 
   it("does not produce an execution target for blocked or missing channel grants", () => {
@@ -183,7 +177,6 @@ describe("resolveRoute precedence", () => {
     expect(decisions.map((decision) => decision.outcome)).toEqual(["block", "block"]);
     expect(decisions.every((decision) => decision.target === undefined)).toBe(true);
     expect(decisions.every((decision) => decision.sessionId === undefined)).toBe(true);
-    expect(decisions.every((decision) => decision.runId === undefined)).toBe(true);
   });
 
   it("preserves evidence_only treatment while routing a broadcast channel", () => {
@@ -212,7 +205,6 @@ describe("resolveRoute precedence", () => {
     });
     expect(decision.factsUsed).toContain("channel:grant-broadcast");
     expect(decision.factsUsed).toContain("channel.treatment:evidence_only");
-    expect(decision.runId).toBeUndefined();
   });
 
   it("blocks an unknown actor when the channel supplies no default tier", () => {

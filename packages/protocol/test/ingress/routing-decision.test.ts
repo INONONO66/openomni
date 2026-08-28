@@ -24,10 +24,8 @@ const terminalCases: RoutingDecisionInput[] = [
     ...baseDecision,
     stage: "wait_correlation",
     outcome: "route",
-    target: "worker-session:session-1",
+    target: "resident",
     sessionId: "session-1",
-    runId: "run-1",
-    pendingInteractionId: "pi-1",
     actorId: "actor-1",
     trustTier: "assigned_worker",
     inboundTreatment: "full_access",
@@ -38,7 +36,7 @@ const terminalCases: RoutingDecisionInput[] = [
     ...baseDecision,
     stage: "wait_correlation",
     outcome: "ambiguous",
-    candidateInteractionIds: ["pending_ask:ask-1", "pending_interaction:pi-2", "wait:wait-3"],
+    candidateInteractionIds: ["wait:wait-2", "wait:wait-3"],
   },
   // Fail-closed wait stage (#215): a matched wait whose owner has no ingress
   // delivery path blocks instead of falling through to surface routing.
@@ -177,13 +175,13 @@ describe("Ingress.Events.RoutingDecision", () => {
     expect(() =>
       routingDecisionSchema.parse({
         ...ambiguous,
-        candidateInteractionIds: ["pending_ask:ask-1"],
+        candidateInteractionIds: ["wait:wait-1"],
       }),
     ).toThrow(ZodError);
     expect(() =>
       routingDecisionSchema.parse({
         ...ambiguous,
-        candidateInteractionIds: ["ask-1", "pending_interaction:pi-2"],
+        candidateInteractionIds: ["wait-1", "wait:wait-2"],
       }),
     ).toThrow(ZodError);
   });

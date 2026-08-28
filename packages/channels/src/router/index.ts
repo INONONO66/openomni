@@ -157,11 +157,10 @@ function claimResidentSurfaceSession(
  *    `activation` (activationId, ...) is in-process routing residue the
  *    projection layer already re-derives or drops, and a legitimate caller
  *    never sets durableSessionId (the app gateway builds none).
- *  - `meta.channelGrantId` / `meta.channelGrantKind` / `meta.pendingAsk`: the
- *    channel-grant treatment + pending-ask projections the router stamps
- *    (authority.applyChannelGrantTreatment / routing-execution). They ride to
- *    authorization + audit reads on the brain side (event-projector,
- *    authority-actor).
+ *  - `meta.channelGrantId` / `meta.channelGrantKind`: the channel-grant
+ *    treatment projections the router stamps
+ *    (authority.applyChannelGrantTreatment). They ride to authorization +
+ *    audit reads on the brain side (event-projector, authority-actor).
  *  - `meta.inboundTreatment`: same class, with ONE carve-out — a caller value
  *    of "evidence_only" is a harmless self-DOWNGRADE (it can only reduce the
  *    sender's own influence, never elevate), preserved so a trusted internal
@@ -183,7 +182,6 @@ function sanitizeInboundEvent(event: Gateway.DeliveredEvent): Gateway.DeliveredE
     const {
       channelGrantId: _channelGrantId,
       channelGrantKind: _channelGrantKind,
-      pendingAsk: _pendingAsk,
       inboundTreatment,
       ...keptMeta
     } = event.meta as Ingress.Meta & Record<string, unknown>;
@@ -210,7 +208,7 @@ function actorContextOf(
     externalId === undefined ||
     externalId.length === 0
   ) {
-    // Wait/pending resumptions (admission = the correlation itself, asserted
+    // Wait resumptions (admission = the correlation itself, asserted
     // via waitContext) and legacy anonymous surfaces carry no tier verdict.
     return undefined;
   }
@@ -380,15 +378,6 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
 
       const waitExecution = await executeWaitRoute(trace, route, decision);
       if (waitExecution.kind === "handled") return waitExecution.result;
-
-      if (waitExecution.authority === "pending_interaction") {
-        // Dispatch work placement is brain judgment (§8.5): deliver the
-        // treated event untouched; the recorded decision carries the routed
-        // session/run/pendingInteractionId the brain executes against.
-        return ports.deliver(
-          buildDelivery(waitExecution.event, route.decision, undefined, decision.sessionId),
-        );
-      }
 
       let event = waitExecution.event;
       if (waitExecution.authority === "required") {

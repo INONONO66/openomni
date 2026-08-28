@@ -11,8 +11,6 @@ import { createSqliteEgressBudgetAdapter } from "./sqlite-egress-budget-adapter"
 import { createSqliteDelegationAdapter } from "./sqlite-delegation-adapter";
 import { createSqliteMessageAdapter } from "./sqlite-message-adapter";
 import { createSqlitePartAdapter } from "./sqlite-part-adapter";
-import { createSqlitePendingAskAdapter } from "./sqlite-pending-ask-adapter";
-import { createSqlitePendingInteractionAdapter } from "./sqlite-pending-interaction-adapter";
 import {
   clearSqliteStorage,
   initializeSqliteDatabase,
@@ -54,8 +52,6 @@ export class SqliteStorageAdapter implements Storage.Adapter {
   readonly engagement: NonNullable<Storage.Adapter["engagement"]>;
   readonly delegation: NonNullable<Storage.Adapter["delegation"]>;
   readonly ledger: NonNullable<Storage.Adapter["ledger"]>;
-  readonly pendingAsk: NonNullable<Storage.Adapter["pendingAsk"]>;
-  readonly pendingInteraction: NonNullable<Storage.Adapter["pendingInteraction"]>;
   readonly cronJob: NonNullable<Storage.Adapter["cronJob"]>;
   readonly egressBudget: NonNullable<Storage.Adapter["egressBudget"]>;
   readonly actorRegistry: NonNullable<Storage.Adapter["actorRegistry"]>;
@@ -109,8 +105,6 @@ export class SqliteStorageAdapter implements Storage.Adapter {
       factsByType: (type) => Ledger.factsByType(this.db, type),
       verifyTail: () => Ledger.verifyTail(this.db),
     };
-    this.pendingAsk = createSqlitePendingAskAdapter(this.db);
-    this.pendingInteraction = createSqlitePendingInteractionAdapter(this.db);
     this.cronJob = createSqliteCronJobAdapter(this.db);
     this.egressBudget = createSqliteEgressBudgetAdapter(this.db);
     this.actorRegistry = createSqliteActorRegistryAdapter(this.db);

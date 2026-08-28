@@ -118,8 +118,6 @@ export namespace Storage {
     // fakes only — decision-class writers fail closed without it.
     ledger?: ProtocolStorage.LedgerSubAdapter;
     workerRunState?: WorkerRunStateStore.Adapter;
-    pendingAsk?: ProtocolStorage.PendingAskSubAdapter;
-    pendingInteraction?: ProtocolStorage.PendingInteractionSubAdapter;
     cronJob?: ProtocolStorage.CronJobSubAdapter;
     // Active-egress debit ledger (#219, perimeter domain). Optional for test
     // fakes only — EgressBudgetStore fails closed when it is missing;
@@ -154,8 +152,6 @@ export namespace Storage {
     "delegation",
     "ledger",
     "workerRunState",
-    "pendingAsk",
-    "pendingInteraction",
     "cronJob",
     "egressBudget",
     "actorRegistry",

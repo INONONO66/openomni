@@ -5,9 +5,9 @@
     "pct": 97.25
   },
   "packages/channels": {
-    "linesFound": 2582,
-    "linesHit": 2397,
-    "pct": 92.84
+    "linesFound": 3261,
+    "linesHit": 3123,
+    "pct": 95.77
   },
   "packages/ipc": {
     "linesFound": 480,
@@ -15,9 +15,9 @@
     "pct": 92.5
   },
   "packages/ledger": {
-    "linesFound": 4742,
-    "linesHit": 4557,
-    "pct": 96.1
+    "linesFound": 4850,
+    "linesHit": 4669,
+    "pct": 96.27
   },
   "packages/llm": {
     "linesFound": 1971,

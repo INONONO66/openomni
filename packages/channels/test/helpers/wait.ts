@@ -1,5 +1,4 @@
-import type { Communication, Wait } from "@openomni/protocol";
-import type { PendingInteractionStore } from "@openomni/ledger";
+import type { Wait } from "@openomni/protocol";
 
 /** Shared Wait-domain fixture builders for openomni tests (#215). */
 
@@ -11,47 +10,6 @@ export const correlationFixture = Object.freeze({
   tokenHash: "token-1",
   externalConversationId: "conversation-1",
 }) satisfies Wait.Correlation;
-
-export function buildInteraction(
-  id: string,
-  overrides: Partial<PendingInteractionStore.Record> = {},
-): PendingInteractionStore.Record {
-  return {
-    id,
-    workerRunId: `run-${id}`,
-    sessionId: `session-${id}`,
-    endpointId: correlationFixture.endpointId,
-    channelId: correlationFixture.channelId,
-    correlation: {},
-    allowedActions: ["report_result"],
-    status: "open",
-    createdAt: 1,
-    updatedAt: 1,
-    expiresAt: Number.MAX_SAFE_INTEGER,
-    followUpWindow: 0,
-    ...overrides,
-  };
-}
-
-export function buildAsk(
-  id: string,
-  overrides: Partial<Communication.PendingAsk.Record> = {},
-): Communication.PendingAsk.Record {
-  return {
-    id,
-    originSessionId: `session-${id}`,
-    originRunId: `run-${id}`,
-    originActorKind: "worker",
-    targetKind: "external_actor",
-    endpointId: correlationFixture.endpointId,
-    channelId: correlationFixture.channelId,
-    correlation: {},
-    status: "open",
-    createdAt: 1,
-    updatedAt: 1,
-    ...overrides,
-  };
-}
 
 export function buildWaitRecord(id: string, overrides: Partial<Wait.Record> = {}): Wait.Record {
   return {

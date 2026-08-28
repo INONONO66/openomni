@@ -68,36 +68,3 @@ describe("Wait.waitPinsAllowClaim — channel always, endpoint only single-respo
     ).toBe(true);
   });
 });
-
-describe("Wait.legacyTierLevels — frozen-store fallback queries", () => {
-  test("builds endpoint+channel-scoped queries per signal, both stores", () => {
-    const levels = Wait.legacyTierLevels({ correlation: { replyToMessageId: "m-1", ...pins } });
-    expect(levels[0]?.pendingInteraction).toEqual([{ ...pins, replyToMessageId: "m-1" }]);
-    expect(levels[0]?.pendingAsk).toEqual([{ ...pins, replyToMessageId: "m-1" }]);
-  });
-
-  test("externalMessageId adds a PendingAsk-ONLY fallback (never PendingInteraction)", () => {
-    const levels = Wait.legacyTierLevels({
-      correlation: { ...pins },
-      externalMessageId: "x-1",
-    });
-    const last = levels.at(-1);
-    expect(
-      last?.pendingAsk.some((q) => "externalMessageId" in q && q.externalMessageId === "x-1"),
-    ).toBe(true);
-    expect(last?.pendingInteraction.some((q) => "externalMessageId" in q)).toBe(false);
-  });
-
-  test("no scope pins → no legacy level reached (parsed envelopes always have pins)", () => {
-    expect(Wait.legacyTierLevels({ correlation: { replyToMessageId: "m-1" } })).toEqual([]);
-  });
-
-  test("dispatch-seam input (no externalMessageId) is inert on that branch — identical to pins-only", () => {
-    const withField = Wait.legacyTierLevels({ correlation: { ...pins } });
-    const withoutField = Wait.legacyTierLevels({
-      correlation: { ...pins },
-      externalMessageId: undefined,
-    });
-    expect(withField).toEqual(withoutField);
-  });
-});

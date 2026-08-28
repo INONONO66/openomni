@@ -105,50 +105,16 @@ function projectWaitOwnerEvent<Event extends Gateway.DeliveredEvent>(
   } as Omit<Event, "target"> & { readonly target?: never };
 }
 
-function projectPendingAskEvent<Event extends Gateway.DeliveredEvent>(
-  event: Event,
-  resolution: Extract<KernelRouteResolution["waitExecution"], { kind: "pending_ask" }>,
-): Omit<Event, "target"> & { readonly target?: never } {
-  const { target: _target, ...withoutTarget } = event;
-  const { target: _metaTarget, ...meta } = event.meta ?? {};
-  const { runId: _runId, ...activation } = event.activation ?? {};
-  const record = resolution.record;
-  return {
-    ...withoutTarget,
-    meta: {
-      ...meta,
-      pendingAsk: {
-        id: record.id,
-        originSessionId: record.originSessionId,
-        ...(record.originRunId === undefined ? {} : { originRunId: record.originRunId }),
-        originActorKind: record.originActorKind,
-        targetKind: record.targetKind,
-        status: record.status,
-        ambiguous: false,
-      },
-    },
-    activation: {
-      ...activation,
-      durableSessionId: record.originSessionId,
-      ...(record.originRunId === undefined ? {} : { runId: record.originRunId }),
-    },
-  } as Omit<Event, "target"> & { readonly target?: never };
-}
-
 export type WaitRouteExecution<Event extends Gateway.DeliveredEvent = Gateway.DeliveredEvent> =
   | Readonly<{
       kind: "continue";
       event: Event | (Omit<Event, "target"> & { readonly target?: never });
       /**
        * "required": routed pre-run authority must still run before delivery.
-       * "wait_precedence": a wait/pending_ask resumption — correlation is the
-       * admission, the pre-run is skipped (frozen behavior).
-       * "pending_interaction": a matched frozen pending-interaction row —
-       * dispatch work placement is brain judgment (kernel-contract §8.5), so
-       * the router delivers and the brain's Deliver consumer executes the
-       * dispatch; the pre-run is skipped exactly as it was before the flip.
+       * "wait_precedence": a wait resumption — correlation is the admission,
+       * the pre-run is skipped (frozen behavior).
        */
-      authority: "required" | "wait_precedence" | "pending_interaction";
+      authority: "required" | "wait_precedence";
     }>
   | Readonly<{ kind: "handled"; result: Ingress.IngressResult }>;
 
@@ -237,30 +203,6 @@ export async function executeWaitRoute<Event extends Gateway.DeliveredEvent>(
         authority: "wait_precedence",
       };
     }
-    case "pending_interaction":
-      if (decision.stage !== "wait_correlation") {
-        return { kind: "continue", event: resolution.event, authority: "required" };
-      }
-      // Frozen-row match: the record/correlation checks and the dispatch
-      // submit stay brain-side (work placement, §8.5) — the router only
-      // asserts the routed stage and hands the event across the seam with
-      // the recorded decision (which carries pendingInteractionId).
-      return { kind: "continue", event: resolution.event, authority: "pending_interaction" };
-    case "pending_ask":
-      // resolve-route copies the resident target and origin session/run into the
-      // decision from this same record; only the stage gate is checked here.
-      if (decision.stage !== "wait_correlation") {
-        throw new IngressRoutingError(
-          "dispatch_route_invalid",
-          "pending ask route is incomplete",
-          decision,
-        );
-      }
-      return {
-        kind: "continue",
-        event: projectPendingAskEvent(resolution.event, wait),
-        authority: "wait_precedence",
-      };
     case "ambiguous":
       throw new IngressRoutingError(
         "dispatch_route_invalid",

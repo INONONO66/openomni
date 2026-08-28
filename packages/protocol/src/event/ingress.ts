@@ -15,8 +15,6 @@ const RoutingDecisionBase = Base.extend({
   factsUsed: z.array(z.string()),
   target: z.string().optional(),
   sessionId: z.string().optional(),
-  runId: z.string().optional(),
-  pendingInteractionId: z.string().optional(),
   actorId: z.string().optional(),
   trustTier: Actor.TrustTier.optional(),
   inboundTreatment: Actor.InboundTreatment.optional(),
@@ -35,9 +33,7 @@ const RoutingDecisionPayloadSchema = z.union([
   RoutingDecisionBase.extend({
     stage: z.literal("wait_correlation"),
     outcome: z.literal("ambiguous"),
-    candidateInteractionIds: z
-      .array(z.string().regex(/^(?:wait|pending_ask|pending_interaction):.+/))
-      .min(2),
+    candidateInteractionIds: z.array(z.string().regex(/^wait:.+/)).min(2),
   }).strict(),
   RoutingDecisionBase.extend({
     stage: z.literal("wait_correlation"),

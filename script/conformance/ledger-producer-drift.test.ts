@@ -76,7 +76,7 @@ describe("ledger producer drift", () => {
 
     expect(matchesLedgerWriteCall("// calls Ledger.append(event, expectedHead) later")).toBe(false);
     expect(matchesLedgerTableWriteSql("db.query(`SELECT * FROM ledger_event`)")).toBe(false);
-    expect(matchesMigrationTableWriteSql("INSERT INTO pending_ask_new (id) VALUES (1);")).toBe(
+    expect(matchesMigrationTableWriteSql("INSERT INTO worker_run_state_new (id) VALUES (1);")).toBe(
       false,
     );
   });
@@ -96,8 +96,6 @@ describe("ledger producer drift", () => {
     try {
       db.run("CREATE TABLE _migrations (name TEXT NOT NULL)");
       db.run("INSERT INTO _migrations VALUES ('test')");
-      db.run("CREATE TABLE pending_ask (id TEXT PRIMARY KEY)");
-      db.run("CREATE TABLE pending_interaction (id TEXT PRIMARY KEY)");
       db.run("CREATE TABLE worker_run_state (run_id TEXT PRIMARY KEY)");
       const archived = buildLedgerArchiveManifest(db).tables.map((entry) => entry.table);
       expect(

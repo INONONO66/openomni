@@ -14,7 +14,6 @@ src/
 ├── artifact/             # Artifact.Meta (positive version and non-empty mimeType/createdAt)
 ├── bus/                  # BusEvent.define() + injected BusEvent.Sink contract
 ├── channel/              # Channel surfaces, messages, config, and surface-key codec
-├── communication/        # PendingAsk and PendingInteraction legacy contracts
 ├── cron/                 # Cron job schemas
 ├── engagement/           # Engagement schemas, events, and pure transition fold
 ├── error/                # NamedError factory and shared protocol errors
@@ -32,7 +31,7 @@ src/
 ├── tool/                 # Tool.Spec / Call / Result / State
 ├── trace/                # TraceContext schema and newTraceId()
 ├── transcript/           # Transcript facts and pure fold
-├── wait/                 # Wait schemas, events, matching/upcasts, and pure folds
+├── wait/                 # Wait schemas, events, matching, and pure folds
 └── work-item/            # WorkItem schemas, attempt identity, completion admission, events, status, and linkage
 ```
 
@@ -63,7 +62,6 @@ Allowed here:
 
 Not allowed here:
 
-- PendingInteraction/PendingAsk match precedence.
 - Actor trust, channel grant, or blacklist evaluation.
 - Session or target resolution.
 - Dispatch/ingress handler routing.

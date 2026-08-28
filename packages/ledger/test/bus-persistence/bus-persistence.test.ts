@@ -394,8 +394,8 @@ describe("BusPersistence", () => {
       title: "worker",
       prompt: "work",
     });
-    const pendingAskEvent = BusEvent.define(
-      "pending_ask.opened",
+    const legacyProbeEvent = BusEvent.define(
+      "legacy_probe.opened",
       z.object({
         id: z.string(),
         originSessionId: z.string(),
@@ -414,7 +414,7 @@ describe("BusPersistence", () => {
     );
 
     BusPersistence.start();
-    Bus.publish(pendingAskEvent, {
+    Bus.publish(legacyProbeEvent, {
       id: "ask-1",
       originSessionId: session.id,
       traceId: "trace-ask",
@@ -430,7 +430,7 @@ describe("BusPersistence", () => {
     const persisted = await waitForRows(2);
     expect(persisted.map((row) => row.session_id)).toEqual([session.id, session.id]);
     expect(persisted.map((row) => row.event_type)).toEqual([
-      "pending_ask.opened",
+      "legacy_probe.opened",
       "worker_run.evaluated",
     ]);
   });

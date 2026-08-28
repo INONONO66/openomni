@@ -23,12 +23,7 @@ export const AllowedAction = z.enum([
 ]);
 export type AllowedAction = z.infer<typeof AllowedAction>;
 
-/**
- * Single owner of reply-correlation fields (#215): legacy
- * Communication.PendingAsk / Communication.PendingInteraction correlation
- * shapes upcast into this one (endpointId/channelId fold in from their
- * top-level records).
- */
+/** Single owner of reply-correlation fields (#215). */
 export const Correlation = z
   .object({
     endpointId: z.string().min(1).optional(),

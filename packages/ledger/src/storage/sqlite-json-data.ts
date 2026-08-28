@@ -1,12 +1,11 @@
 import type { Database } from "bun:sqlite";
 import { z } from "zod";
 
-export type SqliteJsonDataTable = "pending_ask" | "pending_interaction" | "wait";
+export type SqliteJsonDataTable = "wait";
 
 export type SqliteStringEqualityColumn =
   | "endpoint_id"
   | "channel_id"
-  | "external_message_id"
   | "reply_to_message_id"
   | "thread_id"
   | "token_hash"
@@ -26,17 +25,8 @@ export const SqliteJsonDataRowsSchema = z.array(SqliteJsonDataRowSchema);
 // the row's JSON across the persistence boundary (schema `.parse`), so a
 // corrupt/tampered row is a loud typed defect and never a silently-trusted
 // value. The blind `JSON.parse(...) as T` this replaced was the fail-open
-// root cause fixed for worker_grant/message/part in #584 and here for
-// pending_interaction/pending_ask (#585).
-export function parseSqliteJsonDataRow<T>(
-  row: SqliteJsonDataRow | null,
-  decode: (data: string) => T,
-): T | undefined {
-  if (!row) return undefined;
-  return decode(row.data);
-}
-
-export function parseSqliteJsonDataRows<T>(
+// root cause fixed for worker_grant/message/part in #584.
+function parseSqliteJsonDataRows<T>(
   rows: readonly SqliteJsonDataRow[],
   decode: (data: string) => T,
 ): T[] {

@@ -29,24 +29,6 @@ type RouteWait =
       allowed: readonly string[];
     }>
   | Readonly<{
-      kind: "match";
-      backing: "pending_interaction";
-      key: string;
-      recordId: string;
-      sessionId: string;
-      runId: string;
-      allowed: readonly string[];
-      targetActorId?: string;
-    }>
-  | Readonly<{
-      kind: "match";
-      backing: "pending_ask";
-      key: string;
-      recordId: string;
-      sessionId: string;
-      runId?: string;
-    }>
-  | Readonly<{
       kind: "ambiguous";
       candidateInteractionIds: readonly string[];
     }>;
@@ -134,115 +116,53 @@ export function resolveRoute(
         factsUsed: state.wait.candidateInteractionIds.map((id) => `wait.candidate:${id}`),
       };
     case "match": {
-      switch (state.wait.backing) {
-        case "wait": {
-          const action = inbound.requestedAction;
-          if (action === undefined || !state.wait.allowed.includes(action)) {
-            // Fail closed: a matched durable wait never falls through to
-            // surface routing — a disallowed action is a typed block, mirroring
-            // the owner gate below.
-            return {
-              ...common,
-              stage: "wait_correlation",
-              outcome: "block",
-              reason: "Matched wait does not allow the requested action",
-              factsUsed: [
-                `wait:${state.wait.key}`,
-                `wait.action:${action ?? "missing"}`,
-                "wait.action:disallowed",
-              ],
-            };
-          }
-          if (state.wait.owner.kind !== "session") {
-            // Fail closed: a matched wait must never fall through to surface
-            // routing, and workItem-owned resumption has no ingress delivery
-            // path yet (#216/#217 wire it).
-            return {
-              ...common,
-              stage: "wait_correlation",
-              outcome: "block",
-              reason: "Matched wait owner has no ingress delivery path",
-              factsUsed: [
-                `wait:${state.wait.key}`,
-                `wait.action:${action}`,
-                `wait.owner:${state.wait.owner.kind}:${state.wait.owner.id}`,
-                "wait.owner:unsupported_ingress_delivery",
-              ],
-            };
-          }
-          return {
-            ...common,
-            stage: "wait_correlation",
-            outcome: "route",
-            target: "resident",
-            sessionId: state.wait.owner.id,
-            reason: "Inbound message matched an open wait",
-            factsUsed: [
-              `wait:${state.wait.key}`,
-              `wait.action:${action}`,
-              `wait.owner:session:${state.wait.owner.id}`,
-            ],
-          };
-        }
-        case "pending_ask":
-          return {
-            ...common,
-            stage: "wait_correlation",
-            outcome: "route",
-            target: "resident",
-            sessionId: state.wait.sessionId,
-            ...(state.wait.runId === undefined ? {} : { runId: state.wait.runId }),
-            reason: "Inbound message matched a pending ask",
-            factsUsed: [
-              `wait:${state.wait.key}`,
-              `wait.session:${state.wait.sessionId}`,
-              ...(state.wait.runId === undefined ? [] : [`wait.run:${state.wait.runId}`]),
-            ],
-          };
-        case "pending_interaction": {
-          const action = inbound.requestedAction;
-          if (action === undefined || !state.wait.allowed.includes(action)) {
-            // Fail closed (#548): the legacy store is frozen, so the
-            // historical surface fallthrough for a disallowed action is dead
-            // code — a matched frozen row blocks exactly like a durable wait,
-            // making wait correlation uniformly fail-closed for all backings.
-            return {
-              ...common,
-              stage: "wait_correlation",
-              outcome: "block",
-              reason: "Matched wait does not allow the requested action",
-              factsUsed: [
-                `wait:${state.wait.key}`,
-                `wait.action:${action ?? "missing"}`,
-                "wait.action:disallowed",
-              ],
-            };
-          }
-          return {
-            ...common,
-            stage: "wait_correlation",
-            outcome: "route",
-            target: `worker-session:${state.wait.sessionId}`,
-            sessionId: state.wait.sessionId,
-            runId: state.wait.runId,
-            pendingInteractionId: state.wait.recordId,
-            ...(state.wait.targetActorId === undefined
-              ? {}
-              : { actorId: state.wait.targetActorId }),
-            trustTier: "assigned_worker",
-            inboundTreatment: "full_access",
-            reason: "Inbound action matched a pending interaction",
-            factsUsed: [
-              `wait:${state.wait.key}`,
-              `wait.action:${action}`,
-              `wait.session:${state.wait.sessionId}`,
-              `wait.run:${state.wait.runId}`,
-            ],
-          };
-        }
-        default:
-          return unreachable(state.wait);
+      const action = inbound.requestedAction;
+      if (action === undefined || !state.wait.allowed.includes(action)) {
+        // Fail closed: a matched durable wait never falls through to
+        // surface routing — a disallowed action is a typed block, mirroring
+        // the owner gate below.
+        return {
+          ...common,
+          stage: "wait_correlation",
+          outcome: "block",
+          reason: "Matched wait does not allow the requested action",
+          factsUsed: [
+            `wait:${state.wait.key}`,
+            `wait.action:${action ?? "missing"}`,
+            "wait.action:disallowed",
+          ],
+        };
       }
+      if (state.wait.owner.kind !== "session") {
+        // Fail closed: a matched wait must never fall through to surface
+        // routing, and workItem-owned resumption has no ingress delivery
+        // path yet (#216/#217 wire it).
+        return {
+          ...common,
+          stage: "wait_correlation",
+          outcome: "block",
+          reason: "Matched wait owner has no ingress delivery path",
+          factsUsed: [
+            `wait:${state.wait.key}`,
+            `wait.action:${action}`,
+            `wait.owner:${state.wait.owner.kind}:${state.wait.owner.id}`,
+            "wait.owner:unsupported_ingress_delivery",
+          ],
+        };
+      }
+      return {
+        ...common,
+        stage: "wait_correlation",
+        outcome: "route",
+        target: "resident",
+        sessionId: state.wait.owner.id,
+        reason: "Inbound message matched an open wait",
+        factsUsed: [
+          `wait:${state.wait.key}`,
+          `wait.action:${action}`,
+          `wait.owner:session:${state.wait.owner.id}`,
+        ],
+      };
     }
     default:
       return unreachable(state.wait);

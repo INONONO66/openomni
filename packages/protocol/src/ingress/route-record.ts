@@ -65,7 +65,7 @@ export function routeNotDeliveredFact(
 // Replay equivalence gate (#510 review fix F2): a cas_conflict means this
 // inbound was ALREADY decided. The recorded decision and the fresh one must
 // agree on every execution- and authority-shaping field — stage, outcome,
-// target, sessionId, runId, pendingInteractionId, actorId, trustTier, and
+// target, sessionId, actorId, trustTier, and
 // inboundTreatment — before the redelivery may proceed. Fields like
 // traceId/time/reason/factsUsed are delivery-local and deliberately excluded.
 export function routeDecisionsEquivalent(
@@ -77,8 +77,6 @@ export function routeDecisionsEquivalent(
     recorded.outcome === fresh.outcome &&
     recorded.target === fresh.target &&
     recorded.sessionId === fresh.sessionId &&
-    recorded.runId === fresh.runId &&
-    recorded.pendingInteractionId === fresh.pendingInteractionId &&
     recorded.actorId === fresh.actorId &&
     recorded.trustTier === fresh.trustTier &&
     recorded.inboundTreatment === fresh.inboundTreatment

@@ -20,7 +20,7 @@ The same-domain inline delegation driver is the only deliberate in-process short
 
 `packages/ledger` owns the one durable database and typed store surfaces. It stores facts but does not decide product meaning. Perimeter stores are consumed by the channels router; session, delegation, memory-adjacent, and transcript stores are composed by the app. Cross-domain coupling happens through protocol IDs, not direct store reach-through.
 
-`bus.publish` remains observation, not authorization. Record-before-act paths must commit through a durable store or append surface before the external action. Frozen PendingAsk, PendingInteraction, and WorkerRun tables remain read-only compatibility surfaces.
+`bus.publish` remains observation, not authorization. Record-before-act paths must commit through a durable store or append surface before the external action. The frozen WorkerRun table remains a read-only compatibility surface.
 
 ## Policy
 
