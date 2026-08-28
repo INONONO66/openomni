@@ -17,11 +17,11 @@ export interface MachineDaemon {
 /**
  * Machine-side daemon for the localhost slice: connect to the host socket,
  * offer the capability set, and hold the connection open — the live
- * connection IS the attachment. A daemon that offers `kernel.py` serves cells
+ * connection IS the attachment. A daemon that offers the Python-kernel capability serves cells
  * over the reverse request channel using one attachment-scoped interpreter.
  */
 export async function attachMachineDaemon(options: MachineDaemonOptions): Promise<MachineDaemon> {
-  const kernel = options.offer.offeredCapabilities.includes("kernel.py")
+  const kernel = options.offer.offeredCapabilities.includes(Machine.WellKnownCapability.pythonKernel)
     ? new PythonKernel()
     : undefined;
   // Assigned before any request can arrive: the host can only send RunCell
@@ -32,10 +32,10 @@ export async function attachMachineDaemon(options: MachineDaemonOptions): Promis
       if (method !== Machine.WireMethod.RunCell) {
         throw new Error(`unknown method: ${method}`);
       }
-      // The host gate owns this refusal; a daemon that never offered kernel.py
+      // The host gate owns this refusal; a daemon that never offered the Python-kernel capability
       // still re-checks because the host is across a trust boundary.
       if (kernel === undefined) {
-        throw new Error("kernel.py was not offered by this machine");
+        throw new Error(`${Machine.WellKnownCapability.pythonKernel} was not offered by this machine`);
       }
       const request = Machine.CellRequest.parse(params);
       respond(

@@ -16,6 +16,12 @@ const offer = {
   offeredAt: 2,
 } satisfies Machine.Offer;
 
+describe("Machine.WellKnownCapability", () => {
+  test("exports the Python kernel capability", () => {
+    expect(Machine.WellKnownCapability.pythonKernel).toBe("kernel.py");
+  });
+});
+
 describe("Machine.CapabilityId grammar", () => {
   test("accepts dot-namespaced lowercase ids", () => {
     for (const id of ["fs.read", "kernel.py", "screen.read", "input.write", "a.b_c.d0", "a.b"]) {
