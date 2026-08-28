@@ -31,7 +31,7 @@ Exports: `Actor`, `AppConnector`, `Artifact`, `BusEvent`, `Channel`, `Command`, 
 
 Owner: policy registration, evaluation, decision conversion, and effect composition; no business workflow or storage ownership.
 
-Exports: `CanonicalAuditDispatchContextGeneric`, `CanonicalPolicyRegistrationGeneric`, `DispatchContextGeneric`, `DuplicatePolicyFactoryError`, `GenericPolicyContext`, `PolicyDecision`, `PolicyEngine`, `PolicyEngineConfig`, `PolicyEngineInstanceGeneric`, `PolicyEngineMiddlewareGeneric`, `PolicyPointId`, `PolicyRegistrationError`, `PolicyRegistrationFactoryGeneric`, `PolicyRegistry`, `PolicyRegistryInstance`, `composeEffects`, `decisionFromEvaluation`, `evaluatePermission`.
+Exports: `CanonicalAuditDispatchContextGeneric`, `CanonicalPolicyRegistrationGeneric`, `DispatchContextGeneric`, `GenericPolicyContext`, `PolicyDecision`, `PolicyEngine`, `PolicyEngineConfig`, `PolicyEngineInstanceGeneric`, `PolicyEngineMiddlewareGeneric`, `PolicyPointId`, `PolicyRegistrationError`, `PolicyRegistrationFactoryGeneric`, `composeEffects`, `decisionFromEvaluation`, `evaluatePermission`.
 
 ### `@openomni/telemetry`
 
@@ -55,7 +55,7 @@ Exports: `Auth`, `ModelsDev`, `Provider`, `Run`, `RunDependencies`, `RunInput`, 
 
 Owner: invocation-scoped ReAct loop, Agent retry/fallback orchestration, policy adapter, compaction, and MCP client runtime; no durable storage or telemetry implementation dependency.
 
-Exports: `AgentResult`, `BudgetState`, `CanonicalPolicyRegistration`, `ChatAgent`, `ChatAgentConfig`, `ChatAgentInput`, `ChatAgentInstance`, `CompactionOptions`, `McpClient`, `PolicyContext`, `PolicyEngine`, `PolicyEngineInstance`, `PolicyEngineRegistration`, `PolicyFn`, `PolicyRegistrationFactory`, `PolicyRegistry`, `PolicyRegistryInstance`, `RunReasonCode`, `checkBudget`, `createCompactionPolicy`, `describeBudgetRemaining`, `isTimeCarriageMarkerPart`.
+Exports: `AgentResult`, `BudgetState`, `CanonicalPolicyRegistration`, `ChatAgent`, `ChatAgentConfig`, `ChatAgentInput`, `ChatAgentInstance`, `CompactionOptions`, `McpClient`, `PolicyContext`, `PolicyEngine`, `PolicyEngineInstance`, `PolicyEngineRegistration`, `PolicyFn`, `PolicyRegistrationFactory`, `RunReasonCode`, `checkBudget`, `createCompactionPolicy`, `describeBudgetRemaining`, `isTimeCarriageMarkerPart`.
 
 ### `@openomni/placement`
 

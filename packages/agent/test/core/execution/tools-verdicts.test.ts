@@ -18,7 +18,7 @@ function verdictPolicy(decision: Policy.PolicyDecision): PolicyRegistration {
       "tool.native.pre": [...new Set(decision.effects.map((effect) => effect.type))],
     },
     priority: 0,
-    fn: async () => decision,
+    fn: () => decision,
   };
 }
 

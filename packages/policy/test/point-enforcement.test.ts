@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { PolicyEngine } from "@openomni/policy";
+import { PolicyEngine, PolicyRegistrationError } from "@openomni/policy";
 import { type Policy, PolicyDecision } from "@openomni/protocol";
 import { dispatchContext, turnPostContext } from "./point-test-fixtures";
 
@@ -17,6 +17,61 @@ function assertDispatchPointRequiresPointInput(engine: ReturnType<typeof PolicyE
   });
 }
 void assertDispatchPointRequiresPointInput;
+
+function assertPolicyRegistrationRejectsAsync(engine: ReturnType<typeof PolicyEngine.create>) {
+  engine.register({
+    kind: "point",
+    name: "async-policy",
+    pointIds: ["dispatch.action.pre"],
+    effectCapabilities: { "dispatch.action.pre": [] },
+    priority: 0,
+    // @ts-expect-error policy callbacks are synchronous; Promise results are not registrations.
+    fn: async () => PolicyDecision.allow({ policyId: "async-policy" }),
+  });
+}
+void assertPolicyRegistrationRejectsAsync;
+
+describe("direct-lane runtime async refusal", () => {
+  test("an async function smuggled past the type surface is refused at registration", () => {
+    const engine = PolicyEngine.create();
+    expect(() =>
+      engine.register({
+        kind: "point",
+        name: "smuggled-async",
+        pointIds: ["dispatch.action.pre"],
+        effectCapabilities: { "dispatch.action.pre": [] },
+        priority: 0,
+        fn: (async () => PolicyDecision.deny({ policyId: "smuggled-async" })) as never,
+      }),
+    ).toThrow(
+      new PolicyRegistrationError({
+        code: "async_policy_callback",
+        registrationName: "smuggled-async",
+      }),
+    );
+  });
+
+  test("a sync callback returning a thenable is thrown, never awaited", async () => {
+    const engine = PolicyEngine.create();
+    engine.register({
+      kind: "point",
+      name: "thenable-smuggler",
+      pointIds: ["dispatch.action.pre"],
+      effectCapabilities: { "dispatch.action.pre": [] },
+      priority: 0,
+      fn: (() =>
+        Promise.resolve(
+          PolicyDecision.allow({ policyId: "thenable-smuggler" }),
+        )) as never,
+    });
+    const decision = await engine.dispatchPoint("dispatch.action.pre", dispatchContext);
+    // The smuggled async allow must not enter composition: the thenable is
+    // thrown at the call boundary and the point's default fail policy
+    // settles fail-closed.
+    expect(decision.verdict).toBe("deny");
+    expect(decision.reasonCodes).toEqual(["middleware-error"]);
+  });
+});
 
 const workCompletionContext = {
   workItemHash: "wi_admission",
@@ -95,9 +150,20 @@ describe("PolicyEngine dispatchPoint", () => {
     } as unknown as Policy.PolicyPointInputMap["run.lifecycle.post"]);
 
     expect(invoked).toBe(false);
-    expect(decision.verdict).toBe("allow");
-    expect(decision.reasonCodes).toContain("policy.input_invalid");
-    expect(decision.effects.map((effect) => effect.type)).toEqual(["audit.annotate"]);
+    expect(decision).toMatchObject({
+      verdict: "allow",
+      reasonCodes: ["policy.input_invalid"],
+      effects: [
+        {
+          type: "audit.annotate",
+          annotation: "run.lifecycle.post: policy.input_invalid",
+          severity: "error",
+        },
+      ],
+    });
+    // #806 containment: malformed post input cannot reach middleware and a
+    // post-boundary contract failure cannot synthesize a late abort.
+    expect(decision.effects.some((effect) => effect.type === "run.abort")).toBe(false);
   });
 
   test("rejects effects not declared by the canonical registration", async () => {
@@ -251,7 +317,13 @@ describe("PolicyEngine dispatchPoint", () => {
       // No explicit failPolicy: the run.turn.post contract default (fail-open)
       // must decide, end-to-end through dispatch.
       fn: () => {
-        throw new Error("post middleware exploded");
+        // Even decision-shaped data attached to the thrown value is outside
+        // the containment boundary and must not enter composition.
+        throw Object.assign(new Error("post-crash"), {
+          verdict: "deny",
+          policyId: "forged-post-decision",
+          effects: [{ type: "run.abort", reason: "must-not-leak" }],
+        });
       },
     });
     let successorRuns = 0;
@@ -270,7 +342,19 @@ describe("PolicyEngine dispatchPoint", () => {
     const decision = await engine.dispatchPoint("run.turn.post", turnPostContext());
 
     expect(decision.verdict).toBe("allow");
-    expect(decision.reasonCodes).toContain("policy.middleware_failed.fail_open:post-crasher");
+    expect(decision.reasonCodes).toEqual([
+      "policy.middleware_failed.fail_open:post-crasher",
+    ]);
+    expect(decision.effects).toEqual([
+      {
+        type: "audit.annotate",
+        annotation:
+          "run.turn.post: policy.middleware_failed.fail_open:post-crasher",
+        severity: "warning",
+      },
+    ]);
+    expect(decision.effects.some((effect) => effect.type === "run.abort")).toBe(false);
+    expect(decision.policyId).not.toBe("forged-post-decision");
     expect(successorRuns).toBe(1);
   });
 

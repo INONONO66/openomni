@@ -9,7 +9,7 @@
  */
 import { Policy } from "@openomni/protocol";
 import type {
-  CanonicalPolicyRegistrationGeneric,
+  RuntimePolicyRegistrationGeneric,
   GenericPolicyContext,
   PolicyEngineMiddlewareGeneric,
 } from "./types";
@@ -28,7 +28,8 @@ type PolicyRegistrationErrorCode =
   | "unbound_effect_capabilities"
   | "duplicate_effect_capability"
   | "disallowed_effect_capability"
-  | "empty_scope_agent_type";
+  | "empty_scope_agent_type"
+  | "async_policy_callback";
 
 interface PolicyRegistrationErrorOptions {
   readonly code: PolicyRegistrationErrorCode;
@@ -112,8 +113,40 @@ function readSharedMetadataFields(registration: object): SharedMetadataFields {
 
 function isCanonicalPolicyFunction<TCtx extends GenericPolicyContext>(
   value: unknown,
-): value is CanonicalPolicyRegistrationGeneric<TCtx>["fn"] {
+): value is RuntimePolicyRegistrationGeneric<TCtx>["fn"] {
   return typeof value === "function";
+}
+
+function isThenable(value: unknown): boolean {
+  return (
+    (typeof value === "object" || typeof value === "function") &&
+    value !== null &&
+    typeof Reflect.get(value, "then") === "function"
+  );
+}
+
+/**
+ * Direct registrations are contractually synchronous; only the factory lane
+ * retains the Promise-capable runtime shape (agent compaction seam). The type
+ * surface already rejects async callbacks at compile time, but `register()`
+ * is a public runtime API reachable from plain JavaScript, so the direct lane
+ * is also enforced here: an `async function` is refused eagerly at
+ * registration, and a sync function returning a thenable is refused at call
+ * time — thrown, never awaited, so a smuggled async verdict can neither allow
+ * nor deny and the point's fail policy decides deterministically.
+ */
+function guardSynchronousCallback<TCtx extends GenericPolicyContext>(
+  name: string,
+  fn: RuntimePolicyRegistrationGeneric<TCtx>["fn"],
+): RuntimePolicyRegistrationGeneric<TCtx>["fn"] {
+  if (fn.constructor.name === "AsyncFunction") {
+    throw registrationError(name, "async_policy_callback");
+  }
+  return (ctx) => {
+    const decision = fn(ctx);
+    if (isThenable(decision)) throw registrationError(name, "async_policy_callback");
+    return decision;
+  };
 }
 
 function captureScope(value: unknown): unknown {
@@ -137,7 +170,8 @@ function frozenScope(scope: Policy.Scope | undefined): Policy.Scope | undefined 
 function prepareCanonicalRegistration<TCtx extends GenericPolicyContext>(
   registration: object,
   classification: ClassificationFields,
-): CanonicalPolicyRegistrationGeneric<TCtx> {
+  lane: "direct" | "factory",
+): RuntimePolicyRegistrationGeneric<TCtx> {
   const name = registrationName(classification.name);
   if (classification.kind === undefined) {
     throw registrationError(name, "invalid_canonical_registration");
@@ -180,14 +214,14 @@ function prepareCanonicalRegistration<TCtx extends GenericPolicyContext>(
     effectCapabilities,
     ...(scope === undefined ? {} : { scope }),
     ...(metadata.data.failPolicy === undefined ? {} : { failPolicy: metadata.data.failPolicy }),
-    fn: fields.fn,
-  } satisfies CanonicalPolicyRegistrationGeneric<TCtx>);
+    fn: lane === "direct" ? guardSynchronousCallback(name, fields.fn) : fields.fn,
+  } satisfies RuntimePolicyRegistrationGeneric<TCtx>);
   return trusted;
 }
 
 export function prepareRegistrationBoundary<TCtx extends GenericPolicyContext>(
   registration: PolicyEngineMiddlewareGeneric<TCtx>,
-): CanonicalPolicyRegistrationGeneric<TCtx> {
+): RuntimePolicyRegistrationGeneric<TCtx> {
   if (!isObject(registration)) {
     throw registrationError("<unknown>", "invalid_canonical_registration");
   }
@@ -214,7 +248,7 @@ export function prepareRegistrationBoundary<TCtx extends GenericPolicyContext>(
         "invalid_canonical_registration",
       );
     }
-    return prepareCanonicalRegistration<TCtx>(created, readClassificationFields(created));
+    return prepareCanonicalRegistration<TCtx>(created, readClassificationFields(created), "factory");
   }
   const hasCanonicalFields =
     classification.kind !== undefined ||
@@ -226,5 +260,5 @@ export function prepareRegistrationBoundary<TCtx extends GenericPolicyContext>(
     // would be a silent policy bypass.
     throw registrationError(registrationName(classification.name), "legacy_timing_registration");
   }
-  return prepareCanonicalRegistration<TCtx>(registration, classification);
+  return prepareCanonicalRegistration<TCtx>(registration, classification, "direct");
 }

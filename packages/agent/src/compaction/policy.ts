@@ -1,7 +1,7 @@
 import { Operational, PolicyDecision, type BusEvent } from "@openomni/protocol";
 import { Compaction, DEFAULT_PROTECT_RECENT, type CompactionOptions } from "./compact";
 import { DEFAULT_PREPARE_RATIO, createSpeculator, type Speculator } from "./speculate";
-import type { CanonicalPolicyRegistration, PolicyRegistrationFactory } from "../core/policy/types";
+import type { PolicyRegistrationFactory } from "../core/policy/types";
 
 type CompactionConfig = CompactionOptions & {
   /** Where the compaction record goes. The policy reports; it does not decide. */
@@ -24,7 +24,9 @@ export function createCompactionPolicy(config: CompactionConfig): PolicyRegistra
   };
 }
 
-function buildRegistration(config: CompactionConfig): CanonicalPolicyRegistration {
+function buildRegistration(
+  config: CompactionConfig,
+): ReturnType<PolicyRegistrationFactory["create"]> {
   const { events, priority, ...compaction } = config;
   const speculator: Speculator | undefined =
     compaction.onSummarize !== undefined && compaction.speculate !== false

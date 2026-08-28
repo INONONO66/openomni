@@ -2,7 +2,7 @@
 export { ChatAgent } from "./core/chat-agent";
 export type { ChatAgentInstance } from "./core/chat-agent";
 export type { ChatAgentConfig, ChatAgentInput, AgentResult } from "./core/types";
-export { PolicyEngine, PolicyRegistry } from "./core/policy";
+export { PolicyEngine } from "./core/policy";
 // Budget accounting stays core (the limits are loop invariants); the queries
 // are exported so a product can decide what to say about what is left (D5).
 // BudgetState rides along because openomni names it; BudgetStatus does not —
@@ -18,7 +18,6 @@ export type {
   PolicyFn,
   PolicyEngineInstance,
   PolicyRegistrationFactory,
-  PolicyRegistryInstance,
 } from "./core/policy";
 export { placementGatedExecutor } from "./core/execution/turn";
 export { McpClient } from "./runtime/mcp/index";

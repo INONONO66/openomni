@@ -6,9 +6,6 @@ export type {
   PolicyRegistration,
   PolicyRegistrationFactory,
 } from "./types";
-export { PolicyRegistry } from "@openomni/policy";
-export type { PolicyRegistryInstance } from "@openomni/policy";
-
 import {
   PolicyEngine as GenericPolicyEngine,
   type PolicyEngineConfig,

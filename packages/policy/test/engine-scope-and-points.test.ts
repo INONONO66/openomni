@@ -190,6 +190,7 @@ describe("scope filtering with 100 policies", () => {
   it("no agentType in context skips all scoped policies", async () => {
     const engine = PolicyEngine.create();
     const executed: string[] = [];
+    let scopedInvocations = 0;
 
     for (let i = 0; i < 80; i++) {
       engine.register(
@@ -198,8 +199,9 @@ describe("scope filtering with 100 policies", () => {
           priority: i,
           scope: { agentType: ["planner", "architect"] },
           fn: () => {
+            scopedInvocations += 1;
             executed.push(`scoped-${i}`);
-            return allow();
+            throw new Error("a scope-skipped policy must remain outside composition");
           },
         }),
       );
@@ -218,10 +220,16 @@ describe("scope filtering with 100 policies", () => {
       );
     }
 
-    await engine.dispatchPoint("run.turn.post", turnPostContext());
+    const decision = await engine.dispatchPoint("run.turn.post", turnPostContext());
 
+    // #806 containment: omission excludes the entire scoped registration;
+    // unscoped policies still run, and no skipped crash evidence can leak.
+    expect(scopedInvocations).toBe(0);
     expect(executed.length).toBe(20);
     expect(executed.every((name) => name.startsWith("unscoped-"))).toBe(true);
+    expect(decision.verdict).toBe("allow");
+    expect(decision.reasonCodes).toEqual([]);
+    expect(decision.effects).toEqual([]);
   });
 
   it("scope filtering with multi-agent scope arrays", async () => {

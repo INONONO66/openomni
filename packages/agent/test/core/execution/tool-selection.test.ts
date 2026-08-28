@@ -59,7 +59,7 @@ function filterPolicy(filteredTools: string[]): PolicyRegistration {
     pointIds: ["tool.catalog.pre"],
     effectCapabilities: { "tool.catalog.pre": ["tool.filter"] },
     priority: 0,
-    fn: async () => filterTools(filteredTools, "test-filter", "test-filter"),
+    fn: () => filterTools(filteredTools, "test-filter", "test-filter"),
   };
 }
 
@@ -70,7 +70,7 @@ function abortSelectionPolicy(reason: string): PolicyRegistration {
     pointIds: ["tool.catalog.pre"],
     effectCapabilities: { "tool.catalog.pre": ["run.abort"] },
     priority: 0,
-    fn: async () => abortRun("test-abort-selection", reason),
+    fn: () => abortRun("test-abort-selection", reason),
   };
 }
 
@@ -177,7 +177,7 @@ describe("resources.prepare dispatch", () => {
     Bus.reset();
     let capturedCtx: Record<string, unknown> | undefined;
     const engine = PolicyEngine.create();
-    registerAt(engine, "tool.catalog.pre", "capture-ctx", 0, async (ctx) => {
+    registerAt(engine, "tool.catalog.pre", "capture-ctx", 0, (ctx) => {
       capturedCtx = ctx as unknown as Record<string, unknown>;
       return allow();
     });
@@ -210,7 +210,7 @@ describe("resources.prepare dispatch", () => {
   it("keeps all tools when transform verdict has no tools property", async () => {
     Bus.reset();
     const engine = PolicyEngine.create();
-    registerAt(engine, "tool.catalog.pre", "transform-no-tools", 0, async () =>
+    registerAt(engine, "tool.catalog.pre", "transform-no-tools", 0, () =>
       allow("test", "test"),
     );
 
