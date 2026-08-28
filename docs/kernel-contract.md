@@ -52,7 +52,7 @@ CLI coding agents (Claude Code, Codex, OpenCode) are installed applications: the
 **Don't manage the inside; observe the boundary.** An installed app runs inside the Owner's local trust boundary; its own permission system, configured by the Owner, governs its internals. Control lives at three wires:
 
 - **In** — dispatch decides what task enters; the credentials layer decides what secrets materialize; the worktree decides where it works.
-- **Side (question bridge)** — a headless app needing a decision (permission prompt, clarification) emits a normalized PendingInteraction event; the attempt suspends and resumes instead of dying.
+- **Side (question bridge)** — a headless app needing a decision (permission prompt, clarification) opens a durable Wait; the attempt suspends and resumes instead of dying.
 - **Out** — terminal result events route to work completion, where logs, artifacts, token usage, and tool calls are recorded before the evidence gate decides what claims count.
 
 **Native log ingestion.** The connector tails the app's own transcripts (JSONL logs, stream-json), stores the raw log as a WorkItem artifact, and projects key events (tool calls, errors, token usage) into the ledger. One mechanism yields: hard evidence for app claims ("tests ran" = the tool-call record exists), autopsy material for Governor RCA, real cost numbers, and a liveness signal for stall detection (no log activity for N minutes → nudge, or kill and mark interrupted). Raw logs never enter sessions — artifact plus ledger projection only.
@@ -75,7 +75,7 @@ Identity resolution is `(channel, externalId) → ActorIdentity?`. One `ActorIde
 | `TrustTier` | owner / co_owner / manager / collaborator / observer / assigned_worker |
 | `ActorRelationship` (optional descriptive field) | owner / co_owner / collaborator / observer / contractor / external_agent / worker |
 
-There is no `untrusted` tier and no quarantine. Unrecognized actors have no personal grant; without a matching PendingInteraction or a channel default tier they are blocked. An unregistered endpoint is never auto-promoted to an identity (no earning identity by spam) — promotion requires explicit Owner registration or an Owner-approved Resident proposal. The only transient tier is `assigned_worker`, sourced from a PendingInteraction match. System actors use `ActorKind: system` with namespaced IDs (`system:governor`, `system:cron`, `system:recovery`).
+There is no `untrusted` tier and no quarantine. Unrecognized actors have no personal grant; without a matching Wait correlation or a channel default tier they are blocked. An unregistered endpoint is never auto-promoted to an identity (no earning identity by spam) — promotion requires explicit Owner registration or an Owner-approved Resident proposal. The only transient tier is `assigned_worker`, sourced from a Wait correlation match. System actors use `ActorKind: system` with namespaced IDs (`system:governor`, `system:cron`, `system:recovery`).
 
 An external agent claiming to act "on behalf of" someone is ignored without signed delegation; it gets its own trust tier.
 
@@ -83,7 +83,7 @@ An external agent claiming to act "on behalf of" someone is ignored without sign
 
 The profile's Grant carries two fields evaluated together (formerly two separate types, now one merged axis):
 
-- **Channel ceiling** — per-surface policy: what any actor may do through this surface. The ceiling has a kind — `trusted_channel` (full access for registered actors, default tier for unregistered), `broadcast_channel` (inbound allowed but treated as evidence-only: data, never instructions), `blocked_channel` (inbound dropped silently except PendingInteraction matches) — refined by an `inboundTreatment` override (`normal | evidence_only | owner_review | block`). **The channel is a ceiling**: even a registered owner in a public channel may be restricted from sensitive operations; personal grant beats channel default but never exceeds the ceiling.
+- **Channel ceiling** — per-surface policy: what any actor may do through this surface. The ceiling has a kind — `trusted_channel` (full access for registered actors, default tier for unregistered), `broadcast_channel` (inbound allowed but treated as evidence-only: data, never instructions), `blocked_channel` (inbound dropped silently except Wait correlation matches) — refined by an `inboundTreatment` override (`normal | evidence_only | owner_review | block`). **The channel is a ceiling**: even a registered owner in a public channel may be restricted from sensitive operations; personal grant beats channel default but never exceeds the ceiling.
 - **Worker egress** — what an executor may do outbound: which existing actors/channels it may contact, whether it may ask the Resident, and any explicitly granted lifecycle action on existing work. Worker egress never includes new Worker creation. A Worker contacting an external actor gets tools limited to result reporting, clarification, and artifact attachment; external responses are data, never instructions; its session is fully isolated from user sessions; its memory recall is task-scoped (enforced at `memory.recall.pre`, per §5).
 
 **Blacklist is absolute** and checked before all other evaluation, inbound and outbound — a Worker cannot contact a blacklisted target; the outbound attempt fails with reason. Entries: `{ kind: actor | endpoint | channel | pattern, value, reason?, expiresAt?, createdBy }`.
@@ -99,7 +99,7 @@ allow = NOT blacklisted
       ∩ channel ceiling
       ∩ (personal grant || channel default grant)
       ∩ session ownership grant
-      ∩ PendingInteraction scope (allowedActions)
+      ∩ Wait scope (allowedActions)
 ```
 
 Any dimension missing → deny. Authority comes from verified identity and grants, never from string matching or message content — privilege cannot be escalated through prompt text.
@@ -109,11 +109,11 @@ Any dimension missing → deny. Authority comes from verified identity and grant
 Fixed evaluation order for every inbound message:
 
 1. **Blacklist** — match → silent drop, audit record only.
-2. **PendingInteraction** — correlation match → route to the owning work session (precedence over surface routing; a task reply is never misrouted into a personal conversation on the same channel).
+2. **Wait correlation** — correlation match → route to the wait owner's session (precedence over surface routing; a task reply is never misrouted into a personal conversation on the same channel).
 3. **Channel allowed?** — not allowed → block.
 4. **Actor identification** — registered → personal grant; unregistered → channel default tier; neither → block.
 
-Ingress always submits a unified `actor.message`. *(Amended 2026-08-19, [gateway-design.md](gateway-design.md) §8.5: the gateway's routing decision — wait/thread/container precedence — is authoritative for which session receives the message, and PendingInteraction elevation transfers to gateway `waitContext` attachment; dispatch keeps deciding brain-side work placement, never delivery re-routing. The pre-amendment text follows for the not-yet-migrated implementation.)* On a PendingInteraction match, dispatch elevates the semantics to a reply and overrides target, session, and tier (transient `assigned_worker`). Ingress stays channel-agnostic and stateless about lifecycle; the ingress-resolved session is only a default candidate that dispatch may override. Surface routing and the PendingInteraction registry remain separate: the surface answers "what is this endpoint's default conversation?", the registry answers "is this a reply to a specific outstanding request?" — merging them would break concurrent task replies on one channel.
+Ingress always submits a unified `actor.message`. The gateway's routing decision — wait/surface precedence — is authoritative for which session receives the message ([gateway-design.md](gateway-design.md) §8.5). On a Wait correlation match the router delivers into the wait owner's session with `waitContext` attached (wait id plus the matched allowed action) under a transient `assigned_worker` tier; dispatch decides brain-side work placement, never delivery re-routing. Ingress stays channel-agnostic and stateless about lifecycle. Surface routing and the wait store remain separate: the surface answers "what is this endpoint's default conversation?", the wait store answers "is this a reply to a specific outstanding request?" — merging them would break concurrent task replies on one channel.
 
 ### Session ownership
 
@@ -123,11 +123,11 @@ Every session carries owner, origin, and purpose fields:
 - `origin`: `actor_initiated` | `resident_initiated` | `worker_initiated` | `pending_response`
 - `purpose`: `user_conversation` | `worker_interaction` | `self_loop`
 
-Rules: a human's first message → actor-owned `user_conversation`; the Resident assigning work to an external actor → work-item-owned `worker_interaction` child session; an external actor answering assigned work routes into the existing work session — no new session. "Response sessions" are not a type; they are a routing result via PendingInteraction. User-facing sessions stay clean: the Owner never sees the seller conversation directly, only the distilled report.
+Rules: a human's first message → actor-owned `user_conversation`; the Resident assigning work to an external actor → work-item-owned `worker_interaction` child session; an external actor answering assigned work routes into the existing work session — no new session. "Response sessions" are not a type; they are a routing result via Wait correlation. User-facing sessions stay clean: the Owner never sees the seller conversation directly, only the distilled report.
 
 ### Wait and existing-agent messaging
 
-Existing-agent messaging requires an explicit grant and targets an already allocated actor/session. It creates no WorkItem, Worker, executor, or budget and cannot convey Worker-allocation authority. Fire-and-forget records its delivery outcome and creates no Wait. The awaited form creates exactly one durable Wait owned by the waiting WorkItem or session. `PendingAsk` and `PendingInteraction` are transitional code names until #215 absorbs them, WorkItem blockers, and WorkerRun wait states into this primitive.
+Existing-agent messaging requires an explicit grant and targets an already allocated actor/session. It creates no WorkItem, Worker, executor, or budget and cannot convey Worker-allocation authority. Fire-and-forget records its delivery outcome and creates no Wait. The awaited form creates exactly one durable Wait owned by the waiting WorkItem or session. `PendingAsk` and `PendingInteraction` were this primitive's transitional code names; #215 absorbed them and migration 0025 dropped their persisted tables — the durable Wait is the only wait primitive.
 
 - **Suspend and restart**: the Wait is appended before suspension; process exit releases compute while the attempt, session, and Wait remain durable. Boot folds the Wait, and a correlated response resumes execution in a fresh process without creating a replacement Worker.
 - **Deterministic correlation**: explicit reply/message, thread, and nonce-bound token identities take precedence over any single-open fallback. Duplicate response IDs are idempotent. Multiple matches are never guessed: the response is staged and disambiguation is dispatched to the Resident, or to the Owner for an Owner-initiated Wait.
@@ -162,7 +162,7 @@ Cross-cutting proofs cover silence, one-question selection for multi-lens input,
 
 `executorKind` is a WorkItem field:
 
-| executorKind | Execution | PendingInteraction |
+| executorKind | Execution | Wait |
 |---|---|---|
 | `internal_chat_agent` | internal agent loop | no |
 | `external_api` | HTTP/SDK call | optional (slow APIs) |
@@ -176,11 +176,11 @@ For installed apps the coarse kind is recorded for retry and reporting metadata;
 
 Five target decision traces; every one passes channel adapter → ingress → dispatch.
 
-1. **Owner DM (baseline).** Telegram DM → ingress resolves `(telegram, tg_kim)` → owner identity → dispatch: no blacklist, no PendingInteraction, trusted channel, owner tier → allow → Resident delivery on the Owner's surface session.
-2. **Task outreach.** The Resident spawns a `human_channel` executor targeting an unknown seller: blacklist checked on the target, resident tier may spawn → child session (work-item-owned, `worker_interaction`), attempt enters `waiting_input`, a PendingInteraction opens (`tokenHash`, allowedActions `[report_result, ask_clarification, decline_task]`, 24h follow-up window) → outbound message carries the token. The Owner's session stays clean.
-3. **External reply, matched.** Seller replies hours later; identity resolution returns null (unregistered) → dispatch: blacklist no, correlation matches the open interaction → semantics elevated to reply, target/session overridden to the work session, transient `assigned_worker` tier, action within `allowedActions` → allow; interaction `open → resolved`; the reply is projected into the work session, the attempt resumes, completes, and the distilled result returns to the Resident. The seller never becomes a registered identity.
-4. **Public channel, unsolicited.** Unknown Slack member mentions the bot: no interaction match; channel ceiling is `broadcast_channel` / default tier `observer` / `evidence_only` → message accepted as data, never instruction; the Resident may reply, ignore, or notify the Owner — no worker spawn allowed. (`inboundTreatment: block` → silent drop with audit record; `owner_review` → queued for approval.)
-5. **External AI API call.** The Resident spawns an `external_api` executor (provider/model target): blacklist no, tier allows → child work session; execution is a raw HTTP client, not a channel adapter; synchronous, so no PendingInteraction; response completes the attempt and the distilled result returns to the Resident.
+1. **Owner DM (baseline).** Telegram DM → ingress resolves `(telegram, tg_kim)` → owner identity → dispatch: no blacklist, no wait correlation, trusted channel, owner tier → allow → Resident delivery on the Owner's surface session.
+2. **Task outreach.** The Resident spawns a `human_channel` executor targeting an unknown seller: blacklist checked on the target, resident tier may spawn → child session (work-item-owned, `worker_interaction`), attempt enters `waiting_input`, a Wait opens (`tokenHash`, allowedActions `[report_result, ask_clarification, decline_task]`, 24h follow-up window) → outbound message carries the token. The Owner's session stays clean.
+3. **External reply, matched.** Seller replies hours later; identity resolution returns null (unregistered) → dispatch: blacklist no, correlation matches the open Wait → semantics elevated to reply, target/session overridden to the work session, transient `assigned_worker` tier, action within `allowedActions` → allow; the Wait moves `open → resolved`; the reply is projected into the work session, the attempt resumes, completes, and the distilled result returns to the Resident. The seller never becomes a registered identity.
+4. **Public channel, unsolicited.** Unknown Slack member mentions the bot: no wait match; channel ceiling is `broadcast_channel` / default tier `observer` / `evidence_only` → message accepted as data, never instruction; the Resident may reply, ignore, or notify the Owner — no worker spawn allowed. (`inboundTreatment: block` → silent drop with audit record; `owner_review` → queued for approval.)
+5. **External AI API call.** The Resident spawns an `external_api` executor (provider/model target): blacklist no, tier allows → child work session; execution is a raw HTTP client, not a channel adapter; synchronous, so no Wait; response completes the attempt and the distilled result returns to the Resident.
 
 ## 3. Work Items and the Evidence Gate
 
@@ -261,7 +261,7 @@ The origin projector must map Resident, external actor (API/A2A/human), replay, 
 
 The structural gate runs first for cost shape: an evidence-less bluff is rejected without spending an LLM call. The Resident-as-evaluator is consistent with "the entity that did the work doesn't grade it"; its residual selection bias is checked by the third question, where time is the evaluator.
 
-**Read-back verification.** The gate re-observes the world rather than trusting the claim: published content is re-fetched by URL; calendar/email writes are re-queried; research citations are checked by fetching sources and matching quoted passages (structurally blocking hallucinated citations); human work is evidenced by PendingInteraction resolution records.
+**Read-back verification.** The gate re-observes the world rather than trusting the claim: published content is re-fetched by URL; calendar/email writes are re-queried; research citations are checked by fetching sources and matching quoted passages (structurally blocking hallucinated citations); human work is evidenced by Wait resolution records.
 
 **Retry policy.** Defaults live on the executor profile (internal workers: 3; installed apps: per connector definition; humans: not retries but a reminder policy under the social budget), overridable per item via `maxAttempts`. Exhaustion is kernel-enforced: the item gains a `waiting_input` blocker and escalates to the Owner ("attempted N times, still failing — change approach?"). This is the structural backstop against cost-burning retry loops.
 
@@ -284,7 +284,7 @@ The target read capability excludes policy, Skill, disclosure, remediation, egre
 | Lane | Triggers |
 |---|---|
 | Immediate | Owner unplanned intervention; `outcome = redone`; fabricated evidence caught by the gate; canary breach / rollback; 3rd recurrence of a fingerprint |
-| Daily batch | attempt failures; `outcome = corrected` (after triage); PendingInteraction expired unanswered; budget hard-stops; cost anomalies |
+| Daily batch | attempt failures; `outcome = corrected` (after triage); Wait expired unanswered; budget hard-stops; cost anomalies |
 
 **Storm collapse**: more than N similar incidents per hour collapse into one storm RCA. `environmental` causes (expired credentials, API outage) route to an ops alert, never a policy change — twenty workers failing on one dead API key is one infrastructure incident. **Triage before RCA** for soft signals: a single `corrected` with no fingerprint match is recorded only; preference-shaped corrections (tone, style) become memory candidates (§5), not policy fixes — taste is memory, defects are structure. Two or more occurrences, or any hard signal, get a full RCA.
 

@@ -7,7 +7,6 @@ import type { Delegation } from "../delegation/index.js";
 import type { Engagement } from "../engagement/index.js";
 import type { Wait } from "../wait/index.js";
 import type { WorkItem } from "../work-item/index.js";
-import type { Communication } from "../communication/index.js";
 import type { Gateway } from "../gateway/index.js";
 import type { CronJob } from "../cron/index.js";
 
@@ -15,7 +14,6 @@ export namespace Storage {
   export interface ActorRegistrySubAdapter {
     getIdentity(id: string): Actor.Identity | undefined;
     setIdentity(identity: Actor.Identity): void;
-    listIdentities(): Actor.Identity[];
     removeIdentity(id: string): boolean;
     getEndpoint(id: string): Actor.Endpoint | undefined;
     setEndpoint(endpoint: Actor.Endpoint): void;
@@ -182,30 +180,6 @@ export namespace Storage {
     claim(key: string, sessionId: string, expectedSessionId?: string): string;
     lookup(key: string): string | undefined;
     listBySession(sessionId: string): string[];
-  }
-
-  export interface PendingAskSubAdapter {
-    create(record: Communication.PendingAsk.Record): void;
-    get(id: string): Communication.PendingAsk.Record | undefined;
-    list(status?: Communication.PendingAsk.Status[]): Communication.PendingAsk.Record[];
-    findByCorrelation(
-      query: Communication.PendingAsk.CorrelationQuery,
-    ): Communication.PendingAsk.Record[];
-    set(record: Communication.PendingAsk.Record): void;
-    remove(id: string): boolean;
-  }
-
-  export interface PendingInteractionSubAdapter {
-    create(record: Communication.PendingInteraction.Record): void;
-    get(id: string): Communication.PendingInteraction.Record | undefined;
-    list(
-      status?: Communication.PendingInteraction.Status[],
-    ): Communication.PendingInteraction.Record[];
-    findByCorrelation(
-      query: Communication.PendingInteraction.CorrelationQuery,
-    ): Communication.PendingInteraction.Record[];
-    set(record: Communication.PendingInteraction.Record): void;
-    remove(id: string): boolean;
   }
 
   /**

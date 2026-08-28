@@ -34,10 +34,9 @@
 //     binding that exposes them as the ledger sub-adapter.
 //   - frozenTableWriters: the sqlite adapter modules that still CONTAIN
 //     write SQL against frozen legacy tables. Their store layers throw the
-//     typed frozen errors (`pending_ask_frozen` / `pending_interaction`
-//     freeze / `worker_run_frozen` — pinned by conformance), so the SQL is
-//     reachable only by seeding archived fixtures at the adapter layer; no
-//     OTHER module may carry write SQL for a frozen table.
+//     typed frozen errors (`worker_run_frozen` — pinned by conformance), so
+//     the SQL is reachable only by seeding archived fixtures at the adapter
+//     layer; no OTHER module may carry write SQL for a frozen table.
 //   - migrationSqlWriters: the enumerated migration .sql files allowed to
 //     carry write SQL against those tables (historical, pre-freeze
 //     backfills executed by the migration runner).
@@ -126,11 +125,6 @@ export const LEDGER_PRODUCER_MANIFEST: LedgerProducerManifest = {
     "packages/ledger/src/storage/sqlite-storage.ts",
   ],
   frozenTableWriters: [
-    { table: "pending_ask", adapter: "packages/ledger/src/storage/sqlite-pending-ask-adapter.ts" },
-    {
-      table: "pending_interaction",
-      adapter: "packages/ledger/src/storage/sqlite-pending-interaction-adapter.ts",
-    },
     {
       table: "worker_run_state",
       adapter: "packages/ledger/src/storage/sqlite-worker-run-state-adapter.ts",
@@ -151,7 +145,7 @@ const SOURCE_GLOB = new Glob("{packages,apps}/*/src/**/*.ts");
 const MIGRATION_SQL_GLOB = new Glob("packages/*/migration/**/*.sql");
 
 const LEDGER_TABLES = ["ledger_event", "ledger_head"] as const;
-const FROZEN_TABLES = ["pending_ask", "pending_interaction", "worker_run_state"] as const;
+const FROZEN_TABLES = ["worker_run_state"] as const;
 
 // Receiver ending in "ledger" + dot/bracket access to append|adoptStream,
 // OR adoptStream under any receiver. No opening-call parenthesis is required:

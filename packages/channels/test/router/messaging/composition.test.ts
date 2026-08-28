@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { extractSurfaceKey, type Gateway } from "@openomni/protocol";
-import { ActorRegistry, ChannelGrantStore } from "@openomni/ledger";
+import { extractSurfaceKey, type Gateway, Ingress } from "@openomni/protocol";
+import { ActorRegistry, ChannelGrantStore, Storage } from "@openomni/ledger";
 import type { ChannelDeliveryRoute, GatewayRouter } from "../../../src/router/index.js";
 import { makeRouter as makeFixtureRouter, resetRouterState } from "../_router-fixture";
 
@@ -64,11 +64,13 @@ function makeRouter(routes: ReadonlyMap<string, ChannelDeliveryRoute> = delivery
 beforeEach(() => {
   resetRouterState();
   delivered.length = 0;
-  // A broadcast channel admits a first-contact stranger as evidence_only with
-  // a resolved identity — the materialization precondition (routed + endpoint).
-  // A broadcast channel admits a first-contact stranger as evidence_only —
-  // the authorized top-level path for a non-owner initiator (the trusted
-  // channel would deny a collaborator's top-level inbound).
+  seedMarketState();
+});
+
+// A broadcast channel admits a first-contact stranger as evidence_only with
+// a resolved identity — the materialization precondition (routed + endpoint).
+// The trusted channel would deny a collaborator's top-level inbound.
+function seedMarketState(): void {
   ChannelGrantStore.put({
     id: "grant-market",
     surface: "discord",
@@ -86,7 +88,7 @@ beforeEach(() => {
     externalId: "buyer-external",
     workspace: "shop-ws",
   });
-});
+}
 
 describe("messaging-composed gateway router (#708)", () => {
   test("exposes a fail-closed send kernel when messaging ports are provided", async () => {
@@ -165,6 +167,129 @@ describe("messaging-composed gateway router (#708)", () => {
         },
       }),
     ).rejects.toThrow("no registered channel surface delivers discord");
+  });
+
+  test("replays a pre-0025 legacy route fact into a reply grant and skips corrupt rows", async () => {
+    // Given — capture the modern routed fact this inbound records today.
+    await makeRouter().ingest(strangerEvent);
+    const streamId = Ingress.routeStreamId(strangerEvent);
+    const modern = Storage.get().ledger?.headFact(streamId);
+    expect(modern?.data).toMatchObject({ outcome: "route" });
+
+    // And — a fresh ledger seeded with the LEGACY shape of that fact (the
+    // dead runId/pendingInteractionId fields the strict write schema rejects)
+    // plus one corrupt route.decided row no era can parse.
+    resetRouterState();
+    seedMarketState();
+    delivered.length = 0;
+    Storage.get().ledger?.append(
+      {
+        streamId,
+        type: "route.decided",
+        data: {
+          ...(modern?.data as Record<string, unknown>),
+          runId: "run-legacy",
+          pendingInteractionId: "ask_legacy",
+        },
+      },
+      0,
+    );
+    Storage.get().ledger?.append(
+      {
+        streamId: "route:discord:shop-ws:market:corrupt-row",
+        type: "route.decided",
+        data: { junk: true },
+      },
+      0,
+    );
+
+    // And — a routed fact for a second actor whose retired fields carry
+    // wrong types (runId must be a string in every era): never valid, so it
+    // must not reconstruct a grant.
+    ActorRegistry.registerIdentity({
+      id: "actor-mallory",
+      kind: "human",
+      trustTier: "collaborator",
+    });
+    ActorRegistry.registerEndpoint({
+      id: "ep-mallory",
+      actorId: "actor-mallory",
+      channel: "discord",
+      externalId: "mallory-external",
+      workspace: "shop-ws",
+    });
+    const modernData = modern?.data as { factsUsed: string[] } & Record<string, unknown>;
+    Storage.get().ledger?.append(
+      {
+        streamId: Ingress.routeStreamId({ ...strangerEvent, id: "inbound-mallory" }),
+        type: "route.decided",
+        data: {
+          ...modernData,
+          inboundId: "inbound-mallory",
+          actorId: "actor-mallory",
+          factsUsed: modernData.factsUsed.map((fact) =>
+            fact.replace("buyer-external", "mallory-external"),
+          ),
+          runId: 42,
+        },
+      },
+      0,
+    );
+
+    // When — a new router is composed: replay must not crash on the corrupt
+    // row and must materialize the grant from the legacy fact alone.
+    const restarted = makeRouter();
+    const receipt = await restarted.messaging.send({
+      messageId: "m-legacy",
+      traceId: "t-legacy",
+      senderId: "persona-owner",
+      target: { actorId: "actor-buyer", endpointId: "ep-buyer" },
+      operation: "awaited",
+      body: "legacy replay reaches you",
+      at: Date.now(),
+      waitSpec: {
+        waitId: "w-legacy",
+        ownerRef: { kind: "session", id: "s-1" },
+        allowedActions: ["report_result"],
+        expectedResponders: ["actor-buyer"],
+        resolutionPolicy: "first_reply",
+        expiresAt: Date.now() + 60_000,
+        followUpWindow: 0,
+      },
+    });
+
+    // Then — the reply grant admitted from the pre-0025 fact covers the send.
+    expect(receipt.kind).toBe("sent");
+    expect(delivered).toEqual([
+      {
+        externalId: "buyer-external",
+        body: "legacy replay reaches you",
+        idempotencyKey: "m-legacy",
+      },
+    ]);
+
+    // And — the wrong-typed fact granted nothing: the send to mallory denies.
+    const malloryReceipt = await restarted.messaging.send({
+      messageId: "m-mallory",
+      traceId: "t-mallory",
+      senderId: "persona-owner",
+      target: { actorId: "actor-mallory", endpointId: "ep-mallory" },
+      operation: "awaited",
+      body: "must stay ungranted",
+      at: Date.now(),
+      waitSpec: {
+        waitId: "w-mallory",
+        ownerRef: { kind: "session", id: "s-1" },
+        allowedActions: ["report_result"],
+        expectedResponders: ["actor-mallory"],
+        resolutionPolicy: "first_reply",
+        expiresAt: Date.now() + 60_000,
+        followUpWindow: 0,
+      },
+    });
+    expect(malloryReceipt.kind).toBe("denied");
+    if (malloryReceipt.kind === "denied") expect(malloryReceipt.code).toBe("ungranted");
+    expect(delivered).toHaveLength(1);
   });
 
   test("preserves a covered reply grant across router restart", async () => {

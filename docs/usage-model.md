@@ -92,7 +92,7 @@ Autonomy is never granted by a settings toggle; it is earned through ledger evid
 
 ## The two promises
 
-Everything else — the kernel, the ledger, PendingInteraction, the Governor, the Jester — exists to keep exactly two promises:
+Everything else — the kernel, the ledger, the durable Wait, the Governor, the Jester — exists to keep exactly two promises:
 
 > **"What you hand over gets finished."**
 > **"The same mistake doesn't happen twice."**

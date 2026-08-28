@@ -33,7 +33,7 @@ describe("ingest trust-boundary sanitization (audit A T2)", () => {
     expect(delivery.event.activation?.durableSessionId).not.toBe("attacker-pinned-session");
   });
 
-  it("strips caller-supplied reserved trust meta keys (channelGrant*, pendingAsk)", async () => {
+  it("strips caller-supplied reserved trust meta keys (channelGrant*)", async () => {
     const router = getRouter();
 
     await router.ingest({
@@ -42,23 +42,10 @@ describe("ingest trust-boundary sanitization (audit A T2)", () => {
         actor: { role: "user", id: "user-1" },
         channelGrantId: "spoof-grant",
         channelGrantKind: "trusted_channel",
-        // A well-formed but caller-FORGED pendingAsk (batch ② commit 2 declared
-        // the field typed, so the ingest boundary now validates its shape) —
-        // the strip must remove even a valid-looking forge, never trust it.
-        pendingAsk: {
-          id: "spoof-ask",
-          originSessionId: "spoof-session",
-          originActorKind: "resident",
-          targetKind: "resident",
-          status: "open",
-          ambiguous: false,
-        },
       },
     });
 
     const delivery = lastDelivery();
-    // A surface-default route never sets pendingAsk → its absence proves the strip.
-    expect(delivery.event.meta?.pendingAsk).toBeUndefined();
     // channelGrantId reflects the REAL resolved grant, not the caller's spoof.
     expect(delivery.event.meta?.channelGrantId).not.toBe("spoof-grant");
   });

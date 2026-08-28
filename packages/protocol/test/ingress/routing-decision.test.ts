@@ -24,10 +24,8 @@ const terminalCases: RoutingDecisionInput[] = [
     ...baseDecision,
     stage: "wait_correlation",
     outcome: "route",
-    target: "worker-session:session-1",
+    target: "resident",
     sessionId: "session-1",
-    runId: "run-1",
-    pendingInteractionId: "pi-1",
     actorId: "actor-1",
     trustTier: "assigned_worker",
     inboundTreatment: "full_access",
@@ -38,7 +36,7 @@ const terminalCases: RoutingDecisionInput[] = [
     ...baseDecision,
     stage: "wait_correlation",
     outcome: "ambiguous",
-    candidateInteractionIds: ["pending_ask:ask-1", "pending_interaction:pi-2", "wait:wait-3"],
+    candidateInteractionIds: ["wait:wait-2", "wait:wait-3"],
   },
   // Fail-closed wait stage (#215): a matched wait whose owner has no ingress
   // delivery path blocks instead of falling through to surface routing.
@@ -177,13 +175,13 @@ describe("Ingress.Events.RoutingDecision", () => {
     expect(() =>
       routingDecisionSchema.parse({
         ...ambiguous,
-        candidateInteractionIds: ["pending_ask:ask-1"],
+        candidateInteractionIds: ["wait:wait-1"],
       }),
     ).toThrow(ZodError);
     expect(() =>
       routingDecisionSchema.parse({
         ...ambiguous,
-        candidateInteractionIds: ["ask-1", "pending_interaction:pi-2"],
+        candidateInteractionIds: ["wait-1", "wait:wait-2"],
       }),
     ).toThrow(ZodError);
   });
@@ -194,5 +192,99 @@ describe("Ingress.Events.RoutingDecision", () => {
 
     // When / Then
     expect(() => routingDecisionSchema.parse(input)).toThrow(ZodError);
+  });
+});
+
+describe("Ingress.recordedRoutingDecision (upcast-on-read)", () => {
+  test("strips the dead runId/pendingInteractionId fields from pre-0025 facts", () => {
+    // Given — a persisted wait route recorded before the pending-stack
+    // deletion, carrying both dead optional fields the strict schema rejects.
+    const legacyFact = {
+      ...baseDecision,
+      stage: "wait_correlation",
+      outcome: "route",
+      target: "resident",
+      sessionId: "session-1",
+      actorId: "actor-1",
+      runId: "run-legacy-1",
+      pendingInteractionId: "ask_legacy-1",
+    };
+    expect(() => routingDecisionSchema.parse(legacyFact)).toThrow(ZodError);
+
+    // When
+    const upcast = Ingress.recordedRoutingDecision(legacyFact);
+
+    // Then — the modern payload survives, minus the dead fields.
+    expect(upcast).toEqual({
+      ...baseDecision,
+      stage: "wait_correlation",
+      outcome: "route",
+      target: "resident",
+      sessionId: "session-1",
+      actorId: "actor-1",
+    });
+  });
+
+  test("reads legacy pending-prefixed ambiguous candidates verbatim", () => {
+    // Given — a pre-0025 ambiguous decision whose candidates mix wait and
+    // pending sources; the write schema's wait-only regex rejects it.
+    const legacyAmbiguous = {
+      ...baseDecision,
+      stage: "wait_correlation" as const,
+      outcome: "ambiguous" as const,
+      candidateInteractionIds: ["wait:wait-1", "pending_ask:ask-1", "pending_interaction:pi-1"],
+    };
+    expect(() => routingDecisionSchema.parse(legacyAmbiguous)).toThrow(ZodError);
+
+    // When
+    const upcast = Ingress.recordedRoutingDecision(legacyAmbiguous);
+
+    // Then — candidates are preserved as written (comparison-only vocabulary).
+    expect(upcast).toEqual(legacyAmbiguous);
+  });
+
+  test("parses modern facts unchanged", () => {
+    for (const terminal of terminalCases) {
+      expect(Ingress.recordedRoutingDecision(terminal)).toEqual(
+        routingDecisionSchema.parse(terminal),
+      );
+    }
+  });
+
+  test("rejects wrong-typed retired fields — invalid in every era", () => {
+    // Given — an otherwise valid modern route fact whose retired fields carry
+    // types the pre-0025 write schema never accepted. Stripping them blindly
+    // would reconstruct authority from bytes no era wrote.
+    const validRoute = {
+      ...baseDecision,
+      stage: "surface_default",
+      outcome: "route",
+      target: "resident",
+      sessionId: "session-1",
+      actorId: "actor-1",
+    };
+
+    expect(Ingress.recordedRoutingDecision({ ...validRoute, runId: 42 })).toBeUndefined();
+    expect(
+      Ingress.recordedRoutingDecision({ ...validRoute, pendingInteractionId: { bad: true } }),
+    ).toBeUndefined();
+    expect(
+      Ingress.recordedRoutingDecision({ ...validRoute, runId: null, pendingInteractionId: "ok" }),
+    ).toBeUndefined();
+  });
+
+  test("returns undefined for bytes no era could parse", () => {
+    expect(Ingress.recordedRoutingDecision(undefined)).toBeUndefined();
+    expect(Ingress.recordedRoutingDecision(null)).toBeUndefined();
+    expect(Ingress.recordedRoutingDecision("route")).toBeUndefined();
+    expect(Ingress.recordedRoutingDecision({ stage: "blacklist" })).toBeUndefined();
+    expect(
+      Ingress.recordedRoutingDecision({
+        ...baseDecision,
+        stage: "wait_correlation",
+        outcome: "ambiguous",
+        candidateInteractionIds: ["unqualified-1", "unqualified-2"],
+      }),
+    ).toBeUndefined();
   });
 });

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { Ingress, Ledger } from "@openomni/protocol";
-import { ActorRegistry, ChannelGrantStore, Storage } from "@openomni/ledger";
+import { extractSurfaceKey, Ingress, Ledger } from "@openomni/protocol";
+import { ActorRegistry, ChannelGrantStore, Storage, SurfaceKey } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { IngressRoutingError } from "../../src/router/routing-resolution";
 import {
@@ -66,6 +66,38 @@ describe("GatewayRouter durable routing resolution", () => {
     await router.ingest(ownerEvent);
 
     expect(deliveries).toHaveLength(2);
+    expect(Storage.get().ledger?.headFact(streamId())?.seq).toBe(1);
+  });
+
+  test("redelivery against a pre-0025 legacy fact upcasts and re-delivers", async () => {
+    // Given — capture the modern decision this inbound produces today.
+    registerOwnerDm();
+    createMappedOwnerSession();
+    await makeRouter().ingest(ownerEvent);
+    const modern = Storage.get().ledger?.headFact(streamId())?.data as Record<string, unknown>;
+
+    // And — a fresh ledger whose recorded fact is the LEGACY shape: the same
+    // decision plus the dead runId/pendingInteractionId fields that the
+    // strict write schema rejects.
+    resetRouterState();
+    registerOwnerDm();
+    SurfaceKey.claim(extractSurfaceKey(ownerEvent), modern.sessionId as string);
+    const appended = Storage.get().ledger?.append(
+      {
+        streamId: streamId(),
+        type: "route.decided",
+        data: { ...modern, runId: "run-legacy", pendingInteractionId: "ask_legacy" },
+      },
+      0,
+    );
+    expect(appended).toMatchObject({ kind: "appended" });
+
+    // When — the same inbound is redelivered after the upgrade.
+    await makeRouter().ingest(ownerEvent);
+
+    // Then — the recorded legacy fact upcasts, matches the fresh decision,
+    // and the redelivery proceeds without a second fact.
+    expect(deliveries).toHaveLength(1);
     expect(Storage.get().ledger?.headFact(streamId())?.seq).toBe(1);
   });
 

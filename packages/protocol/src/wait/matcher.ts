@@ -1,4 +1,3 @@
-import type { Communication } from "../communication/index.js";
 import type { Ingress } from "../ingress/index.js";
 import type { Correlation, Record } from "./schema.js";
 
@@ -106,22 +105,6 @@ export function ingressEvidence(
       return event.userId === expected || expected === `${event.surface}:${event.userId}`;
     },
   };
-}
-
-/** Matcher targets for a frozen legacy PendingInteraction row (upcast read path). */
-export function targetsOfPendingInteraction(
-  record: Communication.PendingInteraction.Record,
-): ResponderTarget[] {
-  return [
-    {
-      responderId: record.targetActorId ?? record.endpointId,
-      ...(record.targetActorId === undefined ? {} : { targetActorId: record.targetActorId }),
-      endpointId: record.endpointId,
-      ...(record.correlation.tokenHash === undefined
-        ? {}
-        : { tokenHash: record.correlation.tokenHash }),
-    },
-  ];
 }
 
 /**

@@ -234,8 +234,8 @@ const CHANNELS_JUDGMENT_ONLY_DEPS = new Set(["@openomni/policy", "@openomni/ledg
 /**
  * The perimeter store surfaces the gateway router may name from
  * @openomni/ledger (docs/gateway-design.md §4/§6): actors, blacklist,
- * channel grants, waits, the surface↔session map, the frozen pending-*
- * stores, and the SCOPED append port (append + headFact — never the master
+ * channel grants, waits, the surface↔session map, and the SCOPED append
+ * port (append + headFact — never the master
  * `Storage` entry, whose adapter reaches every brain surface). Brain
  * surfaces (Session, WorkItem*, transcript, artifact, worker-run/grant,
  * effect, …) are NOT reachable from the router — the gateway selects
@@ -248,8 +248,6 @@ const CHANNELS_ROUTER_LEDGER_SURFACES = new Set([
   "ChannelGrantStore",
   "WaitStore",
   "SurfaceKey",
-  "PendingAskStore",
-  "PendingInteractionStore",
   "LedgerAppend",
   // #219 active-egress debit ledger — a perimeter surface written ONLY by the
   // router's send kernel (same isolation as the wait store; brain never reaches it).

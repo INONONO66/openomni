@@ -83,7 +83,7 @@ const DeliveredEventSchema = Ingress.DirectEventSchema.omit({ agent: true });
  *   judgment (kernel-contract §8.5), so the brain resolves it from the
  *   pinned event.
  * - `actorContext` is optional — present for surface-default admissions
- *   (where the perimeter produced a tier verdict); absent for wait/pending
+ *   (where the perimeter produced a tier verdict); absent for wait
  *   resumptions (admission is the correlation itself, asserted via
  *   `waitContext`) and for legacy anonymous surfaces without an origin id.
  * - `event` + `decision` carry the routed event residue and the recorded

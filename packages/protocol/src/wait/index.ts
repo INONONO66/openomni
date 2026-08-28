@@ -4,7 +4,6 @@ import * as Fold from "./fold.js";
 import * as Matcher from "./matcher.js";
 import * as RequestedAction from "./requested-action.js";
 import * as Schema from "./schema.js";
-import * as Upcast from "./upcast.js";
 
 export namespace Wait {
   export const OwnerRef = Schema.OwnerRef;
@@ -64,10 +63,6 @@ export namespace Wait {
   export const requestedWaitAction = RequestedAction.requestedWaitAction;
   export type RequestedWaitAction = RequestedAction.RequestedWaitAction;
 
-  // Read-only Wait views over frozen legacy pending-* rows (#215 upcast).
-  export const waitViewOfPendingInteraction = Upcast.waitViewOfPendingInteraction;
-  export const waitViewOfPendingAsk = Upcast.waitViewOfPendingAsk;
-
   // THE sender matcher core (#215): pure matching over protocol types; the
   // delivery-endpoint ActorRegistry resolution stays a caller-side effect
   // and reaches targetsOfWait as an input.
@@ -75,17 +70,13 @@ export namespace Wait {
   export type SenderEvidence = Matcher.SenderEvidence;
   export const responderCandidates = Matcher.responderCandidates;
   export const ingressEvidence = Matcher.ingressEvidence;
-  export const targetsOfPendingInteraction = Matcher.targetsOfPendingInteraction;
   export const targetsOfWait = Matcher.targetsOfWait;
 
-  // Shared wait-correlation precedence core (batch ② commit 1): the PURE
-  // tier-level builders + pin gate both the gateway router's full lookup and
-  // the dispatch plane's frozen-row slice call. Store reads stay per-side.
-  export type CorrelationLookup = CorrelationFold.CorrelationLookup;
-  export type LegacyLevel = CorrelationFold.LegacyLevel;
+  // Shared wait-correlation precedence core: the PURE tier-level builder +
+  // pin gate behind the gateway router's full lookup. Store reads stay
+  // caller-side.
   export const waitPinsAllowClaim = CorrelationFold.waitPinsAllowClaim;
   export const waitTierLevels = CorrelationFold.waitTierLevels;
-  export const legacyTierLevels = CorrelationFold.legacyTierLevels;
 
   export const Events = EventDescriptors;
 }

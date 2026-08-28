@@ -145,7 +145,7 @@ function applyReply(input: Readonly<{ actorId: string; replyKey: string; at: num
     channelId: ReplyChannelId,
     replyToMessageId: AwaitedMessageId,
   };
-  const resolution = findWaitCandidates({ correlation });
+  const resolution = findWaitCandidates(correlation);
   if (resolution.kind !== "match") {
     throw new Error(`reply correlation resolved to ${resolution.kind}`);
   }

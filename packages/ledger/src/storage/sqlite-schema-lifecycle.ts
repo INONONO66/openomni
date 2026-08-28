@@ -29,6 +29,7 @@ const ORDERED_MIGRATIONS: Migration.Definition[] = [
   { name: "0022_bus_event_payload_status/migration.sql" },
   { name: "0023_delegation/migration.sql" },
   { name: "0024_delegation_wake_receipt/migration.sql" },
+  { name: "0025_drop_pending_tables/migration.sql" },
 ];
 
 const CLEAR_ORDER = [
@@ -45,9 +46,7 @@ const CLEAR_ORDER = [
   "actor_identity",
   "cron_job",
   "egress_debit",
-  "pending_interaction",
   "worker_grant",
-  "pending_ask",
   "worker_run_state",
   "bus_event",
   "work_item",

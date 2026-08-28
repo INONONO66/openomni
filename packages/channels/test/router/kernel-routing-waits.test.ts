@@ -1,28 +1,17 @@
-import { beforeEach, describe, expect, spyOn, test } from "bun:test";
-import { Communication, Ingress, type Gateway, type Wait } from "@openomni/protocol";
-import {
-  ActorRegistry,
-  BlacklistStore,
-  PendingAskStore,
-  PendingInteractionStore,
-  Session,
-  Storage,
-  WaitStore,
-} from "@openomni/ledger";
+import { beforeEach, describe, expect, test } from "bun:test";
+import { extractSurfaceKey, Ingress, type Gateway, type Wait } from "@openomni/protocol";
+import { ActorRegistry, BlacklistStore, Storage, SurfaceKey, WaitStore } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { IngressRoutingError } from "../../src/router/routing-resolution";
 import { createExistingAgentMessaging } from "../../src/router/messaging/send";
 import { WaitService } from "../../src/router/wait/index";
-import { seedPendingInteraction } from "../helpers/pending-interaction";
 import { deliveries, kernelRouter, resetRouterState, routingDecisions } from "./_router-fixture";
 
 /**
- * Router half of the pre-flip kernel wait-routing suite (#707): everything up
- * to the Deliver seam — correlation, decision recording, wait folds
+ * Router half of the kernel wait-routing suite (#707): everything up to the
+ * Deliver seam — correlation, decision recording, wait folds
  * (attachReply/expiry), ambiguity, blacklist suppression, and the projected
- * delivery shape. The dispatch-execution half (pending-interaction command
- * placement) is brain-side and lives in
- * the removed product pipeline; the surviving perimeter behavior is pinned here.
+ * delivery shape.
  */
 
 const correlation = {
@@ -47,92 +36,6 @@ function replyEvent(
   };
 }
 
-// PendingInteractionStore writes are frozen (#548) — historical rows are
-// seeded at the adapter layer, exactly as pre-freeze rows persist on disk.
-// The router half needs no WorkItem/attempt scaffolding: dispatch placement
-// is past the seam.
-function seedFrozenPending(
-  id: string,
-  runId: string,
-  allowedActions: PendingInteractionStore.Record["allowedActions"] = ["report_result"],
-): string {
-  const existingEndpoint = ActorRegistry.resolveEndpoint("telegram", "seller-1");
-  const targetActorId = existingEndpoint?.identity.id ?? "actor-external-worker";
-  if (!existingEndpoint) {
-    ActorRegistry.registerIdentity({
-      id: targetActorId,
-      kind: "human",
-      trustTier: "assigned_worker",
-    });
-    ActorRegistry.registerEndpoint({
-      id: correlation.endpointId,
-      actorId: targetActorId,
-      channel: "telegram",
-      externalId: "seller-1",
-    });
-  }
-  const session = Session.create({
-    traceId: "trace-test",
-    title: id,
-    model: { providerID: "test", modelID: "test-model" },
-  });
-  const workerRunAdapter = Storage.getAdapter().workerRunState;
-  if (!workerRunAdapter) throw new Error("workerRunState sub-adapter missing");
-  workerRunAdapter.create(session.id, {
-    runId,
-    agentName: "worker",
-    status: "waiting_input",
-    executorKind: "connector_endpoint",
-    title: runId,
-    prompt: "complete assigned work",
-  });
-  seedPendingInteraction({
-    id,
-    workerRunId: runId,
-    sessionId: session.id,
-    endpointId: correlation.endpointId,
-    channelId: correlation.channelId,
-    correlation: { tokenHash: correlation.tokenHash },
-    allowedActions,
-    targetActorId,
-    expiresAt: Number.MAX_SAFE_INTEGER,
-    followUpWindow: 60_000,
-  });
-  return session.id;
-}
-
-// PendingAskStore writes are frozen (#510 D2a) — historical rows are seeded
-// at the adapter layer, exactly as pre-freeze rows persist on disk.
-function createPendingAsk(
-  id: string,
-  sessionTitle: string,
-  askCorrelation: Communication.PendingAsk.Record["correlation"],
-  originRunId: string | null = `run-${id}`,
-): Communication.PendingAsk.Record {
-  const session = Session.create({
-    traceId: "trace-test",
-    title: sessionTitle,
-    model: { providerID: "test", modelID: "test-model" },
-  });
-  const record = Communication.PendingAsk.Record.parse({
-    id,
-    originSessionId: session.id,
-    ...(originRunId === null ? {} : { originRunId }),
-    originActorKind: "worker",
-    targetKind: "external_actor",
-    endpointId: correlation.endpointId,
-    channelId: correlation.channelId,
-    correlation: askCorrelation,
-    status: "open",
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-  });
-  const adapter = Storage.getAdapter().pendingAsk;
-  if (!adapter) throw new Error("pendingAsk adapter missing");
-  adapter.create(record);
-  return record;
-}
-
 async function captureError(action: Promise<unknown>): Promise<Error | undefined> {
   try {
     await action;
@@ -142,471 +45,6 @@ async function captureError(action: Promise<unknown>): Promise<Error | undefined
     return error;
   }
 }
-
-describe("GatewayRouter wait routing", () => {
-  beforeEach(resetRouterState);
-
-  test("delivers one exact pending-interaction reply after the recorded decision", async () => {
-    const sessionId = seedFrozenPending("pi-exact", "run-exact");
-    const order: string[] = [];
-    const actualPublish = Bus.publish;
-    const publish = spyOn(Bus, "publish").mockImplementation((event, data) => {
-      if (event === Ingress.Events.RoutingDecision) order.push("publish");
-      actualPublish(event, data);
-    });
-
-    let result: Ingress.IngressResult;
-    try {
-      result = await kernelRouter().ingest(replyEvent("inbound-exact"));
-      if (deliveries.length > 0) order.push("deliver");
-    } finally {
-      publish.mockRestore();
-    }
-
-    expect(routingDecisions()).toHaveLength(1);
-    const decision = Ingress.Events.RoutingDecision.schema.parse(routingDecisions()[0]);
-    expect(decision).toMatchObject({
-      stage: "wait_correlation",
-      outcome: "route",
-      sessionId,
-      runId: "run-exact",
-      pendingInteractionId: "pi-exact",
-    });
-    // Record-before-act: the decision published (post-append) before deliver.
-    expect(order).toEqual(["publish", "deliver"]);
-    expect(deliveries).toHaveLength(1);
-    // Dispatch placement is brain judgment: the event crosses untouched, with
-    // the recorded decision carrying the routed worker context.
-    expect(deliveries[0]?.decision).toEqual(decision);
-    expect(deliveries[0]?.event.meta?.correlation).toEqual(correlation);
-    if (result.kind === "dropped") throw new Error("shape");
-    expect(result.sessionId).toBe(sessionId);
-    // #548: the store is frozen — routing leaves the legacy row as persisted.
-    expect(PendingInteractionStore.get("pi-exact")?.status).toBe("open");
-  });
-
-  test("does not deliver a valid action that the matched interaction denies", async () => {
-    seedFrozenPending("pi-denied-action", "run-denied-action", ["report_result"]);
-
-    const error = await captureError(
-      kernelRouter().ingest(
-        replyEvent("inbound-denied-action", { action: "ask_clarification", question: "Why?" }),
-      ),
-    );
-
-    expect(error).toBeInstanceOf(IngressRoutingError);
-    expect((error as IngressRoutingError).code).toBe("route_blocked");
-    expect(error?.message).toBe("Matched wait does not allow the requested action");
-    expect(routingDecisions()).toHaveLength(1);
-    // #548 pin flip: the legacy fallthrough to surface routing is removed —
-    // a matched frozen row with a disallowed action blocks at the
-    // wait_correlation stage exactly like a durable wait.
-    expect(routingDecisions()[0]).toMatchObject({
-      stage: "wait_correlation",
-      outcome: "block",
-      factsUsed: [
-        "wait:pending_interaction:pi-denied-action",
-        "wait.action:ask_clarification",
-        "wait.action:disallowed",
-      ],
-    });
-    expect(deliveries).toHaveLength(0);
-    expect(PendingInteractionStore.get("pi-denied-action")?.status).toBe("open");
-  });
-
-  test("blocks an explicitly invalid action on a matched frozen legacy row instead of coercing to report_result", async () => {
-    seedFrozenPending("pi-invalid-action", "run-invalid-action", ["report_result"]);
-
-    const error = await captureError(
-      kernelRouter().ingest(
-        replyEvent("inbound-invalid-action", { action: "unknown", output: "SN-A2334" }),
-      ),
-    );
-
-    expect(error).toBeInstanceOf(IngressRoutingError);
-    expect((error as IngressRoutingError).code).toBe("route_blocked");
-    expect(error?.message).toBe("Matched wait does not allow the requested action");
-    expect(routingDecisions()).toHaveLength(1);
-    expect(routingDecisions()[0]).toMatchObject({
-      stage: "wait_correlation",
-      outcome: "block",
-      factsUsed: [
-        "wait:pending_interaction:pi-invalid-action",
-        "wait.action:invalid",
-        "wait.action:disallowed",
-      ],
-    });
-    expect(deliveries).toHaveLength(0);
-    expect(PendingInteractionStore.get("pi-invalid-action")?.status).toBe("open");
-  });
-
-  test.each([
-    "attach_artifact",
-    "decline_task",
-  ] as const)("rejects allowed but unsupported %s ingress actions before delivery", async (action) => {
-    const suffix = action.replace("_", "-");
-    const interactionId = `pi-unsupported-${suffix}`;
-    seedFrozenPending(interactionId, `run-unsupported-${suffix}`, [action]);
-
-    const error = await captureError(
-      kernelRouter().ingest(replyEvent(`inbound-unsupported-${suffix}`, { action })),
-    );
-
-    expect(error).toBeInstanceOf(IngressRoutingError);
-    expect((error as IngressRoutingError).code).toBe("route_blocked");
-    expect(routingDecisions()).toHaveLength(1);
-    expect(routingDecisions()[0]).toMatchObject({
-      stage: "channel_ceiling",
-      outcome: "block",
-      factsUsed: [
-        `wait:pending_interaction:${interactionId}`,
-        `wait.action:${action}`,
-        "wait.action:unsupported_ingress_command",
-      ],
-    });
-    expect(deliveries).toHaveLength(0);
-    expect(PendingInteractionStore.get(interactionId)?.status).toBe("open");
-  });
-
-  test("pins a poisoned PendingInteraction event to the matched session and run", async () => {
-    const sessionId = seedFrozenPending("pi-poisoned", "run-poisoned");
-    const inbound = {
-      ...replyEvent("inbound-poisoned"),
-      target: { kind: "worker", sessionId: "stale-target-session" },
-      meta: {
-        correlation,
-        target: { kind: "worker", sessionId: "stale-meta-session" },
-      },
-      activation: {
-        durableSessionId: "stale-runtime-session",
-        runId: "stale-runtime-run",
-        activationId: "stale-activation",
-      },
-    } satisfies Gateway.DeliveredEvent;
-
-    const result = await kernelRouter().ingest(inbound);
-
-    expect(routingDecisions()).toHaveLength(1);
-    const decision = Ingress.Events.RoutingDecision.schema.parse(routingDecisions()[0]);
-    expect(decision).toMatchObject({
-      stage: "wait_correlation",
-      outcome: "route",
-      target: `worker-session:${sessionId}`,
-      sessionId,
-      runId: "run-poisoned",
-      pendingInteractionId: "pi-poisoned",
-    });
-    // The routed decision (not the poisoned event fields) is what the brain
-    // executes against: the delivery label is the matched session.
-    expect(deliveries).toHaveLength(1);
-    expect(deliveries[0]?.sessionId).toBe(sessionId);
-    expect(deliveries[0]?.decision).toEqual(decision);
-    expect(result).toMatchObject({ sessionId });
-    expect(PendingInteractionStore.get("pi-poisoned")?.status).toBe("open");
-  });
-
-  test("routes a PendingAsk private external-message match to its owner session and run", async () => {
-    const ask = createPendingAsk("ask-external-message", "session-external-message", {
-      externalMessageId: "inbound-external-message",
-    });
-    const inbound = {
-      ...replyEvent("inbound-external-message", "answer from external worker"),
-      target: { kind: "worker", sessionId: "stale-target-session" },
-      meta: {
-        correlation,
-        target: { kind: "worker", sessionId: "stale-meta-session" },
-      },
-      activation: {
-        durableSessionId: "stale-runtime-session",
-        runId: "stale-runtime-run",
-      },
-    } satisfies Gateway.DeliveredEvent;
-
-    const result = await kernelRouter().ingest(inbound);
-
-    expect(routingDecisions()).toHaveLength(1);
-    expect(routingDecisions()[0]).toMatchObject({
-      stage: "wait_correlation",
-      outcome: "route",
-      target: "resident",
-      sessionId: ask.originSessionId,
-      runId: ask.originRunId,
-    });
-    expect(routingDecisions()[0]).not.toHaveProperty("actorId");
-    expect(routingDecisions()[0]).not.toHaveProperty("trustTier");
-    // The delivered event IS the projected owner event the brain consumes
-    // (the pre-flip projector-input pins, now at the seam).
-    const delivered = deliveries[0]?.event;
-    if (delivered === undefined) throw new Error("expected a delivery");
-    expect(delivered.target ?? { kind: "resident" }).toEqual({ kind: "resident" });
-    expect(delivered.meta).not.toHaveProperty("target");
-    expect(delivered.meta?.pendingAsk).toMatchObject({
-      id: ask.id,
-      originSessionId: ask.originSessionId,
-      originRunId: ask.originRunId,
-    });
-    expect(delivered.activation).toMatchObject({
-      durableSessionId: ask.originSessionId,
-      runId: ask.originRunId,
-    });
-    if (result.kind === "dropped") throw new Error("shape");
-    expect(result.sessionId).toBe(ask.originSessionId);
-    expect(PendingAskStore.get(ask.id)?.status).toBe("open");
-  });
-
-  test("pins a stale-target PendingAsk to the published Resident route", async () => {
-    const ask = createPendingAsk(
-      "ask-without-run",
-      "session-without-run",
-      { externalMessageId: "inbound-without-run" },
-      null,
-    );
-    const inbound = {
-      ...replyEvent("inbound-without-run", "answer without an origin run"),
-      target: { kind: "worker", sessionId: "stale-target-session" },
-      meta: {
-        correlation,
-        target: { kind: "worker", sessionId: "stale-meta-session" },
-      },
-      activation: {
-        durableSessionId: "stale-runtime-session",
-        runId: "stale-runtime-run",
-        activationId: "inbound-activation",
-      },
-    } satisfies Gateway.DeliveredEvent;
-
-    const result = await kernelRouter().ingest(inbound);
-
-    const delivered = deliveries[0]?.event;
-    if (delivered === undefined) throw new Error("expected a delivery");
-    expect(delivered.target ?? { kind: "resident" }).toEqual({ kind: "resident" });
-    expect(delivered.meta).not.toHaveProperty("target");
-    expect(delivered.meta?.pendingAsk).toEqual({
-      id: ask.id,
-      originSessionId: ask.originSessionId,
-      originActorKind: ask.originActorKind,
-      targetKind: ask.targetKind,
-      status: ask.status,
-      ambiguous: false,
-    });
-    expect(delivered.activation).toEqual({
-      durableSessionId: ask.originSessionId,
-      activationId: "inbound-activation",
-    });
-    expect(deliveries[0]?.sessionId).toBe(ask.originSessionId);
-    if (result.kind === "dropped") throw new Error("shape");
-    expect(result.sessionId).toBe(ask.originSessionId);
-  });
-
-  test("does not guess or mutate for PI-only ambiguity", async () => {
-    seedFrozenPending("pi-ambiguous-a", "run-ambiguous-a");
-    seedFrozenPending("pi-ambiguous-b", "run-ambiguous-b");
-
-    const error = await captureError(kernelRouter().ingest(replyEvent("inbound-pi-ambiguous")));
-
-    expect(error).toBeInstanceOf(IngressRoutingError);
-    expect((error as IngressRoutingError).code).toBe("route_ambiguous");
-    expect(routingDecisions()[0]).toMatchObject({
-      stage: "wait_correlation",
-      outcome: "ambiguous",
-      candidateInteractionIds: [
-        "pending_interaction:pi-ambiguous-a",
-        "pending_interaction:pi-ambiguous-b",
-      ],
-    });
-    expect(deliveries).toHaveLength(0);
-    expect(PendingInteractionStore.get("pi-ambiguous-a")?.status).toBe("open");
-    expect(PendingInteractionStore.get("pi-ambiguous-b")?.status).toBe("open");
-  });
-
-  test("fails closed for combined PendingInteraction and PendingAsk matches", async () => {
-    seedFrozenPending("pi-combined", "run-combined");
-    createPendingAsk("ask-combined", "session-ask-combined", {
-      tokenHash: correlation.tokenHash,
-    });
-
-    const error = await captureError(kernelRouter().ingest(replyEvent("inbound-combined")));
-
-    expect(error).toBeInstanceOf(IngressRoutingError);
-    expect((error as IngressRoutingError).code).toBe("route_ambiguous");
-    expect(routingDecisions()[0]).toMatchObject({
-      stage: "wait_correlation",
-      outcome: "ambiguous",
-      candidateInteractionIds: ["pending_ask:ask-combined", "pending_interaction:pi-combined"],
-    });
-    // Frozen legacy rows: correlation records ambiguity via the typed
-    // decision only and never mutates candidates (#215).
-    expect(PendingAskStore.get("ask-combined")?.status).toBe("open");
-    expect(PendingInteractionStore.get("pi-combined")?.status).toBe("open");
-  });
-
-  test("publishes selected wait ambiguity without mutating the frozen asks", async () => {
-    createPendingAsk("ask-selected-a", "session-selected-a", {
-      tokenHash: correlation.tokenHash,
-    });
-    createPendingAsk("ask-selected-b", "session-selected-b", {
-      tokenHash: correlation.tokenHash,
-    });
-    const mark = spyOn(PendingAskStore, "markAmbiguous");
-
-    let error: Error | undefined;
-    try {
-      error = await captureError(kernelRouter().ingest(replyEvent("inbound-selected-ambiguity")));
-    } finally {
-      mark.mockRestore();
-    }
-
-    expect(error).toBeInstanceOf(IngressRoutingError);
-    expect((error as IngressRoutingError).code).toBe("route_ambiguous");
-    expect(routingDecisions()).toHaveLength(1);
-    const decision = Ingress.Events.RoutingDecision.schema.parse(routingDecisions()[0]);
-    expect(decision).toMatchObject({
-      stage: "wait_correlation",
-      outcome: "ambiguous",
-      candidateInteractionIds: ["pending_ask:ask-selected-a", "pending_ask:ask-selected-b"],
-      factsUsed: [
-        "wait.candidate:pending_ask:ask-selected-a",
-        "wait.candidate:pending_ask:ask-selected-b",
-      ],
-    });
-    // The published typed decision is the sole record of ambiguity; frozen
-    // legacy asks stay untouched (#215 — correlation never writes).
-    expect(mark).not.toHaveBeenCalled();
-    expect(PendingAskStore.get("ask-selected-a")?.status).toBe("open");
-    expect(PendingAskStore.get("ask-selected-b")?.status).toBe("open");
-    expect(deliveries).toHaveLength(0);
-  });
-
-  test("blocks the resolved actor endpoint even when correlation names another endpoint", async () => {
-    ActorRegistry.registerIdentity({
-      id: "actor-seller-resolved",
-      kind: "human",
-      trustTier: "assigned_worker",
-    });
-    ActorRegistry.registerEndpoint({
-      id: "endpoint-seller-resolved",
-      actorId: "actor-seller-resolved",
-      channel: "telegram",
-      externalId: "seller-1",
-    });
-    BlacklistStore.put({
-      id: "blacklist-resolved-endpoint",
-      kind: "endpoint",
-      value: "endpoint-seller-resolved",
-      createdBy: "actor-owner",
-    });
-    seedFrozenPending("pi-resolved-endpoint", "run-resolved-endpoint");
-
-    const result = await kernelRouter().ingest(replyEvent("inbound-resolved-endpoint"));
-
-    expect(result).toMatchObject({ kind: "dropped" });
-    expect(routingDecisions()).toHaveLength(1);
-    expect(routingDecisions()[0]).toMatchObject({
-      stage: "blacklist",
-      outcome: "drop",
-      factsUsed: [
-        "blacklist:blacklist-resolved-endpoint",
-        "blacklist.kind:endpoint",
-        "blacklist.reason:blacklist.endpoint.endpoint-seller-resolved",
-      ],
-    });
-    expect(deliveries).toHaveLength(0);
-    expect(PendingInteractionStore.get("pi-resolved-endpoint")?.status).toBe("open");
-  });
-
-  test("blacklist suppresses gathered two-Ask ambiguity effects and delivery", async () => {
-    createPendingAsk("ask-blacklist-a", "session-blacklist-a", {
-      tokenHash: correlation.tokenHash,
-    });
-    createPendingAsk("ask-blacklist-b", "session-blacklist-b", {
-      tokenHash: correlation.tokenHash,
-    });
-    BlacklistStore.put({
-      id: "blacklist-seller-1",
-      kind: "endpoint",
-      value: correlation.endpointId,
-      createdBy: "actor-owner",
-    });
-    const pendingInteractionReads = spyOn(PendingInteractionStore, "findByCorrelation");
-    const pendingAskReads = spyOn(PendingAskStore, "findByCorrelation");
-    const markCalls: string[] = [];
-    const actualMarkAmbiguous = PendingAskStore.markAmbiguous;
-    const mark = spyOn(PendingAskStore, "markAmbiguous").mockImplementation((id) => {
-      markCalls.push(id);
-      return actualMarkAmbiguous(id);
-    });
-
-    let pendingInteractionQueries: Communication.PendingInteraction.CorrelationQuery[] = [];
-    let pendingAskQueries: Communication.PendingAsk.CorrelationQuery[] = [];
-    let result: Ingress.IngressResult;
-    try {
-      result = await kernelRouter().ingest({
-        ...replyEvent("inbound-blacklisted"),
-        meta: {
-          correlation: {
-            ...correlation,
-            replyToMessageId: "reply-blacklisted",
-            threadId: "thread-blacklisted",
-            externalConversationId: "conversation-blacklisted",
-          },
-        },
-      });
-      pendingInteractionQueries = pendingInteractionReads.mock.calls.map(([query]) => query);
-      pendingAskQueries = pendingAskReads.mock.calls.map(([query]) => query);
-    } finally {
-      mark.mockRestore();
-      pendingInteractionReads.mockRestore();
-      pendingAskReads.mockRestore();
-    }
-
-    expect(result).toMatchObject({ kind: "dropped" });
-    expect(routingDecisions()).toHaveLength(1);
-    const decision = Ingress.Events.RoutingDecision.schema.parse(routingDecisions()[0]);
-    expect(decision).toMatchObject({
-      stage: "blacklist",
-      outcome: "drop",
-      factsUsed: [
-        "blacklist:blacklist-seller-1",
-        "blacklist.kind:endpoint",
-        "blacklist.reason:blacklist.endpoint.telegram:seller-1",
-      ],
-    });
-    expect(pendingInteractionQueries).toEqual([
-      {
-        endpointId: correlation.endpointId,
-        channelId: correlation.channelId,
-        replyToMessageId: "reply-blacklisted",
-      },
-      {
-        endpointId: correlation.endpointId,
-        channelId: correlation.channelId,
-        threadId: "thread-blacklisted",
-      },
-      correlation,
-    ]);
-    expect(pendingAskQueries).toEqual([
-      {
-        endpointId: correlation.endpointId,
-        channelId: correlation.channelId,
-        replyToMessageId: "reply-blacklisted",
-      },
-      {
-        endpointId: correlation.endpointId,
-        channelId: correlation.channelId,
-        threadId: "thread-blacklisted",
-      },
-      {
-        endpointId: correlation.endpointId,
-        channelId: correlation.channelId,
-        tokenHash: correlation.tokenHash,
-      },
-    ]);
-    expect(markCalls).toEqual([]);
-    expect(PendingAskStore.get("ask-blacklist-a")?.status).toBe("open");
-    expect(PendingAskStore.get("ask-blacklist-b")?.status).toBe("open");
-    expect(deliveries).toHaveLength(0);
-  });
-});
 
 describe("GatewayRouter durable wait routing", () => {
   beforeEach(resetRouterState);
@@ -652,6 +90,8 @@ describe("GatewayRouter durable wait routing", () => {
   test("attaches a matched reply to the durable wait and delivers it to the owner session", async () => {
     registerResponder("actor-external-worker", "seller-1");
     const wait = openSessionWait("wait-session-owner");
+    // A conflicting surface-key mapping must lose to the wait owner's session.
+    SurfaceKey.claim(extractSurfaceKey(replyEvent("inbound-wait-reply")), "session-surface-conflict");
 
     const result = await kernelRouter().ingest(replyEvent("inbound-wait-reply"));
 
@@ -964,55 +404,32 @@ describe("GatewayRouter durable wait routing", () => {
     ]);
   });
 
-  test("a new interaction goes through the durable Wait only — the frozen store admits no rows (#548)", async () => {
+  test("blacklist drops a correlated reply before wait delivery and leaves the wait untouched", async () => {
     registerResponder("actor-external-worker", "seller-1");
-    const wait = openSessionWait("wait-new-interaction");
+    openSessionWait("wait-blacklisted");
+    BlacklistStore.put({
+      id: "blacklist-seller-1",
+      kind: "endpoint",
+      value: correlation.endpointId,
+      createdBy: "actor-owner",
+    });
 
-    const result = await kernelRouter().ingest(replyEvent("inbound-new-interaction"));
+    const result = await kernelRouter().ingest(replyEvent("inbound-blacklisted"));
 
-    if (result.kind === "dropped") throw new Error("shape");
-    expect(result.sessionId).toBe(wait.ownerRef.id);
-    expect(WaitStore.get("wait-new-interaction")).toMatchObject({ status: "resolved" });
-    // No PendingInteraction row exists or can be created: the write surface
-    // is frozen (#548) and every new interaction lives in the wait table.
-    const adapter = Storage.getAdapter().pendingInteraction;
-    if (!adapter) throw new Error("pendingInteraction adapter missing");
-    expect(adapter.list()).toHaveLength(0);
-    let thrown: unknown;
-    try {
-      PendingInteractionStore.create({
-        id: "pi-new-after-freeze",
-        workerRunId: "run-new-after-freeze",
-        sessionId: wait.ownerRef.id,
-        endpointId: correlation.endpointId,
-        channelId: correlation.channelId,
-        correlation: { tokenHash: correlation.tokenHash },
-        allowedActions: ["report_result"],
-        expiresAt: Number.MAX_SAFE_INTEGER,
-        followUpWindow: 60_000,
-      });
-    } catch (error) {
-      thrown = error;
-    }
-    if (!Communication.PendingInteraction.FrozenError.isInstance(thrown)) {
-      throw new Error("expected the typed PendingInteractionFrozenError");
-    }
-    expect(thrown.data.code).toBe("pending_interaction_frozen");
-    expect(thrown.data.method).toBe("create");
-    expect(adapter.list()).toHaveLength(0);
-  });
-
-  test("fails closed when a durable wait and a frozen legacy row collide at one level", async () => {
-    registerResponder("actor-external-worker", "seller-1");
-    // The wait table is the first tier: a durable wait shadows same-token
-    // frozen legacy rows instead of guessing between backings.
-    seedFrozenPending("pi-shadowed", "run-shadowed");
-    const wait = openSessionWait("wait-tier-first");
-
-    const result = await kernelRouter().ingest(replyEvent("inbound-wait-tier"));
-
-    if (result.kind === "dropped") throw new Error("shape");
-    expect(result.sessionId).toBe(wait.ownerRef.id);
-    expect(PendingInteractionStore.get("pi-shadowed")?.status).toBe("open");
+    expect(result).toMatchObject({ kind: "dropped" });
+    expect(routingDecisions()).toHaveLength(1);
+    expect(routingDecisions()[0]).toMatchObject({
+      stage: "blacklist",
+      outcome: "drop",
+      factsUsed: [
+        "blacklist:blacklist-seller-1",
+        "blacklist.kind:endpoint",
+        "blacklist.reason:blacklist.endpoint.telegram:seller-1",
+      ],
+    });
+    expect(deliveries).toHaveLength(0);
+    const record = WaitStore.get("wait-blacklisted");
+    expect(record).toMatchObject({ status: "open" });
+    expect(record?.replies).toHaveLength(0);
   });
 });

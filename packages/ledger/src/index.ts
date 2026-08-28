@@ -18,5 +18,3 @@ export { WaitStore } from "./wait/index.js";
 export { EngagementStore } from "./engagement/index.js";
 export { DelegationStore } from "./delegation/index.js";
 export { EgressBudgetStore } from "./egress/index.js";
-export { PendingAskStore } from "./pending-ask/index.js";
-export { PendingInteractionStore } from "./pending-interaction/index.js";

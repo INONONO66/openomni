@@ -5,10 +5,9 @@ import { frozenWriteRefusal } from "../../src/storage/frozen";
 
 /**
  * S2 duplicate-logic audit — unit coverage for the shared frozen-store
- * write-refusal helper consumed by PendingAskStore (#510 D2a),
- * PendingInteractionStore (#548), and WorkerRunStateStore (#510 D2b). The
+ * write-refusal helper consumed by WorkerRunStateStore (#510 D2b). The
  * per-store pins (typed class, data.code, data.method, message text) stay
- * with the stores' own tests; this suite pins the helper's contract:
+ * with the store's own tests; this suite pins the helper's contract:
  * constructor passthrough, code passthrough, and method interpolation.
  */
 

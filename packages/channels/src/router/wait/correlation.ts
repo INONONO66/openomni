@@ -1,36 +1,18 @@
-import { Wait, type Communication } from "@openomni/protocol";
-import { PendingAskStore, PendingInteractionStore, WaitStore } from "@openomni/ledger";
+import { Wait } from "@openomni/protocol";
+import { WaitStore } from "@openomni/ledger";
 
 /**
- * THE one correlation lookup (#215): the durable wait table is consulted
- * first; frozen legacy rows (PendingInteraction / PendingAsk) answer only
- * when the wait table has no candidate. Within the winning precedence level
- * a single candidate matches and anything more is a typed ambiguity — the
- * lookup never guesses and never writes (legacy rows are frozen; ambiguity
- * is recorded by the routing decision, not by mutating candidates).
+ * THE one correlation lookup (#215) over the durable wait table. Within the
+ * winning precedence level a single candidate matches and anything more is a
+ * typed ambiguity — the lookup never guesses and never writes (ambiguity is
+ * recorded by the routing decision, not by mutating candidates).
  *
- * Precedence levels (most specific first, both tiers):
+ * Precedence levels (most specific first):
  *   replyToMessageId > threadId > tokenHash > externalConversationId |
- *   scoped endpoint+channel fallback (+ the PendingAsk-only private
- *   externalMessageId lookup in the legacy tier).
+ *   scoped endpoint+channel fallback.
  */
 
-type WaitCandidate =
-  | Readonly<{ source: "wait"; key: `wait:${string}`; wait: Wait.Record }>
-  | Readonly<{
-      source: "pending_interaction";
-      key: `pending_interaction:${string}`;
-      wait: Wait.Record;
-      record: Communication.PendingInteraction.Record;
-    }>
-  | Readonly<{
-      source: "pending_ask";
-      key: `pending_ask:${string}`;
-      wait: Wait.Record;
-      record: Communication.PendingAsk.Record;
-    }>;
-
-type WaitCorrelationInput = Wait.CorrelationLookup;
+type WaitCandidate = Readonly<{ key: `wait:${string}`; wait: Wait.Record }>;
 
 export type WaitResolution =
   | Readonly<{ kind: "none" }>
@@ -47,49 +29,15 @@ function resolveLevel(rawCandidates: readonly WaitCandidate[]): WaitResolution |
   return { kind: "ambiguous", candidates };
 }
 
-function resolveWaitTier(input: WaitCorrelationInput): WaitResolution | undefined {
-  const correlation = input.correlation;
-  if (correlation === undefined) return undefined;
+export function findWaitCandidates(correlation: Wait.Correlation | undefined): WaitResolution {
+  if (correlation === undefined) return { kind: "none" };
   for (const query of Wait.waitTierLevels(correlation)) {
     const resolution = resolveLevel(
       WaitStore.findByCorrelation(query)
         .filter((record) => Wait.waitPinsAllowClaim(record, correlation))
-        .map((record) => ({ source: "wait", key: `wait:${record.id}`, wait: record }) as const),
+        .map((record) => ({ key: `wait:${record.id}`, wait: record }) as const),
     );
     if (resolution !== undefined) return resolution;
   }
-  return undefined;
-}
-
-function resolveLegacyTier(input: WaitCorrelationInput): WaitResolution | undefined {
-  for (const level of Wait.legacyTierLevels(input)) {
-    const rawCandidates: WaitCandidate[] = [];
-    for (const query of level.pendingInteraction) {
-      for (const record of PendingInteractionStore.findByCorrelation(query)) {
-        rawCandidates.push({
-          source: "pending_interaction",
-          key: `pending_interaction:${record.id}`,
-          wait: Wait.waitViewOfPendingInteraction(record),
-          record,
-        });
-      }
-    }
-    for (const query of level.pendingAsk) {
-      for (const record of PendingAskStore.findByCorrelation(query)) {
-        rawCandidates.push({
-          source: "pending_ask",
-          key: `pending_ask:${record.id}`,
-          wait: Wait.waitViewOfPendingAsk(record),
-          record,
-        });
-      }
-    }
-    const resolution = resolveLevel(rawCandidates);
-    if (resolution !== undefined) return resolution;
-  }
-  return undefined;
-}
-
-export function findWaitCandidates(input: WaitCorrelationInput): WaitResolution {
-  return resolveWaitTier(input) ?? resolveLegacyTier(input) ?? { kind: "none" };
+  return { kind: "none" };
 }

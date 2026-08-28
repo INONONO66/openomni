@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import type { Communication } from "../../src/communication/index.js";
 import type { Ingress } from "../../src/ingress/index.js";
 import { Wait } from "../../src/wait/index.js";
 import { buildWaitRecord } from "../helpers/wait.js";
@@ -9,27 +8,6 @@ const correlation = Object.freeze({
   channelId: "channel-1",
   tokenHash: "token-1",
 }) satisfies Wait.Correlation;
-
-function buildInteraction(
-  id: string,
-  overrides: Partial<Communication.PendingInteraction.Record> = {},
-): Communication.PendingInteraction.Record {
-  return {
-    id,
-    workerRunId: `run-${id}`,
-    sessionId: `session-${id}`,
-    endpointId: correlation.endpointId,
-    channelId: correlation.channelId,
-    correlation: {},
-    allowedActions: ["report_result"],
-    status: "open",
-    createdAt: 1,
-    updatedAt: 1,
-    expiresAt: Number.MAX_SAFE_INTEGER,
-    followUpWindow: 0,
-    ...overrides,
-  };
-}
 
 function directEvent(overrides: Partial<Ingress.DirectEvent> = {}): Ingress.DirectEvent {
   return {
@@ -46,34 +24,35 @@ function directEvent(overrides: Partial<Ingress.DirectEvent> = {}): Ingress.Dire
 
 describe("wait matcher — ingress evidence", () => {
   test("credits a bearer token only when no actor is pinned", () => {
-    const bearer = buildInteraction("pi-bearer", {
-      correlation: { tokenHash: correlation.tokenHash },
-    });
-    const pinned = buildInteraction("pi-pinned", {
+    const bearer: Wait.ResponderTarget = {
+      responderId: "endpoint-1",
+      endpointId: "endpoint-1",
+      tokenHash: correlation.tokenHash,
+    };
+    const pinned: Wait.ResponderTarget = {
+      responderId: "actor-pinned",
       targetActorId: "actor-pinned",
-      correlation: { tokenHash: correlation.tokenHash },
-    });
+      endpointId: "endpoint-1",
+      tokenHash: correlation.tokenHash,
+    };
     const evidence = Wait.ingressEvidence(directEvent(), correlation);
 
-    expect(Wait.responderCandidates(Wait.targetsOfPendingInteraction(bearer), evidence)).toEqual([
-      "endpoint-1",
-    ]);
-    expect(Wait.responderCandidates(Wait.targetsOfPendingInteraction(pinned), evidence)).toEqual(
-      [],
-    );
+    expect(Wait.responderCandidates([bearer], evidence)).toEqual(["endpoint-1"]);
+    expect(Wait.responderCandidates([pinned], evidence)).toEqual([]);
   });
 
   test("rejects a claimed endpoint that contradicts the expected one", () => {
-    const record = buildInteraction("pi-endpoint", { endpointId: "endpoint-2" });
+    const target: Wait.ResponderTarget = { responderId: "endpoint-2", endpointId: "endpoint-2" };
     const evidence = Wait.ingressEvidence(directEvent(), { ...correlation, tokenHash: undefined });
 
-    expect(Wait.responderCandidates(Wait.targetsOfPendingInteraction(record), evidence)).toEqual(
-      [],
-    );
+    expect(Wait.responderCandidates([target], evidence)).toEqual([]);
   });
 
   test("matches an identity-less direct sender through the userId endpoint forms", () => {
-    const record = buildInteraction("pi-user", { endpointId: "telegram:seller-1" });
+    const target: Wait.ResponderTarget = {
+      responderId: "telegram:seller-1",
+      endpointId: "telegram:seller-1",
+    };
     const claim = {
       endpointId: "telegram:seller-1",
       channelId: correlation.channelId,
@@ -82,19 +61,18 @@ describe("wait matcher — ingress evidence", () => {
     const suffixMatch = Wait.ingressEvidence(directEvent({ userId: "seller-1" }), claim);
     const mismatch = Wait.ingressEvidence(directEvent({ userId: "intruder-2" }), claim);
 
-    expect(Wait.responderCandidates(Wait.targetsOfPendingInteraction(record), suffixMatch)).toEqual(
-      ["telegram:seller-1"],
-    );
-    expect(Wait.responderCandidates(Wait.targetsOfPendingInteraction(record), mismatch)).toEqual(
-      [],
-    );
+    expect(Wait.responderCandidates([target], suffixMatch)).toEqual(["telegram:seller-1"]);
+    expect(Wait.responderCandidates([target], mismatch)).toEqual([]);
   });
 
   test("requires resolved-actor endpoint evidence for a pinned target actor", () => {
-    const record = buildInteraction("pi-actor", {
-      targetActorId: "actor-a",
-      endpointId: "telegram:seller-1",
-    });
+    const targets: Wait.ResponderTarget[] = [
+      {
+        responderId: "actor-a",
+        targetActorId: "actor-a",
+        endpointId: "telegram:seller-1",
+      },
+    ];
     const claim = {
       endpointId: "telegram:seller-1",
       channelId: correlation.channelId,
@@ -142,24 +120,13 @@ describe("wait matcher — ingress evidence", () => {
       },
     });
 
-    expect(
-      Wait.responderCandidates(
-        Wait.targetsOfPendingInteraction(record),
-        Wait.ingressEvidence(withProof, claim),
-      ),
-    ).toEqual(["actor-a"]);
-    expect(
-      Wait.responderCandidates(
-        Wait.targetsOfPendingInteraction(record),
-        Wait.ingressEvidence(wrongActor, claim),
-      ),
-    ).toEqual([]);
-    expect(
-      Wait.responderCandidates(
-        Wait.targetsOfPendingInteraction(record),
-        Wait.ingressEvidence(wrongEndpoint, claim),
-      ),
-    ).toEqual([]);
+    expect(Wait.responderCandidates(targets, Wait.ingressEvidence(withProof, claim))).toEqual([
+      "actor-a",
+    ]);
+    expect(Wait.responderCandidates(targets, Wait.ingressEvidence(wrongActor, claim))).toEqual([]);
+    expect(Wait.responderCandidates(targets, Wait.ingressEvidence(wrongEndpoint, claim))).toEqual(
+      [],
+    );
   });
 
   test("pins the delivery endpoint only on the delivery-target responder", () => {

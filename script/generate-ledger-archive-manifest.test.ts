@@ -12,8 +12,6 @@ function fixture(): Database {
   const db = new Database(":memory:");
   db.run("CREATE TABLE _migrations (name TEXT NOT NULL)");
   db.run("INSERT INTO _migrations VALUES ('0022_bus_event_payload_status/migration.sql')");
-  db.run("CREATE TABLE pending_ask (id TEXT PRIMARY KEY, status TEXT NOT NULL)");
-  db.run("CREATE TABLE pending_interaction (id TEXT PRIMARY KEY, status TEXT NOT NULL)");
   db.run("CREATE TABLE worker_run_state (run_id TEXT PRIMARY KEY, status TEXT NOT NULL)");
   return db;
 }
@@ -40,11 +38,7 @@ describe("ledger archive manifest", () => {
     }
   });
 
-  test.each([
-    ["pending_ask", "id"],
-    ["pending_interaction", "id"],
-    ["worker_run_state", "run_id"],
-  ] as const)("%s uses canonical id order, schema/range identity, deterministic sha256, and detects tampering", (table, idColumn) => {
+  test.each([["worker_run_state", "run_id"]] as const)("%s uses canonical id order, schema/range identity, deterministic sha256, and detects tampering", (table, idColumn) => {
     const db = fixture();
     try {
       const insert = db.query(`INSERT INTO ${table} (${idColumn}, status) VALUES (?, ?)`);

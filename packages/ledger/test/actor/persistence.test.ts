@@ -203,6 +203,54 @@ describe("ActorRegistry SQLite persistence", () => {
     expect(ActorRegistry.getIdentity("act_legacy")?.trustTier).toBe("manager");
   });
 
+  test("filters endpoint lists by actor and workspace", () => {
+    // Given — two actors, endpoints across two workspaces.
+    ActorRegistry.registerIdentity({ id: "act_owner", kind: "human", trustTier: "owner" });
+    ActorRegistry.registerIdentity({
+      id: "act_collaborator",
+      kind: "human",
+      trustTier: "collaborator",
+    });
+    ActorRegistry.registerEndpoint({
+      id: "ep_owner_a",
+      actorId: "act_owner",
+      channel: "discord",
+      externalId: "user-1",
+      workspace: "guild-a",
+    });
+    ActorRegistry.registerEndpoint({
+      id: "ep_owner_b",
+      actorId: "act_owner",
+      channel: "discord",
+      externalId: "user-1",
+      workspace: "guild-b",
+    });
+    ActorRegistry.registerEndpoint({
+      id: "ep_collab_a",
+      actorId: "act_collaborator",
+      channel: "discord",
+      externalId: "user-2",
+      workspace: "guild-a",
+    });
+
+    // Then — every filter branch of the SQLite adapter returns the exact set
+    // (ids sorted: the adapter orders by insertion timestamp, which is not a
+    // stable assertion surface across same-millisecond registrations).
+    const ids = (endpoints: readonly { id: string }[]) =>
+      endpoints.map((endpoint) => endpoint.id).sort();
+    expect(ids(ActorRegistry.listEndpoints())).toEqual([
+      "ep_collab_a",
+      "ep_owner_a",
+      "ep_owner_b",
+    ]);
+    expect(ids(ActorRegistry.listEndpoints("act_owner"))).toEqual(["ep_owner_a", "ep_owner_b"]);
+    expect(ids(ActorRegistry.listEndpoints(undefined, "guild-a"))).toEqual([
+      "ep_collab_a",
+      "ep_owner_a",
+    ]);
+    expect(ids(ActorRegistry.listEndpoints("act_owner", "guild-b"))).toEqual(["ep_owner_b"]);
+  });
+
   test("removing an identity removes its endpoints through SQLite cascade", () => {
     // Given
     ActorRegistry.registerIdentity({

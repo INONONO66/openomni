@@ -5,7 +5,6 @@
       "app-connector",
       "artifact",
       "bus",
-      "communication",
       "cron",
       "error",
       "ingress",
