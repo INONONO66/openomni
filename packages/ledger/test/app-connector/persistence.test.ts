@@ -74,7 +74,6 @@ function installation(id: string, createdAt: number): AppConnector.Installation 
     endpointId: `endpoint:${id}`,
     definition,
     detectedVersion: "0.139.0",
-    testedVersions: definition.detect.testedVersions,
     status: "registered",
     registeredBy: "act_owner",
     createdAt,
