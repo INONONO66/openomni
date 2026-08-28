@@ -320,6 +320,27 @@ describe("Delegation.Record durable shape", () => {
     );
   });
 
+  test("wokenAt is a wall-clock instant — negatives refused", () => {
+    expect(
+      Delegation.Record.safeParse({
+        ...OPEN_RECORD,
+        status: "settled",
+        settled: { status: "completed", delegationId: "d-1", output: "done", at: 5 },
+        settledAt: 5,
+        wokenAt: -1,
+      }).success,
+    ).toBe(false);
+    expect(
+      Delegation.Record.safeParse({
+        ...OPEN_RECORD,
+        status: "settled",
+        settled: { status: "completed", delegationId: "d-1", output: "done", at: 5 },
+        settledAt: 5,
+        wokenAt: 6,
+      }).success,
+    ).toBe(true);
+  });
+
   test("sent is terminal for notify only — pinned where operation meets settlement", () => {
     const sentRecord = {
       ...OPEN_RECORD,

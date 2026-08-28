@@ -190,6 +190,13 @@ describe("EngagementStore expiry", () => {
     expect(again.map((record) => record.id)).toEqual(["eng-2"]);
   });
 
+  test("listActive expires a record at the exact deadline instant (Deadline.isExpired boundary)", () => {
+    EngagementStore.open(buildCreate({ terms: { deadline: T0 + 500 } }), "trace-open", T0);
+    const atDeadline = EngagementStore.listActive("ses-owner", "trace-boundary", T0 + 500);
+    expect(atDeadline).toEqual([]);
+    expect(EngagementStore.get("eng-1")?.state).toBe("expired");
+  });
+
   test("listActive scopes to the owner session", () => {
     EngagementStore.open(buildCreate(), "trace-open", T0);
     EngagementStore.open(

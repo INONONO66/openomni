@@ -2,6 +2,7 @@ import { z } from "zod";
 import { Events as EventDescriptors } from "../event/tool.js";
 import { CapabilityId } from "../machine/schema.js";
 import type { TraceContext } from "../trace/index.js";
+import { EpochMs } from "../time.js";
 
 export namespace Tool {
   /**
@@ -77,7 +78,7 @@ export namespace Tool {
     status: z.literal("running"),
     input: z.record(z.string(), z.unknown()),
     time: z.object({
-      start: z.number(),
+      start: EpochMs,
     }),
   });
 
@@ -88,8 +89,8 @@ export namespace Tool {
     title: z.string(),
     metadata: z.record(z.string(), z.unknown()),
     time: z.object({
-      start: z.number(),
-      end: z.number(),
+      start: EpochMs,
+      end: EpochMs,
     }),
   });
 
@@ -98,8 +99,8 @@ export namespace Tool {
     input: z.record(z.string(), z.unknown()),
     error: z.string(),
     time: z.object({
-      start: z.number(),
-      end: z.number(),
+      start: EpochMs,
+      end: EpochMs,
     }),
   });
 

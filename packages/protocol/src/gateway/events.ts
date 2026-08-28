@@ -1,13 +1,14 @@
 import { z } from "zod";
 import { BusEvent } from "../bus/index.js";
 import { Gateway } from "./schema.js";
+import { EpochMs } from "../time.js";
 
 const EventBase = z.object({
   messageId: z.string().min(1),
   traceId: z.string().min(1),
   senderId: z.string().min(1),
   targetActorId: z.string().min(1),
-  time: z.number(),
+  time: EpochMs,
 });
 
 /**

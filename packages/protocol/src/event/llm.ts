@@ -1,12 +1,13 @@
 import { z } from "zod";
 import { BusEvent } from "../bus/index.js";
 import { Token } from "../token/index.js";
+import { EpochMs } from "../time.js";
 
 const Base = z.object({
   traceId: z.string(),
   sessionId: z.string(),
   runId: z.string().optional(),
-  time: z.number(),
+  time: EpochMs,
 });
 
 export namespace LlmCall {

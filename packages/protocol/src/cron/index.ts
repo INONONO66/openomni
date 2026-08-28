@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { EpochMs } from "../time.js";
 
 export namespace CronJob {
   export const Target = z.object({
@@ -13,8 +14,8 @@ export namespace CronJob {
     payload: z.string(),
     schedule: z.string(),
     target: Target,
-    createdAt: z.number(),
-    nextFireAt: z.number().optional(),
+    createdAt: EpochMs,
+    nextFireAt: EpochMs.optional(),
   });
   export type Info = z.infer<typeof Info>;
 }

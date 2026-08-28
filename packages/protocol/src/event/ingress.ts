@@ -1,10 +1,11 @@
 import { z } from "zod";
 import { Actor } from "../actor/index.js";
 import { BusEvent } from "../bus/index.js";
+import { EpochMs } from "../time.js";
 
 const Base = z.object({
   traceId: z.string(),
-  time: z.number(),
+  time: EpochMs,
 });
 
 const RoutingDecisionBase = Base.extend({

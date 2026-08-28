@@ -1,10 +1,11 @@
 import { z } from "zod";
 import { BusEvent } from "../bus/index.js";
 import { CapabilityId, MachineId, uniqueCapabilities } from "./schema.js";
+import { EpochMs } from "../time.js";
 
 const EventBase = z.object({
   machineId: MachineId,
-  time: z.number(),
+  time: EpochMs,
 });
 
 export const Events = {

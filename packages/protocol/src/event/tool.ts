@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { BusEvent } from "../bus/index.js";
+import { EpochMs } from "../time.js";
 
 const Base = z.object({
   traceId: z.string(),
@@ -8,7 +9,7 @@ const Base = z.object({
   actor: z.record(z.string(), z.unknown()).optional(),
   toolCallId: z.string(),
   toolName: z.string(),
-  time: z.number(),
+  time: EpochMs,
 });
 
 export const Events = {

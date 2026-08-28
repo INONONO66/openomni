@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { Deadline } from "../deadline/index.js";
 import type * as Schema from "./schema.js";
+import { EpochMs } from "../time.js";
 
 /**
  * Pure deterministic Wait state machine (#215). Time (`at`) and reply
@@ -31,7 +32,7 @@ export const ReplyInput = z
      */
     responderCandidates: z.array(z.string().min(1)),
     messageId: z.string().min(1).optional(),
-    at: z.number(),
+    at: EpochMs,
   })
   .strict();
 export type ReplyInput = z.infer<typeof ReplyInput>;
@@ -56,7 +57,7 @@ export type RejectionCode = z.infer<typeof RejectionCode>;
 export const DeliveryReceiptInput = z
   .object({
     externalMessageId: z.string().min(1),
-    at: z.number(),
+    at: EpochMs,
   })
   .strict();
 export type DeliveryReceiptInput = z.infer<typeof DeliveryReceiptInput>;

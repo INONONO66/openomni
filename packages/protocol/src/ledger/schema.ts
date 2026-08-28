@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { NamedError } from "../error/index.js";
+import { EpochMs } from "../time.js";
 
 /**
  * Durability class of a ledger write connection (#510). Decision-class
@@ -22,7 +23,7 @@ export const Input = z
     type: z.string().min(1),
     data: z.record(z.string(), z.unknown()),
     /** Milliseconds since epoch; the append core defaults it to now. */
-    timeCreated: z.number().int().nonnegative().optional(),
+    timeCreated: EpochMs.int().nonnegative().optional(),
   })
   .strict();
 export type Input = z.infer<typeof Input>;
@@ -92,7 +93,7 @@ export const RecordedFact = z
     seq: z.number().int().positive(),
     type: z.string().min(1),
     data: z.record(z.string(), z.unknown()),
-    timeCreated: z.number().int().nonnegative(),
+    timeCreated: EpochMs.int().nonnegative(),
   })
   .strict();
 export type RecordedFact = z.infer<typeof RecordedFact>;
@@ -120,7 +121,7 @@ export const ChainBreak = z
     code: ChainBreakCode,
     expected: z.string(),
     actual: z.string(),
-    detectedAt: z.number(),
+    detectedAt: EpochMs,
   })
   .strict();
 export type ChainBreak = z.infer<typeof ChainBreak>;

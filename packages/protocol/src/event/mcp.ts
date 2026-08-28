@@ -1,10 +1,11 @@
 import { z } from "zod";
 import { BusEvent } from "../bus/index.js";
+import { EpochMs } from "../time.js";
 
 const Base = z.object({
   traceId: z.string(),
   serverName: z.string(),
-  time: z.number(),
+  time: EpochMs,
 });
 
 export namespace Mcp {

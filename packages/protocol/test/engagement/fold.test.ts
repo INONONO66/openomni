@@ -203,6 +203,23 @@ describe("Engagement deadline expiry", () => {
     expect(again.code).toBe("engagement_terminal");
   });
 
+  test("the exact deadline instant is expired — canonical inclusive semantics", () => {
+    // Deadline.isExpired: now >= deadline. Work arriving AT the deadline is
+    // late, and expire() fires AT the deadline — both folds share one owner,
+    // so no ordering of the two at the same instant can produce two outcomes.
+    const record = opened({ deadline: T0 + 500 });
+    const atInstant = Engagement.transition(record, {
+      at: T0 + 500,
+      to: "deliberating",
+      reason: "boundary",
+    });
+    expect(atInstant.kind).toBe("rejected");
+    if (atInstant.kind !== "rejected") throw new Error("unreachable");
+    expect(atInstant.code).toBe("deadline_passed");
+    const expired = Engagement.expire(record, { at: T0 + 500 });
+    expect(expired.kind).toBe("expired");
+  });
+
   test("expire before the deadline (or without one) is not_expired", () => {
     const withDeadline = opened({ deadline: T0 + 500 });
     const early = Engagement.expire(withDeadline, { at: T0 + 100 });

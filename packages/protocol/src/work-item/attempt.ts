@@ -1,5 +1,6 @@
-import { createHash } from "node:crypto";
 import { z } from "zod";
+import { canonicalDigest, PlainValueSchema } from "../json.js";
+import { EpochMs } from "../time.js";
 
 /**
  * #510 C2 — Attempt identity vocabulary.
@@ -21,52 +22,9 @@ import { z } from "zod";
  *     attempt and points at the attempt whose result it reuses.
  */
 
-// ---------------------------------------------------------------------------
-// canonicalization + digest owner
-// ---------------------------------------------------------------------------
-
-/**
- * ONE exported digest owner for attempt identity: canonical JSON (sorted
- * object keys, no whitespace, finite numbers, plain data only — undefined
- * and non-JSON values fail loudly) hashed with sha256.
- *
- * TODO(#510 phase D / convention unification): the evidence conformance
- * canonical product verifier module (verifier-conformance-
- * canonical.ts `hashCanonicalJson`) owns an equivalent digest that protocol
- * cannot import (openomni depends on protocol, not the reverse). The
- * restructure audit's digest-owner finding (bare-hex vs `sha256:`-prefixed
- * conventions) already demands convergence — when the canonical module
- * moves below protocol, unify on a single owner.
- */
-export function canonicalDigest(value: unknown): string {
-  return `sha256:${createHash("sha256").update(renderCanonical(value)).digest("hex")}`;
-}
-
-function renderCanonical(value: unknown): string {
-  if (value === null) return "null";
-  if (typeof value === "boolean") return value ? "true" : "false";
-  if (typeof value === "number") {
-    if (!Number.isFinite(value)) throw new Error("canonical JSON accepts finite numbers only");
-    return Object.is(value, -0) ? "0" : String(value);
-  }
-  if (typeof value === "string") return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map((entry) => renderCanonical(entry)).join(",")}]`;
-  if (typeof value === "object") {
-    const prototype: unknown = Object.getPrototypeOf(value);
-    if (prototype !== Object.prototype && prototype !== null) {
-      throw new Error("canonical JSON accepts plain objects only");
-    }
-    const fields: string[] = [];
-    for (const key of Object.keys(value).sort()) {
-      const nested = (value as Record<string, unknown>)[key];
-      if (nested === undefined)
-        throw new Error(`canonical JSON cannot express undefined at ${key}`);
-      fields.push(`${JSON.stringify(key)}:${renderCanonical(nested)}`);
-    }
-    return `{${fields.join(",")}}`;
-  }
-  throw new Error(`canonical JSON cannot express a ${typeof value}`);
-}
+// Attempt identity digests come from the internal canonical-JSON owner
+// (../json). Re-exported so WorkItem.canonicalDigest keeps its public seat.
+export { canonicalDigest };
 
 // ---------------------------------------------------------------------------
 // building blocks
@@ -96,17 +54,11 @@ const ReferenceId = z
   .max(512)
   .regex(/^(?:sha256:[a-f0-9]{64}|(?:ref|version):[A-Za-z0-9._+/@:-]+)$/);
 
-type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
-const JsonValue: z.ZodType<JsonValue> = z.lazy(() =>
-  z.union([
-    z.null(),
-    z.boolean(),
-    z.number().finite(),
-    z.string(),
-    z.array(JsonValue),
-    z.record(z.string(), JsonValue),
-  ]),
-);
+// Plain-JSON values share the hardened internal owner (../json): accessor
+// properties, symbol keys, prototype-key smuggling, sparse arrays, and -0
+// are refused — everything a JSON round-trip produces still passes, so
+// persisted fingerprints keep parsing across eras.
+const JsonValue = PlainValueSchema;
 
 /**
  * A declared-but-unavailable fingerprint input. Coverage fields are always
@@ -302,7 +254,7 @@ export const AttemptTerminal = z
   .object({
     attemptId: AttemptId,
     outcome: AttemptOutcome,
-    endedAt: z.number(),
+    endedAt: EpochMs,
     error: z.string().optional(),
     usage: AttemptUsage.optional(),
   })

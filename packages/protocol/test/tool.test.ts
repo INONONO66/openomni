@@ -63,16 +63,22 @@ describe("Tool.StatePending", () => {
 });
 
 describe("Tool.StateRunning", () => {
-  test("parses valid running state with negative start time", () => {
-    const state = Tool.State.parse({
+  test("refuses a negative start time — timestamps share the EpochMs contract", () => {
+    const negative = Tool.State.safeParse({
       status: "running",
       input: { task: "demo" },
       time: { start: -5 },
     });
+    expect(negative.success).toBe(false);
 
+    const state = Tool.State.parse({
+      status: "running",
+      input: { task: "demo" },
+      time: { start: 1_700_000_000_000 },
+    });
     expect(state.status).toBe("running");
     if (state.status !== "running") throw new Error("shape");
-    expect(state.time.start).toBe(-5);
+    expect(state.time.start).toBe(1_700_000_000_000);
   });
 
   test("rejects missing time", () => {

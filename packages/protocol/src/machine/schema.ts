@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { EpochMs } from "../time.js";
 
 /**
  * Capability id grammar: two-plus dot-separated lowercase segments —
@@ -48,7 +49,7 @@ export const Enrollment = z
     machineId: MachineId,
     name: z.string().min(1),
     allowedCapabilities: z.array(CapabilityId).min(1).superRefine(uniqueCapabilities),
-    enrolledAt: z.number(),
+    enrolledAt: EpochMs,
   })
   .strict();
 export type Enrollment = z.infer<typeof Enrollment>;
@@ -65,7 +66,7 @@ export const Offer = z
     daemonVersion: z.string().min(1),
     /** e.g. "darwin-arm64" — display/diagnostic fact, never a matching key. */
     platform: z.string().min(1),
-    offeredAt: z.number(),
+    offeredAt: EpochMs,
   })
   .strict();
 export type Offer = z.infer<typeof Offer>;

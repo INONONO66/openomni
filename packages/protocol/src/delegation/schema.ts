@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { EpochMs } from "../time.js";
 
 /**
  * Where delegated work goes (docs/machines-and-delegation.md §3).
@@ -52,7 +53,7 @@ export const Request = z
     payload: z.object({ text: z.string().min(1) }).strict(),
     acceptanceCriteria: z.array(z.string().min(1)).optional(),
     /** Epoch ms. Required: no unbounded delegation exists (kernel-contract Wait law). */
-    deadline: z.number().int().positive(),
+    deadline: EpochMs.int().positive(),
   })
   .strict()
   .superRefine((request, ctx) => {
@@ -132,7 +133,7 @@ export const Handle = z
     address: WorkerAddress,
     transport: Transport,
     /** Effective deadline (epoch ms): min(requested, parentDeadline) computed at admission. */
-    deadline: z.number().int().positive(),
+    deadline: EpochMs.int().positive(),
     waitId: z.string().min(1).optional(),
     workItemId: z.string().min(1).optional(),
     parentDelegationId: z.string().min(1).optional(),
@@ -165,7 +166,7 @@ const SettledUnion = z.discriminatedUnion("status", [
       status: z.literal("completed"),
       delegationId: z.string().min(1),
       output: z.string(),
-      at: z.number(),
+      at: EpochMs,
       /** Transport-reported spend; visibility only, never an admission input. */
       usage: z.object({ tokens: z.number().int().nonnegative() }).strict().optional(),
     })
@@ -175,7 +176,7 @@ const SettledUnion = z.discriminatedUnion("status", [
       status: z.literal("failed"),
       delegationId: z.string().min(1),
       error: z.string().min(1),
-      at: z.number(),
+      at: EpochMs,
     })
     .strict(),
   z
@@ -183,7 +184,7 @@ const SettledUnion = z.discriminatedUnion("status", [
       status: z.literal("cancelled"),
       delegationId: z.string().min(1),
       reason: z.string().min(1),
-      at: z.number(),
+      at: EpochMs,
     })
     .strict(),
   z
@@ -191,7 +192,7 @@ const SettledUnion = z.discriminatedUnion("status", [
       status: z.literal("delivery_failed"),
       delegationId: z.string().min(1),
       reason: z.string().min(1),
-      at: z.number(),
+      at: EpochMs,
     })
     .strict(),
   z
@@ -199,22 +200,22 @@ const SettledUnion = z.discriminatedUnion("status", [
       status: z.literal("no_response"),
       delegationId: z.string().min(1),
       /** The deadline (epoch ms) whose expiry produced this terminal. */
-      deadline: z.number().int().positive(),
-      at: z.number(),
+      deadline: EpochMs.int().positive(),
+      at: EpochMs,
     })
     .strict(),
   z
     .object({
       status: z.literal("interrupted"),
       delegationId: z.string().min(1),
-      at: z.number(),
+      at: EpochMs,
     })
     .strict(),
   z
     .object({
       status: z.literal("sent"),
       delegationId: z.string().min(1),
-      at: z.number(),
+      at: EpochMs,
     })
     .strict(),
 ]);
@@ -255,7 +256,7 @@ const RecordBase = z
     address: WorkerAddress,
     transport: Transport,
     /** Effective deadline (epoch ms) — the same instant the Handle carries. */
-    deadline: z.number().int().positive(),
+    deadline: EpochMs.int().positive(),
     waitId: z.string().min(1).optional(),
     workItemId: z.string().min(1).optional(),
     parentDelegationId: z.string().min(1).optional(),
@@ -265,10 +266,10 @@ const RecordBase = z
     instruction: z.string().min(1),
     status: z.enum(["open", "settled"]),
     settled: Settled.optional(),
-    createdAt: z.number(),
-    settledAt: z.number().optional(),
+    createdAt: EpochMs,
+    settledAt: EpochMs.optional(),
     /** Receipt written only after the owner-session settlement wake succeeds. */
-    wokenAt: z.number().optional(),
+    wokenAt: EpochMs.optional(),
   })
   .strict();
 

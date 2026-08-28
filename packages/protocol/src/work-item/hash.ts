@@ -1,11 +1,5 @@
-import { createHash } from "node:crypto";
-
 export function criterionId(workItemId: string, index: number, statement: string): string {
   return `criterion:${workItemId}:${index}:${stableToken(statement)}`;
-}
-
-export function sha256JsonRef(value: unknown): string {
-  return `sha256:${createHash("sha256").update(JSON.stringify(value)).digest("hex")}`;
 }
 
 function stableToken(input: string): string {
