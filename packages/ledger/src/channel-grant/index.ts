@@ -37,6 +37,66 @@ function specificity(grant: Actor.ChannelGrant): number {
   return (grant.workspace === undefined ? 0 : 1) + (grant.channel === undefined ? 0 : 1);
 }
 
+const treatmentRestriction: Record<Actor.InboundTreatment, number> = {
+  drop: 0,
+  evidence_only: 1,
+  full_access: 2,
+};
+
+const defaultTierRestriction: Record<Actor.TrustTier, number> = {
+  assigned_worker: 1,
+  observer: 2,
+  collaborator: 3,
+  manager: 4,
+  co_owner: 5,
+  owner: 6,
+};
+
+const kindRestriction: Record<Actor.ChannelGrantKind, number> = {
+  blocked_channel: 0,
+  broadcast_channel: 1,
+  trusted_channel: 2,
+};
+
+function effectiveTreatment(grant: Actor.ChannelGrant): Actor.InboundTreatment {
+  const treatment = grant.inboundTreatment ?? defaultTreatment(grant.kind);
+  if (grant.kind === "blocked_channel" || treatment === "drop") return "drop";
+  if (grant.kind === "broadcast_channel") return "evidence_only";
+  return treatment;
+}
+
+function compareStableText(a: string, b: string): number {
+  if (a < b) return -1;
+  if (a > b) return 1;
+  return 0;
+}
+
+/**
+ * Resolution keeps the existing specificity lattice, then orders equal-score
+ * grants fail-closed: effective treatment (drop → evidence → full), absent or
+ * lower-authority default tier, intrinsically restrictive kind, then grant ID
+ * by code-unit order. IDs are unique stable identities, so the final key makes
+ * this a backend- and insertion-independent total order.
+ */
+function compareResolutionOrder(a: Actor.ChannelGrant, b: Actor.ChannelGrant): number {
+  const specificityOrder = specificity(b) - specificity(a);
+  if (specificityOrder !== 0) return specificityOrder;
+
+  const treatmentOrder =
+    treatmentRestriction[effectiveTreatment(a)] - treatmentRestriction[effectiveTreatment(b)];
+  if (treatmentOrder !== 0) return treatmentOrder;
+
+  const defaultTierOrder =
+    (a.defaultTier === undefined ? 0 : defaultTierRestriction[a.defaultTier]) -
+    (b.defaultTier === undefined ? 0 : defaultTierRestriction[b.defaultTier]);
+  if (defaultTierOrder !== 0) return defaultTierOrder;
+
+  const kindOrder = kindRestriction[a.kind] - kindRestriction[b.kind];
+  if (kindOrder !== 0) return kindOrder;
+
+  return compareStableText(a.id, b.id);
+}
+
 export namespace ChannelGrantStore {
   export type Grant = Actor.ChannelGrant;
 
@@ -57,7 +117,7 @@ export namespace ChannelGrantStore {
     const grants = requireAdapter()
       .list()
       .filter((grant) => matches(grant, input))
-      .sort((a, b) => specificity(b) - specificity(a));
+      .sort(compareResolutionOrder);
     const grant = grants[0];
     if (!grant) return undefined;
     return {

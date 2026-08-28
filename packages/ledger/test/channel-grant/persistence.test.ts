@@ -4,6 +4,55 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ChannelGrantStore, SqliteStorageAdapter, Storage } from "../../src/index.js";
 
+function createInsertionOrderedChannelGrantAdapter(): NonNullable<Storage.Adapter["channelGrant"]> {
+  const grants = new Map<string, ChannelGrantStore.Grant>();
+  return {
+    get: (id) => grants.get(id),
+    set: (grant) => grants.set(grant.id, grant),
+    list: () => [...grants.values()],
+    remove: (id) => grants.delete(id),
+  };
+}
+
+function configureChannelGrantAdapter(
+  channelGrant: NonNullable<Storage.Adapter["channelGrant"]>,
+): void {
+  const base = Storage.get();
+  Storage.configure({
+    transaction: base.transaction.bind(base),
+    close: base.close?.bind(base),
+    session: base.session,
+    message: base.message,
+    part: base.part,
+    channelGrant,
+  });
+}
+
+const restrictiveGrant = {
+  id: "z-restrictive",
+  surface: "discord",
+  workspace: "guild",
+  kind: "blocked_channel",
+  createdBy: "act_owner",
+  createdAt: 200,
+} as const satisfies ChannelGrantStore.Grant;
+
+const permissiveGrant = {
+  id: "a-permissive",
+  surface: "discord",
+  channel: "design",
+  kind: "trusted_channel",
+  defaultTier: "owner",
+  createdBy: "act_owner",
+  createdAt: 100,
+} as const satisfies ChannelGrantStore.Grant;
+
+const equalSpecificityInput = {
+  surface: "discord",
+  workspace: "guild",
+  channel: "design",
+} as const;
+
 describe("ChannelGrantStore SQLite persistence", () => {
   let tmpDir: string;
   let dbPath: string;
@@ -46,6 +95,37 @@ describe("ChannelGrantStore SQLite persistence", () => {
     });
     expect(resolved?.grant.id).toBe("grant-channel");
     expect(resolved?.inboundTreatment).toBe("evidence_only");
+  });
+
+  test("equal-specificity conflicts choose the restrictive grant regardless of insertion order", () => {
+    const winners = [
+      [permissiveGrant, restrictiveGrant],
+      [restrictiveGrant, permissiveGrant],
+    ].map((grants) => {
+      configureChannelGrantAdapter(createInsertionOrderedChannelGrantAdapter());
+      for (const grant of grants) ChannelGrantStore.put(grant);
+      return ChannelGrantStore.resolve(equalSpecificityInput)?.grant.id;
+    });
+
+    expect(winners).toEqual([restrictiveGrant.id, restrictiveGrant.id]);
+  });
+
+  test("insertion-ordered and SQLite backends agree on equal-specificity conflicts", () => {
+    configureChannelGrantAdapter(createInsertionOrderedChannelGrantAdapter());
+    ChannelGrantStore.put(restrictiveGrant);
+    ChannelGrantStore.put(permissiveGrant);
+    const insertionOrderedWinner = ChannelGrantStore.resolve(equalSpecificityInput)?.grant.id;
+
+    Storage.reset();
+    Storage.configure(new SqliteStorageAdapter(dbPath));
+    ChannelGrantStore.put(restrictiveGrant);
+    ChannelGrantStore.put(permissiveGrant);
+    const sqliteWinner = ChannelGrantStore.resolve(equalSpecificityInput)?.grant.id;
+
+    expect([insertionOrderedWinner, sqliteWinner]).toEqual([
+      restrictiveGrant.id,
+      restrictiveGrant.id,
+    ]);
   });
 
   test("explicit inbound treatment overrides kind default", () => {

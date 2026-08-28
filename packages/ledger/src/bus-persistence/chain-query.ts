@@ -27,6 +27,7 @@ function walkChain(rows: HashChainRow[]): ChainIntegrityResult {
   if (rows.length === 0) return { valid: true, totalVerified: 0 };
 
   let expectedPrev = GENESIS_SEED;
+  let totalVerified = 0;
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i] as HashChainRow | undefined;
     if (!row) continue;
@@ -40,7 +41,7 @@ function walkChain(rows: HashChainRow[]): ChainIntegrityResult {
     if (row.prev_hash !== expectedPrev) {
       return {
         valid: false,
-        totalVerified: i,
+        totalVerified,
         brokenAtId: row.id,
         brokenAtEventType: row.event_type,
       };
@@ -57,14 +58,15 @@ function walkChain(rows: HashChainRow[]): ChainIntegrityResult {
     if (recomputed !== row.event_hash) {
       return {
         valid: false,
-        totalVerified: i,
+        totalVerified,
         brokenAtId: row.id,
         brokenAtEventType: row.event_type,
       };
     }
 
     expectedPrev = row.event_hash;
+    totalVerified += 1;
   }
 
-  return { valid: true, totalVerified: rows.length };
+  return { valid: true, totalVerified };
 }

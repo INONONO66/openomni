@@ -190,6 +190,54 @@ describe("Hash Chain", () => {
     expect(result.brokenAtId).toBeUndefined();
   });
 
+  test("verifyChainIntegrity does not count rows without hashes as verified", async () => {
+    const session = createSession();
+    BusPersistence.start();
+
+    for (let i = 0; i < 3; i++) {
+      Bus.publish(testEvent, {
+        sessionId: session.id,
+        traceId: `trace-unhashed-${i}`,
+        time: 3500 + i,
+        index: i,
+      });
+    }
+
+    await waitForRows(3);
+    const rows = busRows(session.id);
+    BusPersistence.stop();
+    const firstRow = rows[0];
+    const historicalRow = rows[1];
+    const followingRow = rows[2];
+    if (
+      firstRow === undefined ||
+      historicalRow === undefined ||
+      followingRow === undefined ||
+      firstRow.event_hash === null
+    ) {
+      throw new Error("shape");
+    }
+
+    db()
+      .query("UPDATE bus_event SET prev_hash = NULL, event_hash = NULL WHERE id = ?")
+      .run(historicalRow.id);
+    const followingHash = computeEventHash({
+      prevHash: firstRow.event_hash,
+      eventType: followingRow.event_type,
+      data: followingRow.data,
+      traceId: followingRow.trace_id,
+      timeCreated: followingRow.time_created,
+    });
+    db()
+      .query("UPDATE bus_event SET prev_hash = ?, event_hash = ? WHERE id = ?")
+      .run(firstRow.event_hash, followingHash, followingRow.id);
+
+    const result = await BusQuery.verifyChainIntegrity(session.id);
+
+    expect(result.valid).toBe(true);
+    expect(result.totalVerified).toBe(2);
+  });
+
   test("verifyChainIntegrity detects tampered event_hash", async () => {
     const session = createSession();
     BusPersistence.start();

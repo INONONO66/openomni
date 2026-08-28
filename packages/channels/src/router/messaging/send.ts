@@ -253,26 +253,14 @@ function recordAdmission(
   return raced;
 }
 
-function recordDebitOnce(input: SendInput, sendClass: MessageClass): void {
-  try {
-    EgressBudgetStore.record({
-      id: `gateway-send:${input.messageId}`,
-      senderId: input.senderId,
-      targetActorId: input.target.actorId,
-      class: sendClass,
-      at: input.at,
-    });
-  } catch (error) {
-    if (
-      typeof error === "object" &&
-      error !== null &&
-      "code" in error &&
-      error.code === "SQLITE_CONSTRAINT_PRIMARYKEY"
-    ) {
-      return;
-    }
-    throw error;
-  }
+function debitRow(input: SendInput, sendClass: MessageClass): Gateway.EgressDebitRow {
+  return {
+    id: `gateway-send:${input.messageId}`,
+    senderId: input.senderId,
+    targetActorId: input.target.actorId,
+    class: sendClass,
+    at: input.at,
+  };
 }
 
 export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAgentMessaging {
@@ -359,30 +347,26 @@ export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAge
         const budget = ports
           .budgets?.()
           .find((candidate) => candidate.targetActorId === input.target.actorId);
-        const state =
-          budget === undefined
-            ? { countInWindow: 0, notifyInWindow: 0, converseInWindow: 0 }
-            : EgressBudgetStore.readState(
-                input.senderId,
-                input.target.actorId,
-                input.at - budget.windowMs,
-              );
-        const verdict = evaluateSocialBudget(budget, state, { class: sendClass, at: input.at });
-        if (verdict !== "allow") {
+        const claim = EgressBudgetStore.claim(
+          debitRow(input, sendClass),
+          input.at - (budget?.windowMs ?? 0),
+          (state) => evaluateSocialBudget(budget, state, { class: sendClass, at: input.at }),
+        );
+        if (claim.kind === "refused") {
           return deny(
             input,
-            verdict.suppress,
-            `active-egress budget suppressed a ${sendClass} send ${input.senderId} -> ${input.target.actorId} (${verdict.suppress})`,
+            claim.reason.suppress,
+            `active-egress budget suppressed a ${sendClass} send ${input.senderId} -> ${input.target.actorId} (${claim.reason.suppress})`,
           );
         }
       }
       admission = recordAdmission(input, resolution.target, budgeted, sendClass);
     }
     if (admission.budgeted) {
-      // Deterministic identity closes both sides of the admission/debit crash
-      // window: missing debit is appended; an already-recorded debit is a
-      // proven resume and changes no budget count.
-      recordDebitOnce(input, admission.sendClass);
+      // Repair admissions written by an older process (or a crash between its
+      // admission and debit). Deterministic claim identity makes this a no-op
+      // for the normal claim-before-admission path.
+      EgressBudgetStore.claim(debitRow(input, admission.sendClass), input.at, () => "allow");
     }
     // #219 escalation seam (DEFERRED, out of this PR): the autonomous
     // timer-fired 봉수 rung-advance would attach its counting coordinate HERE —

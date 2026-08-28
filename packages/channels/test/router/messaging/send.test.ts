@@ -24,6 +24,26 @@ const flushBus = () => new Promise<void>((resolve) => queueMicrotask(() => resol
 let deliveries: OutboundMessage[];
 let grants: SenderTargetGrant[];
 
+function inspectDebitCount(): number {
+  let count: number | undefined;
+  EgressBudgetStore.claim(
+    {
+      id: "test:inspection-never-recorded",
+      senderId: "actor:sender",
+      targetActorId: "actor:target",
+      class: "notify",
+      at: messagingNow,
+    },
+    0,
+    (state) => {
+      count = state.countInWindow;
+      return "inspect" as const;
+    },
+  );
+  if (count === undefined) throw new Error("egress claim evaluator was not called");
+  return count;
+}
+
 function messaging() {
   return createExistingAgentMessaging({
     deliver: (message) => {
@@ -475,7 +495,7 @@ async function probe(point: FaultPoint): Promise<Probe> {
     receipts: [resumed],
     effects: external.size,
     attempts,
-    debits: EgressBudgetStore.readState("actor:sender", "actor:target", 0).countInWindow,
+    debits: inspectDebitCount(),
     wait: input.waitSpec === undefined ? undefined : WaitStore.get(input.waitSpec.waitId),
   };
 }

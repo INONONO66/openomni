@@ -18,6 +18,26 @@ const ZERO_STATE: Gateway.EgressDebitState = {
   converseInWindow: 0,
 };
 
+function inspectDebitState(senderId: string, targetActorId: string): Gateway.EgressDebitState {
+  let observed: Gateway.EgressDebitState | undefined;
+  EgressBudgetStore.claim(
+    {
+      id: "test:inspection-never-recorded",
+      senderId,
+      targetActorId,
+      class: "notify",
+      at: messagingNow,
+    },
+    0,
+    (state) => {
+      observed = state;
+      return "inspect" as const;
+    },
+  );
+  if (observed === undefined) throw new Error("egress claim evaluator was not called");
+  return observed;
+}
+
 const budget = (overrides: Partial<Gateway.SocialBudget> = {}): Gateway.SocialBudget => ({
   id: "budget:target",
   targetActorId: "actor:target",
@@ -173,7 +193,7 @@ describe("send kernel active-egress gate (#219 seam)", () => {
     expect(receipt.kind).toBe("sent");
     expect(deliveries).toEqual(["message:test"]);
     // The gate never touched the debit ledger.
-    expect(EgressBudgetStore.readState("actor:sender", "actor:target", 0).countInWindow).toBe(0);
+    expect(inspectDebitState("actor:sender", "actor:target").countInWindow).toBe(0);
   });
 
   test("fail-safe default: gate wired but no budget entry → cold proactive denied budget_exhausted", async () => {
@@ -182,7 +202,7 @@ describe("send kernel active-egress gate (#219 seam)", () => {
     if (receipt.kind !== "denied") throw new Error("expected denial");
     expect(receipt.code).toBe("budget_exhausted");
     expect(deliveries).toHaveLength(0);
-    expect(EgressBudgetStore.readState("actor:sender", "actor:target", 0).countInWindow).toBe(0);
+    expect(inspectDebitState("actor:sender", "actor:target").countInWindow).toBe(0);
   });
 
   test("an admitted send records a debit (record-before-act)", async () => {
@@ -190,7 +210,7 @@ describe("send kernel active-egress gate (#219 seam)", () => {
     const receipt = await messaging().send(buildSendInput());
     expect(receipt.kind).toBe("sent");
     expect(deliveries).toEqual(["message:test"]);
-    const state = EgressBudgetStore.readState("actor:sender", "actor:target", 0);
+    const state = inspectDebitState("actor:sender", "actor:target");
     expect(state.countInWindow).toBe(1);
     expect(state.notifyInWindow).toBe(1);
     expect(state.lastSendAt).toBe(messagingNow);
@@ -255,6 +275,6 @@ describe("send kernel active-egress gate (#219 seam)", () => {
     const receipt = await messaging().send(buildSendInput());
     expect(receipt.kind).toBe("sent");
     expect(deliveries).toEqual(["message:test"]);
-    expect(EgressBudgetStore.readState("actor:sender", "actor:target", 0).countInWindow).toBe(0);
+    expect(inspectDebitState("actor:sender", "actor:target").countInWindow).toBe(0);
   });
 });
