@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787888141128,
+  "lastUpdate": 1787889892087,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -64853,6 +64853,90 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 526602,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "18d3294ea3fb7c93ab432e0d3c8c3b7a94eea725",
+          "message": "fix(policy): default-deny absent permissions, refuse async callbacks, delete dead registry (#833)\n\n* fix(policy): default-deny absent permissions, refuse async callbacks, delete dead registry\n\n- permission-evaluate: absent permission and rule fallthrough now deny with\n  traceable default_deny:<action> reason; consumer trace proved zero callers\n  relied on absent=allow (all construct exhaustive rules)\n- post-boundary fail-open kept per #806 pins; containment boundary stated at\n  both sites and pinned tighter (thrown decision-shaped fields cannot leak)\n- direct policy registrations are structurally synchronous; async fn refused\n  at the type surface (@ts-expect-error fixture); factory compaction lane kept\n- PolicyRegistry + portability test + agent re-exports + vacuous lint-guard\n  deleted (production-dead, -411 LOC); docs synced\n\n* fix(policy): enforce direct-lane synchronous contract at runtime\n\nAdversarial review MAJOR: the sync contract was type-only — register() is a\npublic runtime API, so a JS caller (or assertion cast) could smuggle an async\nfn that dispatch silently awaited. Direct registrations now refuse an\nAsyncFunction eagerly at registration (async_policy_callback) and throw on a\nthenable result at call time, never awaiting it; the point's fail policy\nsettles deterministically. Factory lane (compaction seam) unchanged.",
+          "timestamp": "2026-08-28T13:03:51+09:00",
+          "tree_id": "fde204f05d2387367b8aa8f285e0a1599d64677d",
+          "url": "https://github.com/INONONO66/openomni/commit/18d3294ea3fb7c93ab432e0d3c8c3b7a94eea725"
+        },
+        "date": 1787889891704,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2231,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 14738,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7722,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1084,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 982,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1635,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1605,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 742,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 54243,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2386,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 517404,
             "unit": "ns/op"
           }
         ]
