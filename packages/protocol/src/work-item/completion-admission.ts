@@ -1,8 +1,9 @@
 import { z } from "zod";
-import { sha256JsonRef } from "./hash.js";
+import { createHash } from "node:crypto";
+import { EpochMs } from "../time.js";
 
 const Reference = z.string().min(1);
-const Timestamp = z.number().finite();
+const Timestamp = EpochMs;
 const CurrentVersion = z.literal(1);
 
 export const CompletionReport = z.object({
@@ -567,6 +568,15 @@ export function canonicalCompletionReport(input: CompletionReport): CompletionRe
   });
 }
 
+/**
+ * FROZEN BYTES — do not change this serialization. `completionReportRef`
+ * equality is re-verified inside `CompletionAdmission`'s superRefine on
+ * every parse of a persisted admission row, so any algorithm change breaks
+ * historical rows. Determinism holds without key sorting because the input
+ * is `CompletionReport.parse` output: a closed zod object whose key order
+ * is fixed by the schema shape.
+ */
 export function completionReportReference(input: CompletionReport): string {
-  return sha256JsonRef(canonicalCompletionReport(input));
+  const bytes = JSON.stringify(canonicalCompletionReport(input));
+  return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 }

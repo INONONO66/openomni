@@ -1,10 +1,6 @@
 import * as AttemptContract from "./attempt.js";
 import { Events as EventDescriptors } from "./events.js";
-import {
-  criterionId as createCriterionId,
-  generateHash as createHash,
-  sha256JsonRef as createSha256JsonRef,
-} from "./hash.js";
+import { criterionId as createCriterionId, generateHash as createHash } from "./hash.js";
 import * as Schema from "./schemas.js";
 import { deriveStatus as resolveStatus } from "./status.js";
 import * as Completion from "./completion-admission.js";
@@ -141,6 +137,5 @@ export namespace WorkItem {
   export const deriveStatus = resolveStatus;
   export const criterionId = createCriterionId;
   export const generateHash = createHash;
-  export const sha256JsonRef = createSha256JsonRef;
   export const Events = EventDescriptors;
 }

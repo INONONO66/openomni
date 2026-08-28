@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { BusEvent } from "../bus/index.js";
+import { EpochMs } from "../time.js";
 import {
   CompletionDecision,
   CompletionRequest,
@@ -12,7 +13,7 @@ const BaseEvent = z.object({
   runId: z.string().optional(),
   taskId: z.string().optional(),
   sessionId: z.string().optional(),
-  time: z.number(),
+  time: EpochMs,
 });
 
 const Created = BusEvent.define(

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { AttemptTerminal } from "./attempt.js";
+import { EpochMs } from "../time.js";
 import {
   CompletionContract,
   CompletionFacts,
@@ -18,15 +19,15 @@ export const Blocker = z.object({
   id: z.string(),
   description: z.string(),
   kind: z.enum(["dependency", "error", "waiting_input", "external", "unknown"]),
-  createdAt: z.number(),
-  resolvedAt: z.number().optional(),
+  createdAt: EpochMs,
+  resolvedAt: EpochMs.optional(),
 });
 export type Blocker = z.infer<typeof Blocker>;
 
 const ReadBackBase = z.object({
   target: z.string().min(1),
   passed: z.boolean(),
-  observedAt: z.number(),
+  observedAt: EpochMs,
   statusCode: z.number().int().min(100).max(599).optional(),
   matchedText: z.string().min(1).optional(),
 });
@@ -120,7 +121,7 @@ export const Evidence = z
     attempt: z.number().int().positive().optional(),
     basisRef: z.string().min(1).optional(),
     criterionId: z.string().min(1).optional(),
-    createdAt: z.number(),
+    createdAt: EpochMs,
   })
   .superRefine((evidence, ctx) => {
     if (evidence.readBack && evidence.passed !== evidence.readBack.passed) {
@@ -180,13 +181,13 @@ const InfoShape = z.object({
    */
   attemptTerminal: AttemptTerminal.optional(),
   timestamps: z.object({
-    created: z.number(),
-    updated: z.number(),
-    started: z.number().optional(),
-    completed: z.number().optional(),
-    failed: z.number().optional(),
-    cancelled: z.number().optional(),
-    deadline: z.number().optional(),
+    created: EpochMs,
+    updated: EpochMs,
+    started: EpochMs.optional(),
+    completed: EpochMs.optional(),
+    failed: EpochMs.optional(),
+    cancelled: EpochMs.optional(),
+    deadline: EpochMs.optional(),
   }),
   relations: z.object({
     parentId: z.string().optional(),

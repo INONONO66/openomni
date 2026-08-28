@@ -1,5 +1,7 @@
 import { z } from "zod";
+import { Deadline } from "../deadline/index.js";
 import * as Schema from "./schema.js";
+import { EpochMs } from "../time.js";
 
 /**
  * Pure deterministic engagement state machine (gateway-design §5, #709).
@@ -33,7 +35,7 @@ const TransitionInputBase = z
   .object({
     /** Requested target state. `expired` is never requestable; `planning` is entry-only. */
     to: Schema.State,
-    at: z.number(),
+    at: EpochMs,
     /** The declared move, recorded verbatim on the transition event. */
     reason: z.string().min(1),
     /**
@@ -128,7 +130,11 @@ export function transition(record: Schema.Record, input: TransitionInput): Outco
   if (TERMINAL.has(record.state)) {
     return { kind: "rejected", code: "engagement_terminal", record, at: input.at };
   }
-  if (record.expiresAt !== undefined && input.at > record.expiresAt && input.to !== "aborted") {
+  if (
+    record.expiresAt !== undefined &&
+    Deadline.isExpired(input.at, record.expiresAt) &&
+    input.to !== "aborted"
+  ) {
     return { kind: "rejected", code: "deadline_passed", record, at: input.at };
   }
   if (input.termCrossed === true && input.to !== "aborted") {
@@ -172,7 +178,7 @@ export function expire(record: Schema.Record, input: { at: number }): Outcome {
   if (TERMINAL.has(record.state)) {
     return { kind: "rejected", code: "engagement_terminal", record, at: input.at };
   }
-  if (record.expiresAt === undefined || input.at <= record.expiresAt) {
+  if (record.expiresAt === undefined || !Deadline.isExpired(input.at, record.expiresAt)) {
     return { kind: "rejected", code: "not_expired", record, at: input.at };
   }
   return {

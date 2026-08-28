@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { Token } from "../token/index.js";
 import { Tool } from "../tool/index.js";
+import { EpochMs } from "../time.js";
 
 export namespace Message {
   const PartBase = z.object({
@@ -14,8 +15,8 @@ export namespace Message {
     text: z.string(),
     time: z
       .object({
-        start: z.number(),
-        end: z.number().optional(),
+        start: EpochMs,
+        end: EpochMs.optional(),
       })
       .optional(),
     metadata: z.record(z.string(), z.unknown()).optional(),
@@ -28,8 +29,8 @@ export namespace Message {
     /** Provider reasoning signature; resent only under a same-model check (#545 T2). */
     signature: z.string().optional(),
     time: z.object({
-      start: z.number(),
-      end: z.number().optional(),
+      start: EpochMs,
+      end: EpochMs.optional(),
     }),
     metadata: z.record(z.string(), z.unknown()).optional(),
   });
@@ -86,7 +87,7 @@ export namespace Message {
   export const UserMessage = MessageBase.extend({
     role: z.literal("user"),
     time: z.object({
-      created: z.number(),
+      created: EpochMs,
     }),
     agent: z.string(),
     model: z.object({
@@ -102,8 +103,8 @@ export namespace Message {
   export const AssistantMessage = MessageBase.extend({
     role: z.literal("assistant"),
     time: z.object({
-      created: z.number(),
-      completed: z.number().optional(),
+      created: EpochMs,
+      completed: EpochMs.optional(),
     }),
     parentID: z.string(),
     modelID: z.string(),

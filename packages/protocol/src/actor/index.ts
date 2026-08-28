@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { Model } from "../model/index.js";
 import { Tool } from "../tool/index.js";
+import { EpochMs } from "../time.js";
 
 export namespace Actor {
   /**
@@ -44,8 +45,8 @@ export namespace Actor {
     trustTier: TrustTier,
     displayName: z.string().min(1).optional(),
     metadata: Metadata.optional(),
-    createdAt: z.number().optional(),
-    updatedAt: z.number().optional(),
+    createdAt: EpochMs.optional(),
+    updatedAt: EpochMs.optional(),
   });
   export type Identity = z.infer<typeof Identity>;
 
@@ -57,9 +58,9 @@ export namespace Actor {
     workspace: z.string().min(1).optional(),
     displayName: z.string().min(1).optional(),
     metadata: Metadata.optional(),
-    verifiedAt: z.number().optional(),
-    createdAt: z.number().optional(),
-    updatedAt: z.number().optional(),
+    verifiedAt: EpochMs.optional(),
+    createdAt: EpochMs.optional(),
+    updatedAt: EpochMs.optional(),
   });
   export type Endpoint = z.infer<typeof Endpoint>;
 
@@ -77,10 +78,10 @@ export namespace Actor {
     kind: BlacklistKind,
     value: z.string().min(1),
     reason: z.string().min(1).optional(),
-    expiresAt: z.number().optional(),
+    expiresAt: EpochMs.optional(),
     createdBy: z.string().min(1),
-    createdAt: z.number().optional(),
-    updatedAt: z.number().optional(),
+    createdAt: EpochMs.optional(),
+    updatedAt: EpochMs.optional(),
   });
   export type BlacklistEntry = z.infer<typeof BlacklistEntry>;
 
@@ -103,8 +104,8 @@ export namespace Actor {
     defaultTier: TrustTier.optional(),
     inboundTreatment: InboundTreatment.optional(),
     createdBy: z.string().min(1),
-    createdAt: z.number().optional(),
-    updatedAt: z.number().optional(),
+    createdAt: EpochMs.optional(),
+    updatedAt: EpochMs.optional(),
   });
   export type ChannelGrant = z.infer<typeof ChannelGrant>;
 

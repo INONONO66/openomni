@@ -2,6 +2,7 @@ import { z } from "zod";
 import { BusEvent } from "../bus/index.js";
 import { RejectionCode } from "./fold.js";
 import { OwnerKind, Status } from "./schema.js";
+import { EpochMs } from "../time.js";
 
 const EventBase = z.object({
   id: z.string().min(1),
@@ -9,7 +10,7 @@ const EventBase = z.object({
   ownerKind: OwnerKind,
   ownerId: z.string().min(1),
   status: Status,
-  time: z.number(),
+  time: EpochMs,
 });
 
 export const Events = {
@@ -25,13 +26,13 @@ export const Events = {
     }),
     { visibility: "llm_reason" },
   ),
-  Resolved: BusEvent.define("wait.resolved", EventBase.extend({ resolvedAt: z.number() }), {
+  Resolved: BusEvent.define("wait.resolved", EventBase.extend({ resolvedAt: EpochMs }), {
     visibility: "llm_reason",
   }),
   Expired: BusEvent.define("wait.expired", EventBase.extend({ partial: z.boolean() }), {
     visibility: "llm_reason",
   }),
-  Cancelled: BusEvent.define("wait.cancelled", EventBase.extend({ cancelledAt: z.number() }), {
+  Cancelled: BusEvent.define("wait.cancelled", EventBase.extend({ cancelledAt: EpochMs }), {
     visibility: "llm_reason",
   }),
   ReplyRejected: BusEvent.define(
@@ -54,7 +55,7 @@ export const Events = {
       traceId: z.string().min(1),
       sessionId: z.string().min(1),
       phase: z.enum(["opened", "answered", "failed"]),
-      time: z.number(),
+      time: EpochMs,
     }),
     { visibility: "internal" },
   ),

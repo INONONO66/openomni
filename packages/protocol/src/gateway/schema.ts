@@ -3,6 +3,7 @@ import { Actor } from "../actor/index.js";
 import { Events as IngressEvents } from "../event/ingress.js";
 import { Ingress } from "../ingress/index.js";
 import { Wait } from "../wait/index.js";
+import { EpochMs } from "../time.js";
 
 /**
  * Gateway contracts (docs/gateway-design.md §2, stage 0 — #706).
@@ -137,7 +138,7 @@ const SenderTargetGrantSchema = z
     senderId: z.string().min(1),
     targetActorId: z.string().min(1),
     operations: z.array(MessageOperationSchema).min(1),
-    expiresAt: z.number().optional(),
+    expiresAt: EpochMs.optional(),
     /** Present iff this grant was materialized from a ReplyGrantRule — the provenance link that makes `maxLiveInstances` countable. */
     ruleId: z.string().min(1).optional(),
     /** Perimeter-fact scope of a materialized instance: replies stay inside the initiating container. */
@@ -192,8 +193,8 @@ const ReplyGrantRuleSchema = z
     instanceTtlMs: z.number().int().positive(),
     maxLiveInstances: z.number().int().positive(),
     createdBy: z.string().min(1),
-    createdAt: z.number().optional(),
-    updatedAt: z.number().optional(),
+    createdAt: EpochMs.optional(),
+    updatedAt: EpochMs.optional(),
   })
   .strict();
 
@@ -251,7 +252,7 @@ const SocialBudgetSchema = z
       .strict()
       .optional(),
     doNotContact: z.boolean().optional(),
-    expiresAt: z.number().optional(),
+    expiresAt: EpochMs.optional(),
   })
   .strict();
 
@@ -267,7 +268,7 @@ const EgressDebitRowSchema = z
     senderId: z.string().min(1),
     targetActorId: z.string().min(1),
     class: MessageClassSchema,
-    at: z.number(),
+    at: EpochMs,
   })
   .strict();
 
@@ -282,7 +283,7 @@ const EgressDebitStateSchema = z
     countInWindow: z.number().int().nonnegative(),
     notifyInWindow: z.number().int().nonnegative(),
     converseInWindow: z.number().int().nonnegative(),
-    lastSendAt: z.number().optional(),
+    lastSendAt: EpochMs.optional(),
   })
   .strict();
 
@@ -299,7 +300,7 @@ const AwaitSpecSchema = z
     expectedResponders: z.array(z.string().min(1)).min(1),
     resolutionPolicy: Wait.ResolutionPolicy,
     quorum: Wait.Quorum.optional(),
-    expiresAt: z.number(),
+    expiresAt: EpochMs,
     followUpWindow: z.number().int().nonnegative(),
     /** Extra correlation fields (threadId, channelId, …); endpointId and replyToMessageId are derived from the delivery itself. */
     correlation: Wait.Correlation.optional(),
@@ -317,7 +318,7 @@ const SendInputBase = z
     operation: MessageOperationSchema,
     body: z.string().min(1),
     /** Injected timestamp — messaging never reads the wall clock. */
-    at: z.number(),
+    at: EpochMs,
     waitSpec: AwaitSpecSchema.optional(),
     /**
      * #219 policy-intent axis, additive-optional for backward compat. Absent →

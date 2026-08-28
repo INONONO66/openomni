@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { Message } from "../message/index.js";
+import { EpochMs } from "../time.js";
 
 /**
  * Transcript fact vocabulary (#545 T1): conversation history as an
@@ -37,14 +38,14 @@ export type Usage = z.infer<typeof Usage>;
 const TransitionRunning = z
   .object({
     to: z.literal("running"),
-    at: z.number(),
+    at: EpochMs,
   })
   .strict();
 
 const TransitionCompleted = z
   .object({
     to: z.literal("completed"),
-    at: z.number(),
+    at: EpochMs,
     output: z.string(),
     title: z.string().optional(),
     /**
@@ -59,7 +60,7 @@ const TransitionCompleted = z
 const TransitionError = z
   .object({
     to: z.literal("error"),
-    at: z.number(),
+    at: EpochMs,
     error: z.string(),
   })
   .strict();
@@ -67,7 +68,7 @@ const TransitionError = z
 const TransitionInterrupted = z
   .object({
     to: z.literal("interrupted"),
-    at: z.number(),
+    at: EpochMs,
     partialOutput: z.string().optional(),
   })
   .strict();
@@ -121,7 +122,7 @@ const MessageFinishedFact = z
     type: z.literal("message.finished"),
     attemptId: Id,
     messageId: Id,
-    at: z.number(),
+    at: EpochMs,
     finish: FinishReason,
     usage: Usage,
   })

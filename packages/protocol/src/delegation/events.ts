@@ -1,11 +1,12 @@
 import { z } from "zod";
 import { BusEvent } from "../bus/index.js";
 import { Operation, SettledStatus, Transport } from "./schema.js";
+import { EpochMs } from "../time.js";
 
 const EventBase = z.object({
   delegationId: z.string().min(1),
   traceId: z.string().min(1),
-  time: z.number(),
+  time: EpochMs,
 });
 
 export const Events = {
@@ -22,7 +23,7 @@ export const Events = {
       addressKind: z.enum(["core", "actor"]),
       transport: Transport,
       /** Effective deadline (epoch ms) the record was committed under. */
-      deadline: z.number().int().positive(),
+      deadline: EpochMs.int().positive(),
       rootDelegationId: z.string().min(1),
     }),
     { visibility: "llm_reason" },

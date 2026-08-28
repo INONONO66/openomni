@@ -2,12 +2,13 @@ import { z } from "zod";
 import { BusEvent } from "../bus/index.js";
 import { RejectionCode } from "./fold.js";
 import { State } from "./schema.js";
+import { EpochMs } from "../time.js";
 
 const EventBase = z.object({
   id: z.string().min(1),
   traceId: z.string().min(1),
   ownerSessionId: z.string().min(1),
-  time: z.number(),
+  time: EpochMs,
 });
 
 /**

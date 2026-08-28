@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { NamedError } from "../error/index.js";
+import { EpochMs } from "../time.js";
 
 export const OwnerKind = z.enum(["workItem", "session"]);
 export type OwnerKind = z.infer<typeof OwnerKind>;
@@ -64,7 +65,7 @@ export const Reply = z
     replyKey: z.string().min(1),
     responderId: z.string().min(1),
     messageId: z.string().min(1).optional(),
-    receivedAt: z.number(),
+    receivedAt: EpochMs,
   })
   .strict();
 export type Reply = z.infer<typeof Reply>;
@@ -89,12 +90,12 @@ const RecordBase = z
     partial: z.boolean(),
     replies: z.array(Reply),
     revision: z.number().int().nonnegative(),
-    expiresAt: z.number(),
+    expiresAt: EpochMs,
     followUpWindow: z.number().int().nonnegative(),
-    createdAt: z.number(),
-    updatedAt: z.number(),
-    resolvedAt: z.number().optional(),
-    cancelledAt: z.number().optional(),
+    createdAt: EpochMs,
+    updatedAt: EpochMs,
+    resolvedAt: EpochMs.optional(),
+    cancelledAt: EpochMs.optional(),
   })
   .strict();
 
@@ -158,8 +159,8 @@ export const Create = RecordBase.omit({
   resolvedAt: true,
   cancelledAt: true,
 }).extend({
-  createdAt: z.number().optional(),
-  updatedAt: z.number().optional(),
+  createdAt: EpochMs.optional(),
+  updatedAt: EpochMs.optional(),
 });
 export type Create = z.infer<typeof Create>;
 

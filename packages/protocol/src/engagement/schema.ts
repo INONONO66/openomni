@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { NamedError } from "../error/index.js";
+import { EpochMs } from "../time.js";
 
 /**
  * Engagement — the durable delegation object (gateway-design §5, #709).
@@ -35,7 +36,7 @@ const Terms = z
   .object({
     spendCeiling: z.number().positive().optional(),
     autoApprove: z.string().min(1).optional(),
-    deadline: z.number().optional(),
+    deadline: EpochMs.optional(),
     speakTriggers: z.array(z.string().min(1)).optional(),
   })
   .strict();
@@ -52,9 +53,9 @@ export const Record = z
     /** Waits that may resume this engagement in its current state. */
     openWaitIds: z.array(z.string().min(1)),
     /** Machine-enforced expiry instant, seeded from terms.deadline at open. */
-    expiresAt: z.number().optional(),
-    createdAt: z.number(),
-    updatedAt: z.number(),
+    expiresAt: EpochMs.optional(),
+    createdAt: EpochMs,
+    updatedAt: EpochMs,
     revision: z.number().int().nonnegative(),
   })
   .strict();
@@ -73,7 +74,7 @@ export const Create = Record.omit({
   createdAt: true,
   updatedAt: true,
 }).extend({
-  createdAt: z.number().optional(),
+  createdAt: EpochMs.optional(),
 });
 export type Create = z.infer<typeof Create>;
 

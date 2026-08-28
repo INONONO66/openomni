@@ -11,6 +11,7 @@ import { Policy } from "../policy/index.js";
 import { Tool } from "../tool/index.js";
 import { Wait } from "../wait/index.js";
 import * as RouteRecord from "./route-record.js";
+import { EpochMs } from "../time.js";
 
 /**
  * #500 A6: every production-written actor key is declared (`runId` and
@@ -92,8 +93,8 @@ const ActivationMetadataSchemaImpl = z
       .object({
         kind: z.enum(["cron", "webhook", "manual", "internal"]),
         id: z.string().optional(),
-        scheduledAt: z.number().optional(),
-        firedAt: z.number().optional(),
+        scheduledAt: EpochMs.optional(),
+        firedAt: EpochMs.optional(),
         attempt: z.number().optional(),
       })
       .catchall(z.unknown())

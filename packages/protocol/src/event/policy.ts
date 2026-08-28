@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { BusEvent } from "../bus/index.js";
+import { EpochMs } from "../time.js";
 // Deep imports (not ../policy/index.js): the Policy namespace re-exports these
 // descriptors as `Policy.Events`, so importing the barrel here would be a cycle.
 import { PolicyEffects } from "../policy/effects.js";
@@ -9,7 +10,7 @@ const PolicyBase = z.object({
   traceId: z.string(),
   sessionId: z.string(),
   runId: z.string().optional(),
-  time: z.number(),
+  time: EpochMs,
 });
 
 // Audit events retain upcast-on-read compatibility with historical obligations
