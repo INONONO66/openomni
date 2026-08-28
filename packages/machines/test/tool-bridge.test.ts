@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { connectIpcClient, typedCall } from "@openomni/ipc";
 import { Machine } from "@openomni/protocol";
 import { attachMachineDaemon } from "../src/daemon";
@@ -12,6 +13,16 @@ const silent = {
     return;
   },
 };
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
 
 /**
  * A host whose tool port only knows `add`, standing in for the composition
@@ -77,6 +88,186 @@ describe("code-mode tool bridge", () => {
       expect(calls.map((call) => call.name)).toEqual(["add", "add"]);
       expect(calls[0]).toMatchObject({ cellId: "batch", arguments: { a: 1, b: 2 } });
     });
+  });
+
+  test("parallel tool calls overlap and interleaved answers route by callId in input order", async () => {
+    const secondArrived = deferred<void>();
+    let arrivals = 0;
+    await withBridge(
+      async ({ host }) => {
+        const result = await host.runCell("m-1", {
+          cellId: "parallel-routing",
+          code: [
+            "parallel([",
+            "    lambda: tool.echo(value='left'),",
+            "    lambda: tool.echo(value='right'),",
+            "])",
+          ].join("\n"),
+          timeoutMs: 15_000,
+        });
+
+        expect(result).toMatchObject({
+          status: "completed",
+          value: "['answer:left', 'answer:right']",
+        });
+      },
+      async (call) => {
+        arrivals += 1;
+        if (arrivals === 1) {
+          await secondArrived.promise;
+        } else {
+          secondArrived.resolve();
+        }
+        return { status: "completed", value: `answer:${String(call.arguments.value)}` };
+      },
+    );
+    expect(arrivals).toBe(2);
+  });
+
+  test("llm sugar calls the llm tool with a prompt", async () => {
+    await withBridge(
+      async ({ host, calls }) => {
+        const result = await host.runCell("m-1", {
+          cellId: "llm-sugar",
+          code: "llm('summarize this')",
+          timeoutMs: 15_000,
+        });
+
+        expect(result).toMatchObject({ status: "completed", value: "'summary'" });
+        expect(calls).toEqual([
+          { cellId: "llm-sugar", name: "llm", arguments: { prompt: "summarize this" } },
+        ]);
+      },
+      () => Promise.resolve({ status: "completed", value: "summary" }),
+    );
+  });
+
+  test("llm_batched returns llm results in prompt order", async () => {
+    await withBridge(
+      async ({ host, calls }) => {
+        const result = await host.runCell("m-1", {
+          cellId: "llm-batched",
+          code: "llm_batched(['first', 'second'])",
+          timeoutMs: 15_000,
+        });
+
+        expect(result).toMatchObject({
+          status: "completed",
+          value: "['summary:first', 'summary:second']",
+        });
+        expect(calls).toHaveLength(2);
+        expect(calls.every((call) => call.name === "llm")).toBe(true);
+        expect(calls.map((call) => call.arguments.prompt).sort()).toEqual(["first", "second"]);
+      },
+      (call) =>
+        Promise.resolve({
+          status: "completed",
+          value: `summary:${String(call.arguments.prompt)}`,
+        }),
+    );
+  });
+
+  test("an unknown callId answer is ignored without disturbing the waiting call", async () => {
+    const kernel = new PythonKernel();
+    const callEntered = deferred<void>();
+    const releaseCall = deferred<void>();
+    try {
+      const running = kernel.run(
+        { cellId: "unknown-answer", code: "tool.echo(value='real')", timeoutMs: 15_000 },
+        async () => {
+          callEntered.resolve();
+          await releaseCall.promise;
+          return { status: "completed", value: "real answer" };
+        },
+      );
+      await callEntered.promise;
+      const child = (kernel as unknown as { process?: ChildProcessWithoutNullStreams }).process;
+      if (!child) throw new Error("expected a running Python process");
+      child.stdin.write(
+        `${JSON.stringify({ callId: "not-in-flight", status: "completed", value: "stray" })}\n`,
+      );
+      releaseCall.resolve();
+
+      await expect(running).resolves.toMatchObject({
+        status: "completed",
+        value: "'real answer'",
+      });
+    } finally {
+      releaseCall.resolve();
+      kernel.close();
+    }
+  });
+
+  test("parallel waits for other thunks before propagating an exception", async () => {
+    const completed = deferred<void>();
+    await withBridge(
+      async ({ host, calls }) => {
+        const result = await host.runCell("m-1", {
+          cellId: "parallel-error",
+          code: [
+            "def fail():",
+            "    raise ValueError('parallel boom')",
+            "parallel([fail, lambda: tool.complete()])",
+          ].join("\n"),
+          timeoutMs: 15_000,
+        });
+
+        expect(result.status).toBe("raised");
+        expect(result.status === "raised" && result.error).toContain("ValueError: parallel boom");
+        expect(calls.map((call) => call.name)).toEqual(["complete"]);
+        await completed.promise;
+      },
+      () => {
+        completed.resolve();
+        return Promise.resolve({ status: "completed", value: "done" });
+      },
+    );
+  });
+
+  test("a timeout SIGKILLs a cell with in-flight tool calls and consumes late rejection", async () => {
+    const kernel = new PythonKernel();
+    const callEntered = deferred<void>();
+    const toolAnswer = deferred<Machine.ToolCallResult>();
+    type KillSignal = Parameters<ChildProcessWithoutNullStreams["kill"]>[0];
+    const signals: KillSignal[] = [];
+    const unhandled: unknown[] = [];
+    const onUnhandled = (error: unknown) => unhandled.push(error);
+    const rejectionEvents = process as unknown as {
+      on(event: "unhandledRejection", listener: (error: unknown) => void): void;
+      off(event: "unhandledRejection", listener: (error: unknown) => void): void;
+    };
+    rejectionEvents.on("unhandledRejection", onUnhandled);
+    try {
+      const running = kernel.run(
+        {
+          cellId: "timeout-in-flight",
+          code: "parallel([lambda: tool.slow(), lambda: tool.slow()])",
+          timeoutMs: 1_000,
+        },
+        () => {
+          callEntered.resolve();
+          return toolAnswer.promise;
+        },
+      );
+      await callEntered.promise;
+      const child = (kernel as unknown as { process?: ChildProcessWithoutNullStreams }).process;
+      if (!child) throw new Error("expected a running Python process");
+      const kill = child.kill.bind(child);
+      child.kill = ((signal?: KillSignal) => {
+        signals.push(signal);
+        return kill(signal);
+      }) as typeof child.kill;
+
+      await expect(running).resolves.toEqual({ status: "timed_out", cellId: "timeout-in-flight" });
+      expect(signals).toContain("SIGKILL");
+      toolAnswer.reject(new Error("late tool failure"));
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(unhandled).toEqual([]);
+    } finally {
+      rejectionEvents.off("unhandledRejection", onUnhandled);
+      toolAnswer.resolve({ status: "failed", error: "closed" });
+      kernel.close();
+    }
   });
 
   test("a tool the host refuses raises a catchable error and does not run", async () => {
