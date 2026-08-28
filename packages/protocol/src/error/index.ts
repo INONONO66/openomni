@@ -6,7 +6,11 @@ import { z } from "zod";
 // therefore unsound across package boundaries; the Symbol.for-registered
 // brand carries the error name and is set only by this factory, so the
 // guard recognizes instances from any copy while still rejecting plain
-// objects that merely mimic the `name` property.
+// objects that merely mimic the `name` property. The brand alone cannot
+// distinguish same-named factories with different schemas, so isInstance
+// additionally validates the candidate's `data` against this factory's
+// schema — the guard's type predicate is only sound when the payload
+// actually has the promised shape.
 const NAMED_ERROR_BRAND = Symbol.for("openomni.protocol.namedError");
 
 export abstract class NamedError extends Error {
@@ -46,10 +50,11 @@ export abstract class NamedError extends Error {
       }
 
       static isInstance(input: unknown): input is InstanceType<typeof result> {
-        return (
-          input instanceof Error &&
-          (input as unknown as Partial<Record<symbol, unknown>>)[NAMED_ERROR_BRAND] === name
-        );
+        if (!(input instanceof Error)) return false;
+        if ((input as unknown as Partial<Record<symbol, unknown>>)[NAMED_ERROR_BRAND] !== name) {
+          return false;
+        }
+        return data.safeParse((input as { data?: unknown }).data).success;
       }
 
       schema() {

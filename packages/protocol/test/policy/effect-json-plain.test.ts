@@ -53,3 +53,50 @@ test("round-trips JSON-plain effect values unchanged", () => {
   expect(JSON.parse(JSON.stringify(effect.input))).toEqual(input);
   expect(effect.input).toEqual(input);
 });
+
+test("refuses accessor properties without invoking their getters", () => {
+  let invoked = false;
+  const hostile: Record<string, unknown> = {};
+  Object.defineProperty(hostile, "value", {
+    enumerable: true,
+    get: () => {
+      invoked = true;
+      return "plain-looking";
+    },
+  });
+  const result = Policy.PolicyEffect.safeParse({ type: "tool.rewrite_input", input: hostile });
+  expect(result.success).toBe(false);
+  expect(invoked).toBe(false);
+});
+
+test("a throwing getter or Proxy trap yields a parse failure, never a throw", () => {
+  const throwingGetter: Record<string, unknown> = {};
+  Object.defineProperty(throwingGetter, "boom", {
+    enumerable: true,
+    get: () => {
+      throw new Error("hostile getter");
+    },
+  });
+  const throwingProxy = new Proxy(
+    {},
+    {
+      ownKeys: () => {
+        throw new Error("hostile trap");
+      },
+    },
+  );
+  for (const input of [throwingGetter, throwingProxy]) {
+    const result = Policy.PolicyEffect.safeParse({ type: "tool.rewrite_input", input });
+    expect(result.success).toBe(false);
+  }
+});
+
+test("rejects symbol-keyed properties on objects and arrays", () => {
+  const symbolObject = { value: 1, [Symbol("hidden")]: "not round-trippable" };
+  const symbolArray = Object.assign([1, 2], { [Symbol("hidden")]: "dropped by JSON" });
+  for (const value of [symbolObject, { items: symbolArray }]) {
+    expect(
+      Policy.PolicyEffect.safeParse({ type: "tool.rewrite_input", input: value }).success,
+    ).toBe(false);
+  }
+});

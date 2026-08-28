@@ -471,9 +471,13 @@ function recordRouteDecided(
     recordedEndpoint?.channel === freshEndpoint?.channel &&
     recordedEndpoint?.externalId === freshEndpoint?.externalId;
   if (!Ingress.routeDecisionsEquivalent(recorded, decision) || !endpointEquivalent) {
+    // The recorded decision carries perimeter-resolved authority (actorId,
+    // trustTier, inboundTreatment); interpolating either side into the error
+    // would disclose identity and policy treatment to whoever triggered the
+    // redelivery, so the refusal stays typed and value-free.
     throw new IngressRoutingError(
       "route_replay_divergent",
-      `redelivered inbound diverges from its recorded routing decision: recorded ${recorded.stage}/${recorded.outcome}/${recorded.actorId ?? "anonymous"}/${recorded.trustTier ?? "untiered"}/${recorded.inboundTreatment ?? "untreated"}, fresh ${decision.stage}/${decision.outcome}/${decision.actorId ?? "anonymous"}/${decision.trustTier ?? "untiered"}/${decision.inboundTreatment ?? "untreated"}`,
+      "redelivered inbound diverges from its recorded routing decision on an execution- or authority-shaping field",
       decision,
     );
   }

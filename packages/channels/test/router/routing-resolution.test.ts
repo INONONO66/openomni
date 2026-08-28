@@ -140,9 +140,19 @@ describe("GatewayRouter durable routing resolution", () => {
 
     mutate();
 
-    await expect(router.ingest(ownerEvent)).rejects.toMatchObject({
-      code: "route_replay_divergent",
-    });
+    let thrown: unknown;
+    try {
+      await router.ingest(ownerEvent);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrownCode(thrown)).toBe("route_replay_divergent");
+    // The refusal must not disclose perimeter-resolved authority values
+    // (actor ids, trust tiers, treatments) to whoever triggered redelivery.
+    const message = thrown instanceof Error ? thrown.message : String(thrown);
+    for (const secret of ["actor-owner", "actor-replacement", "owner", "manager", "evidence_only"]) {
+      expect(message).not.toContain(secret);
+    }
     expect(deliveries).toHaveLength(1);
     expect(Storage.get().ledger?.headFact(streamId())?.seq).toBe(1);
     expect(routingDecisions()).toHaveLength(projections);
