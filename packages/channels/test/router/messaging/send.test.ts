@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import { Gateway } from "@openomni/protocol";
 import { ActorRegistry, EgressBudgetStore, Storage, WaitStore } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
@@ -14,6 +14,7 @@ import {
   messagingNow,
   registerAgentFixture,
 } from "../../helpers/messaging.js";
+import { resetStores } from "../_router-fixture";
 
 const SendInput = Gateway.SendInput;
 type SenderTargetGrant = Gateway.SenderTargetGrant;
@@ -34,18 +35,11 @@ function messaging() {
 }
 
 beforeEach(() => {
-  Bus.reset();
-  Storage.reset();
-  Storage.initialize({ dbPath: ":memory:" });
+  resetStores();
   deliveries = [];
   grants = [buildGrant("grant:sender->target")];
   registerAgentFixture("actor:sender");
   registerAgentFixture("actor:target", [{ id: "endpoint:target", externalId: "target-1" }]);
-});
-
-afterEach(() => {
-  Storage.reset();
-  Bus.reset();
 });
 
 describe("sender-target grant (policy plane)", () => {
@@ -487,13 +481,10 @@ async function probe(point: FaultPoint): Promise<Probe> {
 }
 
 beforeEach(() => {
-  Storage.reset();
-  Storage.initialize({ dbPath: ":memory:" });
+  resetStores();
   registerAgentFixture("actor:sender");
   registerAgentFixture("actor:target", [{ id: "endpoint:target", externalId: "target-1" }]);
 });
-
-afterEach(() => Storage.reset());
 
 describe("gateway send crash reconciliation transition table", () => {
   test.each([

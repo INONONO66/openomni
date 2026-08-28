@@ -1,7 +1,7 @@
 import type { ChatAgentConfig } from "@openomni/agent";
 import { placementGatedExecutor } from "@openomni/agent";
 import { Placement } from "@openomni/placement";
-import type { Machine, Tool } from "@openomni/protocol";
+import { Machine, type Tool } from "@openomni/protocol";
 import { z } from "zod";
 import type { DelegationOrigin } from "../delegation/admission";
 import type { CatalogEntry } from "./dispatch";
@@ -101,7 +101,7 @@ export function runCodeToolSpec(): Tool.Spec {
     inputSchema: INPUT_JSON_SCHEMA,
     safe: false,
     placement: "machine",
-    requires: ["kernel.py"],
+    requires: [Machine.WellKnownCapability.pythonKernel],
   };
 }
 

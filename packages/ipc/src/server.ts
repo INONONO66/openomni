@@ -4,6 +4,7 @@ import { Ipc } from "@openomni/protocol";
 
 import { IpcConnectionError, IpcProtocolError, IpcRemoteError, IpcTimeoutError } from "./errors";
 import { LineDecoder, encode } from "./framing";
+import { PendingCalls } from "./pending-calls";
 
 function isMissingFileError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error && error.code === "ENOENT";
@@ -33,13 +34,6 @@ export interface IpcServer {
   useConnection(id: string): void;
   close(): void;
 }
-
-type PendingRequest = {
-  resolve: (value: unknown) => void;
-  reject: (err: Error) => void;
-  timer: ReturnType<typeof setTimeout>;
-  connectionId: string;
-};
 
 // How long the pre-listen probe waits for the existing socket to answer
 // before concluding it is dead. No answer means "assume live": stealing a
@@ -121,7 +115,7 @@ export async function createIpcServer(
   };
 
   const connections = new Map<string, ConnectionState>();
-  const pending = new Map<string, PendingRequest>();
+  const pending = new PendingCalls<string>();
   let connCounter = 0;
   let activeConnectionId: string | undefined;
 
@@ -198,20 +192,11 @@ export async function createIpcServer(
   }
 
   function failPendingOf(connId: string, err: Error): void {
-    for (const [reqId, handler] of pending) {
-      if (handler.connectionId !== connId) continue;
-      clearTimeout(handler.timer);
-      pending.delete(reqId);
-      handler.reject(err);
-    }
+    pending.failAll(err, (connectionId) => connectionId === connId);
   }
 
   function failAllPending(err: Error): void {
-    for (const [, handler] of pending) {
-      clearTimeout(handler.timer);
-      handler.reject(err);
-    }
-    pending.clear();
+    pending.failAll(err);
   }
 
   const server = Bun.listen({
@@ -276,19 +261,16 @@ export async function createIpcServer(
           }
 
           if (parsed.type === "response") {
-            const handler = pending.get(parsed.id);
             // Response matching is scoped to the connection that owns the
             // request: another connection echoing (or guessing) the id must
             // not settle a pending it was never asked about.
-            if (handler && handler.connectionId === state.id) {
-              clearTimeout(handler.timer);
-              pending.delete(parsed.id);
-              if (parsed.error) {
-                handler.reject(new IpcRemoteError(parsed.error.code, parsed.error.message));
-              } else {
-                handler.resolve(parsed.result);
-              }
-            }
+            pending.settle(
+              parsed.id,
+              parsed.error
+                ? { ok: false, error: new IpcRemoteError(parsed.error.code, parsed.error.message) }
+                : { ok: true, value: parsed.result },
+              (connectionId) => connectionId === state.id,
+            );
           } else if (parsed.type === "request") {
             const respond = (result: unknown) => {
               sendFrame(state, Ipc.createResponse(parsed.id, result));
@@ -373,15 +355,13 @@ export async function createIpcServer(
       if (!conn) {
         return Promise.reject(new IpcConnectionError("no connected client"));
       }
-      return new Promise((res, rej) => {
-        const req = Ipc.createRequest(method, params);
-        const timer = setTimeout(() => {
-          pending.delete(req.id);
-          rej(new IpcTimeoutError(`request timeout: ${method}`));
-        }, timeoutMs);
-        pending.set(req.id, { resolve: res, reject: rej, timer, connectionId: conn.id });
-        sendFrame(conn, req);
-      });
+      const req = Ipc.createRequest(method, params);
+      return pending.register(
+        req.id,
+        timeoutMs,
+        () => new IpcTimeoutError(`request timeout: ${method}`),
+        { meta: conn.id, send: () => sendFrame(conn, req) },
+      );
     },
     notify(method, params) {
       const conn = getActiveConnection();
