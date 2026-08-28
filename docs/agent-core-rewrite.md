@@ -63,7 +63,7 @@ The order the loop dispatches them. This table is the contract a policy author r
 | P3 | `prompt.context.pre` | system prompt assembly | `prompt.replace`, `prompt.append_context` |
 | P4 | `tool.catalog.pre` | tool selection | `tool.filter`, block |
 | P5 | `connection.llm.pre` | before the model call | block, prompt injection |
-| P6 | `tool.{native,mcp}.pre` | per tool call, **fail-closed** | deny, `tool.skip_invocation`, `tool.rewrite_input`, `tool.require_approval`, `runtime.set_timeout` |
+| P6 | `tool.{native,mcp}.pre` | per tool call, **fail-closed** | deny, `tool.skip_invocation`, `tool.rewrite_input`, `tool.require_approval` |
 | P7 | `tool.{native,mcp}.post` | per tool result, fail-open | `tool.rewrite_output`, `run.abort` |
 | P8 | `connection.llm.post` | after the model call | `run.replace_messages` |
 | P9 | `run.turn.post` | turn settlement | `run.continue_with_prompt`, `run.abort` |
@@ -71,7 +71,7 @@ The order the loop dispatches them. This table is the contract a policy author r
 | P11 | `run.lifecycle.post` | run end | transform |
 | P12 | `run.error.error` | error path | `run.abort`, `run.retry_after` |
 
-Effect vocabulary is 20 types; the agent applies 11. **Every declared type must either gain an application site or be deleted** — `runtime.set_timeout` gets the former (tool timeout), the rest are audited in Phase 4.
+Effect vocabulary is 20 types; the agent applies 11. **Every declared type must either gain an application site or be deleted** — `runtime.set_timeout` was retired in [#828](https://github.com/INONONO66/openomni/pull/828) after an audit found zero production consumers; the rest are audited in Phase 4.
 
 Six points the agent dispatches have no production registration, along with two dispatched elsewhere. Ruling tracked in [#609](https://github.com/INONONO66/openomni/issues/609); it is not a blocker for this work.
 
