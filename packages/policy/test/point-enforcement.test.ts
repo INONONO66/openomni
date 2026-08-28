@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { PolicyEngine } from "@openomni/policy";
+import { PolicyEngine, PolicyRegistrationError } from "@openomni/policy";
 import { type Policy, PolicyDecision } from "@openomni/protocol";
 import { dispatchContext, turnPostContext } from "./point-test-fixtures";
 
@@ -30,6 +30,48 @@ function assertPolicyRegistrationRejectsAsync(engine: ReturnType<typeof PolicyEn
   });
 }
 void assertPolicyRegistrationRejectsAsync;
+
+describe("direct-lane runtime async refusal", () => {
+  test("an async function smuggled past the type surface is refused at registration", () => {
+    const engine = PolicyEngine.create();
+    expect(() =>
+      engine.register({
+        kind: "point",
+        name: "smuggled-async",
+        pointIds: ["dispatch.action.pre"],
+        effectCapabilities: { "dispatch.action.pre": [] },
+        priority: 0,
+        fn: (async () => PolicyDecision.deny({ policyId: "smuggled-async" })) as never,
+      }),
+    ).toThrow(
+      new PolicyRegistrationError({
+        code: "async_policy_callback",
+        registrationName: "smuggled-async",
+      }),
+    );
+  });
+
+  test("a sync callback returning a thenable is thrown, never awaited", async () => {
+    const engine = PolicyEngine.create();
+    engine.register({
+      kind: "point",
+      name: "thenable-smuggler",
+      pointIds: ["dispatch.action.pre"],
+      effectCapabilities: { "dispatch.action.pre": [] },
+      priority: 0,
+      fn: (() =>
+        Promise.resolve(
+          PolicyDecision.allow({ policyId: "thenable-smuggler" }),
+        )) as never,
+    });
+    const decision = await engine.dispatchPoint("dispatch.action.pre", dispatchContext);
+    // The smuggled async allow must not enter composition: the thenable is
+    // thrown at the call boundary and the point's default fail policy
+    // settles fail-closed.
+    expect(decision.verdict).toBe("deny");
+    expect(decision.reasonCodes).toEqual(["middleware-error"]);
+  });
+});
 
 const workCompletionContext = {
   workItemHash: "wi_admission",

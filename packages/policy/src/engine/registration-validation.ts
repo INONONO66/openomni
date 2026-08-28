@@ -28,7 +28,8 @@ type PolicyRegistrationErrorCode =
   | "unbound_effect_capabilities"
   | "duplicate_effect_capability"
   | "disallowed_effect_capability"
-  | "empty_scope_agent_type";
+  | "empty_scope_agent_type"
+  | "async_policy_callback";
 
 interface PolicyRegistrationErrorOptions {
   readonly code: PolicyRegistrationErrorCode;
@@ -116,6 +117,38 @@ function isCanonicalPolicyFunction<TCtx extends GenericPolicyContext>(
   return typeof value === "function";
 }
 
+function isThenable(value: unknown): boolean {
+  return (
+    (typeof value === "object" || typeof value === "function") &&
+    value !== null &&
+    typeof Reflect.get(value, "then") === "function"
+  );
+}
+
+/**
+ * Direct registrations are contractually synchronous; only the factory lane
+ * retains the Promise-capable runtime shape (agent compaction seam). The type
+ * surface already rejects async callbacks at compile time, but `register()`
+ * is a public runtime API reachable from plain JavaScript, so the direct lane
+ * is also enforced here: an `async function` is refused eagerly at
+ * registration, and a sync function returning a thenable is refused at call
+ * time — thrown, never awaited, so a smuggled async verdict can neither allow
+ * nor deny and the point's fail policy decides deterministically.
+ */
+function guardSynchronousCallback<TCtx extends GenericPolicyContext>(
+  name: string,
+  fn: RuntimePolicyRegistrationGeneric<TCtx>["fn"],
+): RuntimePolicyRegistrationGeneric<TCtx>["fn"] {
+  if (fn.constructor.name === "AsyncFunction") {
+    throw registrationError(name, "async_policy_callback");
+  }
+  return (ctx) => {
+    const decision = fn(ctx);
+    if (isThenable(decision)) throw registrationError(name, "async_policy_callback");
+    return decision;
+  };
+}
+
 function captureScope(value: unknown): unknown {
   if (!isObject(value)) return value;
   const agentType = Reflect.get(value, "agentType");
@@ -137,6 +170,7 @@ function frozenScope(scope: Policy.Scope | undefined): Policy.Scope | undefined 
 function prepareCanonicalRegistration<TCtx extends GenericPolicyContext>(
   registration: object,
   classification: ClassificationFields,
+  lane: "direct" | "factory",
 ): RuntimePolicyRegistrationGeneric<TCtx> {
   const name = registrationName(classification.name);
   if (classification.kind === undefined) {
@@ -180,7 +214,7 @@ function prepareCanonicalRegistration<TCtx extends GenericPolicyContext>(
     effectCapabilities,
     ...(scope === undefined ? {} : { scope }),
     ...(metadata.data.failPolicy === undefined ? {} : { failPolicy: metadata.data.failPolicy }),
-    fn: fields.fn,
+    fn: lane === "direct" ? guardSynchronousCallback(name, fields.fn) : fields.fn,
   } satisfies RuntimePolicyRegistrationGeneric<TCtx>);
   return trusted;
 }
@@ -214,7 +248,7 @@ export function prepareRegistrationBoundary<TCtx extends GenericPolicyContext>(
         "invalid_canonical_registration",
       );
     }
-    return prepareCanonicalRegistration<TCtx>(created, readClassificationFields(created));
+    return prepareCanonicalRegistration<TCtx>(created, readClassificationFields(created), "factory");
   }
   const hasCanonicalFields =
     classification.kind !== undefined ||
@@ -226,5 +260,5 @@ export function prepareRegistrationBoundary<TCtx extends GenericPolicyContext>(
     // would be a silent policy bypass.
     throw registrationError(registrationName(classification.name), "legacy_timing_registration");
   }
-  return prepareCanonicalRegistration<TCtx>(registration, classification);
+  return prepareCanonicalRegistration<TCtx>(registration, classification, "direct");
 }
