@@ -1,4 +1,5 @@
 import { Communication } from "@openomni/protocol";
+import { frozenWriteRefusal } from "../storage/frozen";
 import { Storage } from "../storage/storage";
 import { requireSubAdapter } from "../storage/timestamped-store";
 
@@ -28,13 +29,14 @@ function requireAdapter() {
 // (#498 C4 export diet) — derive it from there instead of a second export.
 type FrozenWriteMethod = Communication.PendingInteraction.FrozenError["data"]["method"];
 
-function frozenWrite(method: FrozenWriteMethod): never {
-  throw new Communication.PendingInteraction.FrozenError({
-    message: `PendingInteractionStore is frozen (#548): ${method} is retired — historical pending_interaction rows are read-only archive`,
-    code: "pending_interaction_frozen",
-    method,
-  });
-}
+// Explicit annotation required: TS only treats the call as never-returning
+// (TS2534) when the variable carries an explicit `=> never` type.
+const frozenWrite: (method: FrozenWriteMethod) => never = frozenWriteRefusal(
+  Communication.PendingInteraction.FrozenError,
+  "pending_interaction_frozen",
+  (method: FrozenWriteMethod) =>
+    `PendingInteractionStore is frozen (#548): ${method} is retired — historical pending_interaction rows are read-only archive`,
+);
 
 function stillAcceptsFollowUp(
   record: Communication.PendingInteraction.Record,

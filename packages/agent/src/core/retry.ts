@@ -131,27 +131,3 @@ export function shouldRetry(policy: RetryPolicy, reason: RetryReason, attempt: n
   if (policy.retryOn === undefined || policy.retryOn.length === 0) return true;
   return policy.retryOn.includes(reason);
 }
-
-export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
-  if (signal?.aborted) {
-    return Promise.reject(abortError());
-  }
-
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(
-      () => {
-        signal?.removeEventListener("abort", onAbort);
-        resolve();
-      },
-      Math.max(0, Math.floor(ms)),
-    );
-
-    function onAbort(): void {
-      clearTimeout(timeout);
-      signal?.removeEventListener("abort", onAbort);
-      reject(abortError());
-    }
-
-    signal?.addEventListener("abort", onAbort, { once: true });
-  });
-}

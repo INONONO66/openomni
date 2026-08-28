@@ -171,7 +171,7 @@ async function mutateRun(
     // Contention (a concurrent transition won the head) and losing the
     // acquire race both mean "not acquired/finished" — the caller retries
     // from a fresh read or reports the run as no longer active. A BUSY
-    // storage layer is NEITHER: swallowing WorkItemUnavailableError here
+    // storage layer is NEITHER: swallowing StorageUnavailableError here
     // silently lost terminal attempt facts (runs stuck "running" forever),
     // so it rethrows to the caller like every other storage failure.
     if (error instanceof AttemptRunNotActiveError || error instanceof WorkItemRevisionError) {

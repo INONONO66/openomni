@@ -1,22 +1,14 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import { Wait } from "@openomni/protocol";
 import { Storage, WaitStore } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { WaitService } from "../../../src/router/wait/index";
 import { buildWaitCreate } from "../../helpers/wait";
+import { resetStores } from "../_router-fixture";
 
 const flushBus = () => new Promise<void>((resolve) => queueMicrotask(() => resolve()));
 
-beforeEach(() => {
-  Bus.reset();
-  Storage.reset();
-  Storage.initialize({ dbPath: ":memory:" });
-});
-
-afterEach(() => {
-  Storage.reset();
-  Bus.reset();
-});
+beforeEach(resetStores);
 
 describe("WaitService", () => {
   test("open records exactly one durable Wait for an awaited delivery", () => {
