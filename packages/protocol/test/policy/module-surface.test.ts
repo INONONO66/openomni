@@ -1,11 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { z } from "zod";
-import { Policy, PolicyDecision, PolicyPermission, policyKernelVersion } from "../../src/index.js";
+import { Policy, PolicyDecision, PolicyPermission } from "../../src/index.js";
 import {
   Policy as PolicyIndex,
   PolicyDecision as PolicyDecisionIndex,
   PolicyPermission as PolicyPermissionIndex,
-  policyKernelVersion as policyKernelVersionIndex,
 } from "../../src/policy/index.js";
 
 // #498 receipts: `evaluate` moved to @openomni/policy (evaluatePermission),
@@ -71,7 +70,6 @@ describe("policy module public surface", () => {
     expect(PolicyDecision.allow).toBe(PolicyDecisionIndex.allow);
     expect(Policy.Resource.Descriptor).toBe(PolicyIndex.Resource.Descriptor);
     expect(PolicyPermission.isSafeInputPattern).toBe(PolicyPermissionIndex.isSafeInputPattern);
-    expect(policyKernelVersion).toBe(policyKernelVersionIndex);
   });
 
   test("locks the public policy namespace keys", () => {

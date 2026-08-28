@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { Policy, policyKernelVersion } from "../../../src/policy/index.js";
+import { policyKernelVersion } from "../../../src/policy/definition.js";
+import { Policy } from "../../../src/policy/index.js";
 
 type PolicyPointContract =
   (typeof Policy.PolicyPoint.Registry)[keyof typeof Policy.PolicyPoint.Registry];

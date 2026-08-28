@@ -6,7 +6,6 @@ const terminalSuffixes = ["completed", "failed", "cancelled", "settled"] as cons
 
 const expectedPairs: Readonly<Record<string, readonly string[]>> = {
   "llm.call.started": ["llm.call.completed", "llm.call.failed"],
-  "operational.recovery.started": ["operational.recovery.completed"],
   "tool.execution.started": ["tool.execution.completed"],
 };
 
@@ -50,9 +49,7 @@ describe("protocol start/terminal event vocabulary", () => {
     expect(pairingProblems(names)).toEqual([]);
 
     const missingTerminal = new Set(names);
-    missingTerminal.delete("operational.recovery.completed");
-    expect(pairingProblems(missingTerminal)).toContain(
-      "operational.recovery.started terminals: none",
-    );
+    missingTerminal.delete("tool.execution.completed");
+    expect(pairingProblems(missingTerminal)).toContain("tool.execution.started terminals: none");
   });
 });

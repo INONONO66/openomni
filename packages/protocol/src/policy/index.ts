@@ -7,7 +7,6 @@ import { PolicyPointModule } from "./policy-point.js";
 import { PolicyResource } from "./resource.js";
 
 export { PolicyPermission } from "./permission.js";
-export { policyKernelVersion } from "./definition.js";
 
 export namespace Policy {
   export const LabelEntry = PolicyPermission.LabelEntry;
