@@ -10,7 +10,16 @@ import {
   delegateToolSpec,
 } from "../delegation/tool";
 import type { CuratedMemory } from "../memory/store";
+import type { ArtifactsPort } from "./artifacts";
+import {
+  readArtifactToolExecutor,
+  readArtifactToolSpec,
+  writeArtifactToolExecutor,
+  writeArtifactToolSpec,
+} from "./artifacts";
 import type { CatalogEntry } from "./dispatch";
+import type { LlmPort } from "./llm";
+import { llmToolExecutor, llmToolSpec } from "./llm";
 import { memoryToolExecutor, memoryToolSpec } from "./memory";
 import type { MachinesPort } from "./machines";
 import { machinesToolExecutor, machinesToolSpec } from "./machines";
@@ -30,6 +39,8 @@ export interface CatalogPorts {
   readonly machines?: MachinesPort;
   readonly memory?: CuratedMemory;
   readonly workItems?: CompletionPort;
+  readonly llm?: LlmPort;
+  readonly artifacts?: ArtifactsPort;
 }
 
 type ToolRun = CatalogEntry["run"];
@@ -101,6 +112,25 @@ const CATALOG_TOOLS: readonly CatalogTool[] = [
       ports.workItems === undefined || origin.role !== "resident"
         ? undefined
         : completeWorkToolExecutor(ports.workItems),
+  },
+  {
+    spec: llmToolSpec,
+    wire: (ports) => (ports.llm === undefined ? undefined : llmToolExecutor(ports.llm)),
+  },
+  {
+    // Writes are keyed to the session that asked (the origin already flows
+    // into catalogEntries); reads are by id — the unguessable artifact id is
+    // the read capability, so a session can hand one to a delegate on purpose.
+    spec: writeArtifactToolSpec,
+    wire: (ports, origin) =>
+      ports.artifacts === undefined
+        ? undefined
+        : writeArtifactToolExecutor(ports.artifacts, origin.sessionId),
+  },
+  {
+    spec: readArtifactToolSpec,
+    wire: (ports) =>
+      ports.artifacts === undefined ? undefined : readArtifactToolExecutor(ports.artifacts),
   },
 ];
 
