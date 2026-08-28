@@ -1,13 +1,30 @@
 import { processEntryPath } from "./process-entry-path";
 import type { ChatAgentConfig } from "@openomni/agent";
 import { type GatewayRouter, WaitService, WebSocketHandler } from "@openomni/channels";
-import { ActorRegistry, BusPersistence, initialize, Session, Storage } from "@openomni/ledger";
+import {
+  ActorRegistry,
+  Artifact,
+  BusPersistence,
+  initialize,
+  Session,
+  Storage,
+} from "@openomni/ledger";
+import { ModelsDev, Provider, run as llmRun, type Sink } from "@openomni/llm";
 import { createMachineHost, type MachineHost } from "@openomni/machines";
 import type { Placement } from "@openomni/placement";
-import { type Channel, Gateway, type Ingress, type Machine, newTraceId } from "@openomni/protocol";
+import {
+  type Channel,
+  Gateway,
+  type Ingress,
+  type Machine,
+  type Message,
+  newTraceId,
+} from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { createChannelDrivers } from "./channels";
 import { assertWsExposure, loadConfig, type OpenOmniConfig, type RegisteredActor } from "./config";
+import type { ArtifactsPort } from "./tools/artifacts";
+import type { LlmPort } from "./tools/llm";
 import type { MachinesPort } from "./tools/machines";
 import { createChannelDriver } from "./delegation/channel-driver";
 import { createInlineDriver } from "./delegation/inline-driver";
@@ -53,6 +70,89 @@ function attachedTargets(
       : [{ kind: "machine", id: enrollment.machineId, capabilities: [...capabilities] }];
   });
   return [HOST_TARGET, ...machines];
+}
+
+/**
+ * The llm tool's model, resolved the way the agent loop resolves its own:
+ * the models.dev catalog supplies the provider SDK wiring, and an unlisted
+ * model falls back to the provider's defaults rather than failing the boot.
+ */
+async function llmToolModel(model: OpenOmniConfig["model"]): Promise<Provider.Model> {
+  const data = await ModelsDev.get();
+  const provider = data[model.provider];
+  const raw = provider?.models?.[model.id];
+  if (provider !== undefined && raw !== undefined) {
+    return Provider.fromModelsDevModel(provider, raw as ModelsDev.Model);
+  }
+  return { id: model.id, providerID: model.provider, name: model.id };
+}
+
+/**
+ * The llm tool's one-shot sub-model call: a single user message, no tools,
+ * one step, its own synthesized trace — a nested run must never borrow the
+ * turn's run identity. Auth is the configured key, exactly as the Resident
+ * and the worker loop authenticate.
+ */
+function createLlmToolPort(model: OpenOmniConfig["model"]): LlmPort {
+  return async (prompt) => {
+    const sessionId = "llm-tool";
+    const messageId = crypto.randomUUID();
+    const request: Message.WithParts = {
+      info: {
+        id: messageId,
+        sessionID: sessionId,
+        role: "user",
+        time: { created: Date.now() },
+        agent: "llm-tool",
+        model: { providerID: model.provider, modelID: model.id },
+      },
+      parts: [
+        {
+          id: crypto.randomUUID(),
+          sessionID: sessionId,
+          messageID: messageId,
+          type: "text",
+          text: prompt,
+        },
+      ],
+    };
+    let answer = "";
+    const sink: Sink = {
+      onMessage: (message) => {
+        if (message.info.role !== "assistant") return;
+        answer = message.parts
+          .filter((part): part is Message.TextPart => part.type === "text")
+          .map((part) => part.text)
+          .join("");
+      },
+      onToolCall: () => undefined,
+      onToolResult: () => undefined,
+    };
+    const outcome = await llmRun(
+      {
+        messages: [request],
+        tools: [],
+        maxSteps: 1,
+        model: await llmToolModel(model),
+        auth: { type: "api", key: model.apiKey },
+        trace: {
+          traceId: `llm-tool:${crypto.randomUUID()}`,
+          sessionId,
+          runId: crypto.randomUUID(),
+        },
+        events: Bus,
+      },
+      sink,
+    );
+    if (outcome.type !== "stop") {
+      const reason =
+        "error" in outcome && outcome.error !== undefined
+          ? outcome.error.message
+          : `the sub-model run ended as ${outcome.type}`;
+      return `llm failed: ${reason}`;
+    }
+    return answer;
+  };
 }
 
 /** How a correlated reply's payload reads when handed back to the waiting delegation. */
@@ -129,7 +229,9 @@ export async function startOpenOmni(options: StartOptions = {}) {
     // A worker loop holds the same delegate tool the Resident does, so the
     // runner needs the kernel that the kernel needs the runner to build. The
     // cycle is closed by handing the runner a getter rather than a value.
-    let residentDeliver: ((delivery: Gateway.Deliver) => Promise<Ingress.IngressResult>) | undefined;
+    let residentDeliver:
+      | ((delivery: Gateway.Deliver) => Promise<Ingress.IngressResult>)
+      | undefined;
     // Boot-rescan wakes arrive before the Resident's deliver chain can be
     // bound; they wait in this queue until the arm call below.
     const wakeDelivery = createWakeDeliveryQueue();
@@ -137,7 +239,8 @@ export async function startOpenOmni(options: StartOptions = {}) {
       model: config.model,
       apiKey: config.model.apiKey,
       kernel: () => {
-        if (kernel === undefined) throw new Error("delegation kernel used before composition finished");
+        if (kernel === undefined)
+          throw new Error("delegation kernel used before composition finished");
         return kernel;
       },
       ...(options.llm === undefined ? {} : { llm: options.llm }),
@@ -216,10 +319,19 @@ export async function startOpenOmni(options: StartOptions = {}) {
               const capabilities = machineHost.attached(enrollment.machineId);
               return capabilities === undefined
                 ? { machineId: enrollment.machineId, attached: false, capabilities: [] }
-                : { machineId: enrollment.machineId, attached: true, capabilities: [...capabilities] };
+                : {
+                    machineId: enrollment.machineId,
+                    attached: true,
+                    capabilities: [...capabilities],
+                  };
             });
 
-    const completionPort = createCompletionPort({ writer: completionWriter, now: () => Date.now() });
+    const completionPort = createCompletionPort({
+      writer: completionWriter,
+      now: () => Date.now(),
+    });
+    const llmPort = createLlmToolPort(config.model);
+    const artifactsPort: ArtifactsPort = { store: Artifact.store, get: Artifact.get };
     const cells: CellPorts | undefined =
       machineHost === undefined
         ? undefined
@@ -234,6 +346,8 @@ export async function startOpenOmni(options: StartOptions = {}) {
                   ...(machinesPort === undefined ? {} : { machines: machinesPort }),
                   memory,
                   workItems: completionPort,
+                  llm: llmPort,
+                  artifacts: artifactsPort,
                 },
                 origin,
               ),
@@ -249,6 +363,8 @@ export async function startOpenOmni(options: StartOptions = {}) {
         ...(machinesPort === undefined ? {} : { machines: machinesPort }),
         memory,
         workItems: completionPort,
+        llm: llmPort,
+        artifacts: artifactsPort,
       },
       targets: () => attachedTargets(host, machines?.enrolled ?? []),
       ...(options.llm === undefined ? {} : { llm: options.llm }),
@@ -286,7 +402,8 @@ export async function startOpenOmni(options: StartOptions = {}) {
     // closure is bound before the router exists but cannot be called until a
     // surface starts after composition completes.
     const routingHandler: Channel.MessageHandler = async (message) => {
-      if (gateway === undefined) throw new Error("channel delivery used before composition finished");
+      if (gateway === undefined)
+        throw new Error("channel delivery used before composition finished");
       const result = await gateway.ingest(buildInboundEvent(message));
       return result.kind === "dropped" ? null : { text: result.result.output };
     };
@@ -326,9 +443,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
     // Recovery wakes arrived during kernel.start() and queued; arming binds
     // the Resident delivery and flushes them. Reject-only on failure: the
     // kernel's deliverWake is the single owner of wake-failure reporting.
-    wakeDelivery.arm((wake) =>
-      residentDeliver(delegationWakeDelivery(wake)).then(() => undefined),
-    );
+    wakeDelivery.arm((wake) => residentDeliver(delegationWakeDelivery(wake)).then(() => undefined));
 
     wsHandler = new WebSocketHandler(
       routingHandler,
@@ -399,7 +514,9 @@ export async function startOpenOmni(options: StartOptions = {}) {
       Storage.reset();
     }
     if (flushError !== undefined) {
-      const rollbackFailure = new Error("OpenOmni boot failed and journal rollback flush failed") as Error & {
+      const rollbackFailure = new Error(
+        "OpenOmni boot failed and journal rollback flush failed",
+      ) as Error & {
         errors: readonly unknown[];
       };
       rollbackFailure.errors = [error, flushError];
@@ -429,4 +546,3 @@ export function installShutdownHandlers(deps: {
   deps.on("SIGINT", handler);
   deps.on("SIGTERM", handler);
 }
-
