@@ -7,10 +7,10 @@ export namespace Actor {
    * #498 A2 — THE one actor-kind vocabulary. Every ActorContext, identity,
    * and verdict fact speaks these values; "unknown" is the honest member for
    * unresolved provenance (a missing dispatch actor context is a fact, not a
-   * default). The retired Command.ActorKind values map onto this vocabulary
-   * at the write side ("user"→"human", "worker"→"internal_worker"); persisted
-   * command.authorized/denied facts carrying the old values upcast on read in
-   * Ledger.CommandAuthorized/CommandDenied.
+   * default). The retired Command.ActorKind values mapped onto this
+   * vocabulary at the write side ("user"→"human", "worker"→"internal_worker");
+   * the dormant command fact schemas were deleted with their runtime — no
+   * reader ever shipped.
    */
   export const Kind = z.enum([
     "human",

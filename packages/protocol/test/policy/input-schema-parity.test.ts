@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Command, Policy, Tool } from "../../src/index.js";
+import { Policy, Tool } from "../../src/index.js";
 
 interface Validator {
   readonly safeParse: (input: unknown) => { readonly success: boolean };
@@ -13,66 +13,8 @@ interface ParityCase {
   readonly candidates: readonly unknown[];
 }
 
-const dispatchInput = {
-  actor: { kind: "resident", actorId: "actor-1" },
-  dispatchId: "dispatch-1",
-  action: "worker.spawn",
-  target: { kind: "worker", sessionId: "session-1" },
-  sessionId: "session-1",
-  runId: "run-1",
-};
 
 const parityCases: readonly ParityCase[] = [
-  {
-    name: "Command.ActorContext",
-    canonical: Command.ActorContext,
-    policy: Policy.PolicyPoint.InputSchemas["dispatch.action.pre"],
-    embed: (actor) => ({ ...dispatchInput, actor }),
-    candidates: [
-      dispatchInput.actor,
-      {
-        kind: "worker",
-        actorId: "actor-2",
-        agentName: "worker",
-        sessionId: "session-2",
-        runId: "run-2",
-        workerRunId: "worker-1",
-        workspaceRoot: "/workspace",
-        labels: ["trusted"],
-        trustTier: "assigned_worker",
-        reason: "delegated",
-      },
-      { kind: "resident" },
-      { kind: "invalid", actorId: "actor-1" },
-      { ...dispatchInput.actor, extra: true },
-      { ...dispatchInput.actor, agentName: "" },
-      { ...dispatchInput.actor, trustTier: "invalid" },
-    ],
-  },
-  {
-    name: "Command.Target",
-    canonical: Command.Target,
-    policy: Policy.PolicyPoint.InputSchemas["dispatch.action.pre"],
-    embed: (target) => ({ ...dispatchInput, target }),
-    candidates: [
-      dispatchInput.target,
-      {
-        kind: "external_actor",
-        id: "actor-1",
-        sessionId: "session-2",
-        parentSessionId: "session-1",
-        runId: "run-2",
-        endpointId: "endpoint-1",
-        connectorInstallationId: "install-1",
-        name: "external",
-        labels: ["remote"],
-      },
-      { sessionId: "session-1" },
-      { kind: "invalid" },
-      { kind: "worker", extra: true },
-      { kind: "worker", id: "" },
-    ],
-  },
   {
     name: "Tool.Spec",
     canonical: Tool.Spec,

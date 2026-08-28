@@ -31,7 +31,7 @@ export type State = z.infer<typeof State>;
  * term the machine acts on mechanically (expiry). Extensible strict object:
  * new terms are additive-optional fields, never free-form maps.
  */
-export const Terms = z
+const Terms = z
   .object({
     spendCeiling: z.number().positive().optional(),
     autoApprove: z.string().min(1).optional(),
@@ -39,7 +39,6 @@ export const Terms = z
     speakTriggers: z.array(z.string().min(1)).optional(),
   })
   .strict();
-export type Terms = z.infer<typeof Terms>;
 
 export const Record = z
   .object({

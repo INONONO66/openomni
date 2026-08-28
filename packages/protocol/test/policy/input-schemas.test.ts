@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Command, Policy } from "../../src/index.js";
+import { Policy } from "../../src/index.js";
 
 const pointIds = [
   "dispatch.action.pre",
@@ -267,35 +267,4 @@ describe("PolicyPoint executable input schemas", () => {
     }
   });
 
-  test("uses the canonical Command actor and target validation", () => {
-    const schema = Policy.PolicyPoint.InputSchemas["dispatch.action.pre"];
-    const parityCases = [
-      [
-        "actor",
-        Command.ActorContext,
-        [
-          validDispatchInput.actor,
-          { actorId: "actor-1" },
-          { ...validDispatchInput.actor, extra: true },
-        ],
-      ],
-      [
-        "target",
-        Command.Target,
-        [
-          validDispatchInput.target,
-          { kind: "unknown" },
-          { ...validDispatchInput.target, extra: true },
-        ],
-      ],
-    ] as const;
-
-    for (const [field, canonicalSchema, inputs] of parityCases) {
-      for (const input of inputs) {
-        expect(schema.safeParse({ ...validDispatchInput, [field]: input }).success).toBe(
-          canonicalSchema.safeParse(input).success,
-        );
-      }
-    }
-  });
 });

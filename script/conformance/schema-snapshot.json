@@ -138,54 +138,6 @@
     "title",
     "version"
   ],
-  "Command.ActorContext": [
-    "actorId",
-    "agentName",
-    "kind",
-    "labels",
-    "reason",
-    "runId",
-    "sessionId",
-    "trustTier",
-    "workerRunId",
-    "workspaceRoot"
-  ],
-  "Command.Input": [
-    "action",
-    "correlation",
-    "idempotencyKey",
-    "payload",
-    "target",
-    "timeoutMs",
-    "wait"
-  ],
-  "Command.Request": [
-    "action",
-    "actor",
-    "correlation",
-    "dispatchId",
-    "idempotencyKey",
-    "payload",
-    "runId",
-    "sessionId",
-    "submittedAt",
-    "target",
-    "timeoutMs",
-    "traceId",
-    "wait",
-    "workspaceRoot"
-  ],
-  "Command.Target": [
-    "connectorInstallationId",
-    "endpointId",
-    "id",
-    "kind",
-    "labels",
-    "name",
-    "parentSessionId",
-    "runId",
-    "sessionId"
-  ],
   "CronJob.Info": [
     "agentName",
     "createdAt",
@@ -254,12 +206,6 @@
     "title",
     "updatedAt"
   ],
-  "Engagement.Terms": [
-    "autoApprove",
-    "deadline",
-    "speakTriggers",
-    "spendCeiling"
-  ],
   "Engagement.TransitionInput": [
     "at",
     "ownerApproved",
@@ -267,47 +213,6 @@
     "termCrossed",
     "to",
     "waitIds"
-  ],
-  "Execution.LogEvent": [
-    "artifactId",
-    "data",
-    "kind",
-    "message",
-    "sequence",
-    "timestamp",
-    "toolCall",
-    "usage"
-  ],
-  "Execution.Request": [
-    "agentName",
-    "budget",
-    "credentials",
-    "middleware",
-    "mode",
-    "model",
-    "permissions",
-    "policyPlan",
-    "prompt",
-    "providerOptions",
-    "runId",
-    "sessionId",
-    "skills",
-    "systemPrompt",
-    "toolConfig",
-    "tools",
-    "traceId",
-    "workspaceRoot"
-  ],
-  "Execution.Result": [
-    "artifacts",
-    "error",
-    "finishReason",
-    "logEvents",
-    "output",
-    "runId",
-    "sessionId",
-    "status",
-    "usage"
   ],
   "Gateway.ActorContext": [
     "actorId",
@@ -509,22 +414,6 @@
     "expected",
     "seq",
     "streamId"
-  ],
-  "Ledger.CommandAuthorized": [
-    "action",
-    "actorKind",
-    "policyId",
-    "reason",
-    "targetKind",
-    "verdict"
-  ],
-  "Ledger.CommandDenied": [
-    "action",
-    "actorKind",
-    "policyId",
-    "reason",
-    "targetKind",
-    "verdict"
   ],
   "Ledger.Input": ["data", "streamId", "timeCreated", "type"],
   "Ledger.Outcome#0": ["eventHash", "kind", "seq"],
@@ -1085,33 +974,6 @@
   ],
   "Wait.Reply": ["messageId", "receivedAt", "replyKey", "responderId"],
   "Wait.ReplyInput": ["at", "messageId", "replyKey", "responderCandidates"],
-  "WorkerBootstrap.AgentDefinition": [
-    "budget",
-    "description",
-    "model",
-    "name",
-    "permissions",
-    "policyPlan",
-    "systemPrompt",
-    "tools"
-  ],
-  "WorkerBootstrap.Bootstrap": [
-    "agents",
-    "configEpoch",
-    "credentials",
-    "policyPlan",
-    "toolCatalog"
-  ],
-  "WorkerBootstrap.ToolCatalogEntry": [
-    "canonicalName",
-    "category",
-    "descriptor",
-    "exposedName",
-    "mcpServer",
-    "riskTier",
-    "source",
-    "spec"
-  ],
   "WorkItem.Attempt": [
     "attemptId",
     "attemptSeq",
@@ -1129,12 +991,6 @@
   ],
   "WorkItem.AttemptUsage": ["seconds", "tokens"],
   "WorkItem.Blocker": ["createdAt", "description", "id", "kind", "resolvedAt"],
-  "WorkItem.CacheKey": [
-    "contentDigest",
-    "environmentSubset",
-    "environmentSubsetDigest",
-    "key"
-  ],
   "WorkItem.Claim": [
     "basisRef",
     "createdAt",
@@ -1327,7 +1183,6 @@
     "workItemId",
     "workSessionId"
   ],
-  "WorkItem.NondeterminismManifest": ["absent", "recorded"],
   "WorkItem.Observation": [
     "ancestryRefs",
     "artifactRefs",
@@ -1357,13 +1212,6 @@
     "claimIndex",
     "criterionIndex",
     "request"
-  ],
-  "WorkItem.ReplayKey": [
-    "archivedRange",
-    "environmentDigest",
-    "nondeterminismManifestDigest",
-    "schemaVersions",
-    "upcastVersions"
   ],
   "WorkItem.ResultInvalidation": [
     "basisRef",
