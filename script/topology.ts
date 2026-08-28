@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 export type DependencyBand = "none" | "any-except-self" | readonly string[];
 
 export interface WorkspaceTopology {
@@ -183,6 +186,59 @@ export const TOPOLOGY = [
     tsconfigVerify: true,
   },
 ] as const satisfies readonly WorkspaceTopology[];
+
+interface WorkspaceInventoryDrift {
+  readonly unaccounted: readonly string[];
+  readonly nonexistent: readonly string[];
+}
+
+const REPO_ROOT = join(import.meta.dir, "..");
+
+/** Compare the topology manifest with package.json workspaces found on disk. */
+export function topologyInventoryDrift(
+  topology: readonly WorkspaceTopology[] = TOPOLOGY,
+  root = REPO_ROOT,
+): WorkspaceInventoryDrift {
+  const rootManifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as {
+    workspaces?: unknown;
+  };
+  if (
+    !Array.isArray(rootManifest.workspaces) ||
+    !rootManifest.workspaces.every((workspace) => typeof workspace === "string")
+  ) {
+    throw new Error("root package.json workspaces must be an array of glob strings");
+  }
+
+  const actualDirs = new Set<string>();
+  for (const workspaceGlob of rootManifest.workspaces) {
+    for (const manifestPath of new Bun.Glob(`${workspaceGlob}/package.json`).scanSync({
+      cwd: root,
+      onlyFiles: true,
+    })) {
+      actualDirs.add(manifestPath.replace(/\/package\.json$/, ""));
+    }
+  }
+
+  const topologyDirs = new Set(topology.map((workspace) => workspace.dir));
+  return {
+    unaccounted: [...actualDirs].filter((dir) => !topologyDirs.has(dir)).sort(),
+    nonexistent: [...topologyDirs].filter((dir) => !actualDirs.has(dir)).sort(),
+  };
+}
+
+/** Fail a direct topology consumer before it can scan a reduced repository. */
+export function assertTopologyComplete(
+  topology: readonly WorkspaceTopology[] = TOPOLOGY,
+  root = REPO_ROOT,
+): void {
+  const { unaccounted, nonexistent } = topologyInventoryDrift(topology, root);
+  if (unaccounted.length > 0) {
+    throw new Error(`topology omits on-disk workspace(s): ${unaccounted.join(", ")}`);
+  }
+  if (nonexistent.length > 0) {
+    throw new Error(`topology names workspace(s) with no on-disk package: ${nonexistent.join(", ")}`);
+  }
+}
 
 export const coverageWorkspaces = (topology: readonly WorkspaceTopology[] = TOPOLOGY) =>
   topology.filter((workspace) => workspace.coverageLane);

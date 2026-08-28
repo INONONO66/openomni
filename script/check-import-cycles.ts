@@ -17,7 +17,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
-import { TOPOLOGY } from "./topology";
+import { assertTopologyComplete, TOPOLOGY } from "./topology";
 
 const root = join(import.meta.dir, "..");
 
@@ -204,6 +204,7 @@ if (process.argv.includes("--self-test")) {
 } else {
   let graph: Map<string, readonly string[]>;
   try {
+    assertTopologyComplete();
     graph = buildGraph();
   } catch (error) {
     console.error(`ERROR: ${error instanceof Error ? error.message : String(error)}`);

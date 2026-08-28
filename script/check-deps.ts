@@ -1,5 +1,5 @@
 import { Glob } from "bun";
-import { TOPOLOGY, type WorkspaceTopology } from "./topology";
+import { assertTopologyComplete, TOPOLOGY, type WorkspaceTopology } from "./topology";
 
 type PackageRule = {
   displayName: string;
@@ -852,6 +852,7 @@ function selfTest(): void {
 }
 
 async function main(): Promise<void> {
+  assertTopologyComplete();
   if (Bun.argv.includes("--self-test")) selfTest();
   const depViolations = await validateDependencyDirection();
   const sourceImportViolations = await validateSourceImportDirection();

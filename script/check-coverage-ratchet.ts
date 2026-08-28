@@ -32,7 +32,7 @@
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
-import { coverageWorkspaces, TOPOLOGY } from "./topology";
+import { assertTopologyComplete, coverageWorkspaces, TOPOLOGY } from "./topology";
 
 const BASELINE_PATH = "script/conformance/coverage-baseline.json";
 // 0.5pp absorbs the measured stable macOS<->ubuntu platform offset (coordinator
@@ -311,6 +311,7 @@ async function main(): Promise<void> {
     return;
   }
 
+  assertTopologyComplete();
   const current = await collectCurrentCoverage();
   const expectedCoverageDirs = coverageWorkspaces().map((workspace) => workspace.dir).sort();
 

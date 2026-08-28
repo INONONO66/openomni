@@ -57,6 +57,11 @@ describe("ledger producer drift", () => {
       true,
     );
     expect(matchesLedgerWriteCall('const write = ledger["append"]; write(event, 0)')).toBe(true);
+    expect(matchesLedgerWriteCall("const write = (ledger).append; write(event, 0)")).toBe(true);
+    expect(matchesLedgerWriteCall("const write = (ledger as Ledger).append; write(event, 0)")).toBe(
+      true,
+    );
+    expect(matchesLedgerWriteCall("const write = (ledger satisfies Ledger).append")).toBe(true);
     expect(matchesLedgerWriteCall("const { append: write } = adapter.ledger; write(event, 0)")).toBe(
       true,
     );

@@ -115,12 +115,18 @@ bun install
 bun run build
 bun run check-types
 bun run lint
-bun run lint:docs
 bun run lint:tools
+bun run script/check-topology.ts
 bun run script/check-deps.ts
 bun run script/check-import-cycles.ts
 bun run script/check-dead-exports.ts
+bun run script/verify-tsconfig-inheritance.ts
+bun run script/verify-ledger-rename.ts
+bun run script/check-ledger-schema-drift.ts
 bun test --timeout 15000
+
+# After the coverage-producing package test commands used by CI:
+bun run script/check-coverage-ratchet.ts
 
 # Sole app
 bun run --cwd apps/openomni dev

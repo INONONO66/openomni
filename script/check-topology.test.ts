@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { topologyProblems, type TopologyConsumer } from "./check-topology";
-import { TOPOLOGY, type WorkspaceTopology } from "./topology";
+import { assertTopologyComplete, TOPOLOGY, type WorkspaceTopology } from "./topology";
 
 const consumers: readonly TopologyConsumer[] = [
   "dependency-bands",
@@ -40,6 +40,21 @@ describe("topology conformance", () => {
     process.stdout.write(`PHANTOM-PROOF ${JSON.stringify(proof)}\n`);
     for (const consumer of consumers) {
       expect(problems[consumer].length, `${consumer} silently ignored phantom`).toBeGreaterThan(0);
+    }
+  });
+
+  test("an omitted on-disk workspace is noticed by every consumer", () => {
+    const omitted = TOPOLOGY.filter((workspace) => workspace.key !== "machines");
+    expect(() => assertTopologyComplete(omitted)).toThrow("packages/machines");
+
+    const problems = topologyProblems(omitted);
+    const proof = Object.fromEntries(
+      consumers.map((consumer) => [consumer, problems[consumer].join(" | ")]),
+    );
+    process.stdout.write(`OMISSION-PROOF ${JSON.stringify(proof)}\n`);
+    for (const consumer of consumers) {
+      expect(problems[consumer].length, `${consumer} silently ignored omission`).toBeGreaterThan(0);
+      expect(problems[consumer].join(" | ")).toContain("packages/machines");
     }
   });
 });

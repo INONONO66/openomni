@@ -5,6 +5,7 @@ import {
   coverageWorkspaces,
   knipWorkspaces,
   TOPOLOGY,
+  topologyInventoryDrift,
   tsconfigWorkspaces,
   type WorkspaceTopology,
 } from "./topology";
@@ -107,16 +108,10 @@ export function topologyProblems(
     }
   }
 
-  const actualWorkspaceDirs = [
-    ...new Bun.Glob("{packages,apps}/*/package.json").scanSync({ cwd: root, onlyFiles: true }),
-  ]
-    .map((path) => path.replace(/\/package\.json$/, ""))
-    .sort();
-  const expectedWorkspaceDirs = [...dirs].sort();
-  if (actualWorkspaceDirs.join("\n") !== expectedWorkspaceDirs.join("\n")) {
-    problems["dependency-bands"].push(
-      `workspace inventory drift: expected [${expectedWorkspaceDirs.join(", ")}], got [${actualWorkspaceDirs.join(", ")}]`,
-    );
+  const inventoryDrift = topologyInventoryDrift(topology, root);
+  if (inventoryDrift.unaccounted.length > 0 || inventoryDrift.nonexistent.length > 0) {
+    const message = `workspace inventory drift: unaccounted [${inventoryDrift.unaccounted.join(", ")}], nonexistent [${inventoryDrift.nonexistent.join(", ")}]`;
+    for (const consumer of CONSUMERS) problems[consumer].push(message);
   }
 
   const knip = json(join(root, "knip.json"));

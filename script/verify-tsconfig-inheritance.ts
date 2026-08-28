@@ -26,7 +26,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import ts from "typescript";
-import { tsconfigWorkspaces } from "./topology";
+import { assertTopologyComplete, tsconfigWorkspaces } from "./topology";
 
 export type ProblemCode =
   | "missing_base_config"
@@ -409,6 +409,7 @@ function main(): void {
     process.exit(2);
   }
 
+  if (fixturePath === undefined) assertTopologyComplete();
   const manifest =
     fixturePath === undefined ? repoManifest() : loadFixtureManifest(resolve(fixturePath));
   const result = verifyManifest(manifest);

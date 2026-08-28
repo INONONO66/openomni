@@ -165,7 +165,7 @@ const FROZEN_TABLES = ["pending_ask", "pending_interaction", "worker_run_state"]
 // OR adoptStream under any receiver. No opening-call parenthesis is required:
 // assignment and `.bind` are write capabilities and must identify the module.
 const LEDGER_WRITE_REFERENCE =
-  /[\w$]*ledger\s*(?:\.\s*(?:append|adoptStream)\b|\[\s*["'](?:append|adoptStream)["']\s*\])|[\w$)\]]\s*(?:\.\s*adoptStream\b|\[\s*["']adoptStream["']\s*\])/i;
+  /[\w$]*ledger!?\s*(?:\??\.\s*(?:append|adoptStream)\b|\??\.?\s*\[\s*(?:["'](?:append|adoptStream)["']|`(?:append|adoptStream)`)\s*\])|[\w$)\]]\s*(?:\??\.\s*adoptStream\b|\??\.?\s*\[\s*(?:["']adoptStream["']|`adoptStream`)\s*\])/i;
 const LEDGER_WRITE_DESTRUCTURE =
   /\{[^}]*\badoptStream\b[^}]*\}\s*=|\{[^}]*\bappend\b[^}]*\}\s*=\s*(?:[\w$]*ledger\b|[^;\n]*\.ledger\b)/i;
 const LEDGER_CORE_FACADE = "packages/ledger/src/ledger-core/index.ts";
@@ -200,9 +200,28 @@ function normalizeSqlSource(source: string): string {
   return source.replace(/--[^\n]*/g, " ").replace(/\s+/g, " ");
 }
 
+/**
+ * Remove transparent receiver wrappers that otherwise separate a ledger
+ * identifier from its property access. Repeating handles nested parentheses
+ * and combinations such as `((ledger) as Ledger)` without parsing the file.
+ */
+function normalizeLedgerReceiverWrappers(source: string): string {
+  let normalized = source;
+  let previous: string;
+  do {
+    previous = normalized;
+    normalized = normalized
+      .replace(/([\w$]*ledger)!/gi, "$1")
+      .replace(/([\w$]*ledger)\s*\?\s*([.[])/gi, "$1$2")
+      .replace(/\(\s*([\w$]*ledger)\s+(?:as|satisfies)\s+[^();]+?\s*\)/gi, "$1")
+      .replace(/\(\s*([\w$]*ledger)!?\s*\)/gi, "$1");
+  } while (normalized !== previous);
+  return normalized;
+}
+
 /** True when TS source obtains or invokes a ledger append/adoptStream capability. */
 export function matchesLedgerWriteCall(tsSource: string): boolean {
-  const normalized = normalizeTsSource(tsSource);
+  const normalized = normalizeLedgerReceiverWrappers(normalizeTsSource(tsSource));
   return LEDGER_WRITE_REFERENCE.test(normalized) || LEDGER_WRITE_DESTRUCTURE.test(normalized);
 }
 
