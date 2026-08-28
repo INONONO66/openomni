@@ -52,7 +52,10 @@ interface DelegationStorePort {
   claimOpenWithinRoot(
     record: Delegation.Record,
     maxFanout: number,
-  ): Delegation.Record | undefined;
+    constraints?: { readonly requireOpenParent?: string },
+  ):
+    | { readonly claimed: true; readonly record: Delegation.Record }
+    | { readonly claimed: false; readonly reason: "fanout_cap" | "parent_settled" };
   get(delegationId: string): Delegation.Record | undefined;
   /** Legacy test-port shape; production uses settleOnce for the CAS receipt. */
   settle?(delegationId: string, settlement: Delegation.Settled): Delegation.Settled | undefined;
@@ -194,6 +197,10 @@ function outcomeToSettlement(
     case "sent":
       return { status: "sent", delegationId, at };
   }
+}
+
+function stoppedKernelError(): Error {
+  return new Error("delegation kernel has been stopped");
 }
 
 function controlError(code: "not_found" | "not_open", delegationId: string): NamedError {
@@ -494,7 +501,7 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
 
   async function delegate(candidate: unknown, origin: DelegationOrigin): Promise<DelegationResult> {
     if (stopped) {
-      throw new Error("delegation kernel has been stopped");
+      throw stoppedKernelError();
     }
     const now = options.now();
     const delegationId = options.newDelegationId();
@@ -579,13 +586,38 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
       createdAt: now,
       ...(workItemId === undefined ? {} : { workItemId }),
     });
-    const claimed = store.claimOpenWithinRoot(record, limits.maxFanout);
-    if (claimed === undefined) {
-      if (workItemId !== undefined) await options.workItems?.cancelAssign(workItemId);
-      const message = `delegation fanout is capped at ${limits.maxFanout} open records for root ${record.rootDelegationId}`;
+    const claim = store.claimOpenWithinRoot(record, limits.maxFanout, {
+      ...(record.parentDelegationId === undefined
+        ? {}
+        : { requireOpenParent: record.parentDelegationId }),
+    });
+    if (!claim.claimed) {
+      if (workItemId !== undefined) {
+        try {
+          await options.workItems?.cancelAssign(workItemId);
+        } catch (error) {
+          events.publish(Operational.Events.Error, {
+            traceId: record.delegationId,
+            sessionId: record.origin.sessionId,
+            time: options.now(),
+            component: "delegation",
+            msg: `WorkItem rollback failed for ${record.delegationId}`,
+            error: error instanceof Error ? error.message : String(error),
+            context: {
+              delegationId: record.delegationId,
+              workItemId,
+              refusal: claim.reason,
+            },
+          });
+        }
+      }
+      const message =
+        claim.reason === "parent_settled"
+          ? `parent delegation ${record.parentDelegationId ?? ""} is already settled`
+          : `delegation fanout is capped at ${limits.maxFanout} open records for root ${record.rootDelegationId}`;
       return {
         refused: message,
-        error: new AdmissionRefusal({ code: "fanout_cap", message }),
+        error: new AdmissionRefusal({ code: claim.reason, message }),
       };
     }
     publishAdmitted(record);
@@ -618,6 +650,7 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
     delegationId: string,
     timeoutMs?: number,
   ): Promise<DelegationAwaitResult> {
+    if (stopped) return Promise.reject(stoppedKernelError());
     const record = store.get(delegationId);
     if (record === undefined) return Promise.reject(controlError("not_found", delegationId));
     if (record.status === "settled") {
@@ -662,7 +695,7 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
         stop: () => {
           if (timer !== undefined) clearTimeout(timer);
           removeWaiter();
-          reject(new Error("delegation kernel has been stopped"));
+          reject(stoppedKernelError());
         },
       };
       waiters.add(waiter);

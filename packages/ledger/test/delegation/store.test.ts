@@ -147,6 +147,38 @@ for (const { name, create } of adapters) {
       expect(DelegationStore.countOpenByRoot("delegation-other")).toBe(1);
     });
 
+    test("atomically refuses a child claim when its required parent is settled", () => {
+      DelegationStore.create(buildDelegationRecord({
+        delegationId: "parent",
+        waitId: "wait-parent",
+        rootDelegationId: "parent",
+      }));
+      DelegationStore.settle("parent", {
+        status: "cancelled",
+        delegationId: "parent",
+        reason: "parent cancelled",
+        at: 200,
+      });
+      const child = buildDelegationRecord({
+        delegationId: "child",
+        waitId: "wait-child",
+        parentDelegationId: "parent",
+        rootDelegationId: "parent",
+        origin: {
+          role: "worker",
+          depth: 1,
+          sessionId: "session-1",
+          parentDelegationId: "parent",
+          rootDelegationId: "parent",
+        },
+      });
+
+      expect(
+        DelegationStore.claimOpenWithinRoot(child, 8, { requireOpenParent: "parent" }),
+      ).toEqual({ claimed: false, reason: "parent_settled" });
+      expect(DelegationStore.get("child")).toBeUndefined();
+    });
+
     test("lists all and only open delegations in admission order", () => {
       DelegationStore.create(buildDelegationRecord());
       DelegationStore.create(
