@@ -6,7 +6,7 @@ import {
   handleError,
   handleStop,
 } from "./turn";
-import { ModelsDev, Provider, run as llmRun } from "@openomni/llm";
+import { ModelsDev, Provider, Retry as LlmRetry, run as llmRun } from "@openomni/llm";
 import type { Sink } from "@openomni/llm";
 import { Placement } from "@openomni/placement";
 import { DEFAULT_THRESHOLD_RATIO } from "../../compaction/compact";
@@ -262,7 +262,7 @@ export async function runAgent(
           // terminal record contradict this run's own retry record.
           failureReasons.push(decision.failure.reason);
           thrownFailure = decision.failure;
-          await Retry.sleep(decision.backoffMs, config.signal);
+          await LlmRetry.sleep(decision.backoffMs, config.signal);
           thrownFailure = undefined;
           attempt += 1;
           continue;
