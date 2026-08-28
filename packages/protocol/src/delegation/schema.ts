@@ -269,7 +269,7 @@ const RecordBase = z
     createdAt: EpochMs,
     settledAt: EpochMs.optional(),
     /** Receipt written only after the owner-session settlement wake succeeds. */
-    wokenAt: z.number().optional(),
+    wokenAt: EpochMs.optional(),
   })
   .strict();
 

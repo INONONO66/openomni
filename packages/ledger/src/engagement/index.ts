@@ -1,4 +1,4 @@
-import { Engagement, type Storage as ProtocolStorage } from "@openomni/protocol";
+import { Deadline, Engagement, type Storage as ProtocolStorage } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { isSqliteBusyError } from "../storage/sqlite-busy";
 import { Storage } from "../storage/storage";
@@ -257,7 +257,9 @@ export namespace EngagementStore {
     const active = requireAdapter().list({ ownerSessionId, states: [...ACTIVE_STATES] });
     const alive: Engagement.Record[] = [];
     for (const record of active) {
-      if (record.expiresAt !== undefined && now > record.expiresAt) {
+      // Canonical deadline boundary (Deadline.isExpired): the exact instant
+      // is expired — must agree with the Engagement fold's deadline gates.
+      if (record.expiresAt !== undefined && Deadline.isExpired(now, record.expiresAt)) {
         try {
           expire(record.id, traceId, now);
         } catch (error) {

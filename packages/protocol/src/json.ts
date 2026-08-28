@@ -24,7 +24,7 @@ export type PlainValue =
 // the guard and reported as an ordinary parse failure. A fully transparent
 // Proxy over plain data is indistinguishable by design — the contract here
 // is structural.
-function isPlainValueUnsafe(value: unknown): value is PlainValue {
+function isPlainValueUnsafe(value: unknown, allowLegacyKeys: boolean): value is PlainValue {
   if (value === null || typeof value === "boolean" || typeof value === "string") return true;
   if (typeof value === "number") return Number.isFinite(value) && !Object.is(value, -0);
   if (Array.isArray(value)) {
@@ -36,31 +36,57 @@ function isPlainValueUnsafe(value: unknown): value is PlainValue {
     for (let index = 0; index < value.length; index += 1) {
       const descriptor = Object.getOwnPropertyDescriptor(value, index);
       if (descriptor === undefined || !("value" in descriptor)) return false;
-      if (!isPlainValueUnsafe(descriptor.value)) return false;
+      if (!isPlainValueUnsafe(descriptor.value, allowLegacyKeys)) return false;
     }
     return true;
   }
   if (typeof value !== "object" || Object.getPrototypeOf(value) !== Object.prototype) return false;
   if (Object.getOwnPropertySymbols(value).length > 0) return false;
   for (const key of Object.keys(value)) {
-    if (key === "__proto__" || key === "constructor" || key === "prototype") return false;
+    if (!allowLegacyKeys && (key === "__proto__" || key === "constructor" || key === "prototype"))
+      return false;
     const descriptor = Object.getOwnPropertyDescriptor(value, key);
     if (descriptor === undefined || !("value" in descriptor)) return false;
-    if (!isPlainValueUnsafe(descriptor.value)) return false;
+    if (!isPlainValueUnsafe(descriptor.value, allowLegacyKeys)) return false;
   }
   return true;
 }
 
+/**
+ * Strict live-boundary profile (policy effects): own keys named __proto__,
+ * constructor, or prototype are refused outright — hostile input never gets
+ * to look like plain data.
+ */
 export function isPlainValue(value: unknown): value is PlainValue {
   try {
-    return isPlainValueUnsafe(value);
+    return isPlainValueUnsafe(value, false);
   } catch {
     return false;
   }
 }
 
+/**
+ * Persisted-fact profile (work-item attempt identity): identical structural
+ * guard, but own keys named __proto__/constructor/prototype are ACCEPTED.
+ * Pre-hardening schemas admitted such keys into immutable persisted facts
+ * (e.g. attempt fingerprint parameters inside work_item.attempt_allocated),
+ * so a read schema that refused them would invalidate historical bytes (era
+ * law). Values are only ever READ through data-property descriptors and
+ * canonically rendered — never assigned onto another object — so accepting
+ * these key names creates no prototype-pollution path here. The remaining
+ * strictness deltas vs the old schema (-0, accessor properties, symbol keys,
+ * sparse arrays) are unreachable in persisted bytes: rows are written with
+ * JSON.stringify (never emits -0) and read with JSON.parse (only dense
+ * arrays and plain data properties), so no historical row is invalidated.
+ */
 export const PlainValueSchema: z.ZodType<PlainValue> = z.custom<PlainValue>(
-  (value) => isPlainValue(value),
+  (value) => {
+    try {
+      return isPlainValueUnsafe(value, true);
+    } catch {
+      return false;
+    }
+  },
   { message: "Expected a plain JSON value" },
 );
 
