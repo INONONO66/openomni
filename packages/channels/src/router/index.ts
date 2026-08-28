@@ -101,11 +101,46 @@ export interface GatewayRouter {
  * the single arbiter; no session row is created or removed here (session
  * content is brain domain).
  */
-function claimResidentSurfaceSession(surfaceKey: string): string {
+function publishSurfaceStickinessClaim(
+  sink: GatewayRouterPorts["sink"],
+  surfaceKey: string,
+  requestedSessionId: string,
+  ownerSessionId: string,
+  mode: "external_resident_default" | "internal_claim_port",
+  expectedSessionId?: string,
+): void {
+  sink(Operational.Events.Info, {
+    traceId: newTraceId(),
+    time: Date.now(),
+    component: "gateway.router",
+    msg: "surface stickiness claim",
+    context: {
+      mode,
+      surfaceKey,
+      requestedSessionId,
+      ...(expectedSessionId === undefined ? {} : { expectedSessionId }),
+      ownerSessionId,
+      won: ownerSessionId === requestedSessionId,
+    },
+  });
+}
+
+function claimResidentSurfaceSession(
+  surfaceKey: string,
+  sink: GatewayRouterPorts["sink"],
+): string {
   const existing = SurfaceKey.lookup(surfaceKey);
   if (existing !== undefined) return existing;
-  const minted = crypto.randomUUID();
-  return SurfaceKey.claim(surfaceKey, minted);
+  const requestedSessionId = crypto.randomUUID();
+  const ownerSessionId = SurfaceKey.claim(surfaceKey, requestedSessionId);
+  publishSurfaceStickinessClaim(
+    sink,
+    surfaceKey,
+    requestedSessionId,
+    ownerSessionId,
+    "external_resident_default",
+  );
+  return ownerSessionId;
 }
 
 /**
@@ -380,7 +415,7 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
       // placement is brain judgment.
       let sessionId = pinned.activation?.durableSessionId;
       if (sessionId === undefined && route.selectedTarget.kind === "resident") {
-        sessionId = claimResidentSurfaceSession(extractSurfaceKey(pinned));
+        sessionId = claimResidentSurfaceSession(extractSurfaceKey(pinned), ports.sink);
       }
 
       return ports.deliver(buildDelivery(pinned, route.decision, waitContextOf(route), sessionId));
@@ -407,19 +442,14 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
       // TODO(#708 residue): the internal surface-key namespace has no scoping
       // scheme yet — when one exists, this claim must be scoped to it and
       // cross-namespace claims rejected here.
-      ports.sink(Operational.Events.Info, {
-        traceId: newTraceId(),
-        time: Date.now(),
-        component: "gateway.router",
-        msg: "surface stickiness claim",
-        context: {
-          surfaceKey,
-          requestedSessionId: sessionId,
-          ...(expectedSessionId === undefined ? {} : { expectedSessionId }),
-          ownerSessionId,
-          won: ownerSessionId === sessionId,
-        },
-      });
+      publishSurfaceStickinessClaim(
+        ports.sink,
+        surfaceKey,
+        sessionId,
+        ownerSessionId,
+        "internal_claim_port",
+        expectedSessionId,
+      );
       return ownerSessionId;
     },
   };
