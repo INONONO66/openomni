@@ -1,13 +1,17 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import type { Gateway, Policy } from "@openomni/protocol";
-import { ChannelGrantStore, Storage } from "@openomni/ledger";
-import { Bus } from "@openomni/telemetry";
-import { createGatewayRouter } from "../../src/router/index.js";
+import { ChannelGrantStore } from "@openomni/ledger";
 import {
   applyChannelGrantTreatment,
   IngressAuthorityMiddleware,
 } from "../../src/router/authority.js";
-import { makeInboundEvent } from "./_router-fixture.js";
+import {
+  deliveries,
+  kernelRouter,
+  makeInboundEvent,
+  resetRouterState,
+  routingDecisions,
+} from "./_router-fixture.js";
 
 // Moved from openomni test/policy/ingress-authority-validation.test.ts at the
 // #707 seam flip: runRoutedPreRun now parses Gateway.DeliveredEvent (no
@@ -174,19 +178,7 @@ describe("IngressAuthorityMiddleware trust and validation", () => {
 });
 
 describe("GatewayRouter channel default tier composite (e2e)", () => {
-  const deliveries: Gateway.Deliver[] = [];
-
-  beforeEach(() => {
-    Storage.reset();
-    Bus.reset();
-    Storage.initialize({ dbPath: ":memory:" });
-    deliveries.length = 0;
-  });
-
-  afterEach(() => {
-    Storage.reset();
-    Bus.reset();
-  });
+  beforeEach(resetRouterState);
 
   test("trusted_channel defaultTier observer admits an unregistered actor at the channel ceiling, then the authority check denies", async () => {
     ChannelGrantStore.put({
@@ -197,22 +189,7 @@ describe("GatewayRouter channel default tier composite (e2e)", () => {
       defaultTier: "observer",
       createdBy: "act_owner",
     });
-    const decisions: unknown[] = [];
-    const router = createGatewayRouter({
-      sink: (event, data) => {
-        if (event.name === "ingress.routing.decision") decisions.push(data);
-        Bus.publish(event, data);
-      },
-      deliver: async (delivery) => {
-        deliveries.push(delivery);
-        return {
-          mode: "direct",
-          target: { kind: "resident" },
-          sessionId: delivery.sessionId ?? "unrouted-session",
-          result: { output: "resident response", finishReason: "stop" },
-        };
-      },
-    });
+    const router = kernelRouter();
     const event = {
       id: "evt-observer-default",
       traceId: "trace-test",
@@ -231,6 +208,7 @@ describe("GatewayRouter channel default tier composite (e2e)", () => {
       "actor is not authorized to create top-level inbound work",
     );
 
+    const decisions = routingDecisions();
     expect(decisions).toHaveLength(1);
     expect(decisions[0]).toMatchObject({
       stage: "surface_default",

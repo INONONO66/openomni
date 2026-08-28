@@ -4,6 +4,6 @@
 // barrel as a published contract; it never grows a kernel/ledger/policy import.
 export { connectIpcClient, type IpcClient } from "./client";
 export { IpcConnectionError, IpcProtocolError, IpcRemoteError, IpcTimeoutError } from "./errors";
-export { encode } from "./framing";
+export { encode, LineSplitter } from "./framing";
 export { createIpcServer, type IpcServer } from "./server";
 export { typedCall } from "./typed-call";

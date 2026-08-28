@@ -15,6 +15,7 @@
   "dependencies": {
     "@openomni/agent": "workspace:*",
     "@openomni/channels": "workspace:*",
+    "@openomni/ipc": "workspace:*",
     "@openomni/ledger": "workspace:*",
     "@openomni/llm": "workspace:*",
     "@openomni/protocol": "workspace:*",

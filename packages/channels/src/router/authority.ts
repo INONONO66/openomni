@@ -10,6 +10,7 @@ import {
 import { decisionFromEvaluation, evaluatePermission } from "@openomni/policy";
 import type { ChannelGrantStore } from "@openomni/ledger";
 import { actorTrustTier, getActor, isAuthorizedTopLevelActor } from "./authority-actor";
+import { effectiveTrustTier } from "./effective-tier.js";
 
 interface PreRunContext {
   readonly event: unknown;
@@ -111,9 +112,11 @@ function applyChannelGrantTreatment(
   // channel adapter. Pinned by kernel-routing-access "materializes a
   // default-tier stranger". Tier-range validation at grant-write time is a
   // #498 Grant-convergence candidate, not a treatment-time concern.
+  const actorTier = actorTrustTier(actor);
+  const effectiveTier = effectiveTrustTier(actorTier, grant.defaultTier);
   const actorWithChannelDefault =
-    !actorTrustTier(actor) && grant.defaultTier
-      ? { ...(actor ?? { role: "user" }), trustTier: grant.defaultTier }
+    !actorTier && grant.defaultTier
+      ? { ...(actor ?? { role: "user" }), trustTier: effectiveTier }
       : actor;
 
   return {

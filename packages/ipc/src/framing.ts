@@ -19,18 +19,16 @@ export type DecodedChunk = {
   malformed: string[];
 };
 
-export class LineDecoder {
+/** Stream-agnostic newline framing with streaming UTF-8 decoding. */
+export class LineSplitter {
   private buffer = "";
   private decoder = new TextDecoder();
 
-  /**
-   * Decode a chunk into complete frames. A malformed line costs only itself:
-   * every parseable sibling in the chunk still delivers, in order, and the bad
-   * line lands in `malformed` for the caller to report. Oversize lines and
-   * oversize buffers stay reset+throw — that path is a DoS guard, not a
-   * per-frame failure, and it deliberately drops the whole decode buffer.
-   */
-  push(chunk: string | Uint8Array): DecodedChunk {
+  get buffered(): string {
+    return this.buffer;
+  }
+
+  push(chunk: string | Uint8Array): string[] {
     if (typeof chunk === "string") {
       // String chunks cannot complete a pending byte sequence; discard stale decoder state.
       this.decoder = new TextDecoder();
@@ -41,8 +39,36 @@ export class LineDecoder {
 
     const lines = this.buffer.split("\n");
     this.buffer = lines.pop() ?? "";
+    return lines;
+  }
 
-    if (Buffer.byteLength(this.buffer, "utf-8") > MAX_FRAME_BYTES) {
+  /** Return trailing non-newline-terminated data without flushing partial UTF-8 bytes. */
+  finish(): string | undefined {
+    const trailing = this.buffer || undefined;
+    this.reset();
+    return trailing;
+  }
+
+  reset(): void {
+    this.buffer = "";
+    this.decoder = new TextDecoder();
+  }
+}
+
+export class LineDecoder {
+  private splitter = new LineSplitter();
+
+  /**
+   * Decode a chunk into complete frames. A malformed line costs only itself:
+   * every parseable sibling in the chunk still delivers, in order, and the bad
+   * line lands in `malformed` for the caller to report. Oversize lines and
+   * oversize buffers stay reset+throw — that path is a DoS guard, not a
+   * per-frame failure, and it deliberately drops the whole decode buffer.
+   */
+  push(chunk: string | Uint8Array): DecodedChunk {
+    const lines = this.splitter.push(chunk);
+
+    if (Buffer.byteLength(this.splitter.buffered, "utf-8") > MAX_FRAME_BYTES) {
       this.reset();
       throw new IpcProtocolError(`IPC frame exceeds maximum size of ${MAX_FRAME_BYTES} bytes`);
     }
@@ -65,7 +91,6 @@ export class LineDecoder {
   }
 
   reset(): void {
-    this.buffer = "";
-    this.decoder = new TextDecoder();
+    this.splitter.reset();
   }
 }
