@@ -70,14 +70,17 @@ export class TelegramAdapter implements Channel.Surface {
           // share one id within the dedupe window — key by chat to avoid
           // silently dropping the second chat's message.
           const dedupeKey = `${message.chat.id}:${message.message_id}`;
-          if (this.dedupe.isDuplicate(dedupeKey)) return;
+          const acquisition = this.dedupe.acquire(dedupeKey);
+          if (acquisition.duplicate) return;
+          const dedupeToken = acquisition.token;
+          if (dedupeToken === undefined) return;
           // Origin: the first frame of an inbound telegram message — this ONE
           // mint is the message's trace, carried to the run (D11).
           const messageTraceId = newTraceId();
           try {
             await this.handleMessage(message, messageTraceId);
           } catch (err) {
-            this.dedupe.forget(dedupeKey);
+            this.dedupe.forget(dedupeKey, dedupeToken);
             this.publish(Operational.Events.Error, {
               traceId: messageTraceId,
               time: Date.now(),

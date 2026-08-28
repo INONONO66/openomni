@@ -78,7 +78,10 @@ describe("IngressAuthorityMiddleware integration", () => {
       meta: { actor: { role: "sub_persona" } },
     });
 
-    await expect(IngressAuthorityMiddleware.runRoutedPreRun({ event })).rejects.toThrow();
+    await expect(IngressAuthorityMiddleware.runRoutedPreRun({ event })).rejects.toMatchObject({
+      name: "Error",
+      message: "actor is not authorized to create top-level inbound work",
+    });
   });
 
   test("denies manager actor without trusted flag", async () => {
@@ -86,7 +89,10 @@ describe("IngressAuthorityMiddleware integration", () => {
       meta: { actor: { role: "manager", trusted: false } },
     });
 
-    await expect(IngressAuthorityMiddleware.runRoutedPreRun({ event })).rejects.toThrow();
+    await expect(IngressAuthorityMiddleware.runRoutedPreRun({ event })).rejects.toMatchObject({
+      name: "Error",
+      message: "actor is not authorized to create top-level inbound work",
+    });
   });
 
   test("denies self-reported trusted manager without store trust tier", async () => {
@@ -94,7 +100,10 @@ describe("IngressAuthorityMiddleware integration", () => {
       meta: { actor: { role: "manager", trusted: true } },
     });
 
-    await expect(IngressAuthorityMiddleware.runRoutedPreRun({ event })).rejects.toThrow();
+    await expect(IngressAuthorityMiddleware.runRoutedPreRun({ event })).rejects.toMatchObject({
+      name: "Error",
+      message: "actor is not authorized to create top-level inbound work",
+    });
   });
 
   test("allows canonical manager trust tier without legacy trusted flag", async () => {

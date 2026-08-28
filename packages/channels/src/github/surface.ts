@@ -70,9 +70,11 @@ export class GitHubAdapter implements Channel.Surface {
     const body = auth.body ?? "";
 
     const deliveryId = request.headers.get("x-github-delivery");
-    if (deliveryId && this.dedupe.isDuplicate(deliveryId)) {
+    const dedupeAcquisition = deliveryId === null ? undefined : this.dedupe.acquire(deliveryId);
+    if (dedupeAcquisition?.duplicate) {
       return new Response("Already processed", { status: 200 });
     }
+    const dedupeToken = dedupeAcquisition?.token;
 
     const event = request.headers.get("x-github-event");
     if (!event) return new Response("Missing event", { status: 400 });
@@ -148,7 +150,7 @@ export class GitHubAdapter implements Channel.Surface {
           stack: err instanceof Error ? err.stack : undefined,
         },
       });
-      if (deliveryId) this.dedupe.forget(deliveryId);
+      if (deliveryId && dedupeToken !== undefined) this.dedupe.forget(deliveryId, dedupeToken);
       return new Response("Processing failed", { status: 500 });
     }
 

@@ -194,4 +194,38 @@ describe("outbound adapter delivery dedupe capability", () => {
     expect(dedupe.isDuplicate("message-0")).toBe(false);
     expect(dedupe.isDuplicate("message-99")).toBe(true);
   });
+
+  test("a stale release cannot remove a newer generation after expiry", () => {
+    const originalNow = Date.now;
+    let now = 1_000;
+    Date.now = () => now;
+    try {
+      const dedupe = new Dedupe(5);
+      const first = dedupe.acquire("same-id");
+      now += 6;
+      const second = dedupe.acquire("same-id");
+
+      expect(first.duplicate).toBe(false);
+      expect(second.duplicate).toBe(false);
+      if (first.token === undefined) throw new Error("first acquisition was not accepted");
+      dedupe.forget("same-id", first.token);
+      expect(dedupe.isDuplicate("same-id")).toBe(true);
+    } finally {
+      Date.now = originalNow;
+    }
+  });
+
+  test("a stale release cannot remove a newer generation after capacity eviction", () => {
+    const dedupe = new Dedupe(Number.POSITIVE_INFINITY, 1);
+    const first = dedupe.acquire("same-id");
+    for (let index = 0; index < 99; index += 1) dedupe.acquire(`other-${index}`);
+    dedupe.acquire("eviction-trigger");
+    const second = dedupe.acquire("same-id");
+
+    expect(first.duplicate).toBe(false);
+    expect(second.duplicate).toBe(false);
+    if (first.token === undefined) throw new Error("first acquisition was not accepted");
+    dedupe.forget("same-id", first.token);
+    expect(dedupe.isDuplicate("same-id")).toBe(true);
+  });
 });

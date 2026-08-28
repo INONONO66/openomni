@@ -34,6 +34,7 @@ export class DiscordGateway {
     private readonly fetchGatewayUrl: () => Promise<string>,
     private readonly callbacks: GatewayCallbacks,
     private readonly publish: PublishPort,
+    private readonly delay: (ms: number) => Promise<void> = sleep,
   ) {}
 
   async start(): Promise<void> {
@@ -75,7 +76,7 @@ export class DiscordGateway {
           msg: "discord gateway url fetch failed, retrying",
           context: { err: String(err), backoffMs: Math.round(backoffMs) },
         });
-        await sleep(backoffMs);
+        await this.delay(backoffMs);
       }
     }
     // Stopped during the fetch-retry loop → end cleanly, no socket, no schedule.
@@ -132,7 +133,7 @@ export class DiscordGateway {
               backoffMs: Math.round(backoffMs),
             },
           });
-          await sleep(backoffMs);
+          await this.delay(backoffMs);
           if (this.running)
             this.reconnect(traceId).catch((err) =>
               this.publish(Operational.Events.Error, {

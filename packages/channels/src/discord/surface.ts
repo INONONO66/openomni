@@ -2,6 +2,7 @@ import { type Channel, Operational, PolicyDecision } from "@openomni/protocol";
 import { newTraceId } from "@openomni/protocol";
 import { Dedupe, DedupeWindow } from "../support/dedupe";
 import { DiscordClient } from "./client";
+import { DiscordHandlerMissingError } from "./error";
 import { DiscordGateway } from "./gateway";
 import { DiscordNormalizer } from "./normalizer";
 import type { DiscordMessage } from "./types";
@@ -65,7 +66,9 @@ export class DiscordAdapter implements Channel.Surface {
 
   async start(_traceId: string): Promise<void> {
     if (!this.handler) {
-      throw new Error("[discord] No message handler registered. Call onMessage() before start().");
+      throw new DiscordHandlerMissingError({
+        message: "[discord] No message handler registered. Call onMessage() before start().",
+      });
     }
     await this.gateway.start();
   }
@@ -110,7 +113,10 @@ export class DiscordAdapter implements Channel.Surface {
 
   private handleMessageCreate(message: DiscordMessage, traceId: string): void {
     if (!this.normalizer) return;
-    if (this.dedupe.isDuplicate(message.id)) return;
+    const acquisition = this.dedupe.acquire(message.id);
+    if (acquisition.duplicate) return;
+    const dedupeToken = acquisition.token;
+    if (dedupeToken === undefined) return;
     if (message.author.bot) return;
     if (!message.content) return;
 
@@ -139,6 +145,7 @@ export class DiscordAdapter implements Channel.Surface {
     if (!inbound) return;
 
     this.handleIncoming(inbound, message.channel_id, traceId).catch((err) => {
+      this.dedupe.forget(message.id, dedupeToken);
       this.publish(Operational.Events.Error, {
         traceId,
         time: Date.now(),

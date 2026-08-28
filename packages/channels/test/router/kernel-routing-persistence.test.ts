@@ -84,12 +84,22 @@ describe("GatewayRouter routing decision persistence", () => {
       const row = rows[0];
       if (row === undefined) throw new Error("asserted length above");
       expect(row.visibility).toBe("user_audit");
-      expect(JSON.parse(row.data)).toMatchObject({
+      const storedDecision = JSON.parse(row.data) as {
+        inboundId: string;
+        stage: string;
+        outcome: string;
+        sessionId?: string;
+        factsUsed?: string[];
+      };
+      // Pin the derived routing decision and its surface-default evidence,
+      // rather than merely asserting that serialized input echoes back.
+      expect(storedDecision).toMatchObject({
         inboundId: ownerEvent.id,
         stage: "surface_default",
         outcome: "route",
         sessionId: mappedSession.id,
       });
+      expect(storedDecision.factsUsed).toContain(`surface.default:${mappedSession.id}`);
     } finally {
       db.close();
     }

@@ -439,9 +439,7 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
       // Operational log vocabulary (no new frozen descriptor). The receipt is
       // the CAS outcome: the owner AFTER the attempt, and whether this claim
       // won or yielded to a concurrent owner.
-      // TODO(#708 residue): the internal surface-key namespace has no scoping
-      // scheme yet — when one exists, this claim must be scoped to it and
-      // cross-namespace claims rejected here.
+      // Namespace scoping for this claim is tracked in #837.
       publishSurfaceStickinessClaim(
         ports.sink,
         surfaceKey,

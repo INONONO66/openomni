@@ -1,6 +1,7 @@
 import { Operational } from "@openomni/protocol";
 import { fetchWithRetry } from "../support/fetch-retry";
 import type { ChannelClient, PublishPort } from "../types";
+import { DiscordApiError, DiscordGatewayFetchError } from "./error";
 
 const BASE_URL = "https://discord.com/api/v10";
 
@@ -52,7 +53,9 @@ export class DiscordClient implements ChannelClient {
 
     if (!res.ok) {
       const body = await res.text();
-      throw new Error(`Discord gateway fetch failed (${res.status}): ${body}`);
+      throw new DiscordGatewayFetchError({
+        message: `Discord gateway fetch failed (${res.status}): ${body}`,
+      });
     }
 
     const { url } = (await res.json()) as { url: string };
@@ -87,7 +90,9 @@ export class DiscordClient implements ChannelClient {
 
     if (!res.ok) {
       const text = await res.text();
-      throw new Error(`Discord API ${path} failed (${res.status}): ${text}`);
+      throw new DiscordApiError({
+        message: `Discord API ${path} failed (${res.status}): ${text}`,
+      });
     }
 
     return res.json();
