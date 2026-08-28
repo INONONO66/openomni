@@ -137,7 +137,7 @@ describe("ChatAgent", () => {
           pointIds: ["run.turn.post"],
           effectCapabilities: { "run.turn.post": ["run.continue_with_prompt"] },
           priority: 250,
-          fn: async () => continueWithPrompt("continue", "test.step-guard", "continue-after-step"),
+          fn: () => continueWithPrompt("continue", "test.step-guard", "continue-after-step"),
         },
       ],
     });
@@ -223,7 +223,7 @@ describe("ChatAgent", () => {
           pointIds: ["run.turn.post"],
           effectCapabilities: { "run.turn.post": ["run.continue_with_prompt"] },
           priority: 250,
-          fn: async () => {
+          fn: () => {
             guardInvocations += 1;
             if (guardInvocations === 1) {
               return continueWithPrompt("continue", "test.step-guard", "continue-after-step");

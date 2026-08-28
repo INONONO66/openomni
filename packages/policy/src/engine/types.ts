@@ -38,7 +38,7 @@ export type DispatchPointContextGeneric<
 
 export type PolicyDecision = Policy.PolicyDecision;
 
-export type AuditEmit = <T>(event: BusEvent.Descriptor<T>, data: T) => void;
+type AuditEmit = <T>(event: BusEvent.Descriptor<T>, data: T) => void;
 
 export interface PolicyEngineConfig {
   readonly onDecision?: (decision: Policy.PolicyDecision) => void | Promise<void>;
@@ -65,8 +65,18 @@ export interface CanonicalPolicyRegistrationGeneric<TCtx extends GenericPolicyCo
   readonly failPolicy?: Policy.FailPolicy;
   readonly fn: (
     ctx: Readonly<CanonicalAuditDispatchContextGeneric<TCtx>>,
-  ) => Promise<Policy.PolicyDecision> | Policy.PolicyDecision;
+  ) => Policy.PolicyDecision;
 }
+
+/** Internal storage shape for the pre-existing async factory lane. */
+export type RuntimePolicyRegistrationGeneric<TCtx extends GenericPolicyContext> = Omit<
+  CanonicalPolicyRegistrationGeneric<TCtx>,
+  "fn"
+> & {
+  readonly fn: (
+    ctx: Readonly<CanonicalAuditDispatchContextGeneric<TCtx>>,
+  ) => Promise<Policy.PolicyDecision> | Policy.PolicyDecision;
+};
 
 /**
  * A per-engine registration factory: `create()` is invoked by the engine at
@@ -77,11 +87,15 @@ export interface CanonicalPolicyRegistrationGeneric<TCtx extends GenericPolicyCo
  * tracking): dispatch contexts are structured-clone frozen, so state cannot
  * ride on them, and a plain registration instance shared through a middleware
  * array leaks its closures across runs and across parent/child agents.
+ *
+ * Factory output retains the historical Promise-capable runtime shape for the
+ * agent's blocking compaction seam. Direct registrations do not: their public
+ * `fn` surface is synchronous and rejects accidental async callbacks.
  */
 export interface PolicyRegistrationFactoryGeneric<TCtx extends GenericPolicyContext> {
   readonly kind: "factory";
   readonly name: string;
-  readonly create: () => CanonicalPolicyRegistrationGeneric<TCtx>;
+  readonly create: () => RuntimePolicyRegistrationGeneric<TCtx>;
 }
 
 /** What an engine accepts: a stateless registration, or a per-engine factory. */
@@ -90,6 +104,7 @@ export type PolicyEngineMiddlewareGeneric<TCtx extends GenericPolicyContext> =
   | PolicyRegistrationFactoryGeneric<TCtx>;
 
 export interface PolicyEngineInstanceGeneric<TCtx extends GenericPolicyContext> {
+  /** Direct policy callbacks are synchronous; factories retain the existing async compaction lane. */
   register(reg: PolicyEngineMiddlewareGeneric<TCtx>): void;
   dispatchPoint<TPointId extends PolicyPointId>(
     pointId: TPointId,

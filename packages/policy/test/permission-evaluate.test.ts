@@ -14,11 +14,20 @@ describe("evaluatePermission", () => {
     ...(input !== undefined ? { input } : {}),
   });
 
-  it("allows by default", () => {
+  it("denies with the absent permission key in the reason", () => {
+    expect(evaluatePermission(undefined, request("any_tool"))).toMatchObject({
+      action: "abort",
+      decision: "deny",
+      reason: "default_deny:tool.call",
+      policyId: "guardrail.permission",
+    });
+  });
+
+  it("denies by default when a permission has no explicit grant", () => {
     expect(evaluatePermission({ action: "tool.call" }, request("any_tool"))).toMatchObject({
-      action: "continue",
-      decision: "allow",
-      reason: "default_allow",
+      action: "abort",
+      decision: "deny",
+      reason: "default_deny:tool.call",
       policyId: "guardrail.permission",
     });
   });

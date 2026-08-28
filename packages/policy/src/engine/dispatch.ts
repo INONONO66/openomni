@@ -13,7 +13,7 @@ import { timingForPolicyPoint } from "./points";
 import { createPolicyRegistrationStore } from "./registration";
 import { publishMiddlewareDebug, publishMiddlewareError, recordDecision } from "./telemetry";
 import type {
-  CanonicalPolicyRegistrationGeneric,
+  RuntimePolicyRegistrationGeneric,
   DispatchPointContextGeneric,
   GenericPolicyContext,
   PolicyEngineConfig,
@@ -119,7 +119,7 @@ export function createPolicyEngine<TCtx extends GenericPolicyContext>(
   }
 
   async function evaluateCanonical(
-    reg: CanonicalPolicyRegistrationGeneric<TCtx>,
+    reg: RuntimePolicyRegistrationGeneric<TCtx>,
     pointId: PolicyPointId,
     dispatchTrace: TraceContext.Type | undefined,
     invoke: () => Promise<Policy.PolicyDecision> | Policy.PolicyDecision,

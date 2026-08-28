@@ -47,7 +47,7 @@ const result = await agent.run({
 Also exported from `@openomni/agent`:
 
 - Types: `ChatAgentConfig`, `ChatAgentInput`, `AgentResult`
-- Policy: `PolicyEngine`, `PolicyRegistry`, `PolicyContext`, `PolicyFn`, `CanonicalPolicyRegistration`, `PolicyEngineRegistration`, `PolicyEngineInstance`, `PolicyRegistrationFactory`, `PolicyRegistryInstance`
+- Policy: `PolicyEngine`, `PolicyContext`, `PolicyFn`, `CanonicalPolicyRegistration`, `PolicyEngineRegistration`, `PolicyEngineInstance`, `PolicyRegistrationFactory`
 - Budget queries: `checkBudget`, `describeBudgetRemaining`, `BudgetState` — the accounting stays here, what to say about it does not (D5)
 - Reason codes: `RunReasonCode`; compaction: `createCompactionPolicy`, `isTimeCarriageMarkerPart`, `CompactionOptions`; runtime: `McpClient`
 
@@ -87,7 +87,7 @@ run.lifecycle.pre → run.turn.pre → prompt.context.pre → tool.catalog.pre
 - **Decision** (`Policy.PolicyDecision`): `allow | deny | pending`, with effects such as `prompt.inject_message`, `prompt.replace`, `tool.rewrite_input`, `run.replace_messages`, and `writeback.rewrite`.
 - **System prompt effects**: `dispatchPoint("prompt.context.pre", ...)` returns canonical prompt effects; composition happens through effect merging rather than legacy verdict transforms.
 - **Ownership**: `ChatAgent` registers only caller-supplied `middleware`; runtime builders own default policy assembly (budget, tool permission, compaction) and, per D5, increasingly the policies themselves.
-- **Builtins** — all registered by `openomni` since #642 (`defaultRegistry` is gone; the `agent-registry-assembly` guard keeps registry assembly out of this package). Stamped plans from the dispatch gate (#479) reference these ids:
+- **Builtins** — all supplied by `openomni` since #642; the core package owns no default policy assembly. Stamped plans from the dispatch gate (#479) reference these ids:
   - `builtin:compaction` — mechanism here (`src/compaction/compact.ts` + the `run.completion.pre` seam adapter `src/compaction/policy.ts`); registered by `openomni`'s `registerCompaction`, which supplies the strategy config and the ordering priority
   A `required: true` plan entry whose id is not registered fails closed at middleware build (the worker run fails rather than silently skipping the policy).
   - Moved out (#625): `builtin:idle-nudge` — `openomni`'s `execution-runtime/middleware/idle-nudge-policy.ts`, registered by `registerIdleNudge`

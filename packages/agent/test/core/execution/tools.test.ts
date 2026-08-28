@@ -21,7 +21,7 @@ function abortMiddleware(reason: string): PolicyRegistration {
     pointIds: ["tool.native.pre"],
     effectCapabilities: { "tool.native.pre": ["run.abort"] },
     priority: 0,
-    fn: async () => abortRun("test.abort", reason),
+    fn: () => abortRun("test.abort", reason),
   };
 }
 

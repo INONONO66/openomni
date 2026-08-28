@@ -1,6 +1,6 @@
 import { prepareRegistrationBoundary } from "./registration-validation";
 import type {
-  CanonicalPolicyRegistrationGeneric,
+  RuntimePolicyRegistrationGeneric,
   GenericPolicyContext,
   PolicyEngineMiddlewareGeneric,
   PolicyPointId,
@@ -11,14 +11,16 @@ export { PolicyRegistrationError } from "./registration-validation";
 const NO_REGISTRATIONS: readonly never[] = Object.freeze([]);
 
 /**
- * Scoping is fail-open by omission, and that is a documented decision: a
- * scoped registration simply does not run for a dispatch whose context lacks
- * `agentType` (or names another type), so a caller that forgets to thread the
- * agent type silently loses every scoped policy. Scope only policies whose
- * absence is acceptable; unconditional guards must register unscoped.
+ * Scoping remains fail-open by omission as pinned by #806: a scoped
+ * registration does not run when `agentType` is absent or different. The
+ * containment boundary is selection itself: a skipped registration is never
+ * invoked, so none of its verdict, effects, or identity can leak into the
+ * decision, while unscoped registrations remain selected and authoritative.
+ * Scope only policies whose absence is acceptable; unconditional guards must
+ * register unscoped.
  */
 function matchesScope<TCtx extends GenericPolicyContext>(
-  registration: CanonicalPolicyRegistrationGeneric<TCtx>,
+  registration: RuntimePolicyRegistrationGeneric<TCtx>,
   agentType: string | undefined,
 ): boolean {
   const allowed = registration.scope?.agentType;
@@ -31,7 +33,7 @@ function matchesScope<TCtx extends GenericPolicyContext>(
 }
 
 function isAgentTypeScoped<TCtx extends GenericPolicyContext>(
-  registration: CanonicalPolicyRegistrationGeneric<TCtx>,
+  registration: RuntimePolicyRegistrationGeneric<TCtx>,
 ): boolean {
   return (registration.scope?.agentType?.length ?? 0) > 0;
 }
@@ -41,7 +43,7 @@ export interface PolicyRegistrationStore<TCtx extends GenericPolicyContext> {
   selectPoint(
     pointId: PolicyPointId,
     agentType?: string,
-  ): readonly CanonicalPolicyRegistrationGeneric<TCtx>[];
+  ): readonly RuntimePolicyRegistrationGeneric<TCtx>[];
 }
 
 /**
@@ -54,14 +56,14 @@ export function createPolicyRegistrationStore<
   TCtx extends GenericPolicyContext,
 >(): PolicyRegistrationStore<TCtx> {
   interface Entry {
-    readonly registration: CanonicalPolicyRegistrationGeneric<TCtx>;
+    readonly registration: RuntimePolicyRegistrationGeneric<TCtx>;
     readonly order: number;
   }
 
   const entriesByPoint = new Map<PolicyPointId, Entry[]>();
   const selectionByPoint = new Map<
     PolicyPointId,
-    readonly CanonicalPolicyRegistrationGeneric<TCtx>[]
+    readonly RuntimePolicyRegistrationGeneric<TCtx>[]
   >();
   const agentTypeScopedPoints = new Set<PolicyPointId>();
   let registrationCount = 0;

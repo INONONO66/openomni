@@ -9,7 +9,7 @@
  */
 import { Policy } from "@openomni/protocol";
 import type {
-  CanonicalPolicyRegistrationGeneric,
+  RuntimePolicyRegistrationGeneric,
   GenericPolicyContext,
   PolicyEngineMiddlewareGeneric,
 } from "./types";
@@ -112,7 +112,7 @@ function readSharedMetadataFields(registration: object): SharedMetadataFields {
 
 function isCanonicalPolicyFunction<TCtx extends GenericPolicyContext>(
   value: unknown,
-): value is CanonicalPolicyRegistrationGeneric<TCtx>["fn"] {
+): value is RuntimePolicyRegistrationGeneric<TCtx>["fn"] {
   return typeof value === "function";
 }
 
@@ -137,7 +137,7 @@ function frozenScope(scope: Policy.Scope | undefined): Policy.Scope | undefined 
 function prepareCanonicalRegistration<TCtx extends GenericPolicyContext>(
   registration: object,
   classification: ClassificationFields,
-): CanonicalPolicyRegistrationGeneric<TCtx> {
+): RuntimePolicyRegistrationGeneric<TCtx> {
   const name = registrationName(classification.name);
   if (classification.kind === undefined) {
     throw registrationError(name, "invalid_canonical_registration");
@@ -181,13 +181,13 @@ function prepareCanonicalRegistration<TCtx extends GenericPolicyContext>(
     ...(scope === undefined ? {} : { scope }),
     ...(metadata.data.failPolicy === undefined ? {} : { failPolicy: metadata.data.failPolicy }),
     fn: fields.fn,
-  } satisfies CanonicalPolicyRegistrationGeneric<TCtx>);
+  } satisfies RuntimePolicyRegistrationGeneric<TCtx>);
   return trusted;
 }
 
 export function prepareRegistrationBoundary<TCtx extends GenericPolicyContext>(
   registration: PolicyEngineMiddlewareGeneric<TCtx>,
-): CanonicalPolicyRegistrationGeneric<TCtx> {
+): RuntimePolicyRegistrationGeneric<TCtx> {
   if (!isObject(registration)) {
     throw registrationError("<unknown>", "invalid_canonical_registration");
   }

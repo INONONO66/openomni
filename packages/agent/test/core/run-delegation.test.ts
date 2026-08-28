@@ -271,7 +271,7 @@ describe("run() delegation contract", () => {
           pointIds: ["run.completion.pre"],
           effectCapabilities: { "run.completion.pre": ["run.replace_messages"] },
           priority: 1,
-          fn: async () => replaceMessages([], "test.force-compaction", "force-compaction"),
+          fn: () => replaceMessages([], "test.force-compaction", "force-compaction"),
         },
       ],
     });

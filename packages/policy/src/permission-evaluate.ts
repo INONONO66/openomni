@@ -61,7 +61,7 @@ export function evaluatePermission(
   permission: Policy.Permission | undefined,
   request: Policy.EvaluationRequest,
 ): Policy.EvaluationResult {
-  if (!permission) return verdict("allow", "default_allow");
+  if (!permission) return verdict("deny", `default_deny:${request.action}`);
   if (permission.action !== request.action) return verdict("deny", "action_mismatch");
 
   const inputRules = [...(permission.inputRules ?? [])].sort(
@@ -125,7 +125,7 @@ export function evaluatePermission(
     );
   }
 
-  return verdict("allow", "default_allow");
+  return verdict("deny", `default_deny:${request.action}`);
 }
 
 export function decisionFromEvaluation(

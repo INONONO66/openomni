@@ -22,9 +22,13 @@ function enforcementEffects(pointId: PolicyPointId, reason: string): Policy.Poli
 /**
  * Contract failure at a point. Pre-boundary points default fail-closed and
  * deny; post-boundary points default fail-open, so a missing or malformed
- * context there composes to an ALLOW carrying only audit evidence —
- * enforcement degrades to observation. That fail-open-by-omission is a
- * documented, tested design decision, not an oversight.
+ * context there composes to an ALLOW carrying only audit evidence.
+ *
+ * This preserves the #806 post-boundary decision. Its containment boundary is
+ * exact: validation returns before any middleware runs, and
+ * `enforcementEffects` cannot add `run.abort` after the side-effect boundary.
+ * A malformed post context can therefore leak neither middleware effects nor
+ * a late abort; only the contract reason and audit annotation survive.
  */
 export function pointContractDecision(
   pointId: PolicyPointId,
@@ -61,12 +65,13 @@ export function undeclaredEffectDecision(
 const MIDDLEWARE_FAIL_OPEN_REASON = "policy.middleware_failed.fail_open";
 
 /**
- * A fail-open middleware threw. Fail-open semantics stand — the policy
- * contributes no verdict — but the crash must leave evidence in the composed
- * decision itself, not only in the optional telemetry seam: the reason code
- * names the skipped policy and an audit annotation rides the merged effects,
- * so an allow produced past a crashed guard is distinguishable from a clean
- * one even when no `auditEmit` is bound.
+ * A fail-open middleware threw. The #806 continuation decision stands: the
+ * policy contributes no verdict and later middleware still run. The
+ * containment boundary is the throw itself: no decision was returned, so no
+ * effect or identity field from the crashed policy can enter composition, and
+ * a post-boundary point cannot gain `run.abort`. Only this engine-authored
+ * reason and audit annotation survive, making the degraded allow visible even
+ * without `auditEmit`.
  */
 export function pointMiddlewareFailOpenDecision(
   reg: RegistrationMeta,
