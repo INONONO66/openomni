@@ -21,6 +21,15 @@ describe("buildAgentPrompt", () => {
     );
   });
 
+  test("the resident prompt steers code-mode usage", () => {
+    const prompt = buildAgentPrompt(RESIDENT_PRESET);
+
+    expect(prompt).toContain("one run_code cell");
+    expect(prompt).toContain("parallel(thunks)");
+    expect(prompt).toContain("llm(prompt)");
+    expect(prompt).toContain("write_artifact");
+  });
+
   test("keeps the base prefix stable across memory snapshots", () => {
     const base = buildAgentPrompt(RESIDENT_PRESET, {});
 

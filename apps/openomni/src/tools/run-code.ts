@@ -97,7 +97,7 @@ export function runCodeToolSpec(): Tool.Spec {
   return {
     name: RUN_CODE_TOOL_NAME,
     description:
-      "Run Python on an attached machine. Inside the cell, tool.<name>(...) reaches the same tools you hold here — use it to make many calls in one turn instead of one call per turn.",
+      "Run Python on an attached machine; state persists across cells in _scope, so do a whole step in one cell. Inside it, tool.<name>(...) bridges to the tools you hold here, parallel(thunks) runs independent calls concurrently, llm(prompt) asks a budget-capped sub-model, and write_artifact/read_artifact move large text by id.",
     inputSchema: INPUT_JSON_SCHEMA,
     safe: false,
     placement: "machine",
