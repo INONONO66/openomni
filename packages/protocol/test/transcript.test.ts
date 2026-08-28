@@ -485,6 +485,11 @@ describe("Transcript fold — reasoning signature carrier (F2)", () => {
     if (state.parts[1]?.type !== "tool") throw new Error("expected tool part");
     expect("signature" in state.parts[1]).toBe(false);
   });
+
+  test("PartTransition completed round-trips signature through zod", () => {
+    const transition = { to: "completed", at: 1_400, output: "o", signature: "sig-1" };
+    expect(Transcript.PartTransition.parse(transition)).toEqual(transition as never);
+  });
 });
 
 describe("Transcript fold — already_finished", () => {
