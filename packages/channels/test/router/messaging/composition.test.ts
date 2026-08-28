@@ -1,12 +1,8 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { extractSurfaceKey, type Gateway, type Ingress } from "@openomni/protocol";
-import { ActorRegistry, ChannelGrantStore, Storage } from "@openomni/ledger";
-import { Bus } from "@openomni/telemetry";
-import {
-  type ChannelDeliveryRoute,
-  createGatewayRouter,
-  type GatewayRouter,
-} from "../../../src/router/index.js";
+import { beforeEach, describe, expect, test } from "bun:test";
+import { extractSurfaceKey, type Gateway } from "@openomni/protocol";
+import { ActorRegistry, ChannelGrantStore } from "@openomni/ledger";
+import type { ChannelDeliveryRoute, GatewayRouter } from "../../../src/router/index.js";
+import { makeRouter as makeFixtureRouter, resetRouterState } from "../_router-fixture";
 
 /**
  * Covers the messaging-composed router path (#708): the router built WITH
@@ -44,14 +40,7 @@ const strangerEvent = {
 } satisfies Gateway.DeliveredEvent;
 
 function makeRouter(routes: ReadonlyMap<string, ChannelDeliveryRoute> = deliveryRoutes()): GatewayRouter {
-  return createGatewayRouter({
-    sink: (event, data) => Bus.publish(event, data),
-    deliver: async (delivery: Gateway.Deliver): Promise<Ingress.IngressResult> => ({
-      mode: "direct",
-      target: delivery.event.target ?? { kind: "resident" },
-      sessionId: delivery.sessionId ?? "s-stub",
-      result: { output: "ok", finishReason: "stop" },
-    }),
+  return makeFixtureRouter({
     messaging: {
       deliveryRoutes: routes,
       grants: () => [],
@@ -73,9 +62,7 @@ function makeRouter(routes: ReadonlyMap<string, ChannelDeliveryRoute> = delivery
 }
 
 beforeEach(() => {
-  Storage.reset();
-  Bus.reset();
-  Storage.initialize({ dbPath: ":memory:" });
+  resetRouterState();
   delivered.length = 0;
   // A broadcast channel admits a first-contact stranger as evidence_only with
   // a resolved identity — the materialization precondition (routed + endpoint).
@@ -99,11 +86,6 @@ beforeEach(() => {
     externalId: "buyer-external",
     workspace: "shop-ws",
   });
-});
-
-afterEach(() => {
-  Storage.reset();
-  Bus.reset();
 });
 
 describe("messaging-composed gateway router (#708)", () => {
