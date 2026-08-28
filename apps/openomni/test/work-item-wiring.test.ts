@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DelegationStore, Storage, WorkItemStore, initialize } from "@openomni/ledger";
-import { Delegation, WorkItem } from "@openomni/protocol";
+import { WorkItem } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import type { DelegationOrigin } from "../src/delegation/admission";
 import { createDelegationKernel, type DriverOutcome } from "../src/delegation/kernel";
