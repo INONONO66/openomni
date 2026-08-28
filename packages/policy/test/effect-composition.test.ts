@@ -132,7 +132,6 @@ describe("policy effect composition conformance", () => {
         policyId: "policy.deny",
         verdict: "deny",
         effects: [
-          { type: "runtime.set_timeout", timeoutMs: 1_000 },
           { type: "prompt.append_context", context: "not safe after deny" },
           { type: "audit.annotate", annotation: "blocked dangerous operation", severity: "error" },
         ],
@@ -406,15 +405,13 @@ describe("policy effect composition conformance", () => {
     ]);
   });
 
-  it("chooses safer scalar bounds", () => {
+  it("composes retry limits and workspace locks", () => {
     const result = composeEffects([
       d("policy.generous", [
-        { type: "runtime.set_timeout", timeoutMs: 30_000 },
         { type: "run.retry_after", delayMs: 1_000, maxRetries: 3 },
         { type: "runtime.workspace_lock", required: false },
       ]),
       d("policy.strict", [
-        { type: "runtime.set_timeout", timeoutMs: 5_000 },
         { type: "run.retry_after", delayMs: 5_000, maxRetries: 1 },
         { type: "runtime.workspace_lock", required: true },
       ]),
@@ -422,7 +419,6 @@ describe("policy effect composition conformance", () => {
     expect(result.verdict).toBe("allow");
     expect(result.mergedEffects).toEqual(
       expect.arrayContaining([
-        { type: "runtime.set_timeout", timeoutMs: 5_000 },
         { type: "run.retry_after", delayMs: 5_000, maxRetries: 1 },
         { type: "runtime.workspace_lock", required: true },
       ]),
@@ -450,26 +446,12 @@ describe("policy effect composition conformance", () => {
 
   it("is pure for identical inputs", () => {
     const decisions = [
-      d(
-        "policy.alpha",
-        [
-          { type: "prompt.append_context", context: "alpha" },
-          { type: "runtime.set_timeout", timeoutMs: 5_000 },
-        ],
-        10,
-      ),
+      d("policy.alpha", [{ type: "prompt.append_context", context: "alpha" }], 10),
       d("policy.beta", [{ type: "audit.annotate", annotation: "beta", severity: "info" }]),
     ];
     expect(composeEffects(decisions)).toEqual(composeEffects(decisions));
     expect(decisions).toEqual([
-      d(
-        "policy.alpha",
-        [
-          { type: "prompt.append_context", context: "alpha" },
-          { type: "runtime.set_timeout", timeoutMs: 5_000 },
-        ],
-        10,
-      ),
+      d("policy.alpha", [{ type: "prompt.append_context", context: "alpha" }], 10),
       d("policy.beta", [{ type: "audit.annotate", annotation: "beta", severity: "info" }]),
     ]);
   });

@@ -21,7 +21,6 @@ describe("Policy decision and effect schemas", () => {
     { type: "audit.annotate", annotation: "policy matched", severity: "info" },
     { type: "writeback.rewrite", output: "Redacted final response." },
     { type: "writeback.suppress", reason: "contains sensitive content" },
-    { type: "runtime.set_timeout", timeoutMs: 30_000 },
     { type: "runtime.workspace_lock", required: true },
   ];
 
@@ -96,12 +95,12 @@ describe("Policy decision and effect schemas", () => {
   it("parses EffectiveDecision with merged effects and contributing policies", () => {
     const result = Policy.EffectiveDecision.parse({
       verdict: "allow",
-      mergedEffects: [effects[12], effects[16]],
+      mergedEffects: [effects[12], effects[15]],
       obligations: [],
-      contributingPolicies: ["policy.audit", "policy.timeout"],
+      contributingPolicies: ["policy.audit", "policy.workspace-lock"],
     });
 
     expect(result.mergedEffects.length).toBe(2);
-    expect(result.contributingPolicies).toEqual(["policy.audit", "policy.timeout"]);
+    expect(result.contributingPolicies).toEqual(["policy.audit", "policy.workspace-lock"]);
   });
 });

@@ -84,7 +84,6 @@ export namespace PolicyEffects {
     "audit.annotate",
     "writeback.rewrite",
     "writeback.suppress",
-    "runtime.set_timeout",
     "runtime.workspace_lock",
     "work.allow_asserted",
     "model.override",
@@ -162,10 +161,6 @@ export namespace PolicyEffects {
     z.object({
       type: z.literal("writeback.suppress"),
       reason: z.string().optional(),
-    }),
-    z.object({
-      type: z.literal("runtime.set_timeout"),
-      timeoutMs: z.number().int().min(0),
     }),
     z.object({
       type: z.literal("runtime.workspace_lock"),
