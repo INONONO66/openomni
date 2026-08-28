@@ -72,6 +72,8 @@ jobs:
         run: bun test ./packages/ledger/test/bench/memory-regression.bench.ts
 
       - name: Summarize benchmark runs
+        env:
+          BENCHMARK_RUNS: ${{ github.event.inputs.runs || '5' }}
         run: bun run script/summarize-benchmark-runs.ts
 
       - name: Publish benchmark summary

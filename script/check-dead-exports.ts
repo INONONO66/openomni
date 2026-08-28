@@ -21,6 +21,7 @@
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
+import { knipWorkspaces } from "./topology";
 
 const BASELINE_PATH = "script/conformance/knip-baseline.json";
 const KNIP_CMD = ["bunx", "knip", "--reporter", "json", "--no-exit-code"];
@@ -114,7 +115,21 @@ export function compareDeadExports(
   };
 }
 
+function verifyKnipWorkspaceInventory(): void {
+  const config = JSON.parse(readFileSync("knip.json", "utf8")) as {
+    workspaces?: Record<string, unknown>;
+  };
+  const actual = Object.keys(config.workspaces ?? {}).sort();
+  const expected = [".", ...knipWorkspaces().map((workspace) => workspace.dir)].sort();
+  if (actual.join("\n") !== expected.join("\n")) {
+    throw new Error(
+      `knip workspace topology drift: expected [${expected.join(", ")}], got [${actual.join(", ")}]`,
+    );
+  }
+}
+
 async function runKnip(): Promise<KnipReport> {
+  verifyKnipWorkspaceInventory();
   const proc = Bun.spawn({ cmd: KNIP_CMD, stdout: "pipe", stderr: "pipe" });
   const [stdout, stderr, exitCode] = await Promise.all([
     new Response(proc.stdout).text(),
@@ -240,7 +255,7 @@ async function main(): Promise<void> {
         ? `; ${resolved.length} baseline entr${resolved.length === 1 ? "y is" : "ies are"} no longer reported — shrink via --update`
         : "";
     process.stdout.write(
-      `OK: dead-export ratchet — ${currentKeys.length} known issues, none new${shrinkNote}\n`,
+      `OK: dead-export ratchet — ${knipWorkspaces().length} topology workspaces scanned, ${currentKeys.length} known issues, none new${shrinkNote}\n`,
     );
     return;
   }

@@ -1,6 +1,6 @@
-# Agent core rewrite — execution SOT
+# Agent core rewrite — historical execution receipt
 
-Source of truth for [#606](https://github.com/INONONO66/openomni/issues/606). The issue holds the outcome statement; this file holds the plan, the decisions, the falsifiable boundary rules, and live PR status. When they disagree, this file wins and the issue gets corrected.
+This document preserves the decisions and PR history for [#606](https://github.com/INONONO66/openomni/issues/606). References to removed hosts, coordinators, cron paths, and open phase rows describe that historical delivery only. [Implementation Status](implementation-status.md) alone records current wiring.
 
 ## Outcome
 
@@ -212,7 +212,7 @@ since a rule that catches nothing is worse than no rule — it reads as coverage
 
 ## Measurement
 
-`script/bench-policy-dispatch.ts`, committed artifact `script/bench-policy-dispatch.result.json`. Median of five interleaved rounds, 2000 iterations, `run.turn.pre`, engine binding a no-op `auditEmit` (the conservative agent-loop configuration).
+Median of five interleaved rounds, 2000 iterations, `run.turn.pre`, engine binding a no-op `auditEmit` (the conservative agent-loop configuration).
 
 Baseline before Phase 0, 512-message history, zero registered policies:
 
@@ -223,7 +223,7 @@ Baseline before Phase 0, 512-message history, zero registered policies:
 
 The loop dispatches ~12 points per turn and the history grows every turn, so a dispatch cost that tracks history makes a run pay O(turns² · messages).
 
-**Rules of engagement**: any PR in this plan that changes dispatch or loop cost regenerates the artifact and states the delta. Growth factor is quoted as "constant" or with a stated ± — on a ~1.6 µs measurement, two decimal places overstate precision by an order of magnitude.
+**Rules of engagement**: any PR in this plan that changes dispatch or loop cost states the measured delta against these historical numbers (the original benchmark script and receipt were later deleted; the numbers above are the frozen record). Growth factor is quoted as "constant" or with a stated ± — on a ~1.6 µs measurement, two decimal places overstate precision by an order of magnitude.
 
 ## Discipline
 

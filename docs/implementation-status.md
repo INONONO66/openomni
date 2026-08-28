@@ -2,7 +2,7 @@
 
 Single source of truth for current wiring between accepted design and running code. Target semantics live in [Core Model](core-model.md), [Kernel Contract](kernel-contract.md), [Architecture](architecture.md), and [Machines and Delegation](machines-and-delegation.md). Delivery ordering remains in [#459](https://github.com/INONONO66/openomni/issues/459).
 
-**Legend**: implemented and wired | dormant contract | designed, not implemented. Last verified: 2026-08-27 against the WorkItem delegation wiring slice.
+**Legend**: implemented and wired | dormant contract | designed, not implemented. Last verified against `origin/main`: 2026-08-28 (`5349950e`).
 
 ## Deployed shape
 

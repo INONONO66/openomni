@@ -65,7 +65,7 @@ The removed local worker manager is not part of the final topology. Process dele
 Band rules:
 
 1. `machines` depends only on protocol and IPC.
-2. `channels` driver code depends only on protocol and IPC; its judgment sub-band may additionally consume policy and perimeter ledger surfaces.
+2. `channels` driver code depends only on protocol; its judgment sub-band may additionally consume policy and perimeter ledger surfaces.
 3. Registration happens in `apps/openomni`.
 4. Drivers expose effects behind interfaces and never decide product admission.
 
@@ -92,9 +92,7 @@ The gateway never reads transcript content. The app does not re-derive platform 
 
 ## Work and Completion Contracts
 
-`WorkItem` schemas and durable ledger surfaces remain core contracts. Terminal completion still has one normative authority: current basis plus durable facts, Policy/Stakes/result/Owner authority, and a record-before-terminal admission. #792 removes the old implementation, not that contract. A future app consumer must inherit it rather than adding a raw ledger completion shortcut.
-
-Stakes and `effectiveAuthority` follow the same rule: their contract meaning remains; their deleted product implementation is not called wired. This distinction is recorded in `implementation-status.md`.
+`WorkItem` schemas and durable ledger surfaces remain core contracts. Terminal completion has one normative authority: current basis plus durable facts, Policy/Stakes/result/Owner authority, and a record-before-terminal admission. Every consumer must inherit it rather than adding a raw ledger completion shortcut. [Implementation Status](implementation-status.md) alone records current consumers.
 
 ## Historical Reconciliation
 

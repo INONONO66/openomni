@@ -26,6 +26,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import ts from "typescript";
+import { assertTopologyComplete, tsconfigWorkspaces } from "./topology";
 
 export type ProblemCode =
   | "missing_base_config"
@@ -340,14 +341,17 @@ export function verifyManifest(manifest: Manifest): VerifyResult {
 
 const repoRoot = join(import.meta.dir, "..");
 
-/** Discover every workspace tsconfig project (fixture trees excluded). */
+/** Discover every topology workspace project plus the gate scripts project. */
 export function discoverRepoProjects(): string[] {
-  const glob = new Bun.Glob("{apps,packages,script}/**/tsconfig*.json");
   const projects: string[] = [];
-  for (const match of glob.scanSync({ cwd: repoRoot, onlyFiles: true })) {
-    if (match.split("/").some((segment) => SKIP_SEGMENTS.has(segment))) continue;
-    if (match.startsWith("script/fixtures/")) continue;
-    projects.push(match);
+  for (const rootDir of [...tsconfigWorkspaces().map((workspace) => workspace.dir), "script"]) {
+    const glob = new Bun.Glob("**/tsconfig*.json");
+    for (const match of glob.scanSync({ cwd: resolve(repoRoot, rootDir), onlyFiles: true })) {
+      const project = `${rootDir}/${match}`;
+      if (project.split("/").some((segment) => SKIP_SEGMENTS.has(segment))) continue;
+      if (project.startsWith("script/fixtures/")) continue;
+      projects.push(project);
+    }
   }
   return projects.sort();
 }
@@ -377,27 +381,11 @@ export function repoManifest(): Manifest {
       "packages/llm/tsconfig.test.json": { noEmit: true },
     },
     sourceRoots: [
-      "apps/openomni/src",
-      "apps/openomni/test",
-      "packages/agent/bench",
-      "packages/agent/src",
-      "packages/agent/test",
-      "packages/channels/src",
-      "packages/channels/test",
-      "packages/ipc/src",
-      "packages/ipc/test",
-      "packages/llm/src",
-      "packages/llm/test",
-      "packages/placement/src",
-      "packages/placement/test",
-      "packages/policy/src",
-      "packages/policy/test",
-      "packages/protocol/src",
-      "packages/protocol/test",
-      "packages/ledger/src",
-      "packages/ledger/test",
-      "packages/telemetry/src",
-      "packages/telemetry/test",
+      ...tsconfigWorkspaces().flatMap((workspace) => [
+        `${workspace.dir}/src`,
+        `${workspace.dir}/test`,
+        ...(workspace.extraSourceRoots ?? []).map((rootDir) => `${workspace.dir}/${rootDir}`),
+      ]),
       "script",
     ],
     declarationProject: "packages/protocol/tsconfig.build.json",
@@ -421,6 +409,7 @@ function main(): void {
     process.exit(2);
   }
 
+  if (fixturePath === undefined) assertTopologyComplete();
   const manifest =
     fixturePath === undefined ? repoManifest() : loadFixtureManifest(resolve(fixturePath));
   const result = verifyManifest(manifest);

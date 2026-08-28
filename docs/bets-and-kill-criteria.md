@@ -45,10 +45,6 @@ Guards without full bets: **bypass erosion** (if direct-to-Worker sessions excee
 - **C2 — #215 + #216 shipped**: preserve the pre-existing T1/T3 inspection boundary; H1 measurement begins.
 - **C3 — 8 weeks of regular use after C2**: H2/H3 verdicts; B4–B6 verdicts if the roles shipped; Verdict section appended with the numbers.
 
-## 5. Current verdict (pre-data)
+## 5. Qualification status
 
-- **As a design: A.** The axioms (separation of execution/judgment/improvement, work as the first-class unit, accountability as a kernel duty) target the category's unoccupied duties, and the v2 pass compressed the concept count instead of growing it.
-- **As a running system: partial, not qualified.** Evidence-backed completion admission and read-back checks are wired, but the P2 C1 integration proof and role runtimes are not. "Use OpenOmni as your Agent OS" cannot yet be honestly recommended.
-- **Deciding variable: our own wiring conversion rate**, not competitors. The most probable failure path is the new specs becoming the next dormant engines. C1 is the test.
-
-> The honest self-description until T1+T3+T4 pass: **"an evidence-gated personal workflow engine building toward an Agent OS."** The two promises stand regardless of branding: *what you hand over gets finished; the same mistake doesn't happen twice.*
+[Implementation Status](implementation-status.md) alone records which mechanisms behind these bets are currently wired.

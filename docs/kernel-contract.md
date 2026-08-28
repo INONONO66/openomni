@@ -9,29 +9,11 @@ Every behavioral claim in this project is classified as exactly one of:
 - **Kernel (structural guarantee)** — enforced by code; cannot be bypassed by any prompt. Violations are impossible, not discouraged.
 - **Userland (convention)** — guided by prompts, skills, and actor profiles. May be violated; violations are observable in the ledger and become Governor evidence.
 
-Documentation may use "guaranteed", "cannot", or "never" only for rows marked ✅. `Implemented check` means code enforcement exists but the behavior is not promoted into the narrow structural-guarantee set. Rows marked 🚧 are partially wired and rows marked 📋 are target contracts; none of those categories is a structural guarantee today.
-
-| Contract item | Current status | Current enforcement or remaining target |
-|---|---|---|
-| Boundary-crossing effects use the dispatch gate | 🚧 | Registered dispatch actions are authorized and audited, but direct bash network access and directly attached mutating MCP/custom tools remain outside the target chokepoint. |
-| Authority evaluation (blacklist → wait correlation → channel ceiling → tier → session) | 🚧 | The shipped `resolveRoute` pipeline and dispatch authorization enforce the current checks; final `Wait` backing and durable record-before-act remain target work. |
-| Budget hard-stops (turns, tool calls, wall time) | ✅ | Agent budget policy and coordinator wall-time enforcement. Money and social-budget ceilings remain target contracts. |
-| Tool permission is fail-closed | ✅ | Tool pipeline. |
-| Workers cannot originate new Workers | ✅ | Dispatch policy and the Worker tool surface. |
-| Session ownership and isolation | 🚧 | Current session separation is wired; the target owner/origin/purpose model and WorkItem-attempt absorption are not. |
-| Append-only, record-before-act decisions through `Ledger.append(event, expectedHead)` | 📋 | Target contract; current Bus persistence is not the serialized/CAS write gate. |
-| WorkItem creation requires ≥1 acceptance criterion | Implemented check | WorkItem schema and `worker.spawn` handling; not promoted to the structural-guarantee set. |
-| Completion claims remain distinct from observations and scoped criterion results | ✅ | The Worker completion projector binds each criterion to durable WorkItem-local evidence, resolves verifier input from those records, executes deterministic verifier-registry checks, and never promotes claimant prose, process exit, an unbound artifact, or a check of a different predicate into a result. |
-| WorkItem terminal completion has one contract-closing admission authority | contract inherited; consumer removed | The durable contract still requires current basis/facts/blockers, fail-closed `work.complete.pre`, and a CAS-bound admission before terminal completion. #792 removed its only product implementation; session raw completion remains a typed refusal. |
-| Retry exhaustion adds a blocker and reaches the current Owner-visible task surface | Implemented check | WorkItem retry enforcement and the authenticated local `show open tasks` surface; broader push notification remains target work. |
-| Worker memory recall is task-scoped | 📋 | Target `memory.recall.pre`; no memory engine or recall consumer is wired. |
-| Memory snapshot character budgets | ✅ | The clean-room app's built-in layer (`apps/openomni/src/memory/`): hard write-time budgets and per-session frozen snapshot injection. The engine port and recall policy remain targets. |
-| Full boot contract (below) | 🚧 | Cron reload and interrupted-run marking are wired; final Wait restoration and resume-offer integration are incomplete. |
+These are target guarantees. [Implementation Status](implementation-status.md) alone records which mechanisms are currently wired.
 
 ### Lanes and the effect-radius rule
 
-Current lane availability: the Resident may use `built-in`, `action`, or `worker` and is not given `subagent`; a Worker may use sandbox-local built-ins/actions or a Worker-local `subagent` and is not given the `worker` lane. Lane choice follows how much reasoning and independence execution requires, not size or difficulty.
-The shipped Worker-spawn policy accepts only Resident-origin `worker.spawn`. The target communication contract additionally routes Owner delegation requests through Resident judgment and keeps Worker messages, Wait, `child_agent`, `resident.ask`, and policy grants from transferring allocation authority. The communication vocabulary is fixed: `ingress.submit` enters, `dispatch.submit` crosses a boundary, and `bus.publish` projects observations but is not a command-delivery or durable-ledger-write surface.
+The target gives the Resident `built-in`, `action`, and `worker` lanes but no `subagent` lane; a Worker receives sandbox-local built-ins/actions but no Worker-allocation lane. Lane choice follows how much reasoning and independence execution requires, not size or difficulty. Worker messages, Wait, same-domain subagents, `resident.ask`, and policy grants never transfer allocation authority. The communication vocabulary is fixed: `ingress.submit` enters, `dispatch.submit` crosses a boundary, and `bus.publish` projects observations but is not a command-delivery or durable-ledger-write surface.
 
 What separates a plain tool from dispatch is the **radius of the effect**:
 
@@ -51,17 +33,17 @@ Subagent vs Worker are different species, not tiers of one thing:
 | Ledger | no ticket — part of the parent's work | always ticketed |
 | Verification | exempt — intermediate reasoning the parent digests | gated — an independent deliverable |
 
-Target coordination contract: a subagent is a same-domain, context-sharing `child_agent` extension of a Worker, bounded to the parent grant. The Resident profile receives no subagent lane, and the Worker profile receives no Worker-allocation lane. When a Worker discovers work with independent footing — especially a different domain, permission profile, or verification regime — the target permits either an explicit policy-gated message to an already-existing agent or `resident.ask`; the Resident decides whether to commission a separate Worker. Neither coordination path creates a WorkItem, Worker, executor, or budget.
+Target coordination contract: a subagent is a same-domain, context-sharing extension of a Worker, bounded to the parent grant. The Resident profile receives no subagent lane, and the Worker profile receives no Worker-allocation lane. When a Worker discovers work with independent footing — especially a different domain, permission profile, or verification regime — the target permits either an explicit policy-gated message to an already-existing agent or `resident.ask`; the Resident decides whether to commission a separate Worker. Neither coordination path creates a WorkItem, Worker, executor, or budget.
 
 **Target Peek budget.** A Resident per-turn tool-call budget separates light perception from execution. Work that remains unresolved after that budget moves beyond judgment scope, so the target next step is a bounded action or Resident-origin Worker commission rather than a subagent.
 
 ### Target boot contract
 
-Target: promises survive power loss. Current status is explicit per mechanism:
+Promises survive power loss:
 
-1. 🚧 Scheduled jobs are persisted and server boot reloads due schedules from the durable cron store. The current runner fires through `CronAdapter` internal ingress; convergence on the target unified ingress entry remains design work.
-2. 📋 Final `Wait` restoration: a reply arriving after restart wakes exactly the work or session that was waiting without allocating a replacement Worker. Transitional PendingInteraction rows are durable and boot cleanup is wired, but the final Wait/resume contract is not.
-3. 🚧 Interrupted attempts are marked during boot recovery; the Owner resume-offer surface and combined boot integration proof remain incomplete.
+1. Due schedules re-enter through unified ingress without a separate scheduling authority.
+2. A reply arriving after restart wakes exactly the work or session that was waiting without allocating a replacement Worker.
+3. Interrupted attempts remain identifiable and resumable after boot recovery.
 
 ### Installed applications — the connector contract
 
@@ -192,7 +174,7 @@ For installed apps the coarse kind is recorded for retry and reporting metadata;
 
 ### Scenario traces
 
-Five decision-relevant traces; every one passes server adapter → ingress → dispatch.
+Five target decision traces; every one passes channel adapter → ingress → dispatch.
 
 1. **Owner DM (baseline).** Telegram DM → ingress resolves `(telegram, tg_kim)` → owner identity → dispatch: no blacklist, no PendingInteraction, trusted channel, owner tier → allow → Resident delivery on the Owner's surface session.
 2. **Task outreach.** The Resident spawns a `human_channel` executor targeting an unknown seller: blacklist checked on the target, resident tier may spawn → child session (work-item-owned, `worker_interaction`), attempt enters `waiting_input`, a PendingInteraction opens (`tokenHash`, allowedActions `[report_result, ask_clarification, decline_task]`, 24h follow-up window) → outbound message carries the token. The Owner's session stays clean.
@@ -202,7 +184,7 @@ Five decision-relevant traces; every one passes server adapter → ingress → d
 
 ## 3. Work Items and the Evidence Gate
 
-Every Worker-lane task is a `WorkItem` — the process table. Dispatch actions do not get tickets (atomic operations are already audited by the dispatch record); subagent output is exempt end-to-end (intermediate reasoning the parent digests). Tickets are for work that requires reasoning.
+Every independently delegated task is a `WorkItem` — the process table. Dispatch actions do not get tickets (atomic operations are already audited by the dispatch record); same-domain subagent output is exempt end-to-end (intermediate reasoning the parent digests). Tickets are for work that requires independent reasoning.
 
 **Creation contract.** A WorkItem cannot be created without at least one acceptance criterion (schema-enforced `min(1)`). Defining "done" is part of delegating — a short "done means" list (≤3 bullets) at delegation time; per-task-type templates accumulate as Skills.
 
@@ -232,7 +214,7 @@ One artifact, three jobs: evaluation input (judgment without transcript), distil
 
 Owner outcome (`adopted | corrected | redone | ignored`) is a later calibration signal and never rewrites the historical admission.
 
-The shipped fact flow is domain-neutral:
+The target fact flow is domain-neutral:
 
 ```text
 WorkItem contract revision + stable acceptance criteria
@@ -267,15 +249,13 @@ fold current contract/evidence state
   -> publish work_item.completed.v2 observer projection (best-effort)
 ```
 
-Internal and connector Workers are the production consumers of that path today. The public, exhaustive origin projector is the required seam for future Resident, external actor (API/A2A/human), replay, recovery, and identity-qualified SDK/internal integrations: it maps those sources into the same five canonical origin classes without a fallback branch, but those caller paths are not yet wired. No production direct `WorkItemStore.complete()` bypass survives. A stale expected head, contract revision, criterion set, blocker, result, policy, or basis forces re-evaluation rather than completion.
-
-This delivery owns the WorkItem row-CAS admission boundary, not the later one-writer ledger cutover. #510 consumes this boundary when it moves durable appends behind the single FULL ledger writer and freezes legacy stores for archive/upcast reads. That migration may replace the storage port, but it must preserve the request/admission/terminal ordering and cannot introduce a second completion authority.
+The origin projector must map Resident, external actor (API/A2A/human), replay, recovery, and identity-qualified SDK/internal integrations into the same canonical origin classes without a fallback branch. No caller may bypass admission through a direct store completion. A stale expected head, contract revision, criterion set, blocker, result, policy, or basis forces re-evaluation rather than completion.
 
 **Verification — three questions, three parties:**
 
 | Question | Answered by | Cost | Mechanism |
 |---|---|---|---|
-| Did it happen? | code | ~0 | **Current:** every claim's `evidenceIds` must resolve to passing WorkItem-local evidence. Observations and scoped criterion results are distinct facts; `work.complete.pre` consumes their current fold and cannot infer truth from claimant self-report. |
+| Did it happen? | code | ~0 | Every claim's `evidenceIds` must resolve to passing WorkItem-local evidence. Observations and scoped criterion results are distinct facts; completion admission consumes their current fold and cannot infer truth from claimant self-report. |
 | Is it good? | Resident | 1 LLM evaluation | judges report + deliverable + verified evidence only — never the worker transcript. On failure, names the issue and re-dispatches with it attached. |
 | Was it useful? | Owner's behavior (`outcome`) | 0, delayed | adopted / corrected / redone / ignored — harvested retroactively by the Governor as ground truth; also calibrates the Resident's evaluation leniency. |
 
@@ -392,7 +372,7 @@ Normative promotion of the 2026-07-09 determinism/verification round (machine-lo
 
 - Internal state is a fold: `S = fold(apply, S₀, L)` over the append-only ledger, partitioned per owner key. `apply` is pure — no clock, no randomness, no live reads, no external calls. Nondeterministic values are captured **as events at write time** and never re-derived on replay.
 - **Determinism contract = command-sequence identity**: same inputs must produce the same command sequence, not byte-identical outputs. A replay that attempts a step absent from the ledger fails **loudly** as a nondeterminism error — never silent fold corruption. A static replay-fidelity 1.0 on one golden trace is not accepted as determinism evidence.
-- **The gate uses the durable ledger write for record-before-act**: target `Ledger.append(event, expectedHead)` is a per-owner-key serialized compare-and-append with retry on conflict. The gate evaluates against exactly the state it commits on and awaits that commit before acting, closing the check-then-act TOCTOU (two workers passing one budget gate). `bus.publish` is downstream observation/projection, not the append enforcement point. This split is planned rather than currently wired; [Implementation Status](implementation-status.md) remains authoritative for shipped behavior.
+- **The gate uses the durable ledger write for record-before-act**: target `Ledger.append(event, expectedHead)` is a per-owner-key serialized compare-and-append with retry on conflict. The gate evaluates against exactly the state it commits on and awaits that commit before acting, closing the check-then-act TOCTOU (two workers passing one budget gate). `bus.publish` is downstream observation/projection, not the append enforcement point. [Implementation Status](implementation-status.md) alone records the current durable-write path.
 - **Attempt identity is execution-instance identity, not content identity.** `attemptId` is opaque, immutable, and globally unique; `attemptSeq` is monotonically allocated per WorkItem by serialized append and never reused; nullable `retryOf` points to a prior `attemptId` as lineage, not equivalence. Identical retries coexist as separate rows with different IDs/sequences.
 - **Equivalence is separate.** `contentFingerprint` covers canonical task input, handler/reducer code, model/config, upstream fingerprints, and dependency-lock identity. `environmentFingerprint` covers relevant runtime/OS/architecture, dependency/tool/policy/verifier/schema versions, provider/model parameters, and redacted configuration identity; secrets contribute only non-reversible version/reference IDs. Both fingerprints may repeat across attempts.
 - **Cache identity is lookup-only.** `cacheKey` is an explicit equivalence lookup derived from the content fingerprint plus a declared deterministic environment subset, never a row key. A hit still creates a new attempt and records `reusedFromAttemptId`.

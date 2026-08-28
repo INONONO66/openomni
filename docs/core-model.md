@@ -4,7 +4,7 @@ This document specifies the system that [Design Philosophy](design-philosophy.md
 
 ## The System in One Paragraph
 
-Input channels (Telegram, Discord, CLI, email, cron, other agents) are adapters injected by the server. Everything they receive enters through one ingress, is routed, and crosses boundaries only through one gate (dispatch) — to the Resident, to the Owner, to a specific Worker session, or out to an external human. Every step lands in the ledger. The Owner converses with the Resident; Workers execute in isolation; the Jester doubts in real time; the Governor fixes structurally after the fact.
+Input channels are adapters composed by the product app. Everything they receive enters through one ingress, is routed, and crosses boundaries only through one gate (dispatch) — to the Resident, to the Owner, to a specific Worker session, or out to an external human. Every step lands in the ledger. The Owner converses with the Resident; Workers execute in isolation; the Jester doubts in real time; the Governor fixes structurally after the fact.
 
 ## Actors and Authority Profiles
 
@@ -30,7 +30,7 @@ All communication in the system reduces to three verbs:
 2. **`dispatch.submit`** — anything crosses a boundary. Delivering to the Resident, escalating to the Owner, messaging an external human or an already-existing agent, targeting a session, or cancelling a Worker uses the same verb with a different target. New Worker allocation is also dispatched, but only the Resident may originate it; a message never allocates work.
 3. **`bus.publish`** — an observation is projected. Observation only; the bus never carries commands or performs a durable ledger write.
 
-The single exception is the **Worker-local subagent**: an in-process extension of a Worker (function-call communication, no ticket, dies with the parent). The Resident never receives a subagent lane. The production `child_agent` implementation dispatches and audits `delegation.worker.pre` before construction and `delegation.worker.post` exactly once on completed, failed, or cancelled settlement; deny or pending creates no child. Parent-tool bounding and nesting denial remain unconditional structural controls — *the gate has one Worker-local exception; policy interception has none.*
+The target's single exception is the **Worker-local subagent**: an in-process extension of a Worker (function-call communication, no ticket, dies with the parent). The Resident never receives a subagent lane. Parent-tool bounding and nesting denial remain unconditional structural controls — *the gate has one Worker-local exception; policy interception has none.*
 
 ### Lanes
 
@@ -43,13 +43,13 @@ The gate routes each request to the cheapest sufficient lane:
 | Worker | independent execution in an isolated session with its own profile |
 | Subagent | context-inheriting parallel reasoning inside the parent |
 
-Lane availability is actor-specific. The Resident has `built-in`, `action`, and `worker` lanes, but never `subagent`; it alone may originate a new Worker assignment, including when the Owner requests delegation. A Worker has sandbox-local built-ins/actions and may use `child_agent` only for context-sharing work in the same domain, but it never has the `worker` lane and cannot spawn or commission another Worker. For independent or cross-domain work, a Worker either messages an already-existing agent through explicitly granted, policy-gated dispatch or asks the Resident with `resident.ask`. Neither path transfers allocation authority.
+Target lane availability is actor-specific. The Resident has `built-in`, `action`, and `worker` lanes, but never `subagent`; it alone may originate a new Worker assignment, including when the Owner requests delegation. A Worker has sandbox-local built-ins/actions and may use a subagent only for context-sharing work in the same domain, but it never has the `worker` lane and cannot spawn or commission another Worker. For independent or cross-domain work, a Worker either messages an already-existing agent through explicitly granted, policy-gated dispatch or asks the Resident with `resident.ask`. Neither path transfers allocation authority.
 
 Spawning a Worker for an atomic action is waste; doing multi-step work in the Owner's session is pollution.
 
 ### Policy — the cross-cutting hook layer
 
-Policy is not a gate-internal or Worker-only feature: it is the system-wide interception layer (LSM-style) around every actor and boundary. Resident, Worker, Jester, Governor, ingress, dispatch, memory, scheduling, tools, LLM connections, and writeback may each carry policy registrations selected by their actor profile and context. The protocol registers policy points with contracts for allowed effects, default fail policy, and required context schema. Current points cover the gate (`dispatch.action.pre`), actor loops per turn (`run.turn.pre/post`, `run.lifecycle.*`, `run.completion.pre`, `run.error.error`), WorkItem completion admission (`work.complete.pre`), LLM connections (`connection.llm.pre/post`), prompt (`prompt.context.pre`), tools (`tool.catalog/native/mcp.*`), and Worker-local subagents (`delegation.worker.pre/post`). Planned points add `memory.recall.pre`, `egress.render.pre`, and `schedule.fire.pre`.
+Policy is not a gate-internal or Worker-only feature: it is the system-wide interception layer (LSM-style) around every actor and boundary. Resident, Worker, Jester, Governor, ingress, dispatch, memory, scheduling, tools, LLM connections, and writeback may each carry policy registrations selected by their actor profile and context. The protocol defines policy-point contracts for allowed effects, default fail policy, and required context schema. [Implementation Status](implementation-status.md) alone records which points have live consumers.
 
 The rulebook:
 
@@ -69,7 +69,7 @@ Existing-agent messaging targets an already allocated actor/session and creates 
 
 ## The Ledger
 
-One append-only history. Target `Ledger.append(event, expectedHead)` is the only durable write: it serializes per owner key with compare-and-append semantics and is awaited before any authorized action. `bus.publish` only projects observations and may remain lossy; it neither appends to the ledger nor enforces record-before-act. This split is planned, not wired; [Implementation Status](implementation-status.md) remains the source of truth for current behavior. Everything else is a view:
+One append-only history. Target `Ledger.append(event, expectedHead)` is the only durable write: it serializes per owner key with compare-and-append semantics and is awaited before any authorized action. `bus.publish` only projects observations and may remain lossy; it neither appends to the ledger nor enforces record-before-act. [Implementation Status](implementation-status.md) alone records the current durable-write path. Everything else is a view:
 
 | View | What it shows |
 |---|---|
@@ -100,7 +100,7 @@ The challenge rules:
 
 Any delegated executor: internal agents, external CLI apps (Claude Code, OpenCode), external humans, the Owner. Uniform contract: isolated session, task-scoped slice of data and permission, exit through a CompletionReport whose claims carry evidence. Human executors are verification-waived but never recording-waived — a one-line chat report suffices and the Resident writes the ledger entry.
 
-A Worker cannot spawn another Worker or commission new Worker work. It uses `child_agent` only for same-domain, context-sharing work that remains part of its own attempt. If a need has independent footing — especially a different permission profile, verification regime, or domain — the Worker may message an already-existing agent through an explicit, policy-gated grant or use `resident.ask`; neither creates work or transfers allocation authority. The Resident alone decides whether to commission a separate Worker.
+A Worker cannot spawn another Worker or commission new Worker work. A same-domain, context-sharing subagent remains part of its own attempt. If a need has independent footing — especially a different permission profile, verification regime, or domain — the Worker may message an already-existing agent through an explicit, policy-gated grant or use `resident.ask`; neither creates work or transfers allocation authority. The Resident alone decides whether to commission a separate Worker.
 
 Workers start ephemeral and earn persistence through ledger evidence (usage, adoption, correction rate); they are demoted the same way.
 

@@ -1,10 +1,6 @@
 # Gateway architecture — final design (v2)
 
-Status: Owner-directed, finalized 2026-08-19. Supersedes v1 (2026-08-18) and
-five locked clauses (§8). Reference structure: clawhip
-(https://github.com/Yeachan-Heo/clawhip) — routing/normalization/delivery
-layer with the brain outside it. Issue reconciliation (§9) is the only
-remaining pre-implementation step.
+Owner-directed target design, finalized 2026-08-19. Supersedes v1 (2026-08-18) and five locked clauses (§8). Reference structure: clawhip (https://github.com/Yeachan-Heo/clawhip) — routing/normalization/delivery layer with the brain outside it. [Implementation Status](implementation-status.md) alone records current wiring.
 
 ## 0. North-star fit
 
@@ -409,7 +405,9 @@ consumer-dead after the #797 decommission).
 Still valid: core-package rejection (J5) — this is a role expansion of an
 already-planned package, not a new core.
 
-## 9. Staging & issue map
+## 9. Historical staging & issue map
+
+This section preserves the pre-implementation sequence only. [Implementation Status](implementation-status.md) alone records what is currently wired.
 
 - **Stage 0 — contracts.** protocol: §2 shapes + §3 trust vocabulary. New
   issue. No behavior change; both sides keep working against old wiring.
@@ -426,10 +424,7 @@ already-planned package, not a new core.
 - **Stage 4 — engagement machine.** §5 schema + store + resident wiring +
   rehydration. New issue; depends on stage 3 waits.
 
-Reconciliation edits required on: #499 (clause rewrite), #551 (stage-1
-framing), #219 (lands in gateway router), #216/#217 (gateway delivery path,
-engagement ownerRef). Not yet executed — Owner confirmation before GitHub
-edits.
+The historical plan required reconciliation edits on #499 (clause rewrite), #551 (stage-1 framing), #219 (gateway router), and #216/#217 (gateway delivery path and engagement ownerRef).
 
 ## 10. Non-goals
 

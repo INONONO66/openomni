@@ -1,178 +1,39 @@
 import { Glob } from "bun";
-
-type PackageKey =
-  | "protocol"
-  | "ipc"
-  | "telemetry"
-  | "policy"
-  | "placement"
-  | "ledger"
-  | "llm"
-  | "agent"
-  | "machines"
-  | "channels"
-  | "openomniApp";
+import { assertTopologyComplete, TOPOLOGY, type WorkspaceTopology } from "./topology";
 
 type PackageRule = {
   displayName: string;
   packageJsonPath: string;
   packageName: string;
   allowedDeps: "none" | "any-except-self" | Set<string>;
-  /** Dependencies named here remain forbidden even if the allowlist is widened later. */
   forbiddenDeps?: Set<string>;
-  /**
-   * Tighter allowlist for `<pkg>/src/` alone, when a package's runtime surface
-   * is narrower than what its tests need. Without it a test-only dependency
-   * silently re-permits the same import in production code, which is how a
-   * closed boundary reopens without any gate noticing.
-   */
   srcAllowedDeps?: Set<string>;
 };
 
 const SHOW_FIX_SUGGESTIONS = Bun.argv.includes("--fix-suggestions");
 
 // Known deep import violations (tracked tech debt — do not extend)
-// Keyed by "file:importPath" to avoid file-wide exemptions that could hide new violations.
 const KNOWN_DEEP_IMPORTS = new Set<string>();
-
 const KNOWN_DEEP_RELATIVE_IMPORTS = new Set<string>();
 
-const RULES: Record<PackageKey, PackageRule> = {
-  protocol: {
-    displayName: "protocol",
-    packageJsonPath: "packages/protocol/package.json",
-    packageName: "@openomni/protocol",
-    allowedDeps: "none",
-  },
-  telemetry: {
-    displayName: "telemetry",
-    packageJsonPath: "packages/telemetry/package.json",
-    packageName: "@openomni/telemetry",
-    // Ring-1 observation channel (#606): protocol only. It must stay a leaf —
-    // replacing it with no-ops has to leave observed behavior identical, so it
-    // can never reach for storage or decisions.
-    allowedDeps: new Set(["@openomni/protocol"]),
-  },
-  ipc: {
-    displayName: "ipc",
-    packageJsonPath: "packages/ipc/package.json",
-    packageName: "@openomni/ipc",
-    // Worker-process transport contract (#496): protocol only. Driver-band
-    // packages (channels, remote, browser, machines, …) consume it as a
-    // published contract — it must never grow a kernel/ledger/policy import.
-    allowedDeps: new Set(["@openomni/protocol"]),
-  },
-  ledger: {
-    displayName: "ledger",
-    packageJsonPath: "packages/ledger/package.json",
-    packageName: "@openomni/ledger",
-    allowedDeps: new Set(["@openomni/protocol", "@openomni/telemetry"]),
-  },
-  policy: {
-    displayName: "policy",
-    packageJsonPath: "packages/policy/package.json",
-    packageName: "@openomni/policy",
-    allowedDeps: new Set(["@openomni/protocol"]),
-  },
-  llm: {
-    displayName: "llm",
-    packageJsonPath: "packages/llm/package.json",
-    packageName: "@openomni/llm",
-    // The manifest may carry `telemetry` — the tests bind `Bus`/`collector`
-    // behind the port, and `check-deps` counts devDependencies.
-    allowedDeps: new Set(["@openomni/protocol", "@openomni/telemetry"]),
-    // `src/` may not. It reports through an injected `BusEvent.Sink` and
-    // imports no implementation of the observation channel at all (#606).
-    srcAllowedDeps: new Set(["@openomni/protocol"]),
-  },
-  placement: {
-    displayName: "placement",
-    packageJsonPath: "packages/placement/package.json",
-    packageName: "@openomni/placement",
-    // Ring-1 pure target selection: protocol-only model and machine-axis
-    // folds. It decides placement and nothing else — policy alone owns allow/deny and
-    // the retry policy alone terminates, so it can never grow a
-    // policy/ledger/llm/telemetry import.
-    allowedDeps: new Set(["@openomni/protocol"]),
-  },
-  agent: {
-    displayName: "agent",
-    packageJsonPath: "packages/agent/package.json",
-    packageName: "@openomni/agent",
-    // The manifest may carry `telemetry` — the tests bind `Bus` behind the
-    // port, and `check-deps` counts devDependencies.
-    allowedDeps: new Set([
-      "@openomni/protocol",
-      "@openomni/policy",
-      "@openomni/placement",
-      "@openomni/llm",
-      "@openomni/telemetry",
-    ]),
-    // `src/` may not reach telemetry. The loop reports through an injected
-    // `BusEvent.Sink` and owns no durable state (#606). `placement` supplies
-    // the pure model-fallback and tool machine-axis folds consumed by the loop.
-    srcAllowedDeps: new Set([
-      "@openomni/protocol",
-      "@openomni/policy",
-      "@openomni/placement",
-      "@openomni/llm",
-    ]),
-  },
-  machines: {
-    displayName: "machines",
-    packageJsonPath: "packages/machines/package.json",
-    packageName: "@openomni/machines",
-    // Driver band (docs/machines-and-delegation.md §2): daemon + host accept
-    // endpoint for body machines. Enrollment lookup and event sink are
-    // injected ports — no ledger, no telemetry, repo-extractable.
-    allowedDeps: new Set(["@openomni/protocol", "@openomni/ipc"]),
-  },
-  channels: {
-    displayName: "channels",
-    packageJsonPath: "packages/channels/package.json",
-    packageName: "@openomni/channels",
-    // Gateway band at stage 2 (#707, docs/gateway-design.md §1/§9): protocol
-    // for the contracts, policy + ledger for the judgment band (S8 confines
-    // them to src/router/ + src/authn/ — see validateChannelsIntraPackageBanding,
-    // which also pins the router to the PERIMETER ledger surfaces only). The
-    // manifest may carry `telemetry` — the tests observe the real Bus (the
-    // llm/agent precedent), and `check-deps` counts devDependencies.
-    allowedDeps: new Set([
-      "@openomni/protocol",
-      "@openomni/policy",
-      "@openomni/ledger",
-      "@openomni/telemetry",
-    ]),
-    // `src/` may not touch telemetry: the band observes through an injected
-    // `BusEvent.Sink` port only. No kernel either way (openomni↔channels = 0).
-    srcAllowedDeps: new Set([
-      "@openomni/protocol",
-      "@openomni/policy",
-      "@openomni/ledger",
-    ]),
-  },
-  openomniApp: {
-    displayName: "openomni app",
-    packageJsonPath: "apps/openomni/package.json",
-    packageName: "@openomni/app",
-    // The global deep-import gate keeps this app on package barrels, and
-    // src/gateway.ts is the sole source consumer of channels router exports.
-    allowedDeps: new Set([
-      "@openomni/protocol",
-      "@openomni/channels",
-      "@openomni/ipc",
-      "@openomni/agent",
-      "@openomni/llm",
-      "@openomni/ledger",
-      "@openomni/telemetry",
-      "@openomni/policy",
-      "@openomni/placement",
-      // The app is where a brain acquires a body: it composes the machine
-      // host and owns the enrollments the host admits against.
-      "@openomni/machines",
-    ]),
-  },
-};
+const RULES = Object.fromEntries(
+  TOPOLOGY.map((workspace: WorkspaceTopology) => [
+    workspace.key,
+    {
+      displayName: workspace.displayName,
+      packageJsonPath: `${workspace.dir}/package.json`,
+      packageName: workspace.packageName,
+      allowedDeps:
+        typeof workspace.allowedDeps === "string"
+          ? workspace.allowedDeps
+          : new Set<string>(workspace.allowedDeps),
+      srcAllowedDeps:
+        workspace.srcAllowedDeps === undefined
+          ? undefined
+          : new Set<string>(workspace.srcAllowedDeps),
+    },
+  ]),
+) as Record<string, PackageRule>;
 
 const DEP_FIELDS = [
   "dependencies",
@@ -733,6 +594,23 @@ const TRACKED_DOCS = [
 
 const STALE_THRESHOLD = 50; // commits since last modification
 
+async function gitOutput(args: readonly string[]): Promise<string> {
+  const proc = Bun.spawn({
+    cmd: ["git", ...args],
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+  if (exitCode !== 0) {
+    throw new Error(`git ${args.join(" ")} failed (${exitCode}): ${stderr.trim() || "no stderr"}`);
+  }
+  return stdout;
+}
+
 async function checkDocFreshness(): Promise<string[]> {
   const warnings: string[] = [];
 
@@ -744,15 +622,7 @@ async function checkDocFreshness(): Promise<string[]> {
     }
 
     try {
-      const proc = Bun.spawn({
-        cmd: ["git", "log", "--oneline", `HEAD`, "--", docPath],
-        stdout: "pipe",
-        stderr: "pipe",
-      });
-
-      const output = await new Response(proc.stdout).text();
-      await proc.exited;
-
+      const output = await gitOutput(["log", "--oneline", "HEAD", "--", docPath]);
       const totalCommits = output.trim().split("\n").filter(Boolean).length;
       if (totalCommits === 0) {
         // File exists but has no git history (untracked or new)
@@ -760,33 +630,24 @@ async function checkDocFreshness(): Promise<string[]> {
       }
 
       // Count commits since last modification of this file
-      const lastTouchProc = Bun.spawn({
-        cmd: ["git", "log", "-1", "--format=%H", "--", docPath],
-        stdout: "pipe",
-        stderr: "pipe",
-      });
-
-      const lastTouchHash = (await new Response(lastTouchProc.stdout).text()).trim();
-      await lastTouchProc.exited;
-
+      const lastTouchHash = (
+        await gitOutput(["log", "-1", "--format=%H", "--", docPath])
+      ).trim();
       if (!lastTouchHash) continue;
 
-      const sinceProc = Bun.spawn({
-        cmd: ["git", "rev-list", "--count", `${lastTouchHash}..HEAD`],
-        stdout: "pipe",
-        stderr: "pipe",
-      });
-
-      const commitsSince = parseInt((await new Response(sinceProc.stdout).text()).trim(), 10);
-      await sinceProc.exited;
+      const commitsSince = Number.parseInt(
+        (await gitOutput(["rev-list", "--count", `${lastTouchHash}..HEAD`])).trim(),
+        10,
+      );
 
       if (commitsSince >= STALE_THRESHOLD) {
         warnings.push(
           `STALE: ${docPath} — last updated ${commitsSince} commits ago (threshold: ${STALE_THRESHOLD})`,
         );
       }
-    } catch {
-      // git not available or other error — skip silently
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      warnings.push(`WARNING: doc freshness unavailable for ${docPath}: ${message}`);
     }
   }
 
@@ -991,6 +852,7 @@ function selfTest(): void {
 }
 
 async function main(): Promise<void> {
+  assertTopologyComplete();
   if (Bun.argv.includes("--self-test")) selfTest();
   const depViolations = await validateDependencyDirection();
   const sourceImportViolations = await validateSourceImportDirection();

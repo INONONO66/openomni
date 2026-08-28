@@ -12,17 +12,17 @@
 // Guarantee (honest bound): this is a DRIFT GATE over the write shapes
 // below, not a sandbox. After comment-stripping and whitespace
 // normalization it catches, case-insensitively and across line breaks:
-//   - `<anything>ledger.append(` / `.adoptStream(` — dot OR bracket access
-//     (`ledger["append"](`), any receiver identifier ENDING in "ledger"
-//     (`subLedger.append(`), plus `.adoptStream(` under ANY receiver
-//     (the method name is ledger-specific);
+//   - every direct or indirect reference to `<anything>ledger.append` /
+//     `.adoptStream` — dot OR bracket access, calls, `.bind`, assignment, and
+//     destructuring. A rebound method therefore still identifies its source
+//     module as a producer;
 //   - raw SQL writes — INSERT [OR REPLACE|OR IGNORE|OR ...] INTO,
 //     REPLACE INTO, UPDATE [OR ...], DELETE FROM — against
 //     ledger_event/ledger_head and the frozen legacy tables, in .ts source
 //     AND in runtime-executed migration .sql files.
-// Deliberate evasion — rebinding the method to an unrelated identifier,
-// assembling SQL from string fragments, dynamic table names — is out of
-// scope; the red-proof conformance cases pin what the scan DOES catch.
+// Dynamically assembled SQL/table names remain outside lexical discovery;
+// production adapters keep table names as static SQL so the SQL half stays
+// inspectable. Red-proof conformance cases pin the indirect call forms.
 //
 // Four write surfaces are manifested:
 //   - streams: the ONE producer module per decision-class stream family
@@ -162,9 +162,13 @@ const LEDGER_TABLES = ["ledger_event", "ledger_head"] as const;
 const FROZEN_TABLES = ["pending_ask", "pending_interaction", "worker_run_state"] as const;
 
 // Receiver ending in "ledger" + dot/bracket access to append|adoptStream,
-// OR `.adoptStream(` / `["adoptStream"](` under any receiver.
-const LEDGER_WRITE_CALL =
-  /[\w$]*ledger\s*(?:\.\s*(?:append|adoptStream)|\[\s*["'](?:append|adoptStream)["']\s*\])\s*\(|[\w$)\]]\s*(?:\.\s*adoptStream|\[\s*["']adoptStream["']\s*\])\s*\(/i;
+// OR adoptStream under any receiver. No opening-call parenthesis is required:
+// assignment and `.bind` are write capabilities and must identify the module.
+const LEDGER_WRITE_REFERENCE =
+  /[\w$]*ledger!?\s*(?:\??\.\s*(?:append|adoptStream)\b|\??\.?\s*\[\s*(?:["'](?:append|adoptStream)["']|`(?:append|adoptStream)`)\s*\])|[\w$)\]]\s*(?:\??\.\s*adoptStream\b|\??\.?\s*\[\s*(?:["']adoptStream["']|`adoptStream`)\s*\])/i;
+const LEDGER_WRITE_DESTRUCTURE =
+  /\{[^}]*\badoptStream\b[^}]*\}\s*=|\{[^}]*\bappend\b[^}]*\}\s*=\s*(?:[\w$]*ledger\b|[^;\n]*\.ledger\b)/i;
+const LEDGER_CORE_FACADE = "packages/ledger/src/ledger-core/index.ts";
 
 function tableWriteSqlPattern(tables: readonly string[]): RegExp {
   const table = `(?:${tables.join("|")})`;
@@ -196,9 +200,29 @@ function normalizeSqlSource(source: string): string {
   return source.replace(/--[^\n]*/g, " ").replace(/\s+/g, " ");
 }
 
-/** True when TS source contains a ledger append/adoptStream call shape. */
+/**
+ * Remove transparent receiver wrappers that otherwise separate a ledger
+ * identifier from its property access. Repeating handles nested parentheses
+ * and combinations such as `((ledger) as Ledger)` without parsing the file.
+ */
+function normalizeLedgerReceiverWrappers(source: string): string {
+  let normalized = source;
+  let previous: string;
+  do {
+    previous = normalized;
+    normalized = normalized
+      .replace(/([\w$]*ledger)!/gi, "$1")
+      .replace(/([\w$]*ledger)\s*\?\s*([.[])/gi, "$1$2")
+      .replace(/\(\s*([\w$]*ledger)\s+(?:as|satisfies)\s+[^();]+?\s*\)/gi, "$1")
+      .replace(/\(\s*([\w$]*ledger)!?\s*\)/gi, "$1");
+  } while (normalized !== previous);
+  return normalized;
+}
+
+/** True when TS source obtains or invokes a ledger append/adoptStream capability. */
 export function matchesLedgerWriteCall(tsSource: string): boolean {
-  return LEDGER_WRITE_CALL.test(normalizeTsSource(tsSource));
+  const normalized = normalizeLedgerReceiverWrappers(normalizeTsSource(tsSource));
+  return LEDGER_WRITE_REFERENCE.test(normalized) || LEDGER_WRITE_DESTRUCTURE.test(normalized);
 }
 
 /** True when TS source contains write SQL against ledger_event/ledger_head. */
@@ -239,7 +263,7 @@ export async function scanLedgerProducers(rootDir: string): Promise<LedgerProduc
   sourceFiles.sort();
   for (const file of sourceFiles) {
     const content = await Bun.file(join(rootDir, file)).text();
-    if (matchesLedgerWriteCall(content)) appendCallSites.push(file);
+    if (file !== LEDGER_CORE_FACADE && matchesLedgerWriteCall(content)) appendCallSites.push(file);
     if (matchesLedgerTableWriteSql(content)) ledgerTableWriters.push(file);
     if (matchesFrozenTableWriteSql(content)) frozenTableWriters.push(file);
   }
