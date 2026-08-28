@@ -1,6 +1,6 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import type { Gateway } from "@openomni/protocol";
-import { EgressBudgetStore, Storage } from "@openomni/ledger";
+import { EgressBudgetStore } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { createExistingAgentMessaging } from "../../../src/router/messaging/send.js";
 import { evaluateSocialBudget } from "../../../src/router/messaging/social-budget.js";
@@ -10,6 +10,7 @@ import {
   messagingNow,
   registerAgentFixture,
 } from "../../helpers/messaging.js";
+import { resetStores } from "../_router-fixture";
 
 const ZERO_STATE: Gateway.EgressDebitState = {
   countInWindow: 0,
@@ -159,19 +160,12 @@ describe("send kernel active-egress gate (#219 seam)", () => {
   }
 
   beforeEach(() => {
-    Bus.reset();
-    Storage.reset();
-    Storage.initialize({ dbPath: ":memory:" });
+    resetStores();
     deliveries = [];
     grants = [buildGrant("grant:sender->target")];
     budgets = [];
     registerAgentFixture("actor:sender");
     registerAgentFixture("actor:target", [{ id: "endpoint:target", externalId: "target-1" }]);
-  });
-
-  afterEach(() => {
-    Storage.reset();
-    Bus.reset();
   });
 
   test("backward-compat: with NO budget source injected, a cold proactive send is unaffected", async () => {
