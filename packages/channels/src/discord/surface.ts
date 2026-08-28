@@ -113,7 +113,10 @@ export class DiscordAdapter implements Channel.Surface {
 
   private handleMessageCreate(message: DiscordMessage, traceId: string): void {
     if (!this.normalizer) return;
-    if (this.dedupe.isDuplicate(message.id)) return;
+    const acquisition = this.dedupe.acquire(message.id);
+    if (acquisition.duplicate) return;
+    const dedupeToken = acquisition.token;
+    if (dedupeToken === undefined) return;
     if (message.author.bot) return;
     if (!message.content) return;
 
@@ -142,7 +145,7 @@ export class DiscordAdapter implements Channel.Surface {
     if (!inbound) return;
 
     this.handleIncoming(inbound, message.channel_id, traceId).catch((err) => {
-      this.dedupe.forget(message.id);
+      this.dedupe.forget(message.id, dedupeToken);
       this.publish(Operational.Events.Error, {
         traceId,
         time: Date.now(),

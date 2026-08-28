@@ -38,8 +38,10 @@ export class DedupeWindow<Value> {
   }
 }
 
+export type DedupeToken = symbol;
+
 export class Dedupe {
-  private readonly seen = new Map<string, number>();
+  private readonly seen = new Map<string, { at: number; token: DedupeToken }>();
   private readonly maxAge: number;
   private readonly maxSize: number;
   private ops = 0;
@@ -49,34 +51,35 @@ export class Dedupe {
     this.maxSize = maxSize;
   }
 
-  forget(id: string): void {
-    this.seen.delete(id);
+  forget(id: string, token: DedupeToken): void {
+    if (this.seen.get(id)?.token === token) this.seen.delete(id);
   }
 
-  isDuplicate(id: string): boolean {
+  acquire(id: string): { readonly duplicate: boolean; readonly token?: DedupeToken } {
     // prune every 100 operations to amortize cost
     if (++this.ops >= 100) {
       this.ops = 0;
       this.prune();
     }
 
+    const now = Date.now();
     const existing = this.seen.get(id);
-    if (existing !== undefined) {
-      // allow re-processing if the previous entry has expired
-      if (Date.now() - existing > this.maxAge) {
-        this.seen.set(id, Date.now());
-        return false;
-      }
-      return true;
-    }
-    this.seen.set(id, Date.now());
-    return false;
+    // allow re-processing if the previous entry has expired
+    if (existing !== undefined && now - existing.at <= this.maxAge) return { duplicate: true };
+
+    const token = Symbol("dedupe-generation");
+    this.seen.set(id, { at: now, token });
+    return { duplicate: false, token };
+  }
+
+  isDuplicate(id: string): boolean {
+    return this.acquire(id).duplicate;
   }
 
   private prune(): void {
     const cutoff = Date.now() - this.maxAge;
-    for (const [id, time] of this.seen) {
-      if (time < cutoff) this.seen.delete(id);
+    for (const [id, entry] of this.seen) {
+      if (entry.at < cutoff) this.seen.delete(id);
     }
 
     while (this.seen.size > this.maxSize) {
