@@ -3,7 +3,7 @@ import { Engagement } from "../../src/index.js";
 
 const T0 = 1_700_000_000_000;
 
-function opened(terms: Engagement.Terms = {}): Engagement.Record {
+function opened(terms: Engagement.Record["terms"] = {}): Engagement.Record {
   return Engagement.open(
     {
       id: "eng-1",
@@ -73,7 +73,7 @@ describe("Engagement.transition — legal edges", () => {
     record = expectRecord(move(record, "done"));
     expect(record.state).toBe("done");
     expect(record.openWaitIds).toEqual([]);
-    expect(Engagement.isTerminal(record.state)).toBe(true);
+    expect(["done", "aborted", "expired"]).toContain(record.state);
   });
 
   test("deliberating may act directly when no term crossing is reported", () => {

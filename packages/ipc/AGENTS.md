@@ -38,7 +38,7 @@ Depends on `@openomni/protocol` **only** — enforced by `script/check-deps.ts`.
 
 ## TESTS
 
-`test/framing.test.ts` (frame cap, UTF-8 streaming state, malformed-line skip-and-report), `test/failure-classes.test.ts` (per-connection failure classes, malformed-frame isolation over a real socket, oversize desync close, error-id correlation, cross-connection response scoping), `test/backpressure.test.ts` (multi-megabyte frames survive a slow reader byte-exact and in order), `test/transport-resilience.test.ts` (sync/async handler failure containment, schema-mismatch surfacing, live-socket probe, notify drop signal), `test/ipc-bidirectional.test.ts` (both directions over a real socket), `test/ipc-extraction.test.ts` (#496 extraction contract), and `test/typed-facade-fixtures/compile-red.ts` (known wrong params/results fail compilation while generic calls remain valid).
+`test/framing.test.ts` (frame cap, UTF-8 streaming state, malformed-line skip-and-report), `test/failure-classes.test.ts` (per-connection failure classes, malformed-frame isolation over a real socket, oversize desync close, error-id correlation, cross-connection response scoping), `test/backpressure.test.ts` (multi-megabyte frames survive a slow reader byte-exact and in order), `test/transport-resilience.test.ts` (sync/async handler failure containment, schema-mismatch surfacing, live-socket probe, notify drop signal), `test/ipc-bidirectional.test.ts` (both directions over a real socket), `test/ipc-extraction.test.ts` (#496 extraction contract), and `test/typed-facade-fixtures/compile-red.ts` (known wrong params/results for the machine wire methods fail compilation while generic calls remain valid).
 
 ## ANTI-PATTERNS
 

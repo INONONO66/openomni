@@ -8,7 +8,6 @@
       "communication",
       "cron",
       "error",
-      "execution",
       "ingress",
       "ipc",
       "mcp",
@@ -17,14 +16,11 @@
       "storage",
       "token",
       "tool",
-      "trace",
-      "worker-bootstrap"
+      "trace"
     ]
   },
   "naming": {
     "grandfathered": [
-      "packages/protocol/src/policy/point-contract.ts:PolicyPointContractModule",
-      "packages/protocol/src/policy/point-registry.ts:PolicyPointRegistryModule",
       "packages/protocol/src/policy/policy-point.ts:PolicyPointModule",
       "packages/protocol/src/work-item/index.ts:ReadBackRequestEnvelope",
       "packages/protocol/src/work-item/schemas.ts:ReadBackRequestEnvelope"

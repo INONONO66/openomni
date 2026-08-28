@@ -1,14 +1,15 @@
 import { z } from "zod";
 import { Actor } from "../actor/index.js";
-import { CommandSchemas } from "../command/schemas.js";
+import { Channel } from "../channel/index.js";
 import {
   Events as EventDescriptors,
   type RoutingDecisionPayload as RoutingDecisionPayloadType,
 } from "../event/ingress.js";
-import { Execution } from "../execution/index.js";
+import { Model } from "../model/index.js";
+import { Policy } from "../policy/index.js";
+import { Tool } from "../tool/index.js";
 import { Wait } from "../wait/index.js";
 import * as RouteRecord from "./route-record.js";
-import type { Tool } from "../tool/index.js";
 
 /**
  * #500 A6: every production-written actor key is declared (`runId` and
@@ -37,17 +38,15 @@ const ActorSchemaImpl = z
   .catchall(z.unknown());
 
 /**
- * #498 C2: the ingress seam narrows THE one Command.Target vocabulary to its
- * two executable kinds. `workerId` is the string-form ("worker:<id>") wire
- * artifact this seam owns; every shared field is picked from Command.Target,
- * and the catchall keeps the historical tolerance for extra inbound keys.
+ * The two executable delivery kinds. `workerId` is the string-form
+ * ("worker:<id>") wire artifact this seam owns; the catchall keeps the
+ * historical tolerance for extra inbound keys.
  */
-const RawTargetSchema = CommandSchemas.Target.pick({
-  sessionId: true,
-  parentSessionId: true,
-})
-  .extend({
-    kind: CommandSchemas.TargetKind.extract(["resident", "worker"]),
+const RawTargetSchema = z
+  .object({
+    kind: z.enum(["resident", "worker"]),
+    sessionId: z.string().min(1).optional(),
+    parentSessionId: z.string().min(1).optional(),
     workerId: z.string().optional(),
   })
   .catchall(z.unknown());
@@ -169,21 +168,21 @@ export namespace Ingress {
   export type ActivationMetadata = z.infer<typeof ActivationMetadataSchemaImpl>;
 
   /**
-   * #500 B1: the zod half is PICKED from the canonical spawn config
-   * (Execution.Request) — same field names, same schema objects, including
-   * the #504 dual lane (`permissions` + `policyPlan`). Only the in-process
-   * callback half below is ingress-specific. `.passthrough()` keeps the
-   * historical inbound tolerance for extra keys.
+   * The zod half of a delivered agent config; only the in-process callback
+   * half below is ingress-specific. `.passthrough()` keeps the historical
+   * inbound tolerance for extra keys.
    */
-  export const AgentDefSchema = Execution.Request.pick({
-    model: true,
-    systemPrompt: true,
-    tools: true,
-    budget: true,
-    permissions: true,
-    policyPlan: true,
-    toolConfig: true,
-  }).passthrough();
+  export const AgentDefSchema = z
+    .object({
+      model: Model.Ref,
+      systemPrompt: z.string().optional(),
+      tools: z.array(Tool.Spec).optional(),
+      budget: Actor.Profile.Budget.optional(),
+      permissions: Policy.Permission.optional(),
+      policyPlan: Policy.PolicyPlan.optional(),
+      toolConfig: Tool.Config.optional(),
+    })
+    .passthrough();
   // Runtime callbacks can't be expressed in Zod.
   export type AgentDef = z.infer<typeof AgentDefSchema> & {
     toolExecutor?: (call: Tool.Call, context?: Tool.ExecutionContext) => Promise<Tool.Result>;
@@ -288,4 +287,77 @@ export namespace Ingress {
   export const ROUTE_NOT_DELIVERED_FACT_TYPE = RouteRecord.ROUTE_NOT_DELIVERED_FACT_TYPE;
   export const routeCorrectionStreamId = RouteRecord.routeCorrectionStreamId;
   export const routeNotDeliveredFact = RouteRecord.routeNotDeliveredFact;
+}
+
+/**
+ * Pure target resolution over the Ingress vocabulary (#707 hoist): both
+ * planes (ingress routing and brain-side projection/authority labels) fold
+ * the same explicit-target > meta-target > resident-default precedence and
+ * the same stable target key. No store access, no defaulting judgment —
+ * absent targets are a protocol fact (resident), not a routing decision.
+ */
+export function resolveTarget(event: {
+  target?: Ingress.Target;
+  meta?: { target?: Ingress.Target };
+}): Ingress.Target {
+  if (event.target) return Ingress.TargetSchema.parse(event.target);
+  if (event.meta?.target) return Ingress.TargetSchema.parse(event.meta.target);
+  return { kind: "resident" };
+}
+
+export function targetKey(target: Ingress.Target): string {
+  if (target.kind === "resident") {
+    return target.sessionId ? `resident:${target.sessionId}` : "resident";
+  }
+  if (target.sessionId) return `worker-session:${target.sessionId}`;
+  return target.workerId ? `worker:${target.workerId}` : "worker";
+}
+
+/**
+ * THE surface-key map key for an inbound event (#707 stage-2 hoist from the
+ * kernel session resolver). Pure fold over protocol vocabulary — both the
+ * gateway router (external claim, record-before-act) and the brain (internal
+ * cron/dispatch surface sessions) derive the SAME byte-frozen key from the
+ * same event shape, so the persisted surface↔session rows can never fork by
+ * copy drift.
+ *
+ * Format: "surface:workspace:channel" for legacy events. Explicit ADR-008
+ * targets append `target:<target-key>` so resident and worker sessions do
+ * not collide.
+ */
+export function extractSurfaceKey(event: {
+  surface: string;
+  workspace?: string;
+  channel?: string;
+  target?: Ingress.Target;
+  meta?: Ingress.Meta;
+}): string {
+  const parts = [event.surface, event.workspace ?? "", event.channel ?? ""];
+  const target = event.target || event.meta?.target ? resolveTarget(event) : undefined;
+  if (target && target.kind !== "resident") {
+    parts.push("target", targetKey(target));
+  }
+  return Channel.SurfaceKey.create(parts);
+}
+
+/**
+ * THE canonical inbound payload-text parser (#707 stage-2 hoist from the
+ * kernel ingress handlers): a string payload is the text, a `{ text: string }`
+ * envelope unwraps, anything else round-trips through JSON (nullish and
+ * non-serializable payloads fail safe to ""). The payload shape is minted at
+ * the perimeter and consumed by the brain — one pure parser in protocol keeps
+ * both sides byte-identical instead of drifting copies.
+ */
+export function extractText(payload: unknown): string {
+  if (typeof payload === "string") return payload;
+  if (
+    payload &&
+    typeof payload === "object" &&
+    "text" in payload &&
+    typeof (payload as { text?: unknown }).text === "string"
+  ) {
+    return (payload as { text: string }).text;
+  }
+  if (payload === null || payload === undefined) return "";
+  return JSON.stringify(payload) ?? "";
 }

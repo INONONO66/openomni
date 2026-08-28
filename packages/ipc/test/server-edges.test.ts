@@ -42,7 +42,7 @@ describe("server edge branches", () => {
     for (const s of servers.splice(0)) s.close();
   });
 
-  for (const method of ["worker.shutdown_idle", "worker.deliver_message"] as const) {
+  for (const method of ["machine.run_cell", "machine.call_tool"] as const) {
     test(`${method} without a connected client rejects with IpcConnectionError`, async () => {
       const srv = await createIpcServer(socketPathForTest(`noclient-${method}`), () => undefined);
       servers.push(srv);
@@ -54,10 +54,10 @@ describe("server edge branches", () => {
     const srv = await createIpcServer(socketPathForTest("timeout"), () => undefined);
     servers.push(srv);
     rawSockets.push(await connect(srv.socketPath));
-    await expect(srv.call("worker.shutdown_idle", {}, 30)).rejects.toThrow(IpcTimeoutError);
+    await expect(srv.call("machine.run_cell", {}, 30)).rejects.toThrow(IpcTimeoutError);
 
     const client = await connectIpcClient(srv.socketPath);
-    await expect(client.call("coordinator.bootstrap", {}, 30)).rejects.toBeInstanceOf(
+    await expect(client.call("machine.attach", {}, 30)).rejects.toBeInstanceOf(
       IpcTimeoutError,
     );
     client.close();
@@ -134,7 +134,7 @@ describe("server edge branches", () => {
     const reply = new Promise<string>((resolve) => {
       second.once("data", (chunk) => resolve(String(chunk)));
     });
-    second.write(`${JSON.stringify(Ipc.createRequest("worker.shutdown_idle", {}))}\n`);
+    second.write(`${JSON.stringify(Ipc.createRequest("machine.run_cell", {}))}\n`);
     const frame = JSON.parse(await reply);
     expect(frame.type).toBe("response");
     expect(frame.result).toEqual({ ok: true });

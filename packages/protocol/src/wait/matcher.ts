@@ -1,4 +1,3 @@
-import type { Command } from "../command/index.js";
 import type { Communication } from "../communication/index.js";
 import type { Ingress } from "../ingress/index.js";
 import type { Correlation, Record } from "./schema.js";
@@ -7,7 +6,7 @@ import type { Correlation, Record } from "./schema.js";
  * THE sender matcher (#215): one core rule set — bearer tokenHash match plus
  * expected-responder / targetActorId identity match — with phase-specific
  * evidence extensions (ingress derives endpoint proof from the resolved
- * InboundEvent actor, dispatch from the Command actor context). The matcher
+ * InboundEvent actor). The matcher
  * only RETURNS responderCandidates[] for the protocol fold; it never decides
  * — zero candidates fold to unknown_responder, several to ambiguous_responder.
  *
@@ -106,24 +105,6 @@ export function ingressEvidence(
       // on a different surface must not prove this endpoint.
       return event.userId === expected || expected === `${event.surface}:${event.userId}`;
     },
-  };
-}
-
-/** Command-seam evidence extension: the Command.Request actor context is the proof surface. */
-export function dispatchEvidence(command: Command.Request): SenderEvidence {
-  const correlation =
-    command.correlation !== undefined && typeof command.correlation !== "string"
-      ? command.correlation
-      : undefined;
-  const unresolved = command.actor.kind === "unknown";
-  return {
-    ...(correlation?.tokenHash === undefined ? {} : { tokenHash: correlation.tokenHash }),
-    ...(correlation === undefined ? {} : { claimedEndpointId: correlation.endpointId }),
-    ...(unresolved ? {} : { actorId: command.actor.actorId }),
-    // A dispatch actor context was derived in-process and already carries the
-    // authenticated identity: known actors need no separate endpoint proof;
-    // unresolved senders only match when they present the endpoint id itself.
-    provesEndpoint: (expected) => !unresolved || command.actor.actorId === expected,
   };
 }
 

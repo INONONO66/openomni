@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { Ipc } from "../../src/index.js";
+import { Ipc, Machine } from "../../src/index.js";
 
 describe("Ipc.Request", () => {
   test("rejects missing id", () => {
     expect(
-      Ipc.Request.safeParse({ v: 2, type: "request", method: "worker.bootstrap_ready" }).success,
+      Ipc.Request.safeParse({ v: 2, type: "request", method: "machine.attach" }).success,
     ).toBe(false);
   });
 
@@ -14,7 +14,7 @@ describe("Ipc.Request", () => {
         v: 1,
         type: "request",
         id: "req-1",
-        method: "worker.bootstrap_ready",
+        method: "machine.attach",
       }).success,
     ).toBe(false);
   });
@@ -25,7 +25,7 @@ describe("Ipc.Request", () => {
         v: 2,
         type: "notification",
         id: "req-1",
-        method: "worker.bootstrap_ready",
+        method: "machine.attach",
       }).success,
     ).toBe(false);
   });
@@ -45,16 +45,16 @@ describe("Ipc.Notification", () => {
 
 describe("Ipc helpers", () => {
   test("createRequest produces valid request", () => {
-    const req = Ipc.createRequest("worker.bootstrap_ready", { workerId: "w1", authToken: "token" });
+    const req = Ipc.createRequest("machine.attach", { machineId: "m-1" });
     expect(Ipc.Request.safeParse(req).success).toBe(true);
     expect(req.type).toBe("request");
     expect(req.v).toBe(2);
     expect(typeof req.id).toBe("string");
-    expect(req.method).toBe("worker.bootstrap_ready");
+    expect(req.method).toBe("machine.attach");
   });
 
   test("createRequest without params", () => {
-    const req = Ipc.createRequest("coordinator.cancel_run");
+    const req = Ipc.createRequest("machine.run_cell");
     expect(Ipc.Request.safeParse(req).success).toBe(true);
     expect(req.params).toBe(undefined);
   });
@@ -76,13 +76,10 @@ describe("Ipc helpers", () => {
   });
 
   test("createNotification produces valid notification", () => {
-    const notif = Ipc.createNotification("worker.deliver_message", {
-      sessionId: "sess-1",
-      message: "hello",
-    });
+    const notif = Ipc.createNotification("machine.detached", { machineId: "m-1" });
     expect(Ipc.Notification.safeParse(notif).success).toBe(true);
     expect(notif.type).toBe("notification");
-    expect(notif.method).toBe("worker.deliver_message");
+    expect(notif.method).toBe("machine.detached");
   });
 
   test("createNotification without params", () => {
@@ -93,150 +90,43 @@ describe("Ipc helpers", () => {
 });
 
 describe("Ipc.Methods param schemas", () => {
-  test("coordinator.spawn_run params valid", () => {
-    expect(
-      Ipc.Methods["coordinator.spawn_run"].params.safeParse({
-        authToken: "token",
-        runId: "run-1",
-        sessionId: "sess-1",
-        mode: "direct",
-        traceId: "trace-1",
-        prompt: "do work",
-        model: { provider: "anthropic", id: "claude-3-5-sonnet-20241022" },
-        credentials: { ANTHROPIC_API_KEY: "sk-test" },
-        permissions: {
-          action: "tool.call",
-          allowlist: ["read_file"],
-          denyLabels: ["risk.tier-3"],
-          inputRules: [
-            {
-              toolPattern: "write_file",
-              field: "path",
-              pattern: "^/workspace/",
-              action: "allow",
-            },
-          ],
-        },
-        policyPlan: {
-          policies: [{ id: "builtin:tool-permission", required: true }],
-          labels: ["ipc"],
-        },
-      }).success,
-    ).toBe(true);
+  test("registers exactly the machine wire methods", () => {
+    expect(Object.keys(Ipc.Methods).sort()).toEqual(
+      [Machine.WireMethod.Attach, Machine.WireMethod.RunCell, Machine.WireMethod.CallTool].sort(),
+    );
   });
 
-  test("coordinator.spawn_run preserves policy plans", () => {
-    const parsed = Ipc.Methods["coordinator.spawn_run"].params.parse({
-      authToken: "token",
-      runId: "run-1",
-      sessionId: "sess-1",
-      mode: "direct",
-      traceId: "trace-1",
-      prompt: "do work",
-      model: { provider: "anthropic", id: "claude-3-5-sonnet-20241022" },
-      policyPlan: {
-        policies: [{ id: "builtin:tool-permission", required: true }],
-        labels: ["ipc"],
-      },
+  test("machine.attach params/result are the Machine offer contracts", () => {
+    expect(Ipc.Methods[Machine.WireMethod.Attach].params).toBe(Machine.Offer);
+    expect(Ipc.Methods[Machine.WireMethod.Attach].result).toBe(Machine.AttachResult);
+  });
+
+  test("machine.run_cell params reject a cell request without a timeout", () => {
+    const valid = Ipc.Methods[Machine.WireMethod.RunCell].params.safeParse({
+      cellId: "cell-1",
+      code: "print(1)",
+      timeoutMs: 1_000,
     });
-
-    expect(parsed.policyPlan?.labels).toEqual(["ipc"]);
-    expect(parsed.policyPlan?.policies[0]?.id).toBe("builtin:tool-permission");
+    const missingTimeout = Ipc.Methods[Machine.WireMethod.RunCell].params.safeParse({
+      cellId: "cell-1",
+      code: "print(1)",
+    });
+    expect(valid.success).toBe(true);
+    expect(missingTimeout.success).toBe(false);
   });
 
-  test("coordinator.spawn_run rejects permission payloads without canonical action", () => {
-    expect(
-      Ipc.Methods["coordinator.spawn_run"].params.safeParse({
-        authToken: "token",
-        runId: "run-1",
-        sessionId: "sess-1",
-        mode: "direct",
-        traceId: "trace-1",
-        prompt: "do work",
-        model: { provider: "anthropic", id: "claude-3-5-sonnet-20241022" },
-        permissions: {
-          allowlist: ["read_file"],
-        },
-      }).success,
-    ).toBe(false);
-  });
-
-  test("coordinator.spawn_run rejects missing required fields", () => {
-    expect(
-      Ipc.Methods["coordinator.spawn_run"].params.safeParse({
-        runId: "run-1",
-        prompt: "do work",
-      }).success,
-    ).toBe(false);
-  });
-
-  test("worker.inbound_wait params valid", () => {
-    expect(
-      Ipc.Methods["worker.inbound_wait"].params.safeParse({
-        authToken: "token",
-        workerId: "worker-1",
-        traceId: "trace-1",
-        sessionId: "session-1",
-        runId: "run-1",
-        callId: "call-1",
-        payload: "Need approval",
-        workspaceRoot: "/workspace/openomni",
-      }).success,
-    ).toBe(true);
-  });
-
-  test("worker.inbound_wait requires the asking run's trace", () => {
-    expect(
-      Ipc.Methods["worker.inbound_wait"].params.safeParse({
-        authToken: "token",
-        workerId: "worker-1",
-        sessionId: "session-1",
-        payload: "Need approval",
-      }).success,
-    ).toBe(false);
-  });
-
-  test("worker.tool_call requires an auth token like other worker verbs", () => {
-    const base = {
-      runId: "run-1",
-      sessionId: "session-1",
-      callId: "call-1",
-      tool: "fs.read",
-      input: { path: "/tmp/x" },
-    };
-    expect(
-      Ipc.Methods["worker.tool_call"].params.safeParse({ authToken: "t", ...base }).success,
-    ).toBe(true);
-    expect(Ipc.Methods["worker.tool_call"].params.safeParse(base).success).toBe(false);
-  });
-
-  test("worker.inbound_wait_cancel params valid", () => {
-    expect(
-      Ipc.Methods["worker.inbound_wait_cancel"].params.safeParse({
-        sessionId: "session-1",
-        runId: "run-1",
-        callId: "call-1",
-      }).success,
-    ).toBe(true);
-  });
-
-  test("worker.tool_call_settled requires the auth token the worker enforces", () => {
-    expect(
-      Ipc.Methods["worker.tool_call_settled"].params.safeParse({
-        authToken: "token",
-        callId: "call-1",
-        workspaceRoot: "/workspace",
-      }).success,
-    ).toBe(true);
-
-    // #500 B3: the receiving worker has always refused unauthenticated
-    // settled frames; the schema now says so instead of documenting a
-    // version-skew tolerance that never existed.
-    expect(
-      Ipc.Methods["worker.tool_call_settled"].params.safeParse({
-        callId: "call-1",
-        workspaceRoot: "/workspace",
-      }).success,
-    ).toBe(false);
+  test("machine.call_tool params reject an unnamed tool call", () => {
+    const valid = Ipc.Methods[Machine.WireMethod.CallTool].params.safeParse({
+      cellId: "cell-1",
+      name: "machines",
+      arguments: {},
+    });
+    const unnamed = Ipc.Methods[Machine.WireMethod.CallTool].params.safeParse({
+      cellId: "cell-1",
+      name: "",
+      arguments: {},
+    });
+    expect(valid.success).toBe(true);
+    expect(unnamed.success).toBe(false);
   });
 });

@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import type { Command } from "../../src/command/index.js";
 import type { Communication } from "../../src/communication/index.js";
 import type { Ingress } from "../../src/ingress/index.js";
 import { Wait } from "../../src/wait/index.js";
@@ -41,20 +40,6 @@ function directEvent(overrides: Partial<Ingress.DirectEvent> = {}): Ingress.Dire
     payload: "reply",
     meta: { correlation },
     agent: { model: { provider: "test", id: "test-model" } },
-    ...overrides,
-  };
-}
-
-function command(overrides: Partial<Command.Request> = {}): Command.Request {
-  return {
-    dispatchId: "dispatch-1",
-    traceId: "trace-matcher-test",
-    action: "actor.message",
-    target: { kind: "surface", id: correlation.channelId },
-    payload: "reply",
-    correlation,
-    actor: { kind: "unknown", actorId: "endpoint-1" },
-    submittedAt: 1,
     ...overrides,
   };
 }
@@ -265,96 +250,6 @@ describe("wait matcher — ingress evidence", () => {
       Wait.responderCandidates(
         Wait.targetsOfWait(record, undefined),
         Wait.ingressEvidence(replyFromStranger, claim),
-      ),
-    ).toEqual([]);
-  });
-});
-
-describe("wait matcher — dispatch evidence", () => {
-  test("credits an unknown dispatch actor only when it presents the endpoint id itself", () => {
-    const record = buildInteraction("pi-unknown", { correlation: {} });
-    const presentsEndpoint = command({
-      correlation: { endpointId: "endpoint-1", channelId: correlation.channelId },
-      actor: { kind: "unknown", actorId: "endpoint-1" },
-    });
-    const other = command({
-      correlation: { endpointId: "endpoint-1", channelId: correlation.channelId },
-      actor: { kind: "unknown", actorId: "someone-else" },
-    });
-
-    expect(
-      Wait.responderCandidates(
-        Wait.targetsOfPendingInteraction(record),
-        Wait.dispatchEvidence(presentsEndpoint),
-      ),
-    ).toEqual(["endpoint-1"]);
-    expect(
-      Wait.responderCandidates(
-        Wait.targetsOfPendingInteraction(record),
-        Wait.dispatchEvidence(other),
-      ),
-    ).toEqual([]);
-  });
-
-  test("never lets an unknown dispatch actor satisfy a pinned target actor", () => {
-    const record = buildInteraction("pi-pinned-dispatch", {
-      targetActorId: "actor-pinned",
-      correlation: {},
-    });
-    const impersonator = command({
-      correlation: { endpointId: "endpoint-1", channelId: correlation.channelId },
-      actor: { kind: "unknown", actorId: "actor-pinned" },
-    });
-
-    expect(
-      Wait.responderCandidates(
-        Wait.targetsOfPendingInteraction(record),
-        Wait.dispatchEvidence(impersonator),
-      ),
-    ).toEqual([]);
-  });
-
-  test("matches a resolved dispatch actor against the pinned target actor", () => {
-    const record = buildInteraction("pi-resolved-dispatch", {
-      targetActorId: "actor-a",
-      correlation: {},
-    });
-    const fromPinned = command({
-      correlation: { endpointId: "endpoint-1", channelId: correlation.channelId },
-      actor: { kind: "internal_worker", actorId: "actor-a" },
-    });
-    const fromOther = command({
-      correlation: { endpointId: "endpoint-1", channelId: correlation.channelId },
-      actor: { kind: "internal_worker", actorId: "actor-b" },
-    });
-
-    expect(
-      Wait.responderCandidates(
-        Wait.targetsOfPendingInteraction(record),
-        Wait.dispatchEvidence(fromPinned),
-      ),
-    ).toEqual(["actor-a"]);
-    expect(
-      Wait.responderCandidates(
-        Wait.targetsOfPendingInteraction(record),
-        Wait.dispatchEvidence(fromOther),
-      ),
-    ).toEqual([]);
-  });
-
-  test("ignores a bearer token presented as a bare string correlation", () => {
-    const record = buildInteraction("pi-string-token", {
-      correlation: { tokenHash: correlation.tokenHash },
-    });
-    const stringCorrelation = command({
-      correlation: correlation.tokenHash,
-      actor: { kind: "unknown", actorId: "someone-else" },
-    });
-
-    expect(
-      Wait.responderCandidates(
-        Wait.targetsOfPendingInteraction(record),
-        Wait.dispatchEvidence(stringCorrelation),
       ),
     ).toEqual([]);
   });

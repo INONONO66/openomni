@@ -74,7 +74,7 @@ adds the one-line re-export in the same PR that imports it.
 
 ## POLICY ENGINE
 
-The policy engine is the extension surface. `@openomni/agent` exposes an agent-scoped `PolicyEngine` facade over the generic engine in `@openomni/policy`; the facade binds the full agent `PolicyContext`; legacy timing registrations are rejected fail-closed at the boundary (#530). Agent execution dispatches through the registered policy points defined in `@openomni/protocol` `policy/point-registry.ts`:
+The policy engine is the extension surface. `@openomni/agent` exposes an agent-scoped `PolicyEngine` facade over the generic engine in `@openomni/policy`; the facade binds the full agent `PolicyContext`; legacy timing registrations are rejected fail-closed at the boundary (#530). Agent execution dispatches through the registered policy points defined in `@openomni/protocol` `policy/policy-point.ts`:
 
 ```
 run.lifecycle.pre → run.turn.pre → prompt.context.pre → tool.catalog.pre

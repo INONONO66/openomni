@@ -36,10 +36,10 @@ export type LegacyLevel = Readonly<{
 
 /**
  * #498 C3: correlation input reuses THE one Wait.Correlation shape (all
- * fields optional). The endpoint+channel scope pins are required by every
- * producing seam (Command.Input / the ingress claim parse), so this explicit
- * presence check only narrows the type for the scoped queries below — it
- * never fires for a parsed envelope.
+ * fields optional). The endpoint+channel scope pins are required by the
+ * producing seam (the ingress claim parse), so this explicit presence check
+ * only narrows the type for the scoped queries below — it never fires for a
+ * parsed envelope.
  */
 function scopedPins(
   correlation: Schema.Correlation | undefined,

@@ -28,9 +28,9 @@ export type IngressRoutingErrorCode =
 
 /**
  * #498 C3: ingress correlation claims reuse THE one Wait.Correlation shape.
- * A claim envelope must carry its endpoint+channel scope pins — the same
- * requirement Command.Input enforces — kept as a local type-narrowing refine
- * at this call site so no second correlation shape is exported.
+ * A claim envelope must carry its endpoint+channel scope pins — kept as a
+ * local type-narrowing refine at this call site so no second correlation
+ * shape is exported.
  */
 type ScopedCorrelation = Wait.Correlation & Readonly<{ endpointId: string; channelId: string }>;
 const ScopedCorrelationClaim = Wait.Correlation.refine(

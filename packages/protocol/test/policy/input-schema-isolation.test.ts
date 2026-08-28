@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { z } from "zod";
-import { Command, Policy, Tool } from "../../src/index.js";
+import { Policy, Tool } from "../../src/index.js";
 
 function whileFieldIsOptional<Shape extends z.ZodRawShape>(
   schema: z.ZodObject<Shape>,
@@ -18,25 +18,6 @@ function whileFieldIsOptional<Shape extends z.ZodRawShape>(
 }
 
 test("policy input validators isolate authority schemas from shared public mutation", () => {
-  const dispatch = Policy.PolicyPoint.InputSchemas["dispatch.action.pre"];
-  const dispatchInput = {
-    actor: { kind: "resident", actorId: "actor-1" },
-    dispatchId: "dispatch-1",
-    action: "worker.spawn",
-    target: { kind: "worker", sessionId: "session-1" },
-    sessionId: "session-1",
-    runId: "run-1",
-  };
-  const missingActorIdAccepted = whileFieldIsOptional(
-    Command.ActorContext,
-    "actorId",
-    () => dispatch.safeParse({ ...dispatchInput, actor: { kind: "resident" } }).success,
-  );
-  const missingTargetKindAccepted = whileFieldIsOptional(
-    Command.Target,
-    "kind",
-    () => dispatch.safeParse({ ...dispatchInput, target: { sessionId: "session-1" } }).success,
-  );
   const missingToolNameAccepted = whileFieldIsOptional(
     Tool.Spec,
     "name",
@@ -63,8 +44,6 @@ test("policy input validators isolate authority schemas from shared public mutat
   // packages/llm/test/run-outcome.test.ts with the canonical schema (protocol
   // cannot import llm).
 
-  expect(missingActorIdAccepted).toBe(false);
-  expect(missingTargetKindAccepted).toBe(false);
   expect(missingToolNameAccepted).toBe(false);
   expect(missingToolOutputAccepted).toBe(false);
 });

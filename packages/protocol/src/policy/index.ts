@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { Events as EventDescriptors } from "../event/policy.js";
-import { PolicyDecisionHelpers } from "./decision.js";
 import { PolicyDefinition } from "./definition.js";
 import { PolicyEffects } from "./effects.js";
 import { PolicyPermission } from "./permission.js";
@@ -88,26 +87,42 @@ export namespace PolicyDecision {
     readonly priority?: number;
   }
 
+  function create(
+    verdict: Policy.PolicyDecision["verdict"],
+    options: Options,
+  ): Policy.PolicyDecision {
+    return {
+      policyId: options.policyId,
+      verdict,
+      effects: options.effects ?? [],
+      reasonCodes: options.reasonCodes ?? [],
+      ...(options.obligations !== undefined && { obligations: options.obligations }),
+      ...(options.factsUsed !== undefined && { factsUsed: options.factsUsed }),
+      ...(options.durationMs !== undefined && { durationMs: options.durationMs }),
+      ...(options.priority !== undefined && { priority: options.priority }),
+    };
+  }
+
   export function allow(options: Options): Policy.PolicyDecision {
-    return PolicyDecisionHelpers.allow(options);
+    return create("allow", options);
   }
 
   export function deny(options: Options): Policy.PolicyDecision {
-    return PolicyDecisionHelpers.deny(options);
+    return create("deny", options);
   }
 
   export function pending(options: Options): Policy.PolicyDecision {
-    return PolicyDecisionHelpers.pending(options);
+    return create("pending", options);
   }
 
   export function isBlocking(decision: Policy.PolicyDecision): boolean {
-    return PolicyDecisionHelpers.isBlocking(decision);
+    return decision.verdict !== "allow";
   }
 
   export function reason(
     decision: Policy.PolicyDecision,
     fallback: string = decision.verdict,
   ): string {
-    return PolicyDecisionHelpers.reason(decision, fallback);
+    return decision.reasonCodes[0] ?? fallback;
   }
 }
