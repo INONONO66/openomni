@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { ZodError } from "zod";
 import { McpConfig, Mcp } from "../src/index.js";
 
 describe("McpConfig.ServerConfig", () => {
@@ -36,7 +37,7 @@ describe("McpConfig.ServerConfig", () => {
         name: "bad",
         transport: "websocket",
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
   });
 
   test("rejects transport configs missing runtime-required fields", () => {
@@ -45,14 +46,14 @@ describe("McpConfig.ServerConfig", () => {
         name: "stdio-missing-command",
         transport: "stdio",
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
 
     expect(() =>
       McpConfig.ServerConfig.parse({
         name: "http-missing-url",
         transport: "streamable-http",
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
 
     expect(() =>
       McpConfig.ServerConfig.parse({
@@ -60,7 +61,7 @@ describe("McpConfig.ServerConfig", () => {
         transport: "sse",
         url: "not a url",
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
   });
 
   test("rejects invalid timeout and retry numbers", () => {
@@ -72,7 +73,7 @@ describe("McpConfig.ServerConfig", () => {
 
     for (const field of ["timeout", "retries"] as const) {
       for (const value of [-1, 0.5, Infinity, Number.NaN]) {
-        expect(() => McpConfig.ServerConfig.parse({ ...base, [field]: value })).toThrow();
+        expect(() => McpConfig.ServerConfig.parse({ ...base, [field]: value })).toThrow(ZodError);
       }
     }
   });
@@ -136,7 +137,7 @@ describe("Mcp.Events.ToolCompleted event", () => {
         resultSummary: "success:text:1024b",
         time: Date.now(),
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
   });
 
   test("rejects missing resultSummary", () => {
@@ -149,6 +150,6 @@ describe("Mcp.Events.ToolCompleted event", () => {
         durationMs: 150,
         time: Date.now(),
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
   });
 });

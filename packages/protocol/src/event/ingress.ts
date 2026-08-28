@@ -7,9 +7,6 @@ const Base = z.object({
   time: z.number(),
 });
 
-// Canonical target labels: "resident", "resident:<sessionId>", "worker", "worker:<id>", "worker-session:<id>"
-const IngressTargetLabel = z.string().optional();
-
 const RoutingDecisionBase = Base.extend({
   inboundId: z.string(),
   surface: z.string(),
@@ -67,53 +64,4 @@ export const Events = {
   RoutingDecision: BusEvent.define("ingress.routing.decision", RoutingDecisionPayloadSchema, {
     visibility: "user_audit",
   }),
-  Received: BusEvent.define(
-    "ingress.received",
-    Base.extend({
-      surface: z.string(),
-      mode: z.enum(["direct", "internal"]),
-      target: IngressTargetLabel,
-      payloadLength: z.number(),
-    }),
-    { visibility: "user_audit" },
-  ),
-  ModeDetected: BusEvent.define(
-    "ingress.mode.detected",
-    Base.extend({
-      sessionId: z.string(),
-      mode: z.enum(["direct", "internal"]),
-      target: IngressTargetLabel,
-    }),
-    { visibility: "ephemeral" },
-  ),
-  SessionResolved: BusEvent.define(
-    "ingress.session.resolved",
-    Base.extend({
-      sessionId: z.string(),
-      isNew: z.boolean(),
-      target: z.enum(["resident", "worker"]).optional(),
-    }),
-    { visibility: "ephemeral" },
-  ),
-  Completed: BusEvent.define(
-    "ingress.completed",
-    Base.extend({
-      sessionId: z.string(),
-      mode: z.enum(["direct", "internal"]),
-      target: IngressTargetLabel,
-      durationMs: z.number(),
-    }),
-    { visibility: "user_audit" },
-  ),
-  Failed: BusEvent.define(
-    "ingress.failed",
-    Base.extend({
-      sessionId: z.string(),
-      mode: z.enum(["direct", "internal"]),
-      target: IngressTargetLabel,
-      durationMs: z.number(),
-      error: z.string(),
-    }),
-    { visibility: "llm_reason" },
-  ),
 };

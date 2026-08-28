@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { ZodError } from "zod";
 import { Gateway } from "../src/gateway/index.js";
 
 const actorContext = {
@@ -64,7 +65,7 @@ describe("Gateway.Deliver", () => {
         decision,
         smuggled: true,
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
     expect(() =>
       Gateway.Deliver.parse({
         sessionId: "s-1",
@@ -72,7 +73,7 @@ describe("Gateway.Deliver", () => {
         event,
         decision,
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
   });
 
   test("rejects 'drop' across the seam — a dropped message is never delivered", () => {
@@ -83,7 +84,7 @@ describe("Gateway.Deliver", () => {
         event,
         decision,
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
   });
 
   test("nested strictness: waitContext rejects unknown fields", () => {
@@ -95,7 +96,7 @@ describe("Gateway.Deliver", () => {
         event,
         decision,
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
   });
 
   test("rejects an out-of-enum treatment or trust tier", () => {
@@ -106,7 +107,7 @@ describe("Gateway.Deliver", () => {
         event,
         decision,
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
     expect(() =>
       Gateway.Deliver.parse({
         sessionId: "s-1",
@@ -114,7 +115,7 @@ describe("Gateway.Deliver", () => {
         event,
         decision,
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
   });
 
   test("an actorContext without origin is rejected — a tier verdict needs its taint root", () => {
@@ -126,11 +127,13 @@ describe("Gateway.Deliver", () => {
         event,
         decision,
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
   });
 
   test("a Deliver without the recorded decision is rejected", () => {
-    expect(() => Gateway.Deliver.parse({ sessionId: "s-1", actorContext, event })).toThrow();
+    expect(() => Gateway.Deliver.parse({ sessionId: "s-1", actorContext, event })).toThrow(
+      ZodError,
+    );
   });
 
   test("a parsed DeliveredEvent drops an extraneous embedded agent (brain material never crosses)", () => {
@@ -153,7 +156,7 @@ describe("Gateway.SendInput (re-homed #215 vocabulary)", () => {
   };
 
   test("awaited requires a waitSpec", () => {
-    expect(() => Gateway.SendInput.parse({ ...base, operation: "awaited" })).toThrow();
+    expect(() => Gateway.SendInput.parse({ ...base, operation: "awaited" })).toThrow(ZodError);
   });
 
   test("fire_and_forget forbids a waitSpec", () => {
@@ -171,7 +174,7 @@ describe("Gateway.SendInput (re-homed #215 vocabulary)", () => {
           followUpWindow: 0,
         },
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
   });
 
   test("awaited with a coherent waitSpec parses", () => {
@@ -220,10 +223,10 @@ describe("Gateway.SendInput (re-homed #215 vocabulary)", () => {
     // Incoherent pairings are refused (the two axes stay coherent, not collapsed).
     expect(() =>
       Gateway.SendInput.parse({ ...base, operation: "fire_and_forget", class: "converse" }),
-    ).toThrow();
+    ).toThrow(ZodError);
     expect(() =>
       Gateway.SendInput.parse({ ...base, operation: "awaited", class: "notify" }),
-    ).toThrow();
+    ).toThrow(ZodError);
   });
 });
 
@@ -250,8 +253,8 @@ describe("Gateway.SocialBudget (#219 active-egress contract)", () => {
   });
 
   test("maxPerWindow and windowMs must be positive; cooldownMs may be zero", () => {
-    expect(() => Gateway.SocialBudget.parse({ ...base, maxPerWindow: 0 })).toThrow();
-    expect(() => Gateway.SocialBudget.parse({ ...base, windowMs: 0 })).toThrow();
+    expect(() => Gateway.SocialBudget.parse({ ...base, maxPerWindow: 0 })).toThrow(ZodError);
+    expect(() => Gateway.SocialBudget.parse({ ...base, windowMs: 0 })).toThrow(ZodError);
     expect(Gateway.SocialBudget.parse({ ...base, cooldownMs: 0 }).cooldownMs).toBe(0);
   });
 
@@ -261,8 +264,8 @@ describe("Gateway.SocialBudget (#219 active-egress contract)", () => {
         ...base,
         quietHours: { startMinuteUtc: 1440, endMinuteUtc: 0 },
       }),
-    ).toThrow();
-    expect(() => Gateway.SocialBudget.parse({ ...base, unexpected: true })).toThrow();
+    ).toThrow(ZodError);
+    expect(() => Gateway.SocialBudget.parse({ ...base, unexpected: true })).toThrow(ZodError);
   });
 });
 
@@ -279,14 +282,14 @@ describe("Gateway.SenderTargetGrant (instances)", () => {
   });
 
   test("a rule-materialized instance requires replyScope AND expiresAt", () => {
-    expect(() => Gateway.SenderTargetGrant.parse({ ...standing, ruleId: "r-1" })).toThrow();
+    expect(() => Gateway.SenderTargetGrant.parse({ ...standing, ruleId: "r-1" })).toThrow(ZodError);
     expect(() =>
       Gateway.SenderTargetGrant.parse({
         ...standing,
         ruleId: "r-1",
         replyScope: { surfaceKey: "junggonara:chat:777" },
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
     const instance = Gateway.SenderTargetGrant.parse({
       ...standing,
       ruleId: "r-1",
@@ -302,7 +305,7 @@ describe("Gateway.SenderTargetGrant (instances)", () => {
         ...standing,
         replyScope: { surfaceKey: "junggonara:chat:777" },
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
   });
 });
 
@@ -338,8 +341,8 @@ describe("Gateway.ReplyGrantRule", () => {
   });
 
   test("rejects a zero or negative live-instance cap (farming bound)", () => {
-    expect(() => Gateway.ReplyGrantRule.parse({ ...rule, maxLiveInstances: 0 })).toThrow();
-    expect(() => Gateway.ReplyGrantRule.parse({ ...rule, instanceTtlMs: -1 })).toThrow();
+    expect(() => Gateway.ReplyGrantRule.parse({ ...rule, maxLiveInstances: 0 })).toThrow(ZodError);
+    expect(() => Gateway.ReplyGrantRule.parse({ ...rule, instanceTtlMs: -1 })).toThrow(ZodError);
   });
 });
 
@@ -355,10 +358,10 @@ describe("Gateway.WaitControl", () => {
     ).toBe("expire_now");
     expect(() =>
       Gateway.WaitControl.parse({ waitId: "w-1", action: "extend", reason: "nope" }),
-    ).toThrow();
+    ).toThrow(ZodError);
   });
 
   test("requires a reason (auditability)", () => {
-    expect(() => Gateway.WaitControl.parse({ waitId: "w-1", action: "cancel" })).toThrow();
+    expect(() => Gateway.WaitControl.parse({ waitId: "w-1", action: "cancel" })).toThrow(ZodError);
   });
 });

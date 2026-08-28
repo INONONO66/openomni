@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { ZodError } from "zod";
 import { Artifact } from "../src/artifact/index";
 
 const it = test;
@@ -29,8 +30,8 @@ describe("Artifact schemas", () => {
     });
 
     it("rejects missing required fields", () => {
-      expect(() => Artifact.Meta.parse({})).toThrow();
-      expect(() => Artifact.Meta.parse({ id: "art-1" })).toThrow();
+      expect(() => Artifact.Meta.parse({})).toThrow(ZodError);
+      expect(() => Artifact.Meta.parse({ id: "art-1" })).toThrow(ZodError);
     });
 
     it("rejects non-integer version", () => {
@@ -43,7 +44,7 @@ describe("Artifact schemas", () => {
           version: 1.5,
           createdAt: "2025-01-01T00:00:00Z",
         }),
-      ).toThrow();
+      ).toThrow(ZodError);
     });
 
     describe("version constraint", () => {
@@ -58,7 +59,7 @@ describe("Artifact schemas", () => {
               version,
               createdAt: "x",
             }),
-          ).toThrow());
+          ).toThrow(ZodError));
       }
     });
 
@@ -85,7 +86,7 @@ describe("Artifact schemas", () => {
               title: "t",
               createdAt,
             }),
-          ).toThrow());
+          ).toThrow(ZodError));
       }
 
       for (const mimeType of ["", "   "]) {
@@ -98,7 +99,7 @@ describe("Artifact schemas", () => {
               title: "t",
               createdAt: "x",
             }),
-          ).toThrow());
+          ).toThrow(ZodError));
       }
     });
   });

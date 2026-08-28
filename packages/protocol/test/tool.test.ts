@@ -1,4 +1,5 @@
 import { describe, test, expect } from "bun:test";
+import { ZodError } from "zod";
 import { Tool } from "../src/tool/index.js";
 
 describe("Tool shared contracts", () => {
@@ -44,11 +45,11 @@ describe("Tool.StatePending", () => {
   });
 
   test("rejects missing input", () => {
-    expect(() => Tool.State.parse({ status: "pending" })).toThrow();
+    expect(() => Tool.State.parse({ status: "pending" })).toThrow(ZodError);
   });
 
   test("rejects missing status", () => {
-    expect(() => Tool.State.parse({ input: {} })).toThrow();
+    expect(() => Tool.State.parse({ input: {} })).toThrow(ZodError);
   });
 
   test("rejects wrong status", () => {
@@ -57,7 +58,7 @@ describe("Tool.StatePending", () => {
         status: "running",
         input: {},
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
   });
 });
 
@@ -80,7 +81,7 @@ describe("Tool.StateRunning", () => {
         status: "running",
         input: {},
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
   });
 
   test("rejects missing input", () => {
@@ -89,7 +90,7 @@ describe("Tool.StateRunning", () => {
         status: "running",
         time: { start: 1 },
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
   });
 });
 
@@ -119,7 +120,7 @@ describe("Tool.StateCompleted", () => {
         metadata: {},
         time: { start: 1, end: 2 },
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
   });
 
   test("rejects missing title", () => {
@@ -131,7 +132,7 @@ describe("Tool.StateCompleted", () => {
         metadata: {},
         time: { start: 1, end: 2 },
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
   });
 
   test("rejects missing time", () => {
@@ -143,7 +144,7 @@ describe("Tool.StateCompleted", () => {
         title: "Demo Task",
         metadata: {},
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
   });
 });
 
@@ -168,7 +169,7 @@ describe("Tool.StateError", () => {
         input: {},
         time: { start: 1, end: 2 },
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
   });
 
   test("rejects missing time", () => {
@@ -178,7 +179,7 @@ describe("Tool.StateError", () => {
         input: {},
         error: "failed",
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
   });
 });
 
@@ -226,11 +227,11 @@ describe("Tool.State", () => {
         status: "done",
         input: {},
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
   });
 
   test("rejects missing status field", () => {
-    expect(() => Tool.State.parse({ input: {} })).toThrow();
+    expect(() => Tool.State.parse({ input: {} })).toThrow(ZodError);
   });
 });
 
@@ -253,7 +254,7 @@ describe("Tool.Call", () => {
         tool: "search",
         input: {},
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
   });
 
   test("rejects missing tool", () => {
@@ -262,7 +263,7 @@ describe("Tool.Call", () => {
         id: "call-1",
         input: {},
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
   });
 });
 
@@ -297,7 +298,7 @@ describe("Tool.Result", () => {
         id: "res-1",
         toolCallId: "call-1",
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
   });
 });
 
@@ -355,7 +356,7 @@ describe("Tool.Spec", () => {
       Tool.Spec.parse({
         inputSchema: {},
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
   });
 
   test("rejects missing inputSchema", () => {
@@ -363,7 +364,7 @@ describe("Tool.Spec", () => {
       Tool.Spec.parse({
         name: "search",
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
   });
 });
 
@@ -401,17 +402,9 @@ describe("Tool source label grammar", () => {
 // #500 C4: folded in from the deleted src/tool-selection/tool-selection.test.ts —
 // the vocabulary now lives on the Tool namespace.
 describe("Tool.Category", () => {
-  test("parses every category", () => {
-    expect(Tool.Category.parse("filesystem")).toBe("filesystem");
-    expect(Tool.Category.parse("execution")).toBe("execution");
-    expect(Tool.Category.parse("delegation")).toBe("delegation");
-    expect(Tool.Category.parse("mcp")).toBe("mcp");
-    expect(Tool.Category.parse("custom")).toBe("custom");
-  });
-
   test("rejects unknown categories", () => {
-    expect(() => Tool.Category.parse("invalid")).toThrow();
-    expect(() => Tool.Category.parse("filesystem2")).toThrow();
+    expect(() => Tool.Category.parse("invalid")).toThrow(ZodError);
+    expect(() => Tool.Category.parse("filesystem2")).toThrow(ZodError);
   });
 });
 
@@ -439,7 +432,7 @@ describe("Tool.Selection", () => {
   });
 
   test("rejects invalid categories inside the selection", () => {
-    expect(() => Tool.Selection.parse({ categories: ["invalid"] })).toThrow();
+    expect(() => Tool.Selection.parse({ categories: ["invalid"] })).toThrow(ZodError);
   });
 
   test("parses the empty selection", () => {

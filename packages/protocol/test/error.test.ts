@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { z } from "zod";
+import { z, ZodError } from "zod";
 
 import { NamedError } from "../src/error/index.js";
 
@@ -121,7 +121,7 @@ describe("NamedError.Unknown", () => {
         name: "UnknownError",
         data: {},
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
   });
 });
 

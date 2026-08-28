@@ -16,18 +16,6 @@ const target: Command.Target = {
   parentSessionId: "parent-session",
 };
 
-const eventBase = {
-  dispatchId: "dispatch-1",
-  traceId: "trace-1",
-  sessionId: "session-1",
-  runId: "run-1",
-  actor,
-  action: "resident.ask",
-  target,
-  correlation: "corr-1",
-  time: Date.now(),
-};
-
 describe("Command protocol schemas", () => {
   test("Input accepts the public dispatch envelope", () => {
     const parsed = Command.Input.parse({
@@ -147,7 +135,7 @@ describe("Command protocol schemas", () => {
     ).toBe("internal_worker");
   });
 
-  test("Request and Result carry canonical runtime metadata", () => {
+  test("Request carries canonical runtime metadata", () => {
     const command = Command.Request.parse({
       action: "resident.ask",
       target,
@@ -162,72 +150,6 @@ describe("Command protocol schemas", () => {
     });
 
     expect(command.actor.actorId).toBe("worker-1");
-
-    const result = Command.Result.parse({
-      dispatchId: command.dispatchId,
-      status: "completed",
-      output: { delivered: true },
-      handler: "resident.ask",
-      durationMs: 1,
-    });
-
-    expect(result.status).toBe("completed");
-  });
-
-  test("Events parse dispatch lifecycle payloads", () => {
-    expect(Command.Events.Submitted.schema.parse({ ...eventBase }).dispatchId).toBe("dispatch-1");
-    expect(
-      Command.Events.Authorized.schema.parse({
-        ...eventBase,
-        verdict: "allow",
-        policyId: "dispatch.default",
-        effects: [{ type: "audit.annotate", annotation: "ok" }],
-      }).verdict,
-    ).toBe("allow");
-    expect(
-      Command.Events.Denied.schema.parse({
-        ...eventBase,
-        verdict: "deny",
-        reason: "not authorized",
-        policyId: "dispatch.default",
-      }).reason,
-    ).toBe("not authorized");
-    expect(
-      Command.Events.Routed.schema.parse({ ...eventBase, handler: "resident.ask" }).handler,
-    ).toBe("resident.ask");
-    expect(
-      Command.Events.Completed.schema.parse({
-        ...eventBase,
-        handler: "resident.ask",
-        durationMs: 2,
-      }).durationMs,
-    ).toBe(2);
-    expect(
-      Command.Events.Failed.schema.parse({ ...eventBase, reason: "handler failed" }).reason,
-    ).toBe("handler failed");
-  });
-
-  test("Events refuse an untraced payload", () => {
-    // Pin (D11): Command.traceId is required and submit hard-rejects a missing
-    // one, so the field is enforced at COMPILE time for every typed producer.
-    // Persistence does not strict-parse (it keeps the raw payload and files it
-    // under the "untraced" sentinel); the schema states the invariant so any
-    // future strict consumer refuses. Two events suffice: all six extend the
-    // one EventBase and none re-declares traceId.
-    const { traceId: _traceId, ...untraced } = eventBase;
-    expect(Command.Events.Submitted.schema.safeParse(untraced).success).toBe(false);
-    expect(
-      Command.Events.Failed.schema.safeParse({ ...untraced, reason: "handler failed" }).success,
-    ).toBe(false);
-  });
-
-  test("Events use canonical descriptor names", () => {
-    expect(Command.Events.Submitted.name).toBe("dispatch.submitted");
-    expect(Command.Events.Authorized.name).toBe("dispatch.authorized");
-    expect(Command.Events.Denied.name).toBe("dispatch.denied");
-    expect(Command.Events.Routed.name).toBe("dispatch.routed");
-    expect(Command.Events.Completed.name).toBe("dispatch.completed");
-    expect(Command.Events.Failed.name).toBe("dispatch.failed");
   });
 
   test("Policy.Resource accepts dispatch descriptors for policy audit", () => {

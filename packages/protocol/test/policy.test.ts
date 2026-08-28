@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { describe, expect, test } from "bun:test";
+import { ZodError } from "zod";
 import { Policy, PolicyDecision } from "../src/policy/index";
 
 const it = test;
@@ -109,7 +110,7 @@ describe("Policy schemas", () => {
             pattern,
             action: "deny",
           }),
-        ).toThrow();
+        ).toThrow(ZodError);
       }
     });
 
@@ -526,7 +527,7 @@ describe("Policy schemas", () => {
           policies: [{ id: "", required: true }],
           labels: ["test"],
         }),
-      ).toThrow();
+      ).toThrow(ZodError);
     });
   });
 });

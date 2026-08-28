@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { z } from "zod";
+import { ZodError, type z } from "zod";
 import { Ingress } from "../../src/ingress/index.js";
 
 const RoutingDecision = Ingress.Events.RoutingDecision;
@@ -32,6 +32,8 @@ const terminalCases: RoutingDecisionInput[] = [
     trustTier: "assigned_worker",
     inboundTreatment: "full_access",
   },
+  // Exercises both the source-prefix regex and minimum candidate count
+  // refinements of the ambiguous arm.
   {
     ...baseDecision,
     stage: "wait_correlation",
@@ -136,7 +138,7 @@ describe("Ingress.Events.RoutingDecision", () => {
       Reflect.deleteProperty(input, requiredField);
 
       // When / Then
-      expect(() => routingDecisionSchema.parse(input)).toThrow();
+      expect(() => routingDecisionSchema.parse(input)).toThrow(ZodError);
     });
   }
 
@@ -146,7 +148,7 @@ describe("Ingress.Events.RoutingDecision", () => {
       const input = { ...baseDecision, stage, outcome };
 
       // When / Then
-      expect(() => routingDecisionSchema.parse(input)).toThrow();
+      expect(() => routingDecisionSchema.parse(input)).toThrow(ZodError);
     });
   }
 
@@ -160,7 +162,7 @@ describe("Ingress.Events.RoutingDecision", () => {
     };
 
     // When / Then
-    expect(() => routingDecisionSchema.parse(input)).toThrow();
+    expect(() => routingDecisionSchema.parse(input)).toThrow(ZodError);
   });
 
   test("requires at least two source-qualified candidates for an ambiguous decision", () => {
@@ -177,13 +179,13 @@ describe("Ingress.Events.RoutingDecision", () => {
         ...ambiguous,
         candidateInteractionIds: ["pending_ask:ask-1"],
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
     expect(() =>
       routingDecisionSchema.parse({
         ...ambiguous,
         candidateInteractionIds: ["ask-1", "pending_interaction:pi-2"],
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
   });
 
   test("rejects the retired plan mode", () => {
@@ -191,6 +193,6 @@ describe("Ingress.Events.RoutingDecision", () => {
     const input = { ...baseDecision, mode: "plan", stage: "surface_default", outcome: "route" };
 
     // When / Then
-    expect(() => routingDecisionSchema.parse(input)).toThrow();
+    expect(() => routingDecisionSchema.parse(input)).toThrow(ZodError);
   });
 });

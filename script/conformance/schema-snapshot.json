@@ -175,15 +175,6 @@
     "wait",
     "workspaceRoot"
   ],
-  "Command.Result": [
-    "dispatchId",
-    "durationMs",
-    "error",
-    "handler",
-    "output",
-    "reason",
-    "status"
-  ],
   "Command.Target": [
     "connectorInstallationId",
     "endpointId",

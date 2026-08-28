@@ -14,12 +14,12 @@ src/
 ├── artifact/             # Artifact.Meta (positive version and non-empty mimeType/createdAt)
 ├── bus/                  # BusEvent.define() + injected BusEvent.Sink contract
 ├── channel/              # Channel surfaces, messages, config, and surface-key codec
-├── command/              # Command request/result schemas
+├── command/              # Command request schemas and action constants
 ├── communication/        # PendingAsk and PendingInteraction legacy contracts
-├── cron/                 # Cron job schemas and event descriptors
+├── cron/                 # Cron job schemas
 ├── engagement/           # Engagement schemas, events, and pure transition fold
 ├── error/                # NamedError factory and shared protocol errors
-├── event/                # Ingress, LLM, MCP, operational, policy, tool, and worker-driver descriptors
+├── event/                # Ingress, LLM, MCP, operational, policy, and tool descriptors
 ├── execution/            # Execution.Request / Result and Driver contracts
 ├── gateway/              # Gateway delivery/send/wait contracts and messaging events
 ├── ingress/              # Inbound contracts plus payload, route-record, surface-key, and target helpers
@@ -29,7 +29,7 @@ src/
 ├── message/              # Message.Part variants, Message.Info, Message.WithParts
 ├── model/                # Model.Ref and model status
 ├── policy/               # 18-point registry, contracts, plan, permissions, resources, and effects
-├── storage/              # Storage.WorkItemSubAdapter interface
+├── storage/              # Storage namespace: sub-adapter interfaces split by domain (orchestration, decision ledger, perimeter, scheduling, actor infrastructure)
 ├── token/                # Token usage contracts
 ├── tool/                 # Tool.Spec / Call / Result / State
 ├── trace/                # TraceContext schema and newTraceId()
@@ -48,7 +48,7 @@ Namespace additions are gated: `script/lint-tools.ts` (#467) enforces a grandfat
 - **Discriminated unions**: `Tool.State` on `status`, `Message.Part` on `type`, `Message.Info` on `role`, `Policy.PolicyDecision` on `verdict`, and `Ingress.InboundEvent` on `mode`. `DirectEvent` (`mode: "direct"`) is external inbound; `InternalEvent` (`mode: "internal"`) is system-origin input such as cron. The external `ingest()` path rejects internal events for security. LLM `Run.Outcome` and its streaming `Sink` are owned by `@openomni/llm`, not protocol.
 - **Event correlation**: Event descriptors define their own schemas and carry the relevant trace/run/session identity. There is no exported universal `BaseEvent` contract.
 - **Policy points**: `policy/point-registry.ts` registers 18 policy points (`dispatch.action.pre`, `run.lifecycle.pre/post`, `run.turn.pre/post`, `run.completion.pre`, `run.error.error`, `work.complete.pre`, `prompt.context.pre`, `connection.llm.pre/post`, `tool.catalog.pre`, `tool.native.pre/post`, `tool.mcp.pre/post`, `delegation.worker.pre/post`), each with allowed-effects whitelist, default fail policy (pre-boundary fail-closed, post fail-open), required context, and input schema (`point-contract.ts`). Generic agent-loop `run.completion.pre` and WorkItem contract-closing `work.complete.pre` are distinct points. `Policy.PolicyPlan` is defined in `policy/index.ts`. `Policy.PolicyDecision` verdict is one of `allow | deny | pending`. A legacy `Policy.Timing` alias survives for pre-v2 timing names; do not build new code on it.
-- **Storage sub-adapters**: `Storage.WorkItemSubAdapter` in `storage/index.ts` — pure interface contract with no runtime logic. Implementation lives in `@openomni/ledger`.
+- **Storage sub-adapters**: the `Storage` namespace (`storage/namespace.ts`, re-exported through the `storage/index.ts` barrel) holds pure interface contracts grouped by domain file — no runtime logic. Implementations live in `@openomni/ledger`.
 - **WorkItem namespace**: `work-item/index.ts` is the public facade. `work-item/schemas.ts` defines `WorkItem.Info`; `attempt.ts` owns attempt, fingerprint, cache/replay key, and nondeterminism contracts; `completion-admission.ts` defines stable criteria, claims, observations, requests, admissions, and terminal receipts. Rows parse through `WorkItem.Info` directly. `work-item/events.ts` preserves the shipped `Completed` meaning and carries distinct request/admission/CompletedV2 descriptors; `status.ts`, `hash.ts`, and `terminal-linkage.ts` own pure lifecycle derivation and linkage validation.
 - **Execution/IPC contracts**: `execution/`, `ipc/`, and `worker-bootstrap/` describe worker requests, responses, and bootstrap payloads only. Process delegation lifecycle lives in the product app.
 - **AppConnector namespace**: `app-connector/index.ts` defines installed-app connector schema contracts. Runtime install, consent, and process execution live above protocol.
@@ -101,7 +101,7 @@ Future WorkItem-attempt and Jester-evaluation shapes are contracts only: they ad
 - Adding a new message part? Add a variant to `Message.Part` in `message/index.ts`.
 - Adding a new tool state? Add to `Tool.State` discriminated union in `tool/index.ts`.
 - Adding a new policy point? Register it in `policy/point-registry.ts` with a full contract (allowed effects, fail policy, required context, input schema) and coordinate with the engine in `packages/policy` — point additions are protocol vocabulary and ride the #467 gate.
-- Adding a new storage sub-adapter interface? Add it to `storage/index.ts` as a named interface under the `Storage` namespace.
+- Adding a new storage sub-adapter interface? Add it to the matching domain file under `storage/` as a named interface inside the `Storage` namespace (`storage/namespace.ts`); the `storage/index.ts` barrel re-exports it.
 - Adding a work-item field? Update `WorkItem.Info` in `work-item/schemas.ts`. If it affects status derivation, update `deriveStatus()` in `work-item/status.ts`.
 - Adding a work-item event? Extend `WorkItem.Events` in `work-item/events.ts` with a `BusEvent.define()` call.
 - Adding a new worker request or IPC field? Update `execution/`, `ipc/`, or `worker-bootstrap/` here first, then adapt coordinator/openomni/server callers.
