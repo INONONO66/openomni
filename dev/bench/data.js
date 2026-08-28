@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787887577595,
+  "lastUpdate": 1787888141128,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -64769,6 +64769,90 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 527674,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ddd1b091c24f7b2f33b40ad7e48b722f01800cfb",
+          "message": "refactor(protocol): purge dead vocabulary, split storage by domain, typed test assertions (#832)\n\n* refactor(protocol): purge dead vocabulary, split storage by domain, typed test assertions\n\n- delete worker-driver event vocab, CronJob.Events, five dead ingress.* event\n  descriptors, Command.Result/Command.Events (consumer-swept against main)\n- split storage/index.ts into semantic domain files (orchestration, decision\n  ledger, perimeter, scheduling, actor infrastructure) behind an unchanged\n  barrel; public Storage surface proven identical\n- strengthen ~84 broad toThrow() protocol test assertions to typed ZodError,\n  delete 9 echo tests that could not fail\n- annotate ledger stream registry entries SHIPPED/DORMANT; command stream\n  status corrected to dormant (no production publisher)\n- schema snapshot + AGENTS.md synced (shrinkage only)\n\n* test(protocol): restore behavioral coverage over-deleted by hygiene pass\n\nAdversarial review MAJOR finding: six valid RoutingDecision terminal-arm\nacceptance cases and the PartTransition completed-signature round-trip are\nbehavioral union-arm coverage, not echo tests. Restored verbatim.",
+          "timestamp": "2026-08-28T03:34:38Z",
+          "tree_id": "3cad791c7221d47cb09d66d789fadb4fe547bcc7",
+          "url": "https://github.com/INONONO66/openomni/commit/ddd1b091c24f7b2f33b40ad7e48b722f01800cfb"
+        },
+        "date": 1787888140467,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2154,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 14785,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7853,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1049,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 947,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1592,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1544,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 762,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 44156,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2318,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 526602,
             "unit": "ns/op"
           }
         ]
