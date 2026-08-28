@@ -87,8 +87,7 @@ describe("ledger producer drift", () => {
     const producers = LEDGER_PRODUCER_MANIFEST.streams.flatMap((entry) => entry.producers);
     expect(new Set(producers).size).toBe(producers.length);
     for (const entry of LEDGER_PRODUCER_MANIFEST.streams) {
-      const expected = entry.streamClass === "command" ? 0 : 1;
-      expect(entry.producers.length).toBe(expected);
+      expect(entry.producers.length).toBe(1);
     }
   });
 
