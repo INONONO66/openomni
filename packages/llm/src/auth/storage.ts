@@ -1,6 +1,6 @@
 import z from "zod";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { join, dirname } from "node:path";
+import { join, dirname, resolve } from "node:path";
 import { mkdirSync, existsSync, writeFileSync, renameSync } from "node:fs";
 import { homedir } from "node:os";
 import { NamedError } from "../error";
@@ -18,18 +18,18 @@ const ProxyAuth = z.object({
 
 const Info = z.discriminatedUnion("type", [ApiAuth, ProxyAuth]);
 const authFilePathContext = new AsyncLocalStorage<string>();
+const writeQueues = new Map<string, Promise<void>>();
 
 const getAuthFilePath = () => {
   const scopedPath = authFilePathContext.getStore();
-  if (scopedPath) return scopedPath;
+  if (scopedPath) return resolve(scopedPath);
   if (process.env.OPENOMNI_AUTH_FILE) {
-    return process.env.OPENOMNI_AUTH_FILE;
+    return resolve(process.env.OPENOMNI_AUTH_FILE);
   }
   return join(homedir(), ".openomni", "auth.json");
 };
 
-const ensureAuthDir = () => {
-  const filepath = getAuthFilePath();
+const ensureAuthDir = (filepath: string) => {
   const dir = dirname(filepath);
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
@@ -47,6 +47,22 @@ const writeAuthFile = (filepath: string, contents: string): void => {
   writeFileSync(tmpPath, contents, { mode: 0o600 });
   renameSync(tmpPath, filepath);
 };
+
+async function enqueueWrite<T>(filepath: string, write: () => Promise<T>): Promise<T> {
+  const previous = writeQueues.get(filepath) ?? Promise.resolve();
+  const result = previous.then(write);
+  const current = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  writeQueues.set(filepath, current);
+
+  try {
+    return await result;
+  } finally {
+    if (writeQueues.get(filepath) === current) writeQueues.delete(filepath);
+  }
+}
 
 export namespace Auth {
   export type Info = z.infer<typeof Info>;
@@ -74,7 +90,10 @@ export namespace Auth {
   }
 
   export async function all(): Promise<Record<string, Info>> {
-    const filepath = getAuthFilePath();
+    return readAuthFile(getAuthFilePath());
+  }
+
+  async function readAuthFile(filepath: string): Promise<Record<string, Info>> {
     const file = Bun.file(filepath);
     if (!(await file.exists())) return {};
 
@@ -105,10 +124,12 @@ export namespace Auth {
     );
   }
 
-  export async function set(key: string, info: Info) {
-    ensureAuthDir();
+  export async function set(key: string, info: Info): Promise<void> {
     const filepath = getAuthFilePath();
-    const data = await all();
-    writeAuthFile(filepath, JSON.stringify({ ...data, [key]: info }, null, 2));
+    await enqueueWrite(filepath, async () => {
+      ensureAuthDir(filepath);
+      const data = await readAuthFile(filepath);
+      writeAuthFile(filepath, JSON.stringify({ ...data, [key]: info }, null, 2));
+    });
   }
 }

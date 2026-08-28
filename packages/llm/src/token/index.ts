@@ -17,38 +17,48 @@ export namespace TokenTracker {
     const outputDetails = recordField(usage, "outputTokenDetails");
 
     const inputTokens =
-      numberField(usage, "inputTokens") ||
-      numberField(usage, "input_tokens") ||
-      numberField(usage, "promptTokens") ||
-      numberField(usage, "prompt_tokens");
+      firstCount(
+        numberField(usage, "inputTokens"),
+        numberField(usage, "input_tokens"),
+        numberField(usage, "promptTokens"),
+        numberField(usage, "prompt_tokens"),
+      ) ?? 0;
 
     const outputTokens =
-      numberField(usage, "outputTokens") ||
-      numberField(usage, "output_tokens") ||
-      numberField(usage, "completionTokens") ||
-      numberField(usage, "completion_tokens");
+      firstCount(
+        numberField(usage, "outputTokens"),
+        numberField(usage, "output_tokens"),
+        numberField(usage, "completionTokens"),
+        numberField(usage, "completion_tokens"),
+      ) ?? 0;
 
     const reasoningTokens =
-      numberField(outputDetails, "reasoningTokens") ||
-      numberField(usage, "reasoningTokens") ||
-      numberField(usage, "reasoning_tokens") ||
-      rawReasoningTokens(usage.raw) ||
-      providerMetadataNumber(response.providerMetadata, "anthropic", "reasoningTokens") ||
-      providerMetadataNumber(response.providerMetadata, "openai", "reasoningTokens");
+      firstCount(
+        numberField(outputDetails, "reasoningTokens"),
+        numberField(usage, "reasoningTokens"),
+        numberField(usage, "reasoning_tokens"),
+        rawReasoningTokens(usage.raw),
+        providerMetadataNumber(response.providerMetadata, "anthropic", "reasoningTokens"),
+        providerMetadataNumber(response.providerMetadata, "openai", "reasoningTokens"),
+      ) ?? 0;
 
     const cacheReadTokens =
-      numberField(inputDetails, "cacheReadTokens") ||
-      numberField(usage, "cachedInputTokens") ||
-      numberField(usage, "cacheReadTokens") ||
-      numberField(usage, "cache_read_input_tokens") ||
-      providerMetadataNumber(response.providerMetadata, "anthropic", "cacheReadInputTokens") ||
-      providerMetadataNumber(response.providerMetadata, "openai", "cachedPromptTokens");
+      firstCount(
+        numberField(inputDetails, "cacheReadTokens"),
+        numberField(usage, "cachedInputTokens"),
+        numberField(usage, "cacheReadTokens"),
+        numberField(usage, "cache_read_input_tokens"),
+        providerMetadataNumber(response.providerMetadata, "anthropic", "cacheReadInputTokens"),
+        providerMetadataNumber(response.providerMetadata, "openai", "cachedPromptTokens"),
+      ) ?? 0;
 
     const cacheWriteTokens =
-      numberField(inputDetails, "cacheWriteTokens") ||
-      numberField(usage, "cacheWriteTokens") ||
-      numberField(usage, "cache_creation_input_tokens") ||
-      providerMetadataNumber(response.providerMetadata, "anthropic", "cacheCreationInputTokens");
+      firstCount(
+        numberField(inputDetails, "cacheWriteTokens"),
+        numberField(usage, "cacheWriteTokens"),
+        numberField(usage, "cache_creation_input_tokens"),
+        providerMetadataNumber(response.providerMetadata, "anthropic", "cacheCreationInputTokens"),
+      ) ?? 0;
 
     return {
       inputTokens,
@@ -69,9 +79,17 @@ export namespace TokenTracker {
     };
   }
 
-  function numberField(record: Record<string, unknown>, key: string): number {
+  function firstCount(...values: Array<number | undefined>): number | undefined {
+    return values.find((value) => value !== undefined);
+  }
+
+  function numberField(record: Record<string, unknown>, key: string): number | undefined {
     const value = record[key];
-    return typeof value === "number" ? value : 0;
+    return isCount(value) ? value : undefined;
+  }
+
+  function isCount(value: unknown): value is number {
+    return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
   }
 
   function recordField(record: Record<string, unknown>, key: string): Record<string, unknown> {
@@ -79,19 +97,22 @@ export namespace TokenTracker {
     return isRecord(value) ? value : {};
   }
 
-  function providerMetadataNumber(metadata: unknown, provider: string, key: string): number {
-    if (!isRecord(metadata)) return 0;
+  function providerMetadataNumber(
+    metadata: unknown,
+    provider: string,
+    key: string,
+  ): number | undefined {
+    if (!isRecord(metadata)) return undefined;
     const providerMetadata = metadata[provider];
-    if (!isRecord(providerMetadata)) return 0;
+    if (!isRecord(providerMetadata)) return undefined;
     return numberField(providerMetadata, key);
   }
 
-  function rawReasoningTokens(raw: unknown): number {
-    if (!isRecord(raw)) return 0;
+  function rawReasoningTokens(raw: unknown): number | undefined {
+    if (!isRecord(raw)) return undefined;
     const details = raw.completion_tokens_details;
-    if (!isRecord(details)) return 0;
-    const tokens = details.reasoning_tokens;
-    return typeof tokens === "number" ? tokens : 0;
+    if (!isRecord(details)) return undefined;
+    return isCount(details.reasoning_tokens) ? details.reasoning_tokens : undefined;
   }
 
   function isRecord(value: unknown): value is Record<string, unknown> {

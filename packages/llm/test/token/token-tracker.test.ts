@@ -40,6 +40,65 @@ const usageCases: Array<{
     },
     expected: [200, 80, 9, 0, 0],
   },
+  {
+    name: "keeps a legitimate zero instead of falling through to lower-priority aliases",
+    response: {
+      usage: {
+        inputTokens: 0,
+        input_tokens: 11,
+        outputTokens: 0,
+        output_tokens: 10,
+        outputTokenDetails: { reasoningTokens: 0 },
+        reasoningTokens: 12,
+        inputTokenDetails: { cacheReadTokens: 0, cacheWriteTokens: 0 },
+        cacheReadTokens: 13,
+        cacheWriteTokens: 14,
+      },
+    },
+    expected: [0, 0, 0, 0, 0],
+  },
+  {
+    name: "rejects negative token counts",
+    response: {
+      usage: {
+        inputTokens: -1,
+        outputTokens: -2,
+        reasoningTokens: -3,
+        cacheReadTokens: -4,
+        cacheWriteTokens: -5,
+      },
+    },
+    expected: [0, 0, 0, 0, 0],
+  },
+  {
+    name: "rejects NaN and infinite token counts",
+    response: {
+      usage: {
+        inputTokens: Number.NaN,
+        outputTokens: Number.POSITIVE_INFINITY,
+        reasoningTokens: Number.NEGATIVE_INFINITY,
+      },
+      providerMetadata: {
+        anthropic: {
+          cacheReadInputTokens: Number.NaN,
+          cacheCreationInputTokens: Number.POSITIVE_INFINITY,
+        },
+      },
+    },
+    expected: [0, 0, 0, 0, 0],
+  },
+  {
+    name: "rejects fractional and unsafe token counts",
+    response: {
+      usage: {
+        inputTokens: 1.5,
+        outputTokens: Number.MAX_SAFE_INTEGER + 1,
+        cacheReadTokens: 2.5,
+        cacheWriteTokens: Number.MAX_SAFE_INTEGER + 1,
+      },
+    },
+    expected: [0, 0, 0, 0, 0],
+  },
   { name: "returns zeros when usage is missing", response: {}, expected: [0, 0, 0, 0, 0] },
 ];
 

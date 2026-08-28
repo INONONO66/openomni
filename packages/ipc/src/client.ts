@@ -1,8 +1,7 @@
 import net from "node:net";
-import { Ipc } from "@openomni/protocol";
-import { IpcConnectionError, IpcProtocolError, IpcRemoteError, IpcTimeoutError } from "./errors";
+import { IpcConnectionError, IpcProtocolError } from "./errors";
 import { LineDecoder, encode } from "./framing";
-import { PendingCalls } from "./pending-calls";
+import { PeerRequestTable } from "./peer-request-table";
 
 export interface IpcClient {
   call(method: string, params?: Record<string, unknown>, timeoutMs?: number): Promise<unknown>;
@@ -33,7 +32,14 @@ export function connectIpcClient(
   return new Promise((resolve, reject) => {
     const socket = net.createConnection(socketPath);
     const decoder = new LineDecoder();
-    const pending = new PendingCalls();
+    const peer = new PeerRequestTable({
+      send: (_peer, frame) => socket.write(encode(frame)),
+      onRequest: opts.onRequest
+        ? (_peer, method, params, respond) => opts.onRequest?.(method, params, respond)
+        : undefined,
+      onNotification: (_peer, method, params) => opts.onNotification?.(method, params),
+      missingRequestHandlerMessage: (method) => `client has no request handler for ${method}`,
+    });
     let connected = false;
 
     const connectTimer = setTimeout(() => {
@@ -42,7 +48,7 @@ export function connectIpcClient(
     }, connectTimeoutMs);
 
     function failAllPending(err: Error): void {
-      pending.failAll(err);
+      peer.disconnectAll(err);
     }
 
     socket.on("connect", () => {
@@ -64,85 +70,7 @@ export function connectIpcClient(
         return;
       }
       for (const raw of msgs) {
-        const response = Ipc.Response.safeParse(raw);
-        if (response.success) {
-          const { id, result, error } = response.data;
-          pending.settle(
-            id,
-            error
-              ? { ok: false, error: new IpcRemoteError(error.code, error.message) }
-              : { ok: true, value: result },
-          );
-          continue;
-        }
-
-        const request = Ipc.Request.safeParse(raw);
-        if (request.success) {
-          if (!opts.onRequest) {
-            // No handler is a remote failure the caller can classify — a
-            // silent drop would surface as a timeout on the server side.
-            socket.write(
-              encode(
-                Ipc.createErrorResponse(
-                  request.data.id,
-                  1000,
-                  `client has no request handler for ${request.data.method}`,
-                ),
-              ),
-            );
-            continue;
-          }
-          const respond = (result: unknown) => {
-            socket.write(encode(Ipc.createResponse(request.data.id, result)));
-          };
-          // A failing handler must never escape the socket 'data' listener —
-          // that tears down the connection (and can crash the process). Both
-          // sync throws AND async rejections become the typed code-1000 error
-          // frame instead, mirroring the server side.
-          const failRequest = (err: unknown) => {
-            socket.write(
-              encode(
-                Ipc.createErrorResponse(
-                  request.data.id,
-                  1000,
-                  err instanceof Error ? err.message : String(err),
-                ),
-              ),
-            );
-          };
-          try {
-            const result = opts.onRequest(request.data.method, request.data.params, respond);
-            if (result instanceof Promise) result.catch(failRequest);
-          } catch (err) {
-            failRequest(err);
-          }
-          continue;
-        }
-
-        const notification = Ipc.Notification.safeParse(raw);
-        if (notification.success) {
-          // Notifications get no error frame per the protocol spec, but a
-          // throwing handler must not escape the 'data' listener either —
-          // that is an uncaughtException in whatever process hosts this
-          // client (e.g. the coordinator supervisor). Mirror the server:
-          // log and keep draining, for sync throws AND async rejections.
-          const warnFailure = (error: unknown) => {
-            console.warn(
-              "IPC notification handler failed:",
-              error instanceof Error ? error.message : String(error),
-            );
-          };
-          try {
-            const result = opts.onNotification?.(
-              notification.data.method,
-              notification.data.params,
-            );
-            if (result instanceof Promise) result.catch(warnFailure);
-          } catch (error) {
-            warnFailure(error);
-          }
-          continue;
-        }
+        if (peer.dispatch(raw, undefined)) continue;
 
         // Valid JSON that matches no message schema: surface it instead of a
         // silent drop, so a schema-drifted peer is visible in logs rather
@@ -195,13 +123,7 @@ export function connectIpcClient(
         if (!connected) {
           return Promise.reject(new IpcConnectionError("not connected"));
         }
-        const req = Ipc.createRequest(method, params);
-        return pending.register(
-          req.id,
-          timeoutMs,
-          () => new IpcTimeoutError(`request timeout: ${method}`),
-          { send: () => socket.write(encode(req)) },
-        );
+        return peer.call(undefined, method, params, timeoutMs);
       },
       close() {
         connected = false;

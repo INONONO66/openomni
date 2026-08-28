@@ -15,6 +15,14 @@ type OperationalInfoPayload = {
   context?: Record<string, unknown>;
 };
 
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 function streamOf(chunks: Array<Record<string, unknown>>) {
   return async () => ({
     fullStream: (async function* () {
@@ -571,24 +579,33 @@ describe("Processor", () => {
         }),
       });
 
+      const warnPublished = deferred();
+      const originalPublish = events.publish;
+      events.publish = (event, data) => {
+        originalPublish(event, data);
+        if (
+          event.name === Operational.Events.Warn.name &&
+          (data as OperationalInfoPayload).component === "llm.retry"
+        ) {
+          warnPublished.resolve();
+        }
+      };
+
       const settled = processor.process({ system: "" }).then(
         () => undefined,
         (error: unknown) => error,
       );
-      // The warn publishes before the backoff sleep; abort so the test does
-      // not wait the multi-second backoff out.
+      // The warn publishes before the backoff sleep; abort on that exact event.
+      await warnPublished.promise;
+      abortController.abort();
+      await settled;
+      events.publish = originalPublish;
+
       const warns = () =>
         events
           .named(Operational.Events.Warn.name)
           .map((event) => event as OperationalInfoPayload)
           .filter((data) => data.component === "llm.retry");
-      const deadline = Date.now() + 2000;
-      while (warns().length === 0 && Date.now() < deadline) {
-        await Bun.sleep(5);
-      }
-      abortController.abort();
-      await settled;
-
       expect(warns()).toHaveLength(1);
       expect(warns()[0]).toMatchObject({
         component: "llm.retry",

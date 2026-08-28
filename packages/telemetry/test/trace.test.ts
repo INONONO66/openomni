@@ -7,8 +7,6 @@ import {
   newTraceId,
   requireTraceScope,
   rootScope,
-  spanStatus,
-  spanStatusMessage,
   toTraceparent,
 } from "@openomni/telemetry";
 
@@ -121,32 +119,5 @@ describe("scope construction", () => {
       "traceId must be 32 lowercase hex characters",
     );
     expect(requireTraceScope({ ...base, traceId: newTraceId() }).traceId).toMatch(/^[0-9a-f]{32}$/);
-  });
-});
-
-describe("span status", () => {
-  test("only a completed span is ok", () => {
-    expect(spanStatus({ kind: "completed" })).toBe("ok");
-    expect(spanStatus({ kind: "budget_exhausted", limit: "turns" })).toBe("error");
-    expect(spanStatus({ kind: "failed", error: new Error("x") })).toBe("error");
-    expect(
-      spanStatus({ kind: "guard_denied", point: "run.turn.pre", policyId: "p", reason: "r" }),
-    ).toBe("error");
-  });
-
-  test("the message names why, and a completed span has none", () => {
-    expect(spanStatusMessage({ kind: "completed" })).toBeUndefined();
-    expect(
-      spanStatusMessage({
-        kind: "guard_denied",
-        point: "run.turn.pre",
-        policyId: "p",
-        reason: "r",
-      }),
-    ).toBe("run.turn.pre: r");
-    expect(spanStatusMessage({ kind: "budget_exhausted", limit: "turns" })).toBe(
-      "budget exhausted: turns",
-    );
-    expect(spanStatusMessage({ kind: "failed", error: new Error("boom") })).toBe("boom");
   });
 });

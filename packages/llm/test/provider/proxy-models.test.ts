@@ -51,6 +51,27 @@ describe("proxy-models", () => {
       expect(capturedHeaders?.get("Authorization")).toBe(expected);
     });
 
+    it("does not share cached model lists between credentials at the same URL", async () => {
+      const authorizationHeaders: Array<string | null> = [];
+      stubFetch((_input, init) => {
+        const authorization = new Headers(init?.headers).get("Authorization");
+        authorizationHeaders.push(authorization);
+        const id = authorization === "Bearer credential-a" ? "model-a" : "model-b";
+        return new Response(JSON.stringify({ data: [{ id }] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      });
+
+      expect(await fetchProxyModels("http://localhost:3110/v1", "credential-a")).toEqual([
+        "model-a",
+      ]);
+      expect(await fetchProxyModels("http://localhost:3110/v1", "credential-b")).toEqual([
+        "model-b",
+      ]);
+      expect(authorizationHeaders).toEqual(["Bearer credential-a", "Bearer credential-b"]);
+    });
+
     it("throws a typed error on auth failure (401) instead of returning []", async () => {
       stubFetch(() => new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 }));
       const error = await fetchProxyModels("http://localhost:3102/v1").then(

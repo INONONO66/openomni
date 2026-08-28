@@ -3,6 +3,7 @@ import { connectIpcClient, typedCall } from "@openomni/ipc";
 import { Machine } from "@openomni/protocol";
 import { attachMachineDaemon } from "../src/daemon";
 import { type MachineHost, createMachineHost } from "../src/host";
+import { MachineCellError } from "../src/index";
 import { PythonKernel } from "../src/kernel";
 import { socketPath } from "./helpers/socket-path";
 
@@ -153,11 +154,93 @@ describe("code-mode tool bridge", () => {
         });
         expect(next).toMatchObject({ status: "completed", value: "'alive'" });
       },
-      async () => {
-        await new Promise((resolve) => setTimeout(resolve, 5000));
-        return { status: "completed", value: "too late" };
-      },
+      () => new Promise<Machine.ToolCallResult>(() => undefined),
     );
+  });
+
+  test("a duplicate in-flight cellId is refused with a typed error on a live connection", async () => {
+    const path = socketPath();
+    const host = await createMachineHost({
+      socketPath: path,
+      enrollment: () => ({
+        name: "workstation",
+        machineId: "m-1",
+        allowedCapabilities: ["kernel.py"],
+        enrolledAt: 1000,
+      }),
+      events: silent,
+      now: () => 5000,
+    });
+    let announceFirst!: () => void;
+    const firstReceived = new Promise<void>((resolve) => {
+      announceFirst = resolve;
+    });
+    let releaseFirst!: () => void;
+    const firstBlocked = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    let runCellRequests = 0;
+    const daemon = await connectIpcClient(path, {
+      onRequest: async (method, params, respond) => {
+        if (method !== Machine.WireMethod.RunCell) return;
+        runCellRequests += 1;
+        const request = Machine.CellRequest.parse(params);
+        announceFirst();
+        await firstBlocked;
+        respond({
+          status: "completed",
+          cellId: request.cellId,
+          output: { stdout: "", stderr: "" },
+        });
+      },
+    });
+    try {
+      await typedCall(
+        daemon,
+        Machine.WireMethod.Attach,
+        {
+          machineId: "m-1",
+          daemonVersion: "0.1.0",
+          platform: "darwin",
+          offeredCapabilities: ["kernel.py"],
+          offeredAt: 2000,
+        },
+        5000,
+      );
+      const first = host.runCell("m-1", {
+        cellId: "duplicate",
+        code: "'first'",
+        timeoutMs: 15_000,
+      });
+      await firstReceived;
+
+      let duplicateError: unknown;
+      try {
+        await host.runCell("m-1", {
+          cellId: "duplicate",
+          code: "'second'",
+          timeoutMs: 15_000,
+        });
+      } catch (error) {
+        duplicateError = error;
+      }
+      expect(MachineCellError.isInstance(duplicateError)).toBe(true);
+      if (!MachineCellError.isInstance(duplicateError)) {
+        throw new Error("expected a typed duplicate-cell refusal");
+      }
+      expect(duplicateError.data).toMatchObject({
+        code: "duplicate_cell_id",
+        cellId: "duplicate",
+      });
+      expect(runCellRequests).toBe(1);
+
+      releaseFirst();
+      await expect(first).resolves.toMatchObject({ status: "completed", cellId: "duplicate" });
+    } finally {
+      releaseFirst();
+      daemon.close();
+      host.close();
+    }
   });
 
   test("a connection that never attached cannot reach host tools", async () => {
@@ -197,44 +280,42 @@ describe("code-mode tool bridge", () => {
   });
 
   test("a tool answer that outlives its cell never reaches the next one", async () => {
-    // A cell can leave a tool call in flight by making it from a background
-    // thread and returning first. The interpreter has one stdin channel, so
-    // delivering that late answer while another cell owns the interpreter
-    // would hand the successor a value it never asked for.
     const kernel = new PythonKernel();
+    let announceSlowCall!: () => void;
+    const slowCallEntered = new Promise<void>((resolve) => {
+      announceSlowCall = resolve;
+    });
+    let releaseSlowCall!: () => void;
+    const slowCallBlocked = new Promise<void>((resolve) => {
+      releaseSlowCall = resolve;
+    });
     try {
-      const first = await kernel.run(
-        {
-          cellId: "one",
-          code: [
-            "import threading, time",
-            "threading.Thread(target=lambda: tool.slow(), daemon=True).start()",
-            "time.sleep(0.2)",
-            "'one done'",
-          ].join("\n"),
-          timeoutMs: 15_000,
-        },
+      const firstPending = kernel.run(
+        { cellId: "one", code: "tool.slow()", timeoutMs: 100 },
         async () => {
-          await new Promise((resolve) => setTimeout(resolve, 1200));
+          announceSlowCall();
+          await slowCallBlocked;
           return { status: "completed", value: "stray" };
         },
       );
-      expect(first).toMatchObject({ status: "completed", value: "'one done'" });
+      await slowCallEntered;
+      await expect(firstPending).resolves.toEqual({ status: "timed_out", cellId: "one" });
 
-      // The successor settles on its own terms — never with "stray".
+      // Timeout replaced the interpreter. The successor completes before the
+      // old callback is released, so its result cannot depend on scheduler luck.
       const second = await kernel.run(
         { cellId: "two", code: "tool.mine()", timeoutMs: 2000 },
         async () => ({ status: "completed", value: "mine" }),
       );
-      expect(second.cellId).toBe("two");
-      expect(JSON.stringify(second)).not.toContain("stray");
+      expect(second).toMatchObject({ status: "completed", cellId: "two", value: "'mine'" });
 
-      // And the kernel is still usable afterwards.
+      releaseSlowCall();
       const third = await kernel.run({ cellId: "three", code: "1 + 1", timeoutMs: 15_000 }, () =>
         Promise.resolve({ status: "failed", error: "no tools" }),
       );
       expect(third).toMatchObject({ status: "completed", value: "2" });
     } finally {
+      releaseSlowCall();
       kernel.close();
     }
   });

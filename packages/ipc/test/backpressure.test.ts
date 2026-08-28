@@ -3,6 +3,7 @@ import net from "node:net";
 import { Ipc } from "@openomni/protocol";
 import { LineDecoder } from "../src/framing";
 import { createIpcServer } from "../src/server";
+import { deferred, within } from "./helpers/signal";
 import { socketPath as socketPathForTest } from "./helpers/socket-path";
 
 // Big enough to overflow any kernel socket buffer: Bun sockets do NOT buffer
@@ -13,16 +14,17 @@ describe("server write backpressure (Bun partial writes)", () => {
   const servers: Awaited<ReturnType<typeof createIpcServer>>[] = [];
   const rawSockets: net.Socket[] = [];
 
-  afterEach(async () => {
+  afterEach(() => {
     for (const s of rawSockets.splice(0)) s.destroy();
     for (const s of servers.splice(0)) s.close();
-    await Bun.sleep(10);
   });
 
   test("a multi-megabyte response reaches a slow reader byte-exact", async () => {
     const socketPath = socketPathForTest("big-frame");
+    const responseIssued = deferred();
     const srv = await createIpcServer(socketPath, (_method, _params, respond) => {
       respond({ data: BIG_PAYLOAD });
+      responseIssued.resolve();
     });
     servers.push(srv);
 
@@ -33,19 +35,18 @@ describe("server write backpressure (Bun partial writes)", () => {
     // Slow reader: stop consuming BEFORE the server writes. The kernel
     // accepts only one socket buffer's worth synchronously; everything
     // else must survive in the server's write queue until drain.
+    const decoder = new LineDecoder();
+    const frameReceived = deferred<unknown>();
+    socket.on("data", (chunk) => {
+      const { frames } = decoder.push(chunk);
+      if (frames.length > 0) frameReceived.resolve(frames[0]);
+    });
     socket.pause();
     const request = Ipc.createRequest("get-big", {});
     socket.write(`${JSON.stringify(request)}\n`);
-    await Bun.sleep(300);
-
-    const decoder = new LineDecoder();
-    const frame = await new Promise<unknown>((resolve) => {
-      socket.on("data", (chunk) => {
-        const { frames } = decoder.push(chunk);
-        if (frames.length > 0) resolve(frames[0]);
-      });
-      socket.resume();
-    });
+    await within(responseIssued.promise, "server issuing queued large response");
+    socket.resume();
+    const frame = await within(frameReceived.promise, "complete large response", 10_000);
 
     const response = frame as { id?: string; result?: { data?: string } };
     expect(response.id).toBe(request.id);
@@ -57,8 +58,10 @@ describe("server write backpressure (Bun partial writes)", () => {
 
   test("a frame written while earlier bytes are still queued arrives after them, intact", async () => {
     const socketPath = socketPathForTest("ordering");
+    const responseIssued = deferred();
     const srv = await createIpcServer(socketPath, (_method, _params, respond) => {
       respond({ data: BIG_PAYLOAD });
+      responseIssued.resolve();
     });
     servers.push(srv);
 
@@ -66,25 +69,24 @@ describe("server write backpressure (Bun partial writes)", () => {
     rawSockets.push(socket);
     await new Promise<void>((resolve) => socket.once("connect", () => resolve()));
 
+    const decoder = new LineDecoder();
+    const frames: unknown[] = [];
+    const bothFramesReceived = deferred();
+    socket.on("data", (chunk) => {
+      frames.push(...decoder.push(chunk).frames);
+      if (frames.length >= 2) bothFramesReceived.resolve();
+    });
     socket.pause();
     const request = Ipc.createRequest("get-big", {});
     socket.write(`${JSON.stringify(request)}\n`);
-    await Bun.sleep(200);
+    await within(responseIssued.promise, "server queuing first large frame");
 
     // The big response is now partially queued. A notification issued NOW
     // must land after it — pre-fix it interleaved into the middle of the
     // queued frame and corrupted both.
     expect(srv.notify("after.big", { marker: true })).toBe(true);
-
-    const decoder = new LineDecoder();
-    const frames: unknown[] = [];
-    await new Promise<void>((resolve) => {
-      socket.on("data", (chunk) => {
-        frames.push(...decoder.push(chunk).frames);
-        if (frames.length >= 2) resolve();
-      });
-      socket.resume();
-    });
+    socket.resume();
+    await within(bothFramesReceived.promise, "ordered response and notification", 10_000);
 
     const [first, second] = frames as [
       { id?: string; result?: { data?: string } },

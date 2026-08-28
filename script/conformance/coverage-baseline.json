@@ -40,8 +40,8 @@
     "pct": 97.69
   },
   "packages/telemetry": {
-    "linesFound": 274,
-    "linesHit": 272,
-    "pct": 99.27
+    "linesFound": 225,
+    "linesHit": 223,
+    "pct": 99.11
   }
 }

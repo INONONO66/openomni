@@ -1,6 +1,7 @@
 import { chmodSync } from "node:fs";
 import { type IpcServer, createIpcServer, typedCall } from "@openomni/ipc";
 import { type BusEvent, Machine } from "@openomni/protocol";
+import { MachineCellError } from "./errors";
 
 export interface MachineHostOptions {
   readonly socketPath: string;
@@ -97,7 +98,11 @@ export async function createMachineHost(options: MachineHostOptions): Promise<Ma
         }
         const call = Machine.ToolCall.parse(params);
         if (!inFlight.get(connectionId)?.has(call.cellId)) {
-          throw new Error(`no cell in flight: ${call.cellId}`);
+          throw new MachineCellError({
+            code: "unknown_cell_id",
+            cellId: call.cellId,
+            message: `no cell in flight: ${call.cellId}`,
+          });
         }
         respond(
           options.callTool
@@ -165,6 +170,13 @@ export async function createMachineHost(options: MachineHostOptions): Promise<Ma
       }
       server.useConnection(connectionId);
       const cells = inFlight.get(connectionId) ?? new Set<string>();
+      if (cells.has(request.cellId)) {
+        throw new MachineCellError({
+          code: "duplicate_cell_id",
+          cellId: request.cellId,
+          message: `cell is already in flight: ${request.cellId}`,
+        });
+      }
       cells.add(request.cellId);
       inFlight.set(connectionId, cells);
       try {

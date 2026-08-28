@@ -5,6 +5,7 @@ import { connectIpcClient } from "../src/client";
 import { IpcConnectionError, IpcTimeoutError } from "../src/errors";
 import { LineDecoder } from "../src/framing";
 import { createIpcServer } from "../src/server";
+import { deferred, within } from "./helpers/signal";
 import { socketPath as socketPathForTest } from "./helpers/socket-path";
 
 function connect(socketPath: string): Promise<net.Socket> {
@@ -16,6 +17,8 @@ async function exchange(socketPath: string, line: string): Promise<Record<string
   const socket = await connect(socketPath);
   const decoder = new LineDecoder();
   return new Promise((resolve, reject) => {
+    // Bounded failure guard: resolution is event-driven (first decoded frame); the timer only
+    // rejects the test instead of hanging when the frame never arrives.
     const timeout = setTimeout(() => reject(new Error("IPC response timeout")), 1_000);
     socket.on("data", (chunk) => {
       const frame = decoder.push(chunk).frames[0];
@@ -34,10 +37,9 @@ describe("server edge branches", () => {
   const servers: Awaited<ReturnType<typeof createIpcServer>>[] = [];
   const rawSockets: net.Socket[] = [];
 
-  afterEach(async () => {
+  afterEach(() => {
     for (const s of rawSockets.splice(0)) s.destroy();
     for (const s of servers.splice(0)) s.close();
-    await Bun.sleep(10);
   });
 
   for (const method of ["worker.shutdown_idle", "worker.deliver_message"] as const) {
@@ -52,11 +54,12 @@ describe("server edge branches", () => {
     const srv = await createIpcServer(socketPathForTest("timeout"), () => undefined);
     servers.push(srv);
     rawSockets.push(await connect(srv.socketPath));
-    await Bun.sleep(20);
-    expect(srv.call("worker.shutdown_idle", {}, 30)).rejects.toThrow(IpcTimeoutError);
+    await expect(srv.call("worker.shutdown_idle", {}, 30)).rejects.toThrow(IpcTimeoutError);
 
     const client = await connectIpcClient(srv.socketPath);
-    await expect(client.call("coordinator.bootstrap", {}, 30)).rejects.toBeInstanceOf(IpcTimeoutError);
+    await expect(client.call("coordinator.bootstrap", {}, 30)).rejects.toBeInstanceOf(
+      IpcTimeoutError,
+    );
     client.close();
   });
 
@@ -68,7 +71,10 @@ describe("server edge branches", () => {
     expect(unknown.id).toBe("unknown");
     expect((unknown.error as { code: number }).code).toBe(4000);
 
-    const correlated = await exchange(srv.socketPath, '{"v":2,"type":"request","id":"req-correlate-1"}\n');
+    const correlated = await exchange(
+      srv.socketPath,
+      '{"v":2,"type":"request","id":"req-correlate-1"}\n',
+    );
     expect(correlated.id).toBe("req-correlate-1");
     expect((correlated.error as { code: number }).code).toBe(4000);
 
@@ -80,8 +86,10 @@ describe("server edge branches", () => {
 
   test("notification handler failures are contained (sync throw and async rejection)", async () => {
     const seen: string[] = [];
+    const bothHandled = deferred();
     const srv = await createIpcServer(socketPathForTest("notify"), (method) => {
       seen.push(method);
+      if (seen.length === 2) bothHandled.resolve();
       if (method === "sync.boom") throw new Error("sync failure");
       return Promise.reject(new Error("async failure"));
     });
@@ -93,16 +101,21 @@ describe("server edge branches", () => {
     // server must survive both failure shapes and keep serving.
     socket.write(`${JSON.stringify(Ipc.createNotification("sync.boom", {}))}\n`);
     socket.write(`${JSON.stringify(Ipc.createNotification("async.boom", {}))}\n`);
-    await Bun.sleep(50);
+    await within(bothHandled.promise, "both failing notification handlers");
 
     expect(seen).toEqual(["sync.boom", "async.boom"]);
     expect(socket.destroyed).toBe(false);
   });
 
   test("a client that errors mid-connection is removed and the server keeps serving", async () => {
-    const srv = await createIpcServer(socketPathForTest("sockerr"), (_m, _p, respond) => {
-      respond({ ok: true });
-    });
+    const disconnected = deferred();
+    const srv = await createIpcServer(
+      socketPathForTest("sockerr"),
+      (_m, _p, respond) => {
+        respond({ ok: true });
+      },
+      { onDisconnect: () => disconnected.resolve() },
+    );
     servers.push(srv);
 
     const first = await connect(srv.socketPath);
@@ -110,9 +123,8 @@ describe("server edge branches", () => {
     first.on("error", () => {
       // Client-local: destroy(err) emits here; the server observes the close.
     });
-    await Bun.sleep(20);
     first.destroy(new Error("simulated transport failure"));
-    await Bun.sleep(30);
+    await within(disconnected.promise, "server removal of errored client");
 
     // Client→server direction is deterministic (no active-connection routing):
     // the fresh client sends a request and must get the handler's response,

@@ -2,7 +2,7 @@
 
 The observation channel. Ring 1, depends only on `@openomni/protocol`.
 
-Everything the system says about itself goes through here: the process-wide `Bus`, an emitter that owns trace identity, span pairing for lifecycle events, and sink combinators. Nothing durable, nothing that decides.
+Everything the system says about itself goes through here: the process-wide `Bus`, an emitter that owns trace identity, and sink combinators. Nothing durable, nothing that decides.
 
 ## THE BOUNDARY RULE
 
@@ -23,8 +23,7 @@ If something here can change what the observed code does, it belongs in `@openom
 src/
 ├── bus.ts     # Bus.publish / subscribe / observe, AsyncLocalStorage isolation, diagnostic stats
 ├── trace.ts   # TraceScope + requireTraceScope (construction-time guard)
-├── scope.ts   # scope(trace, sink) -> Emitter: emit, span, child
-├── span.ts    # SpanPair, SpanOutcome, span handle
+├── scope.ts   # scope(trace, sink) -> Emitter: emit, child
 └── sink.ts    # collector (tests), noopSink (the boundary reference), tee (fan-out)
 ```
 
@@ -40,26 +39,9 @@ This exists because thirteen sites in the agent core minted a fresh `crypto.rand
 
 The rest of the tree has not caught up — see D11 in [docs/agent-core-rewrite.md](../../docs/agent-core-rewrite.md) for the remaining count, and note that `scope()` itself still has no production caller.
 
-## WHY SPANS
-
-`span(pair, start, body)` emits exactly one terminal event per start, on every exit: a normal return, a `settle()` recording a policy block or exhausted budget, or a throw.
-
-`guard_denied` and `budget_exhausted` are first-class `SpanOutcome` variants because that is how a run most often stops, and a policy block looks like a normal return from the outside. Twelve of the agent's fifteen run-terminating paths emit no terminal event at all today; `Emitter.span` has no production caller yet, and converting those paths is the same Phase 1b.
-
-First `settle()` wins, so an inner guard is not overwritten by an outer one on the way out.
-
 ## WHAT IS WIRED TODAY
 
-`Bus`, `newTraceId`, and `newSpanId` have production consumers. Everything else — `span`, `child`, the sinks (`tee`, `noopSink`, `collector`), the `traceparent` codec, the span status helpers (`spanStatus`, `spanStatusMessage`), and the guards (`requireTraceScope`, `rootScope`, `isTraceId`, `isSpanId`, `InvalidTraceScopeError`) — has zero PRODUCTION consumers, but its test/bench consumers span packages: `collector` is imported by llm, agent, and openomni tests (not just this package's own), `noopSink` by `packages/agent/bench/index.ts`, and `scope` by a `packages/ledger` test fixture. `createSpanHandle` and `failedOutcome` are not exported from the barrel at all: `scope.ts` is their only consumer, and an export with no reader is the thing this rule exists to catch. The reader-less *type* re-exports that used to ride the barrel (`Emitter`,
-`CollectingSink`, `SpanHandle`, …) were deleted in #647, which supersedes the
-earlier stand-or-fall doctrine here: Phase 1b shipped its consumers (they use
-`Bus` and the id mints, and hold everything else structurally), so the types
-never gained a reader and the entry no longer carries them. Definition-site
-exports remain where declaration emit or an internal importer needs them; a
-consumer that needs to name one adds the one-line barrel re-export in the same
-PR that imports it. `check-dead-exports` will not tell you any of this — entry
-exports are exempt, and tests count as consumers — so re-check with
-`bunx knip --include-entry-exports` when touching this surface.
+`Bus`, `newTraceId`, and `newSpanId` have production consumers. Everything else — `child`, the sinks (`tee`, `noopSink`, `collector`), the `traceparent` codec, and the guards (`requireTraceScope`, `rootScope`, `isTraceId`, `isSpanId`, `InvalidTraceScopeError`) — has zero PRODUCTION consumers, but its test/bench consumers span packages: `collector` is imported by llm, agent, and openomni tests (not just this package's own), `noopSink` by `packages/agent/bench/index.ts`, and `scope` by a `packages/ledger` test fixture. The dormant span API was deleted after a repository-wide consumer scan found no reader outside this package; future span work must arrive with its production consumer rather than another roadmap surface. `check-dead-exports` does not prove entry-export reachability because tests count as consumers, so re-check with `bunx knip --include-entry-exports` when touching this surface.
 
 ## CONVENTIONS
 

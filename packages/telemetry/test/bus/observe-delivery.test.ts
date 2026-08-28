@@ -18,13 +18,18 @@ describe("Bus.observe delivery (#606 audit M1)", () => {
     // silently kills persistence while every subscriber-based test stays
     // green (the audit's surviving mutant).
     const seen: Array<{ name: string; n: number }> = [];
+    let delivered!: () => void;
+    const bothDelivered = new Promise<void>((resolve) => {
+      delivered = resolve;
+    });
     const unsubscribe = Bus.observe((descriptor, data) => {
       seen.push({ name: descriptor.name, n: (data as { n: number }).n });
+      if (seen.length === 2) delivered();
     });
 
     Bus.publish(TestEvent, { traceId: "trace-observe", n: 1 });
     Bus.publish(TestEvent, { traceId: "trace-observe", n: 2 });
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await bothDelivered;
 
     expect(seen).toEqual([
       { name: "test.observe.delivery", n: 1 },
@@ -33,21 +38,27 @@ describe("Bus.observe delivery (#606 audit M1)", () => {
 
     unsubscribe();
     Bus.publish(TestEvent, { traceId: "trace-observe", n: 3 });
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    // One microtask turn is the Bus delivery boundary; no wall-clock delay is involved.
+    await Promise.resolve();
     expect(seen).toHaveLength(2);
   });
 
   test("a throwing observer never breaks delivery to the others", async () => {
     const survived: number[] = [];
+    let delivered!: () => void;
+    const survivorDelivered = new Promise<void>((resolve) => {
+      delivered = resolve;
+    });
     Bus.observe(() => {
       throw new Error("hostile observer");
     });
     Bus.observe((_descriptor, data) => {
       survived.push((data as { n: number }).n);
+      delivered();
     });
 
     Bus.publish(TestEvent, { traceId: "trace-observe", n: 7 });
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await survivorDelivered;
 
     expect(survived).toEqual([7]);
   });
