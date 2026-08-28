@@ -61,30 +61,35 @@ const RoutingDecisionPayloadSchema = routingDecisionUnion(z.string().regex(/^wai
 export type RoutingDecisionPayload = z.infer<typeof RoutingDecisionPayloadSchema>;
 
 // Upcast-on-read for persisted `route.decided` bytes: facts recorded before
-// the pending-stack deletion carry optional `runId`/`pendingInteractionId`
-// fields and may list `pending_ask:*`/`pending_interaction:*` wait candidates
-// on `ambiguous` rows. The reader strips the two dead fields and reads legacy
-// candidate ids verbatim (ambiguous rows never route and never grant, so the
-// wider vocabulary is comparison-only). Anything that still fails the union
-// was never a valid route.decided of any era — the caller decides how that
-// fails closed. New writes go through RoutingDecisionPayloadSchema and cannot
-// produce these legacy shapes.
+// the pending-stack deletion carry optional string `runId`/
+// `pendingInteractionId` fields and may list `pending_ask:*`/
+// `pending_interaction:*` wait candidates on `ambiguous` rows. The reader
+// validates the two dead fields against their historical type before
+// stripping them, and reads legacy candidate ids verbatim (ambiguous rows
+// never route and never grant, so the wider vocabulary is comparison-only).
+// Anything else was never a valid route.decided of any era — the caller
+// decides how that fails closed. New writes go through
+// RoutingDecisionPayloadSchema and cannot produce these legacy shapes.
 const RecordedRoutingDecisionSchema = routingDecisionUnion(
   z.string().regex(/^(?:wait|pending_ask|pending_interaction):.+/),
 );
 
+const LegacyRetiredFieldsSchema = z.object({
+  runId: z.string().optional(),
+  pendingInteractionId: z.string().optional(),
+});
+
 export function recordedRoutingDecision(data: unknown): RoutingDecisionPayload | undefined {
-  const upcast =
-    typeof data === "object" && data !== null
-      ? (() => {
-          const {
-            runId: _runId,
-            pendingInteractionId: _pendingInteractionId,
-            ...rest
-          } = data as Record<string, unknown>;
-          return rest;
-        })()
-      : data;
+  let upcast = data;
+  if (typeof data === "object" && data !== null) {
+    if (!LegacyRetiredFieldsSchema.safeParse(data).success) return undefined;
+    const {
+      runId: _runId,
+      pendingInteractionId: _pendingInteractionId,
+      ...rest
+    } = data as Record<string, unknown>;
+    upcast = rest;
+  }
   const result = RecordedRoutingDecisionSchema.safeParse(upcast);
   return result.success ? result.data : undefined;
 }

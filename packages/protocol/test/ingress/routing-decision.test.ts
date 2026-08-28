@@ -251,6 +251,28 @@ describe("Ingress.recordedRoutingDecision (upcast-on-read)", () => {
     }
   });
 
+  test("rejects wrong-typed retired fields — invalid in every era", () => {
+    // Given — an otherwise valid modern route fact whose retired fields carry
+    // types the pre-0025 write schema never accepted. Stripping them blindly
+    // would reconstruct authority from bytes no era wrote.
+    const validRoute = {
+      ...baseDecision,
+      stage: "surface_default",
+      outcome: "route",
+      target: "resident",
+      sessionId: "session-1",
+      actorId: "actor-1",
+    };
+
+    expect(Ingress.recordedRoutingDecision({ ...validRoute, runId: 42 })).toBeUndefined();
+    expect(
+      Ingress.recordedRoutingDecision({ ...validRoute, pendingInteractionId: { bad: true } }),
+    ).toBeUndefined();
+    expect(
+      Ingress.recordedRoutingDecision({ ...validRoute, runId: null, pendingInteractionId: "ok" }),
+    ).toBeUndefined();
+  });
+
   test("returns undefined for bytes no era could parse", () => {
     expect(Ingress.recordedRoutingDecision(undefined)).toBeUndefined();
     expect(Ingress.recordedRoutingDecision(null)).toBeUndefined();

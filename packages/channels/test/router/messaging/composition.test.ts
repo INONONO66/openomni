@@ -203,6 +203,39 @@ describe("messaging-composed gateway router (#708)", () => {
       0,
     );
 
+    // And — a routed fact for a second actor whose retired fields carry
+    // wrong types (runId must be a string in every era): never valid, so it
+    // must not reconstruct a grant.
+    ActorRegistry.registerIdentity({
+      id: "actor-mallory",
+      kind: "human",
+      trustTier: "collaborator",
+    });
+    ActorRegistry.registerEndpoint({
+      id: "ep-mallory",
+      actorId: "actor-mallory",
+      channel: "discord",
+      externalId: "mallory-external",
+      workspace: "shop-ws",
+    });
+    const modernData = modern?.data as { factsUsed: string[] } & Record<string, unknown>;
+    Storage.get().ledger?.append(
+      {
+        streamId: Ingress.routeStreamId({ ...strangerEvent, id: "inbound-mallory" }),
+        type: "route.decided",
+        data: {
+          ...modernData,
+          inboundId: "inbound-mallory",
+          actorId: "actor-mallory",
+          factsUsed: modernData.factsUsed.map((fact) =>
+            fact.replace("buyer-external", "mallory-external"),
+          ),
+          runId: 42,
+        },
+      },
+      0,
+    );
+
     // When — a new router is composed: replay must not crash on the corrupt
     // row and must materialize the grant from the legacy fact alone.
     const restarted = makeRouter();
@@ -234,6 +267,29 @@ describe("messaging-composed gateway router (#708)", () => {
         idempotencyKey: "m-legacy",
       },
     ]);
+
+    // And — the wrong-typed fact granted nothing: the send to mallory denies.
+    const malloryReceipt = await restarted.messaging.send({
+      messageId: "m-mallory",
+      traceId: "t-mallory",
+      senderId: "persona-owner",
+      target: { actorId: "actor-mallory", endpointId: "ep-mallory" },
+      operation: "awaited",
+      body: "must stay ungranted",
+      at: Date.now(),
+      waitSpec: {
+        waitId: "w-mallory",
+        ownerRef: { kind: "session", id: "s-1" },
+        allowedActions: ["report_result"],
+        expectedResponders: ["actor-mallory"],
+        resolutionPolicy: "first_reply",
+        expiresAt: Date.now() + 60_000,
+        followUpWindow: 0,
+      },
+    });
+    expect(malloryReceipt.kind).toBe("denied");
+    if (malloryReceipt.kind === "denied") expect(malloryReceipt.code).toBe("ungranted");
+    expect(delivered).toHaveLength(1);
   });
 
   test("preserves a covered reply grant across router restart", async () => {
