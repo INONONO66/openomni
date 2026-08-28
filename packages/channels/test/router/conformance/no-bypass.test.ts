@@ -1,8 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { beforeEach, describe, expect, it } from "bun:test";
 import type { Gateway } from "@openomni/protocol";
-import { ChannelGrantStore, Storage } from "@openomni/ledger";
-import { Bus } from "@openomni/telemetry";
-import { createGatewayRouter } from "../../../src/router/index.js";
+import { ChannelGrantStore } from "@openomni/ledger";
+import { deliveries, kernelRouter, resetRouterState } from "../_router-fixture";
 
 // The no-bypass property at the flipped seam (#707): an unauthorized inbound
 // principal is blocked by the gateway router BEFORE the brain's Deliver port
@@ -38,9 +37,7 @@ async function catchError(promise: Promise<unknown>): Promise<unknown> {
 }
 
 beforeEach(() => {
-  Bus.reset();
-  Storage.reset();
-  Storage.initialize({ dbPath: ":memory:" });
+  resetRouterState();
   ChannelGrantStore.put({
     id: "grant-internal",
     surface: "internal",
@@ -49,30 +46,9 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => {
-  Bus.reset();
-  Storage.reset();
-});
-
 describe("policy no-bypass conformance — gateway governed paths", () => {
   it("blocks unauthorized ingress before delivering to the brain", async () => {
-    const deliveries: Gateway.Deliver[] = [];
-    const router = createGatewayRouter({
-      sink: (event, data) => {
-        Bus.publish(event, data);
-      },
-      deliver: async (delivery) => {
-        deliveries.push(delivery);
-        return {
-          mode: "direct",
-          target: { kind: "resident" },
-          sessionId: delivery.sessionId ?? "unrouted-session",
-          result: { output: "should not deliver", finishReason: "stop" },
-        };
-      },
-    });
-
-    const error = await catchError(router.ingest(unauthorizedInboundEvent()));
+    const error = await catchError(kernelRouter().ingest(unauthorizedInboundEvent()));
 
     expect(error).toBeInstanceOf(Error);
     expect((error as Error).message).toContain(

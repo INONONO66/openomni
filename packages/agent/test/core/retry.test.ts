@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { Retry } from "@openomni/llm";
 
 import {
   abortError,
@@ -7,7 +8,6 @@ import {
   isAbort,
   type RetryPolicy,
   shouldRetry,
-  sleep,
 } from "../../src/core/retry";
 
 describe("Retry.sleep", () => {
@@ -17,7 +17,7 @@ describe("Retry.sleep", () => {
 
     const started = Date.now();
 
-    await expect(sleep(5_000, controller.signal)).rejects.toThrow("aborted");
+    await expect(Retry.sleep(5_000, controller.signal)).rejects.toThrow(/aborted/i);
     expect(Date.now() - started).toBeLessThan(100);
   });
 
@@ -27,7 +27,7 @@ describe("Retry.sleep", () => {
     setTimeout(() => controller.abort(), 5);
     const started = Date.now();
 
-    await expect(sleep(5_000, controller.signal)).rejects.toThrow("aborted");
+    await expect(Retry.sleep(5_000, controller.signal)).rejects.toThrow(/aborted/i);
     expect(Date.now() - started).toBeLessThan(500);
   });
 
@@ -48,7 +48,7 @@ describe("Retry.sleep", () => {
       return originalRemoveEventListener(...args);
     }) as AbortSignal["removeEventListener"];
 
-    await sleep(1, signal);
+    await Retry.sleep(1, signal);
 
     expect(added).toBe(1);
     expect(removed).toBe(1);

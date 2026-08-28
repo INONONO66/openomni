@@ -1,6 +1,71 @@
 import { z } from "zod";
 
 export namespace PolicyEffects {
+  type JsonPlainValue =
+    | null
+    | boolean
+    | number
+    | string
+    | JsonPlainValue[]
+    | { readonly [key: string]: JsonPlainValue };
+
+  // Validation at this boundary must never execute caller-supplied code:
+  // property values are read through data-property descriptors (an accessor
+  // property is refused without invoking its getter), symbol-keyed own
+  // properties are refused (JSON serialization would silently drop them),
+  // and any throw from an exotic object (hostile Proxy trap) is contained by
+  // the guard and reported as an ordinary parse failure. A fully transparent
+  // Proxy over plain data is indistinguishable by design — the contract here
+  // is structural.
+  function isJsonPlainValue(value: unknown): value is JsonPlainValue {
+    if (value === null || typeof value === "boolean" || typeof value === "string") return true;
+    if (typeof value === "number") return Number.isFinite(value) && !Object.is(value, -0);
+    if (Array.isArray(value)) {
+      if (Object.getOwnPropertySymbols(value).length > 0) return false;
+      // Named own properties make key count exceed length; holes surface as
+      // absent index descriptors below — together this refuses sparse arrays,
+      // extra properties, and the one-hole + one-named-property cancellation.
+      if (Object.keys(value).length !== value.length) return false;
+      for (let index = 0; index < value.length; index += 1) {
+        const descriptor = Object.getOwnPropertyDescriptor(value, index);
+        if (descriptor === undefined || !("value" in descriptor)) return false;
+        if (!isJsonPlainValue(descriptor.value)) return false;
+      }
+      return true;
+    }
+    if (typeof value !== "object" || Object.getPrototypeOf(value) !== Object.prototype)
+      return false;
+    if (Object.getOwnPropertySymbols(value).length > 0) return false;
+    for (const key of Object.keys(value)) {
+      if (key === "__proto__" || key === "constructor" || key === "prototype") return false;
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (descriptor === undefined || !("value" in descriptor)) return false;
+      if (!isJsonPlainValue(descriptor.value)) return false;
+    }
+    return true;
+  }
+
+  function isJsonPlainValueSafe(value: unknown): boolean {
+    try {
+      return isJsonPlainValue(value);
+    } catch {
+      return false;
+    }
+  }
+
+  const JsonPlainObject = z.custom<Record<string, unknown>>(
+    (value): value is Record<string, unknown> =>
+      typeof value === "object" &&
+      value !== null &&
+      !Array.isArray(value) &&
+      isJsonPlainValueSafe(value),
+    { message: "Expected a JSON-plain object" },
+  );
+  const JsonPlainArray = z.custom<unknown[]>(
+    (value): value is unknown[] => Array.isArray(value) && isJsonPlainValueSafe(value),
+    { message: "Expected a JSON-plain array" },
+  );
+
   export const PolicyEffectType = z.enum([
     "prompt.append_context",
     "prompt.inject_message",
@@ -45,7 +110,7 @@ export namespace PolicyEffects {
     }),
     z.object({
       type: z.literal("tool.rewrite_input"),
-      input: z.record(z.string(), z.unknown()),
+      input: JsonPlainObject,
     }),
     z.object({
       type: z.literal("tool.rewrite_output"),
@@ -74,11 +139,11 @@ export namespace PolicyEffects {
     }),
     z.object({
       type: z.literal("run.replace_messages"),
-      messages: z.array(z.unknown()),
+      messages: JsonPlainArray,
     }),
     z.object({
       type: z.literal("delegation.set_constraints"),
-      constraints: z.record(z.string(), z.unknown()),
+      constraints: JsonPlainObject,
     }),
     z.object({
       type: z.literal("delegation.require_approval"),

@@ -3,8 +3,8 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { isSqliteBusyError } from "../../src/storage/sqlite-busy";
-import { runWorkItemTransaction, WorkItemUnavailableError } from "../../src/work-item/facts";
+import { isSqliteBusyError, StorageUnavailableError } from "../../src/storage/sqlite-busy";
+import { runWorkItemTransaction } from "../../src/work-item/facts";
 
 describe("isSqliteBusyError", () => {
   test("matches a real bun:sqlite SQLITE_BUSY (pins how the driver surfaces it)", () => {
@@ -61,7 +61,7 @@ describe("isSqliteBusyError", () => {
 });
 
 describe("runWorkItemTransaction", () => {
-  test("maps SQLITE_BUSY to the typed WorkItemUnavailableError; other errors pass through", () => {
+  test("maps SQLITE_BUSY to the shared typed storage error; other errors pass through", () => {
     const busyStorage = {
       transaction<T>(_operation: () => T): T {
         throw Object.assign(new Error("database is locked"), { code: "SQLITE_BUSY", errno: 5 });
@@ -74,9 +74,10 @@ describe("runWorkItemTransaction", () => {
     } catch (error) {
       thrown = error;
     }
-    expect(thrown).toBeInstanceOf(WorkItemUnavailableError);
-    expect((thrown as WorkItemUnavailableError).code).toBe("unavailable");
-    expect((thrown as WorkItemUnavailableError).hash).toBe("wi-busy");
+    expect(thrown).toBeInstanceOf(StorageUnavailableError);
+    expect((thrown as StorageUnavailableError).code).toBe("unavailable");
+    expect((thrown as StorageUnavailableError).store).toBe("work-item");
+    expect((thrown as StorageUnavailableError).resourceId).toBe("wi-busy");
 
     const failingStorage = {
       transaction<T>(_operation: () => T): T {

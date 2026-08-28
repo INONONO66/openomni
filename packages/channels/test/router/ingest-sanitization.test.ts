@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { Bus } from "@openomni/telemetry";
-import type { Gateway } from "@openomni/protocol";
+import type { Gateway, Ingress } from "@openomni/protocol";
+import { createGatewayRouter } from "../../src/router/index.js";
 import {
   deliveries,
   getRouter,
@@ -87,7 +88,36 @@ describe("ingest trust-boundary sanitization (audit A T2)", () => {
   });
 });
 
-describe("claimSurface observation (audit A T3)", () => {
+describe("surface stickiness claim observations (audit A T3)", () => {
+  it("publishes the CAS receipt through the injected sink for an external resident default", async () => {
+    const observed: Array<{ name: string; payload: Record<string, unknown> }> = [];
+    const router = createGatewayRouter({
+      sink: (event, payload) =>
+        observed.push({ name: event.name, payload: payload as Record<string, unknown> }),
+      deliver: async (delivery): Promise<Ingress.IngressResult> => ({
+        mode: "direct",
+        target: delivery.event.target ?? { kind: "resident" },
+        sessionId: delivery.sessionId ?? "unrouted-session",
+        result: { output: "resident response", finishReason: "stop" },
+      }),
+    });
+
+    await router.ingest(makeEvent("user-1"));
+
+    const obs = observed.find(
+      (event) =>
+        event.name === "operational.info" &&
+        String(event.payload.msg) === "surface stickiness claim",
+    );
+    expect(obs?.payload.context).toMatchObject({
+      mode: "external_resident_default",
+      surfaceKey: "discord:guild:dev",
+      ownerSessionId: expect.any(String),
+      requestedSessionId: expect.any(String),
+      won: true,
+    });
+  });
+
   it("publishes a user-audit observation carrying the CAS receipt per claim", async () => {
     const router = getRouter();
     const observed: Array<{ name: string; payload: Record<string, unknown> }> = [];
@@ -105,6 +135,7 @@ describe("claimSurface observation (audit A T3)", () => {
     );
     expect(obs).toBeDefined();
     expect(obs?.payload.context).toMatchObject({
+      mode: "internal_claim_port",
       surfaceKey: "telegram:bot:chat:1",
       requestedSessionId: "sess-a",
       ownerSessionId: "sess-a",

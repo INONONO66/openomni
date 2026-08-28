@@ -23,6 +23,7 @@ export * from "./execution/index.js";
 export * from "./ipc/index.js";
 export * from "./worker-bootstrap/index.js";
 export * from "./work-item/index.js";
+export * from "./deadline/index.js";
 export * from "./wait/index.js";
 export * from "./machine/index.js";
 export * from "./delegation/index.js";

@@ -1,6 +1,4 @@
-import { newTraceId } from "@openomni/protocol";
-import type { Channel } from "@openomni/protocol";
-import { Operational } from "@openomni/protocol";
+import { Channel, newTraceId, Operational } from "@openomni/protocol";
 import { ChannelAuthnMiddleware, type ChannelAuthnDecisionObserver } from "./channel-authn";
 import type { PublishPort } from "./types";
 
@@ -128,7 +126,12 @@ export class WebSocketHandler {
       // `ws::dm:<uuid>` — empty namespace, so no workspace is derived and
       // actor endpoints registered as plain channel "ws" resolve.
       data: {
-        surfaceKey: `ws::dm:${crypto.randomUUID()}`,
+        surfaceKey: Channel.SurfaceKey.fromChannel({
+          surface: "ws",
+          namespace: "",
+          kind: "dm",
+          id: crypto.randomUUID(),
+        }),
         authenticated,
         ...(externalId ? { externalId } : {}),
       } satisfies WsConnectionData,

@@ -1,7 +1,12 @@
+import { LineSplitter } from "@openomni/ipc";
 import type { Delegation, Model } from "@openomni/protocol";
 import type { Admitted } from "./admission";
 import type { DelegationDriver, DriverOutcome, DriverReport } from "./kernel";
-import { PROCESS_WORKER_ACK, ProcessWorkerResult, type ProcessWorkerRequest } from "./process-entry";
+import {
+  PROCESS_WORKER_ACK,
+  ProcessWorkerResult,
+  type ProcessWorkerRequest,
+} from "./process-entry";
 
 /** One delegation per child OS process; ack and result remain distinct facts. */
 export interface ProcessDriverOptions {
@@ -12,18 +17,12 @@ export interface ProcessDriverOptions {
 }
 
 async function* lines(stream: ReadableStream<Uint8Array>): AsyncGenerator<string> {
-  const decoder = new TextDecoder();
-  let buffer = "";
+  const splitter = new LineSplitter();
   for await (const chunk of stream) {
-    buffer += decoder.decode(chunk, { stream: true });
-    let end = buffer.indexOf("\n");
-    while (end >= 0) {
-      yield buffer.slice(0, end);
-      buffer = buffer.slice(end + 1);
-      end = buffer.indexOf("\n");
-    }
+    yield* splitter.push(chunk);
   }
-  if (buffer.length > 0) yield buffer;
+  const trailing = splitter.finish();
+  if (trailing !== undefined) yield trailing;
 }
 
 function errorText(error: unknown): string {

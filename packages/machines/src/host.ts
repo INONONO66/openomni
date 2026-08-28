@@ -160,7 +160,7 @@ export async function createMachineHost(options: MachineHostOptions): Promise<Ma
         return { status: "refused", reason: "machine_not_attached" };
       }
       const attachment = attachments.get(connectionId);
-      if (!attachment?.capabilities.includes("kernel.py")) {
+      if (!attachment?.capabilities.includes(Machine.WellKnownCapability.pythonKernel)) {
         return { status: "refused", reason: "kernel_not_available" };
       }
       server.useConnection(connectionId);

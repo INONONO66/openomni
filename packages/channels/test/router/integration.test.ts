@@ -1,14 +1,12 @@
 import { beforeEach, describe, expect, it } from "bun:test";
-import { ChannelGrantStore, Storage } from "@openomni/ledger";
-import { Bus } from "@openomni/telemetry";
-import { createGatewayRouter, type GatewayRouter } from "../../src/router/index.js";
+import { ChannelGrantStore } from "@openomni/ledger";
+import type { GatewayRouter } from "../../src/router/index.js";
+import { kernelRouter, resetRouterState } from "./_router-fixture";
 
 let router: GatewayRouter;
 
 beforeEach(() => {
-  Storage.reset();
-  Bus.reset();
-  Storage.initialize({ dbPath: ":memory:" });
+  resetRouterState();
   for (const surface of ["slack", "tui"]) {
     ChannelGrantStore.put({
       id: `grant-${surface}`,
@@ -18,17 +16,7 @@ beforeEach(() => {
       createdBy: "act_owner",
     });
   }
-  router = createGatewayRouter({
-    sink: (event, data) => {
-      Bus.publish(event, data);
-    },
-    deliver: async (delivery) => ({
-      mode: "direct",
-      target: delivery.event.target ?? { kind: "resident" },
-      sessionId: delivery.sessionId ?? crypto.randomUUID(),
-      result: { output: "resident response", finishReason: "stop" },
-    }),
-  });
+  router = kernelRouter();
 });
 
 describe("GatewayRouter integration pipeline", () => {

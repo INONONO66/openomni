@@ -15,6 +15,11 @@ export const CapabilityId = z
   });
 export type CapabilityId = z.infer<typeof CapabilityId>;
 
+/** Capability ids whose behavior is defined by the machine protocol. */
+export const WellKnownCapability = {
+  pythonKernel: "kernel.py",
+} as const satisfies Record<string, CapabilityId>;
+
 export const MachineId = z.string().min(1);
 export type MachineId = z.infer<typeof MachineId>;
 

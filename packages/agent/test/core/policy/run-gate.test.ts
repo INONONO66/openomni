@@ -10,6 +10,7 @@ import {
   type MockLlmFn,
 } from "../../helpers/mock-llm";
 import { abortRun, allow, inject } from "../../helpers/policy-decision";
+import { assistantSnapshot } from "../../helpers/assistant-snapshot";
 import { runInput } from "../../helpers/run-input";
 import { Bus } from "@openomni/telemetry";
 
@@ -155,6 +156,35 @@ describe("run.finish middleware dispatch", () => {
     expect(ctx?.timing).toBe("run.finish");
     expect(ctx?.isCompletion).toBe(true);
     expect(Array.isArray(ctx?.steps)).toBe(true);
+  });
+
+  it("reports max-steps when a tool loop reaches its cap", async () => {
+    const postRunFn = mock((_ctx: PolicyContext) => allow());
+    mockRunFn = async (_input, sink) => {
+      sink.onMessage(assistantSnapshot("tool-loop-cap", "still working", "tool-calls"));
+      return createStopOutcome();
+    };
+
+    const result = await runWith({
+      ...defaultConfig,
+      budget: { maxToolCalls: 1 },
+      middleware: [
+        {
+          kind: "point",
+          name: "test:run.finish_tool_loop_cap",
+          pointIds: ["run.lifecycle.post"],
+          effectCapabilities: { "run.lifecycle.post": [] },
+          priority: 100,
+          fn: postRunFn,
+        },
+      ],
+    });
+
+    expect(result.finishReason).toBe("max-steps");
+    expect(postRunFn).toHaveBeenCalledTimes(1);
+    expect(Reflect.get(postRunFn.mock.calls[0]?.[0] ?? {}, "runOutcome")).toEqual({
+      type: "max-steps",
+    });
   });
 
   it("reports an honest max-steps outcome after budget exceeded", async () => {

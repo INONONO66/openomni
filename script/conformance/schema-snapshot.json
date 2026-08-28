@@ -84,7 +84,6 @@
     "id",
     "registeredBy",
     "status",
-    "testedVersions",
     "updatedAt",
     "workspace"
   ],

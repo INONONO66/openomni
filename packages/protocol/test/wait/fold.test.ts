@@ -248,11 +248,17 @@ describe("Wait fold — expiry, cancellation, late replies", () => {
   });
 
   test("expire before the deadline is rejected as not_expired", () => {
-    const outcome = Wait.expire(buildWaitRecord(), { at: 10_000 });
+    const outcome = Wait.expire(buildWaitRecord(), { at: 9_999 });
 
     expect(outcome.kind).toBe("rejected");
     if (outcome.kind !== "rejected") throw new Error("expected rejected");
     expect(outcome.code).toBe("not_expired");
+  });
+
+  test("expire at the exact deadline is inclusive", () => {
+    const outcome = Wait.expire(buildWaitRecord(), { at: 10_000 });
+
+    expect(outcome.kind).toBe("expired");
   });
 
   test("expire and cancel on a terminal wait are rejected as wait_terminal", () => {
@@ -282,12 +288,14 @@ describe("Wait fold — expiry, cancellation, late replies", () => {
     expect(outcome.record.replies).toHaveLength(1);
   });
 
-  test("a reply on an open wait past its deadline is rejected as deadline_passed", () => {
-    const outcome = Wait.attachReply(buildWaitRecord(), buildReplyInput({ at: 10_001 }));
+  test("a reply on an open wait at or past its deadline is rejected as deadline_passed", () => {
+    for (const at of [10_000, 10_001]) {
+      const outcome = Wait.attachReply(buildWaitRecord(), buildReplyInput({ at }));
 
-    expect(outcome.kind).toBe("rejected");
-    if (outcome.kind !== "rejected") throw new Error("expected rejected");
-    expect(outcome.code).toBe("deadline_passed");
+      expect(outcome.kind).toBe("rejected");
+      if (outcome.kind !== "rejected") throw new Error("expected rejected");
+      expect(outcome.code).toBe("deadline_passed");
+    }
   });
 
   test("a late reply inside the follow-up window attaches as supplementary information", () => {
