@@ -26,9 +26,9 @@
 //
 // Four write surfaces are manifested:
 //   - streams: the ONE producer module per decision-class stream family
-//     (`wait:` / `work:` / `route:` / `command:` — the class
-//     vocabulary is protocol `Ledger.StreamRegistry`). A retained protocol
-//     class may have zero producers after its owning product path is removed.
+//     (`wait:` / `work:` / `route:` — the class vocabulary is protocol
+//     `Ledger.StreamRegistry`). A retained protocol class may have zero
+//     producers after its owning product path is removed.
 //   - appendCore: the modules allowed to touch `ledger_event`/`ledger_head`
 //     rows directly (raw prepared statements) plus the storage-adapter
 //     binding that exposes them as the ledger sub-adapter.
@@ -52,7 +52,6 @@ interface LedgerStreamProducer {
     | "work"
     | "route"
     | "route_correction"
-    | "command"
     | "engagement"
     | "gateway_send";
   /**
@@ -101,13 +100,6 @@ export const LEDGER_PRODUCER_MANIFEST: LedgerProducerManifest = {
       // the brain's internal path retires wait correlation).
       streamClass: "route_correction",
       producers: ["packages/channels/src/router/routing-execution.ts"],
-      writes: "append",
-    },
-    {
-      // Contract retained for compatibility; its legacy dispatch producer
-      // was removed with the old product kernel.
-      streamClass: "command",
-      producers: [],
       writes: "append",
     },
     {

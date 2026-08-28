@@ -108,10 +108,6 @@ const EDGES: Readonly<Partial<Record<Schema.State, readonly Schema.State[]>>> = 
   acting: ["done"],
 };
 
-export function isTerminal(state: Schema.State): boolean {
-  return TERMINAL.has(state);
-}
-
 function edgeAllowed(from: Schema.State, to: Schema.State): boolean {
   if (to === "aborted") return !TERMINAL.has(from);
   return (EDGES[from] ?? []).includes(to);

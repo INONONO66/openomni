@@ -12,9 +12,6 @@ export namespace Engagement {
   export const State = Schema.State;
   export type State = Schema.State;
 
-  export const Terms = Schema.Terms;
-  export type Terms = Schema.Terms;
-
   export const Record = Schema.Record;
   export type Record = Schema.Record;
 
@@ -39,7 +36,6 @@ export namespace Engagement {
 
   export const transition = Fold.transition;
   export const expire = Fold.expire;
-  export const isTerminal = Fold.isTerminal;
 
   export const Events = EventDescriptors;
 }

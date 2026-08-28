@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Communication, Command } from "../../src/index.js";
+import { Communication } from "../../src/index.js";
 
 describe("Communication protocol schemas", () => {
   test("PendingAsk captures durable correlation state", () => {
@@ -37,20 +37,5 @@ describe("Communication protocol schemas", () => {
 
     expect(parsed.allowedActions).toEqual(["report_result", "ask_clarification"]);
     expect(parsed.correlation.replyToMessageId).toBe("m-1");
-  });
-
-  test("Command actor.message accepts structured correlation hints", () => {
-    const parsed = Command.Input.parse({
-      action: Command.Actions.ActorMessage,
-      target: { kind: "surface", id: "telegram:dm" },
-      payload: "reply",
-      correlation: {
-        endpointId: "telegram:seller-1",
-        channelId: "telegram:dm",
-        replyToMessageId: "m-1",
-      },
-    });
-
-    expect(parsed.correlation).toMatchObject({ replyToMessageId: "m-1" });
   });
 });

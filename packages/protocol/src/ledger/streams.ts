@@ -1,6 +1,4 @@
 import { z } from "zod";
-import { Actor } from "../actor/index.js";
-import { CommandSchemas } from "../command/schemas.js";
 import { Events as IngressEvents, type RoutingDecisionPayload } from "../event/ingress.js";
 
 /**
@@ -15,7 +13,7 @@ import { Events as IngressEvents, type RoutingDecisionPayload } from "../event/i
  *     produced projected revision N, so `expectedHead` is the pre-transition
  *     revision and the stream head always equals the committed row's
  *     revision;
- *   - single-fact streams (route/command): one decision per id, appended at
+ *   - single-fact streams (route): one decision per id, appended at
  *     `expectedHead` 0 (seq 1). "No record, no action" needs the durable
  *     append before the act, not contention — a conflict means the id was
  *     already decided; whether that is a replay to re-execute or an anomaly
@@ -101,15 +99,6 @@ export const StreamRegistry = {
     factTypes: ["route.not_delivered"],
     status: "shipped",
   },
-  // DORMANT — contract-only; no production command decision publisher exists today.
-  command: {
-    stream: "command:<dispatchId>",
-    heads: "single-fact (expectedHead 0, seq 1)",
-    conflictMeans:
-      "dispatch id already decided — an anomaly (dispatchId is minted per submit), fail closed",
-    factTypes: ["command.authorized", "command.denied"],
-    status: "dormant — contract-only; no production command decision publisher today",
-  },
   // SHIPPED — ledger EngagementStore publishes; SQLite ledger append/projection consumes.
   engagement: {
     stream: "engagement:<engagementId>",
@@ -156,53 +145,4 @@ export const RouteNotDelivered = z
   .strict();
 export type RouteNotDelivered = z.infer<typeof RouteNotDelivered>;
 
-/**
- * #498 A2 historical upcast — command verdict facts recorded before the
- * actor-kind convergence carry the retired Command.ActorKind values. The
- * persisted bytes never change; a consumer that parses a fact through this
- * schema reads the canonical vocabulary. NOTE the current read paths: the
- * production writer (openomni dispatch runtime) appends raw fact data and
- * nothing in production re-parses it yet — these schemas are the write-side
- * vocabulary descriptors, and the p2-ledger-baseline conformance suite is the
- * one consumer that parses facts back. The upcast lives here so every future
- * reader inherits it.
- */
-const LEGACY_ACTOR_KIND_UPCAST: Readonly<Record<string, Actor.Kind>> = {
-  user: "human",
-  worker: "internal_worker",
-};
 
-const CommandActorKind = z.preprocess(
-  (value) =>
-    typeof value === "string" && value in LEGACY_ACTOR_KIND_UPCAST
-      ? LEGACY_ACTOR_KIND_UPCAST[value]
-      : value,
-  Actor.Kind,
-);
-
-const CommandVerdictBase = z.object({
-  policyId: z.string().min(1),
-  reason: z.string().min(1),
-  actorKind: CommandActorKind,
-  action: z.string().min(1),
-  targetKind: CommandSchemas.TargetKind,
-});
-
-/**
- * `command.authorized` fact data (C3 ruling 2): the passing dispatch policy
- * verdict, appended before the handler is invoked.
- */
-export const CommandAuthorized = CommandVerdictBase.extend({
-  verdict: z.literal("allow"),
-}).strict();
-export type CommandAuthorized = z.infer<typeof CommandAuthorized>;
-
-/**
- * `command.denied` fact data (C3 ruling 2): the blocking dispatch verdict
- * (policy deny/pending, or the pinned-interaction revalidation denial),
- * appended before the denial result returns.
- */
-export const CommandDenied = CommandVerdictBase.extend({
-  verdict: z.enum(["deny", "pending"]),
-}).strict();
-export type CommandDenied = z.infer<typeof CommandDenied>;

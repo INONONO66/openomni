@@ -133,26 +133,10 @@ export namespace WorkItem {
   export const EnvironmentFingerprint = AttemptContract.EnvironmentFingerprint;
   export type EnvironmentFingerprint = AttemptContract.EnvironmentFingerprint;
 
-  export const EnvironmentSubsetField = AttemptContract.EnvironmentSubsetField;
-  export type EnvironmentSubsetField = AttemptContract.EnvironmentSubsetField;
-
-  export const CacheKey = AttemptContract.CacheKey;
-  export type CacheKey = AttemptContract.CacheKey;
-
-  export const ReplayKey = AttemptContract.ReplayKey;
-  export type ReplayKey = AttemptContract.ReplayKey;
-
-  export const NondeterminismCategory = AttemptContract.NondeterminismCategory;
-  export type NondeterminismCategory = AttemptContract.NondeterminismCategory;
-
-  export const NondeterminismManifest = AttemptContract.NondeterminismManifest;
-  export type NondeterminismManifest = AttemptContract.NondeterminismManifest;
-
   export const canonicalDigest = AttemptContract.canonicalDigest;
   export const generateAttemptId = AttemptContract.generateAttemptId;
   export const contentFingerprintOf = AttemptContract.contentFingerprintOf;
   export const environmentFingerprintOf = AttemptContract.environmentFingerprintOf;
-  export const cacheKeyOf = AttemptContract.cacheKeyOf;
 
   export const deriveStatus = resolveStatus;
   export const criterionId = createCriterionId;

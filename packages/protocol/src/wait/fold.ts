@@ -104,7 +104,7 @@ export type Outcome =
     }
   | { kind: "rejected"; code: RejectionCode; record: Schema.Record; at: number };
 
-export function effectiveThreshold(record: Schema.Record): number {
+function effectiveThreshold(record: Schema.Record): number {
   switch (record.resolutionPolicy) {
     case "first_reply":
       return 1;

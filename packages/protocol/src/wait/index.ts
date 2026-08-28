@@ -7,9 +7,6 @@ import * as Schema from "./schema.js";
 import * as Upcast from "./upcast.js";
 
 export namespace Wait {
-  export const OwnerKind = Schema.OwnerKind;
-  export type OwnerKind = Schema.OwnerKind;
-
   export const OwnerRef = Schema.OwnerRef;
   export type OwnerRef = Schema.OwnerRef;
 
@@ -61,7 +58,6 @@ export namespace Wait {
   export const recordDeliveryReceipt = Fold.recordDeliveryReceipt;
   export const expire = Fold.expire;
   export const cancel = Fold.cancel;
-  export const effectiveThreshold = Fold.effectiveThreshold;
 
   // #707 slice 1 hoists — pure wait-domain folds formerly kernel-side.
   // The one inbound-action parser shared by ingress and dispatch (#548).
@@ -79,7 +75,6 @@ export namespace Wait {
   export type SenderEvidence = Matcher.SenderEvidence;
   export const responderCandidates = Matcher.responderCandidates;
   export const ingressEvidence = Matcher.ingressEvidence;
-  export const dispatchEvidence = Matcher.dispatchEvidence;
   export const targetsOfPendingInteraction = Matcher.targetsOfPendingInteraction;
   export const targetsOfWait = Matcher.targetsOfWait;
 

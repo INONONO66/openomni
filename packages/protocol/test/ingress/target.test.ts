@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { Ingress } from "../../src/ingress/index.js";
-import { resolveTarget, targetKey } from "../../src/ingress/target.js";
+import { resolveTarget, targetKey } from "../../src/ingress/index.js";
 
 describe("ingress target helpers", () => {
   it("defaults events without explicit target to resident", () => {

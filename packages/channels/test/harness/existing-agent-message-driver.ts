@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Command, Wait, type Gateway } from "@openomni/protocol";
+import { Wait, type Gateway } from "@openomni/protocol";
 import {
   ActorRegistry,
   Session,
@@ -137,8 +137,7 @@ function awaitedWaitSpec() {
 /**
  * Applies one inbound reply through the shipped read path: the ONE
  * correlation lookup finds the durable Wait, the ONE sender-matcher core
- * (dispatch-phase evidence) produces responderCandidates, and the protocol
- * fold decides.
+ * produces responderCandidates, and the protocol fold decides.
  */
 function applyReply(input: Readonly<{ actorId: string; replyKey: string; at: number }>) {
   const correlation = {
@@ -150,19 +149,13 @@ function applyReply(input: Readonly<{ actorId: string; replyKey: string; at: num
   if (resolution.kind !== "match") {
     throw new Error(`reply correlation resolved to ${resolution.kind}`);
   }
-  const command = Command.Request.parse({
-    action: Command.Actions.ActorReply,
-    target: { kind: "session", id: OwnerRef.id },
-    correlation,
-    dispatchId: `dispatch:${input.replyKey}`,
-    traceId: `trace:${input.replyKey}`,
-    actor: { kind: "human", actorId: input.actorId },
-    submittedAt: input.at,
+  const candidates = Wait.responderCandidates(targetsOfWait(resolution.candidate.wait), {
+    actorId: input.actorId,
+    claimedEndpointId: correlation.endpointId,
+    // In-process reply evidence: the sender identity is already
+    // authenticated, so endpoint control needs no separate proof.
+    provesEndpoint: () => true,
   });
-  const candidates = Wait.responderCandidates(
-    targetsOfWait(resolution.candidate.wait),
-    Wait.dispatchEvidence(command),
-  );
   return WaitService.attachReply(
     resolution.candidate.wait.id,
     {
