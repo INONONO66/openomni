@@ -48,17 +48,16 @@ declare module "./namespace.js" {
      * Active-egress debit ledger (#219, perimeter domain): a per-(senderId,
      * targetActorId) append-only log of ADMITTED proactive sends. The gateway
      * router is the sole writer (same isolation as the wait store — the brain
-     * never reaches it). `record` appends one admitted send;
-     * `readState` folds the window projection the pure budget evaluator consumes
-     * (`windowStartAt` is the caller's `at - budget.windowMs`).
+     * never reaches it). `claim` atomically folds the projection, asks the
+     * perimeter evaluator whether the row fits, and appends only when admitted.
+     * Retrying the same row id is idempotently `claimed`.
      */
     export interface EgressBudgetSubAdapter {
-      record(row: Gateway.EgressDebitRow): void;
-      readState(
-        senderId: string,
-        targetActorId: string,
+      claim(
+        row: Gateway.EgressDebitRow,
         windowStartAt: number,
-      ): Gateway.EgressDebitState;
+        canClaim: (state: Gateway.EgressDebitState) => boolean,
+      ): "claimed" | "refused";
     }
   }
 }

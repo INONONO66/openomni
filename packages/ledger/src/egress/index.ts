@@ -1,23 +1,20 @@
 /**
- * EgressBudgetStore: the active-egress debit ledger (#219, perimeter domain —
- * gateway-design §4). Records ADMITTED proactive sends and folds the window
- * projection the pure budget evaluator consumes.
+ * EgressBudgetStore: atomic active-egress counted-window claims (#219,
+ * perimeter domain — gateway-design §4).
  *
- * Perimeter isolation (S8): consumed ONLY by the channels gateway router (the
- * send kernel), exactly like the wait store — the brain never reaches it. A
- * missing sub-adapter fails closed: the egress gate must never fabricate an
- * "admitted" answer.
- *
- * Record-before-act: the debit is written when a send is ADMITTED (not
- * suppressed), so split outreach across separate calls cannot evade the cap and
- * the cooldown clock survives a restart.
+ * Perimeter isolation (S8): consumed ONLY by the channels gateway router. A
+ * missing sub-adapter fails closed; storage errors propagate before any send.
  */
 
 import type { Gateway } from "@openomni/protocol";
-import { requireSubAdapter } from "../storage/timestamped-store";
 import { Storage } from "../storage/storage";
+import { requireSubAdapter } from "../storage/timestamped-store";
 
 export namespace EgressBudgetStore {
+  export type ClaimResult<Refusal> =
+    | Readonly<{ kind: "claimed" }>
+    | Readonly<{ kind: "refused"; reason: Refusal }>;
+
   function subAdapter(): NonNullable<Storage.Adapter["egressBudget"]> {
     return requireSubAdapter(
       Storage.get().egressBudget,
@@ -25,21 +22,25 @@ export namespace EgressBudgetStore {
     );
   }
 
-  /** Append one admitted-send debit row (record-before-act). */
-  export function record(row: Gateway.EgressDebitRow): void {
-    subAdapter().record(row);
-  }
-
   /**
-   * Fold the window projection for one (sender, target) pair. `windowStartAt`
-   * is the caller's `at - budget.windowMs`; `lastSendAt` is window-independent
-   * (the cooldown clock runs off the most recent admitted send).
+   * Atomically evaluate and append one counted-window claim. `windowStartAt`
+   * is the caller's inclusive lower bound. The evaluator stays at the policy
+   * boundary; the adapter only serializes projection-read + append.
    */
-  export function readState(
-    senderId: string,
-    targetActorId: string,
+  export function claim<Refusal>(
+    row: Gateway.EgressDebitRow,
     windowStartAt: number,
-  ): Gateway.EgressDebitState {
-    return subAdapter().readState(senderId, targetActorId, windowStartAt);
+    evaluate: (state: Gateway.EgressDebitState) => "allow" | Refusal,
+  ): ClaimResult<Refusal> {
+    const refusals: Refusal[] = [];
+    const result = subAdapter().claim(row, windowStartAt, (state) => {
+      const verdict = evaluate(state);
+      if (verdict === "allow") return true;
+      refusals.push(verdict);
+      return false;
+    });
+    return result === "claimed"
+      ? { kind: "claimed" }
+      : { kind: "refused", reason: refusals[0] as Refusal };
   }
 }
