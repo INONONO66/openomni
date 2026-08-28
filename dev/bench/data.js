@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787889892087,
+  "lastUpdate": 1787892360900,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -64937,6 +64937,90 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 517404,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "dbb04d05573ae1d64bb526cc508b02cd08b36f61",
+          "message": "fix(ledger): atomic egress claims, deterministic grant resolution, honest chain accounting (#834)\n\n* fix(ledger): atomic egress claims, deterministic grant resolution, honest chain accounting\n\n- EgressBudgetStore: check-then-record TOCTOU closed by an atomic counted-window claim primitive (claimWithinCountedWindow) - projection read, decision, and append run under one BEGIN IMMEDIATE; retrying a recorded id is idempotent; the split record/readState surface is deleted and every caller migrated. Lock test discriminates a no-op transaction wrapper (mutation-verified).\n- ChannelGrantStore: equal-specificity conflicts resolve by a documented most-restrictive-wins total order (treatment, anonymous tier, kind, grant id) applied after listing, so insertion-ordered and SQLite backends agree.\n- chain-query: totalVerified counts only rows that actually passed link and hash verification; null-hash historical rows no longer inflate it.\n\n* test(ledger): cover comparator tie-break arms, claim identity conflict, sessionless chain walk\n\nCI coverage ratchet caught the adapter identity-throw, deep grant tie-break\narms (tier/kind/id), and the sessionless chain-query branch as reviewer-probed\nbut test-uncovered. Pin each with focused tests; ledger ratchet green locally.",
+          "timestamp": "2026-08-28T04:44:53Z",
+          "tree_id": "feb704375a96be307463956815299c6503f7d9ab",
+          "url": "https://github.com/INONONO66/openomni/commit/dbb04d05573ae1d64bb526cc508b02cd08b36f61"
+        },
+        "date": 1787892360435,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2147,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 14296,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7714,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1027,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 919,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1429,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1614,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 753,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 44549,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2319,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 511283,
             "unit": "ns/op"
           }
         ]
