@@ -1,6 +1,12 @@
 import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
-import { buildLedgerArchiveManifest } from "./generate-ledger-archive-manifest";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  buildLedgerArchiveManifest,
+  writeArchiveManifestAtomically,
+} from "./generate-ledger-archive-manifest";
 
 function fixture(): Database {
   const db = new Database(":memory:");
@@ -13,6 +19,27 @@ function fixture(): Database {
 }
 
 describe("ledger archive manifest", () => {
+  test("atomically replaces the manifest and retains the previous file if replacement fails", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "openomni-archive-manifest-"));
+    const outPath = join(directory, "ledger-archive-manifest.json");
+    try {
+      await writeFile(outPath, "previous\n");
+      await writeArchiveManifestAtomically(outPath, "replacement\n");
+      expect(await readFile(outPath, "utf8")).toBe("replacement\n");
+      expect(await readdir(directory)).toEqual(["ledger-archive-manifest.json"]);
+
+      await expect(
+        writeArchiveManifestAtomically(outPath, "partial\n", async () => {
+          throw new Error("injected replacement failure");
+        }),
+      ).rejects.toThrow("injected replacement failure");
+      expect(await readFile(outPath, "utf8")).toBe("replacement\n");
+      expect(await readdir(directory)).toEqual(["ledger-archive-manifest.json"]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   test.each([
     ["pending_ask", "id"],
     ["pending_interaction", "id"],

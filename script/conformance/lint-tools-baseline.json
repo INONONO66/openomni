@@ -29,9 +29,5 @@
       "packages/protocol/src/work-item/index.ts:ReadBackRequestEnvelope",
       "packages/protocol/src/work-item/schemas.ts:ReadBackRequestEnvelope"
     ]
-  },
-  "earned": {
-    "dormantActions": [],
-    "dormantTools": ["bash", "recall.output"]
   }
 }

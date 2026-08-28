@@ -32,9 +32,9 @@
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
+import { coverageWorkspaces, TOPOLOGY } from "./topology";
 
 const BASELINE_PATH = "script/conformance/coverage-baseline.json";
-const REPORT_GLOB = "{packages,apps}/*/coverage/lcov.info";
 // 0.5pp absorbs the measured stable macOS<->ubuntu platform offset (coordinator
 // showed 0.45pp on the first CI run) while still catching real regressions.
 const TOLERANCE_PP = 0.5;
@@ -150,18 +150,30 @@ export function compareCoverage(
 
 async function collectCurrentCoverage(): Promise<Record<string, PackageCoverage>> {
   const collected: Record<string, PackageCoverage> = {};
-  const glob = new Bun.Glob(REPORT_GLOB);
-
-  for await (const reportPath of glob.scan({ cwd: ".", onlyFiles: true })) {
-    const packageDir = reportPath.replace(/\/coverage\/lcov\.info$/, "");
-    collected[packageDir] = parseLcovSummary(await Bun.file(reportPath).text());
+  for (const workspace of TOPOLOGY) {
+    const reportPath = `${workspace.dir}/coverage/lcov.info`;
+    const report = Bun.file(reportPath);
+    if (!(await report.exists())) continue;
+    if (!workspace.coverageLane) {
+      throw new Error(
+        `${workspace.dir}: coverage report exists but topology explicitly sets coverageLane: false`,
+      );
+    }
+    collected[workspace.dir] = parseLcovSummary(await report.text());
   }
-
   return Object.fromEntries(Object.entries(collected).sort(([a], [b]) => a.localeCompare(b)));
 }
 
 function readBaseline(): CoverageBaseline {
-  return JSON.parse(readFileSync(BASELINE_PATH, "utf8")) as CoverageBaseline;
+  const baseline = JSON.parse(readFileSync(BASELINE_PATH, "utf8")) as CoverageBaseline;
+  const expected = coverageWorkspaces().map((workspace) => workspace.dir).sort();
+  const actual = Object.keys(baseline).sort();
+  if (actual.join("\n") !== expected.join("\n")) {
+    throw new Error(
+      `coverage baseline topology drift: expected [${expected.join(", ")}], got [${actual.join(", ")}]`,
+    );
+  }
+  return baseline;
 }
 
 // ---------------------------------------------------------------------------
@@ -300,10 +312,14 @@ async function main(): Promise<void> {
   }
 
   const current = await collectCurrentCoverage();
+  const expectedCoverageDirs = coverageWorkspaces().map((workspace) => workspace.dir).sort();
 
   if (args.has("--update")) {
-    if (Object.keys(current).length === 0) {
-      throw new Error("no coverage reports found — run the test suites with --coverage first");
+    const actualCoverageDirs = Object.keys(current).sort();
+    if (actualCoverageDirs.join("\n") !== expectedCoverageDirs.join("\n")) {
+      throw new Error(
+        `coverage update requires every topology coverage lane: expected [${expectedCoverageDirs.join(", ")}], got [${actualCoverageDirs.join(", ")}]`,
+      );
     }
     writeFileSync(BASELINE_PATH, `${JSON.stringify(current, null, 2)}\n`);
     process.stdout.write(

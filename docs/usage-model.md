@@ -1,6 +1,6 @@
 # Usage Model — Operating OpenOmni as the Owner
 
-Every other document describes the system from the inside. This one describes the target experience from your seat. Architecture behind these behaviors: [Core Model](core-model.md). Current wiring is tracked only in [Implementation Status](implementation-status.md): durable cron and transitional reply correlation exist, while generic existing-agent messaging, the unified `Wait`, and the Jester runtime described below are not yet shipped.
+Every other document describes the system from the inside. This one describes the target experience from your seat. Architecture behind these behaviors: [Core Model](core-model.md). [Implementation Status](implementation-status.md) alone records what is currently wired.
 
 ## The mental model — four things to remember
 
@@ -10,7 +10,7 @@ Every other document describes the system from the inside. This one describes th
 4. **Your interventions come in two kinds.** Planned approvals (normal, designed) and unplanned rescues (a defect, recorded as such, expected to decrease).
 ### Allocation, coordination, and waiting
 
-Only the Resident allocates a new Worker assignment. A Worker may use a bounded same-domain `child_agent`, ask the Resident, or—when granted—message an already-existing agent; none of those existing-agent messages creates a WorkItem, Worker, executor, or budget. Fire-and-forget records delivery and returns. An awaited message creates one durable `Wait`; the waiting process releases compute, and restart, reply correlation, timeout, cancellation, late or ambiguous replies, and partial/N-of-M completion are resolved from that record. This is target behavior owned by the canonical role and Wait contracts; current gaps remain in [Implementation Status](implementation-status.md).
+Only the Resident allocates a new Worker assignment. A Worker may use a bounded same-domain subagent, ask the Resident, or—when granted—message an already-existing agent; none of those existing-agent messages creates a WorkItem, Worker, executor, or budget. Fire-and-forget records delivery and returns. An awaited message creates one durable `Wait`; the waiting process releases compute, and restart, reply correlation, timeout, cancellation, late or ambiguous replies, and partial/N-of-M completion are resolved from that record.
 
 ## What happens when you say something
 
@@ -28,7 +28,7 @@ You never classify your own request — the Resident picks the lane:
 
 ## A second voice in the room
 
-Occasionally the Jester evaluates whether a short frame-breaking question belongs next to the Resident's message — for example, *"didn't you freeze releases last week?"* It has exactly seven lenses and returns either silence or one semantic question. It has no dispatch authority: the kernel host separately records the evaluation and decides whether authorized delivery may proceed. If raised, the Resident answers with evidence or concedes; the later adopted/dismissed outcome lets the Governor score whether the role earns its seat. This is the target experience; the runtime is not shipped yet.
+Occasionally the Jester evaluates whether a short frame-breaking question belongs next to the Resident's message — for example, *"didn't you freeze releases last week?"* It has exactly seven lenses and returns either silence or one semantic question. It has no dispatch authority: the kernel host separately records the evaluation and decides whether authorized delivery may proceed. If raised, the Resident answers with evidence or concedes; the later adopted/dismissed outcome lets the Governor score whether the role earns its seat.
 
 ## When other people message you
 

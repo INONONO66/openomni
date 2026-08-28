@@ -10,7 +10,8 @@
     "build": "turbo run build",
     "dev": "turbo run dev",
     "prepare": "lefthook install",
-    "lint": "bun run lint:guards && bun run lint:side-effects && bunx ultracite check --formatter-enabled=false .",
+    "lint": "bun run lint:guards && bun run lint:side-effects && bun run lint:docs && bunx ultracite check --formatter-enabled=false .",
+    "lint:docs": "bun run script/generate-agents-deps.ts --check",
     "lint:guards": "bun run script/lint-guards.ts",
     "lint:side-effects": "bun run script/lint-side-effects.ts",
     "lint:tools": "bun run script/lint-tools.ts",
@@ -19,6 +20,7 @@
     "check-types": "turbo run check-types && tsc -p script/tsconfig.json",
     "test": "turbo run test",
     "bench": "turbo run bench",
+    "generate:agents-deps": "bun run script/generate-agents-deps.ts",
     "generate:models-snapshot": "bun run script/generate-models-snapshot.ts"
   },
   "devDependencies": {

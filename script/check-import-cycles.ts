@@ -17,27 +17,46 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
+import { TOPOLOGY } from "./topology";
 
 const root = join(import.meta.dir, "..");
 
 function listSourceFiles(): string[] {
-  const glob = new Bun.Glob("{packages,apps}/*/src/**/*.{ts,tsx}");
-  return [...glob.scanSync({ cwd: root, absolute: true })].sort();
+  const files: string[] = [];
+  for (const workspace of TOPOLOGY) {
+    const sourceDir = join(root, workspace.dir, "src");
+    if (!existsSync(sourceDir)) {
+      throw new Error(`topology workspace ${workspace.dir} has no src directory`);
+    }
+    const workspaceFiles = [
+      ...new Bun.Glob("**/*.{ts,tsx}").scanSync({ cwd: sourceDir, absolute: true }),
+    ];
+    if (workspaceFiles.length === 0) {
+      throw new Error(`topology workspace ${workspace.dir} contributes zero source modules`);
+    }
+    files.push(...workspaceFiles);
+  }
+  if (files.length === 0) throw new Error("topology produced an empty import graph");
+  return files.sort();
 }
 
 function workspaceEntryPoints(): Map<string, string> {
   const entries = new Map<string, string>();
-  for (const manifestPath of new Bun.Glob("{packages,apps}/*/package.json").scanSync({
-    cwd: root,
-    absolute: true,
-  })) {
+  for (const workspace of TOPOLOGY) {
+    const manifestPath = join(root, workspace.dir, "package.json");
+    if (!existsSync(manifestPath)) {
+      throw new Error(`topology workspace ${workspace.dir} has no package.json`);
+    }
     const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
       name?: string;
       main?: string;
     };
-    if (manifest.name && manifest.main) {
-      entries.set(manifest.name, resolve(dirname(manifestPath), manifest.main));
+    if (manifest.name !== workspace.packageName || !manifest.main) {
+      throw new Error(
+        `topology workspace ${workspace.dir} expected package ${workspace.packageName} with a main entry`,
+      );
     }
+    entries.set(workspace.packageName, resolve(dirname(manifestPath), manifest.main));
   }
   return entries;
 }
@@ -183,7 +202,13 @@ function selfTest(): void {
 if (process.argv.includes("--self-test")) {
   selfTest();
 } else {
-  const graph = buildGraph();
+  let graph: Map<string, readonly string[]>;
+  try {
+    graph = buildGraph();
+  } catch (error) {
+    console.error(`ERROR: ${error instanceof Error ? error.message : String(error)}`);
+    process.exit(1);
+  }
   const cycles = findCycles(graph);
   if (cycles.length > 0) {
     for (const cycle of cycles) {

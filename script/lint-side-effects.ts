@@ -1,9 +1,3 @@
-// Module scope on purpose: script/ typechecks as one program, so a plain
-// script's top-level declarations (main, lineNumberForOffset, …) would
-// collide with the other scripts'. This file genuinely imports nothing —
-// it runs on Bun globals alone.
-export {};
-
 type SideEffectRuleId = "processor-projected-sink" | "session-mutation-ledger-before-storage-write";
 
 interface SideEffectViolation {
@@ -18,7 +12,7 @@ interface SideEffectRule {
   readonly filePath: string;
   readonly sideEffect: RegExp;
   readonly requiredBefore: readonly string[];
-  readonly requiredInScope?: readonly string[];
+  readonly requiredAfter?: readonly string[];
   readonly scopeStart?: RegExp;
   readonly scopeEnd?: RegExp;
   readonly message: string;
@@ -48,7 +42,7 @@ const rules: readonly SideEffectRule[] = [
     scopeStart: /export function addMessage\(/g,
     scopeEnd: /\nexport function /g,
     requiredBefore: [],
-    requiredInScope: ["Bus.publish(Event.Updated, { info: updated })"],
+    requiredAfter: ["Bus.publish(Event.Updated, { info: updated })"],
     message: "Session.addMessage must publish Event.Updated after adapter.message.set",
   },
   {
@@ -58,7 +52,7 @@ const rules: readonly SideEffectRule[] = [
     scopeStart: /export function addMessage\(/g,
     scopeEnd: /\nexport function /g,
     requiredBefore: [],
-    requiredInScope: ["Bus.publish(Event.Updated, { info: updated })"],
+    requiredAfter: ["Bus.publish(Event.Updated, { info: updated })"],
     message: "Session.addMessage must publish Event.Updated after adapter.session.set",
   },
   {
@@ -68,7 +62,7 @@ const rules: readonly SideEffectRule[] = [
     scopeStart: /export function addPart\(/g,
     scopeEnd: /\nexport function /g,
     requiredBefore: [],
-    requiredInScope: ["Bus.publish(Event.Updated, { info:"],
+    requiredAfter: ["Bus.publish(Event.Updated, { info:"],
     message: "Session.addPart must publish Event.Updated after adapter.part.set",
   },
 ];
@@ -79,11 +73,7 @@ async function main(): Promise<void> {
   await verifyHotFilesExist();
   for (const filePath of hotFiles) {
     const source = await Bun.file(filePath).text();
-    const fileRules = rules.filter((rule) => rule.filePath === filePath);
-
-    for (const rule of fileRules) {
-      violations.push(...validateRule(rule, source));
-    }
+    violations.push(...validateSideEffectRules(filePath, source));
   }
 
   if (violations.length === 0) {
@@ -108,6 +98,15 @@ async function verifyHotFilesExist(): Promise<void> {
   }
 }
 
+export function validateSideEffectRules(
+  filePath: string,
+  source: string,
+): SideEffectViolation[] {
+  return rules
+    .filter((rule) => rule.filePath === filePath)
+    .flatMap((rule) => validateRule(rule, source));
+}
+
 function validateRule(rule: SideEffectRule, source: string): SideEffectViolation[] {
   const sideEffects = matches(source, rule.sideEffect);
 
@@ -130,12 +129,13 @@ function validateRule(rule: SideEffectRule, source: string): SideEffectViolation
     const missingBefore = rule.requiredBefore.filter((snippet) => !prefix.includes(snippet));
 
     const scopeEnd = firstMatchStartAfter(source, rule.scopeEnd, sideEffect.index);
-    const scope = source.slice(searchStart, scopeEnd > 0 ? scopeEnd : source.length);
-    const missingInScope = (rule.requiredInScope || []).filter(
-      (snippet) => !scope.includes(snippet),
+    const suffix = source.slice(
+      sideEffect.index + sideEffect.text.length,
+      scopeEnd > 0 ? scopeEnd : source.length,
     );
+    const missingAfter = (rule.requiredAfter || []).filter((snippet) => !suffix.includes(snippet));
 
-    const missing = [...missingBefore, ...missingInScope];
+    const missing = [...missingBefore, ...missingAfter];
 
     if (missing.length === 0) {
       return [];
@@ -191,8 +191,10 @@ function lineNumberForOffset(source: string, offset: number): number {
   return line;
 }
 
-main().catch((error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error);
-  process.stderr.write(`ERROR: ${message}\n`);
-  process.exit(1);
-});
+if (import.meta.main) {
+  main().catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`ERROR: ${message}\n`);
+    process.exit(1);
+  });
+}

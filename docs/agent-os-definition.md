@@ -1,6 +1,6 @@
 # What Is an Agent OS — Definition and Qualification Tests
 
-OpenOmni's root claim is "a single-Owner Agent OS" ([Design Philosophy](design-philosophy.md)). This document defines the term functionally — metaphor stripped — so the claim is checkable rather than rhetorical. The project's own scorecard is at the bottom; it is not flattering, by design. Current wiring is authoritative only in [Implementation Status](implementation-status.md); live delivery tracking is [GitHub #459](https://github.com/INONONO66/openomni/issues/459).
+OpenOmni's root claim is "a single-Owner Agent OS" ([Design Philosophy](design-philosophy.md)). This document defines the term functionally — metaphor stripped — so the claim is checkable rather than rhetorical. Current wiring is tracked only in [Implementation Status](implementation-status.md); live delivery tracking is [GitHub #459](https://github.com/INONONO66/openomni/issues/459).
 
 ## 1. What an OS functionally is
 
@@ -26,7 +26,7 @@ The classical OS protected memory and CPU. The agent world's scarce resources ar
 
 The last row is the category's genuinely new duty. **A classical OS could generally trust a CPU's exit status; an agent's "done" can be false.** An Agent OS therefore needs accountability: preserve what happened, require evidence, and deterministically check the specific predicates it knows how to check. It cannot mechanically turn an arbitrary claim into truth; unsupported claims remain assertions.
 
-OpenOmni sharpens that duty because every unit of work is a WorkItem contract. Progress completion, one execution's exit status, one criterion's result, and terminal contract completion are different facts. The shipped #490 completion authority closes a WorkItem only after a durable admission bound to the current contract revision and evidence basis. Internal and connector Workers are the wired production consumers through the run/session-bound path. `DefaultDispatchRuntime.submitActorWorkItemCompletion` is the caller-authenticated kernel seam for future Resident, API, A2A, human, SDK, and internal transport adapters; it projects durable source identity but does not authenticate transport input itself. Worker replay and boot recovery reuse the same admission service and verifier authority rather than creating another completion authority.
+OpenOmni sharpens that duty by treating each unit of work as a WorkItem contract. Progress completion, one execution's exit status, one criterion's result, and terminal contract completion are different facts. The target contract permits closure only through a durable admission bound to the current contract revision and evidence basis.
 
 ## 3. Definition
 
@@ -64,18 +64,6 @@ A system qualifies only by passing all five. This turns "is it an Agent OS?" fro
 
 A note on trust direction, since it is the deepest split in the landscape: companion systems (OpenClaw, Hermes) are built on *trusting* the agent — its reports, its self-curated memory, its self-improved skills. OpenOmni is built on *not trusting* it: execution, judgment, and improvement are separated, and completion claims must survive an evidence gate. This is an axiom difference, not a feature difference, which is why it is expensive to retrofit in either direction.
 
-## 6. OpenOmni scorecard
+## 6. OpenOmni qualification
 
-Honest as of 2026-08-04. Current wiring truth: [implementation-status.md](implementation-status.md).
-
-| Test | Shipped today | Target path |
-|---|---|---|
-| T1 third-party | ❌ Not passed. The `AppConnector` ABI, installation/consent storage, endpoint dispatch, process driver, log capture, stall detection, and evidence projection exist; first-party definitions and unused discovery/registry modules were deleted, and there is no complete install lifecycle. | Discover → register → consent → wire → smoke-verify, then run a third-party agent under enforced limits |
-| T2 hostile program | ⚠️ Partial. Worker-spawn denial, budget hard-stop, tool guard, blacklist, grants, and authority evaluation are mechanisms; kernel/userland still share one process and the Resident retains direct mutating tools. | Resident-only allocation and process-isolation-grade protection for this single-Owner boundary |
-| T3 power loss | ⚠️ Partial. Cron jobs persist and boot starts their runner; PendingInteraction rows remain storage-backed and boot expiry cleanup runs. Unified durable `Wait`, interrupted-attempt continuation, and effect reconciliation are not shipped. | Unified durable Wait, interrupted-attempt continuation, effect reconciliation, and restart proof |
-| T4 liar | ✅ Passed for the WorkItem completion boundary. Claims, observations, scoped results, invalidations, verification errors, effects, admissions, and terminal receipts are distinct. Deterministic verifier results retain `checkedPredicate`; assertions remain asserted; known-bad results refute and block. Only a current contract/basis/head-bound admission can close, and raw Session completion is refused. | #510 moves the same contract behind the single FULL ledger writer; #493 adds archived replay integration without creating another completion authority. |
-| T5 multiplexing | ⚠️ Partial. Multiple workers, budgets, blacklist, ChannelGrant, TrustTier, WorkerGrant, and effective-authority evaluation exist; broader shared-resource accounting and the target authority boundary remain incomplete. | Shared-resource accounting and the target authority boundary |
-
-**Qualification: 1 / 5 tests fully pass today; the other four have target paths, with substantial partial substrate in T2, T3, and T5.** Formal qualification still requires all five tests. Passing T1, T3, and T4 is the project's narrower product-branding milestone for using “Agent OS”; it is not five-test qualification. Until that milestone, the honest description is *"an evidence-gated personal workflow engine building toward an Agent OS."*
-
-The bets this depends on — and the criteria under which we abandon the claim — live in [Bets and Kill Criteria](bets-and-kill-criteria.md).
+[Implementation Status](implementation-status.md) alone records which qualification mechanisms are currently wired. The bets this depends on — and the criteria under which we abandon the claim — live in [Bets and Kill Criteria](bets-and-kill-criteria.md).

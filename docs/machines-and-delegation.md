@@ -3,8 +3,7 @@
 Owner-directed target design (2026-08-23). This document supersedes the
 package-layout portions of [clean-room-blueprint.md](clean-room-blueprint.md)
 where they conflict: the Owner ruling of 2026-08-23 replaces the legacy brain
-and host with ONE deployable app `apps/openomni`, and unfreezes
-`placement` (the second execution-target kind — machines — now exists).
+and host with the sole-app target and includes machine placement.
 Everything here is a target contract; [implementation-status.md](implementation-status.md)
 alone says what is wired.
 
@@ -17,10 +16,7 @@ OpenOmni is an agent OS. Its reach grows along two axes:
 - **Axis B — workforce (delegation).** Work is commissioned through ONE
   address vocabulary covering internal loops and external actors uniformly.
 
-The protocol contracts for both landed together (`packages/protocol/src/machine/`,
-`packages/protocol/src/delegation/`, `Tool.Placement`) because they meet in the
-tool catalog: a tool declares *where* it runs and *which capabilities* the
-executing side must hold.
+The protocol contracts for both belong together because they meet in the tool catalog: a tool declares *where* it runs and *which capabilities* the executing side must hold.
 
 ## 2. Machine contracts (`protocol/src/machine/`)
 
@@ -75,8 +71,7 @@ enrollment storage is a ledger record; attach admission is kernel judgment.
   was open. `sent` is transport acceptance of a notify, terminal for notify
   only (pinned on `Delegation.Record`, where operation meets settlement).
   `completed` means the worker/actor REPORTED completion (or replied);
-  acceptance-criteria enforcement is deliberately out of this terminal, a
-  future WorkItem completion-authority integration.
+  acceptance-criteria enforcement remains deliberately outside this terminal.
 - `Delegation.Record`: the durable row (record-before-act): the Handle
   fields plus origin, instruction summary, and the `open|settled` lifecycle.
   Written at admission before any work runs; settled exactly once by the
@@ -93,7 +88,7 @@ authority form the **DelegationKernel** in `apps/openomni`; the agent loop
 reaches it only through tools in its catalog (`delegate`, `await_delegation`,
 `cancel_delegation`).
 
-### Async lifecycle (shipped)
+### Async lifecycle contract
 
 - **Record-before-act, single settlement fold.** `kernel.delegate()` runs:
   admit → driver `prepare` (the channel driver allocates its durable `waitId`

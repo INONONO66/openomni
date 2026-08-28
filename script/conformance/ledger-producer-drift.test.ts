@@ -53,6 +53,16 @@ describe("ledger producer drift", () => {
     expect(matchesLedgerWriteCall("adapter.adoptStream(\n streamId,\n head,\n genesis) ")).toBe(
       true,
     );
+    expect(matchesLedgerWriteCall("const write = ledger.append.bind(ledger); write(event, 0)")).toBe(
+      true,
+    );
+    expect(matchesLedgerWriteCall('const write = ledger["append"]; write(event, 0)')).toBe(true);
+    expect(matchesLedgerWriteCall("const { append: write } = adapter.ledger; write(event, 0)")).toBe(
+      true,
+    );
+    expect(matchesLedgerWriteCall("const { adoptStream } = adapter; adoptStream(id, 1, fact)")).toBe(
+      true,
+    );
     expect(
       matchesMigrationTableWriteSql(
         "-- historical backfill\nUPDATE worker_run_state SET executor_kind = 'internal_chat_agent';",

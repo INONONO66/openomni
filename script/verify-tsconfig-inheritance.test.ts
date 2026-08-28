@@ -11,13 +11,12 @@ function verifyFixture(name: string) {
 
 describe("verify-tsconfig-inheritance", () => {
   test("repo: every project extends the shared base with intact emit policy and membership", () => {
-    const result = verifyManifest(repoManifest());
+    const manifest = repoManifest();
+    const result = verifyManifest(manifest);
     expect(result.problems).toEqual([]);
     expect(result.ok).toBe(true);
     expect(result.code).toBeNull();
-    // 27 projects remain after #792 removed the three legacy workspaces;
-    // discovery may only grow from this post-decommission baseline.
-    expect(result.projectCount).toBeGreaterThanOrEqual(27);
+    expect(result.projectCount).toBe(manifest.projects.length);
     expect(result.claimedFileCount).toBeGreaterThan(0);
   });
 

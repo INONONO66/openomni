@@ -1,6 +1,6 @@
-# Agent core rewrite — execution SOT
+# Agent core rewrite — historical execution receipt
 
-Source of truth for [#606](https://github.com/INONONO66/openomni/issues/606). The issue holds the outcome statement; this file holds the plan, the decisions, the falsifiable boundary rules, and live PR status. When they disagree, this file wins and the issue gets corrected.
+This document preserves the decisions and PR history for [#606](https://github.com/INONONO66/openomni/issues/606). References to removed hosts, coordinators, cron paths, and open phase rows describe that historical delivery only. [Implementation Status](implementation-status.md) alone records current wiring.
 
 ## Outcome
 
