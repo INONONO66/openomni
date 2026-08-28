@@ -11,7 +11,12 @@ import {
 } from "../src/tools/artifacts";
 import { catalogEntries, collectToolSpecs } from "../src/tools/catalog";
 import { createDispatcher, HOST_TARGET } from "../src/tools/dispatch";
-import { LLM_TOOL_NAME, llmToolExecutor, MAX_LLM_CALLS } from "../src/tools/llm";
+import {
+  LLM_TOOL_NAME,
+  llmToolExecutor,
+  MAX_LLM_CALLS,
+  resolveLlmToolModel,
+} from "../src/tools/llm";
 
 const RESIDENT = { role: "resident", depth: 0, sessionId: "session-origin" } as const;
 
@@ -36,18 +41,18 @@ describe("the llm tool", () => {
     expect(await run({ prompt: "summarize this" })).toBe("answered: summarize this");
   });
 
-  it("refuses a malformed call without touching the port", async () => {
+  it("refuses a malformed call by throwing, without touching the port", async () => {
     let invoked = 0;
     const run = llmToolExecutor(async () => {
       invoked += 1;
       return "x";
     });
-    expect(await run({ prompt: "" })).toStartWith("llm refused:");
-    expect(await run({ prompt: "ok", extra: true })).toStartWith("llm refused:");
+    await expect(run({ prompt: "" })).rejects.toThrow(/^llm refused:/);
+    await expect(run({ prompt: "ok", extra: true })).rejects.toThrow(/^llm refused:/);
     expect(invoked).toBe(0);
   });
 
-  it(`serves ${MAX_LLM_CALLS} calls, then refuses without invoking the port`, async () => {
+  it(`serves ${MAX_LLM_CALLS} calls, then throws without invoking the port`, async () => {
     let invoked = 0;
     const run = llmToolExecutor(async () => {
       invoked += 1;
@@ -57,12 +62,60 @@ describe("the llm tool", () => {
     for (let i = 1; i <= MAX_LLM_CALLS; i++) {
       expect(await run({ prompt: `q${i}` })).toBe(`call ${i}`);
     }
-    const refusal = await run({ prompt: "one too many" });
 
-    expect(refusal).toBe(
+    await expect(run({ prompt: "one too many" })).rejects.toThrow(
       `llm refused: the per-cell budget of ${MAX_LLM_CALLS} sub-model calls is spent`,
     );
     expect(invoked).toBe(MAX_LLM_CALLS);
+  });
+
+  it("surfaces a failure as an error RESULT through the dispatcher, never as data", async () => {
+    // The defect this pins: a failing llm call returned as a completed string
+    // lets cell code store failure text as if it were model output. The
+    // dispatcher must mark it isError so the cell door raises ToolError.
+    const entries = catalogEntries(
+      {
+        llm: async () => {
+          throw new Error("llm failed: provider on fire");
+        },
+      },
+      RESIDENT,
+    );
+    const dispatcher = createDispatcher(entries);
+
+    const result = await dispatcher.execute({ id: "1", tool: LLM_TOOL_NAME, input: { prompt: "hi" } });
+
+    expect(result.isError).toBe(true);
+    expect(result.output).toBe("llm failed: provider on fire");
+  });
+
+  it("refuses an unlisted model instead of guessing an SDK for it", () => {
+    // The defect this pins: a bare fallback model dropped the provider's npm
+    // wiring, and the LLM package then routed an anthropic credential to the
+    // OpenAI SDK. Unlisted must be a per-call error.
+    const catalog = {
+      anthropic: {
+        id: "anthropic",
+        name: "Anthropic",
+        api: "https://api.anthropic.com",
+        npm: "@ai-sdk/anthropic",
+        env: [],
+        models: {
+          listed: { id: "listed", name: "Listed" },
+        },
+      },
+    } as never;
+
+    expect(resolveLlmToolModel(catalog, { provider: "anthropic", id: "listed" })).toMatchObject({
+      id: "listed",
+      providerID: "anthropic",
+      api: { npm: "@ai-sdk/anthropic" },
+    });
+    expect(() => resolveLlmToolModel(catalog, { provider: "anthropic", id: "claude-unlisted" }))
+      .toThrow('llm failed: model "claude-unlisted" is not listed under provider "anthropic"');
+    expect(() => resolveLlmToolModel(catalog, { provider: "nowhere", id: "listed" })).toThrow(
+      "llm failed:",
+    );
   });
 
   it("is host-placed: it survives the cell-door fold against the brain alone", async () => {

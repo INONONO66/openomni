@@ -15,6 +15,7 @@ import threading
 import traceback
 
 _emit_lock = threading.Lock()
+_cell_context = threading.local()
 _cell_requests = queue.Queue()
 _answer_queues = {}
 _answer_queues_lock = threading.Lock()
@@ -62,6 +63,16 @@ class _Tools:
 
     def __getitem__(self, name):
         def call(**arguments):
+            # The calling thread's cell identity travels with the frame. A bare
+            # thread that outlives its cell has no identity and is refused —
+            # otherwise it would execute under whichever cell runs next.
+            _cell = getattr(_cell_context, "cell_id", None)
+            if _cell is None:
+                raise ToolError(
+                    "tool call refused: tools are reachable only from the cell's"
+                    " own execution or its parallel() workers, never from a"
+                    " thread that outlives its cell"
+                )
             _call_id = str(next(_call_ids))
             _answers = queue.Queue(maxsize=1)
             with _answer_queues_lock:
@@ -70,6 +81,7 @@ class _Tools:
                 _emit({
                     "kind": "tool_call",
                     "callId": _call_id,
+                    "cellId": _cell,
                     "name": name,
                     "arguments": arguments,
                 })
@@ -90,8 +102,17 @@ def parallel(thunks, max_workers=8):
     _thunks = list(thunks)
     if not _thunks:
         return []
+    _cell = getattr(_cell_context, "cell_id", None)
+
+    def _in_cell(_thunk):
+        def _run():
+            _cell_context.cell_id = _cell
+            return _thunk()
+
+        return _run
+
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as _executor:
-        _futures = [_executor.submit(_thunk) for _thunk in _thunks]
+        _futures = [_executor.submit(_in_cell(_thunk)) for _thunk in _thunks]
         concurrent.futures.wait(_futures)
         return [_future.result() for _future in _futures]
 
@@ -121,6 +142,7 @@ while True:
     _request = _cell_requests.get()
     if _request is None:
         break
+    _cell_context.cell_id = _request["cellId"]
     _stdout = io.StringIO()
     _stderr = io.StringIO()
     _filename = f"<cell {_request['cellId']}>"
@@ -156,11 +178,13 @@ while True:
             "output": {"stdout": _stdout.getvalue(), "stderr": _stderr.getvalue()},
             "error": "".join(traceback.format_exception(type(_exc), _exc, _tb)),
         }
+    _cell_context.cell_id = None
     _emit({"kind": "result", "result": _result})
 `;
 
 type ToolCallFrame = {
   readonly callId: string;
+  readonly cellId: string;
   readonly name: string;
   readonly arguments: Record<string, unknown>;
 };
@@ -342,6 +366,24 @@ export class PythonKernel {
     pending: PendingCell,
     frame: ToolCallFrame,
   ): void {
+    // The driver stamps every tool call with the cell it belongs to. A frame
+    // claiming a different cell — forged from inside cell code via the raw
+    // stdout, or from a driver bug — must never execute under the running
+    // cell's identity; it is answered with a refusal instead.
+    if (frame.cellId !== pending.cellId) {
+      try {
+        process.stdin.write(
+          `${JSON.stringify({
+            status: "failed",
+            error: `tool call refused: cell ${String(frame.cellId)} is not the running cell`,
+            callId: frame.callId,
+          })}\n`,
+        );
+      } catch (error) {
+        this.settleWithParseFailure(process, pending, error);
+      }
+      return;
+    }
     // Duplicate or late frames have no waiter and must not create another host call.
     if (pending.inFlight.has(frame.callId)) return;
 

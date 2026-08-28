@@ -314,6 +314,30 @@ test("a cell's llm(prompt) is answered by the LlmPort wired into the catalog", a
   expect(output).toContain("answered: summarize the ledger in one word");
 }, 40_000);
 
+test("a failing llm call raises ToolError inside the cell instead of returning failure text", async () => {
+  const { host, run } = await startCellHarness({
+    llm: async () => {
+      throw new Error("llm failed: provider on fire");
+    },
+  });
+
+  const output = await run(
+    [
+      "try:",
+      "    llm(prompt='doomed')",
+      "    outcome = 'returned as data'",
+      "except ToolError as error:",
+      "    outcome = 'raised: ' + str(error)",
+      "outcome",
+    ].join("\n"),
+  );
+  host.close();
+
+  expect(output).toContain("raised: ");
+  expect(output).toContain("llm failed: provider on fire");
+  expect(output).not.toContain("returned as data");
+}, 40_000);
+
 test("parallel() runs independent tool calls concurrently and returns both results in input order", async () => {
   let inFlight = 0;
   let maxInFlight = 0;

@@ -1,3 +1,4 @@
+import { type ModelsDev, Provider } from "@openomni/llm";
 import type { Tool } from "@openomni/protocol";
 import { z } from "zod";
 
@@ -51,16 +52,42 @@ export function llmToolExecutor(llm: LlmPort) {
   // catalogEntries() builds fresh executors per catalog construction — per
   // cell, per turn — so this counter IS the per-cell budget: a cell that
   // spends it gets refusals, and the next cell starts at zero.
+  //
+  // Refusals and failures THROW rather than return: this tool's consumer is
+  // code, not the model, and code treats any returned string as model output.
+  // The dispatcher turns the throw into an error result, which the cell door
+  // raises as a catchable ToolError.
   let calls = 0;
   return async (rawInput: unknown): Promise<string> => {
     const parsed = Input.safeParse(rawInput);
     if (!parsed.success) {
-      return `llm refused: ${parsed.error.issues[0]?.message ?? "invalid input"}`;
+      throw new Error(`llm refused: ${parsed.error.issues[0]?.message ?? "invalid input"}`);
     }
     if (calls >= MAX_LLM_CALLS) {
-      return `llm refused: the per-cell budget of ${MAX_LLM_CALLS} sub-model calls is spent`;
+      throw new Error(`llm refused: the per-cell budget of ${MAX_LLM_CALLS} sub-model calls is spent`);
     }
     calls += 1;
     return llm(parsed.data.prompt);
   };
+}
+
+/**
+ * The llm tool's model, resolved from the models.dev catalog. Unlisted is an
+ * ERROR, not a fallback: a bare model ref would drop the provider's `api.npm`
+ * wiring and the LLM package would default to the OpenAI SDK — sending the
+ * configured credential to the wrong provider. The agent loop's own resolver
+ * refuses unlisted models for the same reason.
+ */
+export function resolveLlmToolModel(
+  data: Record<string, ModelsDev.Provider>,
+  model: { readonly provider: string; readonly id: string },
+): Provider.Model {
+  const provider = data[model.provider];
+  const raw = provider?.models?.[model.id];
+  if (provider === undefined || raw === undefined) {
+    throw new Error(
+      `llm failed: model "${model.id}" is not listed under provider "${model.provider}" in the models.dev catalog, so its SDK wiring is unknown`,
+    );
+  }
+  return Provider.fromModelsDevModel(provider, raw as ModelsDev.Model);
 }

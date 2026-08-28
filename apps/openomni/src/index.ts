@@ -9,7 +9,7 @@ import {
   Session,
   Storage,
 } from "@openomni/ledger";
-import { ModelsDev, Provider, run as llmRun, type Sink } from "@openomni/llm";
+import { ModelsDev, run as llmRun, type Sink } from "@openomni/llm";
 import { createMachineHost, type MachineHost } from "@openomni/machines";
 import type { Placement } from "@openomni/placement";
 import {
@@ -24,7 +24,7 @@ import { Bus } from "@openomni/telemetry";
 import { createChannelDrivers } from "./channels";
 import { assertWsExposure, loadConfig, type OpenOmniConfig, type RegisteredActor } from "./config";
 import type { ArtifactsPort } from "./tools/artifacts";
-import type { LlmPort } from "./tools/llm";
+import { type LlmPort, resolveLlmToolModel } from "./tools/llm";
 import type { MachinesPort } from "./tools/machines";
 import { createChannelDriver } from "./delegation/channel-driver";
 import { createInlineDriver } from "./delegation/inline-driver";
@@ -73,21 +73,6 @@ function attachedTargets(
 }
 
 /**
- * The llm tool's model, resolved the way the agent loop resolves its own:
- * the models.dev catalog supplies the provider SDK wiring, and an unlisted
- * model falls back to the provider's defaults rather than failing the boot.
- */
-async function llmToolModel(model: OpenOmniConfig["model"]): Promise<Provider.Model> {
-  const data = await ModelsDev.get();
-  const provider = data[model.provider];
-  const raw = provider?.models?.[model.id];
-  if (provider !== undefined && raw !== undefined) {
-    return Provider.fromModelsDevModel(provider, raw as ModelsDev.Model);
-  }
-  return { id: model.id, providerID: model.provider, name: model.id };
-}
-
-/**
  * The llm tool's one-shot sub-model call: a single user message, no tools,
  * one step, its own synthesized trace — a nested run must never borrow the
  * turn's run identity. Auth is the configured key, exactly as the Resident
@@ -133,7 +118,7 @@ function createLlmToolPort(model: OpenOmniConfig["model"]): LlmPort {
         messages: [request],
         tools: [],
         maxSteps: 1,
-        model: await llmToolModel(model),
+        model: resolveLlmToolModel(await ModelsDev.get(), { provider: model.provider, id: model.id }),
         auth: { type: "api", key: model.apiKey },
         trace: {
           traceId: `llm-tool:${crypto.randomUUID()}`,
@@ -149,7 +134,9 @@ function createLlmToolPort(model: OpenOmniConfig["model"]): LlmPort {
         "error" in outcome && outcome.error !== undefined
           ? outcome.error.message
           : `the sub-model run ended as ${outcome.type}`;
-      return `llm failed: ${reason}`;
+      // Thrown, not returned: the consumer is cell code, and a failure string
+      // returned as data would be stored as if it were model output.
+      throw new Error(`llm failed: ${reason}`);
     }
     return answer;
   };

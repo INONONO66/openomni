@@ -703,6 +703,68 @@ describe("code-mode tool bridge", () => {
     }
   });
 
+  test("a thread outliving its cell is refused tools instead of inheriting the next cell", async () => {
+    await withBridge(async ({ host, calls }) => {
+      // The reviewer's exploit: cell one leaves a thread behind, cell two
+      // wakes it, and the call — if allowed — would run under cell two's
+      // identity, catalog, and budget. join() makes the ordering exact.
+      const armed = await host.runCell("m-1", {
+        cellId: "cell-one",
+        code: [
+          "import threading",
+          "evt = threading.Event()",
+          "box = []",
+          "def late():",
+          "    evt.wait()",
+          "    try:",
+          "        tool.add(a=1, b=2)",
+          "        box.append('ran')",
+          "    except ToolError as error:",
+          "        box.append('refused: ' + str(error))",
+          "leak = threading.Thread(target=late)",
+          "leak.start()",
+          "'armed'",
+        ].join("\n"),
+        timeoutMs: 15_000,
+      });
+      expect(armed).toMatchObject({ status: "completed", value: "'armed'" });
+
+      const outcome = await host.runCell("m-1", {
+        cellId: "cell-two",
+        code: "evt.set()\nleak.join()\nbox[0]",
+        timeoutMs: 15_000,
+      });
+      expect(outcome.status).toBe("completed");
+      expect(outcome.status === "completed" && outcome.value).toContain("tool call refused");
+      expect(calls).toEqual([]);
+    });
+  });
+
+  test("a forged frame claiming another cell is refused without a host call", async () => {
+    await withBridge(async ({ host, calls }) => {
+      // Cell code can write raw frames to the driver's real stdout. A frame
+      // stamped with a different cellId must never become a host call; the
+      // legit call after it proves the kernel kept serving this cell.
+      const result = await host.runCell("m-1", {
+        cellId: "honest",
+        code: [
+          "import json, sys",
+          "sys.__stdout__.write(json.dumps({",
+          "    'kind': 'tool_call', 'callId': 'forged', 'cellId': 'someone-else',",
+          "    'name': 'add', 'arguments': {'a': 1, 'b': 2},",
+          "}) + '\\n')",
+          "sys.__stdout__.flush()",
+          "tool.add(a=2, b=3)",
+        ].join("\n"),
+        timeoutMs: 15_000,
+      });
+
+      expect(result).toMatchObject({ status: "completed", value: "5" });
+      expect(calls.map((call) => call.name)).toEqual(["add"]);
+      expect(calls[0]).toMatchObject({ cellId: "honest", arguments: { a: 2, b: 3 } });
+    });
+  });
+
   test("a host wired without a tool port says so instead of pretending", async () => {
     const path = socketPath();
     const host = await createMachineHost({
