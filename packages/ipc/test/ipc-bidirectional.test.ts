@@ -1,12 +1,7 @@
 import { describe, test, expect, afterEach } from "bun:test";
-import os from "node:os";
-import path from "node:path";
 import { connectIpcClient } from "../src/client";
 import { createIpcServer } from "../src/server";
-
-function tmpSocketPath(label: string): string {
-  return path.join(os.tmpdir(), `omo-ipc-bidir-${label}-${process.pid}.sock`);
-}
+import { socketPath as socketPathForTest } from "./helpers/socket-path";
 
 describe("IPC bidirectional", () => {
   const servers: Awaited<ReturnType<typeof createIpcServer>>[] = [];
@@ -19,7 +14,7 @@ describe("IPC bidirectional", () => {
   });
 
   test("client receives incoming Request → onRequest fires → response sent back", async () => {
-    const socketPath = tmpSocketPath("req");
+    const socketPath = socketPathForTest("req");
     const srv = await createIpcServer(socketPath, () => undefined);
     servers.push(srv);
 
@@ -41,7 +36,7 @@ describe("IPC bidirectional", () => {
   });
 
   test("client receives Notification → onNotification fires", async () => {
-    const socketPath = tmpSocketPath("notif");
+    const socketPath = socketPathForTest("notif");
     const srv = await createIpcServer(socketPath, () => undefined);
     servers.push(srv);
 
@@ -70,7 +65,7 @@ describe("IPC bidirectional", () => {
     // A throw here would surface as an uncaughtException in the process
     // hosting the client (e.g. the coordinator supervising its workers).
     // The contract mirrors the server: log, keep the connection draining.
-    const socketPath = tmpSocketPath("notifThrow");
+    const socketPath = socketPathForTest("notifThrow");
     const srv = await createIpcServer(socketPath, () => undefined);
     servers.push(srv);
 
@@ -96,7 +91,7 @@ describe("IPC bidirectional", () => {
   });
 
   test("server.call() → client receives → responds → server gets result", async () => {
-    const socketPath = tmpSocketPath("srvCall");
+    const socketPath = socketPathForTest("srvCall");
     const srv = await createIpcServer(socketPath, () => undefined);
     servers.push(srv);
 
@@ -112,7 +107,7 @@ describe("IPC bidirectional", () => {
   });
 
   test("existing client.call() flow unchanged", async () => {
-    const socketPath = tmpSocketPath("clientCall");
+    const socketPath = socketPathForTest("clientCall");
     const srv = await createIpcServer(socketPath, (method, params, respond) => {
       if (method === "echo") respond({ got: params?.v });
     });
