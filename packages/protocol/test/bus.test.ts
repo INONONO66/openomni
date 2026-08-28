@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { z } from "zod";
+import { z, ZodError } from "zod";
 import { BusEvent } from "../src/bus/index.js";
 
 describe("BusEvent.define", () => {
@@ -41,7 +41,7 @@ describe("BusEvent.define", () => {
   test("throws for invalid payloads", () => {
     const descriptor = BusEvent.define("bus:event", schema);
 
-    expect(() => descriptor.schema.parse({ id: "", count: -1 })).toThrow();
+    expect(() => descriptor.schema.parse({ id: "", count: -1 })).toThrow(ZodError);
   });
 
   test("allows an empty string name", () => {

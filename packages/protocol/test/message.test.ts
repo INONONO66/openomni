@@ -1,4 +1,5 @@
 import { describe, test, expect } from "bun:test";
+import { ZodError } from "zod";
 import { Message } from "../src/message/index.js";
 
 const base = { id: "p-1", sessionID: "ses-1", messageID: "msg-1" };
@@ -32,7 +33,7 @@ describe("Message.TextPart", () => {
   });
 
   test("rejects missing text", () => {
-    expect(() => Message.TextPart.parse({ ...base, type: "text" })).toThrow();
+    expect(() => Message.TextPart.parse({ ...base, type: "text" })).toThrow(ZodError);
   });
 });
 
@@ -58,7 +59,7 @@ describe("Message.ReasoningPart", () => {
         type: "reasoning",
         text: "thinking...",
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
   });
 
   test("rejects missing text", () => {
@@ -68,7 +69,7 @@ describe("Message.ReasoningPart", () => {
         type: "reasoning",
         time: { start: 10 },
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
   });
 });
 
@@ -126,7 +127,7 @@ describe("Message.StepFinishPart", () => {
         reason: "end_turn",
         tokens: { input: 100, output: 50 },
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
   });
 
   test("rejects missing tokens", () => {
@@ -137,7 +138,7 @@ describe("Message.StepFinishPart", () => {
         reason: "end_turn",
         cost: 0.05,
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
   });
 
   test("rejects negative and fractional token counts", () => {
@@ -149,7 +150,7 @@ describe("Message.StepFinishPart", () => {
         cost: 0.05,
         tokens: { input: -1, output: 50 },
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
 
     expect(() =>
       Message.StepFinishPart.parse({
@@ -159,7 +160,7 @@ describe("Message.StepFinishPart", () => {
         cost: 0.05,
         tokens: { input: 100, output: 50, cache: { read: 1.5, write: 0 } },
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
   });
 });
 
@@ -228,7 +229,7 @@ describe("Message.ToolPart", () => {
         tool: "search",
         state: { status: "pending", input: {} },
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
   });
 
   test("rejects wrong Tool.State status", () => {
@@ -237,13 +238,13 @@ describe("Message.ToolPart", () => {
         ...toolBase,
         state: { status: "done", input: {} },
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
   });
 });
 
 describe("Message.Part", () => {
   test("rejects unknown type literal", () => {
-    expect(() => Message.Part.parse({ ...base, type: "unknown" })).toThrow();
+    expect(() => Message.Part.parse({ ...base, type: "unknown" })).toThrow(ZodError);
   });
 });
 
@@ -283,11 +284,11 @@ describe("Message.UserMessage", () => {
 
   test("rejects missing agent", () => {
     const { agent: _, ...noAgent } = validUser;
-    expect(() => Message.UserMessage.parse(noAgent)).toThrow();
+    expect(() => Message.UserMessage.parse(noAgent)).toThrow(ZodError);
   });
 
   test("rejects wrong role", () => {
-    expect(() => Message.UserMessage.parse({ ...validUser, role: "assistant" })).toThrow();
+    expect(() => Message.UserMessage.parse({ ...validUser, role: "assistant" })).toThrow(ZodError);
   });
 });
 
@@ -323,7 +324,7 @@ describe("Message.AssistantMessage", () => {
 
   test("rejects missing parentID", () => {
     const { parentID: _, ...noParent } = validAssistant;
-    expect(() => Message.AssistantMessage.parse(noParent)).toThrow();
+    expect(() => Message.AssistantMessage.parse(noParent)).toThrow(ZodError);
   });
 
   test("rejects negative and fractional token counts", () => {
@@ -332,7 +333,7 @@ describe("Message.AssistantMessage", () => {
         ...validAssistant,
         tokens: { ...validAssistant.tokens, output: -1 },
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
 
     expect(() =>
       Message.AssistantMessage.parse({
@@ -342,13 +343,13 @@ describe("Message.AssistantMessage", () => {
           cache: { read: 1.5, write: 50 },
         },
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
   });
 });
 
 describe("Message.Info", () => {
   test("rejects wrong role", () => {
-    expect(() => Message.Info.parse({ ...msgBase, role: "system" })).toThrow();
+    expect(() => Message.Info.parse({ ...msgBase, role: "system" })).toThrow(ZodError);
   });
 });
 
@@ -379,10 +380,10 @@ describe("Message.WithParts", () => {
   });
 
   test("rejects missing info", () => {
-    expect(() => Message.WithParts.parse({ parts: [textPart] })).toThrow();
+    expect(() => Message.WithParts.parse({ parts: [textPart] })).toThrow(ZodError);
   });
 
   test("rejects missing parts", () => {
-    expect(() => Message.WithParts.parse({ info: userInfo })).toThrow();
+    expect(() => Message.WithParts.parse({ info: userInfo })).toThrow(ZodError);
   });
 });

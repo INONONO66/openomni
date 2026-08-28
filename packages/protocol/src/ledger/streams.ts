@@ -22,6 +22,7 @@ import { Events as IngressEvents, type RoutingDecisionPayload } from "../event/i
  *     to refuse is the class's own mapping (see each entry).
  */
 export const StreamRegistry = {
+  // SHIPPED — ledger WaitStore publishes; SQLite ledger append/projection consumes.
   wait: {
     stream: "wait:<waitId>",
     heads: "revision-bound (expectedHead = revision before the transition)",
@@ -37,6 +38,7 @@ export const StreamRegistry = {
     ],
     status: "shipped",
   },
+  // SHIPPED — ledger WorkItem fact writers publish; SQLite ledger append/projection consumes.
   work: {
     stream: "work:<workItemId>",
     heads: "revision-bound (expectedHead = revision before the transition)",
@@ -66,6 +68,7 @@ export const StreamRegistry = {
     ],
     status: "shipped",
   },
+  // SHIPPED — channels routing resolution publishes and its replay gate consumes via headFact.
   route: {
     // Channel-scoped key (#510 review fix F1): normalizer-minted inbound ids
     // are only unique WITHIN a channel (Telegram per-chat counters, GitHub
@@ -82,6 +85,7 @@ export const StreamRegistry = {
     factTypes: ["route.decided"],
     status: "shipped",
   },
+  // SHIPPED — channels routing execution publishes and consumes corrections via headFact.
   route_correction: {
     // batch ② commit 4: the route stream records the routing DECISION; when a
     // routed wait-correlated delivery is then rejected fail-closed at the wait
@@ -97,14 +101,16 @@ export const StreamRegistry = {
     factTypes: ["route.not_delivered"],
     status: "shipped",
   },
+  // DORMANT — contract-only; no production command decision publisher exists today.
   command: {
     stream: "command:<dispatchId>",
     heads: "single-fact (expectedHead 0, seq 1)",
     conflictMeans:
       "dispatch id already decided — an anomaly (dispatchId is minted per submit), fail closed",
     factTypes: ["command.authorized", "command.denied"],
-    status: "shipped",
+    status: "dormant — contract-only; no production command decision publisher today",
   },
+  // SHIPPED — ledger EngagementStore publishes; SQLite ledger append/projection consumes.
   engagement: {
     stream: "engagement:<engagementId>",
     heads: "revision-bound (expectedHead = revision before the transition)",
@@ -114,6 +120,7 @@ export const StreamRegistry = {
     status:
       "shipped (#709 — writer at ledger engagement/index.ts; brain sole writer, gateway-design §4/§5)",
   },
+  // SHIPPED — channels messaging send publishes and its retry admission consumes via headFact.
   gateway_send: {
     stream: "gateway_send:<uriencoded messageId>",
     heads: "single-fact (expectedHead 0, seq 1)",

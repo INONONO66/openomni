@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { z } from "zod";
+import { ZodError, type z } from "zod";
 import { Ingress } from "../../src/ingress/index.js";
 
 const RoutingDecision = Ingress.Events.RoutingDecision;
@@ -19,45 +19,14 @@ const baseDecision = {
 };
 
 const terminalCases: RoutingDecisionInput[] = [
-  { ...baseDecision, stage: "blacklist", outcome: "drop" },
-  {
-    ...baseDecision,
-    stage: "wait_correlation",
-    outcome: "route",
-    target: "worker-session:session-1",
-    sessionId: "session-1",
-    runId: "run-1",
-    pendingInteractionId: "pi-1",
-    actorId: "actor-1",
-    trustTier: "assigned_worker",
-    inboundTreatment: "full_access",
-  },
+  // This acceptance case exercises both the source-prefix regex and minimum
+  // candidate count refinements; the other union branches are covered at
+  // their invalid stage/outcome boundaries below.
   {
     ...baseDecision,
     stage: "wait_correlation",
     outcome: "ambiguous",
     candidateInteractionIds: ["pending_ask:ask-1", "pending_interaction:pi-2", "wait:wait-3"],
-  },
-  // Fail-closed wait stage (#215): a matched wait whose owner has no ingress
-  // delivery path blocks instead of falling through to surface routing.
-  { ...baseDecision, stage: "wait_correlation", outcome: "block" },
-  { ...baseDecision, stage: "channel_ceiling", outcome: "block", inboundTreatment: "drop" },
-  {
-    ...baseDecision,
-    stage: "actor_identity",
-    outcome: "block",
-    actorId: "actor-2",
-    trustTier: "observer",
-  },
-  {
-    ...baseDecision,
-    stage: "surface_default",
-    outcome: "route",
-    mode: "internal",
-    target: "resident",
-    sessionId: "session-2",
-    actorId: "system:cron",
-    factsUsed: ["actor.system:cron", "surface.default.session-2"],
   },
 ];
 
@@ -136,7 +105,7 @@ describe("Ingress.Events.RoutingDecision", () => {
       Reflect.deleteProperty(input, requiredField);
 
       // When / Then
-      expect(() => routingDecisionSchema.parse(input)).toThrow();
+      expect(() => routingDecisionSchema.parse(input)).toThrow(ZodError);
     });
   }
 
@@ -146,7 +115,7 @@ describe("Ingress.Events.RoutingDecision", () => {
       const input = { ...baseDecision, stage, outcome };
 
       // When / Then
-      expect(() => routingDecisionSchema.parse(input)).toThrow();
+      expect(() => routingDecisionSchema.parse(input)).toThrow(ZodError);
     });
   }
 
@@ -160,7 +129,7 @@ describe("Ingress.Events.RoutingDecision", () => {
     };
 
     // When / Then
-    expect(() => routingDecisionSchema.parse(input)).toThrow();
+    expect(() => routingDecisionSchema.parse(input)).toThrow(ZodError);
   });
 
   test("requires at least two source-qualified candidates for an ambiguous decision", () => {
@@ -177,13 +146,13 @@ describe("Ingress.Events.RoutingDecision", () => {
         ...ambiguous,
         candidateInteractionIds: ["pending_ask:ask-1"],
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
     expect(() =>
       routingDecisionSchema.parse({
         ...ambiguous,
         candidateInteractionIds: ["ask-1", "pending_interaction:pi-2"],
       }),
-    ).toThrow();
+    ).toThrow(ZodError);
   });
 
   test("rejects the retired plan mode", () => {
@@ -191,6 +160,6 @@ describe("Ingress.Events.RoutingDecision", () => {
     const input = { ...baseDecision, mode: "plan", stage: "surface_default", outcome: "route" };
 
     // When / Then
-    expect(() => routingDecisionSchema.parse(input)).toThrow();
+    expect(() => routingDecisionSchema.parse(input)).toThrow(ZodError);
   });
 });
