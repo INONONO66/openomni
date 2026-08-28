@@ -8,42 +8,16 @@ import { Gateway, type Message } from "@openomni/protocol";
 import { createResidentGateway } from "../src/gateway";
 import { openCuratedMemory } from "../src/memory/store";
 import { createResident } from "../src/resident";
+import { assistantMessage, type AssistantMessageOptions } from "./helpers/assistant-message";
 
 const MODEL = { provider: "fake", id: "gateway-contract-test" };
 const NOW = 5_000_000_000_000;
+const ASSISTANT_MESSAGE_OPTIONS = {
+  createdAt: NOW,
+  text: "noted",
+  tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+} satisfies AssistantMessageOptions;
 let directory: string;
-
-function assistantMessage(input: RunInput): Message.WithParts {
-  const id = crypto.randomUUID();
-  const sessionID = input.trace.sessionId;
-  return {
-    info: {
-      id,
-      sessionID,
-      role: "assistant",
-      time: { created: NOW },
-      parentID: "",
-      modelID: input.model.id,
-      providerID: input.model.providerID,
-      agent: "resident",
-      path: { cwd: "", root: "" },
-      cost: 0,
-      tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
-    },
-    parts: [
-      { id: `${id}-text`, sessionID, messageID: id, type: "text", text: "noted" },
-      {
-        id: `${id}-finish`,
-        sessionID,
-        messageID: id,
-        type: "step-finish",
-        reason: "stop",
-        cost: 0,
-        tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
-      },
-    ],
-  };
-}
 
 function evidenceDelivery(payload: string): Gateway.Deliver {
   return Gateway.Deliver.parse({
@@ -107,7 +81,9 @@ describe("Resident inbound treatment", () => {
         }),
         run: async (input: RunInput, sink: Sink) => {
           calls.push(input);
-          sink.onMessage(assistantMessage(input));
+          sink.onMessage(
+            assistantMessage(input, { ...ASSISTANT_MESSAGE_OPTIONS, id: crypto.randomUUID() }),
+          );
           return { type: "stop" };
         },
       },
@@ -157,7 +133,9 @@ describe("Resident inbound treatment", () => {
             tool: "memory",
             input: { action: "add", store: "system", content: "owned-by-observer" },
           });
-          sink.onMessage(assistantMessage(input));
+          sink.onMessage(
+            assistantMessage(input, { ...ASSISTANT_MESSAGE_OPTIONS, id: crypto.randomUUID() }),
+          );
           return { type: "stop" };
         },
       },
@@ -185,7 +163,9 @@ describe("Resident inbound treatment", () => {
         }),
         run: async (input: RunInput, sink: Sink) => {
           calls.push(input);
-          sink.onMessage(assistantMessage(input));
+          sink.onMessage(
+            assistantMessage(input, { ...ASSISTANT_MESSAGE_OPTIONS, id: crypto.randomUUID() }),
+          );
           return { type: "stop" };
         },
       },

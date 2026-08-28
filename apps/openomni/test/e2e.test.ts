@@ -2,47 +2,16 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { RunInput, Sink } from "@openomni/llm";
+import type { Sink } from "@openomni/llm";
 import { Session, Storage, SurfaceKey } from "@openomni/ledger";
 import type { Message } from "@openomni/protocol";
 import { loadConfig, type OpenOmniConfig } from "../src/config";
 import { startOpenOmni } from "../src/index";
+import { assistantMessage } from "./helpers/assistant-message";
 
 const REPLY = "A deterministic Resident reply.";
 const directories: string[] = [];
 let stopApp: (() => void) | undefined;
-
-function assistantMessage(input: RunInput): Message.WithParts {
-  const id = "fake-assistant-message";
-  const sessionID = input.trace.sessionId;
-  return {
-    info: {
-      id,
-      sessionID,
-      role: "assistant",
-      time: { created: Date.now() },
-      parentID: "",
-      modelID: input.model.id,
-      providerID: input.model.providerID,
-      agent: "resident",
-      path: { cwd: "", root: "" },
-      cost: 0,
-      tokens: { input: 4, output: 5, reasoning: 0, cache: { read: 0, write: 0 } },
-    },
-    parts: [
-      { id: `${id}-text`, sessionID, messageID: id, type: "text", text: REPLY },
-      {
-        id: `${id}-finish`,
-        sessionID,
-        messageID: id,
-        type: "step-finish",
-        reason: "stop",
-        cost: 0,
-        tokens: { input: 4, output: 5, reasoning: 0, cache: { read: 0, write: 0 } },
-      },
-    ],
-  };
-}
 
 function nextMessage(ws: WebSocket): Promise<MessageEvent> {
   return new Promise((resolve, reject) => {
@@ -106,7 +75,7 @@ async function bootWithConfig(config: OpenOmniConfig): Promise<{ port: number }>
         providerID: model.provider,
       }),
       run: async (input, sink: Sink) => {
-        sink.onMessage(assistantMessage(input));
+        sink.onMessage(assistantMessage(input, { id: "fake-assistant-message", text: REPLY }));
         return { type: "stop" };
       },
     },

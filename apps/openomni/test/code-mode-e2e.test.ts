@@ -6,8 +6,9 @@ import { Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import type { RunInput, Sink } from "@openomni/llm";
 import { attachMachineDaemon, createMachineHost, type MachineDaemon } from "@openomni/machines";
-import type { Machine, Message } from "@openomni/protocol";
+import type { Machine } from "@openomni/protocol";
 import { startOpenOmni } from "../src/index";
+import { assistantMessage } from "./helpers/assistant-message";
 
 const WS_TOKEN = "code-mode-e2e-token";
 const MACHINE_ID = "alpha";
@@ -24,38 +25,6 @@ afterEach(() => {
   Storage.reset();
   for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
 });
-
-function message(input: RunInput, text: string): Message.WithParts {
-  const id = `fake-${input.trace.sessionId}-${input.messages.length}`;
-  const sessionID = input.trace.sessionId;
-  return {
-    info: {
-      id,
-      sessionID,
-      role: "assistant",
-      time: { created: Date.now() },
-      parentID: "",
-      modelID: input.model.id,
-      providerID: input.model.providerID,
-      agent: "resident",
-      path: { cwd: "", root: "" },
-      cost: 0,
-      tokens: { input: 4, output: 5, reasoning: 0, cache: { read: 0, write: 0 } },
-    },
-    parts: [
-      { id: `${id}-text`, sessionID, messageID: id, type: "text", text } as never,
-      {
-        id: `${id}-finish`,
-        sessionID,
-        messageID: id,
-        type: "step-finish",
-        reason: "stop",
-        cost: 0,
-        tokens: { input: 4, output: 5, reasoning: 0, cache: { read: 0, write: 0 } },
-      },
-    ],
-  };
-}
 
 const enrollment: Machine.Enrollment = {
   machineId: MACHINE_ID,
@@ -94,7 +63,7 @@ test("a cell batches delegation into one turn", async () => {
           const asked = (input.messages.at(-1)?.parts ?? [])
             .flatMap((part) => (part.type === "text" ? [part.text] : []))
             .join(" ");
-          sink.onMessage(message(input, `done(${asked.replace(/^.*?: /, "")})`));
+          sink.onMessage(assistantMessage(input, { text: `done(${asked.replace(/^.*?: /, "")})` }));
           return { type: "stop" };
         }
 
@@ -117,10 +86,9 @@ test("a cell batches delegation into one turn", async () => {
         });
         const listed = await input.toolExecutor?.({ id: "call-2", tool: "machines", input: {} });
         sink.onMessage(
-          message(
-            input,
-            `offered=[${offered.join(",")}] cell=${executed?.output ?? "nothing"} machines=${listed?.output ?? "nothing"}`,
-          ),
+          assistantMessage(input, {
+            text: `offered=[${offered.join(",")}] cell=${executed?.output ?? "nothing"} machines=${listed?.output ?? "nothing"}`,
+          }),
         );
         return { type: "stop" };
       },
@@ -202,7 +170,9 @@ test("the machine tool is not offered while nothing is attached", async () => {
         });
         const listed = await input.toolExecutor?.({ id: "call-2", tool: "machines", input: {} });
         sink.onMessage(
-          message(input, `forced=${forced?.output ?? "nothing"} machines=${listed?.output ?? "nothing"}`),
+          assistantMessage(input, {
+            text: `forced=${forced?.output ?? "nothing"} machines=${listed?.output ?? "nothing"}`,
+          }),
         );
         return { type: "stop" };
       },
