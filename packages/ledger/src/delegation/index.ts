@@ -1,4 +1,5 @@
 import { Delegation, type Storage as ProtocolStorage } from "@openomni/protocol";
+import { claimWithinCountedWindow } from "../storage/counted-window-claim.js";
 import { Storage } from "../storage/storage";
 
 function requireAdapter(): ProtocolStorage.DelegationSubAdapter {
@@ -26,6 +27,54 @@ export namespace DelegationStore {
       throw new Error(`Delegation already exists: ${parsed.delegationId}`);
     }
     return parsed;
+  }
+
+  export type OpenWithinRootClaim =
+    | { readonly claimed: true; readonly record: Delegation.Record }
+    | { readonly claimed: false; readonly reason: "fanout_cap" | "parent_settled" };
+
+  /** Atomically commits an open record only while all admission constraints hold. */
+  export function claimOpenWithinRoot(
+    record: Delegation.Record,
+    maxFanout: number,
+    constraints: { readonly requireOpenParent?: string } = {},
+  ): OpenWithinRootClaim {
+    const parsed = Delegation.Record.parse(record);
+    const adapter = requireAdapter();
+    let refusal: "fanout_cap" | "parent_settled" = "fanout_cap";
+    const result = claimWithinCountedWindow({
+      transaction: (operation) => Storage.get().transaction(operation),
+      alreadyClaimed: () => {
+        const existing = adapter.get(parsed.delegationId);
+        if (existing === undefined) return false;
+        if (JSON.stringify(existing) !== JSON.stringify(parsed)) {
+          throw new Error(`Delegation already exists: ${parsed.delegationId}`);
+        }
+        return true;
+      },
+      readWindowState: () => ({
+        openFanout: adapter.listOpenByRoot(parsed.rootDelegationId).length,
+        parent:
+          constraints.requireOpenParent === undefined
+            ? undefined
+            : adapter.get(constraints.requireOpenParent),
+      }),
+      canClaim: ({ openFanout, parent }) => {
+        if (constraints.requireOpenParent !== undefined && parent?.status !== "open") {
+          refusal = "parent_settled";
+          return false;
+        }
+        return openFanout < maxFanout;
+      },
+      append: () => {
+        if (!adapter.create(parsed)) {
+          throw new Error(`Delegation already exists: ${parsed.delegationId}`);
+        }
+      },
+    });
+    return result === "claimed"
+      ? { claimed: true, record: parsed }
+      : { claimed: false, reason: refusal };
   }
 
   export function get(delegationId: string): Delegation.Record | undefined {

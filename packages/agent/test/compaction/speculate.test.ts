@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { createCompactionPolicy } from "../../src/compaction/policy";
+import { createSpeculator } from "../../src/compaction/speculate";
 
 /**
  * L4 (#714): speculative prepare/promote. The expensive summarize runs in
@@ -100,7 +101,9 @@ function seamCtx(messages: Message.WithParts[], contextTokens: number) {
   } as never;
 }
 
-function build(summarize: (m: Message.WithParts[], p?: string) => Promise<string>) {
+function build(
+  summarize: (m: Message.WithParts[], p?: string, signal?: AbortSignal) => Promise<string>,
+) {
   return createCompactionPolicy({
     contextWindowTokens: 100,
     protectRecentMessages: 2,
@@ -108,6 +111,12 @@ function build(summarize: (m: Message.WithParts[], p?: string) => Promise<string
     events: Bus,
     priority: 900,
   }).create();
+}
+
+async function settle(registration: unknown): Promise<void> {
+  await (
+    registration as { readonly speculationSettled?: () => Promise<void> }
+  ).speculationSettled?.();
 }
 
 describe("speculative prepare/promote (L4)", () => {
@@ -140,11 +149,11 @@ describe("speculative prepare/promote (L4)", () => {
       return "candidate";
     });
     await registration.fn(turnPostCtx(history(), 60)); // below 0.65 × 100
-    await Bun.sleep(0);
+    await settle(registration);
     expect(calls).toBe(0);
 
     await registration.fn(turnPostCtx(history(), 70)); // above
-    await Bun.sleep(0);
+    await settle(registration);
     expect(calls).toBe(1);
   });
 
@@ -162,9 +171,9 @@ describe("speculative prepare/promote (L4)", () => {
     await registration.fn(turnPostCtx(messages, 70));
     await registration.fn(turnPostCtx(messages, 75)); // while in flight
     release("candidate");
-    await Bun.sleep(0);
+    await settle(registration);
     await registration.fn(turnPostCtx(messages, 80)); // candidate already held
-    await Bun.sleep(0);
+    await settle(registration);
     expect(calls).toBe(1);
   });
 
@@ -176,7 +185,7 @@ describe("speculative prepare/promote (L4)", () => {
     });
     const messages = history();
     await registration.fn(turnPostCtx(messages, 70));
-    await Bun.sleep(0);
+    await settle(registration);
     expect(calls).toBe(1);
 
     const decision = await registration.fn(seamCtx(messages, 85));
@@ -199,7 +208,7 @@ describe("speculative prepare/promote (L4)", () => {
     });
     const messages = history();
     await registration.fn(turnPostCtx(messages, 70));
-    await Bun.sleep(0);
+    await settle(registration);
 
     // Two more turns landed before the seam fired.
     const grown = [...messages, user("late-q"), assistant("late-a")];
@@ -226,7 +235,7 @@ describe("speculative prepare/promote (L4)", () => {
     });
     const messages = history();
     await registration.fn(turnPostCtx(messages, 70));
-    await Bun.sleep(0);
+    await settle(registration);
     expect(calls).toBe(1);
 
     // History replaced (fresh ids): the candidate's span is no longer a prefix.
@@ -247,7 +256,7 @@ describe("speculative prepare/promote (L4)", () => {
     });
     const messages = history();
     await registration.fn(turnPostCtx(messages, 70));
-    await Bun.sleep(0);
+    await settle(registration);
     expect(calls).toBe(1);
 
     // Seam falls back to the synchronous merge — the failure stayed out of
@@ -271,7 +280,7 @@ describe("speculative prepare/promote (L4)", () => {
     // render outweighs it.
     const tiny = [user("q"), assistant("a"), user("t1"), user("t2")];
     await registration.fn(turnPostCtx(tiny, 70));
-    await Bun.sleep(0);
+    await settle(registration);
     expect(calls).toBe(1);
 
     // The history grew massively: the candidate's tiny-span promote cannot
@@ -303,7 +312,7 @@ describe("speculative prepare/promote (L4)", () => {
     });
     const messages = history();
     await registration.fn(turnPostCtx(messages, 70));
-    await Bun.sleep(0);
+    await settle(registration);
     expect(calls).toBe(1);
 
     // A seam that never reaches the candidate branch (history within the
@@ -321,6 +330,36 @@ describe("speculative prepare/promote (L4)", () => {
     );
   });
 
+  it("does not start preparation after an abort before its microtask", async () => {
+    let calls = 0;
+    const speculator = createSpeculator({
+      prepareRatio: 0.65,
+      protectRecentMessages: 2,
+      onSummarize: async () => {
+        calls += 1;
+        return "late";
+      },
+    });
+    speculator.maybePrepare(history(), 70, 100);
+    speculator.abort();
+    await speculator.settled();
+    expect(calls).toBe(0);
+  });
+
+  it("aborts an in-flight candidate when the run ends", async () => {
+    const registration = build(async () => "must-not-promote");
+    const messages = history();
+    await registration.fn(turnPostCtx(messages, 70));
+    (registration as { readonly onRunEnd?: () => void }).onRunEnd?.();
+    await settle(registration);
+
+    expect((registration as { readonly speculationSettled?: () => Promise<void> }).speculationSettled).toBeDefined();
+    const decision = await registration.fn(seamCtx(messages, 85));
+    expect((decision as { reasonCodes?: string[] }).reasonCodes).not.toContain(
+      "compaction_candidate_promoted",
+    );
+  });
+
   it("stops preparing after the failure streak cap, visibly", async () => {
     let calls = 0;
     const registration = build(async () => {
@@ -329,13 +368,13 @@ describe("speculative prepare/promote (L4)", () => {
     });
     const messages = history();
     await registration.fn(turnPostCtx(messages, 70));
-    await Bun.sleep(0);
+    await settle(registration);
     await registration.fn(turnPostCtx(messages, 72));
-    await Bun.sleep(0);
+    await settle(registration);
     expect(calls).toBe(2);
     // Streak cap reached: no more prepares this run.
     await registration.fn(turnPostCtx(messages, 74));
-    await Bun.sleep(0);
+    await settle(registration);
     expect(calls).toBe(2);
   });
 });

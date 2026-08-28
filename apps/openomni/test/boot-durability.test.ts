@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Database } from "bun:sqlite";
 import {
   BusPersistence,
   BusQuery,
@@ -233,6 +234,50 @@ describe("OpenOmni boot durability", () => {
         traceId: "trace-shutdown-flush",
       }),
     ]);
+  });
+
+  test("boot rollback flushes pending journal writes before storage resets", async () => {
+    const dbPath = newDatabasePath();
+    initialize({ dbPath });
+    WaitStore.create(
+      {
+        id: "wait-expired-during-failed-boot",
+        ownerRef: { kind: "workItem", id: "work-rollback" },
+        originMessageId: "message-rollback",
+        correlation: { endpointId: "ws:actor-1", replyToMessageId: "message-rollback" },
+        allowedActions: ["report_result"],
+        expectedResponders: ["actor-1"],
+        resolutionPolicy: "first_reply",
+        expiresAt: 1,
+        followUpWindow: 0,
+        createdAt: 0,
+        updatedAt: 0,
+      },
+      "trace-seed-rollback-wait",
+    );
+    Storage.reset();
+    const blocker = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: () => new Response("occupied"),
+    });
+    const occupiedPort = blocker.port;
+    if (occupiedPort === undefined) throw new Error("blocker server did not bind a port");
+
+    await expect(
+      startOpenOmni({ config: { ...testConfig(dbPath), wsPort: occupiedPort } }),
+    ).rejects.toThrow();
+    blocker.stop();
+
+    const database = new Database(dbPath, { readonly: true });
+    try {
+      const row = database
+        .query("SELECT event_type FROM bus_event WHERE event_type = 'wait.expired'")
+        .get() as { event_type: string } | null;
+      expect(row?.event_type).toBe("wait.expired");
+    } finally {
+      database.close();
+    }
   });
 
   test("rolls back the bus journal and storage when boot fails after journaling started", async () => {

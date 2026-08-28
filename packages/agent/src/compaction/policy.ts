@@ -16,7 +16,17 @@ type CompactionConfig = CompactionOptions & {
  * home for stateful policies (engines are built once per run and invoke
  * `create()` at registration).
  */
-export function createCompactionPolicy(config: CompactionConfig): PolicyRegistrationFactory {
+type CompactionPolicyRegistration = ReturnType<PolicyRegistrationFactory["create"]> & {
+  readonly onRunEnd?: () => void;
+  readonly speculationStarted?: () => Promise<void>;
+  readonly speculationSettled?: () => Promise<void>;
+};
+
+type CompactionPolicyFactory = PolicyRegistrationFactory & {
+  readonly create: () => CompactionPolicyRegistration;
+};
+
+export function createCompactionPolicy(config: CompactionConfig): CompactionPolicyFactory {
   return {
     kind: "factory",
     name: "builtin:compaction",
@@ -26,7 +36,7 @@ export function createCompactionPolicy(config: CompactionConfig): PolicyRegistra
 
 function buildRegistration(
   config: CompactionConfig,
-): ReturnType<PolicyRegistrationFactory["create"]> {
+): CompactionPolicyRegistration {
   const { events, priority, ...compaction } = config;
   const speculator: Speculator | undefined =
     compaction.onSummarize !== undefined && compaction.speculate !== false
@@ -50,6 +60,9 @@ function buildRegistration(
       ...(speculator === undefined ? {} : { "run.turn.post": [] }),
     },
     priority,
+    onRunEnd: () => speculator?.abort(),
+    speculationStarted: () => speculator?.started() ?? Promise.resolve(),
+    speculationSettled: () => speculator?.settled() ?? Promise.resolve(),
     fn: async (ctx) => {
       if (!ctx.messages || ctx.messages.length === 0) {
         return PolicyDecision.allow({ policyId: "builtin.compaction" });

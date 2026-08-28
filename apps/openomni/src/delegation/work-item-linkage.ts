@@ -10,6 +10,8 @@ import { Delegation, WorkItem, newTraceId } from "@openomni/protocol";
 export interface WorkItemLinkage {
   /** Commission the WorkItem and its attempt at admission. Returns the WorkItem id. */
   openAssign(input: OpenAssignInput): Promise<string>;
+  /** Roll back a commissioned assign whose final admission write was refused. */
+  cancelAssign(workItemId: string): Promise<void>;
   /** Close the attempt from the settlement fold. Unknown items are a no-op. */
   closeAttempt(input: CloseAttemptInput): Promise<void>;
   /**
@@ -71,10 +73,14 @@ export function createWorkItemLinkage(options: WorkItemLinkageOptions): WorkItem
       await commission(item.workItemId, input, traceId);
     } catch (error) {
       // Never leave an orphan pending item behind a refused admission.
-      await WorkItemStore.cancel(item.workItemId, traceId);
+      await cancelAssign(item.workItemId, traceId);
       throw error;
     }
     return item.workItemId;
+  }
+
+  async function cancelAssign(workItemId: string, traceId = newTraceId()): Promise<void> {
+    await WorkItemStore.cancel(workItemId, traceId);
   }
 
   async function commission(
@@ -191,5 +197,5 @@ export function createWorkItemLinkage(options: WorkItemLinkageOptions): WorkItem
     }
   }
 
-  return { openAssign, closeAttempt, recoverAttempts };
+  return { openAssign, cancelAssign, closeAttempt, recoverAttempts };
 }

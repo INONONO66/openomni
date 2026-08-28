@@ -100,6 +100,7 @@ export async function runAgent(
    * — escaped past its own record.
    */
   const finish = (result: AgentResult): AgentResult => {
+    engine.endRun();
     emitRunCompleted(config.events, state, agentBase, result.finishReason);
     return result;
   };
@@ -119,10 +120,10 @@ export async function runAgent(
     maxAttempts: retryPolicy.maxAttempts,
   });
 
-  const preRunResult = await dispatchPreRun(state, engine, config, agentBase);
-  if (preRunResult) return finish(preRunResult);
-
   try {
+    const preRunResult = await dispatchPreRun(state, engine, config, agentBase);
+    if (preRunResult) return finish(preRunResult);
+
     for (;;) {
       try {
         // Attempt identity for lifecycle policies (#694 observation material):
@@ -273,6 +274,7 @@ export async function runAgent(
       }
     }
   } catch (error) {
+    engine.endRun();
     emitRunFailed(
       config.events,
       agentBase,
@@ -327,10 +329,12 @@ async function resolveProviderModel(model: {
   throw new Error(`Model not found: ${model.id} for provider ${model.provider}`);
 }
 
+type RunPolicyEngine = PolicyEngineInstance & { readonly endRun: () => void };
+
 export function buildPolicyEngine(
   config: ChatAgentConfig,
   agentBase: AgentRunBase,
-): PolicyEngineInstance {
+): RunPolicyEngine {
   const engine = PolicyEngine.create({
     traceContext: {
       traceId: agentBase.traceId,
@@ -339,8 +343,23 @@ export function buildPolicyEngine(
     },
     auditEmit: (descriptor, data) => config.events.publish(descriptor, data),
   });
+  const onRunEnd: Array<() => void> = [];
   for (const reg of config.middleware ?? []) {
-    engine.register(reg);
+    if (reg.kind === "factory") {
+      const created = reg.create();
+      // Re-wrap the already-created registration so the generic engine keeps
+      // its async factory lane while this runner retains its run-end hook.
+      engine.register({ kind: "factory", name: reg.name, create: () => created });
+      const cleanup = (created as { readonly onRunEnd?: () => void }).onRunEnd;
+      if (cleanup !== undefined) onRunEnd.push(cleanup);
+    } else {
+      engine.register(reg);
+    }
   }
-  return engine;
+  return Object.assign(engine, {
+    endRun: () => {
+      for (const cleanup of onRunEnd) cleanup();
+      onRunEnd.length = 0;
+    },
+  });
 }

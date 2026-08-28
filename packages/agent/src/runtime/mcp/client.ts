@@ -158,15 +158,25 @@ export class McpClient {
         undefined,
         requestOptions(this.config, context),
       );
+      const result = convertMcpResult(
+        response as {
+          content: Array<{ type: string; text?: string }>;
+          isError?: boolean;
+        },
+        toolCallId,
+      );
+      this.events.publish(Mcp.Events.ToolCompleted, {
+        traceId,
+        serverName: this.config.name,
+        toolName: strippedName,
+        toolCallId,
+        durationMs: Date.now() - startTime,
+        resultSummary: result.output,
+        time: Date.now(),
+      });
 
       return {
-        ...convertMcpResult(
-          response as {
-            content: Array<{ type: string; text?: string }>;
-            isError?: boolean;
-          },
-          toolCallId,
-        ),
+        ...result,
         // #500 C4: the exposed (server-prefixed) name the caller invoked.
         toolName: name,
       };

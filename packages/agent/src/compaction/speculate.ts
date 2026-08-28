@@ -44,6 +44,12 @@ export interface Speculator {
   peek(): CompactionCandidate | undefined;
   /** The seam consumed (promoted or discarded) whatever was pending. */
   consume(): void;
+  /** Cancel and invalidate background work when the run reaches a terminal. */
+  abort(): void;
+  /** Resolves when the current background preparation starts. */
+  started(): Promise<void>;
+  /** Resolves when the current background preparation settles. */
+  settled(): Promise<void>;
 }
 
 export const DEFAULT_PREPARE_RATIO = 0.65;
@@ -60,11 +66,20 @@ function isIdPrefix(spanIds: readonly string[], messages: readonly Message.WithP
 export function createSpeculator(config: {
   readonly prepareRatio: number;
   readonly protectRecentMessages: number;
-  readonly onSummarize: (messages: Message.WithParts[], previousAnchor?: string) => Promise<string>;
+  readonly onSummarize: (
+    messages: Message.WithParts[],
+    previousAnchor?: string,
+    signal?: AbortSignal,
+  ) => Promise<string>;
 }): Speculator {
   let candidate: CompactionCandidate | undefined;
   let inFlight = false;
   let failStreak = 0;
+  let generation = 0;
+  let controller: AbortController | undefined;
+  let preparation = Promise.resolve();
+  let started = Promise.resolve();
+  let resolveStarted: (() => void) | undefined;
 
   return {
     maybePrepare(messages, contextTokens, contextWindowTokens, onFailure) {
@@ -81,14 +96,31 @@ export function createSpeculator(config: {
       if (plan === undefined || plan.summarizerInput.length === 0) return;
 
       inFlight = true;
-      void config
-        .onSummarize(plan.summarizerInput, plan.previousAnchor)
+      started = new Promise<void>((resolve) => {
+        resolveStarted = resolve;
+      });
+      const runGeneration = generation;
+      const preparationController = new AbortController();
+      controller = preparationController;
+      preparation = Promise.resolve()
+        .then(() => {
+          resolveStarted?.();
+          resolveStarted = undefined;
+          if (runGeneration !== generation || preparationController.signal.aborted) return undefined;
+          return config.onSummarize(
+            plan.summarizerInput,
+            plan.previousAnchor,
+            preparationController.signal,
+          );
+        })
         .then((merged) => {
+          if (runGeneration !== generation || merged === undefined) return;
           failStreak = 0;
           candidate =
             merged.trim().length > 0 ? { spanIds: plan.spanIds, anchorBody: merged } : undefined;
         })
         .catch((error: unknown) => {
+          if (runGeneration !== generation) return;
           // Absent candidate: the seam falls back to its synchronous merge,
           // which surfaces the same failure through the fail-closed bracket
           // if it repeats there. Nothing to rethrow into — this promise has
@@ -98,12 +130,24 @@ export function createSpeculator(config: {
           onFailure?.(error, failStreak);
         })
         .finally(() => {
-          inFlight = false;
+          if (runGeneration === generation) {
+            inFlight = false;
+            controller = undefined;
+          }
         });
     },
     peek: () => candidate,
     consume: () => {
       candidate = undefined;
     },
+    abort: () => {
+      generation += 1;
+      candidate = undefined;
+      controller?.abort();
+      controller = undefined;
+      inFlight = false;
+    },
+    started: () => started,
+    settled: () => preparation,
   };
 }
