@@ -1,4 +1,4 @@
-import type { Gateway } from "@openomni/protocol";
+import { Channel, type Gateway } from "@openomni/protocol";
 
 /**
  * Existing-agent messaging grant evaluation (#215, gateway router since #707
@@ -50,7 +50,7 @@ function idOrdered(
 export function deliverySurfaceKey(
   endpoint: Readonly<{ channel: string; externalId: string }>,
 ): string {
-  return `${endpoint.channel}:${endpoint.externalId}`;
+  return Channel.SurfaceKey.create([endpoint.channel, endpoint.externalId]);
 }
 
 /**
