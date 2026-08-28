@@ -1,22 +1,14 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import { Wait } from "@openomni/protocol";
 import { Storage, WaitStore } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { WaitService } from "../../../src/router/wait/index";
 import { buildWaitCreate } from "../../helpers/wait";
+import { resetStores } from "../_router-fixture";
 
 const flushBus = () => new Promise<void>((resolve) => queueMicrotask(() => resolve()));
 
-beforeEach(() => {
-  Bus.reset();
-  Storage.reset();
-  Storage.initialize({ dbPath: ":memory:" });
-});
-
-afterEach(() => {
-  Storage.reset();
-  Bus.reset();
-});
+beforeEach(resetStores);
 
 describe("WaitService", () => {
   test("open records exactly one durable Wait for an awaited delivery", () => {
@@ -135,6 +127,21 @@ describe("WaitService", () => {
     expect(WaitStore.get("wait-untouched")?.status).toBe("open");
     await flushBus();
     expect(events).toContainEqual({ name: "wait.expired", partial: true });
+  });
+
+  test("sweepExpired expires a wait at exactly its deadline (inclusive boundary)", () => {
+    // Deadline contract: expired when now >= deadline. The sweep guard must
+    // share the fold's boundary — a sweep at now === expiresAt expires the
+    // wait instead of leaving it for the next tick.
+    WaitService.open(
+      buildWaitCreate("wait-boundary", { originMessageId: "out-boundary", expiresAt: 10_000 }),
+      "trace-test",
+    );
+
+    const expired = WaitService.sweepExpired("trace-test", Bus.publish, 10_000);
+
+    expect(expired.map((record) => record.id)).toEqual(["wait-boundary"]);
+    expect(WaitStore.get("wait-boundary")?.status).toBe("expired");
   });
 
   test("sweepExpired isolates one corrupt wait: records Operational.Events.Error and keeps sweeping", async () => {

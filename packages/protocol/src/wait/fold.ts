@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Deadline } from "../deadline/index.js";
 import type * as Schema from "./schema.js";
 
 /**
@@ -14,7 +15,7 @@ import type * as Schema from "./schema.js";
  *                                  duplicate_reply (open/expired/cancelled)
  *   2. terminal status          -> follow-up attach when resolved and inside
  *                                  the follow-up window, else rejected late_reply
- *   3. deadline passed          -> rejected deadline_passed (open, at > expiresAt)
+ *   3. deadline reached         -> rejected deadline_passed (open, at >= expiresAt)
  *   4. responder identity       -> rejected unknown_responder / ambiguous_responder
  *   5. attach                   -> resolved at quorum threshold, else attached
  */
@@ -145,7 +146,7 @@ export function attachReply(record: Schema.Record, input: ReplyInput): Outcome {
     }
     return { kind: "rejected", code: "late_reply", record, at: input.at };
   }
-  if (input.at > record.expiresAt) {
+  if (Deadline.isExpired(input.at, record.expiresAt)) {
     return { kind: "rejected", code: "deadline_passed", record, at: input.at };
   }
   return matchAndAttach(record, input, false);
@@ -217,7 +218,7 @@ export function expire(record: Schema.Record, input: { at: number }): Outcome {
   if (record.status !== "open") {
     return { kind: "rejected", code: "wait_terminal", record, at: input.at };
   }
-  if (input.at <= record.expiresAt) {
+  if (!Deadline.isExpired(input.at, record.expiresAt)) {
     return { kind: "rejected", code: "not_expired", record, at: input.at };
   }
   // Partial expiry: some-but-not-all replies arrived (quorum unmet is implied

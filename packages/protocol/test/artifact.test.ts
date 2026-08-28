@@ -63,6 +63,18 @@ describe("Artifact schemas", () => {
     });
 
     describe("non-empty fields", () => {
+      it("rejects metadata with no durable identity", () => {
+        const result = Artifact.Meta.safeParse({
+          id: "",
+          sessionId: " ",
+          mimeType: "text/plain",
+          title: "",
+          createdAt: "2025-01-01T00:00:00Z",
+        });
+
+        expect(result.success).toBe(false);
+      });
+
       for (const createdAt of ["", "   "]) {
         it(`rejects createdAt ${JSON.stringify(createdAt)}`, () =>
           expect(() =>

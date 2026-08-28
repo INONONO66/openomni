@@ -66,12 +66,30 @@ describe("NamedError.create", () => {
     expect(MyError.isInstance(null)).toBe(false);
   });
 
-  test("isInstance accepts plain objects with the same name", () => {
-    expect(MyError.isInstance({ name: "MyError" })).toBe(true);
+  test("isInstance rejects plain objects with the same name", () => {
+    expect(MyError.isInstance({ name: "MyError" })).toBe(false);
   });
 
   test("isInstance rejects plain objects with a different name", () => {
     expect(MyError.isInstance({ name: "OtherError" })).toBe(false);
+  });
+
+  test("isInstance recognizes instances from an independent copy of the class", () => {
+    // bun resolves each workspace symlink to @openomni/protocol separately,
+    // so one process can hold two copies of the same generated class; the
+    // guard must match across copies. A second create() with the same name
+    // reproduces that dual-load shape.
+    const CopyError = NamedError.create(
+      "MyError",
+      z.object({ message: z.string(), detail: z.number() }),
+    );
+    expect(MyError.isInstance(new CopyError({ message: "ok", detail: 1 }))).toBe(true);
+  });
+
+  test("isInstance rejects a real Error whose name merely matches", () => {
+    const impostor = new Error("boom");
+    impostor.name = "MyError";
+    expect(MyError.isInstance(impostor)).toBe(false);
   });
 });
 
@@ -122,4 +140,15 @@ describe("NamedError.create with non-object data", () => {
       data: "just a string",
     });
   });
+});
+
+test("isInstance refuses a same-named error whose data violates this factory's schema", () => {
+  const A = NamedError.create("SharedName", z.object({ code: z.string() }));
+  const B = NamedError.create("SharedName", z.object({ count: z.number() }));
+  const fromB = new B({ count: 3 });
+  // Same brand value (name), incompatible payload contract: the guard's type
+  // predicate must not admit it, or consumers read absent fields.
+  expect(A.isInstance(fromB)).toBe(false);
+  expect(B.isInstance(fromB)).toBe(true);
+  expect(A.isInstance(new A({ code: "ok" }))).toBe(true);
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import type { Policy } from "@openomni/protocol";
+import { Policy } from "@openomni/protocol";
 import { composeEffects } from "@openomni/policy";
 
 interface DecisionOptions {
@@ -37,6 +37,14 @@ function conflict(annotation: string) {
 }
 
 describe("policy effect composition conformance", () => {
+  it("rejects prototype-polluting effect payloads at the protocol parse seam", () => {
+    const input = JSON.parse(
+      '{"policyId":"policy.hostile","verdict":"allow","effects":[{"type":"tool.rewrite_input","input":{"__proto__":{"polluted":true}}}],"reasonCodes":["hostile"]}',
+    );
+
+    expect(Policy.PolicyDecision.safeParse(input).success).toBe(false);
+  });
+
   const verdictCases: ReadonlyArray<{
     name: string;
     decisions: Policy.PolicyDecision[];

@@ -6,8 +6,8 @@ export namespace Retry {
   export const RETRY_MAX_DELAY_NO_HEADERS = 30_000;
   export const RETRY_MAX_DELAY = 2_147_483_647;
 
-  export async function sleep(ms: number, signal: AbortSignal): Promise<void> {
-    if (signal.aborted) {
+  export async function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+    if (signal?.aborted) {
       throw new DOMException("Aborted", "AbortError");
     }
 
@@ -18,12 +18,12 @@ export namespace Retry {
       };
       const timeout = setTimeout(
         () => {
-          signal.removeEventListener("abort", abortHandler);
+          signal?.removeEventListener("abort", abortHandler);
           resolve();
         },
         Math.min(ms, RETRY_MAX_DELAY),
       );
-      signal.addEventListener("abort", abortHandler, { once: true });
+      signal?.addEventListener("abort", abortHandler, { once: true });
     });
   }
 

@@ -1,4 +1,5 @@
 import type { Actor, Ingress, Wait } from "@openomni/protocol";
+import { effectiveTrustTier } from "./effective-tier.js";
 
 /**
  * External routing arms of THE resolveRoute fold (#707 stage 2). The
@@ -286,7 +287,7 @@ export function resolveRoute(
     `channel.treatment:${state.channel.inboundTreatment}`,
   ];
   const actorId = state.actor?.id;
-  const trustTier = state.actor?.trustTier ?? state.channel.defaultTier;
+  const trustTier = effectiveTrustTier(state.actor?.trustTier, state.channel.defaultTier);
 
   if (trustTier === undefined) {
     return {
