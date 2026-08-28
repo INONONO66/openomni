@@ -125,7 +125,10 @@ describe("IngressAuthorityMiddleware trust and validation", () => {
   test("aborts on invalid schema", async () => {
     const badEvent = { not: "valid" };
 
-    await expect(IngressAuthorityMiddleware.runRoutedPreRun({ event: badEvent })).rejects.toThrow();
+    await expect(IngressAuthorityMiddleware.runRoutedPreRun({ event: badEvent })).rejects.toMatchObject({
+      name: "ZodError",
+      issues: expect.any(Array),
+    });
   });
 
   test("aborts on unsupported mode", async () => {

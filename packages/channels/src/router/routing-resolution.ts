@@ -376,33 +376,13 @@ function resolveKernelRoute<Event extends Gateway.DeliveredEvent>(
   };
 }
 
-// The route owner-stream key (#510 F1) and the replay equivalence gate
-// (#510 F2) are the PURE parts of this recorder, hoisted to protocol
-// (`Ingress.routeStreamId` / `Ingress.routeDecisionsEquivalent` /
-// `Ingress.routeDecidedFact`) so this external arm and the brain's internal
-// arm cannot drift. Only the append below stays per-side — it holds the
-// router's scoped `LedgerAppend.port()` and throws the channels-local typed
-// error.
-
-// #510 C3 ruling 1 — the routing decision is a decision-class fact on the
-// single-fact owner stream `route:<surface>:<workspace>:<channel>:<id>`
-// (expectedHead 0), awaited durably BEFORE anything acts on the decision:
-// the observe-only Bus publish, the typed terminal rejection, and
-// wait/handler execution all follow the append. No record, no action — with
-// one EQUIVALENCE-GATED replay carve-out (review fix F2): a cas_conflict
-// means this inbound was already decided, and a redelivered inbound may
-// proceed only when the fresh decision matches the recorded one on every
-// execution- and authority-shaping field (see routeDecisionsEquivalent).
-// Equivalent →
-// execution proceeds with the FRESH resolution and fresh decision (identical
-// anyway), so recorded payload and fresh waitExecution/selectedTarget can
-// never mix: an accepted route re-executes idempotently (the wait fold's
-// already_resolved short-circuit re-delivers to the owner — the #519
-// attach/deliver crash-window recovery), a terminal decision repeats the
-// same typed rejection. Divergent → typed route_replay_divergent, fail
-// closed: no action, no second fact, nothing published. Only append
-// INFRASTRUCTURE failure (missing sub-adapter, failed append/read, foreign
-// or unparsable recorded fact) fails closed as route_record_failed.
+// The protocol owns the route stream key, decision equivalence predicate, and
+// route.decided fact shape. This recorder owns only the scoped append port.
+// A decision is durably appended before projection or execution. On a CAS
+// conflict, the fresh decision may proceed only when it is equivalent to the
+// recorded decision, including the pinned reply-grant endpoint. Divergence
+// and append/read failures fail closed with a typed error; no second fact or
+// projection is emitted.
 function pinReplyGrantEndpoint(
   decision: Ingress.RoutingDecisionPayload,
   event: Gateway.DeliveredEvent,
