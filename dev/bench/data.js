@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787892360900,
+  "lastUpdate": 1787895489368,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -65021,6 +65021,90 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 511283,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e7d09d65f744bc842510522d59f7c48cdd438310",
+          "message": "fix(app,agent): delegation admission/boot durability + agent lifecycle closure (audit PR-5) (#835)\n\n* fix(app,agent): delegation admission/boot durability and agent lifecycle closure\n\nDelegation kernel (apps/openomni):\n- refuse commissioning a child under an already-settled parent (typed parent_settled)\n- fanout cap enforced by atomic DelegationStore.claimOpenWithinRoot (BEGIN IMMEDIATE\n  claim primitive from #834); losing assign claims roll back their commissioned\n  WorkItem through the single WorkItemLinkage.cancelAssign path\n- boot rollback flushes persistence before observer/storage reset\n- stop() rejects pending delegation_await waiters\n\nAgent lifecycle (packages/agent):\n- publish Mcp.Events.ToolCompleted on the MCP success arm\n- dispatchPreRun moved inside the terminal-owning try (no terminal-less runs)\n- speculative compaction: per-preparation AbortController + generation; controller\n  captured at scheduling so abort-before-microtask skips the summarizer\n- speculation timing tests await exact speculationSettled signals\n\n* fix(app,ledger): close adversarial-review findings on delegation admission\n\n- claimOpenWithinRoot enforces parent-open atomically inside the counted-window\n  transaction ({requireOpenParent}); typed claim result discriminates\n  fanout_cap vs parent_settled (closes the prepare/openAssign TOCTOU window)\n- claim-loss WorkItem rollback wrapped: cancelAssign failure publishes\n  Operational.Events.Error and never masks the typed refusal\n- awaitDelegation rejects immediately with the shared stopped-kernel error\n  when called after stop(); no waiter or timer is registered post-stop\n- kernel-arm barrier regressions for ask+assign settled-parent, throwing\n  cancelAssign, and post-stop await",
+          "timestamp": "2026-08-28T05:37:00Z",
+          "tree_id": "3eb01c92512dab3d54de91f2f134c3c05dda0229",
+          "url": "https://github.com/INONONO66/openomni/commit/e7d09d65f744bc842510522d59f7c48cdd438310"
+        },
+        "date": 1787895488979,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2255,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 14580,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7880,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1065,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 957,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1585,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 47,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1615,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 717,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 48702,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2371,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 513358,
             "unit": "ns/op"
           }
         ]
