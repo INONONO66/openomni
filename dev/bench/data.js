@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787886128373,
+  "lastUpdate": 1787886349173,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -64265,6 +64265,90 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 424747,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "df7aa0958fe5d6d69ca92ce1af20b03f815773e1",
+          "message": "fix(protocol): authority-complete replay fold, canonical Deadline module, contract soundness fixes (#831)\n\n* fix(protocol): authority-complete replay fold, canonical Deadline module, contract soundness fixes\n\n- Ingress.routeDecisionsEquivalent now compares actorId/trustTier/inboundTreatment;\n  channels replay gate refuses authority-mutated redelivery as route_replay_divergent.\n- New protocol Deadline module owns the inclusive boundary (now >= deadline) and\n  parent clamping; Wait fold, channels wait sweep, and app delegation\n  kernel/admission adopt it, removing the equality race where one instant\n  produced both an accepted reply and no_response.\n- NamedError.isInstance uses a Symbol.for brand guard: bun resolves each\n  workspace symlink to @openomni/protocol separately, so one process can hold\n  two copies of a generated class - bare instanceof is unsound across package\n  boundaries. The brand recognizes instances from any copy while rejecting\n  name-forged plain objects and name-forged Errors.\n- Artifact Meta identity fields are trim-aware nonEmptyString (empty-identity refusal).\n- Operational.envelope requires an injected time (no ambient clock in protocol).\n- App-connector testedVersions lives only on Definition.detect (dedupe);\n  schema snapshot regenerated (Owner-sanctioned by the campaign order).\n- Policy effect values (tool.rewrite_input.input, run.replace_messages.messages,\n  delegation.set_constraints.constraints) are JSON-plain at schema parse: finite\n  non--0 numbers, dense arrays (canonical-index proof), ordinary-prototype\n  objects only; __proto__/constructor/prototype refused recursively.\n- docs/core-model.md gains Deadline as a Tier-2 noun (Owner addition 2026-08-28).\n\n* fix(review): schema-validating NamedError guard, descriptor-safe JSON-plain validation, value-free divergence refusal\n\nAdversarial review R1 (FAIL, 6 findings) fixes:\n- F1: isInstance validates data against the factory schema after the brand\n  check - same-named factories with different schemas no longer cross-match\n- F2: JSON-plain validation reads only data-property descriptors (accessor\n  properties refused without invoking getters); hostile Proxy throws are\n  contained and reported as parse failure, never thrown out of safeParse\n- F3: symbol-keyed own properties refused on objects and arrays\n- F4: route_replay_divergent no longer interpolates recorded/fresh authority\n  values (actorId/trustTier/inboundTreatment); refusal is typed value-free\n- F5/F6 accepted with justification (.omo/pr1-review-response.md)\n\nRED proof: stash-run of new tests = 7 fail; GREEN 32/0. Full gate chain\ngreen: 2531 tests / 0 fail.",
+          "timestamp": "2026-08-28T03:04:42Z",
+          "tree_id": "66eec84c58f8b1f338779905b366a194dc9344bc",
+          "url": "https://github.com/INONONO66/openomni/commit/df7aa0958fe5d6d69ca92ce1af20b03f815773e1"
+        },
+        "date": 1787886348072,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 2300,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 15754,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 8204,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1108,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 979,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 1782,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 50,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1548,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 796,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 51476,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2356,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 533313,
             "unit": "ns/op"
           }
         ]
