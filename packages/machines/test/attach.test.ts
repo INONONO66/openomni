@@ -4,12 +4,7 @@ import { IpcRemoteError, connectIpcClient, createIpcServer } from "@openomni/ipc
 import type { BusEvent, Machine } from "@openomni/protocol";
 import { attachMachineDaemon } from "../src/daemon";
 import { type MachineHost, createMachineHost } from "../src/host";
-
-let socketCounter = 0;
-function socketPath(): string {
-  socketCounter += 1;
-  return `/tmp/omo-machines-${process.pid}-${socketCounter}.sock`;
-}
+import { socketPath } from "./helpers/socket-path";
 
 interface RecordedEvent {
   readonly name: string;

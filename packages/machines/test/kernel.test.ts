@@ -3,16 +3,13 @@ import type { BusEvent, Machine } from "@openomni/protocol";
 import { attachMachineDaemon } from "../src/daemon";
 import { type MachineHost, createMachineHost } from "../src/host";
 import { type CellToolCaller, PythonKernel } from "../src/kernel";
+import { socketPath } from "./helpers/socket-path";
 
 /** These cells call no tools, so a call is a test bug and must be visible. */
 const noTools: CellToolCaller = (call) =>
   Promise.resolve({ status: "failed", error: `unexpected tool call: ${call.name}` });
 
-let socketCounter = 0;
-function socketPath(): string {
-  socketCounter += 1;
-  return `/tmp/omo-kernel-${process.pid}-${socketCounter}.sock`;
-}
+let cellCounter = 0;
 
 // These tests assert cell execution, not attach telemetry.
 const silent: BusEvent.Sink = {
@@ -66,7 +63,8 @@ async function withMachine(
 }
 
 function cell(code: string, timeoutMs = 15_000): Machine.CellRequest {
-  return { cellId: `cell-${socketCounter}-${code.length}`, code, timeoutMs };
+  cellCounter += 1;
+  return { cellId: `cell-${cellCounter}-${code.length}`, code, timeoutMs };
 }
 
 describe("cell settlement ownership", () => {

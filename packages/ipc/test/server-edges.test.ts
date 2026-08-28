@@ -1,16 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import net from "node:net";
-import os from "node:os";
-import path from "node:path";
 import { Ipc } from "@openomni/protocol";
 import { connectIpcClient } from "../src/client";
 import { IpcConnectionError, IpcTimeoutError } from "../src/errors";
 import { LineDecoder } from "../src/framing";
 import { createIpcServer } from "../src/server";
-
-function tmpSocketPath(label: string): string {
-  return path.join(os.tmpdir(), `omo-ipc-edge-${label}-${process.pid}.sock`);
-}
+import { socketPath as socketPathForTest } from "./helpers/socket-path";
 
 function connect(socketPath: string): Promise<net.Socket> {
   const socket = net.createConnection(socketPath);
@@ -47,14 +42,14 @@ describe("server edge branches", () => {
 
   for (const method of ["worker.shutdown_idle", "worker.deliver_message"] as const) {
     test(`${method} without a connected client rejects with IpcConnectionError`, async () => {
-      const srv = await createIpcServer(tmpSocketPath(`noclient-${method}`), () => undefined);
+      const srv = await createIpcServer(socketPathForTest(`noclient-${method}`), () => undefined);
       servers.push(srv);
       await expect(srv.call(method, {})).rejects.toThrow(IpcConnectionError);
     });
   }
 
   test("calls in either direction that never get a response reject with IpcTimeoutError", async () => {
-    const srv = await createIpcServer(tmpSocketPath("timeout"), () => undefined);
+    const srv = await createIpcServer(socketPathForTest("timeout"), () => undefined);
     servers.push(srv);
     rawSockets.push(await connect(srv.socketPath));
     await Bun.sleep(20);
@@ -66,7 +61,7 @@ describe("server edge branches", () => {
   });
 
   test("schema-invalid frames get bounded, correlated 4000 responses", async () => {
-    const srv = await createIpcServer(tmpSocketPath("protocol"), () => undefined);
+    const srv = await createIpcServer(socketPathForTest("protocol"), () => undefined);
     servers.push(srv);
     const unknown = await exchange(srv.socketPath, '{"neither":"request-nor-response"}\n');
     expect(unknown.type).toBe("response");
@@ -85,7 +80,7 @@ describe("server edge branches", () => {
 
   test("notification handler failures are contained (sync throw and async rejection)", async () => {
     const seen: string[] = [];
-    const srv = await createIpcServer(tmpSocketPath("notify"), (method) => {
+    const srv = await createIpcServer(socketPathForTest("notify"), (method) => {
       seen.push(method);
       if (method === "sync.boom") throw new Error("sync failure");
       return Promise.reject(new Error("async failure"));
@@ -105,7 +100,7 @@ describe("server edge branches", () => {
   });
 
   test("a client that errors mid-connection is removed and the server keeps serving", async () => {
-    const srv = await createIpcServer(tmpSocketPath("sockerr"), (_m, _p, respond) => {
+    const srv = await createIpcServer(socketPathForTest("sockerr"), (_m, _p, respond) => {
       respond({ ok: true });
     });
     servers.push(srv);

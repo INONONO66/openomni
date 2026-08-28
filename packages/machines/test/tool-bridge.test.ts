@@ -4,15 +4,13 @@ import { Machine } from "@openomni/protocol";
 import { attachMachineDaemon } from "../src/daemon";
 import { type MachineHost, createMachineHost } from "../src/host";
 import { PythonKernel } from "../src/kernel";
+import { socketPath } from "./helpers/socket-path";
 
 const silent = {
   publish() {
     return;
   },
 };
-
-let seq = 0;
-const socketPath = () => `/tmp/omo-bridge-${process.pid}-${seq++}.sock`;
 
 /**
  * A host whose tool port only knows `add`, standing in for the composition
