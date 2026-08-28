@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { RunInput, Sink } from "@openomni/llm";
 import { Storage } from "@openomni/ledger";
-import type { Message } from "@openomni/protocol";
 import { startOpenOmni } from "../src/index";
+import { assistantMessage } from "./helpers/assistant-message";
 
 const WS_TOKEN = "delegation-e2e-token";
 const WORKER_ANSWER = "the build is green";
@@ -19,44 +19,6 @@ afterEach(() => {
   Storage.reset();
   for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
 });
-
-/**
- * The Resident's first turn calls the tool, the worker's turn answers, and the
- * Resident's second turn reports it. Which loop is speaking is read from the
- * session id, because a worker runs in a delegation session of its own — the
- * same fact the runtime uses to keep the two transcripts apart.
- */
-function message(input: RunInput, parts: Message.WithParts["parts"]): Message.WithParts {
-  const id = `fake-${input.trace.sessionId}-${input.messages.length}`;
-  const sessionID = input.trace.sessionId;
-  return {
-    info: {
-      id,
-      sessionID,
-      role: "assistant",
-      time: { created: Date.now() },
-      parentID: "",
-      modelID: input.model.id,
-      providerID: input.model.providerID,
-      agent: "resident",
-      path: { cwd: "", root: "" },
-      cost: 0,
-      tokens: { input: 4, output: 5, reasoning: 0, cache: { read: 0, write: 0 } },
-    },
-    parts: [
-      ...parts.map((part) => ({ ...part, id: `${id}-${part.type}`, sessionID, messageID: id })),
-      {
-        id: `${id}-finish`,
-        sessionID,
-        messageID: id,
-        type: "step-finish",
-        reason: "stop",
-        cost: 0,
-        tokens: { input: 4, output: 5, reasoning: 0, cache: { read: 0, write: 0 } },
-      },
-    ],
-  };
-}
 
 test("a Resident turn hands work to an inline worker and reports what came back", async () => {
   const directory = mkdtempSync(join(tmpdir(), "openomni-delegation-"));
@@ -83,7 +45,9 @@ test("a Resident turn hands work to an inline worker and reports what came back"
           // Composition-root door check: the worker door must never offer
           // the Resident-only completion surface.
           workerTools = (input.tools ?? []).map((tool) => tool.name);
-          sink.onMessage(message(input, [{ type: "text", text: WORKER_ANSWER } as never]));
+          sink.onMessage(
+            assistantMessage(input, { parts: [{ type: "text", text: WORKER_ANSWER } as never] }),
+          );
           return { type: "stop" };
         }
 
@@ -96,7 +60,14 @@ test("a Resident turn hands work to an inline worker and reports what came back"
           input: { instruction: "check the build", mode: "ask", scope: "inline", timeoutMs: 5000 },
         });
         sink.onMessage(
-          message(input, [{ type: "text", text: `the worker reports: ${executed?.output ?? "nothing"}` } as never]),
+          assistantMessage(input, {
+            parts: [
+              {
+                type: "text",
+                text: `the worker reports: ${executed?.output ?? "nothing"}`,
+              } as never,
+            ],
+          }),
         );
         return { type: "stop" };
       },

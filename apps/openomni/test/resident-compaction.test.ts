@@ -2,10 +2,11 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { RunInput, Sink } from "@openomni/llm";
+import type { Sink } from "@openomni/llm";
 import { initialize, Session, Storage } from "@openomni/ledger";
-import type { Gateway, Message } from "@openomni/protocol";
+import type { Gateway } from "@openomni/protocol";
 import { createResident } from "../src/resident";
+import { assistantMessage } from "./helpers/assistant-message";
 
 const directories: string[] = [];
 
@@ -52,38 +53,6 @@ function addStoredMessage(sessionId: string, index: number): void {
     type: "text",
     text: `${role} history ${index} ${"filler ".repeat(30)}`,
   });
-}
-
-function assistantMessage(input: RunInput, call: number): Message.WithParts {
-  const id = `assistant-${call}`;
-  const sessionID = input.trace.sessionId;
-  return {
-    info: {
-      id,
-      sessionID,
-      role: "assistant",
-      time: { created: Date.now() },
-      parentID: "",
-      modelID: input.model.id,
-      providerID: input.model.providerID,
-      agent: "resident",
-      path: { cwd: "", root: "" },
-      cost: 0,
-      tokens: { input: 90, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
-    },
-    parts: [
-      { id: `${id}-text`, sessionID, messageID: id, type: "text", text: `reply ${call}` },
-      {
-        id: `${id}-finish`,
-        sessionID,
-        messageID: id,
-        type: "step-finish",
-        reason: call === 1 ? "tool-calls" : "stop",
-        cost: 0,
-        tokens: { input: 90, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
-      },
-    ],
-  };
 }
 
 function delivery(sessionId: string): Gateway.Deliver {
@@ -143,7 +112,13 @@ describe("Resident compaction", () => {
         run: async (input, sink: Sink) => {
           calls += 1;
           messageCounts.push(input.messages?.length ?? 0);
-          sink.onMessage(assistantMessage(input, calls));
+          sink.onMessage(
+            assistantMessage(input, {
+              call: calls,
+              reason: calls === 1 ? "tool-calls" : "stop",
+              tokens: { input: 90, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+            }),
+          );
           return { type: "stop" };
         },
       },

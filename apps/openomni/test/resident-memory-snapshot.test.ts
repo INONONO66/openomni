@@ -2,11 +2,12 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { RunInput, Sink } from "@openomni/llm";
+import type { Sink } from "@openomni/llm";
 import { initialize, Session, Storage } from "@openomni/ledger";
-import type { Gateway, Message } from "@openomni/protocol";
+import type { Gateway } from "@openomni/protocol";
 import type { CuratedMemory } from "../src/memory/store";
 import { createResident } from "../src/resident";
+import { assistantMessage } from "./helpers/assistant-message";
 
 const directories: string[] = [];
 
@@ -16,38 +17,6 @@ afterEach(() => {
     rmSync(directory, { recursive: true, force: true });
   }
 });
-
-function stopMessage(input: RunInput, call: number): Message.WithParts {
-  const id = `assistant-${call}`;
-  const sessionID = input.trace.sessionId;
-  return {
-    info: {
-      id,
-      sessionID,
-      role: "assistant",
-      time: { created: Date.now() },
-      parentID: "",
-      modelID: input.model.id,
-      providerID: input.model.providerID,
-      agent: "resident",
-      path: { cwd: "", root: "" },
-      cost: 0,
-      tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
-    },
-    parts: [
-      { id: `${id}-text`, sessionID, messageID: id, type: "text", text: `reply ${call}` },
-      {
-        id: `${id}-finish`,
-        sessionID,
-        messageID: id,
-        type: "step-finish",
-        reason: "stop",
-        cost: 0,
-        tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
-      },
-    ],
-  };
-}
 
 let inbound = 0;
 
@@ -117,7 +86,12 @@ describe("Resident memory snapshot lifecycle", () => {
         }),
         run: async (input, sink: Sink) => {
           systems.push(input.system ?? "");
-          sink.onMessage(stopMessage(input, systems.length));
+          sink.onMessage(
+            assistantMessage(input, {
+              call: systems.length,
+              tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+            }),
+          );
           return { type: "stop" };
         },
       },
