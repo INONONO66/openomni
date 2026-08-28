@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787853428497,
+  "lastUpdate": 1787884308596,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -63509,6 +63509,90 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 513688,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "16ef6a16c13a016219f79722624306d149585d46",
+          "message": "refactor(ledger): extract shared frozen-store write-refusal helper (#818)\n\nPendingAskStore (#510 D2a), PendingInteractionStore (#548), and\nWorkerRunStateStore (#510 D2b) each hand-rolled an identical\nfrozenWrite(method): never thrower building a typed FrozenError. Extract\nthe scaffolding into storage/frozen.ts frozenWriteRefusal(ErrorCtor, code,\nmessageTemplate); each store keeps owning its error class, pinned data\ncode, and byte-for-byte message template. Adds focused unit coverage for\nthe helper (duplicate-logic audit, finding S2).",
+          "timestamp": "2026-08-28T11:30:49+09:00",
+          "tree_id": "254d634251b916771e9668d5a01092cc61a0f1eb",
+          "url": "https://github.com/INONONO66/openomni/commit/16ef6a16c13a016219f79722624306d149585d46"
+        },
+        "date": 1787884308211,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1614,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 11654,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 6105,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 673,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 604,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 945,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 33,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1090,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 487,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 28504,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 1420,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 362746,
             "unit": "ns/op"
           }
         ]
