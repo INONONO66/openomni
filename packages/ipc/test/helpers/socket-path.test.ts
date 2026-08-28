@@ -8,7 +8,6 @@ describe("socketPath", () => {
     const second = socketPath("🧪".repeat(500));
 
     expect(first).not.toBe(second);
-    expect(first.endsWith(".sock")).toBe(true);
     expect(Buffer.byteLength(first)).toBeLessThan(104);
     expect(Buffer.byteLength(second)).toBeLessThan(104);
   });

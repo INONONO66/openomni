@@ -1,9 +1,10 @@
 import { expect, test } from "bun:test";
 import { connectIpcClient } from "../src/client";
 import { createIpcServer } from "../src/server";
+import { socketPath as socketPathForTest } from "./helpers/socket-path";
 
 test("onDisconnect fires exactly once per torn-down connection", async () => {
-  const socketPath = `/tmp/omo-ipc-disc-${process.pid}.sock`;
+  const socketPath = socketPathForTest("disconnect");
   const disconnects: string[] = [];
   let notifyDisconnect: (() => void) | undefined;
   const server = await createIpcServer(
@@ -44,7 +45,7 @@ test("onDisconnect fires exactly once per torn-down connection", async () => {
 });
 
 test("onDisconnect fires exactly once on abrupt socket destruction", async () => {
-  const socketPath = `/tmp/omo-ipc-abrupt-${process.pid}.sock`;
+  const socketPath = socketPathForTest("abrupt");
   const disconnects: string[] = [];
   let notifyDisconnect: (() => void) | undefined;
   const server = await createIpcServer(
