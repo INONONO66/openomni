@@ -45,12 +45,21 @@ export function createDispatcher(entries: readonly CatalogEntry[]): Dispatcher {
             output: `unknown tool: ${call.tool}`,
             isError: true,
           }
-        : {
-            toolCallId: call.id,
-            id: call.id,
-            toolName: call.tool,
-            output: await entry.run(call.input),
-          };
+        : await entry.run(call.input).then(
+            (output) => ({ toolCallId: call.id, id: call.id, toolName: call.tool, output }),
+            // A throwing tool is an error RESULT, not a transport crash: the
+            // agent loop shows it to the model as a failed call, and the cell
+            // door's `failed` arm raises a catchable ToolError — so cell code
+            // (parallel, llm_batched) fails loudly instead of storing failure
+            // text as data.
+            (error: unknown) => ({
+              toolCallId: call.id,
+              id: call.id,
+              toolName: call.tool,
+              output: error instanceof Error ? error.message : String(error),
+              isError: true,
+            }),
+          );
     },
   };
 }

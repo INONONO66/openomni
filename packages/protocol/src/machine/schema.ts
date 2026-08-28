@@ -96,6 +96,15 @@ export const CellRequest = z
     cellId: z.string().min(1),
     code: z.string(),
     timeoutMs: z.number().int().positive(),
+    /**
+     * Which tenant's interpreter runs the cell. One attachment can serve
+     * several sessions, and a Python interpreter offers no in-process
+     * isolation — state, and any thread a cell leaves behind, are reachable
+     * by whatever runs in that process next. The daemon therefore keeps one
+     * interpreter per tenant so a cell can only ever share a process with
+     * cells of the same session. Absent on the wire reads as "default".
+     */
+    tenant: z.string().min(1).optional(),
   })
   .strict();
 export type CellRequest = z.infer<typeof CellRequest>;

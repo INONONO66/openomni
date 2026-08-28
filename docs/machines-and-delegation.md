@@ -187,7 +187,11 @@ The machine axis of `@openomni/placement` folds candidate machines against
    independently verifiable:
    - **5a — kernel substrate: landed.** A machine offering `kernel.py` runs
      code cells with interpreter state persisting across cells, each cell
-     under a required deadline, behind the effective-capability gate.
+     under a required deadline, behind the effective-capability gate. The
+     daemon keeps one interpreter PER TENANT (`CellRequest.tenant`, the
+     asking session): a Python process offers no in-process isolation, so
+     the process boundary is what keeps one session's state — and anything
+     a cell leaves running — out of another session's cells.
    - **5b — the `tool.<name>()` bridge: landed.** A running cell calls back to
      the host's tool port over the same attachment (`machine.call_tool`), so
      one cell replaces N tool round trips. The host does not re-implement the
