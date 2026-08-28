@@ -53,10 +53,19 @@ const sinkEvents: Array<{ readonly name: string; readonly data: unknown }> = [];
 
 let router: GatewayRouter | undefined;
 
-export function resetRouterState(): void {
+/**
+ * The store half of the fixture, without the router: fresh in-memory Storage
+ * and Bus. Router-less kernel suites (messaging send kernel, WaitService)
+ * duplicated this trio inline; this is the one home.
+ */
+export function resetStores(): void {
   Storage.reset();
   Bus.reset();
   Storage.initialize({ dbPath: ":memory:" });
+}
+
+export function resetRouterState(): void {
+  resetStores();
   deliveries.length = 0;
   sinkEvents.length = 0;
   router = makeRouter();
