@@ -594,10 +594,11 @@ export async function handleStop(
   if (yielded === "steps") {
     // The step budget ran out while the model still wanted tools. Ending as
     // a plain stop pretended completion; the cap is the honest reason.
+    await dispatchPostRunTransform(state, engine, config, agentBase, "max-steps");
     return runResult(state, { finishReason: "max-steps", text: turnText });
   }
 
-  await dispatchPostRunTransform(state, engine, config, agentBase);
+  await dispatchPostRunTransform(state, engine, config, agentBase, "stop");
   return runResult(state, { finishReason: "stop", text: turnText });
 }
 
@@ -801,12 +802,13 @@ async function dispatchPostRunTransform(
   engine: PolicyEngineInstance,
   config: ChatAgentConfig,
   agentBase: AgentRunBase,
+  runOutcome: "stop" | "max-steps",
 ): Promise<void> {
   const postRunDecision = await engine.dispatchPoint(
     "run.lifecycle.post",
     buildLifecyclePolicyContext(state, config, agentBase, {
       isCompletion: true,
-      runOutcome: { type: "stop" },
+      runOutcome: { type: runOutcome },
     }),
   );
   if (PolicyDecision.isBlocking(postRunDecision)) {
