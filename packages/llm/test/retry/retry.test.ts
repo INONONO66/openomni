@@ -41,6 +41,10 @@ describe("Retry", () => {
   });
 
   describe("sleep(ms, abortSignal)", () => {
+    test("resolves without an abort signal", async () => {
+      await Retry.sleep(0);
+    });
+
     test("resolves after specified milliseconds", async () => {
       const start = Date.now();
       await Retry.sleep(100, new AbortController().signal);

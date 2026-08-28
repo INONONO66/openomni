@@ -19,3 +19,21 @@ export function isSqliteBusyError(error: unknown): boolean {
   const code = (error as { code?: unknown }).code;
   return typeof code === "string" && code.startsWith("SQLITE_BUSY");
 }
+
+/** A retriable store transaction failure caused by SQLite write contention. */
+export class StorageUnavailableError extends Error {
+  readonly name = "StorageUnavailableError";
+  readonly code = "unavailable";
+
+  constructor(
+    readonly store: string,
+    readonly resourceId: string,
+    cause: unknown,
+  ) {
+    super(
+      `${store} storage busy: ${resourceId} — ${
+        cause instanceof Error ? cause.message : String(cause)
+      }`,
+    );
+  }
+}

@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { RunInput, Sink } from "@openomni/llm";
 import { Session, Storage } from "@openomni/ledger";
-import type { Message } from "@openomni/protocol";
 import { startOpenOmni } from "../src/index";
+import { assistantMessage } from "./helpers/assistant-message";
 
 const WS_TOKEN = "channel-delegation-e2e-token";
 
@@ -18,39 +18,6 @@ afterEach(() => {
   Storage.reset();
   for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
 });
-
-function message(input: RunInput, text: string): Message.WithParts {
-  const id = `fake-${input.trace.sessionId}-${input.messages.length}`;
-  const sessionID = input.trace.sessionId;
-  const part = { type: "text", text } as never;
-  return {
-    info: {
-      id,
-      sessionID,
-      role: "assistant",
-      time: { created: Date.now() },
-      parentID: "",
-      modelID: input.model.id,
-      providerID: input.model.providerID,
-      agent: "resident",
-      path: { cwd: "", root: "" },
-      cost: 0,
-      tokens: { input: 4, output: 5, reasoning: 0, cache: { read: 0, write: 0 } },
-    },
-    parts: [
-      { ...(part as object), id: `${id}-text`, sessionID, messageID: id } as never,
-      {
-        id: `${id}-finish`,
-        sessionID,
-        messageID: id,
-        type: "step-finish",
-        reason: "stop",
-        cost: 0,
-        tokens: { input: 4, output: 5, reasoning: 0, cache: { read: 0, write: 0 } },
-      },
-    ],
-  };
-}
 
 async function openSocket(url: string): Promise<WebSocket> {
   const ws = new WebSocket(url);
@@ -135,16 +102,20 @@ test("the Resident delegates to an external actor over the channel and reports t
               timeoutMs: 10_000,
             },
           });
-          sink.onMessage(message(input, `delegation started: ${executed?.output ?? "nothing"}`));
+          sink.onMessage(
+            assistantMessage(input, {
+              text: `delegation started: ${executed?.output ?? "nothing"}`,
+            }),
+          );
           return { type: "stop" };
         }
         if (asked.startsWith("delegation ") && asked.includes(" settled:")) {
           wake();
-          sink.onMessage(message(input, `wake observed: ${asked}`));
+          sink.onMessage(assistantMessage(input, { text: `wake observed: ${asked}` }));
           return { type: "stop" };
         }
 
-        sink.onMessage(message(input, "noted"));
+        sink.onMessage(assistantMessage(input, { text: "noted" }));
         return { type: "stop" };
       },
     },

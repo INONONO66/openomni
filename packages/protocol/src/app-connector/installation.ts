@@ -40,7 +40,6 @@ export const Installation = z
     endpointId: nonEmptyString,
     definition: Definition,
     detectedVersion: nonEmptyString.optional(),
-    testedVersions: nonEmptyString,
     status: InstallationStatus,
     registeredBy: nonEmptyString,
     workspace: WorkspaceIdentity.optional(),

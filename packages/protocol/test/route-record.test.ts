@@ -81,6 +81,9 @@ describe("Ingress.routeDecisionsEquivalent", () => {
     ["sessionId", { sessionId: "s-2" }],
     ["runId", { runId: "r-2" }],
     ["pendingInteractionId", { pendingInteractionId: "pi-2" }],
+    ["actorId", { actorId: "actor-2" }],
+    ["trustTier", { trustTier: "observer" as const }],
+    ["inboundTreatment", { inboundTreatment: "evidence_only" as const }],
   ])("divergent %s → not equivalent (redelivery fails closed)", (_f, over) => {
     expect(Ingress.routeDecisionsEquivalent(decision(), decision(over))).toBe(false);
   });

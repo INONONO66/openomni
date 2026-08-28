@@ -89,7 +89,6 @@ describe("AppConnector protocol domain", () => {
         endpointId: "endpoint:install-app-codex",
         definition: validConnector(),
         detectedVersion: "0.139.0",
-        testedVersions: ">=0.139.0 <0.140.0",
         status: "registered",
         registeredBy: "act_owner",
         consent: {
@@ -117,6 +116,23 @@ describe("AppConnector protocol domain", () => {
       }
     });
 
+    it("rejects the duplicate testedVersions field", () => {
+      const installation = {
+        id: "install-app-codex",
+        connectorId: "app.example-connector",
+        connectorVersion: "1.0.0",
+        endpointId: "endpoint:install-app-codex",
+        definition: validConnector(),
+        testedVersions: ">=0.139.0 <0.140.0",
+        status: "registered",
+        registeredBy: "act_owner",
+        createdAt: 100,
+        updatedAt: 100,
+      };
+
+      expect(AppConnector.Installation.safeParse(installation).success).toBe(false);
+    });
+
     it("rejects installation records whose embedded definition does not match the connector id", () => {
       // Given
       const installation = {
@@ -125,7 +141,6 @@ describe("AppConnector protocol domain", () => {
         connectorVersion: "1.0.0",
         endpointId: "endpoint:install-app-codex",
         definition: { ...validConnector(), id: "app.other" },
-        testedVersions: ">=1.0.0 <2.0.0",
         status: "registered",
         registeredBy: "act_owner",
         createdAt: 100,
@@ -151,7 +166,6 @@ describe("AppConnector protocol domain", () => {
         connectorVersion: "2.0.0",
         endpointId: "endpoint:install-app-codex",
         definition: validConnector(),
-        testedVersions: ">=1.0.0 <2.0.0",
         status: "registered",
         registeredBy: "act_owner",
         createdAt: 100,
@@ -177,7 +191,6 @@ describe("AppConnector protocol domain", () => {
         connectorVersion: "1.0.0",
         endpointId: "endpoint:install-app-codex",
         definition: validConnector(),
-        testedVersions: ">=1.0.0 <2.0.0",
         status: "enabled",
         registeredBy: "act_owner",
         createdAt: 100,
