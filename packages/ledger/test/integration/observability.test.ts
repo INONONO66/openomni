@@ -34,7 +34,7 @@ const RunEvents = {
 };
 
 function db(): Database {
-  return (Storage.getAdapter() as unknown as { readonly db: Database }).db;
+  return (Storage.get() as unknown as { readonly db: Database }).db;
 }
 
 function createSession(title = "test"): ReturnType<typeof Session.create> {
@@ -152,7 +152,7 @@ describe("Observability Pipeline Integration", () => {
 
       // The worker-run store is frozen (#510 D2b) — the historical row is
       // seeded at the adapter layer, exactly as pre-freeze rows persist.
-      const workerRunAdapter = Storage.getAdapter().workerRunState;
+      const workerRunAdapter = Storage.get().workerRunState;
       if (!workerRunAdapter) throw new Error("workerRunState sub-adapter missing");
       workerRunAdapter.create(sessionId, {
         runId,
@@ -203,7 +203,7 @@ describe("Observability Pipeline Integration", () => {
         .get(sessionId) as { count: number };
       expect(beforeCount.count).toBe(2);
 
-      Storage.getAdapter().session.remove(sessionId);
+      Storage.get().session.remove(sessionId);
 
       const afterCount = db()
         .query("SELECT COUNT(*) as count FROM bus_event WHERE session_id = ?")

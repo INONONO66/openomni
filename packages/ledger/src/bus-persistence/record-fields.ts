@@ -35,7 +35,7 @@ function numberFromRecord(
   key: string,
 ): number | undefined {
   const value = record?.[key];
-  return typeof value === "number" ? value : undefined;
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
 export function toRecord(value: unknown): Record<string, unknown> | undefined {

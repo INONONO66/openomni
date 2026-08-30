@@ -46,7 +46,7 @@ export function createMemoryDelegationAdapter(): ProtocolStorage.DelegationSubAd
       return true;
     },
     listOpen() {
-      return list(records.values());
+      return openSorted(records.values());
     },
     listSettledUnwoken() {
       return [...records.values()]
@@ -55,10 +55,8 @@ export function createMemoryDelegationAdapter(): ProtocolStorage.DelegationSubAd
         .map((record) => Delegation.Record.parse(record));
     },
     listOpenByRoot(rootDelegationId) {
-      return list(
-        [...records.values()].filter(
-          (record) => record.status === "open" && record.rootDelegationId === rootDelegationId,
-        ),
+      return openSorted(
+        [...records.values()].filter((record) => record.rootDelegationId === rootDelegationId),
       );
     },
     findByWaitId(waitId) {
@@ -68,7 +66,7 @@ export function createMemoryDelegationAdapter(): ProtocolStorage.DelegationSubAd
   };
 }
 
-function list(records: Iterable<Delegation.Record>): Delegation.Record[] {
+function openSorted(records: Iterable<Delegation.Record>): Delegation.Record[] {
   return [...records]
     .filter((record) => record.status === "open")
     .sort((left, right) => left.createdAt - right.createdAt)

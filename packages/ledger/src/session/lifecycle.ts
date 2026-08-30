@@ -39,7 +39,7 @@ export function create(input: CreateInput): SessionInfo {
     ...(input.ttlMs !== undefined && { expiresAt: now + input.ttlMs }),
   };
 
-  Storage.getAdapter().session.set(id, session);
+  Storage.get().session.set(id, session);
   Bus.publish(Event.Created, { traceId: input.traceId, info: session });
 
   return session;
@@ -66,7 +66,7 @@ export function createChild(input: CreateChildInput): SessionInfo {
     ...(input.workerMeta !== undefined && { workerMeta: input.workerMeta }),
   };
 
-  Storage.getAdapter().session.set(id, child);
+  Storage.get().session.set(id, child);
   Bus.publish(Event.Created, { traceId: input.traceId, info: child });
 
   return child;
@@ -97,7 +97,7 @@ export function materialize(input: CreateInput & { id: string }): {
     spawnDepth: 0,
     ...(input.ttlMs !== undefined && { expiresAt: now + input.ttlMs }),
   };
-  Storage.getAdapter().session.set(input.id, session);
+  Storage.get().session.set(input.id, session);
   Bus.publish(Event.Created, { traceId: input.traceId, info: session });
   return { session, created: true };
 }
@@ -107,7 +107,7 @@ function isExpired(session: SessionInfo, now: number): boolean {
 }
 
 export function get(id: string): SessionInfo | undefined {
-  const session = Storage.getAdapter().session.get(id);
+  const session = Storage.get().session.get(id);
   if (!session) return undefined;
   // Reads are pure: an expired session is invisible but NOT deleted here —
   // a get() that writes turns every read into a mutation (delete-during-get
@@ -120,7 +120,7 @@ export function get(id: string): SessionInfo | undefined {
 export function list(): SessionInfo[] {
   const now = Date.now();
   // Pure read: expired sessions are filtered out, never removed mid-filter.
-  return Storage.getAdapter()
+  return Storage.get()
     .session.list()
     .filter((session) => !isExpired(session, now));
 }
@@ -141,7 +141,7 @@ export function list(): SessionInfo[] {
  * removed.
  */
 export function sweepExpired(traceId: string, now = Date.now()): SessionInfo[] {
-  const expired = Storage.getAdapter()
+  const expired = Storage.get()
     .session.list()
     .filter((session) => isExpired(session, now));
   const swept: SessionInfo[] = [];
@@ -171,7 +171,7 @@ export function listChildren(parentSessionId: string): SessionInfo[] {
 }
 
 export function update(id: string, input: UpdateInput): SessionInfo | undefined {
-  const session = Storage.getAdapter().session.get(id);
+  const session = Storage.get().session.get(id);
   if (!session) return undefined;
 
   const updated: SessionInfo = {
@@ -184,13 +184,13 @@ export function update(id: string, input: UpdateInput): SessionInfo | undefined 
     },
   };
 
-  Storage.getAdapter().session.set(id, updated);
+  Storage.get().session.set(id, updated);
   Bus.publish(Event.Updated, { info: updated });
   return updated;
 }
 
 export function remove(id: string, traceId: string): boolean {
-  const adapter = Storage.getAdapter();
+  const adapter = Storage.get();
   const exists = adapter.session.get(id) !== undefined;
   if (exists) {
     // One transaction: a crash mid-cascade must not leave a half-deleted

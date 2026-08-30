@@ -123,35 +123,13 @@ function eventBase(record: Engagement.Record, time: number, traceId: string) {
 // change is Owner-visible by construction (gateway-design §0/§5).
 function publishChange(outcome: CommittedOutcome, reason: string, traceId: string): void {
   const base = eventBase(outcome.record, outcome.record.updatedAt, traceId);
-  switch (outcome.kind) {
-    case "transitioned":
-      Bus.publish(Engagement.Events.Transitioned, {
-        ...base,
-        from: outcome.from,
-        to: outcome.record.state,
-        reason,
-        forced: false,
-      });
-      return;
-    case "forced_approval":
-      Bus.publish(Engagement.Events.Transitioned, {
-        ...base,
-        from: outcome.from,
-        to: outcome.record.state,
-        reason,
-        forced: true,
-      });
-      return;
-    case "expired":
-      Bus.publish(Engagement.Events.Transitioned, {
-        ...base,
-        from: outcome.from,
-        to: outcome.record.state,
-        reason,
-        forced: false,
-      });
-      return;
-  }
+  Bus.publish(Engagement.Events.Transitioned, {
+    ...base,
+    from: outcome.from,
+    to: outcome.record.state,
+    reason,
+    forced: outcome.kind === "forced_approval",
+  });
 }
 
 const ACTIVE_STATES: Engagement.State[] = [

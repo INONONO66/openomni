@@ -14,7 +14,7 @@ import { WorkerRunStateStore } from "../../src/worker-run/state-store";
  */
 
 function seedSession(id: string): void {
-  Storage.getAdapter().session.set(id, {
+  Storage.get().session.set(id, {
     id,
     title: "test",
     model: { providerID: "test", modelID: "test" },
@@ -28,7 +28,7 @@ function seedFrozenRun(
   runId: string,
   status: WorkerRunStateStore.Status = "running",
 ): void {
-  const adapter = Storage.getAdapter().workerRunState;
+  const adapter = Storage.get().workerRunState;
   if (!adapter) throw new Error("workerRunState sub-adapter missing");
   adapter.create(sessionId, {
     runId,

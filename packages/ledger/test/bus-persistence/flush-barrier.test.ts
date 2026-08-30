@@ -8,7 +8,7 @@ import { Storage } from "../../src/storage/storage.js";
 import "../../src/storage/initialize.js";
 
 function db(): Database {
-  const descriptor = Object.getOwnPropertyDescriptor(Storage.getAdapter(), "db");
+  const descriptor = Object.getOwnPropertyDescriptor(Storage.get(), "db");
   if (descriptor?.value instanceof Database) return descriptor.value;
   throw new Error("Expected SQLite-backed storage adapter");
 }

@@ -37,7 +37,7 @@ interface BusEventRow {
 }
 
 function db(): Database {
-  return (Storage.getAdapter() as unknown as { readonly db: Database }).db;
+  return (Storage.get() as unknown as { readonly db: Database }).db;
 }
 
 function rows(): BusEventRow[] {

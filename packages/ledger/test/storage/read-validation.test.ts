@@ -75,7 +75,7 @@ describe("sqlite adapters fail closed on corrupt rows", () => {
     corruptRow(dbPath, "message", "msg-corrupt", JSON.stringify({ role: "user" }));
 
     expect(() => Session.getMessages(session.id)).toThrow();
-    expect(() => Storage.getAdapter().message.get(session.id, "msg-corrupt")).toThrow();
+    expect(() => Storage.get().message.get(session.id, "msg-corrupt")).toThrow();
   });
 
   test("a corrupt part row rejects on read", () => {
@@ -90,6 +90,6 @@ describe("sqlite adapters fail closed on corrupt rows", () => {
     corruptRow(dbPath, "part", "part-corrupt", JSON.stringify({ type: "text" }));
 
     expect(() => Session.getParts("msg-parts")).toThrow();
-    expect(() => Storage.getAdapter().part.get("msg-parts", "part-corrupt")).toThrow();
+    expect(() => Storage.get().part.get("msg-parts", "part-corrupt")).toThrow();
   });
 });

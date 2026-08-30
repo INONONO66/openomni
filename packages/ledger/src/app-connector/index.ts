@@ -197,7 +197,9 @@ export namespace AppConnectorInstallationStore {
   ): AppConnector.Installation {
     const installation = requireInstallation(id);
     if (installation.status !== "consented") {
-      throw new Error(`Cannot smoke verify ${installation.status} installation: ${id}`);
+      throw new Error(
+        `Cannot mark smoke verification failed for ${installation.status} installation: ${id}`,
+      );
     }
 
     return set({

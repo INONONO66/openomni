@@ -1,6 +1,6 @@
 import { Delegation, type Storage as ProtocolStorage } from "@openomni/protocol";
 import { claimWithinCountedWindow } from "../storage/counted-window-claim.js";
-import { Storage } from "../storage/storage";
+import { Storage } from "../storage/storage.js";
 
 function requireAdapter(): ProtocolStorage.DelegationSubAdapter {
   const adapter = Storage.get().delegation;
