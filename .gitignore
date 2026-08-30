@@ -2,8 +2,6 @@
 
 # Dependencies
 node_modules
-.pnp
-.pnp.js
 
 # Local env files
 .env
@@ -20,20 +18,9 @@ source-metrics.json
 # Turbo
 .turbo
 
-# Vercel
-.vercel
-
 # Build Outputs
-.next/
-out/
-build
 dist
 dist-npm
-
-# Debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
 
 # Local AI instructions (not committed)
 *.local.md
@@ -52,4 +39,7 @@ yarn-error.log*
 .opencode
 .omo
 .codegraph
+.senpi
+.agents
+skills-lock.json
 *.local.ts

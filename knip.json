@@ -6,8 +6,7 @@
     "@biomejs/biome",
     "@commitlint/cli",
     "lefthook",
-    "turbo",
-    "opensearch-ai-sdk"
+    "turbo"
   ],
   "workspaces": {
     ".": {
