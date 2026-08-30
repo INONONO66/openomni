@@ -1,6 +1,7 @@
 import { Deadline, Delegation, NamedError, newTraceId, Operational, type BusEvent } from "@openomni/protocol";
 import { DelegationStore } from "@openomni/ledger";
 import type { WorkItemLinkage } from "./work-item-linkage";
+import { delegationTraceId } from "./trace";
 import { z } from "zod";
 import {
   admit,
@@ -247,7 +248,7 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
   function publishAdmitted(record: Delegation.Record): void {
     events.publish(Delegation.Events.Admitted, {
       delegationId: record.delegationId,
-      traceId: record.delegationId,
+      traceId: delegationTraceId(record.delegationId),
       time: record.createdAt,
       operation: record.operation,
       addressKind: record.address.kind,
@@ -262,7 +263,7 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
     delivered.add(handle.delegationId);
     events.publish(Delegation.Events.Delivered, {
       delegationId: handle.delegationId,
-      traceId: handle.delegationId,
+      traceId: delegationTraceId(handle.delegationId),
       time: options.now(),
       transport: handle.transport,
     });
@@ -316,7 +317,7 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
     clearTimer(delegationId);
     events.publish(Delegation.Events.Settled, {
       delegationId,
-      traceId: delegationId,
+      traceId: delegationTraceId(delegationId),
       time: persisted.settledAt ?? winner.at,
       status: winner.status,
     });
@@ -340,7 +341,7 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
         )
         .catch((error: unknown) => {
           events.publish(Operational.Events.Error, {
-            traceId: delegationId,
+            traceId: delegationTraceId(delegationId),
             sessionId: persisted.origin.sessionId,
             time: options.now(),
             component: "delegation",
@@ -360,7 +361,7 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
     const reportFailure = (error: unknown): void => {
       const detail = error instanceof Error ? error.message : String(error);
       events.publish(Operational.Events.Error, {
-        traceId: record.delegationId,
+        traceId: delegationTraceId(record.delegationId),
         sessionId: record.origin.sessionId,
         time: options.now(),
         component: "delegation",
@@ -597,7 +598,7 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
           await options.workItems?.cancelAssign(workItemId);
         } catch (error) {
           events.publish(Operational.Events.Error, {
-            traceId: record.delegationId,
+            traceId: delegationTraceId(record.delegationId),
             sessionId: record.origin.sessionId,
             time: options.now(),
             component: "delegation",

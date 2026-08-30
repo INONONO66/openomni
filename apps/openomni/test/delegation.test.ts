@@ -6,6 +6,7 @@ import { DelegationStore, SqliteStorageAdapter, Storage, WorkItemStore } from "@
 import { admit, type AdmissionLimits } from "../src/delegation/admission";
 import { createChannelDriver } from "../src/delegation/channel-driver";
 import { createDelegationKernel } from "../src/delegation/kernel";
+import { delegationTraceId } from "../src/delegation/trace";
 import { createWorkItemLinkage } from "../src/delegation/work-item-linkage";
 import {
   AWAIT_DELEGATION_TOOL_NAME,
@@ -554,7 +555,7 @@ describe("durable kernel", () => {
       {
         name: "operational.error",
         data: {
-          traceId: delegationId,
+          traceId: delegationTraceId(delegationId ?? ""),
           sessionId: "session-origin",
           time: 1_000,
           component: "delegation",
@@ -1021,7 +1022,7 @@ describe("delegation controls and tool surface", () => {
     );
 
     await expect(failed).resolves.toMatchObject({
-      traceId: "d-wake-failure",
+      traceId: delegationTraceId("d-wake-failure"),
       component: "delegation",
       msg: "delegation wake failed for d-wake-failure",
       error: "resident unavailable",

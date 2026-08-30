@@ -33,6 +33,7 @@ import {
   type DelegationKernel,
   type DelegationWake,
 } from "./delegation/kernel";
+import { delegationTraceId } from "./delegation/trace";
 import { createWakeDeliveryQueue } from "./delegation/wake-delivery";
 import { createWorkItemLinkage } from "./delegation/work-item-linkage";
 import { createCompletionPort } from "./work-item/completion";
@@ -121,7 +122,7 @@ function createLlmToolPort(model: OpenOmniConfig["model"]): LlmPort {
         model: resolveLlmToolModel(await ModelsDev.get(), { provider: model.provider, id: model.id }),
         auth: { type: "api", key: model.apiKey },
         trace: {
-          traceId: `llm-tool:${crypto.randomUUID()}`,
+          traceId: newTraceId(),
           sessionId,
           runId: crypto.randomUUID(),
         },
@@ -150,15 +151,7 @@ function replyText(payload: unknown): string {
 
 /** Builds the internal, persisted Resident turn used for one settlement wake. */
 function delegationWakeDelivery(wake: DelegationWake): Gateway.Deliver {
-  // Deterministic W3C trace id: production delegation ids are UUIDs, whose
-  // hex digits are exactly a 32-char lowercase trace id once the hyphens go.
-  // A non-UUID id (test doubles) falls back to a fresh trace id, and so does
-  // the nil UUID — the all-zero trace id is invalid per W3C.
-  const canonical = wake.record.delegationId.split("-").join("").toLowerCase();
-  const traceId =
-    /^[0-9a-f]{32}$/.test(canonical) && canonical !== "00000000000000000000000000000000"
-      ? canonical
-      : newTraceId();
+  const traceId = delegationTraceId(wake.record.delegationId);
   return Gateway.Deliver.parse({
     sessionId: wake.record.origin.sessionId,
     event: {
