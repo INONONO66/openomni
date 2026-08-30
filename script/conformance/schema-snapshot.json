@@ -87,7 +87,7 @@
     "updatedAt",
     "workspace"
   ],
-  "AppConnector.Logs#0": [
+  "AppConnector.Logs#jsonl": [
     "eventTimeField",
     "kind",
     "messageField",
@@ -96,7 +96,7 @@
     "tokenUsageMode",
     "toolCallField"
   ],
-  "AppConnector.Logs#1": [
+  "AppConnector.Logs#stream_json": [
     "eventTimeField",
     "kind",
     "messageField",
@@ -105,16 +105,16 @@
     "tokenUsageMode",
     "toolCallField"
   ],
-  "AppConnector.Logs#2": ["kind", "path"],
-  "AppConnector.QuestionBridge#0": [
+  "AppConnector.Logs#text": ["kind", "path"],
+  "AppConnector.QuestionBridge#hook": [
     "args",
     "command",
     "kind",
     "promptField",
     "responseMode"
   ],
-  "AppConnector.QuestionBridge#1": ["kind", "promptField", "responseMode"],
-  "AppConnector.QuestionBridge#2": ["kind"],
+  "AppConnector.QuestionBridge#none": ["kind"],
+  "AppConnector.QuestionBridge#stdio": ["kind", "promptField", "responseMode"],
   "AppConnector.ReportSource": [
     "artifactGlobs",
     "finalMessage",
@@ -137,6 +137,22 @@
     "sessionId",
     "title",
     "version"
+  ],
+  "BusEvent.Metadata": [
+    "actorId",
+    "agentName",
+    "componentGeneration",
+    "componentId",
+    "configRevision",
+    "eventId",
+    "parentSpanId",
+    "pluginName",
+    "pluginVersion",
+    "runId",
+    "sessionId",
+    "spanId",
+    "time",
+    "traceId"
   ],
   "CronJob.Info": [
     "agentName",
@@ -191,8 +207,8 @@
     "operation",
     "payload"
   ],
-  "Delegation.WorkerAddress#0": ["kind", "scope"],
-  "Delegation.WorkerAddress#1": ["actorId", "kind"],
+  "Delegation.WorkerAddress#actor": ["actorId", "kind"],
+  "Delegation.WorkerAddress#core": ["kind", "scope"],
   "Engagement.Create": ["createdAt", "id", "ownerSessionId", "terms", "title"],
   "Engagement.Record": [
     "createdAt",
@@ -345,7 +361,7 @@
     "userId",
     "workspace"
   ],
-  "Ingress.InboundEventSchema#0": [
+  "Ingress.InboundEventSchema#direct": [
     "activation",
     "agent",
     "channel",
@@ -359,7 +375,7 @@
     "userId",
     "workspace"
   ],
-  "Ingress.InboundEventSchema#1": [
+  "Ingress.InboundEventSchema#internal": [
     "activation",
     "agentName",
     "channel",
@@ -415,8 +431,8 @@
     "streamId"
   ],
   "Ledger.Input": ["data", "streamId", "timeCreated", "type"],
-  "Ledger.Outcome#0": ["eventHash", "kind", "seq"],
-  "Ledger.Outcome#1": ["currentHead", "kind"],
+  "Ledger.Outcome#appended": ["eventHash", "kind", "seq"],
+  "Ledger.Outcome#cas_conflict": ["currentHead", "kind"],
   "Ledger.RecordedFact": ["data", "seq", "streamId", "timeCreated", "type"],
   "Ledger.RouteDecided#0": [
     "actorId",
@@ -532,12 +548,12 @@
     "trustTier"
   ],
   "Ledger.RouteNotDelivered": ["inboundId", "reason"],
-  "Machine.AttachResult#0": ["effectiveCapabilities", "status"],
-  "Machine.AttachResult#1": ["reason", "status"],
-  "Machine.CellRequest": ["cellId", "code", "timeoutMs"],
-  "Machine.CellResult#0": ["cellId", "output", "status", "value"],
-  "Machine.CellResult#1": ["cellId", "error", "output", "status"],
-  "Machine.CellResult#2": ["cellId", "status"],
+  "Machine.AttachResult#attached": ["effectiveCapabilities", "status"],
+  "Machine.AttachResult#refused": ["reason", "status"],
+  "Machine.CellRequest": ["cellId", "code", "tenant", "timeoutMs"],
+  "Machine.CellResult#completed": ["cellId", "output", "status", "value"],
+  "Machine.CellResult#raised": ["cellId", "error", "output", "status"],
+  "Machine.CellResult#timed_out": ["cellId", "status"],
   "Machine.Enrollment": [
     "allowedCapabilities",
     "enrolledAt",
@@ -552,9 +568,17 @@
     "platform"
   ],
   "Machine.ToolCall": ["arguments", "cellId", "name"],
-  "Machine.ToolCallResult#0": ["status", "value"],
-  "Machine.ToolCallResult#1": ["error", "status"],
-  "McpConfig.ServerConfig#0": [
+  "Machine.ToolCallResult#completed": ["status", "value"],
+  "Machine.ToolCallResult#failed": ["error", "status"],
+  "McpConfig.ServerConfig#sse": [
+    "headers",
+    "name",
+    "retries",
+    "timeout",
+    "transport",
+    "url"
+  ],
+  "McpConfig.ServerConfig#stdio": [
     "args",
     "command",
     "headers",
@@ -563,15 +587,7 @@
     "timeout",
     "transport"
   ],
-  "McpConfig.ServerConfig#1": [
-    "headers",
-    "name",
-    "retries",
-    "timeout",
-    "transport",
-    "url"
-  ],
-  "McpConfig.ServerConfig#2": [
+  "McpConfig.ServerConfig#streamable-http": [
     "headers",
     "name",
     "retries",
@@ -593,18 +609,7 @@
     "time",
     "tokens"
   ],
-  "Message.Info#0": [
-    "agent",
-    "id",
-    "model",
-    "role",
-    "sessionID",
-    "system",
-    "time",
-    "tools",
-    "variant"
-  ],
-  "Message.Info#1": [
+  "Message.Info#assistant": [
     "agent",
     "cost",
     "finish",
@@ -618,16 +623,18 @@
     "time",
     "tokens"
   ],
-  "Message.Part#0": [
+  "Message.Info#user": [
+    "agent",
     "id",
-    "messageID",
-    "metadata",
+    "model",
+    "role",
     "sessionID",
-    "text",
+    "system",
     "time",
-    "type"
+    "tools",
+    "variant"
   ],
-  "Message.Part#1": [
+  "Message.Part#reasoning": [
     "id",
     "messageID",
     "metadata",
@@ -637,8 +644,7 @@
     "time",
     "type"
   ],
-  "Message.Part#2": ["id", "messageID", "sessionID", "type"],
-  "Message.Part#3": [
+  "Message.Part#step-finish": [
     "cost",
     "id",
     "messageID",
@@ -647,7 +653,17 @@
     "tokens",
     "type"
   ],
-  "Message.Part#4": [
+  "Message.Part#step-start": ["id", "messageID", "sessionID", "type"],
+  "Message.Part#text": [
+    "id",
+    "messageID",
+    "metadata",
+    "sessionID",
+    "text",
+    "time",
+    "type"
+  ],
+  "Message.Part#tool": [
     "callID",
     "id",
     "messageID",
@@ -760,26 +776,26 @@
     "reasonCodes",
     "verdict"
   ],
-  "Policy.PolicyEffect#0": ["context", "type"],
-  "Policy.PolicyEffect#1": ["message", "role", "type"],
-  "Policy.PolicyEffect#10": ["delayMs", "maxRetries", "type"],
-  "Policy.PolicyEffect#11": ["messages", "type"],
-  "Policy.PolicyEffect#12": ["constraints", "type"],
-  "Policy.PolicyEffect#13": ["reason", "type"],
-  "Policy.PolicyEffect#14": ["annotation", "severity", "type"],
-  "Policy.PolicyEffect#15": ["output", "type"],
-  "Policy.PolicyEffect#16": ["reason", "type"],
-  "Policy.PolicyEffect#17": ["required", "type"],
-  "Policy.PolicyEffect#18": ["criterionIds", "type"],
-  "Policy.PolicyEffect#19": ["id", "provider", "type"],
-  "Policy.PolicyEffect#2": ["prompt", "type"],
-  "Policy.PolicyEffect#3": ["toolPattern", "type"],
-  "Policy.PolicyEffect#4": ["input", "type"],
-  "Policy.PolicyEffect#5": ["output", "type"],
-  "Policy.PolicyEffect#6": ["reason", "type"],
-  "Policy.PolicyEffect#7": ["reason", "type"],
-  "Policy.PolicyEffect#8": ["reason", "type"],
-  "Policy.PolicyEffect#9": ["prompt", "type"],
+  "Policy.PolicyEffect#audit.annotate": ["annotation", "severity", "type"],
+  "Policy.PolicyEffect#delegation.require_approval": ["reason", "type"],
+  "Policy.PolicyEffect#delegation.set_constraints": ["constraints", "type"],
+  "Policy.PolicyEffect#model.override": ["id", "provider", "type"],
+  "Policy.PolicyEffect#prompt.append_context": ["context", "type"],
+  "Policy.PolicyEffect#prompt.inject_message": ["message", "role", "type"],
+  "Policy.PolicyEffect#prompt.replace": ["prompt", "type"],
+  "Policy.PolicyEffect#run.abort": ["reason", "type"],
+  "Policy.PolicyEffect#run.continue_with_prompt": ["prompt", "type"],
+  "Policy.PolicyEffect#run.replace_messages": ["messages", "type"],
+  "Policy.PolicyEffect#run.retry_after": ["delayMs", "maxRetries", "type"],
+  "Policy.PolicyEffect#runtime.workspace_lock": ["required", "type"],
+  "Policy.PolicyEffect#tool.filter": ["toolPattern", "type"],
+  "Policy.PolicyEffect#tool.require_approval": ["reason", "type"],
+  "Policy.PolicyEffect#tool.rewrite_input": ["input", "type"],
+  "Policy.PolicyEffect#tool.rewrite_output": ["output", "type"],
+  "Policy.PolicyEffect#tool.skip_invocation": ["reason", "type"],
+  "Policy.PolicyEffect#work.allow_asserted": ["criterionIds", "type"],
+  "Policy.PolicyEffect#writeback.rewrite": ["output", "type"],
+  "Policy.PolicyEffect#writeback.suppress": ["reason", "type"],
   "Policy.PolicyObligation": [
     "description",
     "obligationId",
@@ -877,20 +893,19 @@
     "requires",
     "safe"
   ],
-  "Tool.State#0": ["input", "status"],
-  "Tool.State#1": ["input", "status", "time"],
-  "Tool.State#2": ["input", "metadata", "output", "status", "time", "title"],
-  "Tool.State#3": ["error", "input", "status", "time"],
-  "Transcript.Fact#0": ["attemptId", "message", "type"],
-  "Transcript.Fact#1": ["attemptId", "messageId", "part", "type"],
-  "Transcript.Fact#2": [
-    "attemptId",
-    "messageId",
-    "partId",
-    "transition",
-    "type"
+  "Tool.State#completed": [
+    "input",
+    "metadata",
+    "output",
+    "status",
+    "time",
+    "title"
   ],
-  "Transcript.Fact#3": [
+  "Tool.State#error": ["error", "input", "status", "time"],
+  "Tool.State#pending": ["input", "status"],
+  "Tool.State#running": ["input", "status", "time"],
+  "Transcript.Fact#message.created": ["attemptId", "message", "type"],
+  "Transcript.Fact#message.finished": [
     "at",
     "attemptId",
     "finish",
@@ -898,10 +913,24 @@
     "type",
     "usage"
   ],
-  "Transcript.PartTransition#0": ["at", "to"],
-  "Transcript.PartTransition#1": ["at", "output", "signature", "title", "to"],
-  "Transcript.PartTransition#2": ["at", "error", "to"],
-  "Transcript.PartTransition#3": ["at", "partialOutput", "to"],
+  "Transcript.Fact#part.advanced": [
+    "attemptId",
+    "messageId",
+    "partId",
+    "transition",
+    "type"
+  ],
+  "Transcript.Fact#part.appended": ["attemptId", "messageId", "part", "type"],
+  "Transcript.PartTransition#completed": [
+    "at",
+    "output",
+    "signature",
+    "title",
+    "to"
+  ],
+  "Transcript.PartTransition#error": ["at", "error", "to"],
+  "Transcript.PartTransition#interrupted": ["at", "partialOutput", "to"],
+  "Transcript.PartTransition#running": ["at", "to"],
   "Transcript.Usage": ["cache", "input", "output", "reasoning"],
   "Wait.Correlation": [
     "channelId",
@@ -1077,9 +1106,10 @@
     "workInput"
   ],
   "WorkItem.Criterion": ["id", "required", "revision", "statement"],
-  "WorkItem.CriterionResult#0": [
+  "WorkItem.CriterionResult#1": [
     "assumptions",
     "basisRef",
+    "checkedPredicate",
     "createdAt",
     "criterionId",
     "id",
@@ -1089,10 +1119,9 @@
     "value",
     "verifierRef"
   ],
-  "WorkItem.CriterionResult#1": [
+  "WorkItem.CriterionResult#asserted": [
     "assumptions",
     "basisRef",
-    "checkedPredicate",
     "createdAt",
     "criterionId",
     "id",
@@ -1178,18 +1207,23 @@
     "provenanceRef",
     "subjectRef"
   ],
-  "WorkItem.ReadBackRequest#0": ["kind", "maxBodyBytes", "target", "timeoutMs"],
-  "WorkItem.ReadBackRequest#1": [
+  "WorkItem.ReadBackRequest#api_query": [
     "kind",
     "maxBodyBytes",
     "method",
     "target",
     "timeoutMs"
   ],
-  "WorkItem.ReadBackRequest#2": [
+  "WorkItem.ReadBackRequest#citation_match": [
     "kind",
     "maxBodyBytes",
     "quotedText",
+    "target",
+    "timeoutMs"
+  ],
+  "WorkItem.ReadBackRequest#url_fetch": [
+    "kind",
+    "maxBodyBytes",
     "target",
     "timeoutMs"
   ],

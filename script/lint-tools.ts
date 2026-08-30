@@ -331,6 +331,12 @@ function shapeKeys(schema: ZodObjectLike, seen: Set<unknown> = new Set()): strin
   return undefined;
 }
 
+function discriminatorValue(option: ZodObjectLike, discriminator: string): string | undefined {
+  const field = (option.shape as Record<string, unknown> | undefined)?.[discriminator];
+  const value = isZodSchema(field) ? field._def?.value : undefined;
+  return typeof value === "string" ? value : undefined;
+}
+
 export async function buildSchemaSnapshot(): Promise<SchemaSnapshot> {
   const protocol = (await import("../packages/protocol/src/index.js")) as Record<string, unknown>;
   const snapshot: Record<string, readonly string[]> = {};
@@ -349,11 +355,20 @@ export async function buildSchemaSnapshot(): Promise<SchemaSnapshot> {
         continue;
       }
       if (Array.isArray(exportValue.options)) {
+        // Key discriminated-union options by their discriminator value, not
+        // array position: reordering or inserting an option must not renumber
+        // the others (an index shift reads as every later option "losing"
+        // fields). Plain unions without a discriminator keep index keys.
+        const discriminator = exportValue._def?.discriminator;
         exportValue.options.forEach((option, index) => {
           if (isZodSchema(option)) {
             const optionKeys = shapeKeys(option);
             if (optionKeys) {
-              snapshot[`${namespaceName}.${exportName}#${index}`] = optionKeys;
+              const label =
+                typeof discriminator === "string"
+                  ? discriminatorValue(option, discriminator)
+                  : undefined;
+              snapshot[`${namespaceName}.${exportName}#${label ?? index}`] = optionKeys;
             }
           }
         });

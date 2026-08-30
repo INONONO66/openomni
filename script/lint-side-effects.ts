@@ -1,4 +1,4 @@
-type SideEffectRuleId = "processor-projected-sink" | "session-mutation-ledger-before-storage-write";
+type SideEffectRuleId = "processor-projected-sink" | "session-mutation-publish-after-write";
 
 interface SideEffectViolation {
   readonly ruleId: SideEffectRuleId;
@@ -36,7 +36,7 @@ const rules: readonly SideEffectRule[] = [
     message: "processor sink side effects must flow through createProjectedSink",
   },
   {
-    ruleId: "session-mutation-ledger-before-storage-write",
+    ruleId: "session-mutation-publish-after-write",
     filePath: "packages/ledger/src/session/messages.ts",
     sideEffect: /adapter\.message\.set\(sessionID, message\)/g,
     scopeStart: /export function addMessage\(/g,
@@ -46,7 +46,7 @@ const rules: readonly SideEffectRule[] = [
     message: "Session.addMessage must publish Event.Updated after adapter.message.set",
   },
   {
-    ruleId: "session-mutation-ledger-before-storage-write",
+    ruleId: "session-mutation-publish-after-write",
     filePath: "packages/ledger/src/session/messages.ts",
     sideEffect: /adapter\.session\.set\(sessionID, updated\)/g,
     scopeStart: /export function addMessage\(/g,
@@ -56,7 +56,7 @@ const rules: readonly SideEffectRule[] = [
     message: "Session.addMessage must publish Event.Updated after adapter.session.set",
   },
   {
-    ruleId: "session-mutation-ledger-before-storage-write",
+    ruleId: "session-mutation-publish-after-write",
     filePath: "packages/ledger/src/session/messages.ts",
     sideEffect: /adapter\.part\.set\(messageID, part\)/g,
     scopeStart: /export function addPart\(/g,
@@ -131,7 +131,7 @@ function validateRule(rule: SideEffectRule, source: string): SideEffectViolation
     const scopeEnd = firstMatchStartAfter(source, rule.scopeEnd, sideEffect.index);
     const suffix = source.slice(
       sideEffect.index + sideEffect.text.length,
-      scopeEnd > 0 ? scopeEnd : source.length,
+      scopeEnd === -1 ? source.length : scopeEnd,
     );
     const missingAfter = (rule.requiredAfter || []).filter((snippet) => !suffix.includes(snippet));
 

@@ -89,7 +89,9 @@ export function topologyProblems(
     }
     const projectCount = existsSync(join(root, workspace.dir))
       ? [...new Bun.Glob("**/tsconfig*.json").scanSync({ cwd: join(root, workspace.dir), onlyFiles: true })]
-          .length
+          // Installed dependencies ship their own tsconfigs; counting them
+          // would make this check pass vacuously for every workspace.
+          .filter((path) => !path.includes("node_modules/")).length
       : 0;
     if (workspace.tsconfigVerify && projectCount === 0) {
       problems.tsconfig.push(`${workspace.dir} contributes zero tsconfig projects`);
