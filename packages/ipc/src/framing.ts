@@ -15,7 +15,7 @@ export function encode(msg: unknown): Uint8Array {
 export type DecodedChunk = {
   /** Every parseable frame in the chunk, delivered immediately, in wire order. */
   frames: unknown[];
-  /** Each non-JSON line, truncated to 64 chars for reporting — never re-queued. */
+  /** Each non-JSON line, truncated to MALFORMED_REPORT_CHARS for reporting — never re-queued. */
   malformed: string[];
 };
 

@@ -1,6 +1,6 @@
 import type { Policy } from "@openomni/protocol";
 import { FAIL_CLOSED_CONFLICT, type Conflict, type EffectEntry, type FieldOwner } from "./types";
-import { flattenRecord, pathsOverlap, stableHash } from "./records";
+import { flattenRecord, pathsOverlap, stableKey } from "./records";
 
 export function collectPreConflicts(entries: EffectEntry[]): Conflict[] {
   return [
@@ -39,10 +39,10 @@ function collectRecordRewriteConflicts(
     if (!record) continue;
 
     for (const [path, value] of flattenRecord(record)) {
-      const valueHash = stableHash(value);
+      const valueKey = stableKey(value);
       const owner = highestPriorityOwner(owners, path, entry.policyId);
 
-      if (owner && owner.valueHash !== valueHash) {
+      if (owner && owner.valueKey !== valueKey) {
         if (owner.priority === entry.priority) {
           conflicts.push({
             message: `${effectType}.${path} rewritten by ${owner.policyId} and ${entry.policyId}`,
@@ -52,7 +52,7 @@ function collectRecordRewriteConflicts(
       }
 
       if (!owner || entry.priority >= owner.priority) {
-        owners.push({ path, policyId: entry.policyId, valueHash, priority: entry.priority });
+        owners.push({ path, policyId: entry.policyId, valueKey, priority: entry.priority });
       }
     }
   }
@@ -102,8 +102,8 @@ function collectSingleValueConflicts(
     const value = singleValueForEffect(entry.effect, effectType);
     if (value === undefined) continue;
 
-    const valueHash = stableHash(value);
-    if (owner && owner.policyId !== entry.policyId && owner.valueHash !== valueHash) {
+    const valueKey = stableKey(value);
+    if (owner && owner.policyId !== entry.policyId && owner.valueKey !== valueKey) {
       if (owner.priority === entry.priority) {
         conflicts.push({
           message: `${label}.${field} rewritten by ${owner.policyId} and ${entry.policyId}`,
@@ -113,7 +113,7 @@ function collectSingleValueConflicts(
     }
 
     if (!owner || entry.priority >= owner.priority) {
-      owner = { path: field, policyId: entry.policyId, valueHash, priority: entry.priority };
+      owner = { path: field, policyId: entry.policyId, valueKey, priority: entry.priority };
     }
   }
 
