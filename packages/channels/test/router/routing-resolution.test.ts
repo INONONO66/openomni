@@ -201,7 +201,7 @@ describe("GatewayRouter durable routing resolution", () => {
   test("append failure returns route_record_failed without delivery or projection", async () => {
     registerOwnerDm();
     createMappedOwnerSession();
-    const adapter = Storage.getAdapter();
+    const adapter = Storage.get();
     Storage.configure({
       ...adapter,
       transaction: adapter.transaction.bind(adapter),

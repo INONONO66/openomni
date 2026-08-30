@@ -26,7 +26,7 @@ describe("Storage.initialize", () => {
 
   test("default backend is sqlite", () => {
     initialize({ dbPath: join(tmpDir, ".openomni", "storage.db") });
-    expect(Storage.getAdapter()).toBeInstanceOf(SqliteStorageAdapter);
+    expect(Storage.get()).toBeInstanceOf(SqliteStorageAdapter);
   });
 
   test("refuses an incomplete production sqlite adapter before first use", () => {
@@ -61,7 +61,7 @@ describe("Storage.initialize", () => {
       time: { created: Date.now(), updated: Date.now() },
       spawnDepth: 0,
     };
-    Storage.getAdapter().session.set("s1", session);
+    Storage.get().session.set("s1", session);
 
     // Verify by opening a second adapter to the same DB
     const verifyAdapter = new SqliteStorageAdapter(dbPath);
@@ -86,20 +86,20 @@ describe("Storage.initialize", () => {
   test("custom dbPath works", () => {
     const dbPath = join(tmpDir, "custom", "session.db");
     initialize({ dbPath });
-    expect(Storage.getAdapter()).toBeInstanceOf(SqliteStorageAdapter);
+    expect(Storage.get()).toBeInstanceOf(SqliteStorageAdapter);
   });
 
   test("initializes an isolated storage scope even when the parent uses the same path", () => {
     const dbPath = join(tmpDir, ".openomni", "storage.db");
     initialize({ dbPath });
-    const parentAdapter = Storage.getAdapter();
+    const parentAdapter = Storage.get();
 
     Storage.withIsolation(() => {
       expect(() => initialize({ dbPath })).not.toThrow();
-      expect(Storage.getAdapter()).toBeInstanceOf(SqliteStorageAdapter);
-      expect(Storage.getAdapter()).not.toBe(parentAdapter);
+      expect(Storage.get()).toBeInstanceOf(SqliteStorageAdapter);
+      expect(Storage.get()).not.toBe(parentAdapter);
       expect(Storage.getInitializedDbPath()).toBe(dbPath);
-      Storage.getAdapter().session.set("isolated-session", {
+      Storage.get().session.set("isolated-session", {
         id: "isolated-session",
         title: "Isolated",
         model: { providerID: "test", modelID: "test" },
@@ -114,6 +114,6 @@ describe("Storage.initialize", () => {
   test("Storage.initialize is callable on the namespace", () => {
     expect(typeof Storage.initialize).toBe("function");
     Storage.initialize({ dbPath: join(tmpDir, ".openomni", "storage.db") });
-    expect(Storage.getAdapter()).toBeInstanceOf(SqliteStorageAdapter);
+    expect(Storage.get()).toBeInstanceOf(SqliteStorageAdapter);
   });
 });

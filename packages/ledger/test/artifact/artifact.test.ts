@@ -19,7 +19,7 @@ function makeMeta(overrides: Partial<ArtifactSchema.Meta> = {}): ArtifactSchema.
 }
 
 function seedSession(id: string): void {
-  Storage.getAdapter().session.set(id, {
+  Storage.get().session.set(id, {
     id,
     title: "test",
     model: { providerID: "test", modelID: "test" },

@@ -124,7 +124,7 @@ describe("session memory regression", () => {
   }, 30_000);
 
   test("storage adapter session CRUD does not leak", () => {
-    const adapter = Storage.getAdapter();
+    const adapter = Storage.get();
     const warmupSession = createSession(0);
     Session.remove(warmupSession.id, "trace-memory-regression");
     const baseline = measureRSS();

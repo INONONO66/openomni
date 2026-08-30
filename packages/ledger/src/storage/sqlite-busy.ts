@@ -34,6 +34,7 @@ export class StorageUnavailableError extends Error {
       `${store} storage busy: ${resourceId} — ${
         cause instanceof Error ? cause.message : String(cause)
       }`,
+      { cause },
     );
   }
 }

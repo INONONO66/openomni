@@ -79,7 +79,7 @@ describe("Session TTL", () => {
       expect(retrieved).toBeUndefined();
 
       // The row survives the read; no delete event fired.
-      const stillStored = Storage.getAdapter().session.get(session.id);
+      const stillStored = Storage.get().session.get(session.id);
       expect(stillStored).toBeDefined();
       await flushBus();
       expect(deleted).toEqual([]);
@@ -145,7 +145,7 @@ describe("Session TTL", () => {
       expect(sessions[0]?.id).toBe(activeSession.id);
 
       // list() is a pure read: the expired row survives until the sweep.
-      const stillStored = Storage.getAdapter().session.get(expiredSession.id);
+      const stillStored = Storage.get().session.get(expiredSession.id);
       expect(stillStored).toBeDefined();
       await flushBus();
       expect(deleted).toEqual([]);
@@ -194,7 +194,7 @@ describe("Session TTL", () => {
         expect(sessions.find((s) => s.id === expired1.id)).toBeUndefined();
         expect(sessions.find((s) => s.id === expired2.id)).toBeUndefined();
       }
-      expect(Storage.getAdapter().session.list().length).toBe(4);
+      expect(Storage.get().session.list().length).toBe(4);
     });
   });
 
@@ -228,9 +228,9 @@ describe("Session TTL", () => {
       expect(swept.map((s) => s.id)).toEqual([expired.id]);
       await flushBus();
       expect(deleted).toEqual([{ traceId: "trace-ttl-test", id: expired.id }]);
-      expect(Storage.getAdapter().session.get(expired.id)).toBeUndefined();
-      expect(Storage.getAdapter().session.get(active.id)).toBeDefined();
-      expect(Storage.getAdapter().session.get(noExpiry.id)).toBeDefined();
+      expect(Storage.get().session.get(expired.id)).toBeUndefined();
+      expect(Storage.get().session.get(active.id)).toBeDefined();
+      expect(Storage.get().session.get(noExpiry.id)).toBeDefined();
       unsub();
     });
 
@@ -261,7 +261,7 @@ describe("Session TTL", () => {
 
       // One row's removal fails (e.g. a corrupt cascade): the adapter's
       // session.remove throws only for that id.
-      const adapter = Storage.getAdapter();
+      const adapter = Storage.get();
       const originalRemove = adapter.session.remove;
       Storage.configure({
         ...adapter,
@@ -282,9 +282,9 @@ describe("Session TTL", () => {
       const swept = Session.sweepExpired("trace-ttl-test");
 
       expect(swept.map((s) => s.id)).toEqual([healthy.id]);
-      expect(Storage.getAdapter().session.get(healthy.id)).toBeUndefined();
-      expect(Storage.getAdapter().session.get(corrupt.id)).toBeDefined();
-      expect(Storage.getAdapter().session.get(active.id)).toBeDefined();
+      expect(Storage.get().session.get(healthy.id)).toBeUndefined();
+      expect(Storage.get().session.get(corrupt.id)).toBeDefined();
+      expect(Storage.get().session.get(active.id)).toBeDefined();
       await flushBus();
       expect(errors).toEqual([
         { component: "session", context: expect.objectContaining({ sessionId: corrupt.id }) },
@@ -301,7 +301,7 @@ describe("Session TTL", () => {
       });
 
       expect(Session.sweepExpired("trace-ttl-test")).toEqual([]);
-      expect(Storage.getAdapter().session.list().length).toBe(1);
+      expect(Storage.get().session.list().length).toBe(1);
     });
   });
 });

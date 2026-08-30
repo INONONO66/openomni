@@ -93,7 +93,7 @@ If a store method starts combining multiple product facts into an allow/deny/rou
 
 ## ANTI-PATTERNS
 
-- **Storage API tiers**: `Storage.get()` is the public low-level API for accessing sub-adapters such as `workItem` and `workerRunState` from outside this package. The interface keeps many capabilities optional so narrow test fakes are possible, but the branded production adapter must pass `Storage.assertComplete()` at configuration. For core session operations, prefer namespace APIs (`Session.*`, `Artifact.*`, `SurfaceKey.*`). `Storage.getAdapter()` is an internal alias; both return the same adapter.
+- **Storage API tiers**: `Storage.get()` is the public low-level API for accessing sub-adapters such as `workItem` and `workerRunState` from outside this package. The interface keeps many capabilities optional so narrow test fakes are possible, but the branded production adapter must pass `Storage.assertComplete()` at configuration. For core session operations, prefer namespace APIs (`Session.*`, `Artifact.*`, `SurfaceKey.*`).
 - Do NOT import internal paths from other packages — import from `@openomni/ledger` (index re-exports).
 - Do NOT persist ad-hoc delegated execution state alongside `Session`. `worker_run_state` is a frozen read-only archive; new writes use the canonical WorkItem attempt contract rather than reviving the legacy shape.
 - Do NOT write raw self-loop transcripts back into the original user session. Store internal work in child sessions and let `openomni` decide what distilled result belongs in the original session.

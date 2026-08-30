@@ -466,7 +466,7 @@ describe("WaitStore", () => {
   });
 
   test("waits survive adapter reconfiguration on the same database", () => {
-    const adapter = Storage.getAdapter();
+    const adapter = Storage.get();
     WaitStore.create(buildWaitCreate(), "trace-wait-store");
 
     Storage.configure(adapter);
