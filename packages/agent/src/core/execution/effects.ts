@@ -29,6 +29,17 @@ export function matchesToolPattern(toolName: string, pattern: string): boolean {
 }
 
 export namespace PolicyEffectApplier {
+  /** Builds one prompt.inject_message message, honoring the effect's role. */
+  function injectedMessage(
+    effect: Extract<Policy.PolicyDecision["effects"][number], { type: "prompt.inject_message" }>,
+    parentID: string,
+    sessionId: string,
+  ): Message.WithParts {
+    return effect.role === "assistant"
+      ? createAssistantMessage(effect.message, parentID, sessionId)
+      : createUserMessage(effect.message, sessionId, { policyInjected: true });
+  }
+
   export function continuationMessages(
     decision: Policy.PolicyDecision,
     sessionId: string,
@@ -38,10 +49,7 @@ export namespace PolicyEffectApplier {
     let assistantParentID = parentID;
     for (const effect of decision.effects) {
       if (effect.type === "prompt.inject_message") {
-        const message =
-          effect.role === "assistant"
-            ? createAssistantMessage(effect.message, assistantParentID, sessionId)
-            : createUserMessage(effect.message, sessionId, { policyInjected: true });
+        const message = injectedMessage(effect, assistantParentID, sessionId);
         messages.push(message);
         assistantParentID = message.info.id;
       } else if (effect.type === "run.continue_with_prompt") {
@@ -72,10 +80,7 @@ export namespace PolicyEffectApplier {
     let parentID = state.messages.at(-1)?.info.id ?? "";
     for (const effect of decision.effects) {
       if (effect.type === "prompt.inject_message") {
-        const message =
-          effect.role === "assistant"
-            ? createAssistantMessage(effect.message, parentID, state.sessionId)
-            : createUserMessage(effect.message, state.sessionId, { policyInjected: true });
+        const message = injectedMessage(effect, parentID, state.sessionId);
         messages.push(message);
         parentID = message.info.id;
       } else if (effect.type === "prompt.append_context") {
