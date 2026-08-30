@@ -60,25 +60,40 @@ const COMPLETE_JSON_SCHEMA: Record<string, unknown> = {
       type: "array",
       minItems: 1,
       description: "One judgment per criterion. Only verified admits.",
+      // Mirrors the Judgment discriminated union: an asserted judgment
+      // carries no check fields; verified/refuted require both.
       items: {
-        type: "object",
-        additionalProperties: false,
-        required: ["criterionId", "value"],
-        properties: {
-          criterionId: { type: "string", minLength: 1 },
-          value: { type: "string", enum: ["verified", "refuted", "asserted"] },
-          checkedPredicate: {
-            type: "string",
-            minLength: 1,
-            description: "What you actually checked (verified and refuted only).",
+        oneOf: [
+          {
+            type: "object",
+            additionalProperties: false,
+            required: ["criterionId", "value"],
+            properties: {
+              criterionId: { type: "string", minLength: 1 },
+              value: { type: "string", const: "asserted" },
+            },
           },
-          evidenceIds: {
-            type: "array",
-            minItems: 1,
-            items: { type: "string", minLength: 1 },
-            description: "Evidence ids the check consumed (verified and refuted only).",
+          {
+            type: "object",
+            additionalProperties: false,
+            required: ["criterionId", "value", "checkedPredicate", "evidenceIds"],
+            properties: {
+              criterionId: { type: "string", minLength: 1 },
+              value: { type: "string", enum: ["verified", "refuted"] },
+              checkedPredicate: {
+                type: "string",
+                minLength: 1,
+                description: "What you actually checked.",
+              },
+              evidenceIds: {
+                type: "array",
+                minItems: 1,
+                items: { type: "string", minLength: 1 },
+                description: "Evidence ids the check consumed.",
+              },
+            },
           },
-        },
+        ],
       },
     },
   },

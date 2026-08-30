@@ -63,7 +63,7 @@ export async function runDoctor(ports: DoctorPorts): Promise<DoctorReport> {
       checks.push({
         name: "linger",
         status: "warn",
-        detail: "disabled or unverifiable — daemon dies at logout; run `loginctl enable-linger`",
+        detail: "disabled — daemon dies at logout; run `loginctl enable-linger`",
       });
     }
   } else {
@@ -76,7 +76,9 @@ export async function runDoctor(ports: DoctorPorts): Promise<DoctorReport> {
 
   const rawPort = ports.effectiveEnv.get("OPENOMNI_WS_PORT");
   const port =
-    rawPort !== undefined && /^\d+$/.test(rawPort) && Number(rawPort) >= 1 ? Number(rawPort) : 3000;
+    rawPort !== undefined && /^\d+$/.test(rawPort) && Number(rawPort) >= 1 && Number(rawPort) <= 65_535
+      ? Number(rawPort)
+      : 3000;
   const healthy = await ports.probeHealth(port);
   if (healthy) {
     checks.push({ name: "health", status: "pass", detail: `http://127.0.0.1:${port}/health ok` });

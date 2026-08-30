@@ -120,6 +120,14 @@ export function openCuratedMemory(path: string): CuratedMemory {
     return { index, content: entry.content };
   }
 
+  // Fail here, not on the next load: a persisted empty entry would make
+  // every later FileShape.parse throw and brick the whole store.
+  function assertContent(content: string): void {
+    if (content.length === 0) {
+      throw new MemoryRefusal("entry content must be non-empty");
+    }
+  }
+
   function mintId(file: MemoryFile): string {
     let id = crypto.randomUUID().slice(0, 8);
     while (MEMORY_STORES.some((store) => file[store].some((entry) => entry.id === id))) {
@@ -130,6 +138,7 @@ export function openCuratedMemory(path: string): CuratedMemory {
 
   return {
     add(store, content) {
+      assertContent(content);
       const file = loadFile(path);
       assertBudget(store, usedChars(file[store]) + content.length);
       const id = mintId(file);
@@ -138,6 +147,7 @@ export function openCuratedMemory(path: string): CuratedMemory {
       return id;
     },
     replace(store, id, content) {
+      assertContent(content);
       const file = loadFile(path);
       const existing = entryAt(file, store, id);
       assertBudget(store, usedChars(file[store]) - existing.content.length + content.length);

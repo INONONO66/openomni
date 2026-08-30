@@ -110,10 +110,12 @@ export function admit(
   const trustedOrigin = parsedOrigin.data;
   const request = parsed.data;
 
-  if (context?.parentMissing === true) {
-    return refusal("parent_missing", `parent delegation ${trustedOrigin.parentDelegationId} does not exist`);
-  }
-  if (context !== undefined && trustedOrigin.parentDelegationId !== undefined && context.parent === undefined) {
+  if (
+    context?.parentMissing === true ||
+    (context !== undefined &&
+      trustedOrigin.parentDelegationId !== undefined &&
+      context.parent === undefined)
+  ) {
     return refusal("parent_missing", `parent delegation ${trustedOrigin.parentDelegationId} does not exist`);
   }
   if (

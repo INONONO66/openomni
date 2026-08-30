@@ -132,6 +132,12 @@ function launchdDomainTarget(target: DaemonTarget): string {
   return `gui/${target.uid}/${LAUNCHD_LABEL}`;
 }
 
+/** (Re)loads the launchd job: a previous generation may be loaded, so bootout is allowed to fail. */
+function launchdReload(target: DaemonTarget, io: DaemonIo): void {
+  io.exec(["launchctl", "bootout", launchdDomainTarget(target)]);
+  run(io, ["launchctl", "bootstrap", `gui/${target.uid}`, unitPath(target)]);
+}
+
 /** (Re)loads the service: idempotent, safe to run over an existing install. */
 export function daemonInstall(target: DaemonTarget, io: DaemonIo): string {
   const path = unitPath(target);
@@ -139,9 +145,7 @@ export function daemonInstall(target: DaemonTarget, io: DaemonIo): string {
     // launchd opens the configured log paths itself; missing parents kill the job at load.
     io.makeDir(dirname(logPath(target)));
     io.writeFile(path, renderLaunchdPlist(target));
-    // A previous generation may be loaded; bootout is allowed to fail.
-    io.exec(["launchctl", "bootout", launchdDomainTarget(target)]);
-    run(io, ["launchctl", "bootstrap", `gui/${target.uid}`, path]);
+    launchdReload(target, io);
     return `installed and started (launchd: ${path})`;
   }
   io.writeFile(path, renderSystemdUnit(target));
@@ -208,8 +212,7 @@ export function daemonStart(target: DaemonTarget, io: DaemonIo): string {
     throw new Error("not installed — run `openomni daemon install` first");
   }
   if (target.platform === "darwin") {
-    io.exec(["launchctl", "bootout", launchdDomainTarget(target)]);
-    run(io, ["launchctl", "bootstrap", `gui/${target.uid}`, path]);
+    launchdReload(target, io);
     return "started";
   }
   run(io, ["systemctl", "--user", "start", SYSTEMD_UNIT]);

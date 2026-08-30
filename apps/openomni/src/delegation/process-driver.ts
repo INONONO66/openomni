@@ -90,7 +90,18 @@ export function createProcessDriver(options: ProcessDriverOptions): DelegationDr
         if (resultLine.done) {
           return { status: "failed", error: "worker process exited without a result" };
         }
-        const parsed = ProcessWorkerResult.safeParse(JSON.parse(resultLine.value));
+        let resultJson: unknown;
+        try {
+          resultJson = JSON.parse(resultLine.value);
+        } catch {
+          // Without this guard a non-JSON line would surface as a generic
+          // failure from the outer catch instead of naming the bad output.
+          return {
+            status: "failed",
+            error: `worker process wrote a malformed result: ${resultLine.value}`,
+          };
+        }
+        const parsed = ProcessWorkerResult.safeParse(resultJson);
         if (!parsed.success) {
           return {
             status: "failed",
