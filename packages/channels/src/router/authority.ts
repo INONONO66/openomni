@@ -140,10 +140,10 @@ export namespace IngressAuthorityMiddleware {
    * mode). Only the authority check is real authorization: an unconditional
    * direct `Policy.evaluate` whose decision is fanned to the observer.
    * Schema and mode dispatch are pipeline mechanics — they throw directly
-   * and are not observed as policy decisions. The coordinator-presence check
-   * that historically ran here is brain machinery (worker-target deliveries
-   * need a coordinator) and lives in the brain's Deliver consumer since the
-   * #707 seam flip — same behavior, new home.
+   * and are not observed as policy decisions. The executor-presence check
+   * that historically ran here (worker-target deliveries need a live
+   * executor) moved to the app's Deliver consumer in the #707 seam flip —
+   * same behavior, new home.
    */
   export async function runRoutedPreRun(ctx: PreRunContext): Promise<PreRunResult> {
     // schema (fail-closed): the original ZodError is the abort surface.

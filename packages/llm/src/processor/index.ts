@@ -271,9 +271,8 @@ export namespace Processor {
                   });
                 }
                 // Abort classification reads the signal, not the error shape:
-                // production callers abort with a custom reason
-                // (controller.abort(new Error("cancelled by coordinator"))),
-                // so throwIfAborted() throws a plain Error that the
+                // a caller may abort with a custom reason (a plain Error), so
+                // throwIfAborted() throws a plain Error that the
                 // DOMException check alone misclassifies as "error" — hiding
                 // the turn from replay and marking in-flight tools as failed
                 // instead of interrupted.
