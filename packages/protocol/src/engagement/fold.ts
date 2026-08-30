@@ -115,7 +115,11 @@ function edgeAllowed(from: Schema.State, to: Schema.State): boolean {
   return (EDGES[from] ?? []).includes(to);
 }
 
-function apply(record: Schema.Record, input: TransitionInput, to: Schema.State): Schema.Record {
+function apply(
+  record: Schema.Record,
+  input: Readonly<{ at: number; waitIds?: string[] }>,
+  to: Schema.State,
+): Schema.Record {
   const openWaitIds = TERMINAL.has(to) ? [] : (input.waitIds ?? record.openWaitIds);
   return {
     ...record,
@@ -183,13 +187,7 @@ export function expire(record: Schema.Record, input: { at: number }): Outcome {
   }
   return {
     kind: "expired",
-    record: {
-      ...record,
-      state: "expired",
-      openWaitIds: [],
-      revision: record.revision + 1,
-      updatedAt: input.at,
-    },
+    record: apply(record, input, "expired"),
     from: record.state,
   };
 }
