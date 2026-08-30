@@ -31,12 +31,17 @@ export interface Emitter {
   /** A narrower scope — a child run or a delegated actor, same trace and span. */
   child(narrowing: ScopeNarrowing): Emitter;
 
+  /** Compatibility port for packages that accept the protocol's raw sink. */
+  readonly sink: BusEvent.Sink;
+
   readonly trace: TraceScope;
 }
 
 export interface ScopeOptions {
   /** Injectable clock. Tests pin it; production leaves it alone. */
   readonly now?: () => number;
+  /** Injectable event-id mint. Tests pin it; production leaves it alone. */
+  readonly newEventId?: () => string;
   /**
    * Called when a sink or a payload builder throws. Defaults to a console
    * warning.
@@ -68,6 +73,7 @@ export function scope(
   options: ScopeOptions = {},
 ): Emitter {
   const now = options.now ?? Date.now;
+  const newEventId = options.newEventId ?? (() => crypto.randomUUID());
   const onEmitError =
     options.onEmitError ??
     ((error, eventName) =>
@@ -89,7 +95,12 @@ export function scope(
       // Identity is spread last: a caller who casts past `EmitPayload` still
       // cannot forge a trace id. The cast is the one place TypeScript cannot
       // prove `Omit<T, K> & Pick<T, K>` reconstitutes `T` for a generic `T`.
-      const event = { ...build(), time: now(), ...from } as unknown as TPayload;
+      const event = {
+        ...build(),
+        eventId: newEventId(),
+        time: now(),
+        ...from,
+      } as unknown as TPayload;
       sink.publish(descriptor, event);
     } catch (error) {
       report(error, descriptor.name);
@@ -109,6 +120,17 @@ export function scope(
     }
   }
 
+  const scopedSink: BusEvent.Sink = {
+    publish(descriptor, data) {
+      publish(identity, descriptor as BusEvent.Descriptor<object>, () => {
+        if (data === null || typeof data !== "object" || Array.isArray(data)) {
+          throw new TypeError("scoped telemetry payload must be an object");
+        }
+        return data;
+      });
+    },
+  };
+
   return {
     emit(descriptor, payload) {
       publish(identity, descriptor, () => payload);
@@ -116,6 +138,7 @@ export function scope(
     child(narrowing) {
       return scope({ ...identity, ...narrowedFields(narrowing) }, sink, options);
     },
+    sink: scopedSink,
     trace: identity,
   };
 }
@@ -126,17 +149,32 @@ export function scope(
  * from `child({ traceId } as never)`. Reads are guarded because a hostile
  * accessor must not turn narrowing a scope into a way to stop a run.
  */
-const NARROWABLE = ["sessionId", "runId", "actorId", "agentName"] as const;
+const NARROWABLE = [
+  "sessionId",
+  "runId",
+  "actorId",
+  "agentName",
+  "componentId",
+  "componentGeneration",
+  "pluginName",
+  "pluginVersion",
+  "configRevision",
+] as const;
 
 function narrowedFields(narrowing: ScopeNarrowing): ScopeNarrowing {
-  const kept: Record<string, string> = {};
+  const kept: Record<string, string | number> = {};
   for (const field of NARROWABLE) {
     try {
       const value = narrowing[field];
-      if (typeof value === "string" && value.length > 0) kept[field] = value;
+      if (
+        (typeof value === "string" && value.length > 0) ||
+        (typeof value === "number" && Number.isInteger(value) && value >= 0)
+      ) {
+        kept[field] = value;
+      }
     } catch {
       // A throwing accessor drops its own field; the parent's value survives.
     }
   }
-  return kept;
+  return kept as ScopeNarrowing;
 }

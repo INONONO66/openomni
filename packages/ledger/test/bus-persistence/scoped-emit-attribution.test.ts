@@ -15,10 +15,10 @@ import "../../src/storage/initialize.js";
  *     `parsePayload` and `defaultResolveSessionId` attributes the row to that
  *     session — moving it out of the `session_id IS NULL` hash chain into the
  *     session's own.
- *   - `runId` / `actorId` / `agentName` are NOT declared, so zod strips them
- *     and `run_id` is written NULL even though the emitter knew the value.
- *     Populating it requires the descriptor to declare the field; the emitter
- *     cannot smuggle it past the schema.
+ *   - Collector-owned metadata such as `runId` / `actorId` / `agentName` is
+ *     validated independently and preserved even when a domain descriptor
+ *     does not redeclare it. Arbitrary undeclared payload fields still cannot
+ *     pass schema normalization.
  *   - A `sessionId` with no matching session row fails the `bus_event` foreign
  *     key, and the write is dropped with a warning rather than raised.
  *
@@ -26,9 +26,8 @@ import "../../src/storage/initialize.js";
  * and `Operational.Events.Info` are `ephemeral` and never persist. The agent core's
  * budget and retry reporting uses `Warn`, which does.
  *
- * Nothing emits through `scope()` in production yet. This pins the
- * consequences now, so the driver conversion (#606 Phase 1b) has to confront
- * them instead of changing ledger attribution silently.
+ * Resident and Worker runs emit through `scope()` in production, so this test
+ * pins the collector attribution contract.
  */
 interface BusEventRow {
   readonly session_id: string | null;
@@ -48,11 +47,8 @@ function rows(): BusEventRow[] {
 }
 
 async function settle(): Promise<void> {
-  for (let attempt = 0; attempt < 10; attempt += 1) {
-    await new Promise((resolve) => queueMicrotask(resolve));
-    await BusPersistence.flush();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  }
+  await new Promise<void>((resolve) => queueMicrotask(resolve));
+  await BusPersistence.flush();
 }
 
 describe("scoped emit attribution", () => {
@@ -68,7 +64,7 @@ describe("scoped emit attribution", () => {
     Storage.reset();
   });
 
-  test("declared identity is attributed; undeclared identity is dropped", async () => {
+  test("scoped identity is attributed independently of the domain schema", async () => {
     const session = Session.create({
       traceId: newTraceId(),
       title: "scoped emit",
@@ -91,7 +87,7 @@ describe("scoped emit attribution", () => {
     expect(persisted.map((row) => row.event_type)).toEqual([Operational.Events.Warn.name]);
     expect(persisted[0]?.trace_id).toBe(traceId);
     expect(persisted[0]?.session_id).toBe(session.id);
-    expect(persisted[0]?.run_id).toBeNull();
+    expect(persisted[0]?.run_id).toBe("run-attr");
   });
 
   test("a session id with no session row drops the write instead of raising", async () => {

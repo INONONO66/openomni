@@ -22,6 +22,11 @@ export interface TraceScope {
   readonly runId: string;
   readonly actorId?: string;
   readonly agentName?: string;
+  readonly componentId?: string;
+  readonly componentGeneration?: number;
+  readonly pluginName?: string;
+  readonly pluginVersion?: string;
+  readonly configRevision?: number;
 }
 
 const TRACE_ID_PATTERN = /^[0-9a-f]{32}$/;
@@ -92,6 +97,7 @@ export function fromTraceparent(
 
 /** Fields an emitter supplies. Never accepted from a payload. */
 const TRACE_FIELDS = [
+  "eventId",
   "traceId",
   "spanId",
   "parentSpanId",
@@ -99,6 +105,11 @@ const TRACE_FIELDS = [
   "runId",
   "actorId",
   "agentName",
+  "componentId",
+  "componentGeneration",
+  "pluginName",
+  "pluginVersion",
+  "configRevision",
 ] as const;
 
 type TraceField = (typeof TRACE_FIELDS)[number];
@@ -124,6 +135,11 @@ export interface TraceScopeInput {
   readonly runId?: string;
   readonly actorId?: string;
   readonly agentName?: string;
+  readonly componentId?: string;
+  readonly componentGeneration?: number;
+  readonly pluginName?: string;
+  readonly pluginVersion?: string;
+  readonly configRevision?: number;
 }
 
 /**
@@ -147,6 +163,27 @@ export function requireTraceScope(input: TraceScopeInput): TraceScope {
   }
   if (nonEmpty(input.sessionId) === undefined) problems.push("sessionId is required");
   if (nonEmpty(input.runId) === undefined) problems.push("runId is required");
+  if (input.componentId !== undefined && nonEmpty(input.componentId) === undefined) {
+    problems.push("componentId must be non-empty");
+  }
+  if (
+    input.componentGeneration !== undefined &&
+    (!Number.isInteger(input.componentGeneration) || input.componentGeneration < 0)
+  ) {
+    problems.push("componentGeneration must be a non-negative integer");
+  }
+  if (input.pluginName !== undefined && nonEmpty(input.pluginName) === undefined) {
+    problems.push("pluginName must be non-empty");
+  }
+  if (input.pluginVersion !== undefined && nonEmpty(input.pluginVersion) === undefined) {
+    problems.push("pluginVersion must be non-empty");
+  }
+  if (
+    input.configRevision !== undefined &&
+    (!Number.isInteger(input.configRevision) || input.configRevision < 0)
+  ) {
+    problems.push("configRevision must be a non-negative integer");
+  }
   if (problems.length > 0) throw new InvalidTraceScopeError(problems);
 
   return {
@@ -157,6 +194,19 @@ export function requireTraceScope(input: TraceScopeInput): TraceScope {
     runId: input.runId as string,
     ...(nonEmpty(input.actorId) === undefined ? {} : { actorId: input.actorId as string }),
     ...(nonEmpty(input.agentName) === undefined ? {} : { agentName: input.agentName as string }),
+    ...(nonEmpty(input.componentId) === undefined
+      ? {}
+      : { componentId: input.componentId as string }),
+    ...(input.componentGeneration === undefined
+      ? {}
+      : { componentGeneration: input.componentGeneration }),
+    ...(nonEmpty(input.pluginName) === undefined
+      ? {}
+      : { pluginName: input.pluginName as string }),
+    ...(nonEmpty(input.pluginVersion) === undefined
+      ? {}
+      : { pluginVersion: input.pluginVersion as string }),
+    ...(input.configRevision === undefined ? {} : { configRevision: input.configRevision }),
   };
 }
 

@@ -1,6 +1,6 @@
 import { ChatAgent, type ChatAgentConfig } from "@openomni/agent";
-import type { Model } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
+import { newTraceId, type Model } from "@openomni/protocol";
+import { observeComponent } from "../observation/component";
 import { buildAgentPrompt } from "../prompt/build";
 import { WORKER_PRESET } from "../prompt/roles";
 import { catalogEntries } from "../tools/catalog";
@@ -29,18 +29,6 @@ export function createInlineWorkerRunner(options: WorkerLoopOptions): InlineWork
   return async (input) => {
     const catalog = createDispatcher(catalogEntries({ delegation: options.kernel() }, input.origin));
 
-    const agent = ChatAgent.create({
-      events: Bus,
-      systemPrompt: buildAgentPrompt(WORKER_PRESET),
-      tools: catalog.specs,
-      toolTargets: [HOST_TARGET],
-      toolExecutor: catalog.execute,
-      model: options.model,
-      auth: { type: "api", key: options.apiKey },
-      signal: input.signal,
-      ...(options.llm === undefined ? {} : { llm: options.llm }),
-    });
-
     const messages: Array<{ role: "user" | "assistant"; content: string; time: number }> = [
       {
         role: "user",
@@ -48,7 +36,7 @@ export function createInlineWorkerRunner(options: WorkerLoopOptions): InlineWork
         time: Date.now(),
       },
     ];
-    const traceId = crypto.randomUUID();
+    const traceId = newTraceId();
     const sessionId = `delegation-${input.delegationId}`;
 
     // Assigned work is driven goal-style (drive-loop.ts); ask/notify runs
@@ -58,10 +46,34 @@ export function createInlineWorkerRunner(options: WorkerLoopOptions): InlineWork
     for (;;) {
       // Each driven run is its own run identity so telemetry never conflates
       // two agent runs under one runId.
-      const result = await agent.run({
-        messages,
-        traceContext: { traceId, sessionId, runId: crypto.randomUUID(), agentName: "worker" },
+      const runId = crypto.randomUUID();
+      const observation = observeComponent({
+        traceId,
+        sessionId,
+        runId,
+        actorId: "worker",
+        agentName: "worker",
+        componentId: "worker.agent",
+        componentGeneration: state.runs + 1,
+        pluginName: "builtin.worker",
       });
+      const agent = ChatAgent.create({
+        events: observation.events,
+        systemPrompt: buildAgentPrompt(WORKER_PRESET),
+        tools: catalog.specs,
+        toolTargets: [HOST_TARGET],
+        toolExecutor: catalog.execute,
+        model: options.model,
+        auth: { type: "api", key: options.apiKey },
+        signal: input.signal,
+        ...(options.llm === undefined ? {} : { llm: options.llm }),
+      });
+      const result = await observation.run(() =>
+        agent.run({
+          messages,
+          traceContext: { traceId, sessionId, runId, agentName: "worker" },
+        }),
+      );
       tokens += result.usage.totalTokens;
       if (input.operation !== "assign") return { text: result.text, tokens };
       const decision = decideDrive(state, {

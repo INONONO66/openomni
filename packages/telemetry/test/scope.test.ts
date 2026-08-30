@@ -24,12 +24,13 @@ const clock = () => 1_700_000_000_000;
 describe("telemetry scope", () => {
   test("supplies identity and time so a payload cannot carry them", () => {
     const sink = collector();
-    const log = scope(TRACE, sink, { now: clock });
+    const log = scope(TRACE, sink, { now: clock, newEventId: () => "event-1" });
 
     log.emit(Operational.Events.Info, { component: "test", msg: "hello" });
 
     expect(sink.named(Operational.Events.Info.name)).toEqual([
       {
+        eventId: "event-1",
         time: clock(),
         component: "test",
         msg: "hello",
@@ -38,6 +39,51 @@ describe("telemetry scope", () => {
         sessionId: "session-1",
         runId: "run-1",
         actorId: "actor-1",
+      },
+    ]);
+  });
+
+  test("exposes a normalized sink with event and component identity", () => {
+    const sink = collector();
+    const log = scope(
+      {
+        ...TRACE,
+        componentId: "resident.agent",
+        componentGeneration: 3,
+        pluginName: "builtin.resident",
+        pluginVersion: "1.0.0",
+        configRevision: 7,
+      },
+      sink,
+      { now: clock, newEventId: () => "event-1" },
+    );
+
+    log.sink.publish(
+      Operational.Events.Info,
+      {
+        traceId: "forged",
+        time: 1,
+        component: "agent",
+        msg: "started",
+      } as never,
+    );
+
+    expect(sink.named(Operational.Events.Info.name)).toEqual([
+      {
+        traceId: TRACE_ID,
+        spanId: SPAN_ID,
+        sessionId: "session-1",
+        runId: "run-1",
+        actorId: "actor-1",
+        componentId: "resident.agent",
+        componentGeneration: 3,
+        pluginName: "builtin.resident",
+        pluginVersion: "1.0.0",
+        configRevision: 7,
+        eventId: "event-1",
+        time: 1_700_000_000_000,
+        component: "agent",
+        msg: "started",
       },
     ]);
   });

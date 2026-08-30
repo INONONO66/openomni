@@ -7,6 +7,7 @@ export * from "./bus/index.js";
 export * from "./event/llm.js";
 export * from "./event/mcp.js";
 export * from "./event/operational.js";
+export * from "./event/component.js";
 export * from "./mcp/index.js";
 export * from "./channel/index.js";
 export * from "./actor/index.js";

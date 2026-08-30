@@ -1,3 +1,4 @@
+import { BusEvent } from "@openomni/protocol";
 import type { Bus } from "@openomni/telemetry";
 
 interface SafeParseSuccess {
@@ -35,11 +36,21 @@ export function parsePayload(event: Bus.PublishedDescriptor, payload: unknown): 
       return { value: payload, status: "parse_failed", diagnostic: "schema parser result invalid" };
     }
     return result.success
-      ? { value: result.data, status: "valid" }
+      ? { value: preserveMetadata(payload, result.data), status: "valid" }
       : { value: payload, status: "invalid", diagnostic: "schema validation failed" };
   } catch {
     return { value: payload, status: "parse_failed", diagnostic: "schema parser threw" };
   }
+}
+
+function preserveMetadata(payload: unknown, normalized: unknown): unknown {
+  const metadata = BusEvent.Metadata.safeParse(payload);
+  if (!metadata.success) return normalized;
+  const record =
+    normalized !== null && typeof normalized === "object" && !Array.isArray(normalized)
+      ? normalized
+      : undefined;
+  return record === undefined ? normalized : { ...record, ...metadata.data };
 }
 
 function toSafeParseSchema(schema: unknown): SafeParseSchema | undefined {
