@@ -34,7 +34,6 @@ const canonicalPolicyRequiredFiles = new Set([
   "packages/channels/src/router/authority.ts",
   "packages/channels/src/authn/decision.ts",
 ]);
-const approvedAuthorizationFiles = new Set<string>([]);
 
 const listMembershipPattern = /\b(?:denylist|allowlist)\s*\??\.\s*includes\s*\(/g;
 const channelNormalizerTriggerPattern = /\bevaluateTriggers\s*\(/g;
@@ -112,11 +111,7 @@ const policyPackageBoundaryPattern =
  * lint-side-effects.ts's "Missing hot file" guard).
  */
 async function verifyPinnedFilesExist(): Promise<void> {
-  const pinned = [
-    ...canonicalPolicyEvaluator,
-    ...canonicalPolicyRequiredFiles,
-    ...approvedAuthorizationFiles,
-  ];
+  const pinned = [...canonicalPolicyEvaluator, ...canonicalPolicyRequiredFiles];
   for (const filePath of pinned) {
     if (!(await Bun.file(filePath).exists())) {
       throw new Error(
@@ -232,10 +227,6 @@ function validateListMembership(filePath: string, source: string): GuardViolatio
 }
 
 function validateInlineAuthorization(filePath: string, source: string): GuardViolation[] {
-  if (approvedAuthorizationFiles.has(filePath)) {
-    return [];
-  }
-
   return inlineAuthorizationThrowPatterns.flatMap((pattern) =>
     matches(source, pattern).map((match) => ({
       ruleId: "inline-authorization-throw",
@@ -261,7 +252,15 @@ function validatePolicyPackageBoundary(filePath: string, source: string): GuardV
 }
 
 function validateRunReasonCodeVocabulary(filePath: string, source: string): GuardViolation[] {
-  if (filePath === runReasonCodeSource || !filePath.includes("/src/")) return [];
+  // Test files are the pin layer (see the vocabulary comment above), so a
+  // co-located src test is excluded structurally, not by convention.
+  if (
+    filePath === runReasonCodeSource ||
+    !filePath.includes("/src/") ||
+    filePath.endsWith(".test.ts")
+  ) {
+    return [];
+  }
 
   return [
     ...matches(source, runReasonCodeLiteralPattern),

@@ -150,9 +150,8 @@ async function runKnip(): Promise<KnipReport> {
 }
 
 function readBaseline(): DeadExportBaseline {
-  // An empty baseline is `{}`: once the last grandfathered entry resolves,
-  // the removals-only shrink cannot leave an empty array literal behind
-  // without an added line, so the key simply disappears.
+  // Tolerate a missing key: `--update` always writes the `grandfathered`
+  // array (empty or not), but a hand-minimized `{}` baseline is still valid.
   const parsed = JSON.parse(readFileSync(BASELINE_PATH, "utf8")) as Partial<DeadExportBaseline>;
   return { grandfathered: parsed.grandfathered ?? [] };
 }

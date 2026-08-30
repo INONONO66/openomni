@@ -6,15 +6,14 @@ type PackageRule = {
   packageJsonPath: string;
   packageName: string;
   allowedDeps: "none" | "any-except-self" | Set<string>;
-  forbiddenDeps?: Set<string>;
   srcAllowedDeps?: Set<string>;
 };
 
 const SHOW_FIX_SUGGESTIONS = Bun.argv.includes("--fix-suggestions");
 
-// Known deep import violations (tracked tech debt — do not extend)
-const KNOWN_DEEP_IMPORTS = new Set<string>();
-const KNOWN_DEEP_RELATIVE_IMPORTS = new Set<string>();
+/** Barrel-only cross-package import specifier, shared by both direction checks. */
+const openomniBarrelImportPattern = () =>
+  /(?:from\s+|import\s+|import\s*\(\s*)["'](@openomni\/[^"'/]+)(?:\/[^"']*)?["']/g;
 
 const RULES = Object.fromEntries(
   TOPOLOGY.map((workspace: WorkspaceTopology) => [
@@ -49,7 +48,6 @@ function isAllowedSourceDep(rule: PackageRule, dep: string): boolean {
 }
 
 function isAllowedDep(rule: PackageRule, dep: string): boolean {
-  if (rule.forbiddenDeps?.has(dep)) return false;
   if (!dep.startsWith("@openomni/")) {
     return true;
   }
@@ -190,8 +188,7 @@ async function validateSourceImportDirection(): Promise<string[]> {
     rule,
     srcPrefix: `${packageDirOf(rule)}/src/`,
   }));
-  const importPattern =
-    /(?:from\s+|import\s+|import\s*\(\s*)["'](@openomni\/[^"'/]+)(?:\/[^"']*)?["']/g;
+  const importPattern = openomniBarrelImportPattern();
   const sourceGlob = new Glob("**/*.ts");
 
   for await (const filePath of sourceGlob.scan({
@@ -364,8 +361,7 @@ function channelsRouterLedgerViolations(filePath: string, source: string): strin
 
 async function validateChannelsIntraPackageBanding(): Promise<string[]> {
   const violations: string[] = [];
-  const importPattern =
-    /(?:from\s+|import\s+|import\s*\(\s*)["'](@openomni\/[^"'/]+)(?:\/[^"']*)?["']/g;
+  const importPattern = openomniBarrelImportPattern();
   const relativeImportPattern = /(?:from\s+|import\s+|import\s*\(\s*)["'](\.{1,2}\/[^"']*)["']/g;
   const sourceGlob = new Glob(`${CHANNELS_SRC_PREFIX}**/*.ts`);
 
@@ -408,7 +404,7 @@ async function validateChannelsIntraPackageBanding(): Promise<string[]> {
 async function validateDeepImports(): Promise<string[]> {
   const violations: string[] = [];
   // Matches both `from "@openomni/.../src/..."` and side-effect `import "@openomni/.../src/..."`
-  const importPattern = /(?:from\s+|import\s+)["'](@openomni\/[^"']+\/src\/[^"']*)["']/g;
+  const importPattern = /(?:from\s+|import\s+|import\s*\(\s*)["'](@openomni\/[^"']+\/src\/[^"']*)["']/g;
   const sourceGlob = new Glob("**/*.ts");
 
   for await (const filePath of sourceGlob.scan({
@@ -429,14 +425,9 @@ async function validateDeepImports(): Promise<string[]> {
       // string | undefined from noUncheckedIndexedAccess, nothing more.
       if (!importPath) continue;
       const line = lineNumberForOffset(source, match.index);
-      const isKnown = KNOWN_DEEP_IMPORTS.has(`${filePath}:${importPath}`);
-      const prefix = isKnown ? "KNOWN" : "VIOLATION";
-      const base = `${prefix}: ${filePath}:${line} imports ${importPath} — use package barrel instead`;
+      const base = `VIOLATION: ${filePath}:${line} imports ${importPath} — use package barrel instead`;
 
-      if (isKnown) {
-        // Print but don't count as violation
-        console.warn(base);
-      } else if (SHOW_FIX_SUGGESTIONS) {
+      if (SHOW_FIX_SUGGESTIONS) {
         const suggested = suggestBarrelImport(importPath);
         violations.push(`${base} (suggestion: ${suggested})`);
       } else {
@@ -471,7 +462,6 @@ async function validateDeepRelativeImports(): Promise<string[]> {
       // string | undefined from noUncheckedIndexedAccess, nothing more.
       if (!importPath) continue;
       const line = lineNumberForOffset(source, match.index);
-      const key = `${filePath}:${importPath}`;
       const isSelfRootImport = importPath.startsWith("../../src/");
       const isDeepRelativeImport = parentTraversalDepth(importPath) >= 3;
 
@@ -479,16 +469,10 @@ async function validateDeepRelativeImports(): Promise<string[]> {
         continue;
       }
 
-      const isKnown = KNOWN_DEEP_RELATIVE_IMPORTS.has(key);
-      const prefix = isKnown ? "KNOWN" : "VIOLATION";
       const reason = isSelfRootImport ? "self-root relative import" : "deep relative import";
-      const base = `${prefix}: ${filePath}:${line} imports ${importPath} — ${reason}; use a closer relative import or a domain barrel`;
-
-      if (isKnown) {
-        console.warn(base);
-      } else {
-        violations.push(base);
-      }
+      violations.push(
+        `VIOLATION: ${filePath}:${line} imports ${importPath} — ${reason}; use a closer relative import or a domain barrel`,
+      );
     }
   }
 
@@ -500,13 +484,6 @@ async function validateDeepRelativeImports(): Promise<string[]> {
 // Allowed `as any` locations (pre-existing tech debt — do not extend).
 // protocol/error was removed 2026-08 (#552 item 5): zero remaining hits.
 const ALLOWED_AS_ANY_FILES = new Set(["packages/agent/src/runtime/messenger/transport.ts"]);
-
-// Known catch-all filenames (pre-existing tech debt)
-const KNOWN_CATCHALL_FILES = new Set<string>();
-
-// Known empty catch blocks (pre-existing tech debt — do not extend)
-// Keyed by "file:line" to track exact locations.
-const KNOWN_EMPTY_CATCHES = new Set<string>();
 
 async function validateGoldenPrinciples(): Promise<string[]> {
   const violations: string[] = [];
@@ -551,14 +528,9 @@ async function validateGoldenPrinciples(): Promise<string[]> {
     let emptyCatchMatch = emptyCatchPattern.exec(source);
     while (emptyCatchMatch !== null) {
       const catchLine = lineNumberForOffset(source, emptyCatchMatch.index);
-      const key = `${filePath}:${catchLine}`;
-      if (KNOWN_EMPTY_CATCHES.has(key)) {
-        console.warn(`KNOWN: ${key} — empty catch block (tracked tech debt)`);
-      } else {
-        violations.push(
-          `VIOLATION: ${filePath}:${catchLine} — empty catch block detected. See docs/golden-principles.local.md #5`,
-        );
-      }
+      violations.push(
+        `VIOLATION: ${filePath}:${catchLine} — empty catch block detected. See docs/golden-principles.local.md #5`,
+      );
       emptyCatchMatch = emptyCatchPattern.exec(source);
     }
 
@@ -566,8 +538,7 @@ async function validateGoldenPrinciples(): Promise<string[]> {
     const basename = filePath.split("/").pop() ?? "";
     if (
       /^(utils|helpers|common|service)\.ts$/.test(basename) &&
-      filePath.includes("/src/") &&
-      !KNOWN_CATCHALL_FILES.has(filePath)
+      filePath.includes("/src/")
     ) {
       violations.push(
         `VIOLATION: ${filePath} — catch-all filename detected. See docs/golden-principles.local.md #7`,
@@ -620,14 +591,7 @@ async function checkDocFreshness(): Promise<string[]> {
     }
 
     try {
-      const output = await gitOutput(["log", "--oneline", "HEAD", "--", docPath]);
-      const totalCommits = output.trim().split("\n").filter(Boolean).length;
-      if (totalCommits === 0) {
-        // File exists but has no git history (untracked or new)
-        continue;
-      }
-
-      // Count commits since last modification of this file
+      // Empty hash means no git history (untracked or new file).
       const lastTouchHash = (
         await gitOutput(["log", "-1", "--format=%H", "--", docPath])
       ).trim();

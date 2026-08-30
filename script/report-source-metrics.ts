@@ -67,7 +67,9 @@ async function runGit(args: string[]): Promise<string> {
 }
 
 async function main(): Promise<void> {
-  const trackedFiles = (await runGit(["ls-files"])).split("\n").filter(Boolean);
+  // -z: NUL-separated output — git C-quotes special-character paths
+  // otherwise, and the quoted string is not a readable path.
+  const trackedFiles = (await runGit(["ls-files", "-z"])).split("\0").filter(Boolean);
   const commit = (await runGit(["rev-parse", "HEAD"])).trim();
 
   const units: Record<string, { files: number; loc: number }> = {};

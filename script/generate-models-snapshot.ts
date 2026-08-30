@@ -16,8 +16,10 @@ const catalog = (await response.json()) as Record<string, Record<string, unknown
 const subset: Record<string, unknown> = {};
 for (const providerID of BUNDLED_PROVIDERS) {
   const provider = catalog[providerID];
-  if (!provider) {
-    console.error(`[generate-models-snapshot] provider missing from catalog: ${providerID}`);
+  if (!provider || typeof provider.models !== "object" || provider.models === null) {
+    console.error(
+      `[generate-models-snapshot] provider missing or has no models in catalog: ${providerID}`,
+    );
     process.exit(1);
   }
   const models: Record<string, unknown> = {};
