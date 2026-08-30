@@ -34,6 +34,9 @@ export async function gatherOnboarding(ask: Ask): Promise<readonly EnvEntry[]> {
   const provider = await askRequired(ask, "Model provider (anthropic | openai)", {
     fallback: "anthropic",
   });
+  if (provider !== "anthropic" && provider !== "openai") {
+    throw new Error(`Model provider must be "anthropic" or "openai", got "${provider}"`);
+  }
   const modelId = await askRequired(ask, "Model id");
   const apiKey = await askRequired(ask, "Model API key", { secret: true });
   const port = await askRequired(ask, "WebSocket port", { fallback: "3000" });

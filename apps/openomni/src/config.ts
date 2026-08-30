@@ -104,18 +104,32 @@ const Actors = z
   )
   .min(1);
 
+/** Reads an env var holding JSON, naming the variable on both parse and schema failure. */
+function parseEnvJson<T>(
+  name: string,
+  schema: { safeParse: (value: unknown) => { success: true; data: T } | { success: false; error: z.ZodError } },
+): T | undefined {
+  const raw = process.env[name]?.trim();
+  if (raw === undefined || raw.length === 0) return undefined;
+  let json: unknown;
+  try {
+    json = JSON.parse(raw);
+  } catch (error) {
+    throw new Error(`${name} is invalid JSON: ${String(error)}`);
+  }
+  const parsed = schema.safeParse(json);
+  if (!parsed.success) {
+    throw new Error(`${name} is invalid: ${parsed.error.issues[0]?.message}`);
+  }
+  return parsed.data;
+}
+
 /**
  * Like enrollment, actor admission is the Owner's decision read from config:
  * who may be delegated to is never inferred from whoever connects.
  */
 function actorsFromEnv(): OpenOmniConfig["actors"] {
-  const raw = process.env.OPENOMNI_ACTORS?.trim();
-  if (raw === undefined || raw.length === 0) return undefined;
-  const parsed = Actors.safeParse(JSON.parse(raw));
-  if (!parsed.success) {
-    throw new Error(`OPENOMNI_ACTORS is invalid: ${parsed.error.issues[0]?.message}`);
-  }
-  return parsed.data;
+  return parseEnvJson("OPENOMNI_ACTORS", Actors);
 }
 
 function channelsFromEnv(): OpenOmniConfig["channels"] {
@@ -141,13 +155,7 @@ function channelsFromEnv(): OpenOmniConfig["channels"] {
 }
 
 function socialBudgetsFromEnv(): OpenOmniConfig["socialBudgets"] {
-  const raw = process.env.OPENOMNI_SOCIAL_BUDGETS?.trim();
-  if (raw === undefined || raw.length === 0) return undefined;
-  const parsed = SocialBudgets.safeParse(JSON.parse(raw));
-  if (!parsed.success) {
-    throw new Error(`OPENOMNI_SOCIAL_BUDGETS is invalid: ${parsed.error.issues[0]?.message}`);
-  }
-  return parsed.data;
+  return parseEnvJson("OPENOMNI_SOCIAL_BUDGETS", SocialBudgets);
 }
 
 /**
@@ -156,17 +164,12 @@ function socialBudgetsFromEnv(): OpenOmniConfig["socialBudgets"] {
  * later slice; the shape the host consumes is already the protocol's.
  */
 function machinesFromEnv(): OpenOmniConfig["machines"] {
-  const raw = process.env.OPENOMNI_MACHINES_ENROLLED?.trim();
-  if (raw === undefined || raw.length === 0) return undefined;
-
-  const parsed = Enrollments.safeParse(JSON.parse(raw));
-  if (!parsed.success) {
-    throw new Error(`OPENOMNI_MACHINES_ENROLLED is invalid: ${parsed.error.issues[0]?.message}`);
-  }
+  const enrolled = parseEnvJson("OPENOMNI_MACHINES_ENROLLED", Enrollments);
+  if (enrolled === undefined) return undefined;
   return {
     socketPath:
       process.env.OPENOMNI_MACHINES_SOCKET?.trim() || join(homedir(), ".openomni", "machines.sock"),
-    enrolled: parsed.data,
+    enrolled,
   };
 }
 

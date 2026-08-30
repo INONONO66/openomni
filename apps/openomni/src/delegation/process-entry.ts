@@ -96,6 +96,8 @@ function processWorkerRun(
     instruction: request.instruction,
     acceptanceCriteria: request.acceptanceCriteria,
     origin: request.origin,
+    // Never fires by design: process-level cancellation is the driver
+    // killing this worker process, not an in-band abort.
     signal: new AbortController().signal,
   });
 }

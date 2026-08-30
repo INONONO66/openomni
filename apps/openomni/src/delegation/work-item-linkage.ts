@@ -134,10 +134,10 @@ export function createWorkItemLinkage(options: WorkItemLinkageOptions): WorkItem
 
   async function closeAttempt(input: CloseAttemptInput): Promise<void> {
     const { record, settlement } = input;
+    if (record.workItemId === undefined || settlement.status === "sent") return;
     // Spend rides the durable settlement itself, so a restart-sweep re-close
     // recovers the same tokens the live fold would have recorded.
     const tokens = settlement.status === "completed" ? settlement.usage?.tokens : undefined;
-    if (record.workItemId === undefined || settlement.status === "sent") return;
     const item = await WorkItemStore.get(record.workItemId);
     // Unknown item: a legacy record upcast points at nothing durable — no-op.
     if (item === undefined || item.attemptTerminal !== undefined) return;

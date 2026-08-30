@@ -38,12 +38,16 @@ export function parseEnvFile(text: string): ReadonlyMap<string, string> {
   return entries;
 }
 
-function unquote(value: string): string {
-  const quoted =
+function isQuoted(value: string): boolean {
+  return (
     value.length >= 2 &&
     ((value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'")));
-  return quoted ? value.slice(1, -1) : value;
+      (value.startsWith("'") && value.endsWith("'")))
+  );
+}
+
+function unquote(value: string): string {
+  return isQuoted(value) ? value.slice(1, -1) : value;
 }
 
 export function renderEnvFile(entries: readonly EnvEntry[]): string {
@@ -56,11 +60,9 @@ export function renderEnvFile(entries: readonly EnvEntry[]): string {
     }
     // Round-trip: a value the parser would unquote gets one protective
     // quote layer, so `"secret"` reads back as `"secret"`, not `secret`.
-    const wouldUnquote =
-      entry.value.length >= 2 &&
-      ((entry.value.startsWith('"') && entry.value.endsWith('"')) ||
-        (entry.value.startsWith("'") && entry.value.endsWith("'")));
-    const value = wouldUnquote ? `"${entry.value}"` : entry.value;
+    // Edge whitespace gets the same layer — the parser trims bare values.
+    const value =
+      isQuoted(entry.value) || /^\s|\s$/.test(entry.value) ? `"${entry.value}"` : entry.value;
     return `${entry.key}=${value}`;
   });
   return `${lines.join("\n")}\n`;
