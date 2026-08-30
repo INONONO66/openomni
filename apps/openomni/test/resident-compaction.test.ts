@@ -56,11 +56,12 @@ function addStoredMessage(sessionId: string, index: number): void {
 }
 
 function delivery(sessionId: string): Gateway.Deliver {
+  const traceId = "0af7651916cd43dd8448eb211c80319c";
   return {
     sessionId,
     event: {
       id: "inbound-compaction",
-      traceId: "trace-resident-compaction",
+      traceId,
       surface: "internal",
       userId: "owner",
       payload: "new resident question",
@@ -68,7 +69,7 @@ function delivery(sessionId: string): Gateway.Deliver {
       mode: "direct",
     },
     decision: {
-      traceId: "trace-resident-compaction",
+      traceId,
       time: Date.now(),
       inboundId: "inbound-compaction",
       surface: "internal",

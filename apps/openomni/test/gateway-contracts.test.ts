@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { RunInput, Sink } from "@openomni/llm";
 import { ActorRegistry, Session, Storage } from "@openomni/ledger";
-import { Gateway, type Message } from "@openomni/protocol";
+import { Gateway, type Message, newTraceId } from "@openomni/protocol";
 import { createResidentGateway } from "../src/gateway";
 import { openCuratedMemory } from "../src/memory/store";
 import { createResident } from "../src/resident";
@@ -20,6 +20,9 @@ const ASSISTANT_MESSAGE_OPTIONS = {
 let directory: string;
 
 function evidenceDelivery(payload: string): Gateway.Deliver {
+  // The Resident's component observation requires a W3C trace id, exactly as
+  // every production channel driver mints via newTraceId().
+  const traceId = newTraceId();
   return Gateway.Deliver.parse({
     sessionId: "session:evidence",
     actorContext: {
@@ -30,7 +33,7 @@ function evidenceDelivery(payload: string): Gateway.Deliver {
     },
     event: {
       id: "inbound:evidence",
-      traceId: "trace:evidence",
+      traceId,
       surface: "ws",
       userId: "observer",
       payload,
@@ -38,7 +41,7 @@ function evidenceDelivery(payload: string): Gateway.Deliver {
       meta: { inboundTreatment: "evidence_only" },
     },
     decision: {
-      traceId: "trace:evidence",
+      traceId,
       time: NOW,
       inboundId: "inbound:evidence",
       surface: "ws",

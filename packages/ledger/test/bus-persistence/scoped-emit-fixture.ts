@@ -1,10 +1,8 @@
 /**
  * Local binding of a scoped emitter onto the Bus.
  *
- * `@openomni/telemetry` deliberately ships no `busSink()` — an abstraction is
- * earned by its second consumer, and the first production one lands with the
- * driver conversion (#606 Phase 1b). This fixture is that binding for the one
- * attribution test that needs it.
+ * The fixture keeps Bus isolation explicit while production uses
+ * `scope(..., Bus).sink`.
  */
 import { Bus } from "@openomni/telemetry";
 import type { BusEvent } from "@openomni/protocol";

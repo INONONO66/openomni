@@ -23,11 +23,12 @@ let inbound = 0;
 function delivery(sessionId: string): Gateway.Deliver {
   inbound += 1;
   const id = `inbound-${inbound}`;
+  const traceId = inbound.toString(16).padStart(32, "0");
   return {
     sessionId,
     event: {
       id,
-      traceId: `trace-${id}`,
+      traceId,
       surface: "internal",
       userId: "owner",
       payload: "resident question",
@@ -35,7 +36,7 @@ function delivery(sessionId: string): Gateway.Deliver {
       mode: "direct",
     },
     decision: {
-      traceId: `trace-${id}`,
+      traceId,
       time: Date.now(),
       inboundId: id,
       surface: "internal",

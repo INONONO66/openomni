@@ -18,6 +18,7 @@ export function writeOperationalToStdout(eventName: string, payload: unknown): v
   const redactedCtx = toRecord(redactForPersistence(ctx));
   const line = JSON.stringify({
     ...redactedCtx,
+    ...correlationFields(rec),
     ts: rec?.time ?? Date.now(),
     level,
     pid: process.pid,
@@ -25,6 +26,33 @@ export function writeOperationalToStdout(eventName: string, payload: unknown): v
     msg: rec?.msg ?? "",
   });
   process.stdout.write(`${line}\n`);
+}
+
+function correlationFields(
+  record: Record<string, unknown> | undefined,
+): Record<string, string | number> {
+  if (record === undefined) return {};
+  const fields = [
+    "eventId",
+    "traceId",
+    "spanId",
+    "parentSpanId",
+    "sessionId",
+    "runId",
+    "actorId",
+    "agentName",
+    "componentId",
+    "componentGeneration",
+    "pluginName",
+    "pluginVersion",
+    "configRevision",
+  ] as const;
+  const kept: Record<string, string | number> = {};
+  for (const field of fields) {
+    const value = record[field];
+    if (typeof value === "string" || typeof value === "number") kept[field] = value;
+  }
+  return kept;
 }
 
 function getMinLogLevel(): LogLevel {

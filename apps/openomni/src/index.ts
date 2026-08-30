@@ -150,11 +150,19 @@ function replyText(payload: unknown): string {
 
 /** Builds the internal, persisted Resident turn used for one settlement wake. */
 function delegationWakeDelivery(wake: DelegationWake): Gateway.Deliver {
-  const traceId = `delegation:${wake.record.delegationId}`;
+  // Deterministic W3C trace id: production delegation ids are UUIDs, whose
+  // hex digits are exactly a 32-char lowercase trace id once the hyphens go.
+  // A non-UUID id (test doubles) falls back to a fresh trace id, and so does
+  // the nil UUID — the all-zero trace id is invalid per W3C.
+  const canonical = wake.record.delegationId.split("-").join("").toLowerCase();
+  const traceId =
+    /^[0-9a-f]{32}$/.test(canonical) && canonical !== "00000000000000000000000000000000"
+      ? canonical
+      : newTraceId();
   return Gateway.Deliver.parse({
     sessionId: wake.record.origin.sessionId,
     event: {
-      id: `${traceId}:${wake.settlement.at}`,
+      id: `delegation:${wake.record.delegationId}:${wake.settlement.at}`,
       traceId,
       surface: "internal",
       userId: "system",
@@ -170,7 +178,7 @@ function delegationWakeDelivery(wake: DelegationWake): Gateway.Deliver {
     decision: {
       traceId,
       time: wake.settlement.at,
-      inboundId: `${traceId}:inbound`,
+      inboundId: `delegation:${wake.record.delegationId}:inbound`,
       surface: "internal",
       mode: "direct",
       stage: "surface_default",

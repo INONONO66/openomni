@@ -7,8 +7,8 @@ import {
 import { Session } from "@openomni/ledger";
 import type { Placement } from "@openomni/placement";
 import type { Gateway, Ingress, Message, Model } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
 import type { DelegationOrigin } from "./delegation/admission";
+import { observeComponent } from "./observation/component";
 import { buildAgentPrompt } from "./prompt/build";
 import { RESIDENT_PRESET } from "./prompt/roles";
 import type { CatalogPorts } from "./tools/catalog";
@@ -143,8 +143,19 @@ export function createResident(options: ResidentOptions) {
     // An evidence-only turn gets no execution surface: the model is offered
     // no tools, and the executor it could still reach refuses every call.
     const tools = evidenceOnly ? [] : catalog.specs;
+    const runId = crypto.randomUUID();
+    const observation = observeComponent({
+      traceId: delivery.event.traceId,
+      sessionId,
+      runId,
+      actorId: "resident",
+      agentName: "resident",
+      componentId: "resident.agent",
+      componentGeneration: 1,
+      pluginName: "builtin.resident",
+    });
     const agent = ChatAgent.create({
-      events: Bus,
+      events: observation.events,
       systemPrompt: systemPromptFor(sessionId),
       tools,
       toolTargets: targets,
@@ -152,7 +163,7 @@ export function createResident(options: ResidentOptions) {
       toolExecutor: evidenceOnly ? refuseEvidenceOnlyToolCall : catalog.execute,
       middleware: [
         createCompactionPolicy({
-          events: Bus,
+          events: observation.events,
           priority: 900,
           elideToolOutputs: { minOutputChars: 4000, keepHeadChars: 500 },
         }),
@@ -192,15 +203,17 @@ export function createResident(options: ResidentOptions) {
         : delivery.event.payload,
     );
 
-    const result = await agent.run({
-      messages: history(sessionId),
-      traceContext: {
-        traceId: delivery.event.traceId,
-        sessionId,
-        runId: crypto.randomUUID(),
-        agentName: "resident",
-      },
-    });
+    const result = await observation.run(() =>
+      agent.run({
+        messages: history(sessionId),
+        traceContext: {
+          traceId: delivery.event.traceId,
+          sessionId,
+          runId,
+          agentName: "resident",
+        },
+      }),
+    );
 
     const assistantId = crypto.randomUUID();
     Session.addMessage(sessionId, {
