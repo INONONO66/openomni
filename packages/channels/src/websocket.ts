@@ -146,7 +146,6 @@ export class WebSocketHandler {
       const parsed = JSON.parse(raw) as {
         type?: string;
         text?: string;
-        surfaceKey?: string;
         replyToId?: string;
       };
 

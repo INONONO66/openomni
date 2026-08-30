@@ -205,9 +205,8 @@ describe("outbound adapter delivery dedupe capability", () => {
       now += 6;
       const second = dedupe.acquire("same-id");
 
-      expect(first.duplicate).toBe(false);
       expect(second.duplicate).toBe(false);
-      if (first.token === undefined) throw new Error("first acquisition was not accepted");
+      if (first.duplicate) throw new Error("first acquisition was not accepted");
       dedupe.forget("same-id", first.token);
       expect(dedupe.isDuplicate("same-id")).toBe(true);
     } finally {
@@ -222,9 +221,8 @@ describe("outbound adapter delivery dedupe capability", () => {
     dedupe.acquire("eviction-trigger");
     const second = dedupe.acquire("same-id");
 
-    expect(first.duplicate).toBe(false);
     expect(second.duplicate).toBe(false);
-    if (first.token === undefined) throw new Error("first acquisition was not accepted");
+    if (first.duplicate) throw new Error("first acquisition was not accepted");
     dedupe.forget("same-id", first.token);
     expect(dedupe.isDuplicate("same-id")).toBe(true);
   });

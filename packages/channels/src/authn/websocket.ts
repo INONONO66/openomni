@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from "node:crypto";
 import { Operational } from "@openomni/protocol";
 import type { Policy } from "@openomni/protocol";
 import { newTraceId } from "@openomni/protocol";
@@ -30,6 +31,14 @@ function readSubprotocolAuth(
   return token ? { token, selected: "auth" } : undefined;
 }
 
+/** Constant-time token check — hash both sides so length differences leak nothing. */
+function tokensEqual(provided: string, expected: string): boolean {
+  return timingSafeEqual(
+    createHash("sha256").update(provided).digest(),
+    createHash("sha256").update(expected).digest(),
+  );
+}
+
 function evaluateWebSocketToken(state: WebSocketAuthState): Policy.PolicyDecision {
   const policyId = "channel.authn.websocket-token";
   if (!state.token) {
@@ -46,7 +55,7 @@ function evaluateWebSocketToken(state: WebSocketAuthState): Policy.PolicyDecisio
   const url = new URL(state.request.url);
   const subprotocolAuth = readSubprotocolAuth(state.request);
   const provided = subprotocolAuth?.token ?? url.searchParams.get("token");
-  if (provided !== state.token) {
+  if (provided === null || !tokensEqual(provided, state.token)) {
     state.publish(Operational.Events.Warn, {
       traceId: state.traceId,
       time: Date.now(),

@@ -64,12 +64,10 @@ export type MessagingPorts = Readonly<{
   /**
    * Concrete delivery owner (server channel / API / connector). Required at
    * construction — there is no ownerless send path, so "no owner" cannot be
-   * silently skipped (fail-closed, rule 7).
-   */
-  /**
-   * At-least-once delivery: retries carry the same `message.idempotencyKey` so
-   * a concrete owner can provide bounded dedupe or platform read-back. The
-   * guarantee remains at-least-once when composition does not forward the key.
+   * silently skipped (fail-closed, rule 7). At-least-once delivery: retries
+   * carry the same `message.idempotencyKey` so a concrete owner can provide
+   * bounded dedupe or platform read-back; the guarantee remains at-least-once
+   * when composition does not forward the key.
    */
   deliver: (
     message: OutboundMessage,
@@ -347,16 +345,16 @@ export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAge
         const budget = ports
           .budgets?.()
           .find((candidate) => candidate.targetActorId === input.target.actorId);
-        const claim = EgressBudgetStore.claim(
+        const budgetClaim = EgressBudgetStore.claim(
           debitRow(input, sendClass),
           input.at - (budget?.windowMs ?? 0),
           (state) => evaluateSocialBudget(budget, state, { class: sendClass, at: input.at }),
         );
-        if (claim.kind === "refused") {
+        if (budgetClaim.kind === "refused") {
           return deny(
             input,
-            claim.reason.suppress,
-            `active-egress budget suppressed a ${sendClass} send ${input.senderId} -> ${input.target.actorId} (${claim.reason.suppress})`,
+            budgetClaim.reason.suppress,
+            `active-egress budget suppressed a ${sendClass} send ${input.senderId} -> ${input.target.actorId} (${budgetClaim.reason.suppress})`,
           );
         }
       }
