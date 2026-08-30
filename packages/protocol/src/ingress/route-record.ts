@@ -33,9 +33,13 @@ export const ROUTE_DECIDED_FACT_TYPE = "route.decided";
 // safety): the protocol schemas allow plain strings, so a ":" inside a
 // channel or id could otherwise forge a foreign scope's key (e.g.
 // channel "C1" + id "x:5" colliding with channel "C1:x" + id "5").
-export function routeStreamId(scope: RouteStreamScope): string {
+function scopedStreamId(prefix: string, scope: RouteStreamScope): string {
   const component = (value: string | undefined) => encodeURIComponent(value ?? "");
-  return `route:${component(scope.surface)}:${component(scope.workspace)}:${component(scope.channel)}:${component(scope.id)}`;
+  return `${prefix}:${component(scope.surface)}:${component(scope.workspace)}:${component(scope.channel)}:${component(scope.id)}`;
+}
+
+export function routeStreamId(scope: RouteStreamScope): string {
+  return scopedStreamId("route", scope);
 }
 
 /** The ledger append input for a `route.decided` fact (the fact-payload builder). */
@@ -50,8 +54,7 @@ export const ROUTE_NOT_DELIVERED_FACT_TYPE = "route.not_delivered";
 // inbound id as the route decision it corrects, on a distinct class prefix so
 // the route stream's single-fact route.decided replay gate is untouched.
 export function routeCorrectionStreamId(scope: RouteStreamScope): string {
-  const component = (value: string | undefined) => encodeURIComponent(value ?? "");
-  return `route_correction:${component(scope.surface)}:${component(scope.workspace)}:${component(scope.channel)}:${component(scope.id)}`;
+  return scopedStreamId("route_correction", scope);
 }
 
 /** The ledger append input for a `route.not_delivered` correction fact. */

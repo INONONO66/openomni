@@ -1,7 +1,7 @@
 import z from "zod";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { join, dirname, resolve } from "node:path";
-import { mkdirSync, existsSync, writeFileSync, renameSync } from "node:fs";
+import { mkdirSync, existsSync, writeFileSync, renameSync, unlinkSync } from "node:fs";
 import { homedir } from "node:os";
 import { NamedError } from "../error";
 
@@ -45,7 +45,17 @@ const ensureAuthDir = (filepath: string) => {
 const writeAuthFile = (filepath: string, contents: string): void => {
   const tmpPath = `${filepath}.${crypto.randomUUID()}.tmp`;
   writeFileSync(tmpPath, contents, { mode: 0o600 });
-  renameSync(tmpPath, filepath);
+  try {
+    renameSync(tmpPath, filepath);
+  } catch (error) {
+    // Never leave a plaintext-credential temp file behind on a failed swap.
+    try {
+      unlinkSync(tmpPath);
+    } catch {
+      /* already gone */
+    }
+    throw error;
+  }
 };
 
 async function enqueueWrite<T>(filepath: string, write: () => Promise<T>): Promise<T> {

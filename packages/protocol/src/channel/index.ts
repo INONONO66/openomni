@@ -100,7 +100,9 @@ export namespace Channel {
    *   - Chat:    telegram:botId:chat:chatId
    */
   export namespace SurfaceKey {
-    export type ChannelKind = "dm" | "group" | "channel" | "thread" | "chat";
+    // "thread" is NOT a kind: threads are sub-keys under a channel (the
+    // `:thread:<id>` marker pair) — see the encoding examples above.
+    export type ChannelKind = "dm" | "group" | "channel" | "chat";
 
     export interface ParsedKey {
       readonly surface: string;
@@ -149,13 +151,7 @@ export namespace Channel {
       return assertWellFormed(parts.join(":"));
     }
 
-    const KNOWN_KINDS: ReadonlySet<string> = new Set<ChannelKind>([
-      "dm",
-      "group",
-      "channel",
-      "thread",
-      "chat",
-    ]);
+    const KNOWN_KINDS: ReadonlySet<string> = new Set<ChannelKind>(["dm", "group", "channel", "chat"]);
 
     export function fromChannel(descriptor: ChannelDescriptor): string {
       const parts = [descriptor.surface, descriptor.namespace, descriptor.kind, descriptor.id];
@@ -179,15 +175,13 @@ export namespace Channel {
         if (seg == null) {
           continue;
         }
-        if (KNOWN_KINDS.has(seg)) {
-          if (seg === "thread") {
-            threadId = segments[i + 1];
-            i++;
-          } else {
-            kind = seg as ChannelKind;
-            id = segments[i + 1];
-            i++;
-          }
+        if (seg === "thread") {
+          threadId = segments[i + 1];
+          i++;
+        } else if (KNOWN_KINDS.has(seg)) {
+          kind = seg as ChannelKind;
+          id = segments[i + 1];
+          i++;
         }
       }
 

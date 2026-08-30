@@ -203,7 +203,7 @@ describe("ModelsDev catalog loading", () => {
       }
     });
 
-    it("should ignore malformed cache data instead of throwing", async () => {
+    it("should fall back to the bundled snapshot when the cache sanitizes to nothing", async () => {
       await writeCacheCatalog({
         openai: null,
         anthropic: {
@@ -215,7 +215,8 @@ describe("ModelsDev catalog loading", () => {
         },
       });
 
-      await expect(ModelsDev.get()).resolves.toEqual({});
+      const snapshot = (await import("../../src/model/models-snapshot.json")).default;
+      await expect(ModelsDev.get()).resolves.toEqual(snapshot);
     });
 
     it("should drop malformed model records from trusted providers", async () => {

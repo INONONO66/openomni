@@ -1,6 +1,6 @@
 import type { Policy } from "@openomni/protocol";
 import type { EffectEntry, OrderedDecision } from "./types";
-import { stableHash } from "./records";
+import { stableKey } from "./records";
 
 export function orderDecisions(decisions: Policy.PolicyDecision[]): OrderedDecision[] {
   return decisions
@@ -36,10 +36,10 @@ export function collectEffectEntries(orderedDecisions: OrderedDecision[]): Effec
 
   for (const ordered of orderedDecisions) {
     ordered.decision.effects.forEach((effect, effectIndex) => {
-      const effectHash = stableHash(effect);
-      if (seenEffects.has(effectHash)) return;
+      const effectKey = stableKey(effect);
+      if (seenEffects.has(effectKey)) return;
 
-      seenEffects.add(effectHash);
+      seenEffects.add(effectKey);
       entries.push({
         effect,
         policyId: ordered.decision.policyId,

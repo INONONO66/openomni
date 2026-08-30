@@ -116,7 +116,6 @@ export class DiscordAdapter implements Channel.Surface {
     const acquisition = this.dedupe.acquire(message.id);
     if (acquisition.duplicate) return;
     const dedupeToken = acquisition.token;
-    if (dedupeToken === undefined) return;
     if (message.author.bot) return;
     if (!message.content) return;
 
