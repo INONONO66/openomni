@@ -1,12 +1,9 @@
 import type { Token } from "@openomni/protocol";
-import type { LanguageModelUsage } from "ai";
 import { InvalidUsageError } from "../error";
-
-type UsageInput = Partial<LanguageModelUsage>;
 
 export namespace TokenTracker {
   export function extractUsage(response: {
-    readonly usage?: UsageInput | unknown;
+    readonly usage?: unknown;
     readonly providerMetadata?: unknown;
   }): Token.ProviderUsage {
     // Absent/non-record usage still validates providerMetadata-sourced positions:
