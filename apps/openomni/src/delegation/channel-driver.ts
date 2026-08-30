@@ -2,6 +2,7 @@ import type { ExistingAgentMessaging } from "@openomni/channels";
 import type { Delegation, Gateway } from "@openomni/protocol";
 import type { Admitted } from "./admission";
 import { renderInstruction } from "./instruction";
+import { delegationTraceId } from "./trace";
 import type {
   DelegationDriver,
   DriverOutcome,
@@ -60,7 +61,7 @@ export function createChannelDriver(ports: ChannelDriverPorts): ChannelDelegatio
 
       const common = {
         messageId: handle.delegationId,
-        traceId: handle.delegationId,
+        traceId: delegationTraceId(handle.delegationId),
         senderId: "resident",
         target: { actorId: address.actorId },
         body: renderInstruction(
