@@ -13,16 +13,18 @@ interface GitHubRepository {
   name: string;
 }
 
+interface GitHubIssue {
+  number: number;
+  title: string;
+  body?: string;
+  pull_request?: unknown;
+  labels?: GitHubLabel[];
+  user: GitHubUser;
+}
+
 export interface GitHubIssueCommentPayload {
   action: string;
-  issue: {
-    number: number;
-    title: string;
-    body?: string;
-    pull_request?: unknown;
-    labels?: GitHubLabel[];
-    user: GitHubUser;
-  };
+  issue: GitHubIssue;
   comment: {
     id: number;
     body: string;
@@ -33,14 +35,7 @@ export interface GitHubIssueCommentPayload {
 
 export interface GitHubIssuesPayload {
   action: string;
-  issue: {
-    number: number;
-    title: string;
-    body?: string;
-    pull_request?: unknown;
-    labels?: GitHubLabel[];
-    user: GitHubUser;
-  };
+  issue: GitHubIssue;
   repository: GitHubRepository;
 }
 

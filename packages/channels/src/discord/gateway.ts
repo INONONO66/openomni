@@ -91,7 +91,20 @@ export class DiscordGateway {
       let resolved = false;
 
       ws.addEventListener("message", (event) => {
-        const payload = JSON.parse(String(event.data)) as GatewayPayload;
+        let payload: GatewayPayload;
+        try {
+          payload = JSON.parse(String(event.data)) as GatewayPayload;
+        } catch {
+          // One malformed frame must not become an uncaught listener throw;
+          // drop it — the gateway's own heartbeat/close handling recovers.
+          this.publish(Operational.Events.Warn, {
+            traceId: newTraceId(),
+            time: Date.now(),
+            component: "server",
+            msg: "discord gateway frame was not valid JSON; dropped",
+          });
+          return;
+        }
         const ready = this.handlePayload(payload);
         if (ready && !resolved) {
           resolved = true;

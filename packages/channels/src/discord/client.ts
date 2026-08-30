@@ -42,7 +42,12 @@ export class DiscordClient implements ChannelClient {
       "/users/@me/channels",
       { recipient_id: recipientId },
       traceId,
-    )) as { id: string };
+    )) as { id?: unknown };
+    if (typeof channel.id !== "string") {
+      throw new DiscordApiError({
+        message: "Discord DM channel response carried no string id",
+      });
+    }
     return channel.id;
   }
 

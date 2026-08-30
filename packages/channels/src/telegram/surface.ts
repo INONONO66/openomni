@@ -73,7 +73,6 @@ export class TelegramAdapter implements Channel.Surface {
           const acquisition = this.dedupe.acquire(dedupeKey);
           if (acquisition.duplicate) return;
           const dedupeToken = acquisition.token;
-          if (dedupeToken === undefined) return;
           // Origin: the first frame of an inbound telegram message — this ONE
           // mint is the message's trace, carried to the run (D11).
           const messageTraceId = newTraceId();
@@ -141,7 +140,10 @@ export class TelegramAdapter implements Channel.Surface {
       triggers: this.config.triggers,
       ctx: {
         event: "message",
-        mentioned: this.botUsername !== "" && text.includes(`@${this.botUsername}`),
+        // Word-boundary match: `@foo` must not count a mention of `@foobar`.
+        mentioned:
+          this.botUsername !== "" &&
+          new RegExp(`@${this.botUsername}(?![A-Za-z0-9_])`).test(text),
         channelId: chatId,
         senderId: String(message.from.id),
         isDM: message.chat.type === "private",
