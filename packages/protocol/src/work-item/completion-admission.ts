@@ -283,6 +283,26 @@ export const CompletionContract = z
   .strict();
 export type CompletionContract = z.infer<typeof CompletionContract>;
 
+/** Fact ids must be unique ACROSS collections, not merely within each one. */
+function requireUniqueFactIds(
+  ctx: z.RefinementCtx,
+  collections: ReadonlyArray<readonly [string, ReadonlyArray<Readonly<{ id: string }>>]>,
+): void {
+  const seen = new Set<string>();
+  for (const [collection, entries] of collections) {
+    for (const [index, entry] of entries.entries()) {
+      if (seen.has(entry.id)) {
+        ctx.addIssue({
+          code: "custom",
+          message: `duplicate completion fact id: ${entry.id}`,
+          path: [collection, index, "id"],
+        });
+      }
+      seen.add(entry.id);
+    }
+  }
+}
+
 const CompletionRequestShape = z
   .object({
     version: CurrentVersion,
@@ -303,27 +323,14 @@ const CompletionRequestShape = z
   })
   .strict()
   .superRefine((request, ctx) => {
-    const factGroups = [
+    requireUniqueFactIds(ctx, [
       ["claims", request.claims],
       ["observations", request.observations],
       ["results", request.results],
       ["invalidations", request.invalidations],
       ["verificationErrors", request.verificationErrors],
       ["effects", request.effects],
-    ] as const;
-    const factIds = new Set<string>();
-    for (const [group, facts] of factGroups) {
-      for (const [index, fact] of facts.entries()) {
-        if (factIds.has(fact.id)) {
-          ctx.addIssue({
-            code: "custom",
-            message: `duplicate completion fact id: ${fact.id}`,
-            path: [group, index, "id"],
-          });
-        }
-        factIds.add(fact.id);
-      }
-    }
+    ]);
     validateSourceIdentityOrigin(request.origin, request.sourceIdentity, ctx);
   });
 
@@ -498,8 +505,7 @@ const CompletionFactsShape = z
   })
   .strict()
   .superRefine((facts, ctx) => {
-    const seen = new Set<string>();
-    const collections: ReadonlyArray<readonly [string, ReadonlyArray<Readonly<{ id: string }>>]> = [
+    requireUniqueFactIds(ctx, [
       ["criteria", facts.criteria],
       ["claims", facts.claims],
       ["observations", facts.observations],
@@ -509,19 +515,7 @@ const CompletionFactsShape = z
       ["effects", facts.effects],
       ["requestReservations", facts.requestReservations],
       ["admissions", facts.admissions],
-    ];
-    for (const [collection, entries] of collections) {
-      for (const [index, entry] of entries.entries()) {
-        if (seen.has(entry.id)) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: `duplicate completion fact id: ${entry.id}`,
-            path: [collection, index, "id"],
-          });
-        }
-        seen.add(entry.id);
-      }
-    }
+    ]);
   });
 
 export const CompletionFacts = CompletionFactsShape;
