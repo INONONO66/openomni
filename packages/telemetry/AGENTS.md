@@ -37,7 +37,7 @@ A caller cannot pass `traceId` / `sessionId` / `runId` / `actorId` / `agentName`
 
 This exists because thirteen sites in the agent core minted a fresh `crypto.randomUUID()` per event. Those events were structurally uncorrelatable with the run that produced them — the record looked authoritative and pointed at nothing. **All thirteen are converted**: `core/retry.ts`'s eight were narration of a pure decision the caller already reports correlated, so they were deleted rather than rewired; `core/budget.ts`, `core/execution/compaction.ts`, and `../openomni/src/execution-runtime/middleware/tool-permission-policy.ts` inherit the run's trace or refuse. **`packages/agent/src` mints no trace id at all.** The three that remained in `src/runtime/mcp/client.ts` are converted too: a server's lifecycle is reported under the trace of whatever brought it up (the boot, by way of `McpToolProvider`) or not reported, and a tool call inherits the trace of the run that made it or is refused.
 
-The rest of the tree has not caught up — see D11 in [docs/agent-core-rewrite.md](../../docs/agent-core-rewrite.md) for the remaining count. `scope()` has its first production caller: `apps/openomni/src/observation/component.ts` wraps Resident and Worker agent invocations in a scoped emitter.
+The rest of the tree has not caught up — see D11 in the archived agent-core rewrite receipt (git history, `docs/agent-core-rewrite.md`) for the remaining count. `scope()` has its first production caller: `apps/openomni/src/observation/component.ts` wraps Resident and Worker agent invocations in a scoped emitter.
 
 ## WHAT IS WIRED TODAY
 

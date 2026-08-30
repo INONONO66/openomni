@@ -1,9 +1,9 @@
 # Machines and Delegation — the OS's Body and Workforce
 
 Owner-directed target design (2026-08-23). This document supersedes the
-package-layout portions of [clean-room-blueprint.md](clean-room-blueprint.md)
-where they conflict: the Owner ruling of 2026-08-23 replaces the legacy brain
-and host with the sole-app target and includes machine placement.
+package-layout portions of the archived clean-room blueprint (git history,
+`docs/clean-room-blueprint.md`): the Owner ruling of 2026-08-23 replaces the
+legacy brain and host with the sole-app target and includes machine placement.
 Everything here is a target contract; [implementation-status.md](implementation-status.md)
 alone says what is wired.
 

@@ -1,6 +1,6 @@
 # PROJECT KNOWLEDGE BASE
 
-Last verified against `origin/main`: 2026-08-28 (`5349950e`; paths, dependency topology, and shipped-state pointers re-checked; keep this stamp current when editing - doc-state sync law).
+Last verified against `origin/main`: 2026-08-30 (`725fa4db`; paths, dependency topology, and shipped-state pointers re-checked; keep this stamp current when editing - doc-state sync law).
 
 ## OVERVIEW
 

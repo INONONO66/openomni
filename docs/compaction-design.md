@@ -1,6 +1,6 @@
 # Compaction & Context Window Design
 
-Last verified against `origin/main`: 2026-08-18. Design target document; [`docs/implementation-status.md`](implementation-status.md) alone says what is wired. Supersedes the two open Phase 3 rows in [`docs/agent-core-rewrite.md`](agent-core-rewrite.md) ("cut planning, incremental summarization" and "speculative overlap (D8)") — those rows now resolve here.
+Last verified against `origin/main`: 2026-08-18. Design target document; [`docs/implementation-status.md`](implementation-status.md) alone says what is wired. Supersedes the two open Phase 3 rows of the archived agent-core rewrite receipt ("cut planning, incremental summarization" and "speculative overlap (D8)"; git history, `docs/agent-core-rewrite.md`) — those rows resolve here.
 
 ## Outcome
 
