@@ -55,7 +55,9 @@ export class Dedupe {
     if (this.seen.get(id)?.token === token) this.seen.delete(id);
   }
 
-  acquire(id: string): { readonly duplicate: boolean; readonly token?: DedupeToken } {
+  acquire(
+    id: string,
+  ): { readonly duplicate: true } | { readonly duplicate: false; readonly token: DedupeToken } {
     // prune every 100 operations to amortize cost
     if (++this.ops >= 100) {
       this.ops = 0;

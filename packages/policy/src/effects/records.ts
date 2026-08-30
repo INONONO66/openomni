@@ -34,7 +34,7 @@ export function deepMergeRecords(
   return result;
 }
 
-export function stableHash(value: unknown): string {
+export function stableKey(value: unknown): string {
   return stableStringify(value);
 }
 

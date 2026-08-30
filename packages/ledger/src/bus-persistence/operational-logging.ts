@@ -61,5 +61,5 @@ function getMinLogLevel(): LogLevel {
 }
 
 function isLogLevel(value: string): value is LogLevel {
-  return value === "debug" || value === "info" || value === "warn" || value === "error";
+  return Object.keys(LOG_LEVELS).includes(value);
 }

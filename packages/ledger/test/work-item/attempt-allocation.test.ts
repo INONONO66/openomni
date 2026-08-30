@@ -24,7 +24,7 @@ beforeEach(() => {
 
 afterEach(() => {
   inspect.close();
-  const adapter = Storage.getAdapter();
+  const adapter = Storage.get();
   if (adapter instanceof SqliteStorageAdapter) adapter.close();
   Storage.reset();
   rmSync(tempDir, { recursive: true, force: true });

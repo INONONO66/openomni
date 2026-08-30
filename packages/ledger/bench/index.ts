@@ -180,7 +180,7 @@ async function runStorageSessionList(): Promise<void> {
       Session.create({ title: `list-session-${count}-${index}`, model: MODEL });
     }
 
-    const adapter = Storage.getAdapter();
+    const adapter = Storage.get();
     bench.add(`${count}-sessions`, () => {
       adapter.session.list();
     });

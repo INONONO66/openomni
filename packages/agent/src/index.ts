@@ -1,4 +1,5 @@
-// Agent package public API — ChatAgent only
+// Agent package public API: the ChatAgent loop plus the policy-engine and
+// budget surfaces a product composes it with.
 export { ChatAgent } from "./core/chat-agent";
 export type { ChatAgentInstance } from "./core/chat-agent";
 export type { ChatAgentConfig, ChatAgentInput, AgentResult } from "./core/types";

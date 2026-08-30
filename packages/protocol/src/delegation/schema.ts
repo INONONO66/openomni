@@ -39,7 +39,7 @@ export const Operation = z.enum(["notify", "ask", "assign"]);
 export type Operation = z.infer<typeof Operation>;
 
 /**
- * The four delegation transports a kernel driver can resolve an address
+ * The three delegation transports a kernel driver can resolve an address
  * onto. Distinct from the core-model "Lane" noun (Built-in/Action/Worker/
  * Subagent execution lanes) — this is the wire, not the role.
  */
@@ -231,15 +231,14 @@ export const Settled = SettledUnion.superRefine((settled, ctx) => {
 });
 export type Settled = z.infer<typeof Settled>;
 
-export const SettledStatus = z.enum([
-  "completed",
-  "failed",
-  "cancelled",
-  "delivery_failed",
-  "no_response",
-  "interrupted",
-  "sent",
-]);
+// Derived from the union discriminants so the status vocabulary cannot
+// drift from the settled shapes.
+export const SettledStatus = z.enum(
+  SettledUnion.options.map((option) => option.shape.status.value) as [
+    Settled["status"],
+    ...Settled["status"][],
+  ],
+);
 export type SettledStatus = z.infer<typeof SettledStatus>;
 
 /**

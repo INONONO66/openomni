@@ -10,6 +10,17 @@ function isMissingFileError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error && error.code === "ENOENT";
 }
 
+/** Remove the socket file, tolerating a concurrent removal (ENOENT). */
+function unlinkIfExists(socketPath: string): void {
+  try {
+    fs.unlinkSync(socketPath);
+  } catch (error) {
+    if (!isMissingFileError(error)) {
+      throw error;
+    }
+  }
+}
+
 export interface IpcServerOptions {
   /**
    * Fires once per connection after it is torn down (close or error). The
@@ -74,13 +85,7 @@ export async function createIpcServer(
     if (await probeSocketLive(socketPath)) {
       throw new IpcConnectionError(`socket ${socketPath} is in use by a live server`);
     }
-    try {
-      fs.unlinkSync(socketPath);
-    } catch (error) {
-      if (!isMissingFileError(error)) {
-        throw error;
-      }
-    }
+    unlinkIfExists(socketPath);
   }
 
   interface SocketData {
@@ -318,13 +323,7 @@ export async function createIpcServer(
     close() {
       peer.disconnectAll(new IpcConnectionError("server closed"));
       server.stop(true);
-      try {
-        fs.unlinkSync(socketPath);
-      } catch (error) {
-        if (!isMissingFileError(error)) {
-          throw error;
-        }
-      }
+      unlinkIfExists(socketPath);
     },
   };
 }

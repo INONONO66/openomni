@@ -6,7 +6,7 @@ import { Storage } from "../storage/storage.js";
 // WAL. The adapter's telemetryConnection() is the single sanctioned path to
 // the handle; no consumer casts past the adapter's private fields.
 export function getDatabase(): Database {
-  const db = Storage.getAdapter().telemetryConnection?.();
+  const db = Storage.get().telemetryConnection?.();
   if (db === undefined) {
     throw new Error("BusPersistence requires a SQLite-backed storage adapter");
   }
@@ -14,5 +14,5 @@ export function getDatabase(): Database {
 }
 
 export function getOptionalDatabase(): Database | undefined {
-  return Storage.getAdapter().telemetryConnection?.();
+  return Storage.get().telemetryConnection?.();
 }

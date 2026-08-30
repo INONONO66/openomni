@@ -20,7 +20,7 @@ export class DiscordNormalizer implements InboundNormalizer<DiscordMessage> {
 
     let content = message.content;
     if (mentioned && !isDM) {
-      content = content.replace(new RegExp(`<@!?${this.ctx.botId}>\\s*`), "").trim();
+      content = content.replace(new RegExp(`<@!?${this.ctx.botId}>\\s*`, "g"), "").trim();
     }
     content = normalizeContent(content, this.ctx.triggers);
     if (!content) return null;

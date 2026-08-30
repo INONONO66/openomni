@@ -65,6 +65,11 @@ export interface RunInput {
   events: BusEvent.Sink;
 }
 
+export interface RunDependencies {
+  /** Overrides provider stream creation for an isolated caller or test harness. */
+  createStream?: Processor.ProcessorOptions["createStream"];
+}
+
 /**
  * #500 C1: the loop-run result vocabulary, moved here from protocol — this
  * package's `run()` is the sole producer and the consumers (agent core) all
@@ -72,11 +77,6 @@ export interface RunInput {
  * namespace, so there is no collision (`run` the function and `Run` the
  * namespace are distinct identifiers).
  */
-export interface RunDependencies {
-  /** Overrides provider stream creation for an isolated caller or test harness. */
-  createStream?: Processor.ProcessorOptions["createStream"];
-}
-
 export namespace Run {
   const FailureUsage = z.object({
     inputTokens: z.number(),

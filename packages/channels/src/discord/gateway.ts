@@ -11,6 +11,28 @@ export interface GatewayCallbacks {
 }
 
 /**
+ * Accept a READY resume URL only when it points at a Discord gateway origin
+ * (`wss://*.discord.gg`) or the same origin the trusted gateway-URL fetch
+ * connected to; anything else returns null, which falls back to a freshly
+ * fetched gateway URL on the next reconnect.
+ */
+function validResumeUrl(raw: string, trustedOrigin: string | null): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return null;
+  }
+  const host = parsed.hostname;
+  const discordGateway =
+    parsed.protocol === "wss:" && (host === "discord.gg" || host.endsWith(".discord.gg"));
+  if (!(discordGateway || parsed.origin === trustedOrigin)) {
+    return null;
+  }
+  return `${raw}?v=10&encoding=json`;
+}
+
+/**
  * Discord gateway connection state machine. Heartbeat and payload routing
  * live INSIDE this class (#520): the former heartbeat.ts/dispatch-router.ts
  * satellite split severed the two data paths the protocol depends on — no
@@ -27,6 +49,8 @@ export class DiscordGateway {
   private sequence: number | null = null;
   private sessionId: string | null = null;
   private resumeUrl: string | null = null;
+  /** Origin of the last trusted (fetched, not payload-provided) gateway URL. */
+  private gatewayOrigin: string | null = null;
   private reconnectAttempt = 0;
 
   constructor(
@@ -39,7 +63,18 @@ export class DiscordGateway {
 
   async start(): Promise<void> {
     this.running = true;
-    await this.openSocket(await this.fetchGatewayUrl());
+    await this.openSocket(await this.fetchTrustedGatewayUrl());
+  }
+
+  /** Fetch a gateway URL and remember its origin as the trusted resume anchor. */
+  private async fetchTrustedGatewayUrl(): Promise<string> {
+    const url = await this.fetchGatewayUrl();
+    try {
+      this.gatewayOrigin = new URL(url).origin;
+    } catch {
+      this.gatewayOrigin = null;
+    }
+    return url;
   }
 
   stop(): void {
@@ -63,7 +98,7 @@ export class DiscordGateway {
     let url = this.resumeUrl && this.sessionId ? this.resumeUrl : undefined;
     while (url === undefined && this.running) {
       try {
-        url = await this.fetchGatewayUrl();
+        url = await this.fetchTrustedGatewayUrl();
       } catch (err) {
         this.reconnectAttempt++;
         const backoffMs = calculateBackoff(this.reconnectAttempt);
@@ -91,7 +126,20 @@ export class DiscordGateway {
       let resolved = false;
 
       ws.addEventListener("message", (event) => {
-        const payload = JSON.parse(String(event.data)) as GatewayPayload;
+        let payload: GatewayPayload;
+        try {
+          payload = JSON.parse(String(event.data)) as GatewayPayload;
+        } catch {
+          // One malformed frame must not become an uncaught listener throw;
+          // drop it — the gateway's own heartbeat/close handling recovers.
+          this.publish(Operational.Events.Warn, {
+            traceId: newTraceId(),
+            time: Date.now(),
+            component: "server",
+            msg: "discord gateway frame was not valid JSON; dropped",
+          });
+          return;
+        }
         const ready = this.handlePayload(payload);
         if (ready && !resolved) {
           resolved = true;
@@ -234,7 +282,10 @@ export class DiscordGateway {
     if (event === "READY") {
       const d = data as { session_id: string; resume_gateway_url: string; user: DiscordUser };
       this.sessionId = d.session_id;
-      this.resumeUrl = `${d.resume_gateway_url}?v=10&encoding=json`;
+      // The resume URL arrives in a server payload; pin it to Discord's
+      // gateway origin before it can ever become a socket target, so a
+      // spoofed READY cannot redirect the resume connection elsewhere.
+      this.resumeUrl = validResumeUrl(d.resume_gateway_url, this.gatewayOrigin);
       this.reconnectAttempt = 0;
       this.callbacks.onReady({ botId: d.user.id, botUsername: d.user.username });
       return true;

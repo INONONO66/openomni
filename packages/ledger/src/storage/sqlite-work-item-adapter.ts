@@ -81,7 +81,9 @@ export function createSqliteWorkItemAdapter(db: Database): ProtocolStorage.WorkI
           parsed.sessionId ?? null,
           parsed.relations.parentId ?? null,
           parsed.sourceChannel,
-          Date.now(),
+          // Lockstep with the payload (like create) — the column must not
+          // drift from parsed.timestamps.updated.
+          parsed.timestamps.updated,
           hash,
           expectedHead,
         );

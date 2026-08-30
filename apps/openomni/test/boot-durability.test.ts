@@ -130,7 +130,7 @@ describe("OpenOmni boot durability", () => {
     stopApp = app.stop;
 
     // The sweep is a physical removal, not a read-time filter: the row is gone.
-    expect(Storage.getAdapter().session.get(expired.id)).toBeUndefined();
+    expect(Storage.get().session.get(expired.id)).toBeUndefined();
   });
 
   test("reports a failed boot-rescanned wake through the queued path and leaves no receipt", async () => {
@@ -299,7 +299,7 @@ describe("OpenOmni boot durability", () => {
     // Fail-closed rollback: the journal observer is detached and storage is
     // torn down, so a failed boot leaks no writer and poisons no later boot.
     expect(Bus.stats().observerCount).toBe(observersBefore);
-    expect(() => Storage.getAdapter()).toThrow();
+    expect(() => Storage.get()).toThrow();
 
     const app = await startOpenOmni({ config: testConfig(dbPath) });
     stopApp = app.stop;

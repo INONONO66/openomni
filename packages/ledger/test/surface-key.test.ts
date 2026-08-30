@@ -9,7 +9,7 @@ import "../src/storage/initialize";
 // This suite covers the storage semantics: claim/lookup/listBySession.
 
 function seedSession(id: string): void {
-  Storage.getAdapter().session.set(id, {
+  Storage.get().session.set(id, {
     id,
     title: "test",
     model: { providerID: "test", modelID: "test" },

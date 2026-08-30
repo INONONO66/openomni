@@ -38,7 +38,7 @@ afterEach(() => {
 });
 
 function closeStorage(): void {
-  const adapter = Storage.getInitializedDbPath() !== null ? Storage.getAdapter() : null;
+  const adapter = Storage.getInitializedDbPath() !== null ? Storage.get() : null;
   if (adapter instanceof SqliteStorageAdapter) adapter.close();
   Storage.reset();
 }
@@ -234,7 +234,7 @@ describe("TranscriptStore resume-by-replay (pin 1)", () => {
 
     // Drop the read-model projection rows: replay must recover from the
     // fact stream itself (the record), not from the projection tables.
-    const adapter = Storage.getAdapter();
+    const adapter = Storage.get();
     for (const part of adapter.part.list("msg-1")) {
       adapter.part.remove("msg-1", part.id);
     }
@@ -277,14 +277,14 @@ describe("TranscriptStore record-path fold cache (#562 F7)", () => {
 
     // The savepoint commits inside record(), the cache advances, then the
     // OUTER transaction rolls everything back — cache and disk now disagree.
-    const adapter = Storage.getAdapter();
+    const adapter = Storage.get();
     expect(() =>
       adapter.transaction(() => {
         TranscriptStore.record(session.id, appended);
         throw new Error("outer rollback");
       }),
     ).toThrow("outer rollback");
-    expect(Storage.getAdapter().transcriptFact?.list(session.id)).toHaveLength(1);
+    expect(Storage.get().transcriptFact?.list(session.id)).toHaveLength(1);
 
     // Re-recording the same fact must refold from the stored stream (count
     // mismatch), not double-apply the cached state.
@@ -316,7 +316,7 @@ describe("TranscriptStore record-path fold cache (#562 F7)", () => {
         message: assistantInfo(session.id, "msg-dup"),
       }),
     ).toThrow(TranscriptRecordingError);
-    expect(Storage.getAdapter().transcriptFact?.list(session.id)).toHaveLength(1);
+    expect(Storage.get().transcriptFact?.list(session.id)).toHaveLength(1);
   });
 });
 
@@ -336,7 +336,7 @@ describe("TranscriptStore recording defects (pin 2)", () => {
     ).toThrow(TranscriptRecordingError);
 
     expect(TranscriptStore.replay(session.id)).toEqual([]);
-    expect(Storage.getAdapter().transcriptFact?.list(session.id)).toEqual([]);
+    expect(Storage.get().transcriptFact?.list(session.id)).toEqual([]);
   });
 
   test("illegal transition (skipping running) throws with the fold's reject reason", () => {
@@ -353,7 +353,7 @@ describe("TranscriptStore recording defects (pin 2)", () => {
       part: toolPart(session.id, "msg-1", "msg-1-tool"),
     });
 
-    const factCountBefore = Storage.getAdapter().transcriptFact?.list(session.id).length;
+    const factCountBefore = Storage.get().transcriptFact?.list(session.id).length;
 
     let thrown: unknown;
     try {
@@ -370,7 +370,7 @@ describe("TranscriptStore recording defects (pin 2)", () => {
 
     expect(thrown).toBeInstanceOf(TranscriptRecordingError);
     expect((thrown as TranscriptRecordingError).reason).toBe("invalid_transition");
-    expect(Storage.getAdapter().transcriptFact?.list(session.id).length).toBe(factCountBefore);
+    expect(Storage.get().transcriptFact?.list(session.id).length).toBe(factCountBefore);
   });
 
   test("projectFrom escalates a rejected outcome on a raw fact stream", () => {
@@ -401,7 +401,7 @@ describe("TranscriptStore append-only fact rows (pin 3)", () => {
       part: toolPart(session.id, "msg-1", "msg-1-tool"),
     });
 
-    const facts = Storage.getAdapter().transcriptFact;
+    const facts = Storage.get().transcriptFact;
     const before = facts?.list(session.id) ?? [];
 
     TranscriptStore.record(session.id, {
@@ -421,7 +421,7 @@ describe("TranscriptStore append-only fact rows (pin 3)", () => {
   });
 
   test("the fact sub-adapter exposes no update or delete surface", () => {
-    const facts = Storage.getAdapter().transcriptFact;
+    const facts = Storage.get().transcriptFact;
     expect(facts).toBeDefined();
     // countByAttempt (#562 F7) is read-only — still no update/delete surface.
     expect(Object.keys(facts ?? {}).sort()).toEqual([

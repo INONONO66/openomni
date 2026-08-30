@@ -11,13 +11,16 @@ export function splitText(text: string, maxLength: number): string[] {
       break;
     }
 
-    let splitAt = remaining.lastIndexOf("\n", maxLength);
-    if (splitAt < maxLength / 2) {
-      splitAt = maxLength;
+    const newlineAt = remaining.lastIndexOf("\n", maxLength);
+    if (newlineAt >= maxLength / 2) {
+      // Split on the newline and drop it — it separated the chunks; keeping
+      // it would prepend every subsequent chunk with a blank first line.
+      chunks.push(remaining.slice(0, newlineAt));
+      remaining = remaining.slice(newlineAt + 1);
+    } else {
+      chunks.push(remaining.slice(0, maxLength));
+      remaining = remaining.slice(maxLength);
     }
-
-    chunks.push(remaining.slice(0, splitAt));
-    remaining = remaining.slice(splitAt);
   }
 
   return chunks;

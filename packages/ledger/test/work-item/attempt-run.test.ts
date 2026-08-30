@@ -74,7 +74,7 @@ function seedLegacyRow(
   runId: string,
   status: "queued" | "starting" | "running" | "waiting_input" | "succeeded" | "failed",
 ): void {
-  const sessionAdapter = Storage.getAdapter().session;
+  const sessionAdapter = Storage.get().session;
   if (!sessionAdapter.get(sessionId)) {
     sessionAdapter.set(sessionId, {
       id: sessionId,
@@ -84,7 +84,7 @@ function seedLegacyRow(
       spawnDepth: 0,
     });
   }
-  const adapter = Storage.getAdapter().workerRunState;
+  const adapter = Storage.get().workerRunState;
   if (!adapter) throw new Error("workerRunState sub-adapter missing");
   adapter.create(sessionId, {
     runId,

@@ -31,7 +31,7 @@ interface EventChainRow {
 }
 
 function db(): Database {
-  return (Storage.getAdapter() as unknown as { readonly db: Database }).db;
+  return (Storage.get() as unknown as { readonly db: Database }).db;
 }
 
 function busRows(sessionId?: string): BusEventRow[] {
