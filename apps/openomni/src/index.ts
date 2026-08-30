@@ -329,7 +329,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
             toolsFor: (origin) =>
               catalogEntries(
                 {
-                  delegation: kernel,
+                  delegation: delegationKernel,
                   cells,
                   ...(machinesPort === undefined ? {} : { machines: machinesPort }),
                   memory,
@@ -346,7 +346,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       model: config.model,
       apiKey: config.model.apiKey,
       tools: {
-        delegation: kernel,
+        delegation: delegationKernel,
         ...(cells === undefined ? {} : { cells }),
         ...(machinesPort === undefined ? {} : { machines: machinesPort }),
         memory,

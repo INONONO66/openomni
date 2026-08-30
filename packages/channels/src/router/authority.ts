@@ -91,7 +91,7 @@ function evaluateIngressAuthority(event: Gateway.DeliveredEvent): Policy.PolicyD
   return { ...decision, factsUsed: resourceLabels };
 }
 
-export /**
+/**
  * Stamps the treatment onto meta VERBATIM — no runtime validation against
  * Actor.InboundTreatment. Today every producer is schema-derived (grants are
  * Zod-parsed at write and read, and routing-resolution passes the parsed
@@ -99,7 +99,7 @@ export /**
  * unchecked — a test carried an out-of-enum value through here for a year
  * (#652 review). Convergence of this seam belongs to #498.
  */
-function applyChannelGrantTreatment(
+export function applyChannelGrantTreatment(
   event: Gateway.DeliveredEvent,
   grant: ChannelGrantStore.Grant,
   inboundTreatment: Actor.InboundTreatment,

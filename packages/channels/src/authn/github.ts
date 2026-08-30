@@ -10,43 +10,32 @@ interface GitHubAuthState {
   response?: Response;
 }
 
+function hmacVerdict(allowed: boolean, denyReason: string): Policy.PolicyDecision {
+  return evaluateChannelPermission({
+    action: "channel.authn.github-hmac",
+    resource: "github.webhook",
+    field: "authenticated",
+    allowed,
+    allowReason: "github signature verified",
+    denyReason,
+  });
+}
+
 async function evaluateGitHubHmac(state: GitHubAuthState): Promise<Policy.PolicyDecision> {
-  const policyId = "channel.authn.github-hmac";
   const signature = state.request.headers.get("x-hub-signature-256");
   if (!signature) {
     state.response = new Response("Missing signature", { status: 401 });
-    return evaluateChannelPermission({
-      action: policyId,
-      resource: "github.webhook",
-      field: "authenticated",
-      allowed: false,
-      allowReason: "github signature verified",
-      denyReason: "github signature missing",
-    });
+    return hmacVerdict(false, "github signature missing");
   }
 
   const body = await state.request.text();
   state.body = body;
   if (!(await verifyGitHubSignature(body, signature, state.secret))) {
     state.response = new Response("Invalid signature", { status: 401 });
-    return evaluateChannelPermission({
-      action: policyId,
-      resource: "github.webhook",
-      field: "authenticated",
-      allowed: false,
-      allowReason: "github signature verified",
-      denyReason: "github signature invalid",
-    });
+    return hmacVerdict(false, "github signature invalid");
   }
 
-  return evaluateChannelPermission({
-    action: policyId,
-    resource: "github.webhook",
-    field: "authenticated",
-    allowed: true,
-    allowReason: "github signature verified",
-    denyReason: "github signature invalid",
-  });
+  return hmacVerdict(true, "github signature invalid");
 }
 
 export async function authenticateGitHubWebhook(input: {

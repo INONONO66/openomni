@@ -48,7 +48,7 @@ function createSession(title: string) {
 describe("session write discipline", () => {
   test("addMessage is atomic: a failing session write rolls the message back", () => {
     const session = createSession("atomic-add");
-    const adapter = Storage.getAdapter();
+    const adapter = Storage.get();
     const realSessionSet = adapter.session.set.bind(adapter.session);
     Storage.configure({
       ...adapter,
@@ -86,7 +86,7 @@ describe("session write discipline", () => {
     Session.addPart("msg-1", textPart(session.id, "msg-1", "part-1"));
     Session.addPart("msg-1", textPart(session.id, "msg-1", "part-2"));
 
-    const adapter = Storage.getAdapter();
+    const adapter = Storage.get();
     const realPartRemove = adapter.part.remove.bind(adapter.part);
     let removals = 0;
     Storage.configure({

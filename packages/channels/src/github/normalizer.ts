@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { Channel } from "@openomni/protocol";
 import { normalizeContent } from "../support/trigger";
 import type { GitHubEventContent } from "./types";
@@ -5,6 +6,10 @@ import type { GitHubEventContent } from "./types";
 export interface GitHubNormalizerContext {
   botUsername?: string;
   triggers: Channel.Config["triggers"];
+}
+
+function textDigest(text: string): string {
+  return createHash("sha256").update(text).digest("hex").slice(0, 12);
 }
 
 export class GitHubNormalizer {
@@ -30,8 +35,9 @@ export class GitHubNormalizer {
     if (normalizedText.trim().length === 0) return null;
 
     return {
-      id:
-        deliveryId ?? `${eventKey}-${content.issueNumber}-${content.sender}-${content.text.length}`,
+      // Fallback id (no x-github-delivery): hash the text — a length suffix
+      // would collide for equal-length comments and silently drop the second.
+      id: deliveryId ?? `${eventKey}-${content.issueNumber}-${content.sender}-${textDigest(content.text)}`,
       traceId,
       surfaceKey,
       text: normalizedText,

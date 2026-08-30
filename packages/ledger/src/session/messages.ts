@@ -8,7 +8,7 @@ export function addMessage(
   message: Message.Info,
   options?: { status?: "received" | "processing" | "completed" },
 ): void {
-  const adapter = Storage.getAdapter();
+  const adapter = Storage.get();
   const session = adapter.session.get(sessionID);
   if (!session) {
     // Fail closed: ingress appends its message.write ledger fact BEFORE this
@@ -61,18 +61,18 @@ export function updateMessageStatus(
   messageID: string,
   status: "received" | "processing" | "completed",
 ): void {
-  const adapter = Storage.getAdapter();
+  const adapter = Storage.get();
   if (adapter.message.setStatus) {
     adapter.message.setStatus(messageID, status);
   }
 }
 
 export function getMessages(sessionID: string): Message.Info[] {
-  return Storage.getAdapter().message.list(sessionID);
+  return Storage.get().message.list(sessionID);
 }
 
 export function addPart(messageID: string, part: Message.Part): void {
-  const adapter = Storage.getAdapter();
+  const adapter = Storage.get();
   const session = adapter.session.get(part.sessionID);
   if (!session) {
     // Fail closed like addMessage: a part for a missing session is a defect
@@ -84,5 +84,5 @@ export function addPart(messageID: string, part: Message.Part): void {
 }
 
 export function getParts(messageID: string): Message.Part[] {
-  return Storage.getAdapter().part.list(messageID);
+  return Storage.get().part.list(messageID);
 }

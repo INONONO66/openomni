@@ -305,9 +305,11 @@ export function targetKey(target: Ingress.Target): string {
  * same event shape, so the persisted surface↔session rows can never fork by
  * copy drift.
  *
- * Format: "surface:workspace:channel" for legacy events. Explicit ADR-008
- * targets append `target:<target-key>` so resident and worker sessions do
- * not collide.
+ * Format: "surface:workspace:channel" for legacy events. Explicit
+ * NON-resident ADR-008 targets append `target:<target-key>` so worker
+ * sessions do not collide; resident targets keep the bare key (the resident
+ * is the default target, so appending would fork existing resident
+ * surface↔session rows).
  */
 export function extractSurfaceKey(event: {
   surface: string;
@@ -343,5 +345,10 @@ export function extractText(payload: unknown): string {
     return (payload as { text: string }).text;
   }
   if (payload === null || payload === undefined) return "";
-  return JSON.stringify(payload) ?? "";
+  try {
+    return JSON.stringify(payload) ?? "";
+  } catch {
+    // Circular structures / BigInt throw from JSON.stringify — fail safe.
+    return "";
+  }
 }

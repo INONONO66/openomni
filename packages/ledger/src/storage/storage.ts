@@ -225,10 +225,6 @@ export namespace Storage {
     return current;
   }
 
-  export function getAdapter(): Adapter {
-    return get();
-  }
-
   export function reset(): void {
     const scope = storageScope.getStore();
     if (scope) {

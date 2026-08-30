@@ -33,13 +33,16 @@ export namespace ModelsDev {
     return process.env.OPENOMNI_MODELS_URL || "https://models.dev";
   }
 
+  function cachePath(): string {
+    return process.env.OPENOMNI_MODELS_PATH ?? DEFAULT_CACHE_PATH;
+  }
+
   async function writeCache(data: Record<string, Provider>): Promise<void> {
     try {
       const { mkdirSync } = await import("node:fs");
-      const cachePath = process.env.OPENOMNI_MODELS_PATH ?? DEFAULT_CACHE_PATH;
-      const cacheDir = cachePath.substring(0, cachePath.lastIndexOf("/"));
-      mkdirSync(cacheDir, { recursive: true });
-      await Bun.write(cachePath, JSON.stringify(data));
+      const { dirname } = await import("node:path");
+      mkdirSync(dirname(cachePath()), { recursive: true });
+      await Bun.write(cachePath(), JSON.stringify(data));
     } catch {
       /* non-fatal */
     }
@@ -92,10 +95,14 @@ export namespace ModelsDev {
   }
 
   export const Data = lazy(async (): Promise<Record<string, Provider>> => {
-    const cachePath = process.env.OPENOMNI_MODELS_PATH ?? DEFAULT_CACHE_PATH;
-    const file = Bun.file(cachePath);
+    const file = Bun.file(cachePath());
     const cached = await file.json().catch(() => undefined);
-    if (cached) return sanitizeRemoteCatalog(cached);
+    if (cached) {
+      const sanitized = sanitizeRemoteCatalog(cached);
+      // A cache that sanitizes to nothing (e.g. the trusted-package set
+      // changed since it was written) must not shadow the fetch/snapshot.
+      if (Object.keys(sanitized).length > 0) return sanitized;
+    }
 
     if (!process.env.OPENOMNI_DISABLE_MODELS_FETCH) {
       try {

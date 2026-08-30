@@ -25,13 +25,10 @@ export function emitTurnStart(
   state: RunState,
   agentBase: AgentRunBase,
 ): void {
-  const turnIndex = state.turnIndex;
-  const sessionId = agentBase.sessionId;
   events.publish(RunEvents.TurnStart, {
     ...agentBase,
-    sessionId,
     time: Date.now(),
-    turnIndex,
+    turnIndex: state.turnIndex,
   });
 }
 
@@ -41,10 +38,8 @@ export function emitTurnComplete(
   agentBase: AgentRunBase,
   turnUsage: TokenUsage,
 ): void {
-  const sessionId = agentBase.sessionId;
   events.publish(RunEvents.TurnComplete, {
     ...agentBase,
-    sessionId,
     time: Date.now(),
     turnIndex: state.turnIndex,
     usage: {

@@ -36,8 +36,8 @@ const policyPointIds = [
 ] as const;
 
 // Adding a registered policy point intentionally touches this ID list, the
-// registry entry, and the migration mapping so schema, contract, and legacy
-// timing compatibility remain reviewable in one protocol-layer change.
+// registry entry, and the input validator below so schema and contract
+// remain reviewable in one protocol-layer change.
 const policyPoint = z.object({
   point: TimingValue,
   allowedEffects: z.array(PolicyEffectType),

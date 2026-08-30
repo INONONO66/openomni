@@ -25,7 +25,7 @@ interface BusEventRow {
 }
 
 function db(): Database {
-  const descriptor = Object.getOwnPropertyDescriptor(Storage.getAdapter(), "db");
+  const descriptor = Object.getOwnPropertyDescriptor(Storage.get(), "db");
   if (descriptor?.value instanceof Database) return descriptor.value;
   throw new Error("Expected SQLite-backed storage adapter");
 }
@@ -385,7 +385,7 @@ describe("BusPersistence", () => {
     const session = createSession();
     // The worker-run store is frozen (#510 D2b) — the row is seeded at the
     // adapter layer, exactly as pre-freeze rows persist on disk.
-    const workerRunAdapter = Storage.getAdapter().workerRunState;
+    const workerRunAdapter = Storage.get().workerRunState;
     if (!workerRunAdapter) throw new Error("workerRunState sub-adapter missing");
     workerRunAdapter.create(session.id, {
       runId: "worker-run-1",

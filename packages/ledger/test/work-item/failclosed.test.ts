@@ -18,7 +18,7 @@ describe("work-item writes fail closed (#606 audit)", () => {
     // Bare storage: no workItem sub-adapter. The old path warned and returned
     // a fabricated, never-persisted Info whose hash looked real.
     Storage.initialize({ dbPath: ":memory:" });
-    const adapter = Storage.getAdapter();
+    const adapter = Storage.get();
     Object.defineProperty(Storage.get(), "workItem", { value: undefined, configurable: true });
 
     await expect(

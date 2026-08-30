@@ -19,13 +19,9 @@ export interface CellPorts {
     | { readonly status: "refused"; readonly reason: "machine_not_attached" | "kernel_not_available" }
   >;
   /**
-   * The whole catalog `origin` holds — machine-placed tools included — which
-   * is then folded against the brain alone. Handing over everything and
-   * letting placement subtract is what keeps machine tools out of a cell
-   * structurally: a cell already runs on a machine, so reaching back to the
-   * brain to reach another machine is the round trip code mode exists to
-   * remove. A machine tool added later is excluded by the same fold, with
-   * nobody having to remember this rule.
+   * The whole catalog `origin` holds — machine-placed tools included. The
+   * brain-only fold that subtracts machine tools lives at the enforcement
+   * point: see {@link cellDoor}.
    */
   toolsFor(origin: DelegationOrigin): readonly CatalogEntry[];
   newCellId(): string;
