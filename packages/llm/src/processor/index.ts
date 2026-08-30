@@ -363,7 +363,6 @@ export namespace Processor {
     message: string,
     data?: Record<string, unknown>,
   ): void {
-    if (!sessionID) return;
     events.publish(Operational.Events.Info, {
       traceId,
       time: Date.now(),

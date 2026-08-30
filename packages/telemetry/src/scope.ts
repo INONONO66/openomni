@@ -63,9 +63,8 @@ export interface ScopeOptions {
  *
  * Validation happens at construction: a malformed scope is a wiring error the
  * process should not start with, while a throw from inside a run would be
- * telemetry cancelling observed work. {@link Emitter.child} and
- * {@link Emitter.child} derives its identity from an already-valid one, so it
- * cannot fail.
+ * telemetry cancelling observed work. {@link Emitter.child} derives its
+ * identity from an already-valid one, so it cannot fail.
  */
 export function scope(
   trace: Omit<TraceScope, "spanId"> & { readonly spanId?: SpanId },

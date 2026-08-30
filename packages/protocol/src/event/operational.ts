@@ -25,7 +25,7 @@ export namespace Operational {
     readonly error?: string;
   }
 
-  /** Builds a `LogBase` operational envelope with the producer's timestamp. */
+  /** Attaches the producer's timestamp to log fields (no validation here — the bus event schema validates on publish). */
   export function envelope<Fields extends LogFields>(
     fields: Fields,
     time: number,
@@ -58,12 +58,9 @@ export namespace Operational {
      */
     export const GovernorIncident = BusEvent.define(
       "operational.governor.incident",
-      Base.extend({
-        component: z.string(),
+      LogBase.omit({ sessionId: true }).extend({
         /** Incident class, e.g. "chain_break". */
         incident: z.string(),
-        msg: z.string(),
-        context: z.record(z.string(), z.unknown()).optional(),
       }),
       { visibility: "internal" },
     );

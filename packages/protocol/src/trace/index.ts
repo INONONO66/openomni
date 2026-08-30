@@ -1,4 +1,3 @@
-import { z } from "zod";
 
 /** 32 lowercase hex characters (W3C trace id). */
 type TraceId = string;
@@ -22,12 +21,14 @@ export function newTraceId(): TraceId {
  * package); the two must stay field-compatible on the traceparent pair.
  */
 export namespace TraceContext {
-  const Schema = z.object({
-    traceId: z.string(),
-    sessionId: z.string().optional(),
-    runId: z.string().optional(),
-    agentName: z.string().optional(),
-    parentSpanId: z.string().optional(),
-  });
-  export type Type = z.infer<typeof Schema>;
+  // A plain type, not a Zod schema: every consumer propagates this
+  // structurally (no runtime validation seam exists), so a schema here
+  // would be dead runtime weight.
+  export type Type = {
+    traceId: string;
+    sessionId?: string | undefined;
+    runId?: string | undefined;
+    agentName?: string | undefined;
+    parentSpanId?: string | undefined;
+  };
 }
