@@ -237,6 +237,10 @@ export function createToolExecutor(
     );
 
     recordDecision(activeTraceContext, "invoke.result", postDecision);
+    // Post is a post-hoc point: the tool already ran, so a blocking verdict
+    // alone cannot un-run it. Only the explicit run.abort effect withholds the
+    // result; a bare blocking post-verdict is recorded (recordDecision above)
+    // and the result flows on — the authorization gate was the pre point.
     const postAbort = effectOf(postDecision, "run.abort");
     if (PolicyDecision.isBlocking(postDecision) && postAbort) {
       const reason = postAbort.reason ?? PolicyDecision.reason(postDecision, "middleware");

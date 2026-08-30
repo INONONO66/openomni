@@ -15,8 +15,9 @@ export function generateHash(): string {
   crypto.getRandomValues(bytes);
   let n = 0n;
   for (const b of bytes) n = (n << 8n) | BigInt(b);
-  // constrain to exactly 36^12 range to guarantee 12-char base36 output
-  const BASE12 = 4738381338321616896n;
-  n = n % BASE12;
+  // Cap at 36^12 so toString(36) yields at most 12 chars; padStart below
+  // pads shorter values, so the output is always exactly 12 chars.
+  const BASE36_POW_12 = 36n ** 12n;
+  n = n % BASE36_POW_12;
   return `wi_${n.toString(36).padStart(12, "0")}`;
 }
