@@ -22,7 +22,7 @@ export interface Conflict {
 export interface FieldOwner {
   readonly path: string;
   readonly policyId: string;
-  readonly valueHash: string;
+  readonly valueKey: string;
   readonly priority: number;
 }
 
