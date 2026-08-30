@@ -28,9 +28,15 @@ export function observeComponent(
         observation.emit(Component.Events.Disposed, { outcome: "completed" });
         return result;
       } catch (error) {
-        observation.emit(Component.Events.Failed, {
-          error: error instanceof Error ? error.message : String(error),
-        });
+        // Formatting must never mask the operation failure: a hostile Error
+        // subclass can throw from its own `message` getter or toPrimitive.
+        let message: string;
+        try {
+          message = error instanceof Error ? error.message : String(error);
+        } catch {
+          message = "unprintable error";
+        }
+        observation.emit(Component.Events.Failed, { error: message });
         observation.emit(Component.Events.Disposed, { outcome: "failed" });
         throw error;
       }

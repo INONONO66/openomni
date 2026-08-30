@@ -152,9 +152,13 @@ function replyText(payload: unknown): string {
 function delegationWakeDelivery(wake: DelegationWake): Gateway.Deliver {
   // Deterministic W3C trace id: production delegation ids are UUIDs, whose
   // hex digits are exactly a 32-char lowercase trace id once the hyphens go.
-  // A non-UUID id (test doubles) falls back to a fresh trace id.
+  // A non-UUID id (test doubles) falls back to a fresh trace id, and so does
+  // the nil UUID — the all-zero trace id is invalid per W3C.
   const canonical = wake.record.delegationId.split("-").join("").toLowerCase();
-  const traceId = /^[0-9a-f]{32}$/.test(canonical) ? canonical : newTraceId();
+  const traceId =
+    /^[0-9a-f]{32}$/.test(canonical) && canonical !== "00000000000000000000000000000000"
+      ? canonical
+      : newTraceId();
   return Gateway.Deliver.parse({
     sessionId: wake.record.origin.sessionId,
     event: {
