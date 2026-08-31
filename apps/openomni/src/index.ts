@@ -1,6 +1,11 @@
 import { processEntryPath } from "./process-entry-path";
 import type { ChatAgentConfig } from "@openomni/agent";
-import { type GatewayRouter, WaitService, WebSocketHandler } from "@openomni/channels";
+import {
+  type ChannelDeliveryRoute,
+  type GatewayRouter,
+  WaitService,
+  WebSocketHandler,
+} from "@openomni/channels";
 import {
   ActorRegistry,
   Artifact,
@@ -21,7 +26,7 @@ import {
   newTraceId,
 } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
-import { createChannelDrivers } from "./channels";
+import { channelProfile } from "./channels";
 import { assertWsExposure, loadConfig, type OpenOmniConfig, type RegisteredActor } from "./config";
 import type { ArtifactsPort } from "./tools/artifacts";
 import { type LlmPort, resolveLlmToolModel } from "./tools/llm";
@@ -39,7 +44,7 @@ import { createWorkItemLinkage } from "./delegation/work-item-linkage";
 import { createCompletionPort } from "./work-item/completion";
 import { createProcessDriver } from "./delegation/process-driver";
 import { createInlineWorkerRunner } from "./delegation/worker-loop";
-import { createResidentGateway } from "./gateway";
+import { createResidentGateway, registerTrustedChannelGrant } from "./gateway";
 import { createComposer } from "./composition/composer";
 import { createDriverRegistry } from "./composition/driver-registry";
 import { openCuratedMemory } from "./memory/store";
@@ -427,15 +432,21 @@ export async function startOpenOmni(options: StartOptions = {}) {
       const result = await gateway.ingest(buildInboundEvent(message));
       return result.kind === "dropped" ? null : { text: result.result.output };
     };
-    const channelSetup = createChannelDrivers(config, routingHandler);
-    const externalSurfaces = channelSetup.surfaces;
+    // The profile is the declarative row list of external channels; each row
+    // becomes its own composition stage below.
+    const builtChannels = channelProfile(config).map((row) => row.build(routingHandler));
+    const githubWebhookHandler = builtChannels.find(
+      (built) => built.webhookHandler !== undefined,
+    )?.webhookHandler;
 
     let wsHandler: WebSocketHandler | undefined;
     const wsRoute = async (externalId: string, body: string) => {
       if (wsHandler === undefined) throw new Error("ws delivery used before composition finished");
       return wsHandler.push(externalId, body);
     };
-    const deliveryRoutes = new Map(channelSetup.deliveryRoutes);
+    // Live table: channel components register and revoke their own outbound
+    // routes while the gateway keeps reading it per delivery.
+    const deliveryRoutes = new Map<string, ChannelDeliveryRoute>();
     deliveryRoutes.set("ws", wsRoute);
     gateway = createResidentGateway(
       deliver,
@@ -452,7 +463,6 @@ export async function startOpenOmni(options: StartOptions = {}) {
               })),
             budgets: () => config.socialBudgets ?? [],
           },
-      ["ws", ...externalSurfaces.map((surface) => surface.id as "discord" | "telegram" | "github")],
     );
     // Recovery is deliberately after the Resident and gateway exist: boot
     // settlements must be able to deliver their one owner-session wake.
@@ -464,6 +474,27 @@ export async function startOpenOmni(options: StartOptions = {}) {
     // the Resident delivery and flushes them. Reject-only on failure: the
     // kernel's deliverWake is the single owner of wake-failure reporting.
     wakeDelivery.arm((wake) => residentDeliver(delegationWakeDelivery(wake)).then(() => undefined));
+
+    // Each channel component is its own stage, mounted before the ws server so
+    // its authority and outbound route exist before any ingress is reachable.
+    // Disposal revokes exactly what the component registered: the listener,
+    // the delivery route, and the trusted-channel grant — fail-closed for any
+    // traffic that arrives afterwards.
+    for (const built of builtChannels) {
+      const surfaceId = built.surface.id;
+      await composer.mount(`channel.${surfaceId}`, async (ctx) => {
+        ctx.effect(registerTrustedChannelGrant(surfaceId));
+        const route = built.deliveryRoute;
+        if (route !== undefined) {
+          deliveryRoutes.set(surfaceId, route);
+          ctx.effect(() => {
+            deliveryRoutes.delete(surfaceId);
+          });
+        }
+        await built.surface.start(recoveryTraceId);
+        ctx.effect(() => built.surface.stop(newTraceId()));
+      });
+    }
 
     wsHandler = new WebSocketHandler(
       routingHandler,
@@ -488,9 +519,9 @@ export async function startOpenOmni(options: StartOptions = {}) {
         if (
           request.method === "POST" &&
           url.pathname === "/github/webhook" &&
-          channelSetup.githubWebhookHandler !== undefined
+          githubWebhookHandler !== undefined
         ) {
-          return channelSetup.githubWebhookHandler(request);
+          return githubWebhookHandler(request);
         }
         return new Response("Not found", { status: 404 });
       },
@@ -507,14 +538,6 @@ export async function startOpenOmni(options: StartOptions = {}) {
         void boundServer.stop();
       });
     });
-    // Each surface is its own stage: the one that fails to start owns nothing,
-    // and the ones already listening unwind in reverse on the rollback path.
-    for (const surface of externalSurfaces) {
-      await composer.mount(`channel.${surface.id}`, async (ctx) => {
-        await surface.start(recoveryTraceId);
-        ctx.effect(() => surface.stop(newTraceId()));
-      });
-    }
     return {
       port: boundPort,
       // Shutdown is the same reverse-order release boot rollback uses: the
