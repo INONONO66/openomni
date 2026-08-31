@@ -131,11 +131,8 @@ describe("WorkItemStore.allocateAttempt", () => {
     const first = await WorkItemStore.allocateAttempt(item.workItemId, identity(), "trace-test");
     if (!first) throw new Error("expected the first allocation");
 
-    // A failed run retried through the existing retry path keeps the
-    // attempt-identity watermark: the next allocation advances the seq and
-    // points its lineage at the recorded prior attempt.
-    await WorkItemStore.fail(item.workItemId, "trace-test", "first attempt failed");
-    await WorkItemStore.retry(item.workItemId, "trace-test");
+    // A subsequent allocation advances the sequence and points its lineage
+    // at the recorded prior attempt.
     const second = await WorkItemStore.allocateAttempt(
       item.workItemId,
       identity("retry the goal"),

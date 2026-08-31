@@ -9,7 +9,6 @@ import {
   cancelWorkItem,
   failWorkItem,
   resolveWorkItemBlocker,
-  retryStoredWorkItem,
   startWorkItem,
   type AttemptAllocationInput,
 } from "./lifecycle.js";
@@ -82,16 +81,6 @@ export namespace WorkItemStore {
     expectedScope?: Readonly<{ expectedAttempt: number; expectedBasisRef: string }>,
   ): Promise<WorkItem.Info | undefined> {
     return addWorkItemEvidence(hash, evidence, traceId, expectedScope);
-  }
-
-  /**
-   * No production caller reaches retry today (dispatch does not re-drive
-   * failed items yet); it stays because multi-attempt admission flows are
-   * pinned through the former completion-admission tests) and it
-   * is the only writer of the attempt/basisRef advance on a failed item.
-   */
-  export async function retry(hash: string, traceId: string): Promise<WorkItem.Info | undefined> {
-    return retryStoredWorkItem(hash, traceId);
   }
 
   /**

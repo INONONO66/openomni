@@ -2,8 +2,7 @@ import { WorkItem } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { Storage } from "../storage/storage.js";
 import { attemptAllocatedFact } from "./facts.js";
-import { mutate, persistMutation } from "./mutation.js";
-import { retryWorkItem } from "./retry.js";
+import { mutate } from "./mutation.js";
 
 export async function startWorkItem(
   hash: string,
@@ -242,13 +241,6 @@ export async function addWorkItemEvidence(
       },
     };
   });
-}
-
-export async function retryStoredWorkItem(
-  hash: string,
-  traceId: string,
-): Promise<WorkItem.Info | undefined> {
-  return retryWorkItem(hash, Storage.get().workItem, persistMutation, traceId);
 }
 
 function assertEvidenceScope(
