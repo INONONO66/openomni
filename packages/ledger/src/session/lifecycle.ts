@@ -23,11 +23,27 @@ type UpdateInput = Partial<Omit<SessionInfo, "id" | "time">> & {
   time?: Partial<SessionInfo["time"]>;
 };
 
-export function create(input: CreateInput): SessionInfo {
-  const id = crypto.randomUUID();
-  const now = Date.now();
+/**
+ * Single owner of "a new session row exists": stores the row, then announces
+ * it. Every birth path (minted root, child, gateway-materialized root) goes
+ * through here so the store write and the Created publish cannot drift apart.
+ * The publish follows the write deliberately — a subscriber must never see a
+ * session it cannot read.
+ */
+function admit(session: SessionInfo, traceId: string): SessionInfo {
+  Storage.get().session.set(session.id, session);
+  Bus.publish(Event.Created, { traceId, info: session });
+  return session;
+}
 
-  const session: SessionInfo = {
+/**
+ * Single owner of the ROOT row shape: depth 0, no parent, created === updated
+ * from one clock read, and expiresAt seeded from ttlMs against that same read.
+ * `create` mints the id; `materialize` is told one by the gateway.
+ */
+function buildRoot(id: string, input: CreateInput): SessionInfo {
+  const now = Date.now();
+  return {
     id,
     title: input.title,
     model: input.model,
@@ -38,11 +54,10 @@ export function create(input: CreateInput): SessionInfo {
     spawnDepth: 0,
     ...(input.ttlMs !== undefined && { expiresAt: now + input.ttlMs }),
   };
+}
 
-  Storage.get().session.set(id, session);
-  Bus.publish(Event.Created, { traceId: input.traceId, info: session });
-
-  return session;
+export function create(input: CreateInput): SessionInfo {
+  return admit(buildRoot(crypto.randomUUID(), input), input.traceId);
 }
 
 export function createChild(input: CreateChildInput): SessionInfo {
@@ -51,10 +66,11 @@ export function createChild(input: CreateChildInput): SessionInfo {
     throw new Error(`Parent session not found: ${input.parentSessionId}`);
   }
 
-  const id = crypto.randomUUID();
   const now = Date.now();
+  // Not buildRoot: a child carries lineage (parent id, parent depth + 1) and
+  // worker metadata, and takes no ttl — its lifetime follows its parent's.
   const child: SessionInfo = {
-    id,
+    id: crypto.randomUUID(),
     title: input.title,
     model: input.model,
     parentSessionId: input.parentSessionId,
@@ -66,10 +82,7 @@ export function createChild(input: CreateChildInput): SessionInfo {
     ...(input.workerMeta !== undefined && { workerMeta: input.workerMeta }),
   };
 
-  Storage.get().session.set(id, child);
-  Bus.publish(Event.Created, { traceId: input.traceId, info: child });
-
-  return child;
+  return admit(child, input.traceId);
 }
 
 /**
@@ -85,21 +98,7 @@ export function materialize(input: CreateInput & { id: string }): {
 } {
   const existing = get(input.id);
   if (existing !== undefined) return { session: existing, created: false };
-  const now = Date.now();
-  const session: SessionInfo = {
-    id: input.id,
-    title: input.title,
-    model: input.model,
-    time: {
-      created: now,
-      updated: now,
-    },
-    spawnDepth: 0,
-    ...(input.ttlMs !== undefined && { expiresAt: now + input.ttlMs }),
-  };
-  Storage.get().session.set(input.id, session);
-  Bus.publish(Event.Created, { traceId: input.traceId, info: session });
-  return { session, created: true };
+  return { session: admit(buildRoot(input.id, input), input.traceId), created: true };
 }
 
 function isExpired(session: SessionInfo, now: number): boolean {
