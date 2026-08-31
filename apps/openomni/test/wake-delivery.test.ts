@@ -13,12 +13,12 @@ describe("wake delivery queue", () => {
     Bus.reset();
   });
 
-  test("a wake queued before arm rejects with exactly one kernel error event", async () => {
-    const collector = eventCollector();
-    // The composition root's publish channel: a duplicate wake-failure report
-    // (R1's defect) would surface here, never through the kernel's sink.
-    const busErrors: unknown[] = [];
-    Bus.subscribe(Operational.Events.Error, (data) => busErrors.push(data));
+  /**
+   * A kernel whose wakes flow through a fresh queue, over one delegation
+   * already settled before boot — the exact shape whose rescan wake must
+   * queue until arm.
+   */
+  function settledUnwokenKernel(collector: ReturnType<typeof eventCollector>) {
     const queue = createWakeDeliveryQueue();
     const wakePromises: Array<Promise<void>> = [];
     const kernel = createDelegationKernel({
@@ -33,7 +33,6 @@ describe("wake delivery queue", () => {
         return delivery;
       },
     });
-
     DelegationStore.create(
       Delegation.Record.parse({
         delegationId: "delegation-1",
@@ -55,6 +54,16 @@ describe("wake delivery queue", () => {
       output: "done",
       at: 200,
     });
+    return { queue, wakePromises, kernel };
+  }
+
+  test("a wake queued before arm rejects with exactly one kernel error event", async () => {
+    const collector = eventCollector();
+    // The composition root's publish channel: a duplicate wake-failure report
+    // (R1's defect) would surface here, never through the kernel's sink.
+    const busErrors: unknown[] = [];
+    Bus.subscribe(Operational.Events.Error, (data) => busErrors.push(data));
+    const { queue, wakePromises, kernel } = settledUnwokenKernel(collector);
 
     // Recovery runs BEFORE the queue is armed: the rescan wake has nowhere to
     // go yet, so it lands in the queue — the exact path R1's duplicate lived on.
@@ -89,42 +98,7 @@ describe("wake delivery queue", () => {
 
   test("a queued wake resolves once arm delivers it and stamps the receipt", async () => {
     const collector = eventCollector();
-    const queue = createWakeDeliveryQueue();
-    const wakePromises: Array<Promise<void>> = [];
-    const kernel = createDelegationKernel({
-      drivers: {},
-      now: () => 1_000,
-      newDelegationId: () => crypto.randomUUID(),
-      events: collector,
-      bootSweep: false,
-      wake: (wake) => {
-        const delivery = queue.deliver(wake);
-        if (delivery !== undefined) wakePromises.push(delivery);
-        return delivery;
-      },
-    });
-
-    DelegationStore.create(
-      Delegation.Record.parse({
-        delegationId: "delegation-1",
-        operation: "ask",
-        address: { kind: "actor", actorId: "actor-1" },
-        transport: "channel",
-        deadline: 10_000,
-        waitId: "wait-1",
-        rootDelegationId: "delegation-1",
-        origin: { role: "resident", depth: 0, sessionId: "session-1" },
-        instruction: "Summarize the proposal.",
-        status: "open",
-        createdAt: 100,
-      }),
-    );
-    DelegationStore.settleOnce("delegation-1", {
-      status: "completed",
-      delegationId: "delegation-1",
-      output: "done",
-      at: 200,
-    });
+    const { queue, wakePromises, kernel } = settledUnwokenKernel(collector);
 
     kernel.start();
     const delivered: string[] = [];

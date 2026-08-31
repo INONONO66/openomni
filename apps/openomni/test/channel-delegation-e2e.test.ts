@@ -1,53 +1,14 @@
-import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { expect, test } from "bun:test";
 import type { RunInput, Sink } from "@openomni/llm";
-import { Session, Storage } from "@openomni/ledger";
-import { startOpenOmni } from "../src/index";
+import { Session } from "@openomni/ledger";
 import { assistantMessage } from "./helpers/assistant-message";
+import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
+import { nextFrame, openSocket } from "./helpers/ws";
 
 const WS_TOKEN = "channel-delegation-e2e-token";
-
-const directories: string[] = [];
-let stopApp: (() => Promise<void>) | undefined;
-
-afterEach(async () => {
-  await stopApp?.();
-  stopApp = undefined;
-  Storage.reset();
-  for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
-});
-
-async function openSocket(url: string): Promise<WebSocket> {
-  const ws = new WebSocket(url);
-  await new Promise<void>((resolve, reject) => {
-    ws.addEventListener("open", () => resolve(), { once: true });
-    ws.addEventListener("error", () => reject(new Error("socket failed to open")), { once: true });
-  });
-  return ws;
-}
-
-function nextFrame(
-  ws: WebSocket,
-  accept: (frame: Record<string, unknown>) => boolean,
-): Promise<Record<string, unknown>> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("no frame arrived")), 10_000);
-    const listener = (event: MessageEvent) => {
-      const frame = JSON.parse(String(event.data)) as Record<string, unknown>;
-      if (!accept(frame)) return;
-      clearTimeout(timer);
-      ws.removeEventListener("message", listener);
-      resolve(frame);
-    };
-    ws.addEventListener("message", listener);
-  });
-}
+const suite = residentSuite();
 
 test("the Resident delegates to an external actor over the channel and reports the reply", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "openomni-channel-delegation-"));
-  directories.push(directory);
   const residentTexts: string[] = [];
   let ownerSessionId: string | undefined;
   let wake!: () => void;
@@ -55,12 +16,8 @@ test("the Resident delegates to an external actor over the channel and reports t
     wake = resolve;
   });
 
-  const app = await startOpenOmni({
-    config: {
-      dbPath: join(directory, "chat.db"),
-      memoryPath: join(directory, "memory.json"),
-      host: "127.0.0.1",
-      wsPort: 0,
+  const app = await suite.boot({
+    config: suite.config("openomni-channel-delegation-", {
       wsToken: WS_TOKEN,
       model: { provider: "fake", id: "channel-delegation-test", apiKey: "test-key" },
       actors: [{ actorId: "alice", externalId: "alice", trustTier: "collaborator", kind: "human" }],
@@ -73,13 +30,9 @@ test("the Resident delegates to an external actor over the channel and reports t
           cooldownMs: 0,
         },
       ],
-    },
+    }),
     llm: {
-      resolveProviderModel: async (model) => ({
-        id: model.id,
-        name: model.id,
-        providerID: model.provider,
-      }),
+      resolveProviderModel: fakeProviderModel,
       run: async (input: RunInput, sink: Sink) => {
         const lastUser = [...input.messages].reverse().find((entry) => entry.info.role === "user");
         const asked = (lastUser?.parts ?? [])
@@ -120,7 +73,6 @@ test("the Resident delegates to an external actor over the channel and reports t
       },
     },
   });
-  stopApp = app.stop;
 
   const base = `ws://127.0.0.1:${app.port}/ws?token=${WS_TOKEN}`;
   const owner = await openSocket(base);
