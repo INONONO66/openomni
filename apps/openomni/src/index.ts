@@ -41,6 +41,7 @@ import { createProcessDriver } from "./delegation/process-driver";
 import { createInlineWorkerRunner } from "./delegation/worker-loop";
 import { createResidentGateway } from "./gateway";
 import { createComposer } from "./composition/composer";
+import { createDriverRegistry } from "./composition/driver-registry";
 import { openCuratedMemory } from "./memory/store";
 import { buildInboundEvent } from "./inbound";
 import { createResident } from "./resident";
@@ -256,6 +257,32 @@ export async function startOpenOmni(options: StartOptions = {}) {
       now: () => Date.now(),
       newWaitId: () => crypto.randomUUID(),
     });
+    // The kernel reads this table at dispatch time, so registrations made
+    // (or replaced) after boot are visible to the very next dispatch. Each
+    // boot registration is a composer-owned effect: disposing revokes the
+    // driver's admission to new work while in-flight runs complete under the
+    // generation that dispatched them.
+    const driverRegistry = createDriverRegistry();
+    await composer.mount("delegation.drivers", (ctx) => {
+      const registrations = [
+        driverRegistry.register("inline", createInlineDriver(runner)),
+        driverRegistry.register("channel", channelDriver),
+        driverRegistry.register(
+          "process",
+          createProcessDriver({
+            command: [process.execPath, processEntryPath(import.meta.url)],
+            worker: {
+              model: { provider: config.model.provider, id: config.model.id },
+              apiKey: config.model.apiKey,
+            },
+            dbPath: config.dbPath,
+          }),
+        ),
+      ];
+      for (const registration of registrations) {
+        ctx.effect(() => registration.dispose());
+      }
+    });
     kernel = createDelegationKernel({
       events: Bus,
       workItems: createWorkItemLinkage({
@@ -264,18 +291,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       }),
       wake: (wake) => wakeDelivery.deliver(wake),
       bootSweep: false,
-      drivers: {
-        inline: createInlineDriver(runner),
-        channel: channelDriver,
-        process: createProcessDriver({
-          command: [process.execPath, processEntryPath(import.meta.url)],
-          worker: {
-            model: { provider: config.model.provider, id: config.model.id },
-            apiKey: config.model.apiKey,
-          },
-          dbPath: config.dbPath,
-        }),
-      },
+      drivers: driverRegistry.drivers,
       now: () => Date.now(),
       newDelegationId: () => crypto.randomUUID(),
     });
