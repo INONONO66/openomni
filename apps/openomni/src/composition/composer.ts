@@ -49,7 +49,7 @@ interface EffectContext {
   effect(disposer: Disposer): void;
 }
 
-interface Composer {
+export interface Composer {
   /**
    * Runs one stage. If `apply` throws, the disposers it already registered
    * run in reverse before the error propagates — a failed stage leaves
@@ -87,6 +87,21 @@ async function release(fiber: Fiber): Promise<readonly Error[]> {
   }
   fiber.disposers.length = 0;
   return failures;
+}
+
+/**
+ * Fail-closed unwinding for a failed composition run: release everything the
+ * composer holds, then rethrow the original cause. When the release itself
+ * also fails, both faults surface together — the rollback failure must never
+ * shadow what actually broke the run.
+ */
+export async function rollbackToCause(composer: Composer, cause: Error): Promise<never> {
+  try {
+    await composer.dispose();
+  } catch (rollbackError) {
+    throw new AggregateError([cause, rollbackError], "composition failed and its rollback failed");
+  }
+  throw cause;
 }
 
 export function createComposer(): Composer {

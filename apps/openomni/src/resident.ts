@@ -61,6 +61,52 @@ interface ResidentOptions {
   readonly policies: PolicyRegistry;
 }
 
+interface DeliveryClassification {
+  readonly sessionId: string;
+  readonly payload: string;
+  readonly evidenceOnly: boolean;
+  readonly systemKind: "delegation.settled" | "evidence_only" | undefined;
+}
+
+/**
+ * The delivery's authority reading, settled once per turn. The authoritative
+ * perimeter verdict is actorContext.inboundTreatment (§2a projection); event
+ * meta and the recorded decision carry copies the schema does not require to
+ * agree. Fail closed on disagreement: ANY evidence_only stamp downgrades the
+ * turn, and only a delivery with no evidence_only anywhere runs at full
+ * authority. A mismatch can therefore only reduce authority, never elevate it.
+ */
+function classifyDelivery(delivery: Gateway.Deliver): DeliveryClassification {
+  const sessionId = delivery.sessionId;
+  if (sessionId === undefined) {
+    throw new Error("Resident delivery requires a routed sessionId");
+  }
+  const payload = delivery.event.payload;
+  if (typeof payload !== "string") {
+    throw new Error("Resident delivery payload must be text");
+  }
+  const evidenceOnly =
+    delivery.actorContext?.inboundTreatment === "evidence_only" ||
+    delivery.decision.inboundTreatment === "evidence_only" ||
+    delivery.event.meta?.inboundTreatment === "evidence_only";
+  const systemKind =
+    delivery.event.meta?.kind === "delegation.settled"
+      ? "delegation.settled"
+      : evidenceOnly
+        ? "evidence_only"
+        : undefined;
+  return { sessionId, payload, evidenceOnly, systemKind };
+}
+
+/** Who an evidence-only observation is attributed to in its framing. */
+function evidenceOrigin(delivery: Gateway.Deliver): string {
+  return (
+    delivery.actorContext?.actorId ??
+    delivery.actorContext?.origin.externalId ??
+    delivery.event.surface
+  );
+}
+
 function addTextPart(sessionId: string, messageId: string, text: string): void {
   Session.addPart(messageId, {
     id: crypto.randomUUID(),
@@ -111,34 +157,65 @@ export function createResident(options: ResidentOptions) {
     return buildAgentPrompt(RESIDENT_PRESET, { memorySnapshot: snapshot });
   }
 
+  function recordUserTurn(delivery: Gateway.Deliver, turn: DeliveryClassification): string {
+    const userId = crypto.randomUUID();
+    Session.addMessage(turn.sessionId, {
+      id: userId,
+      sessionID: turn.sessionId,
+      role: "user",
+      time: { created: Date.now() },
+      agent: turn.systemKind === undefined ? "resident" : "system",
+      model: { providerID: options.model.provider, modelID: options.model.id },
+      ...(turn.systemKind === undefined ? {} : { system: turn.systemKind }),
+    });
+    addTextPart(
+      turn.sessionId,
+      userId,
+      turn.evidenceOnly
+        ? frameEvidenceOnlyText(turn.payload, evidenceOrigin(delivery))
+        : turn.payload,
+    );
+    return userId;
+  }
+
+  function recordAssistantTurn(
+    sessionId: string,
+    userId: string,
+    result: Awaited<ReturnType<ReturnType<typeof ChatAgent.create>["run"]>>,
+  ): void {
+    const assistantId = crypto.randomUUID();
+    Session.addMessage(sessionId, {
+      id: assistantId,
+      sessionID: sessionId,
+      role: "assistant",
+      time: { created: Date.now(), completed: Date.now() },
+      parentID: userId,
+      modelID: options.model.id,
+      providerID: options.model.provider,
+      agent: "resident",
+      path: { cwd: process.cwd(), root: process.cwd() },
+      cost: 0,
+      tokens: {
+        input: result.usage.inputTokens,
+        output: result.usage.outputTokens,
+        reasoning: result.usage.reasoningTokens ?? 0,
+        cache: {
+          read: result.usage.cacheReadTokens ?? 0,
+          write: result.usage.cacheWriteTokens ?? 0,
+        },
+      },
+      finish: result.finishReason,
+    });
+    addTextPart(sessionId, assistantId, result.text);
+  }
+
   return async function deliver(delivery: Gateway.Deliver): Promise<Ingress.IngressResult> {
-    const sessionId = delivery.sessionId;
-    if (sessionId === undefined) {
-      throw new Error("Resident delivery requires a routed sessionId");
-    }
-    if (typeof delivery.event.payload !== "string") {
-      throw new Error("Resident delivery payload must be text");
-    }
+    const turn = classifyDelivery(delivery);
+    const { sessionId, evidenceOnly } = turn;
 
     // Built per delivery because the origin carries THIS session: a Wait a
     // delegation opens must be owned by the session that asked for the work.
     const origin: DelegationOrigin = { role: "resident", depth: 0, sessionId };
-    // The authoritative perimeter verdict is actorContext.inboundTreatment
-    // (§2a projection); event meta and the recorded decision carry copies the
-    // schema does not require to agree. Fail closed on disagreement: ANY
-    // evidence_only stamp downgrades the turn, and only a delivery with no
-    // evidence_only anywhere runs at full authority. A mismatch can therefore
-    // only reduce authority, never elevate it.
-    const evidenceOnly =
-      delivery.actorContext?.inboundTreatment === "evidence_only" ||
-      delivery.decision.inboundTreatment === "evidence_only" ||
-      delivery.event.meta?.inboundTreatment === "evidence_only";
-    const systemKind =
-      delivery.event.meta?.kind === "delegation.settled"
-        ? "delegation.settled"
-        : evidenceOnly
-          ? "evidence_only"
-          : undefined;
     const targets = options.targets();
     const catalog = createDispatcher(catalogEntries(options.tools, origin));
     // An evidence-only turn gets no execution surface: the model is offered
@@ -175,28 +252,7 @@ export function createResident(options: ResidentOptions) {
       model: { providerID: options.model.provider, modelID: options.model.id },
     });
 
-    const userId = crypto.randomUUID();
-    Session.addMessage(sessionId, {
-      id: userId,
-      sessionID: sessionId,
-      role: "user",
-      time: { created: Date.now() },
-      agent: systemKind === undefined ? "resident" : "system",
-      model: { providerID: options.model.provider, modelID: options.model.id },
-      ...(systemKind === undefined ? {} : { system: systemKind }),
-    });
-    addTextPart(
-      sessionId,
-      userId,
-      evidenceOnly
-        ? frameEvidenceOnlyText(
-            delivery.event.payload,
-            delivery.actorContext?.actorId ??
-              delivery.actorContext?.origin.externalId ??
-              delivery.event.surface,
-          )
-        : delivery.event.payload,
-    );
+    const userId = recordUserTurn(delivery, turn);
 
     const result = await observation.run(() =>
       agent.run({
@@ -210,30 +266,7 @@ export function createResident(options: ResidentOptions) {
       }),
     );
 
-    const assistantId = crypto.randomUUID();
-    Session.addMessage(sessionId, {
-      id: assistantId,
-      sessionID: sessionId,
-      role: "assistant",
-      time: { created: Date.now(), completed: Date.now() },
-      parentID: userId,
-      modelID: options.model.id,
-      providerID: options.model.provider,
-      agent: "resident",
-      path: { cwd: process.cwd(), root: process.cwd() },
-      cost: 0,
-      tokens: {
-        input: result.usage.inputTokens,
-        output: result.usage.outputTokens,
-        reasoning: result.usage.reasoningTokens ?? 0,
-        cache: {
-          read: result.usage.cacheReadTokens ?? 0,
-          write: result.usage.cacheWriteTokens ?? 0,
-        },
-      },
-      finish: result.finishReason,
-    });
-    addTextPart(sessionId, assistantId, result.text);
+    recordAssistantTurn(sessionId, userId, result);
 
     return {
       mode: "direct",

@@ -1,5 +1,6 @@
-import { type ModelsDev, Provider } from "@openomni/llm";
-import type { Tool } from "@openomni/protocol";
+import { ModelsDev, Provider, run as llmRun, type Sink } from "@openomni/llm";
+import { type Message, type Model, newTraceId, type Tool } from "@openomni/protocol";
+import { Bus } from "@openomni/telemetry";
 import { z } from "zod";
 
 /**
@@ -78,6 +79,95 @@ export function llmToolExecutor(llm: LlmPort) {
  * configured credential to the wrong provider. The agent loop's own resolver
  * refuses unlisted models for the same reason.
  */
+/**
+ * The same substitution seam ChatAgentConfig["llm"] gives the Resident and
+ * the worker loop: absent fields use the real provider I/O. Boot passes its
+ * `options.llm` through, so a composition booted on a fake model never lets
+ * this one port slip out to the network.
+ */
+export interface LlmIo {
+  readonly run?: typeof llmRun;
+  readonly resolveProviderModel?: (model: Model.Ref) => Promise<Provider.Model>;
+}
+
+/**
+ * The llm tool's one-shot sub-model call: a single user message, no tools,
+ * one step, its own synthesized trace — a nested run must never borrow the
+ * turn's run identity. Auth is the configured key, exactly as the Resident
+ * and the worker loop authenticate.
+ */
+export function createLlmToolPort(
+  model: { readonly provider: string; readonly id: string; readonly apiKey: string },
+  io: LlmIo = {},
+): LlmPort {
+  return async (prompt) => {
+    const sessionId = "llm-tool";
+    const messageId = crypto.randomUUID();
+    const request: Message.WithParts = {
+      info: {
+        id: messageId,
+        sessionID: sessionId,
+        role: "user",
+        time: { created: Date.now() },
+        agent: "llm-tool",
+        model: { providerID: model.provider, modelID: model.id },
+      },
+      parts: [
+        {
+          id: crypto.randomUUID(),
+          sessionID: sessionId,
+          messageID: messageId,
+          type: "text",
+          text: prompt,
+        },
+      ],
+    };
+    let answer = "";
+    const sink: Sink = {
+      onMessage: (message) => {
+        if (message.info.role !== "assistant") return;
+        answer = message.parts
+          .filter((part): part is Message.TextPart => part.type === "text")
+          .map((part) => part.text)
+          .join("");
+      },
+      onToolCall: () => undefined,
+      onToolResult: () => undefined,
+    };
+    const ref: Model.Ref = { provider: model.provider, id: model.id };
+    const resolved =
+      io.resolveProviderModel === undefined
+        ? resolveLlmToolModel(await ModelsDev.get(), ref)
+        : await io.resolveProviderModel(ref);
+    const outcome = await (io.run ?? llmRun)(
+      {
+        messages: [request],
+        tools: [],
+        maxSteps: 1,
+        model: resolved,
+        auth: { type: "api", key: model.apiKey },
+        trace: {
+          traceId: newTraceId(),
+          sessionId,
+          runId: crypto.randomUUID(),
+        },
+        events: Bus,
+      },
+      sink,
+    );
+    if (outcome.type !== "stop") {
+      const reason =
+        "error" in outcome && outcome.error !== undefined
+          ? outcome.error.message
+          : `the sub-model run ended as ${outcome.type}`;
+      // Thrown, not returned: the consumer is cell code, and a failure string
+      // returned as data would be stored as if it were model output.
+      throw new Error(`llm failed: ${reason}`);
+    }
+    return answer;
+  };
+}
+
 export function resolveLlmToolModel(
   data: Record<string, ModelsDev.Provider>,
   model: { readonly provider: string; readonly id: string },

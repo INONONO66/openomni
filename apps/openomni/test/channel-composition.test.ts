@@ -149,4 +149,26 @@ describe("OpenOmni channel composition", () => {
       status: 202,
     });
   });
+
+  it("builds the real channel adapters when no factories are injected", () => {
+    const handler: Channel.MessageHandler = async () => ({ text: "resident reply" });
+    const config: OpenOmniConfig = {
+      ...baseConfig(),
+      channels: {
+        discord: { token: "discord-token" },
+        telegram: { token: "telegram-token" },
+        github: { secret: "github-secret" },
+      },
+    };
+
+    // Construction only — adapters connect in start(), which is never called.
+    const built = channelProfile(config).map((row) => row.build(handler));
+
+    expect(built.map((channel) => channel.surface.id)).toEqual(["telegram", "github", "discord"]);
+    const [telegram, github, discord] = built;
+    expect(telegram?.deliveryRoute).toBeDefined();
+    expect(discord?.deliveryRoute).toBeDefined();
+    expect(github?.deliveryRoute).toBeUndefined();
+    expect(github?.webhookHandler).toBeDefined();
+  });
 });
