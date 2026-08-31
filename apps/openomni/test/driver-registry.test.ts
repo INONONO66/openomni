@@ -74,6 +74,32 @@ describe("delegation driver registry", () => {
     expect(registration.inFlight()).toBe(0);
   });
 
+  test("drain outlives the first return while a second run is still in flight", async () => {
+    const registry = createDriverRegistry();
+    const releases: (() => void)[] = [];
+    const registration = registry.register("inline", {
+      run: () =>
+        new Promise<DriverOutcome>((resolve) => {
+          releases.push(() => resolve(completed("ok")));
+        }),
+    });
+
+    const first = registry.drivers.inline?.run(admitted, handle, signal);
+    const second = registry.drivers.inline?.run(admitted, handle, signal);
+    expect(registration.inFlight()).toBe(2);
+    const drained = registration.drain().then(() => "drained" as const);
+
+    // The first return must not settle the drain: one run still holds work.
+    releases[0]?.();
+    await first;
+    expect(await Promise.race([drained, Promise.resolve("pending" as const)])).toBe("pending");
+
+    releases[1]?.();
+    await second;
+    expect(await drained).toBe("drained");
+    expect(registration.inFlight()).toBe(0);
+  });
+
   test("drain on an idle registration resolves immediately", async () => {
     const registry = createDriverRegistry();
     const registration = registry.register("process", {

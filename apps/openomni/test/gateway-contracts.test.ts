@@ -3,9 +3,9 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { RunInput, Sink } from "@openomni/llm";
-import { ActorRegistry, Session, Storage } from "@openomni/ledger";
+import { ActorRegistry, ChannelGrantStore, Session, Storage } from "@openomni/ledger";
 import { Gateway, type Message, newTraceId } from "@openomni/protocol";
-import { createResidentGateway } from "../src/gateway";
+import { createResidentGateway, registerTrustedChannelGrant } from "../src/gateway";
 import { openCuratedMemory } from "../src/memory/store";
 import { createPolicyRegistry } from "../src/composition/policy-registry";
 import { createResident } from "../src/resident";
@@ -67,6 +67,51 @@ beforeEach(() => {
 afterEach(() => {
   Storage.reset();
   rmSync(directory, { recursive: true, force: true });
+});
+
+describe("channel grant registration", () => {
+  test("the revoker removes exactly the grant it registered", () => {
+    const revokeTelegram = registerTrustedChannelGrant("telegram");
+    const revokeDiscord = registerTrustedChannelGrant("discord");
+    expect(ChannelGrantStore.resolve({ surface: "telegram" })?.grant.kind).toBe(
+      "trusted_channel",
+    );
+
+    revokeTelegram();
+
+    // Only the telegram grant is gone; the sibling surface keeps its authority.
+    expect(ChannelGrantStore.resolve({ surface: "telegram" })).toBeUndefined();
+    expect(ChannelGrantStore.resolve({ surface: "discord" })?.grant.kind).toBe(
+      "trusted_channel",
+    );
+    revokeDiscord();
+    expect(ChannelGrantStore.resolve({ surface: "discord" })).toBeUndefined();
+  });
+});
+
+describe("Resident delivery contract", () => {
+  test("refuses a delivery without a routed sessionId before touching any state", async () => {
+    const resident = createResident({
+      model: MODEL,
+      apiKey: "test-key",
+      policies: createPolicyRegistry({ mandatory: [] }),
+      tools: { memory: openCuratedMemory(join(directory, "memory.json")) },
+      targets: () => [{ kind: "host", id: "brain", capabilities: [] }],
+      llm: {
+        resolveProviderModel: async (model) => ({
+          id: model.id,
+          name: model.id,
+          providerID: model.provider,
+        }),
+        run: async () => {
+          throw new Error("the model must never run for an unrouted delivery");
+        },
+      },
+    });
+
+    const unrouted = Gateway.Deliver.parse({ ...evidenceDelivery("hi"), sessionId: undefined });
+    await expect(resident(unrouted)).rejects.toThrow("Resident delivery requires a routed sessionId");
+  });
 });
 
 describe("Resident inbound treatment", () => {
