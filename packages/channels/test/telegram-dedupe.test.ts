@@ -88,7 +88,11 @@ describe("TelegramAdapter dedupe (D1)", () => {
 
 const config = { triggers: [] } satisfies Channel.Config;
 type DeliveryOwner = Readonly<{
-  deliver(externalId: string, body: string, idempotencyKey?: string): Promise<{
+  deliver(
+    externalId: string,
+    body: string,
+    idempotencyKey?: string,
+  ): Promise<{
     externalMessageId?: string;
   }>;
 }>;
@@ -133,10 +137,9 @@ afterEach(() => {
 });
 
 describe("outbound adapter delivery dedupe capability", () => {
-  test.each(owners)("%s reuses one outbound result when an idempotency key is supplied", async (
-    _name,
-    fixture,
-  ) => {
+  test.each(
+    owners,
+  )("%s reuses one outbound result when an idempotency key is supplied", async (_name, fixture) => {
     const { owner, outboundCalls } = fixture();
 
     const [first, retry] = await Promise.all([
@@ -148,10 +151,9 @@ describe("outbound adapter delivery dedupe capability", () => {
     expect(retry).toEqual(first);
   });
 
-  test.each(owners)("%s remains at-least-once when no idempotency key is supplied", async (
-    _name,
-    fixture,
-  ) => {
+  test.each(
+    owners,
+  )("%s remains at-least-once when no idempotency key is supplied", async (_name, fixture) => {
     const { owner, outboundCalls } = fixture();
 
     await owner.deliver("recipient-1", "hello");
@@ -188,11 +190,11 @@ describe("outbound adapter delivery dedupe capability", () => {
   test("the inbound dedupe bound evicts oldest ids rather than dropping new work", () => {
     const dedupe = new Dedupe(Number.POSITIVE_INFINITY, 2);
     for (let index = 0; index < 100; index += 1) {
-      expect(dedupe.isDuplicate(`message-${index}`)).toBe(false);
+      expect(dedupe.acquire(`message-${index}`).duplicate).toBe(false);
     }
 
-    expect(dedupe.isDuplicate("message-0")).toBe(false);
-    expect(dedupe.isDuplicate("message-99")).toBe(true);
+    expect(dedupe.acquire("message-0").duplicate).toBe(false);
+    expect(dedupe.acquire("message-99").duplicate).toBe(true);
   });
 
   test("a stale release cannot remove a newer generation after expiry", () => {
@@ -208,7 +210,7 @@ describe("outbound adapter delivery dedupe capability", () => {
       expect(second.duplicate).toBe(false);
       if (first.duplicate) throw new Error("first acquisition was not accepted");
       dedupe.forget("same-id", first.token);
-      expect(dedupe.isDuplicate("same-id")).toBe(true);
+      expect(dedupe.acquire("same-id").duplicate).toBe(true);
     } finally {
       Date.now = originalNow;
     }
@@ -224,6 +226,6 @@ describe("outbound adapter delivery dedupe capability", () => {
     expect(second.duplicate).toBe(false);
     if (first.duplicate) throw new Error("first acquisition was not accepted");
     dedupe.forget("same-id", first.token);
-    expect(dedupe.isDuplicate("same-id")).toBe(true);
+    expect(dedupe.acquire("same-id").duplicate).toBe(true);
   });
 });

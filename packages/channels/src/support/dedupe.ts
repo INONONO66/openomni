@@ -74,10 +74,6 @@ export class Dedupe {
     return { duplicate: false, token };
   }
 
-  isDuplicate(id: string): boolean {
-    return this.acquire(id).duplicate;
-  }
-
   private prune(): void {
     const cutoff = Date.now() - this.maxAge;
     for (const [id, entry] of this.seen) {
