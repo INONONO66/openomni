@@ -76,10 +76,12 @@ describe("composition substrate", () => {
     await expect(rejection).rejects.toThrow(
       "composition stage bad failed and its rollback failed",
     );
-    const caught = (await rejection.catch((error: unknown) => error)) as Error & {
-      errors: readonly unknown[];
-    };
-    expect(caught.errors).toEqual([mountFailure, releaseFailure]);
+    const caught = await rejection.then(
+      () => null,
+      (error: AggregateError) => error,
+    );
+    expect(caught).toBeInstanceOf(AggregateError);
+    expect(caught?.errors).toEqual([mountFailure, releaseFailure]);
   });
 
   test("dispose runs every disposer even when one throws, then reports the failures", async () => {
@@ -98,10 +100,12 @@ describe("composition substrate", () => {
     });
     const rejection = composer.dispose();
     await expect(rejection).rejects.toThrow("composition dispose failed");
-    const caught = (await rejection.catch((error: unknown) => error)) as Error & {
-      errors: readonly unknown[];
-    };
-    expect(caught.errors).toEqual([failure]);
+    const caught = await rejection.then(
+      () => null,
+      (error: AggregateError) => error,
+    );
+    expect(caught).toBeInstanceOf(AggregateError);
+    expect(caught?.errors).toEqual([failure]);
     // The failing disposer did not abandon the rest.
     expect(order).toEqual(["a.release"]);
   });
