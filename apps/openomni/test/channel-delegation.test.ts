@@ -55,15 +55,21 @@ describe("channel delegation driver", () => {
       },
       now: () => NOW,
       newWaitId: () => "wait-1",
+      conversations: {
+        open: () => {
+          throw new Error("window open failed");
+        },
+        get: () => undefined,
+      },
     });
     const prepared = driver.prepare(admitted(), {
       ...HANDLE,
       waitId: undefined,
     });
     expect(prepared).toEqual({ waitId: "wait-1" });
-    const outcome = driver.run(admitted(), HANDLE, controller.signal);
-    controller.abort();
-    expect(await outcome).toMatchObject({ status: "cancelled" });
+    await expect(driver.run(admitted(), HANDLE, controller.signal)).rejects.toThrow(
+      "window open failed",
+    );
     const input = sent[0];
     if (input === undefined || input.waitSpec === undefined) throw new Error("nothing was sent");
     expect(input.operation).toBe("awaited");
@@ -89,6 +95,7 @@ describe("channel delegation driver", () => {
       },
       now: () => NOW,
       newWaitId: () => "never-used",
+      conversations: { open: () => { throw new Error("not reached"); }, get: () => undefined },
     });
     const outcome = await driver.run(admitted("notify"), { ...HANDLE, operation: "notify", waitId: undefined }, new AbortController().signal, {
       delivered: () => {
@@ -114,6 +121,7 @@ describe("channel delegation driver", () => {
       }),
       now: () => NOW,
       newWaitId: () => "wait-1",
+      conversations: { open: () => { throw new Error("not reached"); }, get: () => undefined },
     });
     await expect(denied.run(admitted(), HANDLE, new AbortController().signal)).resolves.toEqual({
       status: "delivery_failed",
@@ -126,6 +134,7 @@ describe("channel delegation driver", () => {
       },
       now: () => NOW,
       newWaitId: () => "wait-1",
+      conversations: { open: () => { throw new Error("not reached"); }, get: () => undefined },
     });
     await expect(broken.run(admitted(), HANDLE, new AbortController().signal)).resolves.toEqual({
       status: "delivery_failed",
@@ -139,6 +148,7 @@ describe("channel delegation driver", () => {
       send: async (input) => awaitedReceipt(input),
       now: () => NOW,
       newWaitId: () => "wait-1",
+      conversations: { open: () => { throw new Error("not reached"); }, get: () => undefined },
     });
     const kernel = createDelegationKernel({
       drivers: { channel: driver },
@@ -185,4 +195,46 @@ describe("channel delegation driver", () => {
     );
     expect(decision).toMatchObject({ ok: false, error: { data: { code: "worker_transport" } } });
   });
+  test("an awaited ask opens its bounded conversation window after acceptance", async () => {
+    const opened: Array<{ id: string; expiresAt: number }> = [];
+    const controller = new AbortController();
+    const driver = createChannelDriver({
+      send: async (input) => awaitedReceipt(input),
+      now: () => NOW,
+      newWaitId: () => "wait-1",
+      conversations: {
+        open: (input) => {
+          opened.push({ id: input.id, expiresAt: input.policy.expiresAt });
+          throw new Error("stop after recording — the window shape is the assertion");
+        },
+        get: () => undefined,
+      },
+    });
+    await expect(
+      driver.run(admitted("ask"), { ...HANDLE, operation: "ask" }, controller.signal),
+    ).rejects.toThrow("stop after recording");
+    expect(opened).toEqual([{ id: "conv:wait-1", expiresAt: DEADLINE }]);
+  });
+
+  test("a replayed dispatch reuses the already-open window (idempotent)", async () => {
+    let opens = 0;
+    const controller = new AbortController();
+    const driver = createChannelDriver({
+      send: async (input) => awaitedReceipt(input),
+      now: () => NOW,
+      newWaitId: () => "wait-1",
+      conversations: {
+        open: () => {
+          opens += 1;
+          throw new Error("must not re-open");
+        },
+        get: () => ({ id: "conv:wait-1" }) as never,
+      },
+    });
+    const outcome = driver.run(admitted("ask"), { ...HANDLE, operation: "ask" }, controller.signal);
+    controller.abort();
+    await outcome;
+    expect(opens).toBe(0);
+  });
 });
+

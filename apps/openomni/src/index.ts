@@ -10,6 +10,7 @@ import {
   ActorRegistry,
   Artifact,
   BusPersistence,
+  ConversationStore,
   initialize,
   Session,
   Storage,
@@ -284,6 +285,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       },
       now: () => Date.now(),
       newWaitId: () => crypto.randomUUID(),
+      conversations: ConversationStore,
     });
     // The kernel reads this table at dispatch time, so registrations made
     // (or replaced) after boot are visible to the very next dispatch. Each
@@ -380,6 +382,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
                   workItems: completionPort,
                   llm: llmPort,
                   artifacts: artifactsPort,
+                  conversations: ConversationStore,
                 },
                 origin,
               ),
@@ -414,6 +417,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
         workItems: completionPort,
         llm: llmPort,
         artifacts: artifactsPort,
+        conversations: ConversationStore,
       },
       targets: () => attachedTargets(host, machines?.enrolled ?? []),
       ...(options.llm === undefined ? {} : { llm: options.llm }),

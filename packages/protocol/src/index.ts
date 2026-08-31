@@ -19,6 +19,7 @@ export * from "./ipc/index.js";
 export * from "./work-item/index.js";
 export * from "./deadline/index.js";
 export * from "./wait/index.js";
+export * from "./conversation/index.js";
 export * from "./machine/index.js";
 export * from "./delegation/index.js";
 export * from "./engagement/index.js";

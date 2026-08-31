@@ -5,6 +5,7 @@ import type { AppConnector } from "../app-connector/index.js";
 import type { Ledger } from "../ledger/index.js";
 import type { Delegation } from "../delegation/index.js";
 import type { Engagement } from "../engagement/index.js";
+import type { Conversation } from "../conversation/index.js";
 import type { Wait } from "../wait/index.js";
 import type { WorkItem } from "../work-item/index.js";
 import type { Gateway } from "../gateway/index.js";
@@ -166,6 +167,17 @@ export namespace Storage {
     findByCorrelation(query: Wait.CorrelationQuery): Wait.Record[];
     /** Revision compare-and-set (UPDATE ... WHERE id AND revision): changes===1 receipt. */
     compareAndSet(id: string, expectedRevision: number, record: Wait.Record): boolean;
+  }
+
+  export interface ConversationSubAdapter {
+    /** INSERT receipt: false when the id already exists. */
+    create(record: Conversation.Record): boolean;
+    get(id: string): Conversation.Record | undefined;
+    list(state?: Conversation.State[]): Conversation.Record[];
+    /** Open windows pinned to one endpoint — the router's inbound correlation read. */
+    findOpenByEndpoint(endpointId: string): Conversation.Record[];
+    /** Revision compare-and-set (UPDATE ... WHERE id AND revision): changes===1 receipt. */
+    compareAndSet(id: string, expectedRevision: number, record: Conversation.Record): boolean;
   }
 
   /**

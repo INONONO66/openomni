@@ -244,6 +244,7 @@ const CHANNELS_ROUTER_LEDGER_SURFACES = new Set([
   "BlacklistStore",
   "ChannelGrantStore",
   "WaitStore",
+  "ConversationStore",
   "SurfaceKey",
   "LedgerAppend",
   // #219 active-egress debit ledger — a perimeter surface written ONLY by the
