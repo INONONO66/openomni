@@ -12,11 +12,14 @@ import {
 import { catalogEntries, collectToolSpecs } from "../src/tools/catalog";
 import { createDispatcher, HOST_TARGET } from "../src/tools/dispatch";
 import {
+  createLlmToolPort,
   LLM_TOOL_NAME,
   llmToolExecutor,
   MAX_LLM_CALLS,
   resolveLlmToolModel,
 } from "../src/tools/llm";
+import type { RunInput } from "@openomni/llm";
+import { assistantMessage } from "./helpers/assistant-message";
 
 const RESIDENT = { role: "resident", depth: 0, sessionId: "session-origin" } as const;
 
@@ -132,6 +135,72 @@ describe("the llm tool", () => {
 
     expect(result.isError).toBeUndefined();
     expect(result.output).toBe("ok");
+  });
+});
+
+describe("the llm tool port", () => {
+  const MODEL = { provider: "fake", id: "port-test", apiKey: "port-key" } as const;
+  const resolveProviderModel = async (model: { provider: string; id: string }) => ({
+    id: model.id,
+    name: model.id,
+    providerID: model.provider,
+  });
+
+  it("runs one toolless step under its own trace and returns the assistant text", async () => {
+    let seen: RunInput | undefined;
+    const port = createLlmToolPort(MODEL, {
+      resolveProviderModel,
+      run: async (input, sink) => {
+        seen = input;
+        sink.onMessage(assistantMessage(input, { id: "sub-reply", text: "the answer" }));
+        return { type: "stop" };
+      },
+    });
+
+    expect(await port("summarize")).toBe("the answer");
+    expect(seen?.tools).toEqual([]);
+    expect(seen?.maxSteps).toBe(1);
+    expect(seen?.auth).toEqual({ type: "api", key: "port-key" });
+    expect(seen?.model).toMatchObject({ id: "port-test", providerID: "fake" });
+    // A nested run must never borrow the turn's identity: the trace is its own.
+    expect(seen?.trace.sessionId).toBe("llm-tool");
+    const parts = seen?.messages[0]?.parts ?? [];
+    expect(parts[0]).toMatchObject({ type: "text", text: "summarize" });
+  });
+
+  it("ignores non-assistant messages when reading the answer", async () => {
+    const port = createLlmToolPort(MODEL, {
+      resolveProviderModel,
+      run: async (input, sink) => {
+        const echo = input.messages[0];
+        if (echo !== undefined) sink.onMessage(echo);
+        // The port discards tool activity too: a one-step toolless run has no
+        // executor, so these projections must be inert.
+        sink.onToolCall({ id: "call-1", tool: "noop", input: {} });
+        sink.onToolResult({ id: "result-1", toolCallId: "call-1", output: "ignored" });
+        return { type: "stop" };
+      },
+    });
+
+    expect(await port("anything")).toBe("");
+  });
+
+  it("throws the provider's failure instead of returning it as data", async () => {
+    const port = createLlmToolPort(MODEL, {
+      resolveProviderModel,
+      run: async () => ({ type: "error", error: new Error("provider on fire") }),
+    });
+
+    await expect(port("q")).rejects.toThrow("llm failed: provider on fire");
+  });
+
+  it("names the outcome when a non-stop run carries no error", async () => {
+    const port = createLlmToolPort(MODEL, {
+      resolveProviderModel,
+      run: async () => ({ type: "aborted" }),
+    });
+
+    await expect(port("q")).rejects.toThrow("llm failed: the sub-model run ended as aborted");
   });
 });
 

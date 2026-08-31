@@ -55,7 +55,7 @@ const defaultFactories: ChannelFactories = {
     new GitHubAdapter(secret, config, Bus.publish, token, botUsername),
 };
 
-interface BuiltChannel {
+export interface BuiltChannel {
   readonly surface: Channel.Surface;
   /** Outbound seam, keyed by `surface.id`: present only for channels the Resident can message into. */
   readonly deliveryRoute?: ChannelDeliveryRoute;

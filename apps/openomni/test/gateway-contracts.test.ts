@@ -111,6 +111,15 @@ describe("Resident delivery contract", () => {
 
     const unrouted = Gateway.Deliver.parse({ ...evidenceDelivery("hi"), sessionId: undefined });
     await expect(resident(unrouted)).rejects.toThrow("Resident delivery requires a routed sessionId");
+
+    // The same fail-closed classification refuses a non-text payload: the
+    // Resident's turn contract is text in, text out.
+    const base = evidenceDelivery("hi");
+    const structured = Gateway.Deliver.parse({
+      ...base,
+      event: { ...base.event, payload: { not: "text" } },
+    });
+    await expect(resident(structured)).rejects.toThrow("Resident delivery payload must be text");
   });
 });
 

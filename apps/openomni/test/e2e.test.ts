@@ -252,4 +252,36 @@ describe("OpenOmni Resident WebSocket", () => {
     await expect(opened(ws)).rejects.toThrow("WebSocket failed before opening");
     expect(Session.list()).toHaveLength(0);
   });
+
+  it("rolls a failed boot back and leaves the next boot clean", async () => {
+    // Occupy the port so Bun.serve fails AFTER the journal and kernel stages
+    // mounted — the composer must unwind them and rethrow the original cause.
+    const occupant = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: () => new Response("occupied"),
+    });
+    const directory = mkdtempSync(join(tmpdir(), "openomni-resident-"));
+    directories.push(directory);
+    const config: OpenOmniConfig = {
+      dbPath: join(directory, "chat.db"),
+      memoryPath: join(directory, "memory.json"),
+      host: "127.0.0.1",
+      wsPort: occupant.port ?? 0,
+      wsToken: WS_TOKEN,
+      model: { provider: "fake", id: "resident-test", apiKey: "test-key" },
+    };
+    try {
+      await expect(bootWithConfig(config)).rejects.toThrow(/in use|EADDRINUSE|Failed to (listen|start server)/i);
+
+      // The rollback released storage: the same config boots cleanly once the
+      // port frees up.
+      await occupant.stop(true);
+      const app = await bootWithConfig(config);
+      const health = await fetch(`http://127.0.0.1:${app.port}/health`);
+      expect(await health.json()).toEqual({ ok: true });
+    } finally {
+      await occupant.stop(true);
+    }
+  });
 });

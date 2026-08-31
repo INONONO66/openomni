@@ -1,7 +1,49 @@
 import { describe, expect, test } from "bun:test";
-import { createComposer } from "../src/composition/composer";
+import { createComposer, rollbackToCause } from "../src/composition/composer";
 
 const noop = () => undefined;
+
+describe("rollback to cause", () => {
+  test("releases the composer and rethrows the original cause by identity", async () => {
+    const composer = createComposer();
+    let released = false;
+    await composer.mount("stage", (ctx) => {
+      ctx.effect(() => {
+        released = true;
+      });
+    });
+    const cause = new Error("the run broke");
+
+    const thrown = await rollbackToCause(composer, cause).then(
+      () => null,
+      (error: Error) => error,
+    );
+
+    expect(thrown).toBe(cause);
+    expect(released).toBe(true);
+  });
+
+  test("surfaces both faults when the rollback itself fails", async () => {
+    const composer = createComposer();
+    const disposeError = new Error("disposer broke");
+    await composer.mount("stage", (ctx) => {
+      ctx.effect(() => {
+        throw disposeError;
+      });
+    });
+    const cause = new Error("the run broke");
+
+    const thrown = await rollbackToCause(composer, cause).then(
+      () => null,
+      (error: AggregateError) => error,
+    );
+
+    expect(thrown).toBeInstanceOf(AggregateError);
+    expect(thrown?.message).toBe("composition failed and its rollback failed");
+    expect(thrown?.errors[0]).toBe(cause);
+    expect(thrown?.errors[1]).toBeInstanceOf(AggregateError);
+  });
+});
 
 describe("composition substrate", () => {
   test("mounted stages report active with their owned effect counts", async () => {

@@ -14,7 +14,7 @@ import {
   Session,
   Storage,
 } from "@openomni/ledger";
-import { ModelsDev, run as llmRun, type Sink } from "@openomni/llm";
+
 import { createMachineHost, type MachineHost } from "@openomni/machines";
 import type { Placement } from "@openomni/placement";
 import {
@@ -22,14 +22,13 @@ import {
   Gateway,
   type Ingress,
   type Machine,
-  type Message,
   newTraceId,
 } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
-import { channelProfile } from "./channels";
+import { type BuiltChannel, channelProfile } from "./channels";
 import { assertWsExposure, loadConfig, type OpenOmniConfig, type RegisteredActor } from "./config";
 import type { ArtifactsPort } from "./tools/artifacts";
-import { type LlmPort, resolveLlmToolModel } from "./tools/llm";
+import { createLlmToolPort } from "./tools/llm";
 import type { MachinesPort } from "./tools/machines";
 import { createChannelDriver } from "./delegation/channel-driver";
 import { createInlineDriver } from "./delegation/inline-driver";
@@ -45,7 +44,7 @@ import { createCompletionPort } from "./work-item/completion";
 import { createProcessDriver } from "./delegation/process-driver";
 import { createInlineWorkerRunner } from "./delegation/worker-loop";
 import { createResidentGateway, registerTrustedChannelGrant } from "./gateway";
-import { createComposer } from "./composition/composer";
+import { type Composer, createComposer, rollbackToCause } from "./composition/composer";
 import { createPolicyRegistry } from "./composition/policy-registry";
 import { createDriverRegistry } from "./composition/driver-registry";
 import { openCuratedMemory } from "./memory/store";
@@ -82,77 +81,116 @@ function attachedTargets(
 }
 
 /**
- * The llm tool's one-shot sub-model call: a single user message, no tools,
- * one step, its own synthesized trace — a nested run must never borrow the
- * turn's run identity. Auth is the configured key, exactly as the Resident
- * and the worker loop authenticate.
+ * Owner-admitted delegation targets, recorded as durable identity facts.
+ * Registration is an upsert, so a restart re-asserting the same actors is a
+ * no-op — which is also why this is not a composer effect: durable facts are
+ * history, not runtime handles.
  */
-function createLlmToolPort(model: OpenOmniConfig["model"]): LlmPort {
-  return async (prompt) => {
-    const sessionId = "llm-tool";
-    const messageId = crypto.randomUUID();
-    const request: Message.WithParts = {
-      info: {
-        id: messageId,
-        sessionID: sessionId,
-        role: "user",
-        time: { created: Date.now() },
-        agent: "llm-tool",
-        model: { providerID: model.provider, modelID: model.id },
-      },
-      parts: [
-        {
-          id: crypto.randomUUID(),
-          sessionID: sessionId,
-          messageID: messageId,
-          type: "text",
-          text: prompt,
-        },
-      ],
-    };
-    let answer = "";
-    const sink: Sink = {
-      onMessage: (message) => {
-        if (message.info.role !== "assistant") return;
-        answer = message.parts
-          .filter((part): part is Message.TextPart => part.type === "text")
-          .map((part) => part.text)
-          .join("");
-      },
-      onToolCall: () => undefined,
-      onToolResult: () => undefined,
-    };
-    const outcome = await llmRun(
-      {
-        messages: [request],
-        tools: [],
-        maxSteps: 1,
-        model: resolveLlmToolModel(await ModelsDev.get(), { provider: model.provider, id: model.id }),
-        auth: { type: "api", key: model.apiKey },
-        trace: {
-          traceId: newTraceId(),
-          sessionId,
-          runId: crypto.randomUUID(),
-        },
-        events: Bus,
-      },
-      sink,
-    );
-    if (outcome.type !== "stop") {
-      const reason =
-        "error" in outcome && outcome.error !== undefined
-          ? outcome.error.message
-          : `the sub-model run ended as ${outcome.type}`;
-      // Thrown, not returned: the consumer is cell code, and a failure string
-      // returned as data would be stored as if it were model output.
-      throw new Error(`llm failed: ${reason}`);
+function registerActors(actors: readonly RegisteredActor[]): void {
+  for (const actor of actors) {
+    ActorRegistry.registerIdentity({
+      id: actor.actorId,
+      kind: actor.kind,
+      trustTier: actor.trustTier,
+      ...(actor.displayName === undefined ? {} : { displayName: actor.displayName }),
+    });
+    const channel = actor.channel ?? "ws";
+    ActorRegistry.registerEndpoint({
+      id: `${channel}:${actor.externalId}`,
+      actorId: actor.actorId,
+      channel,
+      externalId: actor.externalId,
+    });
+  }
+}
+
+/**
+ * The Resident's view of its body: every enrolled machine, attached or not,
+ * reduced to the effective (enrollment∩offer) capability fold the host
+ * attachment table holds.
+ */
+export function createMachinesPort(
+  host: Pick<MachineHost, "attached"> | undefined,
+  machines: OpenOmniConfig["machines"],
+): MachinesPort | undefined {
+  if (host === undefined || machines === undefined) return undefined;
+  return () =>
+    machines.enrolled.map((enrollment) => {
+      const capabilities = host.attached(enrollment.machineId);
+      return capabilities === undefined
+        ? { machineId: enrollment.machineId, attached: false, capabilities: [] }
+        : {
+            machineId: enrollment.machineId,
+            attached: true,
+            capabilities: [...capabilities],
+          };
+    });
+}
+
+/**
+ * The app's HTTP surface: the ws upgrade seam, unauthenticated liveness (no
+ * clock, no version, no state), and — only when a GitHub channel is composed —
+ * its webhook ingress. Everything else is 404.
+ */
+function createHttpRoutes(
+  wsHandler: WebSocketHandler,
+  githubWebhookHandler: ((request: Request) => Promise<Response>) | undefined,
+) {
+  return (
+    request: Request,
+    bunServer: Parameters<WebSocketHandler["handleUpgrade"]>[1],
+  ): Response | Promise<Response> | undefined => {
+    const url = new URL(request.url);
+    if (request.headers.get("upgrade") === "websocket" && url.pathname === "/ws") {
+      // undefined = the upgrade succeeded; a Response = the upgrade was denied.
+      return wsHandler.handleUpgrade(request, bunServer);
     }
-    return answer;
+    if (request.method === "GET" && url.pathname === "/health") {
+      return Response.json({ ok: true });
+    }
+    if (
+      request.method === "POST" &&
+      url.pathname === "/github/webhook" &&
+      githubWebhookHandler !== undefined
+    ) {
+      return githubWebhookHandler(request);
+    }
+    return new Response("Not found", { status: 404 });
   };
 }
 
+/**
+ * Each channel component is its own stage, mounted before the ws server so
+ * its authority and outbound route exist before any ingress is reachable.
+ * Disposal revokes exactly what the component registered: the listener, the
+ * delivery route, and the trusted-channel grant — fail-closed for any
+ * traffic that arrives afterwards.
+ */
+export async function mountChannelStages(
+  composer: Composer,
+  builtChannels: readonly BuiltChannel[],
+  deliveryRoutes: Map<string, ChannelDeliveryRoute>,
+  recoveryTraceId: string,
+): Promise<void> {
+  for (const built of builtChannels) {
+    const surfaceId = built.surface.id;
+    await composer.mount(`channel.${surfaceId}`, async (ctx) => {
+      ctx.effect(registerTrustedChannelGrant(surfaceId));
+      const route = built.deliveryRoute;
+      if (route !== undefined) {
+        deliveryRoutes.set(surfaceId, route);
+        ctx.effect(() => {
+          deliveryRoutes.delete(surfaceId);
+        });
+      }
+      await built.surface.start(recoveryTraceId);
+      ctx.effect(() => built.surface.stop(newTraceId()));
+    });
+  }
+}
+
 /** How a correlated reply's payload reads when handed back to the waiting delegation. */
-function replyText(payload: unknown): string {
+export function replyText(payload: unknown): string {
   if (typeof payload === "string") return payload;
   return JSON.stringify(payload);
 }
@@ -213,24 +251,8 @@ export async function startOpenOmni(options: StartOptions = {}) {
         Storage.reset();
       });
     });
-    // Owner-admitted delegation targets. Registration is an upsert, so a
-    // restart re-asserting the same actors is a no-op.
     const actors: readonly RegisteredActor[] = config.actors ?? [];
-    for (const actor of actors) {
-      ActorRegistry.registerIdentity({
-        id: actor.actorId,
-        kind: actor.kind,
-        trustTier: actor.trustTier,
-        ...(actor.displayName === undefined ? {} : { displayName: actor.displayName }),
-      });
-      const channel = actor.channel ?? "ws";
-      ActorRegistry.registerEndpoint({
-        id: `${channel}:${actor.externalId}`,
-        actorId: actor.actorId,
-        channel,
-        externalId: actor.externalId,
-      });
-    }
+    registerActors(actors);
 
     // A worker loop holds the same delegate tool the Resident does, so the
     // runner needs the kernel that the kernel needs the runner to build. The
@@ -333,30 +355,14 @@ export async function startOpenOmni(options: StartOptions = {}) {
     // the memory tool, frozen into the system prompt per session.
     const memory = openCuratedMemory(config.memoryPath);
 
-    // The Resident's view of its body: every enrolled machine, attached or
-    // not, reduced to the effective (enrollment∩offer) capability fold the
-    // host attachment table holds.
     const machineHost = host;
-    const machinesPort: MachinesPort | undefined =
-      machineHost === undefined || machines === undefined
-        ? undefined
-        : () =>
-            machines.enrolled.map((enrollment) => {
-              const capabilities = machineHost.attached(enrollment.machineId);
-              return capabilities === undefined
-                ? { machineId: enrollment.machineId, attached: false, capabilities: [] }
-                : {
-                    machineId: enrollment.machineId,
-                    attached: true,
-                    capabilities: [...capabilities],
-                  };
-            });
+    const machinesPort = createMachinesPort(machineHost, machines);
 
     const completionPort = createCompletionPort({
       writer: completionWriter,
       now: () => Date.now(),
     });
-    const llmPort = createLlmToolPort(config.model);
+    const llmPort = createLlmToolPort(config.model, options.llm ?? {});
     const artifactsPort: ArtifactsPort = { store: Artifact.store, get: Artifact.get };
     const cells: CellPorts | undefined =
       machineHost === undefined
@@ -493,26 +499,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
     // kernel's deliverWake is the single owner of wake-failure reporting.
     wakeDelivery.arm((wake) => residentDeliver(delegationWakeDelivery(wake)).then(() => undefined));
 
-    // Each channel component is its own stage, mounted before the ws server so
-    // its authority and outbound route exist before any ingress is reachable.
-    // Disposal revokes exactly what the component registered: the listener,
-    // the delivery route, and the trusted-channel grant — fail-closed for any
-    // traffic that arrives afterwards.
-    for (const built of builtChannels) {
-      const surfaceId = built.surface.id;
-      await composer.mount(`channel.${surfaceId}`, async (ctx) => {
-        ctx.effect(registerTrustedChannelGrant(surfaceId));
-        const route = built.deliveryRoute;
-        if (route !== undefined) {
-          deliveryRoutes.set(surfaceId, route);
-          ctx.effect(() => {
-            deliveryRoutes.delete(surfaceId);
-          });
-        }
-        await built.surface.start(recoveryTraceId);
-        ctx.effect(() => built.surface.stop(newTraceId()));
-      });
-    }
+    await mountChannelStages(composer, builtChannels, deliveryRoutes, recoveryTraceId);
 
     wsHandler = new WebSocketHandler(
       routingHandler,
@@ -524,25 +511,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       hostname: config.host,
       port: config.wsPort,
       websocket: wsHandler.ws,
-      fetch(request, bunServer) {
-        const url = new URL(request.url);
-        if (request.headers.get("upgrade") === "websocket" && url.pathname === "/ws") {
-          // undefined = the upgrade succeeded; a Response = the upgrade was denied.
-          return wsHandler.handleUpgrade(request, bunServer);
-        }
-        if (request.method === "GET" && url.pathname === "/health") {
-          // Unauthenticated liveness only: no clock, no version, no state.
-          return Response.json({ ok: true });
-        }
-        if (
-          request.method === "POST" &&
-          url.pathname === "/github/webhook" &&
-          githubWebhookHandler !== undefined
-        ) {
-          return githubWebhookHandler(request);
-        }
-        return new Response("Not found", { status: 404 });
-      },
+      fetch: createHttpRoutes(wsHandler, githubWebhookHandler),
     });
 
     if (server.port === undefined) throw new Error("OpenOmni ws server did not bind a TCP port");
@@ -567,15 +536,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
     // Fail-closed boot rollback: a failure after the journal started leaves
     // no leaked Bus observer, no armed kernel timer, and no configured
     // storage behind — a later boot starts clean.
-    try {
-      await composer.dispose();
-    } catch (rollbackError) {
-      throw new AggregateError(
-        [error, rollbackError],
-        "OpenOmni boot failed and its rollback failed",
-      );
-    }
-    throw error;
+    return rollbackToCause(composer, error instanceof Error ? error : new Error(String(error)));
   }
 }
 
