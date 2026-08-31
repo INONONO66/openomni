@@ -7,6 +7,7 @@ import { ActorRegistry, Session, Storage } from "@openomni/ledger";
 import { Gateway, type Message, newTraceId } from "@openomni/protocol";
 import { createResidentGateway } from "../src/gateway";
 import { openCuratedMemory } from "../src/memory/store";
+import { createPolicyRegistry } from "../src/composition/policy-registry";
 import { createResident } from "../src/resident";
 import { assistantMessage, type AssistantMessageOptions } from "./helpers/assistant-message";
 
@@ -74,6 +75,7 @@ describe("Resident inbound treatment", () => {
     const resident = createResident({
       model: MODEL,
       apiKey: "test-key",
+      policies: createPolicyRegistry({ mandatory: [] }),
       tools: { memory: openCuratedMemory(join(directory, "memory.json")) },
       targets: () => [{ kind: "host", id: "brain", capabilities: [] }],
       llm: {
@@ -120,6 +122,7 @@ describe("Resident inbound treatment", () => {
     const resident = createResident({
       model: MODEL,
       apiKey: "test-key",
+      policies: createPolicyRegistry({ mandatory: [] }),
       tools: { memory },
       targets: () => [{ kind: "host", id: "brain", capabilities: [] }],
       llm: {
@@ -156,6 +159,7 @@ describe("Resident inbound treatment", () => {
     const resident = createResident({
       model: MODEL,
       apiKey: "test-key",
+      policies: createPolicyRegistry({ mandatory: [] }),
       tools: { memory: openCuratedMemory(join(directory, "memory.json")) },
       targets: () => [{ kind: "host", id: "brain", capabilities: [] }],
       llm: {

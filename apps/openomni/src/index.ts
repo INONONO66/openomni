@@ -1,5 +1,5 @@
 import { processEntryPath } from "./process-entry-path";
-import type { ChatAgentConfig } from "@openomni/agent";
+import { type ChatAgentConfig, createCompactionPolicy } from "@openomni/agent";
 import {
   type ChannelDeliveryRoute,
   type GatewayRouter,
@@ -46,6 +46,7 @@ import { createProcessDriver } from "./delegation/process-driver";
 import { createInlineWorkerRunner } from "./delegation/worker-loop";
 import { createResidentGateway, registerTrustedChannelGrant } from "./gateway";
 import { createComposer } from "./composition/composer";
+import { createPolicyRegistry } from "./composition/policy-registry";
 import { createDriverRegistry } from "./composition/driver-registry";
 import { openCuratedMemory } from "./memory/store";
 import { buildInboundEvent } from "./inbound";
@@ -379,9 +380,26 @@ export async function startOpenOmni(options: StartOptions = {}) {
             newCellId: () => crypto.randomUUID(),
           };
 
+    // The Resident's policy floor: compaction is declared mandatory, so a
+    // run without it is refused fail-closed rather than run unprotected.
+    // The registration is a composer-owned effect — disposing the policy
+    // stage suspends dependent runs instead of silently widening them.
+    const policyRegistry = createPolicyRegistry({ mandatory: ["compaction"] });
+    await composer.mount("policy", (ctx) => {
+      const compaction = policyRegistry.register("compaction", (run) =>
+        createCompactionPolicy({
+          events: run.events,
+          priority: 900,
+          elideToolOutputs: { minOutputChars: 4000, keepHeadChars: 500 },
+        }),
+      );
+      ctx.effect(() => compaction.dispose());
+    });
+
     residentDeliver = createResident({
       model: config.model,
       apiKey: config.model.apiKey,
+      policies: policyRegistry,
       tools: {
         delegation: delegationKernel,
         ...(cells === undefined ? {} : { cells }),
