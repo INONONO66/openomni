@@ -484,7 +484,12 @@ export async function startOpenOmni(options: StartOptions = {}) {
     const boundServer = server;
     const boundPort: number = server.port;
     await composer.mount("ws.server", (ctx) => {
-      ctx.effect(() => boundServer.stop());
+      // Initiate the graceful stop without awaiting it: Bun resolves this
+      // promise only after every open client connection closes, and shutdown
+      // must not wait on clients (the pre-composer stop never did).
+      ctx.effect(() => {
+        void boundServer.stop();
+      });
     });
     // Each surface is its own stage: the one that fails to start owns nothing,
     // and the ones already listening unwind in reverse on the rollback path.
