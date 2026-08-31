@@ -35,11 +35,12 @@
 //   - sharedAppendExecutor: the ONE module that may perform the append on a
 //     manifested producer's behalf. A stream family's `producers` entry still
 //     names who OWNS that family's facts (payload, adoption genesis, conflict
-//     taxonomy); a producer that delegates the mechanical
-//     append/adopt/compare-and-set to this executor therefore carries no
-//     lexical `ledger.append` call of its own. Declaring it here keeps the
-//     scan exact in both directions: the executor is the only module allowed
-//     to appear in the scan without owning a stream family.
+//     taxonomy). Delegating the mechanics does NOT exempt a caller from the
+//     write manifest: the scan matches the executor's entry points
+//     (COMMIT_EXECUTOR_ENTRIES) as well as direct `ledger.append` calls, so a
+//     module cannot launder an unmanifested stream class through the shared
+//     executor. The executor itself is the only module allowed to appear in
+//     the scan without owning a stream family.
 //   - frozenTableWriters: the sqlite adapter modules that still CONTAIN
 //     write SQL against frozen legacy tables. Their store layers throw the
 //     typed frozen errors (`worker_run_frozen` — pinned by conformance), so
@@ -174,6 +175,28 @@ const LEDGER_WRITE_DESTRUCTURE =
   /\{[^}]*\badoptStream\b[^}]*\}\s*=|\{[^}]*\bappend\b[^}]*\}\s*=\s*(?:[\w$]*ledger\b|[^;\n]*\.ledger\b)/i;
 const LEDGER_CORE_FACADE = "packages/ledger/src/ledger-core/index.ts";
 
+/**
+ * Entry points of the shared commit executor. Calling one of these IS a
+ * decision-class write — the executor performs the append on the caller's
+ * behalf — so a caller must be manifested exactly like a direct appender.
+ * Without this, moving the mechanics behind a helper would silently turn the
+ * append surface into a blind spot.
+ */
+const COMMIT_EXECUTOR_ENTRIES = ["commitFact"] as const;
+
+// Invocation, aliasing, `.bind`, destructuring, and bracket access — the same
+// capability shapes LEDGER_WRITE_REFERENCE already covers for `append`.
+const COMMIT_EXECUTOR_REFERENCE = new RegExp(
+  `\\b(?:${COMMIT_EXECUTOR_ENTRIES.join("|")})\\b\\s*(?:\\(|\\.bind\\b|[,;)\\]}=]|$)`,
+  "i",
+);
+const COMMIT_EXECUTOR_ACCESS = new RegExp(
+  `\\[\\s*(?:["'](?:${COMMIT_EXECUTOR_ENTRIES.join("|")})["']|\`(?:${COMMIT_EXECUTOR_ENTRIES.join("|")})\`)\\s*\\]`,
+  "i",
+);
+/** The executor module itself defines these names; it is manifested separately. */
+const COMMIT_EXECUTOR_MODULE = "packages/ledger/src/storage/commit-coordinator.ts";
+
 function tableWriteSqlPattern(tables: readonly string[]): RegExp {
   const table = `(?:${tables.join("|")})`;
   return new RegExp(
@@ -229,6 +252,16 @@ export function matchesLedgerWriteCall(tsSource: string): boolean {
   return LEDGER_WRITE_REFERENCE.test(normalized) || LEDGER_WRITE_DESTRUCTURE.test(normalized);
 }
 
+/**
+ * True when TS source obtains or invokes a shared commit-executor entry
+ * ({@link COMMIT_EXECUTOR_ENTRIES}). Delegating the append does not exempt a
+ * module from the write manifest.
+ */
+export function matchesCommitExecutorCall(tsSource: string): boolean {
+  const normalized = normalizeTsSource(tsSource);
+  return COMMIT_EXECUTOR_REFERENCE.test(normalized) || COMMIT_EXECUTOR_ACCESS.test(normalized);
+}
+
 /** True when TS source contains write SQL against ledger_event/ledger_head. */
 export function matchesLedgerTableWriteSql(tsSource: string): boolean {
   return LEDGER_TABLE_WRITE_SQL.test(normalizeTsSource(tsSource));
@@ -267,7 +300,10 @@ export async function scanLedgerProducers(rootDir: string): Promise<LedgerProduc
   sourceFiles.sort();
   for (const file of sourceFiles) {
     const content = await Bun.file(join(rootDir, file)).text();
-    if (file !== LEDGER_CORE_FACADE && matchesLedgerWriteCall(content)) appendCallSites.push(file);
+    const writesDirectly = file !== LEDGER_CORE_FACADE && matchesLedgerWriteCall(content);
+    // Delegating through the shared executor is the same write surface.
+    const writesViaExecutor = file !== COMMIT_EXECUTOR_MODULE && matchesCommitExecutorCall(content);
+    if (writesDirectly || writesViaExecutor) appendCallSites.push(file);
     if (matchesLedgerTableWriteSql(content)) ledgerTableWriters.push(file);
     if (matchesFrozenTableWriteSql(content)) frozenTableWriters.push(file);
   }
