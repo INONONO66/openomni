@@ -247,11 +247,11 @@ function assertEvidenceScope(
   existing: WorkItem.Info | undefined,
   expectedScope: Readonly<{ expectedAttempt: number; expectedBasisRef: string }> | undefined,
 ): void {
+  if (!existing || !expectedScope) return;
+  const activeAttempt = existing.lastAttemptSeq || existing.attempt;
   if (
-    existing &&
-    expectedScope &&
-    (existing.attempt !== expectedScope.expectedAttempt ||
-      existing.completionContract.basisRef !== expectedScope.expectedBasisRef)
+    activeAttempt !== expectedScope.expectedAttempt ||
+    existing.completionContract.basisRef !== expectedScope.expectedBasisRef
   ) {
     throw new Error("WorkItem attempt changed before evidence recording");
   }

@@ -149,6 +149,85 @@ describe("WorkItemStore.allocateAttempt", () => {
     expect(second.item.currentAttemptId).toBe(second.attempt.attemptId);
   });
 
+  test("rejects evidence scoped to an earlier allocated attempt", async () => {
+    const item = await createItem("stale-attempt-evidence");
+    await WorkItemStore.assignExecution(
+      item.workItemId,
+      {
+        executorKind: "internal_chat_agent",
+        workerRunId: "run:stale-evidence",
+        workSessionId: "session:stale-evidence",
+      },
+      "trace-test",
+    );
+    const first = await WorkItemStore.allocateAttempt(item.workItemId, identity(), "trace-test");
+    if (!first) throw new Error("expected the first allocation");
+    const firstScope = {
+      expectedAttempt: first.attempt.attemptSeq,
+      expectedBasisRef: first.item.completionContract.basisRef,
+    };
+    const second = await WorkItemStore.allocateAttempt(
+      item.workItemId,
+      identity("second attempt"),
+      "trace-test",
+    );
+    if (!second) throw new Error("expected the second allocation");
+
+    await expect(
+      WorkItemStore.addEvidence(
+        item.workItemId,
+        { kind: "verification", description: "stale first-attempt evidence", passed: true },
+        "trace-test",
+        firstScope,
+      ),
+    ).rejects.toThrow("attempt changed before evidence recording");
+    expect(second.item.evidence).toEqual([]);
+  });
+
+  test("checks attempt scope before explicit-id idempotent evidence replay", async () => {
+    const item = await createItem("scoped-evidence-replay");
+    const first = await WorkItemStore.allocateAttempt(item.workItemId, identity(), "trace-test");
+    if (!first) throw new Error("expected the first allocation");
+    const firstScope = {
+      expectedAttempt: first.attempt.attemptSeq,
+      expectedBasisRef: first.item.completionContract.basisRef,
+    };
+    const evidence = {
+      id: "evidence:scoped-replay",
+      kind: "verification" as const,
+      description: "first-attempt evidence",
+      passed: true,
+    };
+
+    const recorded = await WorkItemStore.addEvidence(
+      item.workItemId,
+      evidence,
+      "trace-test",
+      firstScope,
+    );
+    const replayed = await WorkItemStore.addEvidence(
+      item.workItemId,
+      evidence,
+      "trace-test",
+      firstScope,
+    );
+    expect(replayed).toEqual(recorded);
+    expect(
+      workFactsOf(item.workItemId).filter((fact) => fact.type === "work_item.evidence_appended"),
+    ).toHaveLength(1);
+    await expect(
+      WorkItemStore.addEvidence(item.workItemId, evidence, "trace-test", {
+        ...firstScope,
+        expectedBasisRef: "stale-basis",
+      }),
+    ).rejects.toThrow("attempt changed before evidence recording");
+
+    await WorkItemStore.allocateAttempt(item.workItemId, identity("second attempt"), "trace-test");
+    await expect(
+      WorkItemStore.addEvidence(item.workItemId, evidence, "trace-test", firstScope),
+    ).rejects.toThrow("attempt changed before evidence recording");
+  });
+
   test("cache reuse allocates a distinct immutable fact and rejects self-reuse", async () => {
     const item = await createItem("cache-reuse");
     const seeded = await WorkItemStore.allocateAttempt(item.workItemId, identity(), "trace-test");
