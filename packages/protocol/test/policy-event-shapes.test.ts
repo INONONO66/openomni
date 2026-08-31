@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { z } from "zod";
+import type { z } from "zod";
 import { Policy } from "../src/policy/index.js";
 
 /**

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { z } from "zod";
+import type { z } from "zod";
 import { Delegation } from "../../src/delegation/index.js";
 
 /**
@@ -162,15 +162,16 @@ describe("Delegation.Settled arm vocabulary", () => {
   });
 
   test("completed keeps its output and optional usage; no_response keeps its deadline rule", () => {
-    expect(
-      Delegation.Settled.parse({
-        status: "completed",
-        delegationId: "del-1",
-        output: "done",
-        at: T0,
-        usage: { tokens: 12 },
-      }).usage,
-    ).toEqual({ tokens: 12 });
+    const completed = Delegation.Settled.parse({
+      status: "completed",
+      delegationId: "del-1",
+      output: "done",
+      at: T0,
+      usage: { tokens: 12 },
+    });
+    if (completed.status !== "completed") throw new Error("completed arm did not parse as itself");
+    expect(completed.usage).toEqual({ tokens: 12 });
+    expect(completed.output).toBe("done");
 
     // The cross-field rule lives on the union, not on any shared field map.
     expect(
