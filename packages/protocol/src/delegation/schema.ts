@@ -248,29 +248,17 @@ export type SettledStatus = z.infer<typeof SettledStatus>;
  * open->settled compare-and-swap. Protocol owns the serializable shape; the
  * store implementation lives in the ledger.
  */
-const RecordBase = z
-  .object({
-    delegationId: z.string().min(1),
-    operation: Operation,
-    address: WorkerAddress,
-    transport: Transport,
-    /** Effective deadline (epoch ms) — the same instant the Handle carries. */
-    deadline: EpochMs.int().positive(),
-    waitId: z.string().min(1).optional(),
-    workItemId: z.string().min(1).optional(),
-    parentDelegationId: z.string().min(1).optional(),
-    rootDelegationId: z.string().min(1),
-    origin: Origin,
-    /** Summary of the request payload text (truncation is the writer's choice). */
-    instruction: z.string().min(1),
-    status: z.enum(["open", "settled"]),
-    settled: Settled.optional(),
-    createdAt: EpochMs,
-    settledAt: EpochMs.optional(),
-    /** Receipt written only after the owner-session settlement wake succeeds. */
-    wokenAt: EpochMs.optional(),
-  })
-  .strict();
+const RecordBase = Handle.extend({
+  origin: Origin,
+  /** Summary of the request payload text (truncation is the writer's choice). */
+  instruction: z.string().min(1),
+  status: z.enum(["open", "settled"]),
+  settled: Settled.optional(),
+  createdAt: EpochMs,
+  settledAt: EpochMs.optional(),
+  /** Receipt written only after the owner-session settlement wake succeeds. */
+  wokenAt: EpochMs.optional(),
+}).strict();
 
 export const Record = RecordBase.superRefine((record, ctx) => {
   if (record.status === "settled" && (record.settled === undefined || record.settledAt === undefined)) {

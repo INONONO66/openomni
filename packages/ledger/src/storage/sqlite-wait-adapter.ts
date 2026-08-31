@@ -11,6 +11,26 @@ import {
  * (`Wait.Record.parse`); this adapter records receipts (`changes === 1`) and
  * re-validates only on read, across the persistence boundary.
  */
+/**
+ * The projection columns both writers stamp in the same order: the JSON
+ * snapshot, the CAS revision, status/partial, and the six correlation keys
+ * findByCorrelation matches on.
+ */
+function projectionBindings(record: Wait.Record) {
+  return [
+    JSON.stringify(record),
+    record.revision,
+    record.status,
+    record.partial ? 1 : 0,
+    record.correlation.endpointId ?? null,
+    record.correlation.channelId ?? null,
+    record.correlation.replyToMessageId ?? null,
+    record.correlation.threadId ?? null,
+    record.correlation.tokenHash ?? null,
+    record.correlation.externalConversationId ?? null,
+  ] as const;
+}
+
 export function createSqliteWaitAdapter(db: Database): ProtocolStorage.WaitSubAdapter {
   return {
     create(record) {
@@ -28,16 +48,7 @@ export function createSqliteWaitAdapter(db: Database): ProtocolStorage.WaitSubAd
           record.ownerRef.kind,
           record.ownerRef.id,
           record.originMessageId,
-          JSON.stringify(record),
-          record.revision,
-          record.status,
-          record.partial ? 1 : 0,
-          record.correlation.endpointId ?? null,
-          record.correlation.channelId ?? null,
-          record.correlation.replyToMessageId ?? null,
-          record.correlation.threadId ?? null,
-          record.correlation.tokenHash ?? null,
-          record.correlation.externalConversationId ?? null,
+          ...projectionBindings(record),
           record.expiresAt,
           followUpUntil(record),
           record.createdAt,
@@ -118,16 +129,7 @@ export function createSqliteWaitAdapter(db: Database): ProtocolStorage.WaitSubAd
            WHERE id = ? AND revision = ?`,
         )
         .run(
-          JSON.stringify(record),
-          record.revision,
-          record.status,
-          record.partial ? 1 : 0,
-          record.correlation.endpointId ?? null,
-          record.correlation.channelId ?? null,
-          record.correlation.replyToMessageId ?? null,
-          record.correlation.threadId ?? null,
-          record.correlation.tokenHash ?? null,
-          record.correlation.externalConversationId ?? null,
+          ...projectionBindings(record),
           followUpUntil(record),
           record.updatedAt,
           id,
