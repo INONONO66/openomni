@@ -21,7 +21,7 @@ src/
 ├── discord/          # Discord gateway client + surface (mention-trigger by default)
 ├── telegram/         # Ordered long-poll surface; offset advances only after successful handoff
 ├── github/           # Webhooks with retryable 5xx failures and delivery-marker comment read-back
-└── support/          # Band-local helpers: chunk-text, bounded dedupe, fetch retry, trigger evaluation
+└── support/          # Band-local helpers: format renderers/chunking, bounded dedupe, fetch retry, trigger evaluation
 ```
 
 ## DEPENDENCIES (the band import contract)

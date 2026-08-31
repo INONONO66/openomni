@@ -200,7 +200,8 @@ export class DiscordAdapter implements Channel.Surface {
 }
 
 // merged from formatter.ts (#453 hygiene: sub-30-LOC single-importer)
-import { splitText } from "../support/chunk-text";
+import { chunkMarkdown } from "../support/format/chunk";
+import { renderDiscordMarkdown } from "../support/format/discord";
 import type { ChannelClient } from "../types";
 
 const DISCORD_MESSAGE_LIMIT = 2000;
@@ -213,7 +214,8 @@ async function sendDiscordMessage(
 ): Promise<string | undefined> {
   if (!message.text) return undefined;
   let lastMessageId: string | undefined;
-  for (const chunk of splitText(message.text, DISCORD_MESSAGE_LIMIT)) {
+  const rendered = renderDiscordMarkdown(message.text);
+  for (const chunk of chunkMarkdown(rendered, DISCORD_MESSAGE_LIMIT)) {
     lastMessageId = (await client.send(channelId, chunk, traceId)) ?? lastMessageId;
   }
   return lastMessageId;
