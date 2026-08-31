@@ -38,11 +38,6 @@ export namespace SurfaceKey {
     return subAdapter().claim(key, sessionId, expectedSessionId);
   }
 
-  /**
-   * List all surfaceKeys registered for a given session.
-   * @param sessionId - The session ID
-   * @returns Array of surfaceKeys for this session
-   */
   export function listBySession(sessionId: string): string[] {
     return subAdapter().listBySession(sessionId);
   }

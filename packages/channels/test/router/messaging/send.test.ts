@@ -388,6 +388,48 @@ describe("durable send admission faults", () => {
     expect(deliveries).toEqual([]);
   });
 
+  test("fails closed when a budget callback replaces the active adapter before admission", async () => {
+    const input = buildSendInput({ messageId: "message:reentrant-adapter-swap" });
+    const detached = Storage.get();
+    const detachedLedger = detached.ledger;
+    if (detachedLedger === undefined) throw new Error("ledger sub-adapter missing");
+    const reentrant = createExistingAgentMessaging({
+      deliver: (message) => {
+        deliveries.push(message);
+      },
+      grants: () => grants,
+      budgets: () => {
+        const { ledger: _ledger, ...withoutLedger } = detached;
+        Storage.configure({
+          ...withoutLedger,
+          transaction: detached.transaction.bind(detached),
+        });
+        return [
+          {
+            id: "budget:reentrant-adapter-swap",
+            targetActorId: "actor:target",
+            maxPerWindow: 10,
+            windowMs: 60_000,
+            cooldownMs: 0,
+          },
+        ];
+      },
+      publish: Bus.publish,
+    });
+
+    try {
+      await expect(reentrant.send(input)).rejects.toThrow(
+        "Storage adapter does not implement ledger append — gateway sends fail closed",
+      );
+      expect(
+        detachedLedger.headFact(`gateway_send:${encodeURIComponent(input.messageId)}`),
+      ).toBeUndefined();
+      expect(deliveries).toEqual([]);
+    } finally {
+      Storage.configure(detached);
+    }
+  });
+
   test("reusing a fire-and-forget message id with different bytes throws before delivery", async () => {
     const first = buildSendInput({ messageId: "message:immutable" });
     expect((await messaging().send(first)).kind).toBe("sent");

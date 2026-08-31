@@ -13,7 +13,6 @@ export function listErrors(sessionId: string): Promise<EventRecord[]> {
   return Promise.resolve(rows.map(toEventRecord));
 }
 
-// merged from event-record-mapper.ts (#453 hygiene: sub-30-LOC single-importer)
 function toEventRecord(row: BusEventRow): EventRecord {
   if (row.session_id === null) {
     // Impossible for the session-scoped query above (WHERE session_id = ?);

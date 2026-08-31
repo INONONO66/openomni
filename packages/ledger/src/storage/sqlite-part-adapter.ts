@@ -46,8 +46,6 @@ export function createSqlitePartAdapter(db: Database): Storage.Adapter["part"] {
   };
 }
 
-// merged from part-time.ts (#453 hygiene: sub-30-LOC single-importer)
-
 function getPartStartTime(part: Message.Part): number | undefined {
   if ((part.type === "text" || part.type === "reasoning") && part.time?.start !== undefined) {
     return part.time.start;

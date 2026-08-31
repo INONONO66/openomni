@@ -101,12 +101,10 @@ const DeliverSchema = z
   })
   .strict();
 
-// ---------------------------------------------------------------------------
 // Outbound vocabulary — re-homed from the #215 messaging kernel verbatim
 // (openomni/messaging re-exports these until stage 2 moves the kernel).
 // Grant *evaluation* stays above protocol (grant evaluation is forbidden
 // here per the contract boundary); only the shapes live at the seam.
-// ---------------------------------------------------------------------------
 
 const MessageOperationSchema = z.enum(["fire_and_forget", "awaited"]);
 
@@ -363,10 +361,8 @@ const SendInputSchema = SendInputBase.superRefine((input, ctx) => {
   }
 });
 
-// ---------------------------------------------------------------------------
 // Wait control — brain → gateway (§2b-1): the brain owns WHEN a wait should
 // stop mattering; the gateway owns the rows and executes the write.
-// ---------------------------------------------------------------------------
 
 const WaitControlActionSchema = z.enum(["cancel", "expire_now"]);
 

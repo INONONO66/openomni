@@ -215,6 +215,9 @@ describe("PolicyEngine portability", () => {
 
   it("runs without server, session, or agent bootstrap", async () => {
     const { engine, events } = createAuditedEngine();
+    let invocations = 0;
+    let observedAgentType: unknown;
+    let observedResourceDescriptor: unknown;
 
     engine.register({
       kind: "point",
@@ -223,14 +226,19 @@ describe("PolicyEngine portability", () => {
       effectCapabilities: { "run.turn.pre": [] },
       priority: 100,
       fn: (ctx) => {
-        expect(ctx.agentType).toBeDefined();
-        expect(ctx.resourceDescriptor).toBeDefined();
+        invocations += 1;
+        observedAgentType = ctx.agentType;
+        observedResourceDescriptor = ctx.resourceDescriptor;
         return PolicyDecision.allow({ policyId: "standalone" });
       },
     });
 
-    const decision = await engine.dispatchPoint("run.turn.pre", createDispatchContext());
+    const context = createDispatchContext();
+    const decision = await engine.dispatchPoint("run.turn.pre", context);
 
+    expect(invocations).toBe(1);
+    expect(observedAgentType).toBe("resident");
+    expect(observedResourceDescriptor).toEqual(context.resourceDescriptor);
     expect(decision.verdict).toBe("allow");
     expect(events.some(({ name }) => name === Operational.Events.Debug.name)).toBe(true);
   });

@@ -80,11 +80,9 @@ describe("failure classes stay honest (#606 re-audit)", () => {
 
     // Pre-fix: the request was silently dropped and the server's call aged
     // out as a timeout.
-    const rejection = srv.call("do-thing", {}, 2_000);
-    await expect(rejection).rejects.toBeInstanceOf(IpcRemoteError);
-    await expect(srv.call("do-thing", {}, 2_000)).rejects.toThrow(
-      "client has no request handler for do-thing",
-    );
+    const error = await srv.call("do-thing", {}, 2_000).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(IpcRemoteError);
+    expect((error as Error).message).toContain("client has no request handler for do-thing");
   });
 
   test("a valid response sharing a chunk with a bad line still resolves the call", async () => {
@@ -337,10 +335,9 @@ describe("client remote-error path (#606 audit)", () => {
     // made remote failures resolve `undefined` with every suite green), and
     // the rejection class was IpcConnectionError — misfiling a healthy
     // connection's remote failure as a transport problem.
-    const rejection = client.call("do-thing", {}, 2_000);
-    await expect(rejection).rejects.toBeInstanceOf(IpcRemoteError);
-    await expect(client.call("do-thing", {}, 2_000)).rejects.toThrow("remote refused do-thing");
-    const error = await client.call("do-thing", {}, 2_000).catch((e: unknown) => e);
+    const error = await client.call("do-thing", {}, 2_000).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(IpcRemoteError);
+    expect((error as Error).message).toContain("remote refused do-thing");
     expect(error).not.toBeInstanceOf(IpcConnectionError);
     expect((error as IpcRemoteError).code).toBe(1000);
   });

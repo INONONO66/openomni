@@ -2,9 +2,6 @@ import { z } from "zod";
 import { PolicyDefinition, policyKernelVersion } from "./definition.js";
 import { PolicyEffects } from "./effects.js";
 
-// ---------------------------------------------------------------------------
-// point contract vocabulary
-// ---------------------------------------------------------------------------
 // Module-internal alias: the engine consumers that used to reach this via
 // the namespace moved to packages/policy (#498 W1) and read Policy.Timing;
 // only TimingValue below needs it here.
@@ -95,9 +92,6 @@ const contract = (
 const preBoundary = ["fail-closed", true] as const;
 const postBoundary = ["fail-open", false] as const;
 
-// ---------------------------------------------------------------------------
-// registered point contracts
-// ---------------------------------------------------------------------------
 const PolicyPointRegistry = Object.freeze({
   "dispatch.action.pre": contract(
     "dispatch.action.pre",
@@ -295,9 +289,6 @@ const PolicyPointRegistry = Object.freeze({
   ),
 } satisfies Record<RegisteredPolicyPointId, PolicyPointContractSnapshot>);
 
-// ---------------------------------------------------------------------------
-// per-point input validators
-// ---------------------------------------------------------------------------
 const id = z.string().min(1);
 const requiredValue = z.unknown().refine((value) => value !== undefined, {
   message: "Required",
@@ -523,9 +514,6 @@ type PolicyPointInputMapType = {
     : never;
 };
 
-// ---------------------------------------------------------------------------
-// public namespace
-// ---------------------------------------------------------------------------
 export namespace PolicyPointModule {
   export const PolicyPoint = Object.assign(policyPoint, {
     version: policyKernelVersion,

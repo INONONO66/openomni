@@ -25,9 +25,6 @@ function matchesScope<TCtx extends GenericPolicyContext>(
 ): boolean {
   const allowed = registration.scope?.agentType;
   if (allowed === undefined) return true;
-  // Unreachable via register() — `empty_scope_agent_type` rejects [] at the
-  // boundary — kept fail-closed so an empty list can never mean "everyone".
-  if (allowed.length === 0) return false;
   if (!agentType) return false;
   return allowed.includes(agentType);
 }

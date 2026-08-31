@@ -49,7 +49,6 @@ export interface DelegationDriver {
 }
 
 interface DelegationStorePort {
-  create(record: Delegation.Record): Delegation.Record;
   claimOpenWithinRoot(
     record: Delegation.Record,
     maxFanout: number,

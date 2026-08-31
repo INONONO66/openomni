@@ -55,7 +55,7 @@ function testMessage(id: string): Message.WithParts {
 }
 
 describe("snapshot: compaction", () => {
-  it("continue — below token threshold", async () => {
+  it("records why compaction is skipped without a measured context", async () => {
     const mw = createCompactionPolicy({
       priority: 900,
       events: Bus,
@@ -69,7 +69,11 @@ describe("snapshot: compaction", () => {
         budgetState: budgetState({ totalInputTokens: 1000, totalOutputTokens: 500 }),
       }),
     );
-    expect(verdict.verdict).toBe("allow");
+    expect(verdict).toMatchObject({
+      verdict: "allow",
+      policyId: "builtin.compaction",
+      reasonCodes: ["compaction_skipped_no_measurement"],
+    });
   });
 });
 

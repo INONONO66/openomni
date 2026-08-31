@@ -66,6 +66,6 @@ describe("tool metadata key collisions", () => {
       runInput([{ role: "user", content: "hi" }]),
       config([spec("a_b")]),
     );
-    expect(result.finishReason).toBeDefined();
+    expect(result.finishReason).toBe("stop");
   });
 });

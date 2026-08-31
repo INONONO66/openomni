@@ -37,6 +37,6 @@ describe("GitHubNormalizer", () => {
       "trace-github-test",
     );
 
-    expect(inbound?.text.length).toBeGreaterThan(0);
+    expect(inbound?.text).toBe("please review");
   });
 });

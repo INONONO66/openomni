@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test, vi } from "bun:test";
 import { APIError } from "../../src/error";
 import { Retry } from "../../src/retry";
 
@@ -91,13 +91,16 @@ describe("Retry", () => {
     });
 
     test("caps delay at RETRY_MAX_DELAY", async () => {
+      const timeout = vi.spyOn(globalThis, "setTimeout");
       const controller = new AbortController();
-      const promise = Retry.sleep(Retry.RETRY_MAX_DELAY + 1000, controller.signal);
-      setTimeout(() => controller.abort(), 100);
       try {
-        await promise;
-      } catch {
-        // Expected abort proves the requested delay was capped before completion.
+        const sleeping = Retry.sleep(Retry.RETRY_MAX_DELAY + 1000, controller.signal);
+
+        expect(timeout).toHaveBeenCalledWith(expect.any(Function), Retry.RETRY_MAX_DELAY);
+        controller.abort();
+        await expect(sleeping).rejects.toHaveProperty("name", "AbortError");
+      } finally {
+        timeout.mockRestore();
       }
     });
   });
