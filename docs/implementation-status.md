@@ -59,7 +59,7 @@ The legacy product kernel, local-process coordinator, and old server host were d
 ## Planned, not implemented
 
 - Transactional outbox projection from authoritative message/state writes to Bus observation; current session-message events are emitted after the durable transaction and therefore do not close the post-commit crash window.
-- Dynamic component/plugin composition with reactive dependencies, generation draining, and reversible registration ownership; the shipped component events currently observe Resident/Worker invocation generations only.
+- Dynamic component/plugin composition with reactive dependencies and generation draining; reversible registration ownership ships as the app's composition substrate (`apps/openomni/src/composition/composer.ts`), which owns boot rollback and shutdown as one reverse-order release. The shipped component events currently observe Resident/Worker invocation generations only.
 - Connector installation/execution beyond retained protocol and storage primitives (#216 class).
 - Memory.Engine / FTS5 session search (#220).
 - P4 role surfaces (Governor, Jester, Voice).

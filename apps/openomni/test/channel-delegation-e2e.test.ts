@@ -10,10 +10,10 @@ import { assistantMessage } from "./helpers/assistant-message";
 const WS_TOKEN = "channel-delegation-e2e-token";
 
 const directories: string[] = [];
-let stopApp: (() => void) | undefined;
+let stopApp: (() => Promise<void>) | undefined;
 
-afterEach(() => {
-  stopApp?.();
+afterEach(async () => {
+  await stopApp?.();
   stopApp = undefined;
   Storage.reset();
   for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
