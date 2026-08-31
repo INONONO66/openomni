@@ -160,28 +160,13 @@ export type Handle = z.infer<typeof Handle>;
  * That rule is pinned where operation meets settlement (`Record`), because
  * a bare terminal carries no operation to check itself against.
  */
-/**
- * Single owner of the stamp every terminal carries: WHICH delegation settled
- * and WHEN. Each arm below extends it with its own evidence, so the terminal
- * VOCABULARY stays fully split (a `cancelled` reason and a `delivery_failed`
- * reason are different facts even though the field shape matches) while the
- * stamp has one spelling. Reason text stays per-arm on purpose — the two arms
- * are not one terminal with a flag.
- */
-const settledStamp = {
-  delegationId: z.string().min(1),
-  at: EpochMs,
-} as const;
-
-/** Why the delegation stopped, as reported by the settling authority. */
-const settledReason = z.string().min(1);
-
 const SettledUnion = z.discriminatedUnion("status", [
   z
     .object({
       status: z.literal("completed"),
-      ...settledStamp,
+      delegationId: z.string().min(1),
       output: z.string(),
+      at: EpochMs,
       /** Transport-reported spend; visibility only, never an admission input. */
       usage: z.object({ tokens: z.number().int().nonnegative() }).strict().optional(),
     })
@@ -189,36 +174,50 @@ const SettledUnion = z.discriminatedUnion("status", [
   z
     .object({
       status: z.literal("failed"),
-      ...settledStamp,
-      error: settledReason,
+      delegationId: z.string().min(1),
+      error: z.string().min(1),
+      at: EpochMs,
     })
     .strict(),
   z
     .object({
       status: z.literal("cancelled"),
-      ...settledStamp,
-      /** The owner or kernel stopped it before the worker answered. */
-      reason: settledReason,
+      delegationId: z.string().min(1),
+      reason: z.string().min(1),
+      at: EpochMs,
     })
     .strict(),
   z
     .object({
       status: z.literal("delivery_failed"),
-      ...settledStamp,
-      /** The request never reached the worker — NOT did-not-happen. */
-      reason: settledReason,
+      delegationId: z.string().min(1),
+      reason: z.string().min(1),
+      at: EpochMs,
     })
     .strict(),
   z
     .object({
       status: z.literal("no_response"),
-      ...settledStamp,
+      delegationId: z.string().min(1),
       /** The deadline (epoch ms) whose expiry produced this terminal. */
       deadline: EpochMs.int().positive(),
+      at: EpochMs,
     })
     .strict(),
-  z.object({ status: z.literal("interrupted"), ...settledStamp }).strict(),
-  z.object({ status: z.literal("sent"), ...settledStamp }).strict(),
+  z
+    .object({
+      status: z.literal("interrupted"),
+      delegationId: z.string().min(1),
+      at: EpochMs,
+    })
+    .strict(),
+  z
+    .object({
+      status: z.literal("sent"),
+      delegationId: z.string().min(1),
+      at: EpochMs,
+    })
+    .strict(),
 ]);
 
 export const Settled = SettledUnion.superRefine((settled, ctx) => {

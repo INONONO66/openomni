@@ -3,21 +3,36 @@ import type { z } from "zod";
 import { Delegation } from "../../src/delegation/index.js";
 
 /**
- * Characterization of the `Delegation.Settled` discriminated union arms that
- * duplicate a field map today (slop-audit duplication #18
- * `delegation/schema.ts:184-192 <-> :192-200` — the `cancelled` and
- * `delivery_failed` arms are byte-identical apart from their status literal).
+ * Characterization of the `Delegation.Settled` discriminated union arms.
  *
- * Consolidating the SHAPE must not merge the TERMINAL VOCABULARY: the
- * semantic-audit do-not-touch ledger (SYNTHESIS section 2, "Domain terminal
- * vocabularies") forbids a universal terminal enum, and `SettledStatus` is
- * derived from these very discriminants. This file pins what must survive:
+ * Duplication #18 (`delegation/schema.ts` — the `cancelled` and
+ * `delivery_failed` arms are byte-identical apart from their status literal)
+ * is deliberately LEFT UNCONSOLIDATED, and this file is why.
  *
- *   - every status literal stays its own arm, reachable by discriminant;
- *   - each arm keeps its OWN required-field set (no arm gains a sibling
- *     arm's field, no arm loses one) and stays `.strict()`;
- *   - the discriminated-union rejection path and message are unchanged;
- *   - `SettledStatus` keeps exactly the arm discriminants, in arm order.
+ * `JSON.stringify` of a parsed `Settled` is not formatting — it is DATA:
+ *
+ *   - `packages/ledger/src/storage/sqlite-delegation-adapter.ts:55` persists
+ *     it as the delegation row's `data` column;
+ *   - `apps/openomni/src/delegation/kernel.ts:134` uses it as the settlement
+ *     IDENTITY key that wakes a settlement waiter.
+ *
+ * Zod emits object keys in shape-declaration order, so hoisting the shared
+ * `delegationId`/`at` stamp into one spread reorders every arm that has
+ * fields BETWEEN them (base emits `status, delegationId, <evidence>, at`).
+ * A differential over this file's fixtures showed 14/18 cases changing bytes.
+ * An order-preserving factoring would need the two-field stamp split into two
+ * one-field maps sitting on opposite sides of each arm's evidence, which is
+ * strictly worse than the duplication it removes.
+ *
+ * So this file pins BOTH layers:
+ *
+ *   - the vocabulary: every status literal stays its own arm, each keeps its
+ *     OWN required-field set and `.strict()`, and `SettledStatus` keeps
+ *     exactly the arm discriminants in arm order (SYNTHESIS section 2,
+ *     "Domain terminal vocabularies", forbids a universal terminal enum);
+ *   - the BYTES: exact `JSON.stringify` output per arm, so any future
+ *     refactor that reorders emission fails here instead of silently
+ *     rewriting persisted rows and settlement identities.
  */
 
 const T0 = 1_700_000_000_000;
@@ -42,6 +57,55 @@ describe("Delegation.Settled arm vocabulary", () => {
       "interrupted",
       "sent",
     ]);
+  });
+
+  test("every arm's JSON bytes are exact, and input key order cannot change them", () => {
+    // Base emission order per arm: status, delegationId, <arm evidence>, at.
+    // These literals are the persisted `data` column and the settlement
+    // identity key — they are a compatibility surface, not a style choice.
+    const expected: [Record<string, unknown>, string][] = [
+      [
+        { status: "completed", delegationId: "del-1", output: "done", at: T0 },
+        '{"status":"completed","delegationId":"del-1","output":"done","at":1700000000000}',
+      ],
+      [
+        { status: "completed", delegationId: "del-1", output: "done", at: T0, usage: { tokens: 12 } },
+        '{"status":"completed","delegationId":"del-1","output":"done","at":1700000000000,"usage":{"tokens":12}}',
+      ],
+      [
+        { status: "failed", delegationId: "del-1", error: "boom", at: T0 },
+        '{"status":"failed","delegationId":"del-1","error":"boom","at":1700000000000}',
+      ],
+      [
+        { status: "cancelled", delegationId: "del-1", reason: "owner stopped", at: T0 },
+        '{"status":"cancelled","delegationId":"del-1","reason":"owner stopped","at":1700000000000}',
+      ],
+      [
+        { status: "delivery_failed", delegationId: "del-1", reason: "unreachable", at: T0 },
+        '{"status":"delivery_failed","delegationId":"del-1","reason":"unreachable","at":1700000000000}',
+      ],
+      [
+        { status: "no_response", delegationId: "del-1", deadline: T0 - 1_000, at: T0 },
+        '{"status":"no_response","delegationId":"del-1","deadline":1699999999000,"at":1700000000000}',
+      ],
+      [
+        { status: "interrupted", delegationId: "del-1", at: T0 },
+        '{"status":"interrupted","delegationId":"del-1","at":1700000000000}',
+      ],
+      [
+        { status: "sent", delegationId: "del-1", at: T0 },
+        '{"status":"sent","delegationId":"del-1","at":1700000000000}',
+      ],
+    ];
+
+    for (const [input, bytes] of expected) {
+      expect(JSON.stringify(Delegation.Settled.parse(input))).toBe(bytes);
+      // The SCHEMA fixes emission order, not the caller: a row read back with
+      // its keys in any order must re-serialize to the same bytes, or the
+      // settlement identity key would depend on who built the object.
+      const shuffled = Object.fromEntries(Object.entries(input).reverse());
+      expect(JSON.stringify(Delegation.Settled.parse(shuffled))).toBe(bytes);
+    }
   });
 
   test("cancelled and delivery_failed are DISTINCT terminals over the same field map", () => {
