@@ -11,10 +11,10 @@ const WS_TOKEN = "delegation-e2e-token";
 const WORKER_ANSWER = "the build is green";
 
 const directories: string[] = [];
-let stopApp: (() => void) | undefined;
+let stopApp: (() => Promise<void>) | undefined;
 
-afterEach(() => {
-  stopApp?.();
+afterEach(async () => {
+  await stopApp?.();
   stopApp = undefined;
   Storage.reset();
   for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });

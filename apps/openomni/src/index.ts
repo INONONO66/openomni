@@ -40,6 +40,7 @@ import { createCompletionPort } from "./work-item/completion";
 import { createProcessDriver } from "./delegation/process-driver";
 import { createInlineWorkerRunner } from "./delegation/worker-loop";
 import { createResidentGateway } from "./gateway";
+import { createComposer } from "./composition/composer";
 import { openCuratedMemory } from "./memory/store";
 import { buildInboundEvent } from "./inbound";
 import { createResident } from "./resident";
@@ -187,14 +188,24 @@ function delegationWakeDelivery(wake: DelegationWake): Gateway.Deliver {
 export async function startOpenOmni(options: StartOptions = {}) {
   const config = options.config ?? loadConfig();
   assertWsExposure(config);
-  const completionWriter = initialize({ dbPath: config.dbPath });
-  const stopBusPersistence = BusPersistence.start();
-  // Boot owns the kernel and host handles from this scope so the rollback
-  // path below can tear down whatever a failed boot already built.
+  // Every stage whose teardown matters is mounted on the composer: boot
+  // rollback and shutdown are the same reverse-order release, owned by the
+  // stage that acquired the thing rather than restated by hand in two places.
+  const composer = createComposer();
   let kernel: DelegationKernel | undefined;
-  let host: MachineHost | undefined;
-  let externalSurfaces: Channel.Surface[] = [];
   try {
+    let completionWriter!: Storage.WorkItemCompletionWriter;
+    await composer.mount("journal", (ctx) => {
+      completionWriter = initialize({ dbPath: config.dbPath });
+      const stopBusPersistence = BusPersistence.start();
+      // Journal shutdown contract: every accepted event row is committed
+      // before the observer detaches and storage closes.
+      ctx.effect(async () => {
+        await BusPersistence.flush();
+        stopBusPersistence();
+        Storage.reset();
+      });
+    });
     // Owner-admitted delegation targets. Registration is an upsert, so a
     // restart re-asserting the same actors is a no-op.
     const actors: readonly RegisteredActor[] = config.actors ?? [];
@@ -269,14 +280,17 @@ export async function startOpenOmni(options: StartOptions = {}) {
       newDelegationId: () => crypto.randomUUID(),
     });
     // Const capture for the closures below (the outer `let kernel` exists so
-    // boot rollback can stop a partially built kernel).
+    // the runner's late-binding getter can reach it).
     const delegationKernel = kernel;
+    await composer.mount("delegation.kernel", (ctx) => {
+      ctx.effect(() => delegationKernel.stop());
+    });
 
     // The cell door is bound per cell rather than globally, so a cell serves
     // exactly the tools its own dispatcher holds.
     const registry = createCellRegistry();
     const machines = config.machines;
-    host =
+    const host: MachineHost | undefined =
       machines === undefined
         ? undefined
         : await createMachineHost({
@@ -286,6 +300,10 @@ export async function startOpenOmni(options: StartOptions = {}) {
             now: () => Date.now(),
             callTool: registry.callTool,
           });
+    if (host !== undefined) {
+      const attachedHost = host;
+      await composer.mount("machines", (ctx) => ctx.effect(() => attachedHost.close()));
+    }
 
     // Self-referential: a cell's catalog is the same one that dispatches cells,
     // and placement subtracts what a cell cannot reach.
@@ -296,8 +314,6 @@ export async function startOpenOmni(options: StartOptions = {}) {
     // The Resident's view of its body: every enrolled machine, attached or
     // not, reduced to the effective (enrollment∩offer) capability fold the
     // host attachment table holds.
-    // A const capture keeps the narrowing the closures below rely on (the
-    // outer `let host` exists only so boot rollback can reach the handle).
     const machineHost = host;
     const machinesPort: MachinesPort | undefined =
       machineHost === undefined || machines === undefined
@@ -396,7 +412,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       return result.kind === "dropped" ? null : { text: result.result.output };
     };
     const channelSetup = createChannelDrivers(config, routingHandler);
-    externalSurfaces = channelSetup.surfaces;
+    const externalSurfaces = channelSetup.surfaces;
 
     let wsHandler: WebSocketHandler | undefined;
     const wsRoute = async (externalId: string, body: string) => {
@@ -465,49 +481,44 @@ export async function startOpenOmni(options: StartOptions = {}) {
     });
 
     if (server.port === undefined) throw new Error("OpenOmni ws server did not bind a TCP port");
-    try {
-      await Promise.all(externalSurfaces.map((surface) => surface.start(recoveryTraceId)));
-    } catch (error) {
-      server.stop();
-      throw error;
+    const boundServer = server;
+    const boundPort: number = server.port;
+    await composer.mount("ws.server", (ctx) => {
+      // Initiate the graceful stop without awaiting it: Bun resolves this
+      // promise only after every open client connection closes, and shutdown
+      // must not wait on clients (the pre-composer stop never did).
+      ctx.effect(() => {
+        void boundServer.stop();
+      });
+    });
+    // Each surface is its own stage: the one that fails to start owns nothing,
+    // and the ones already listening unwind in reverse on the rollback path.
+    for (const surface of externalSurfaces) {
+      await composer.mount(`channel.${surface.id}`, async (ctx) => {
+        await surface.start(recoveryTraceId);
+        ctx.effect(() => surface.stop(newTraceId()));
+      });
     }
     return {
-      port: server.port,
-      async stop(): Promise<void> {
-        server.stop();
-        for (const surface of externalSurfaces) surface.stop(newTraceId());
-        kernel?.stop();
-        host?.close();
-        // Journal shutdown contract: every accepted event row is committed
-        // before the observer detaches and storage closes.
-        await BusPersistence.flush();
-        stopBusPersistence();
-        Storage.reset();
-      },
+      port: boundPort,
+      // Shutdown is the same reverse-order release boot rollback uses: the
+      // composer owns the sequence, so a new stage cannot leak by forgetting
+      // a line here.
+      stop: () => composer.dispose(),
     };
   } catch (error) {
     // Fail-closed boot rollback: a failure after the journal started leaves
     // no leaked Bus observer, no armed kernel timer, and no configured
     // storage behind — a later boot starts clean.
-    for (const surface of externalSurfaces) surface.stop(newTraceId());
-    kernel?.stop();
-    host?.close();
-    let flushError: unknown;
     try {
-      await BusPersistence.flush();
-    } catch (caught) {
-      flushError = caught;
-    } finally {
-      stopBusPersistence();
-      Storage.reset();
-    }
-    if (flushError !== undefined) {
+      await composer.dispose();
+    } catch (rollbackError) {
       const rollbackFailure = new Error(
-        "OpenOmni boot failed and journal rollback flush failed",
+        "OpenOmni boot failed and its rollback failed",
       ) as Error & {
         errors: readonly unknown[];
       };
-      rollbackFailure.errors = [error, flushError];
+      rollbackFailure.errors = [error, rollbackError];
       throw rollbackFailure;
     }
     throw error;

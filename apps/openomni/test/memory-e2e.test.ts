@@ -7,11 +7,11 @@ import { Storage } from "@openomni/ledger";
 import { startOpenOmni } from "../src/index";
 import { assistantMessage } from "./helpers/assistant-message";
 
-let stopApp: (() => void) | undefined;
+let stopApp: (() => Promise<void>) | undefined;
 const directories: string[] = [];
 
-afterEach(() => {
-  stopApp?.();
+afterEach(async () => {
+  await stopApp?.();
   stopApp = undefined;
   Storage.reset();
   for (const directory of directories.splice(0))

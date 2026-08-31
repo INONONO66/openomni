@@ -23,13 +23,13 @@ const WS_TOKEN = "code-mode-e2e-token";
 const MACHINE_ID = "alpha";
 
 const directories: string[] = [];
-let stopApp: (() => void) | undefined;
+let stopApp: (() => Promise<void>) | undefined;
 let daemon: MachineDaemon | undefined;
 
-afterEach(() => {
+afterEach(async () => {
   daemon?.close();
   daemon = undefined;
-  stopApp?.();
+  await stopApp?.();
   stopApp = undefined;
   Storage.reset();
   for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });

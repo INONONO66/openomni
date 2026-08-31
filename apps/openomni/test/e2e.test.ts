@@ -11,7 +11,7 @@ import { assistantMessage } from "./helpers/assistant-message";
 
 const REPLY = "A deterministic Resident reply.";
 const directories: string[] = [];
-let stopApp: (() => void) | undefined;
+let stopApp: (() => Promise<void>) | undefined;
 
 function nextMessage(ws: WebSocket): Promise<MessageEvent> {
   return new Promise((resolve, reject) => {
@@ -55,8 +55,8 @@ function opened(ws: WebSocket): Promise<void> {
   });
 }
 
-afterEach(() => {
-  stopApp?.();
+afterEach(async () => {
+  await stopApp?.();
   stopApp = undefined;
   Storage.reset();
   for (const directory of directories.splice(0))
