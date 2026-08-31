@@ -164,15 +164,9 @@ export const Create = RecordBase.omit({
 });
 export type Create = z.infer<typeof Create>;
 
-export const CorrelationQuery = z
-  .object({
-    endpointId: z.string().min(1).optional(),
-    channelId: z.string().min(1).optional(),
-    replyToMessageId: z.string().min(1).optional(),
-    threadId: z.string().min(1).optional(),
-    tokenHash: z.string().min(1).optional(),
-    externalConversationId: z.string().min(1).optional(),
-  })
+// Derived from the single owner of the correlation fields; omitting
+// engagementId is the load-bearing part (it must never become a matching key).
+export const CorrelationQuery = Correlation.omit({ engagementId: true })
   .strict()
   .refine((query) => Object.values(query).some((value) => value !== undefined), {
     message: "At least one correlation field is required",
