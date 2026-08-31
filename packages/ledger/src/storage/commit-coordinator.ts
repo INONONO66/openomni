@@ -66,13 +66,20 @@ export type CommitOutcome<T> = Readonly<{ kind: "committed"; value: T }> | Commi
 
 /**
  * Appends `request.fact` at the expected head and lands the caller's
- * projection write in the same transaction.
+ * projection write in the same unit.
  *
- * `project` runs only after the fact is durably appended, and its `false`
- * return means "the projection CAS lost" — the coordinator turns that into a
- * refusal and lets the transaction roll the appended fact back, so head and
- * revision can never disagree. `project` MUST be a compare-and-set against
- * `expectedHead`; a blind write would defeat the binding.
+ * `project` runs only after the fact is appended, and its `false` return means
+ * "the projection compare-and-set lost". A refusal is ATOMIC: append and
+ * projection share a NESTED transaction (a savepoint on the caller's
+ * transaction), and a lost projection unwinds that savepoint, so
+ * `ledger_head.head` never outruns the projected revision. `project` MUST be a
+ * compare-and-set against `expectedHead`; a blind write would defeat the
+ * binding.
+ *
+ * The savepoint is what makes the refusal atomic for EVERY caller, not just
+ * throwing ones. The completion writer reports a lost race by RETURNING false,
+ * which COMMITS its transaction — leaning on the outer rollback would strand
+ * the appended fact above the row's revision on exactly that path.
  *
  * MUST be called inside {@link runCommitTransaction}.
  */
@@ -80,6 +87,12 @@ export function commitFact<T>(
   ledger: ProtocolStorage.LedgerSubAdapter,
   request: CommitRequest,
   project: () => T | false,
+  /**
+   * Nested-transaction factory (the storage adapter's own `transaction`).
+   * Omit it only where the caller has already bound append and projection
+   * into one unit by other means.
+   */
+  nest?: <R>(unit: () => R) => R,
 ): CommitOutcome<T> {
   const event = {
     streamId: request.streamId,
@@ -87,17 +100,44 @@ export function commitFact<T>(
     data: request.fact.data,
   };
 
-  let appended = ledger.append(event, request.expectedHead);
-  const adoption = request.adoption;
-  if (adoption !== undefined && isPreCutoverHead(appended, request.expectedHead)) {
-    if (!adoptStream(ledger, request, adoption)) return { kind: "stale_head" };
-    appended = ledger.append(event, request.expectedHead);
-  }
-  if (appended.kind === "cas_conflict") return { kind: "stale_head" };
+  const commit = (): CommitOutcome<T> => {
+    let appended = ledger.append(event, request.expectedHead);
+    const adoption = request.adoption;
+    if (adoption !== undefined && isPreCutoverHead(appended, request.expectedHead)) {
+      if (!adoptStream(ledger, request, adoption)) return { kind: "stale_head" };
+      appended = ledger.append(event, request.expectedHead);
+    }
+    if (appended.kind === "cas_conflict") return { kind: "stale_head" };
 
-  const projected = project();
-  if (projected === false) return { kind: "stale_head" };
-  return { kind: "committed", value: projected };
+    const projected = project();
+    if (projected === false) return { kind: "stale_head" };
+    return { kind: "committed", value: projected };
+  };
+
+  if (!nest) return commit();
+
+  // A refusal must discard the append, but the CALLER's transaction may still
+  // be committing (a writer that returns false rather than throwing). Throw
+  // the refusal across the savepoint boundary to unwind just this unit, then
+  // hand it back as an ordinary value.
+  try {
+    return nest(() => {
+      const outcome = commit();
+      if (outcome.kind !== "committed") throw new CommitRefused();
+      return outcome;
+    });
+  } catch (error) {
+    if (error instanceof CommitRefused) return { kind: "stale_head" };
+    throw error;
+  }
+}
+
+/** Internal savepoint-unwind signal; never escapes {@link commitFact}. */
+class CommitRefused extends Error {
+  constructor() {
+    super("commit refused");
+    this.name = "CommitRefused";
+  }
 }
 
 /**

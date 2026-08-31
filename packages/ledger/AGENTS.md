@@ -28,7 +28,7 @@ src/
 │   ├── sqlite-storage.ts # SqliteStorageAdapter facade (Bun SQLite persistence)
 │   ├── sqlite-*-adapter.ts # SQLite sub-adapters by storage seam
 │   ├── sqlite-schema-lifecycle.ts # PRAGMAs, migrations, and clear ordering
-│   ├── commit-coordinator.ts # SOLE owner of decision-class commit MECHANICS: append at expectedHead → adopt an empty pre-cutover stream → projection CAS, all in one transaction, with SQLITE_BUSY mapped to the caller's typed error. Domains keep their folds, fact payloads, adoption genesis, and conflict taxonomy
+│   ├── commit-coordinator.ts # SOLE owner of decision-class commit MECHANICS: append at expectedHead → adopt an empty pre-cutover stream → caller's projection CAS, with SQLITE_BUSY mapped to the caller's typed error. A refused projection is ATOMIC via a nested transaction (savepoint), so head never outruns revision even when the caller reports the refusal by RETURNING (completion-writer) rather than throwing. Domains keep their folds, fact payloads, adoption genesis, and conflict taxonomy
 │   ├── migration-runner.ts / sqlite-busy.ts / sqlite-json-data.ts / timestamped-store.ts # shared SQLite helpers (requireSubAdapter lives in timestamped-store)
 │   └── initialize.ts     # initialize({ dbPath }) — bootstraps the default SQLite adapter
 ├── ledger-core/          # Ledger append core (#510 A): serialized CAS append, adoptStream, headFact/factsByType, verifyTail over the hash-chained ledger_event table (schema.ts = drizzle DDL source)
