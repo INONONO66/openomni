@@ -1,10 +1,5 @@
 import { Actor, type Ingress, resolveTarget, type Gateway } from "@openomni/protocol";
 
-/**
- * The typed inbound actor (Ingress.MetaSchema `actor`): batch ② commit 2
- * declared the production meta keys, so authorization reads here take the
- * typed `Ingress.Actor` instead of an untyped `Record<string, unknown>`.
- */
 export type ActorRecord = Ingress.Actor;
 
 const topLevelTrustTiers = new Set<Actor.TrustTier>(["owner", "co_owner", "manager"]);

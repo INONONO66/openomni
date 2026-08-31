@@ -23,12 +23,14 @@ type MessageOperation = Gateway.MessageOperation;
 type MessageTarget = Gateway.MessageTarget;
 const SendInput = Gateway.SendInput;
 type SendInput = Gateway.SendInput;
+type ParsedSendInput = Gateway.ParsedSendInput;
 type SendReceipt = Gateway.SendReceipt;
 type SenderTargetGrant = Gateway.SenderTargetGrant;
 type SocialBudget = Gateway.SocialBudget;
+type LedgerPort = NonNullable<ReturnType<typeof LedgerAppend.port>>;
 
 /** Policy-intent class of a send, inferred from `operation` when not explicit (#219). */
-function sendClassOf(input: SendInput): MessageClass {
+function sendClassOf(input: ParsedSendInput): MessageClass {
   return input.class ?? (input.operation === "awaited" ? "converse" : "notify");
 }
 
@@ -178,7 +180,7 @@ function sendStreamId(messageId: string): string {
   return `gateway_send:${encodeURIComponent(messageId)}`;
 }
 
-function sendSignature(input: SendInput, target: DeliveryTarget): string {
+function sendSignature(input: ParsedSendInput, target: DeliveryTarget): string {
   return JSON.stringify({
     messageId: input.messageId,
     senderId: input.senderId,
@@ -210,11 +212,19 @@ function parseAdmission(data: unknown, streamId: string): SendAdmission {
   };
 }
 
-function existingAdmission(input: SendInput, target: DeliveryTarget): SendAdmission | undefined {
+function requireLedger(): LedgerPort {
   const ledger = LedgerAppend.port();
   if (ledger === undefined) {
     throw new Error("Storage adapter does not implement ledger append — gateway sends fail closed");
   }
+  return ledger;
+}
+
+function existingAdmission(
+  ledger: LedgerPort,
+  input: ParsedSendInput,
+  target: DeliveryTarget,
+): SendAdmission | undefined {
   const streamId = sendStreamId(input.messageId);
   const fact = ledger.headFact(streamId);
   if (fact === undefined) return undefined;
@@ -231,27 +241,24 @@ function existingAdmission(input: SendInput, target: DeliveryTarget): SendAdmiss
 }
 
 function recordAdmission(
-  input: SendInput,
+  ledger: LedgerPort,
+  input: ParsedSendInput,
   target: DeliveryTarget,
   budgeted: boolean,
   sendClass: MessageClass,
 ): SendAdmission {
-  const ledger = LedgerAppend.port();
-  if (ledger === undefined) {
-    throw new Error("Storage adapter does not implement ledger append — gateway sends fail closed");
-  }
   const streamId = sendStreamId(input.messageId);
   const admission = { signature: sendSignature(input, target), budgeted, sendClass } as const;
   const appended = ledger.append({ streamId, type: SEND_ADMITTED_FACT, data: { ...admission } }, 0);
   if (appended.kind === "appended") return admission;
-  const raced = existingAdmission(input, target);
+  const raced = existingAdmission(ledger, input, target);
   if (raced === undefined) {
     throw new Error(`send admission conflicted without a recorded fact on ${streamId}`);
   }
   return raced;
 }
 
-function debitRow(input: SendInput, sendClass: MessageClass): Gateway.EgressDebitRow {
+function debitRow(input: ParsedSendInput, sendClass: MessageClass): Gateway.EgressDebitRow {
   return {
     id: `gateway-send:${input.messageId}`,
     senderId: input.senderId,
@@ -262,7 +269,7 @@ function debitRow(input: SendInput, sendClass: MessageClass): Gateway.EgressDebi
 }
 
 export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAgentMessaging {
-  function deny(input: SendInput, code: MessageDenialCode, reason: string): SendReceipt {
+  function deny(input: ParsedSendInput, code: MessageDenialCode, reason: string): SendReceipt {
     ports.publish(MessagingEvents.Denied, {
       messageId: input.messageId,
       traceId: input.traceId,
@@ -328,9 +335,10 @@ export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAge
     // binding from messageId to content + resolved endpoint: reusing a key for
     // different bytes fails closed.
     const sendClass = sendClassOf(input);
+    const ledger = requireLedger();
     let admission: SendAdmission | undefined;
     try {
-      admission = existingAdmission(input, resolution.target);
+      admission = existingAdmission(ledger, input, resolution.target);
     } catch (error) {
       if (error instanceof SendAdmissionConflict && input.operation === "awaited") {
         return deny(input, "wait_duplicate", error.message);
@@ -358,7 +366,7 @@ export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAge
           );
         }
       }
-      admission = recordAdmission(input, resolution.target, budgeted, sendClass);
+      admission = recordAdmission(ledger, input, resolution.target, budgeted, sendClass);
     }
     if (admission.budgeted) {
       // Repair admissions written by an older process (or a crash between its
@@ -374,11 +382,6 @@ export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAge
     let wait: Wait.Record | undefined;
     if (input.operation === "awaited") {
       const spec = input.waitSpec;
-      // Presence is guaranteed by the SendInput refinement; this narrows the
-      // optional type without a silent fallback.
-      if (spec === undefined) {
-        throw new Error("awaited send without waitSpec — schema layer regressed");
-      }
       // Record-before-act: the durable Wait lands before the delivery effect.
       // A delivery failure then leaves an open Wait that expires on schedule;
       // the reverse order could deliver a message the ledger never awaits.

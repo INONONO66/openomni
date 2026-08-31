@@ -136,11 +136,11 @@ export namespace IngressAuthorityMiddleware {
    * The routed pre-run admission checks. No canonical policy point fits this
    * boundary honestly — the event is pre-schema-validation, pre-session, and
    * pre-run, and anonymous actors are legal here — so these run as plain
-   * sequential steps, aborting on the FIRST failure (schema → authority →
-   * mode). Only the authority check is real authorization: an unconditional
+   * sequential steps, aborting on the FIRST failure (schema → authority).
+   * Only the authority check is real authorization: an unconditional
    * direct `Policy.evaluate` whose decision is fanned to the observer.
-   * Schema and mode dispatch are pipeline mechanics — they throw directly
-   * and are not observed as policy decisions. The executor-presence check
+   * Schema validation is pipeline mechanics — it throws directly and is not
+   * observed as a policy decision. The executor-presence check
    * that historically ran here (worker-target deliveries need a live
    * executor) moved to the app's Deliver consumer in the #707 seam flip —
    * same behavior, new home.
@@ -157,12 +157,6 @@ export namespace IngressAuthorityMiddleware {
     notifyDecision(ctx.onDecision, decision);
     if (PolicyDecision.isBlocking(decision)) {
       throw new Error(PolicyDecision.reason(decision, "ingress routed pre-run policy aborted"));
-    }
-
-    // mode dispatch.
-    if (event.mode !== "direct") {
-      const unknownMode: unknown = event.mode;
-      throw new Error(`unknown ingress mode: ${unknownMode}`);
     }
 
     return { event, mode: event.mode, target };

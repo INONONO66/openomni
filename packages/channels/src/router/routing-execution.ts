@@ -65,9 +65,6 @@ function factValue(decision: Ingress.RoutingDecisionPayload, prefix: string): st
 }
 
 function terminalMessage(decision: Ingress.RoutingDecisionPayload): string {
-  if (decision.stage === "blacklist") {
-    return factValue(decision, "blacklist.reason:") ?? decision.reason;
-  }
   if (decision.stage === "channel_ceiling") {
     if (decision.factsUsed.includes("channel:missing")) return "channel_grant.missing";
     const kind = factValue(decision, "channel.kind:");
@@ -133,9 +130,6 @@ export async function executeWaitRoute<Event extends Gateway.DeliveredEvent>(
         reason: decision.reason,
       },
     };
-  }
-  if (decision.outcome !== "route") {
-    throw new TypeError("accepted terminal routing decision was not handled");
   }
   const wait = resolution.waitExecution;
   switch (wait.kind) {

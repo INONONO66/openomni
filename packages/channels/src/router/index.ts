@@ -347,9 +347,6 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
     async ingest(input: unknown): Promise<Ingress.IngressResult> {
       const externalEvent = sanitizeInboundEvent(Gateway.DeliveredEvent.parse(input));
       const resolvedActorEvent = resolveIngressActor(externalEvent);
-      if (resolvedActorEvent.mode !== "direct") {
-        throw new TypeError("external ingress actor resolution changed event mode");
-      }
       // D11: inherit the trace minted at the channel's first frame — the
       // router never re-mints.
       const trace = { traceId: externalEvent.traceId };
