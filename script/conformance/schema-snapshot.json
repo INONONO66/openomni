@@ -154,6 +154,39 @@
     "time",
     "traceId"
   ],
+  "Conversation.Create": [
+    "contactId",
+    "endpointId",
+    "id",
+    "openedBy",
+    "ownerRef",
+    "policy"
+  ],
+  "Conversation.Policy": [
+    "expiresAt",
+    "maxInbound",
+    "maxOutbound",
+    "onInboundCapBreach",
+    "quietHours"
+  ],
+  "Conversation.QuietHours": ["endMinute", "startMinute"],
+  "Conversation.Record": [
+    "closedAt",
+    "closedBy",
+    "contactId",
+    "createdAt",
+    "endpointId",
+    "id",
+    "inboundCapBreachedAt",
+    "inboundUsed",
+    "openedBy",
+    "outboundUsed",
+    "ownerRef",
+    "policy",
+    "revision",
+    "state",
+    "updatedAt"
+  ],
   "CronJob.Info": [
     "agentName",
     "createdAt",
@@ -302,6 +335,7 @@
     "at",
     "body",
     "class",
+    "conversationId",
     "messageId",
     "operation",
     "senderId",
@@ -452,6 +486,7 @@
   ],
   "Ledger.RouteDecided#1": [
     "actorId",
+    "conversationId",
     "factsUsed",
     "inboundId",
     "inboundTreatment",
@@ -468,7 +503,6 @@
   ],
   "Ledger.RouteDecided#2": [
     "actorId",
-    "candidateInteractionIds",
     "factsUsed",
     "inboundId",
     "inboundTreatment",
@@ -485,6 +519,7 @@
   ],
   "Ledger.RouteDecided#3": [
     "actorId",
+    "candidateInteractionIds",
     "factsUsed",
     "inboundId",
     "inboundTreatment",
@@ -532,6 +567,22 @@
     "trustTier"
   ],
   "Ledger.RouteDecided#6": [
+    "actorId",
+    "factsUsed",
+    "inboundId",
+    "inboundTreatment",
+    "mode",
+    "outcome",
+    "reason",
+    "sessionId",
+    "stage",
+    "surface",
+    "target",
+    "time",
+    "traceId",
+    "trustTier"
+  ],
+  "Ledger.RouteDecided#7": [
     "actorId",
     "factsUsed",
     "inboundId",

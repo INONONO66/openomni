@@ -4,9 +4,17 @@ import {
   Wait as WaitProtocol,
   type Actor,
   type BusEvent,
+  type Conversation,
   type Wait,
 } from "@openomni/protocol";
-import { ActorRegistry, EgressBudgetStore, LedgerAppend, WaitStore } from "@openomni/ledger";
+import {
+  ActorRegistry,
+  BlacklistStore,
+  ConversationStore,
+  EgressBudgetStore,
+  LedgerAppend,
+  WaitStore,
+} from "@openomni/ledger";
 import { WaitService } from "../wait/index.js";
 import {
   deliverySurfaceKey,
@@ -92,6 +100,60 @@ export type MessagingPorts = Readonly<{
 export type ExistingAgentMessaging = Readonly<{
   send: (input: SendInput) => Promise<SendReceipt>;
 }>;
+
+/**
+ * Reads the window a conversation-pinned send claims. A missing or closed
+ * window reads as "no conversation arm" ONLY after the gate below refuses —
+ * so this lookup stays a plain read and the typed denial happens in one
+ * place (conversationGate) with the target resolved.
+ */
+function conversationForSend(input: SendInput): Conversation.Record | undefined {
+  if (input.conversationId === undefined) return undefined;
+  return ConversationStore.get(input.conversationId);
+}
+
+/**
+ * The conversational send right (§3.4): the window must be open, unexpired,
+ * and pinned to THIS actor at THIS endpoint; the absolute blacklist deny
+ * (DNC) still binds. Returns the denial reason, or undefined when admitted.
+ */
+function conversationGate(
+  input: SendInput,
+  conversation: Conversation.Record | undefined,
+  target: DeliveryTarget,
+): string | undefined {
+  const conversationId = input.conversationId;
+  if (conversationId === undefined) return undefined;
+  if (conversation === undefined) {
+    return `conversation ${conversationId} does not exist`;
+  }
+  if (conversation.state !== "open") {
+    return `conversation ${conversationId} is closed (${conversation.closedBy ?? "unknown"})`;
+  }
+  if (conversation.contactId !== target.actorId || conversation.endpointId !== target.endpointId) {
+    return `conversation ${conversationId} is not pinned to ${target.actorId} at ${target.endpointId}`;
+  }
+  const dnc = BlacklistStore.match({
+    actorId: target.actorId,
+    endpointId: target.endpointId,
+    channel: target.channel,
+    candidates: [target.channel],
+  });
+  if (dnc !== undefined) {
+    return `conversation ${conversationId} target is blacklisted (${dnc.kind})`;
+  }
+  return undefined;
+}
+
+/** The grant stamp a conversation-pinned send carries on its audit events. */
+function conversationGrant(input: SendInput): SenderTargetGrant {
+  return {
+    id: `conversation:${input.conversationId ?? ""}`,
+    senderId: input.senderId,
+    targetActorId: input.target.actorId,
+    operations: [input.operation],
+  };
+}
 
 type TargetDenialCode = Extract<
   MessageDenialCode,
@@ -291,25 +353,41 @@ export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAge
       operation: input.operation,
       at: input.at,
     };
-    // Scope-aware arm (#708): a rule-materialized instance carries a
-    // replyScope that can only be checked against the RESOLVED delivery
-    // endpoint, so with a candidate present the target resolves first and
-    // the scope check follows. With no candidate the denial stays
-    // `ungranted` BEFORE any registry lookup — an ungranted sender learns
-    // nothing from the registry (pinned by the send suite).
-    let grant = resolveSenderTargetGrant(grants, claim);
-    if (grant === undefined && !hasScopedSenderTargetCandidate(grants, claim)) {
-      return deny(
-        input,
-        "ungranted",
-        `no active sender-target grant covers ${input.senderId} -> ${input.target.actorId} (${input.operation})`,
-      );
+    // #P1 conversational arm (docs/conversation-and-message-io.md §3.4): a
+    // conversation-pinned send derives its authority from the open window,
+    // not from grants — but the target still resolves and the absolute
+    // blacklist deny still binds BEFORE any window fact is consulted, so an
+    // unauthorized sender learns nothing from the window.
+    const conversationPinned = input.conversationId !== undefined;
+    const conversation = conversationForSend(input);
+    let grant: SenderTargetGrant | undefined;
+    if (!conversationPinned) {
+      // Scope-aware arm (#708): a rule-materialized instance carries a
+      // replyScope that can only be checked against the RESOLVED delivery
+      // endpoint, so with a candidate present the target resolves first and
+      // the scope check follows. With no candidate the denial stays
+      // `ungranted` BEFORE any registry lookup — an ungranted sender learns
+      // nothing from the registry (pinned by the send suite).
+      grant = resolveSenderTargetGrant(grants, claim);
+      if (grant === undefined && !hasScopedSenderTargetCandidate(grants, claim)) {
+        return deny(
+          input,
+          "ungranted",
+          `no active sender-target grant covers ${input.senderId} -> ${input.target.actorId} (${input.operation})`,
+        );
+      }
     }
     const resolution = resolveExistingTarget(input.target);
     if (!resolution.ok) {
       return deny(input, resolution.code, resolution.reason);
     }
-    if (grant === undefined) {
+    if (conversationPinned) {
+      const conversationDenial = conversationGate(input, conversation, resolution.target);
+      if (conversationDenial !== undefined) {
+        return deny(input, "conversation_denied", conversationDenial);
+      }
+      grant = conversationGrant(input);
+    } else if (grant === undefined) {
       const surfaceKey = deliverySurfaceKey(resolution.target);
       grant = resolveScopedSenderTargetGrant(grants, { ...claim, surfaceKey });
       if (grant === undefined) {
@@ -340,7 +418,23 @@ export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAge
     if (admission === undefined) {
       // #219 active-egress gate: evaluate only for a NEW admission. A resumed
       // send already passed this judgment and must not consume capacity twice.
-      const budgeted = ports.budgets !== undefined && grant.replyScope === undefined;
+      // A conversation-pinned send debits the WINDOW instead — the egress
+      // budget never double-counts it.
+      const budgeted =
+        !conversationPinned && ports.budgets !== undefined && grant.replyScope === undefined;
+      if (conversationPinned && conversation !== undefined) {
+        // Record-before-act: the durable outbound debit lands before the
+        // delivery effect. A refusal here (closed/expired/cap/quiet-hours
+        // raced past the read above) is the same typed denial.
+        const debit = ConversationStore.admitOutbound(conversation.id, input.traceId, input.at);
+        if (debit.kind === "refused") {
+          return deny(
+            input,
+            "conversation_denied",
+            `conversation ${conversation.id} refused the outbound send (${debit.reason})`,
+          );
+        }
+      }
       if (budgeted) {
         const budget = ports
           .budgets?.()

@@ -52,7 +52,8 @@ interface LedgerStreamProducer {
     | "route"
     | "route_correction"
     | "engagement"
-    | "gateway_send";
+    | "gateway_send"
+    | "conversation";
   /**
    * Repo-relative paths of the enumerated modules that append this class's
    * facts. A retained protocol class may have no current producer.
@@ -99,6 +100,14 @@ export const LEDGER_PRODUCER_MANIFEST: LedgerProducerManifest = {
       // the brain's internal path retires wait correlation).
       streamClass: "route_correction",
       producers: ["packages/channels/src/router/routing-execution.ts"],
+      writes: "append",
+    },
+    {
+      // #P1 conversation window (docs/conversation-and-message-io.md §3.4) —
+      // one producer: the ledger ConversationStore (append-before-CAS, no
+      // adoption path — the stream class is born with the table).
+      streamClass: "conversation",
+      producers: ["packages/ledger/src/conversation/index.ts"],
       writes: "append",
     },
     {

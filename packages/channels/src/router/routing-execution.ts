@@ -135,6 +135,23 @@ export async function executeWaitRoute<Event extends Gateway.DeliveredEvent>(
   switch (wait.kind) {
     case "none":
       return { kind: "continue", event: resolution.event, authority: "required" };
+    case "conversation":
+      // Conversation tier (§3.4): the window routes the reply to its owner's
+      // session; the delivery still settles the delegation the window was
+      // opened for, via the WaitContext waitContextOf derives from the
+      // deterministic `conv:<waitId>` id. The wait row itself is settled by
+      // the brain's settleFromReply — the router never writes it here.
+      if (decision.stage !== "conversation") {
+        throw new IngressRoutingError(
+          "dispatch_route_invalid",
+          "conversation route is incomplete",
+          decision,
+        );
+      }
+      // The window is the authority (§3.4) — the routed pre-run's trust-tier
+      // ladder must not re-judge a delivery the window already admitted, the
+      // same precedence a wait-correlated reply enjoys.
+      return { kind: "continue", event: resolution.event, authority: "wait_precedence" };
     case "wait": {
       if (decision.stage !== "wait_correlation") {
         throw new IngressRoutingError(

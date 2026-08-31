@@ -292,6 +292,12 @@ function replayReplyGrantAdmissions(): readonly ReplyGrantAdmission[] {
 
 function waitContextOf(resolution: KernelRouteResolution): Gateway.WaitContext | undefined {
   const wait = resolution.waitExecution;
+  if (wait.kind === "conversation") {
+    // The window's deterministic `conv:<waitId>` id names the wait the
+    // window was opened for (§3.4) — the brain settles that delegation from
+    // this context exactly as a wait-tier delivery would.
+    return { waitId: wait.waitId, allowedAction: "report_result" };
+  }
   if (wait.kind !== "wait") return undefined;
   const allowedAction = Wait.AllowedAction.safeParse(wait.requestedAction);
   if (!allowedAction.success) return undefined;

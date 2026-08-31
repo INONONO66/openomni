@@ -7,7 +7,13 @@ import {
   targetKey,
   type BusEvent,
 } from "@openomni/protocol";
-import { BlacklistStore, ChannelGrantStore, LedgerAppend, SurfaceKey } from "@openomni/ledger";
+import {
+  BlacklistStore,
+  ChannelGrantStore,
+  ConversationStore,
+  LedgerAppend,
+  SurfaceKey,
+} from "@openomni/ledger";
 import { applyChannelGrantTreatment } from "./authority.js";
 import { replyGrantEndpointFacts, replyGrantEndpointFromFacts } from "./messaging/reply-grant.js";
 import { resolveRoute, type RouteState } from "./resolve-route.js";
@@ -65,6 +71,15 @@ type KernelWaitExecution =
       requestedAction: Wait.RequestedWaitAction;
       record: Wait.Record;
     }>
+  | Readonly<{
+      // Conversation tier (#P1, §3.4): the reply rides the open window, but
+      // the window's deterministic `conv:<waitId>` id still names the wait
+      // the window was opened for — the delivery settles that delegation
+      // through the same WaitContext the wait tier carries.
+      kind: "conversation";
+      waitId: string;
+      conversationId: string;
+    }>
   | Readonly<{ kind: "ambiguous" }>;
 
 export type KernelRouteResolution<Event extends Gateway.DeliveredEvent = Gateway.DeliveredEvent> =
@@ -103,11 +118,23 @@ function routeWaitState(resolution: WaitResolution): RouteState["wait"] {
   }
 }
 
+const CONVERSATION_WAIT_PREFIX = "conv:";
+
 function kernelWaitExecution(
   resolution: WaitResolution,
   correlation: ScopedCorrelation | undefined,
   requestedAction: Wait.RequestedWaitAction,
+  conversation: RouteState["conversation"],
 ): KernelWaitExecution {
+  if (conversation !== undefined && conversation.state === "open") {
+    const waitId = conversation.id.startsWith(CONVERSATION_WAIT_PREFIX)
+      ? conversation.id.slice(CONVERSATION_WAIT_PREFIX.length)
+      : undefined;
+    if (waitId !== undefined) {
+      return { kind: "conversation", waitId, conversationId: conversation.id };
+    }
+    return { kind: "none" };
+  }
   switch (resolution.kind) {
     case "none":
       return { kind: "none" };
@@ -131,7 +158,13 @@ function selectedRouteTarget(
   waitExecution: KernelWaitExecution,
   surfaceDefault: Ingress.Target,
 ): Ingress.Target {
-  if (decision.outcome !== "route" || decision.stage !== "wait_correlation") {
+  if (decision.outcome !== "route") {
+    return surfaceDefault;
+  }
+  if (decision.stage === "conversation") {
+    return { kind: "resident" };
+  }
+  if (decision.stage !== "wait_correlation") {
     return surfaceDefault;
   }
   if (waitExecution.kind === "wait") {
@@ -232,6 +265,25 @@ function blacklistState(
   };
 }
 
+// Conversation tier (docs/conversation-and-message-io.md §3.4): an open
+// window pinned to the sender's endpoint is a routing fact. Endpoint
+// identity comes from the resolved actor meta, falling back to the
+// correlation envelope pin. The read is fail-closed — a missing
+// conversation sub-adapter throws the typed store error rather than
+// silently skipping the tier.
+function conversationState(
+  event: Gateway.DeliveredEvent,
+  correlation: ScopedCorrelation | undefined,
+): RouteState["conversation"] {
+  const actor = event.meta?.actor;
+  const endpointId =
+    (typeof actor?.endpointId === "string" ? actor.endpointId : undefined) ??
+    correlation?.endpointId;
+  if (endpointId === undefined) return undefined;
+  const open = ConversationStore.findOpenByEndpoint(endpointId);
+  return open.length === 0 ? undefined : open[0];
+}
+
 function resolveKernelRoute<Event extends Gateway.DeliveredEvent>(
   event: Event,
   traceId: string,
@@ -245,6 +297,7 @@ function resolveKernelRoute<Event extends Gateway.DeliveredEvent>(
   const surfaceSessionId =
     event.activation?.durableSessionId ?? SurfaceKey.lookup(extractSurfaceKey(event));
   const blacklist = blacklistState(event, correlation);
+  const conversation = conversationState(event, correlation);
   const channelResolution = ChannelGrantStore.resolve({
     surface: event.surface,
     workspace: event.workspace,
@@ -264,13 +317,19 @@ function resolveKernelRoute<Event extends Gateway.DeliveredEvent>(
     },
     {
       wait,
+      ...(conversation === undefined ? {} : { conversation }),
       ...(blacklist === undefined ? {} : { blacklist }),
       ...(channel === undefined ? {} : { channel }),
       ...(actor === undefined ? {} : { actor }),
       ...(surfaceSessionId === undefined ? {} : { surfaceSessionId }),
     },
   );
-  const waitExecution = kernelWaitExecution(gatheredWait, correlation, requestedAction);
+  const waitExecution = kernelWaitExecution(
+    gatheredWait,
+    correlation,
+    requestedAction,
+    conversation,
+  );
   return {
     decision,
     event: routedEvent(event, channelResolution, channel),
@@ -390,6 +449,13 @@ export function resolveAndRecordRoute<Event extends Gateway.DeliveredEvent>(
   // Redelivery passes the equivalence gate or fails closed — execution below
   // always uses the fresh decision with its own fresh resolution.
   const effective = recordRouteDecided(Ingress.routeStreamId(event), decision);
+  // Conversation inbound accounting (§3.4): one durable increment per routed
+  // delivery, AFTER the route.decided fact — the first cap crossing
+  // publishes the single owner wake (conversation.cap_breached) inside the
+  // store write.
+  if (effective.outcome === "route" && effective.stage === "conversation") {
+    ConversationStore.recordInbound(effective.conversationId, traceId, effective.time);
+  }
   // Observe-only projection — strictly after the append (or after the gated
   // equivalent replay); lossy by contract, published through the injected
   // sink (channels never imports the observation channel). A divergent

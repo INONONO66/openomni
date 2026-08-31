@@ -1,4 +1,4 @@
-import type { Actor, Ingress, Wait } from "@openomni/protocol";
+import type { Actor, Conversation, Ingress, Wait } from "@openomni/protocol";
 import { effectiveTrustTier } from "./effective-tier.js";
 
 /**
@@ -64,6 +64,7 @@ export type RouteState = {
     readonly reason?: string;
   };
   readonly wait: RouteWait;
+  readonly conversation?: Conversation.Record;
   readonly channel?: RouteChannel;
   readonly actor?: RouteActor;
   readonly surfaceSessionId?: string;
@@ -97,6 +98,37 @@ export function resolveRoute(
         ...(state.blacklist.reason === undefined
           ? []
           : [`blacklist.reason:${state.blacklist.reason}`]),
+      ],
+    };
+  }
+
+  const conversation = state.conversation;
+  if (conversation !== undefined && conversation.state === "open") {
+    // Conversation tier (#P1, docs/conversation-and-message-io.md §3.4): an
+    // open window pinned to the sender's endpoint admits the inbound to the
+    // window owner's session. Cap breach demotes the treatment to
+    // evidence_only (§3.4 onInboundCapBreach:"demote") — the durable
+    // increment + one owner wake happen in the store write after this pure
+    // fold; the fold only reports the treatment.
+    const demoted = conversation.inboundCapBreachedAt !== undefined;
+    return {
+      ...common,
+      stage: "conversation",
+      outcome: "route",
+      target: "resident",
+      sessionId: conversation.ownerRef.id,
+      conversationId: conversation.id,
+      // The window IS the authority for this delivery — the contact's trust
+      // tier is irrelevant inside it, so the treatment the brain consumes is
+      // the window's, not the tier ladder's. A cap-breached window demotes
+      // to evidence_only (§3.4 onInboundCapBreach:"demote").
+      inboundTreatment: demoted ? "evidence_only" : "full_access",
+      reason: "Inbound message matched an open conversation",
+      factsUsed: [
+        `conversation:${conversation.id}`,
+        `conversation.owner:session:${conversation.ownerRef.id}`,
+        "conversation.authority:window",
+        ...(demoted ? ["conversation.cap:breached"] : []),
       ],
     };
   }
