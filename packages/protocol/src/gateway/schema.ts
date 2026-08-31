@@ -327,12 +327,6 @@ const SendInputBase = z
   })
   .strict();
 
-type ParsedSendInput = Omit<z.infer<typeof SendInputBase>, "operation" | "waitSpec"> &
-  (
-    | { operation: "awaited"; waitSpec: z.infer<typeof AwaitSpecSchema> }
-    | { operation: "fire_and_forget"; waitSpec?: undefined }
-  );
-
 const SendInputSchema = SendInputBase.superRefine((input, ctx) => {
   if (input.operation === "awaited" && input.waitSpec === undefined) {
     ctx.addIssue({
@@ -365,7 +359,7 @@ const SendInputSchema = SendInputBase.superRefine((input, ctx) => {
       path: ["class"],
     });
   }
-}).transform((input): ParsedSendInput => input as ParsedSendInput);
+});
 
 // Wait control — brain → gateway (§2b-1): the brain owns WHEN a wait should
 // stop mattering; the gateway owns the rows and executes the write.
@@ -427,8 +421,7 @@ export namespace Gateway {
   export type AwaitSpec = z.infer<typeof AwaitSpecSchema>;
 
   export const SendInput = SendInputSchema;
-  export type SendInput = z.input<typeof SendInputSchema>;
-  export type ParsedSendInput = z.output<typeof SendInputSchema>;
+  export type SendInput = z.infer<typeof SendInputSchema>;
 
   /** The one allocated delivery address a target resolves to. */
   export type DeliveryTarget = Readonly<{
