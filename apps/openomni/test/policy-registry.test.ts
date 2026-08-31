@@ -1,13 +1,26 @@
 import { describe, expect, it } from "bun:test";
 import type { ChatAgentConfig } from "@openomni/agent";
+import { PolicyDecision } from "@openomni/protocol";
 import { createPolicyRegistry, MissingMandatoryPolicyError } from "../src/composition/policy-registry";
 
 type Middleware = NonNullable<ChatAgentConfig["middleware"]>[number];
+type RunContext = { events: ChatAgentConfig["events"] };
 
-const runContext = { events: undefined as unknown as ChatAgentConfig["events"] };
+const runContext: RunContext = {
+  events: {
+    publish: () => undefined,
+  },
+};
 
 function middleware(name: string): Middleware {
-  return { kind: "factory", name, create: () => ({}) } as unknown as Middleware;
+  return {
+    kind: "point",
+    name,
+    pointIds: [],
+    effectCapabilities: {},
+    priority: 0,
+    fn: () => PolicyDecision.allow({ policyId: name }),
+  };
 }
 
 describe("policy registry", () => {
@@ -16,13 +29,13 @@ describe("policy registry", () => {
     registry.register("first", () => middleware("first"));
     registry.register("second", () => middleware("second"));
 
-    const built = registry.middlewareFor(runContext) as ReadonlyArray<{ name: string }>;
+    const built = registry.middlewareFor(runContext);
     expect(built.map((entry) => entry.name)).toEqual(["first", "second"]);
   });
 
   it("passes the run context to each factory per build", () => {
     const registry = createPolicyRegistry({ mandatory: [] });
-    const seen: unknown[] = [];
+    const seen: RunContext[] = [];
     registry.register("observer", (run) => {
       seen.push(run);
       return middleware("observer");
@@ -35,14 +48,14 @@ describe("policy registry", () => {
 
   it("suspends a run fail-closed when a declared-mandatory policy is missing", () => {
     const registry = createPolicyRegistry({ mandatory: ["compaction"] });
-    let caught: unknown;
+    let caught: MissingMandatoryPolicyError | null = null;
     try {
       registry.middlewareFor(runContext);
     } catch (error) {
-      caught = error;
+      expect(error).toBeInstanceOf(MissingMandatoryPolicyError);
+      caught = error as MissingMandatoryPolicyError;
     }
-    expect(caught).toBeInstanceOf(MissingMandatoryPolicyError);
-    expect((caught as MissingMandatoryPolicyError).missing).toEqual(["compaction"]);
+    expect(caught?.missing).toEqual(["compaction"]);
   });
 
   it("suspends again when a mandatory registration is disposed without replacement", () => {
@@ -63,8 +76,7 @@ describe("policy registry", () => {
     expect(registry.middlewareFor(runContext)).toHaveLength(2);
 
     optional.dispose();
-    const built = registry.middlewareFor(runContext) as ReadonlyArray<{ name: string }>;
-    expect(built.map((entry) => entry.name)).toEqual(["compaction"]);
+    expect(registry.middlewareFor(runContext).map((entry) => entry.name)).toEqual(["compaction"]);
   });
 
   it("never lets a replaced registration's dispose evict its successor", () => {
@@ -73,7 +85,8 @@ describe("policy registry", () => {
     registry.register("compaction", () => middleware("replacement"));
 
     original.dispose();
-    const built = registry.middlewareFor(runContext) as ReadonlyArray<{ name: string }>;
-    expect(built.map((entry) => entry.name)).toEqual(["replacement"]);
+    expect(registry.middlewareFor(runContext).map((entry) => entry.name)).toEqual([
+      "replacement",
+    ]);
   });
 });

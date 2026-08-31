@@ -74,23 +74,19 @@ interface Fiber {
 }
 
 /** Runs one fiber's disposers newest-first; returns the failures, never throws. */
-async function release(fiber: Fiber): Promise<readonly unknown[]> {
-  const failures: unknown[] = [];
+async function release(fiber: Fiber): Promise<readonly Error[]> {
+  const failures: Error[] = [];
   for (const disposer of [...fiber.disposers].reverse()) {
     try {
       await disposer();
     } catch (error) {
-      failures.push(error);
+      // Disposers throw Errors; anything else is normalized at this boundary
+      // so the aggregate stays a plain Error list.
+      failures.push(error instanceof Error ? error : new Error(String(error)));
     }
   }
   fiber.disposers.length = 0;
   return failures;
-}
-
-function withErrors(message: string, errors: readonly unknown[]): Error {
-  const failure = new Error(message) as Error & { errors: readonly unknown[] };
-  failure.errors = errors;
-  return failure;
 }
 
 export function createComposer(): Composer {
@@ -125,10 +121,10 @@ export function createComposer(): Composer {
         fiber.state = "failed";
         const rollbackFailures = await release(fiber);
         if (rollbackFailures.length > 0) {
-          throw withErrors(`composition stage ${id} failed and its rollback failed`, [
-            error,
-            ...rollbackFailures,
-          ]);
+          throw new AggregateError(
+            [error, ...rollbackFailures],
+            `composition stage ${id} failed and its rollback failed`,
+          );
         }
         throw error;
       }
@@ -140,7 +136,7 @@ export function createComposer(): Composer {
       // run the disposers again.
       disposal ??= (async () => {
         disposed = true;
-        const failures: unknown[] = [];
+        const failures: Error[] = [];
         for (const fiber of [...fibers].reverse()) {
           // A failed fiber already ran its rollback; its effects are gone.
           if (fiber.state !== "active") {
@@ -151,7 +147,7 @@ export function createComposer(): Composer {
           fiber.state = "disposed";
         }
         if (failures.length > 0) {
-          throw withErrors("composition dispose failed", failures);
+          throw new AggregateError(failures, "composition dispose failed");
         }
       })();
       return disposal;

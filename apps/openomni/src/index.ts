@@ -570,13 +570,10 @@ export async function startOpenOmni(options: StartOptions = {}) {
     try {
       await composer.dispose();
     } catch (rollbackError) {
-      const rollbackFailure = new Error(
+      throw new AggregateError(
+        [error, rollbackError],
         "OpenOmni boot failed and its rollback failed",
-      ) as Error & {
-        errors: readonly unknown[];
-      };
-      rollbackFailure.errors = [error, rollbackError];
-      throw rollbackFailure;
+      );
     }
     throw error;
   }
