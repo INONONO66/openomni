@@ -1,12 +1,8 @@
-import {
-  ChatAgent,
-  type ChatAgentConfig,
-  type ChatAgentInput,
-  createCompactionPolicy,
-} from "@openomni/agent";
+import { ChatAgent, type ChatAgentConfig, type ChatAgentInput } from "@openomni/agent";
 import { Session } from "@openomni/ledger";
 import type { Placement } from "@openomni/placement";
 import type { Gateway, Ingress, Message, Model } from "@openomni/protocol";
+import type { PolicyRegistry } from "./composition/policy-registry";
 import type { DelegationOrigin } from "./delegation/admission";
 import { observeComponent } from "./observation/component";
 import { buildAgentPrompt } from "./prompt/build";
@@ -58,6 +54,11 @@ interface ResidentOptions {
    * messages must be offerable on the second one.
    */
   readonly targets: () => readonly Placement.ToolTarget[];
+  /**
+   * Owns which policies shape each run. Read per run: a mandatory policy
+   * lost between two messages suspends the second one fail-closed.
+   */
+  readonly policies: PolicyRegistry;
 }
 
 function addTextPart(sessionId: string, messageId: string, text: string): void {
@@ -161,13 +162,7 @@ export function createResident(options: ResidentOptions) {
       toolTargets: targets,
       toolChoice: evidenceOnly || tools.length === 0 ? "none" : "auto",
       toolExecutor: evidenceOnly ? refuseEvidenceOnlyToolCall : catalog.execute,
-      middleware: [
-        createCompactionPolicy({
-          events: observation.events,
-          priority: 900,
-          elideToolOutputs: { minOutputChars: 4000, keepHeadChars: 500 },
-        }),
-      ],
+      middleware: options.policies.middlewareFor({ events: observation.events }),
       model: options.model,
       auth: { type: "api", key: options.apiKey },
       ...(options.llm === undefined ? {} : { llm: options.llm }),

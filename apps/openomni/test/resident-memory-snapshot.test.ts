@@ -6,6 +6,7 @@ import type { Sink } from "@openomni/llm";
 import { initialize, Session, Storage } from "@openomni/ledger";
 import type { Gateway } from "@openomni/protocol";
 import type { CuratedMemory } from "../src/memory/store";
+import { createPolicyRegistry } from "../src/composition/policy-registry";
 import { createResident } from "../src/resident";
 import { assistantMessage } from "./helpers/assistant-message";
 
@@ -76,6 +77,7 @@ describe("Resident memory snapshot lifecycle", () => {
     const resident = createResident({
       model: { provider: "fake", id: "resident-test" },
       apiKey: "test-key",
+      policies: createPolicyRegistry({ mandatory: [] }),
       tools: { memory },
       targets: () => [],
       llm: {
