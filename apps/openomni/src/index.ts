@@ -1,6 +1,11 @@
 import { processEntryPath } from "./process-entry-path";
-import type { ChatAgentConfig } from "@openomni/agent";
-import { type GatewayRouter, WaitService, WebSocketHandler } from "@openomni/channels";
+import { type ChatAgentConfig, createCompactionPolicy } from "@openomni/agent";
+import {
+  type ChannelDeliveryRoute,
+  type GatewayRouter,
+  WaitService,
+  WebSocketHandler,
+} from "@openomni/channels";
 import {
   ActorRegistry,
   Artifact,
@@ -9,7 +14,7 @@ import {
   Session,
   Storage,
 } from "@openomni/ledger";
-import { ModelsDev, run as llmRun, type Sink } from "@openomni/llm";
+
 import { createMachineHost, type MachineHost } from "@openomni/machines";
 import type { Placement } from "@openomni/placement";
 import {
@@ -17,14 +22,13 @@ import {
   Gateway,
   type Ingress,
   type Machine,
-  type Message,
   newTraceId,
 } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
-import { createChannelDrivers } from "./channels";
+import { type BuiltChannel, channelProfile } from "./channels";
 import { assertWsExposure, loadConfig, type OpenOmniConfig, type RegisteredActor } from "./config";
 import type { ArtifactsPort } from "./tools/artifacts";
-import { type LlmPort, resolveLlmToolModel } from "./tools/llm";
+import { createLlmToolPort } from "./tools/llm";
 import type { MachinesPort } from "./tools/machines";
 import { createChannelDriver } from "./delegation/channel-driver";
 import { createInlineDriver } from "./delegation/inline-driver";
@@ -39,7 +43,10 @@ import { createWorkItemLinkage } from "./delegation/work-item-linkage";
 import { createCompletionPort } from "./work-item/completion";
 import { createProcessDriver } from "./delegation/process-driver";
 import { createInlineWorkerRunner } from "./delegation/worker-loop";
-import { createResidentGateway } from "./gateway";
+import { createResidentGateway, registerTrustedChannelGrant } from "./gateway";
+import { type Composer, createComposer, rollbackToCause } from "./composition/composer";
+import { createPolicyRegistry } from "./composition/policy-registry";
+import { createDriverRegistry } from "./composition/driver-registry";
 import { openCuratedMemory } from "./memory/store";
 import { buildInboundEvent } from "./inbound";
 import { createResident } from "./resident";
@@ -74,77 +81,116 @@ function attachedTargets(
 }
 
 /**
- * The llm tool's one-shot sub-model call: a single user message, no tools,
- * one step, its own synthesized trace — a nested run must never borrow the
- * turn's run identity. Auth is the configured key, exactly as the Resident
- * and the worker loop authenticate.
+ * Owner-admitted delegation targets, recorded as durable identity facts.
+ * Registration is an upsert, so a restart re-asserting the same actors is a
+ * no-op — which is also why this is not a composer effect: durable facts are
+ * history, not runtime handles.
  */
-function createLlmToolPort(model: OpenOmniConfig["model"]): LlmPort {
-  return async (prompt) => {
-    const sessionId = "llm-tool";
-    const messageId = crypto.randomUUID();
-    const request: Message.WithParts = {
-      info: {
-        id: messageId,
-        sessionID: sessionId,
-        role: "user",
-        time: { created: Date.now() },
-        agent: "llm-tool",
-        model: { providerID: model.provider, modelID: model.id },
-      },
-      parts: [
-        {
-          id: crypto.randomUUID(),
-          sessionID: sessionId,
-          messageID: messageId,
-          type: "text",
-          text: prompt,
-        },
-      ],
-    };
-    let answer = "";
-    const sink: Sink = {
-      onMessage: (message) => {
-        if (message.info.role !== "assistant") return;
-        answer = message.parts
-          .filter((part): part is Message.TextPart => part.type === "text")
-          .map((part) => part.text)
-          .join("");
-      },
-      onToolCall: () => undefined,
-      onToolResult: () => undefined,
-    };
-    const outcome = await llmRun(
-      {
-        messages: [request],
-        tools: [],
-        maxSteps: 1,
-        model: resolveLlmToolModel(await ModelsDev.get(), { provider: model.provider, id: model.id }),
-        auth: { type: "api", key: model.apiKey },
-        trace: {
-          traceId: newTraceId(),
-          sessionId,
-          runId: crypto.randomUUID(),
-        },
-        events: Bus,
-      },
-      sink,
-    );
-    if (outcome.type !== "stop") {
-      const reason =
-        "error" in outcome && outcome.error !== undefined
-          ? outcome.error.message
-          : `the sub-model run ended as ${outcome.type}`;
-      // Thrown, not returned: the consumer is cell code, and a failure string
-      // returned as data would be stored as if it were model output.
-      throw new Error(`llm failed: ${reason}`);
+function registerActors(actors: readonly RegisteredActor[]): void {
+  for (const actor of actors) {
+    ActorRegistry.registerIdentity({
+      id: actor.actorId,
+      kind: actor.kind,
+      trustTier: actor.trustTier,
+      ...(actor.displayName === undefined ? {} : { displayName: actor.displayName }),
+    });
+    const channel = actor.channel ?? "ws";
+    ActorRegistry.registerEndpoint({
+      id: `${channel}:${actor.externalId}`,
+      actorId: actor.actorId,
+      channel,
+      externalId: actor.externalId,
+    });
+  }
+}
+
+/**
+ * The Resident's view of its body: every enrolled machine, attached or not,
+ * reduced to the effective (enrollment∩offer) capability fold the host
+ * attachment table holds.
+ */
+export function createMachinesPort(
+  host: Pick<MachineHost, "attached"> | undefined,
+  machines: OpenOmniConfig["machines"],
+): MachinesPort | undefined {
+  if (host === undefined || machines === undefined) return undefined;
+  return () =>
+    machines.enrolled.map((enrollment) => {
+      const capabilities = host.attached(enrollment.machineId);
+      return capabilities === undefined
+        ? { machineId: enrollment.machineId, attached: false, capabilities: [] }
+        : {
+            machineId: enrollment.machineId,
+            attached: true,
+            capabilities: [...capabilities],
+          };
+    });
+}
+
+/**
+ * The app's HTTP surface: the ws upgrade seam, unauthenticated liveness (no
+ * clock, no version, no state), and — only when a GitHub channel is composed —
+ * its webhook ingress. Everything else is 404.
+ */
+function createHttpRoutes(
+  wsHandler: WebSocketHandler,
+  githubWebhookHandler: ((request: Request) => Promise<Response>) | undefined,
+) {
+  return (
+    request: Request,
+    bunServer: Parameters<WebSocketHandler["handleUpgrade"]>[1],
+  ): Response | Promise<Response> | undefined => {
+    const url = new URL(request.url);
+    if (request.headers.get("upgrade") === "websocket" && url.pathname === "/ws") {
+      // undefined = the upgrade succeeded; a Response = the upgrade was denied.
+      return wsHandler.handleUpgrade(request, bunServer);
     }
-    return answer;
+    if (request.method === "GET" && url.pathname === "/health") {
+      return Response.json({ ok: true });
+    }
+    if (
+      request.method === "POST" &&
+      url.pathname === "/github/webhook" &&
+      githubWebhookHandler !== undefined
+    ) {
+      return githubWebhookHandler(request);
+    }
+    return new Response("Not found", { status: 404 });
   };
 }
 
+/**
+ * Each channel component is its own stage, mounted before the ws server so
+ * its authority and outbound route exist before any ingress is reachable.
+ * Disposal revokes exactly what the component registered: the listener, the
+ * delivery route, and the trusted-channel grant — fail-closed for any
+ * traffic that arrives afterwards.
+ */
+export async function mountChannelStages(
+  composer: Composer,
+  builtChannels: readonly BuiltChannel[],
+  deliveryRoutes: Map<string, ChannelDeliveryRoute>,
+  recoveryTraceId: string,
+): Promise<void> {
+  for (const built of builtChannels) {
+    const surfaceId = built.surface.id;
+    await composer.mount(`channel.${surfaceId}`, async (ctx) => {
+      ctx.effect(registerTrustedChannelGrant(surfaceId));
+      const route = built.deliveryRoute;
+      if (route !== undefined) {
+        deliveryRoutes.set(surfaceId, route);
+        ctx.effect(() => {
+          deliveryRoutes.delete(surfaceId);
+        });
+      }
+      await built.surface.start(recoveryTraceId);
+      ctx.effect(() => built.surface.stop(newTraceId()));
+    });
+  }
+}
+
 /** How a correlated reply's payload reads when handed back to the waiting delegation. */
-function replyText(payload: unknown): string {
+export function replyText(payload: unknown): string {
   if (typeof payload === "string") return payload;
   return JSON.stringify(payload);
 }
@@ -187,32 +233,26 @@ function delegationWakeDelivery(wake: DelegationWake): Gateway.Deliver {
 export async function startOpenOmni(options: StartOptions = {}) {
   const config = options.config ?? loadConfig();
   assertWsExposure(config);
-  const completionWriter = initialize({ dbPath: config.dbPath });
-  const stopBusPersistence = BusPersistence.start();
-  // Boot owns the kernel and host handles from this scope so the rollback
-  // path below can tear down whatever a failed boot already built.
+  // Every stage whose teardown matters is mounted on the composer: boot
+  // rollback and shutdown are the same reverse-order release, owned by the
+  // stage that acquired the thing rather than restated by hand in two places.
+  const composer = createComposer();
   let kernel: DelegationKernel | undefined;
-  let host: MachineHost | undefined;
-  let externalSurfaces: Channel.Surface[] = [];
   try {
-    // Owner-admitted delegation targets. Registration is an upsert, so a
-    // restart re-asserting the same actors is a no-op.
+    let completionWriter!: Storage.WorkItemCompletionWriter;
+    await composer.mount("journal", (ctx) => {
+      completionWriter = initialize({ dbPath: config.dbPath });
+      const stopBusPersistence = BusPersistence.start();
+      // Journal shutdown contract: every accepted event row is committed
+      // before the observer detaches and storage closes.
+      ctx.effect(async () => {
+        await BusPersistence.flush();
+        stopBusPersistence();
+        Storage.reset();
+      });
+    });
     const actors: readonly RegisteredActor[] = config.actors ?? [];
-    for (const actor of actors) {
-      ActorRegistry.registerIdentity({
-        id: actor.actorId,
-        kind: actor.kind,
-        trustTier: actor.trustTier,
-        ...(actor.displayName === undefined ? {} : { displayName: actor.displayName }),
-      });
-      const channel = actor.channel ?? "ws";
-      ActorRegistry.registerEndpoint({
-        id: `${channel}:${actor.externalId}`,
-        actorId: actor.actorId,
-        channel,
-        externalId: actor.externalId,
-      });
-    }
+    registerActors(actors);
 
     // A worker loop holds the same delegate tool the Resident does, so the
     // runner needs the kernel that the kernel needs the runner to build. The
@@ -245,6 +285,32 @@ export async function startOpenOmni(options: StartOptions = {}) {
       now: () => Date.now(),
       newWaitId: () => crypto.randomUUID(),
     });
+    // The kernel reads this table at dispatch time, so registrations made
+    // (or replaced) after boot are visible to the very next dispatch. Each
+    // boot registration is a composer-owned effect: disposing revokes the
+    // driver's admission to new work while in-flight runs complete under the
+    // generation that dispatched them.
+    const driverRegistry = createDriverRegistry();
+    await composer.mount("delegation.drivers", (ctx) => {
+      const registrations = [
+        driverRegistry.register("inline", createInlineDriver(runner)),
+        driverRegistry.register("channel", channelDriver),
+        driverRegistry.register(
+          "process",
+          createProcessDriver({
+            command: [process.execPath, processEntryPath(import.meta.url)],
+            worker: {
+              model: { provider: config.model.provider, id: config.model.id },
+              apiKey: config.model.apiKey,
+            },
+            dbPath: config.dbPath,
+          }),
+        ),
+      ];
+      for (const registration of registrations) {
+        ctx.effect(() => registration.dispose());
+      }
+    });
     kernel = createDelegationKernel({
       events: Bus,
       workItems: createWorkItemLinkage({
@@ -253,30 +319,22 @@ export async function startOpenOmni(options: StartOptions = {}) {
       }),
       wake: (wake) => wakeDelivery.deliver(wake),
       bootSweep: false,
-      drivers: {
-        inline: createInlineDriver(runner),
-        channel: channelDriver,
-        process: createProcessDriver({
-          command: [process.execPath, processEntryPath(import.meta.url)],
-          worker: {
-            model: { provider: config.model.provider, id: config.model.id },
-            apiKey: config.model.apiKey,
-          },
-          dbPath: config.dbPath,
-        }),
-      },
+      drivers: driverRegistry.drivers,
       now: () => Date.now(),
       newDelegationId: () => crypto.randomUUID(),
     });
     // Const capture for the closures below (the outer `let kernel` exists so
-    // boot rollback can stop a partially built kernel).
+    // the runner's late-binding getter can reach it).
     const delegationKernel = kernel;
+    await composer.mount("delegation.kernel", (ctx) => {
+      ctx.effect(() => delegationKernel.stop());
+    });
 
     // The cell door is bound per cell rather than globally, so a cell serves
     // exactly the tools its own dispatcher holds.
     const registry = createCellRegistry();
     const machines = config.machines;
-    host =
+    const host: MachineHost | undefined =
       machines === undefined
         ? undefined
         : await createMachineHost({
@@ -286,6 +344,10 @@ export async function startOpenOmni(options: StartOptions = {}) {
             now: () => Date.now(),
             callTool: registry.callTool,
           });
+    if (host !== undefined) {
+      const attachedHost = host;
+      await composer.mount("machines", (ctx) => ctx.effect(() => attachedHost.close()));
+    }
 
     // Self-referential: a cell's catalog is the same one that dispatches cells,
     // and placement subtracts what a cell cannot reach.
@@ -293,32 +355,14 @@ export async function startOpenOmni(options: StartOptions = {}) {
     // the memory tool, frozen into the system prompt per session.
     const memory = openCuratedMemory(config.memoryPath);
 
-    // The Resident's view of its body: every enrolled machine, attached or
-    // not, reduced to the effective (enrollment∩offer) capability fold the
-    // host attachment table holds.
-    // A const capture keeps the narrowing the closures below rely on (the
-    // outer `let host` exists only so boot rollback can reach the handle).
     const machineHost = host;
-    const machinesPort: MachinesPort | undefined =
-      machineHost === undefined || machines === undefined
-        ? undefined
-        : () =>
-            machines.enrolled.map((enrollment) => {
-              const capabilities = machineHost.attached(enrollment.machineId);
-              return capabilities === undefined
-                ? { machineId: enrollment.machineId, attached: false, capabilities: [] }
-                : {
-                    machineId: enrollment.machineId,
-                    attached: true,
-                    capabilities: [...capabilities],
-                  };
-            });
+    const machinesPort = createMachinesPort(machineHost, machines);
 
     const completionPort = createCompletionPort({
       writer: completionWriter,
       now: () => Date.now(),
     });
-    const llmPort = createLlmToolPort(config.model);
+    const llmPort = createLlmToolPort(config.model, options.llm ?? {});
     const artifactsPort: ArtifactsPort = { store: Artifact.store, get: Artifact.get };
     const cells: CellPorts | undefined =
       machineHost === undefined
@@ -342,9 +386,26 @@ export async function startOpenOmni(options: StartOptions = {}) {
             newCellId: () => crypto.randomUUID(),
           };
 
+    // The Resident's policy floor: compaction is declared mandatory, so a
+    // run without it is refused fail-closed rather than run unprotected.
+    // The registration is a composer-owned effect — disposing the policy
+    // stage suspends dependent runs instead of silently widening them.
+    const policyRegistry = createPolicyRegistry({ mandatory: ["compaction"] });
+    await composer.mount("policy", (ctx) => {
+      const compaction = policyRegistry.register("compaction", (run) =>
+        createCompactionPolicy({
+          events: run.events,
+          priority: 900,
+          elideToolOutputs: { minOutputChars: 4000, keepHeadChars: 500 },
+        }),
+      );
+      ctx.effect(() => compaction.dispose());
+    });
+
     residentDeliver = createResident({
       model: config.model,
       apiKey: config.model.apiKey,
+      policies: policyRegistry,
       tools: {
         delegation: delegationKernel,
         ...(cells === undefined ? {} : { cells }),
@@ -395,15 +456,21 @@ export async function startOpenOmni(options: StartOptions = {}) {
       const result = await gateway.ingest(buildInboundEvent(message));
       return result.kind === "dropped" ? null : { text: result.result.output };
     };
-    const channelSetup = createChannelDrivers(config, routingHandler);
-    externalSurfaces = channelSetup.surfaces;
+    // The profile is the declarative row list of external channels; each row
+    // becomes its own composition stage below.
+    const builtChannels = channelProfile(config).map((row) => row.build(routingHandler));
+    const githubWebhookHandler = builtChannels.find(
+      (built) => built.webhookHandler !== undefined,
+    )?.webhookHandler;
 
     let wsHandler: WebSocketHandler | undefined;
     const wsRoute = async (externalId: string, body: string) => {
       if (wsHandler === undefined) throw new Error("ws delivery used before composition finished");
       return wsHandler.push(externalId, body);
     };
-    const deliveryRoutes = new Map(channelSetup.deliveryRoutes);
+    // Live table: channel components register and revoke their own outbound
+    // routes while the gateway keeps reading it per delivery.
+    const deliveryRoutes = new Map<string, ChannelDeliveryRoute>();
     deliveryRoutes.set("ws", wsRoute);
     gateway = createResidentGateway(
       deliver,
@@ -420,7 +487,6 @@ export async function startOpenOmni(options: StartOptions = {}) {
               })),
             budgets: () => config.socialBudgets ?? [],
           },
-      ["ws", ...externalSurfaces.map((surface) => surface.id as "discord" | "telegram" | "github")],
     );
     // Recovery is deliberately after the Resident and gateway exist: boot
     // settlements must be able to deliver their one owner-session wake.
@@ -433,6 +499,8 @@ export async function startOpenOmni(options: StartOptions = {}) {
     // kernel's deliverWake is the single owner of wake-failure reporting.
     wakeDelivery.arm((wake) => residentDeliver(delegationWakeDelivery(wake)).then(() => undefined));
 
+    await mountChannelStages(composer, builtChannels, deliveryRoutes, recoveryTraceId);
+
     wsHandler = new WebSocketHandler(
       routingHandler,
       Bus.publish,
@@ -443,74 +511,32 @@ export async function startOpenOmni(options: StartOptions = {}) {
       hostname: config.host,
       port: config.wsPort,
       websocket: wsHandler.ws,
-      fetch(request, bunServer) {
-        const url = new URL(request.url);
-        if (request.headers.get("upgrade") === "websocket" && url.pathname === "/ws") {
-          // undefined = the upgrade succeeded; a Response = the upgrade was denied.
-          return wsHandler.handleUpgrade(request, bunServer);
-        }
-        if (request.method === "GET" && url.pathname === "/health") {
-          // Unauthenticated liveness only: no clock, no version, no state.
-          return Response.json({ ok: true });
-        }
-        if (
-          request.method === "POST" &&
-          url.pathname === "/github/webhook" &&
-          channelSetup.githubWebhookHandler !== undefined
-        ) {
-          return channelSetup.githubWebhookHandler(request);
-        }
-        return new Response("Not found", { status: 404 });
-      },
+      fetch: createHttpRoutes(wsHandler, githubWebhookHandler),
     });
 
     if (server.port === undefined) throw new Error("OpenOmni ws server did not bind a TCP port");
-    try {
-      await Promise.all(externalSurfaces.map((surface) => surface.start(recoveryTraceId)));
-    } catch (error) {
-      server.stop();
-      throw error;
-    }
+    const boundServer = server;
+    const boundPort: number = server.port;
+    await composer.mount("ws.server", (ctx) => {
+      // Initiate the graceful stop without awaiting it: Bun resolves this
+      // promise only after every open client connection closes, and shutdown
+      // must not wait on clients (the pre-composer stop never did).
+      ctx.effect(() => {
+        void boundServer.stop();
+      });
+    });
     return {
-      port: server.port,
-      async stop(): Promise<void> {
-        server.stop();
-        for (const surface of externalSurfaces) surface.stop(newTraceId());
-        kernel?.stop();
-        host?.close();
-        // Journal shutdown contract: every accepted event row is committed
-        // before the observer detaches and storage closes.
-        await BusPersistence.flush();
-        stopBusPersistence();
-        Storage.reset();
-      },
+      port: boundPort,
+      // Shutdown is the same reverse-order release boot rollback uses: the
+      // composer owns the sequence, so a new stage cannot leak by forgetting
+      // a line here.
+      stop: () => composer.dispose(),
     };
   } catch (error) {
     // Fail-closed boot rollback: a failure after the journal started leaves
     // no leaked Bus observer, no armed kernel timer, and no configured
     // storage behind — a later boot starts clean.
-    for (const surface of externalSurfaces) surface.stop(newTraceId());
-    kernel?.stop();
-    host?.close();
-    let flushError: unknown;
-    try {
-      await BusPersistence.flush();
-    } catch (caught) {
-      flushError = caught;
-    } finally {
-      stopBusPersistence();
-      Storage.reset();
-    }
-    if (flushError !== undefined) {
-      const rollbackFailure = new Error(
-        "OpenOmni boot failed and journal rollback flush failed",
-      ) as Error & {
-        errors: readonly unknown[];
-      };
-      rollbackFailure.errors = [error, flushError];
-      throw rollbackFailure;
-    }
-    throw error;
+    return rollbackToCause(composer, error instanceof Error ? error : new Error(String(error)));
   }
 }
 

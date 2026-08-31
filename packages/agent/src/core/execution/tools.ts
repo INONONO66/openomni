@@ -339,6 +339,24 @@ function sharedContext(context: ToolPolicyRunContext): Omit<
   };
 }
 
+/** The point-input fields every tool policy point shares, pre and post. */
+function toolPointInput(
+  context: ToolPolicyRunContext,
+  toolName: string,
+  call: Tool.Call,
+  labels: readonly string[] | undefined,
+  target: ReturnType<typeof policyTarget>,
+) {
+  return {
+    ...sharedContext(context),
+    toolId: toolName,
+    toolName,
+    toolCallId: call.id,
+    toolLabels: [...(labels ?? target.descriptor.labels)],
+    resourceDescriptor: target.descriptor,
+  };
+}
+
 async function dispatchToolPre(
   engine: PolicyEngineInstance,
   context: ToolPolicyRunContext,
@@ -349,13 +367,8 @@ async function dispatchToolPre(
 ): Promise<Policy.PolicyDecision> {
   const target = policyTarget(toolName, labels, descriptor);
   const input = {
-    ...sharedContext(context),
-    toolId: toolName,
-    toolName,
-    toolCallId: call.id,
-    toolLabels: [...(labels ?? target.descriptor.labels)],
+    ...toolPointInput(context, toolName, call, labels, target),
     toolInput: call.input,
-    resourceDescriptor: target.descriptor,
   };
   if (target.kind === "mcp") {
     const mcpInput = {
@@ -386,14 +399,9 @@ async function dispatchToolPost(
 ): Promise<Policy.PolicyDecision> {
   const target = policyTarget(toolName, labels, descriptor);
   const input = {
-    ...sharedContext(context),
-    toolId: toolName,
-    toolName,
-    toolCallId: call.id,
-    toolLabels: [...(labels ?? target.descriptor.labels)],
+    ...toolPointInput(context, toolName, call, labels, target),
     toolOutput: result.output,
     toolResult: result,
-    resourceDescriptor: target.descriptor,
   };
   if (target.kind === "mcp") {
     const mcpInput = {

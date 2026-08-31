@@ -1,89 +1,19 @@
-import { afterEach, expect, it } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { expect, it } from "bun:test";
 import type { Sink } from "@openomni/llm";
-import { Storage } from "@openomni/ledger";
-import { startOpenOmni } from "../src/index";
 import { assistantMessage } from "./helpers/assistant-message";
-
-let stopApp: (() => void) | undefined;
-const directories: string[] = [];
-
-afterEach(() => {
-  stopApp?.();
-  stopApp = undefined;
-  Storage.reset();
-  for (const directory of directories.splice(0))
-    rmSync(directory, { recursive: true, force: true });
-});
+import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
+import { ask, opened } from "./helpers/ws";
 
 const WS_TOKEN = "memory-e2e-token";
-
-function opened(ws: WebSocket): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error("open timed out")), 2_000);
-    ws.addEventListener(
-      "open",
-      () => {
-        clearTimeout(timeout);
-        resolve();
-      },
-      { once: true },
-    );
-    ws.addEventListener(
-      "error",
-      () => {
-        clearTimeout(timeout);
-        reject(new Error("WebSocket failed before opening"));
-      },
-      { once: true },
-    );
-  });
-}
-
-function nextMessage(ws: WebSocket): Promise<MessageEvent> {
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error("reply timed out")), 2_000);
-    ws.addEventListener(
-      "message",
-      (event) => {
-        clearTimeout(timeout);
-        resolve(event);
-      },
-      { once: true },
-    );
-  });
-}
-
-async function ask(ws: WebSocket, text: string): Promise<string> {
-  const reply = nextMessage(ws);
-  ws.send(JSON.stringify({ type: "message", text }));
-  const event = await reply;
-  return JSON.parse(String(event.data)).text as string;
-}
+const suite = residentSuite();
 
 it("memory writes render next session, never mid-session", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "openomni-memory-e2e-"));
-  directories.push(directory);
-
   // The fake Resident: on a "remember" ask it writes memory through its own
   // tool executor; every turn reports whether its system prompt held memory.
-  const app = await startOpenOmni({
-    config: {
-      dbPath: join(directory, "chat.db"),
-      memoryPath: join(directory, "memory.json"),
-      host: "127.0.0.1",
-      wsPort: 0,
-      wsToken: WS_TOKEN,
-      model: { provider: "fake", id: "resident-test", apiKey: "test-key" },
-    },
+  const app = await suite.boot({
+    config: suite.config("openomni-memory-e2e-", { wsToken: WS_TOKEN }),
     llm: {
-      resolveProviderModel: async (model) => ({
-        id: model.id,
-        name: model.id,
-        providerID: model.provider,
-      }),
+      resolveProviderModel: fakeProviderModel,
       run: async (input, sink: Sink) => {
         const offered = (input.tools ?? []).map((tool) => tool.name);
         const ask = input.messages.at(-1)?.parts.find((part) => part.type === "text");
@@ -109,7 +39,6 @@ it("memory writes render next session, never mid-session", async () => {
       },
     },
   });
-  stopApp = app.stop;
 
   // Session A, turn 1: nothing remembered yet; the tool is offered; a write lands.
   const first = new WebSocket(`ws://127.0.0.1:${app.port}/ws?token=${WS_TOKEN}`);

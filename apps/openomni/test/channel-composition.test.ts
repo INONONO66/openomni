@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import type { Channel } from "@openomni/protocol";
-import { createChannelDrivers } from "../src/channels";
+import { channelProfile } from "../src/channels";
 import { loadConfig, type OpenOmniConfig } from "../src/config";
 
 const CHANNEL_ENV_KEYS = [
@@ -81,10 +81,7 @@ describe("OpenOmni channel composition", () => {
     const config = loadConfig();
 
     expect(config.channels).toBeUndefined();
-    const composed = createChannelDrivers(config, async () => null);
-    expect(composed.surfaces).toEqual([]);
-    expect(composed.deliveryRoutes.size).toBe(0);
-    expect(composed.githubWebhookHandler).toBeUndefined();
+    expect(channelProfile(config)).toEqual([]);
   });
 
   it("reads only present credentials into channel config", () => {
@@ -106,7 +103,7 @@ describe("OpenOmni channel composition", () => {
     });
   });
 
-  it("registers configured drivers and their existing delivery/webhook seams", async () => {
+  it("profiles one row per configured channel and binds its delivery/webhook seams", async () => {
     const discord = new FakeSurface("discord");
     const telegram = new FakeSurface("telegram");
     const github = new FakeGitHubSurface();
@@ -120,36 +117,58 @@ describe("OpenOmni channel composition", () => {
       },
     };
 
-    const composed = createChannelDrivers(config, handler, {
+    const rows = channelProfile(config, {
       discord: () => discord,
       telegram: () => telegram,
       github: () => github,
     });
 
-    expect(composed.surfaces.map((surface) => surface.id)).toEqual([
-      "telegram",
-      "github",
-      "discord",
-    ]);
+    // One declarative row per configured channel, in composition order.
+    expect(rows.map((row) => row.id)).toEqual(["telegram", "github", "discord"]);
+    const built = rows.map((row) => row.build(handler));
+    expect(built.map((channel) => channel.surface.id)).toEqual(["telegram", "github", "discord"]);
     expect(discord.handler).toBe(handler);
     expect(telegram.handler).toBe(handler);
     expect(github.handler).toBe(handler);
-    const discordRoute = composed.deliveryRoutes.get("discord");
-    const telegramRoute = composed.deliveryRoutes.get("telegram");
-    if (discordRoute === undefined || telegramRoute === undefined) {
+
+    const [telegramBuilt, githubBuilt, discordBuilt] = built;
+    if (telegramBuilt?.deliveryRoute === undefined || discordBuilt?.deliveryRoute === undefined) {
       throw new Error("configured delivery route missing");
     }
-    expect(await discordRoute("user-1", "hello", "send-1")).toEqual({
+    expect(await discordBuilt.deliveryRoute("user-1", "hello", "send-1")).toEqual({
       externalMessageId: "user-1:hello",
     });
-    expect(await telegramRoute("chat-1", "hello", "send-2")).toEqual({
+    expect(await telegramBuilt.deliveryRoute("chat-1", "hello", "send-2")).toEqual({
       externalMessageId: "chat-1:hello",
     });
-    expect(composed.deliveryRoutes.has("github")).toBe(false);
-    const webhook = composed.githubWebhookHandler;
+    // GitHub is ingress-only: webhook seam present, outbound route absent.
+    expect(githubBuilt?.deliveryRoute).toBeUndefined();
+    const webhook = githubBuilt?.webhookHandler;
     if (webhook === undefined) throw new Error("configured GitHub webhook missing");
     expect(await webhook(new Request("http://localhost/github/webhook"))).toMatchObject({
       status: 202,
     });
+  });
+
+  it("builds the real channel adapters when no factories are injected", () => {
+    const handler: Channel.MessageHandler = async () => ({ text: "resident reply" });
+    const config: OpenOmniConfig = {
+      ...baseConfig(),
+      channels: {
+        discord: { token: "discord-token" },
+        telegram: { token: "telegram-token" },
+        github: { secret: "github-secret" },
+      },
+    };
+
+    // Construction only — adapters connect in start(), which is never called.
+    const built = channelProfile(config).map((row) => row.build(handler));
+
+    expect(built.map((channel) => channel.surface.id)).toEqual(["telegram", "github", "discord"]);
+    const [telegram, github, discord] = built;
+    expect(telegram?.deliveryRoute).toBeDefined();
+    expect(discord?.deliveryRoute).toBeDefined();
+    expect(github?.deliveryRoute).toBeUndefined();
+    expect(github?.webhookHandler).toBeDefined();
   });
 });

@@ -5,6 +5,8 @@ import { join } from "node:path";
 import type { Sink } from "@openomni/llm";
 import { initialize, Session, Storage } from "@openomni/ledger";
 import type { Gateway } from "@openomni/protocol";
+import { createCompactionPolicy } from "@openomni/agent";
+import { createPolicyRegistry } from "../src/composition/policy-registry";
 import { createResident } from "../src/resident";
 import { assistantMessage } from "./helpers/assistant-message";
 
@@ -84,6 +86,18 @@ function delivery(sessionId: string): Gateway.Deliver {
   };
 }
 
+function residentPolicies() {
+  const policies = createPolicyRegistry({ mandatory: ["compaction"] });
+  policies.register("compaction", (run) =>
+    createCompactionPolicy({
+      events: run.events,
+      priority: 900,
+      elideToolOutputs: { minOutputChars: 4000, keepHeadChars: 500 },
+    }),
+  );
+  return policies;
+}
+
 describe("Resident compaction", () => {
   it("replaces oversized hydrated history before continuing the Resident run", async () => {
     const directory = mkdtempSync(join(tmpdir(), "openomni-resident-compaction-"));
@@ -101,6 +115,9 @@ describe("Resident compaction", () => {
     const resident = createResident({
       model: { provider: "fake", id: "resident-test" },
       apiKey: "test-key",
+      // Mirrors the production floor: compaction is mandatory, registered
+      // through the registry rather than baked into the Resident.
+      policies: residentPolicies(),
       tools: {},
       targets: () => [],
       llm: {

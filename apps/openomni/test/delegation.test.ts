@@ -179,14 +179,23 @@ describe("durable kernel", () => {
     ]);
   });
 
-  test("refuses an ask when its parent settles during transport preparation", async () => {
+  /**
+   * An open parent plus a kernel whose process driver blocks inside prepare
+   * until released — the window in which a parent settlement must abort the
+   * child. `entered` resolves once preparation is underway.
+   */
+  function parentSettlingHarness(
+    parentId: string,
+    childId: string,
+    extras: Partial<Parameters<typeof createDelegationKernel>[0]> = {},
+  ) {
     DelegationStore.create({
-      delegationId: "ask-parent",
+      delegationId: parentId,
       operation: "ask",
       address: { kind: "core", scope: "independent" },
       transport: "process",
       deadline: 10_000,
-      rootDelegationId: "ask-parent",
+      rootDelegationId: parentId,
       origin: RESIDENT,
       instruction: "parent",
       status: "open",
@@ -213,11 +222,17 @@ describe("durable kernel", () => {
         },
       },
       now: () => 1_000,
-      newDelegationId: () => "ask-child",
+      newDelegationId: () => childId,
       wake: () => undefined,
       bootSweep: false,
       limits: LIMITS,
+      ...extras,
     });
+    return { kernel, entered, releasePreparation: () => releasePreparation() };
+  }
+
+  test("refuses an ask when its parent settles during transport preparation", async () => {
+    const { kernel, entered, releasePreparation } = parentSettlingHarness("ask-parent", "ask-child");
     const delegated = kernel.delegate(
       ask({ address: { kind: "core", scope: "independent" } }),
       { ...RESIDENT, parentDelegationId: "ask-parent", rootDelegationId: "ask-parent" },
@@ -235,48 +250,16 @@ describe("durable kernel", () => {
   });
 
   test("refuses and cancels an assign when its parent settles during transport preparation", async () => {
-    DelegationStore.create({
-      delegationId: "assign-parent",
-      operation: "ask",
-      address: { kind: "core", scope: "independent" },
-      transport: "process",
-      deadline: 10_000,
-      rootDelegationId: "assign-parent",
-      origin: RESIDENT,
-      instruction: "parent",
-      status: "open",
-      createdAt: 1,
-    });
-    let releasePreparation!: () => void;
-    let preparationEntered!: () => void;
-    const entered = new Promise<void>((resolve) => {
-      preparationEntered = resolve;
-    });
-    const release = new Promise<void>((resolve) => {
-      releasePreparation = resolve;
-    });
-    const kernel = createDelegationKernel({
-      store: DelegationStore,
-      drivers: {
-        process: {
-          prepare: async () => {
-            preparationEntered();
-            await release;
-            return {};
-          },
-          run: () => new Promise(() => undefined),
-        },
+    const { kernel, entered, releasePreparation } = parentSettlingHarness(
+      "assign-parent",
+      "assign-child",
+      {
+        workItems: createWorkItemLinkage({
+          model: { provider: "fake", id: "parent-settled-test" },
+          now: () => 1_000,
+        }),
       },
-      workItems: createWorkItemLinkage({
-        model: { provider: "fake", id: "parent-settled-test" },
-        now: () => 1_000,
-      }),
-      now: () => 1_000,
-      newDelegationId: () => "assign-child",
-      wake: () => undefined,
-      bootSweep: false,
-      limits: LIMITS,
-    });
+    );
     const delegated = kernel.delegate(
       ask({
         operation: "assign",
@@ -302,14 +285,18 @@ describe("durable kernel", () => {
     kernel.stop();
   });
 
-  test("atomically admits at most one concurrent child into the last fanout slot", async () => {
+  /**
+   * A root delegation one child short of the fanout cap, plus a prepare gate
+   * that holds every candidate until two of them are racing for the last slot.
+   */
+  function saturatedFanoutRoot(rootId: string, prefix: string) {
     DelegationStore.create({
-      delegationId: "root",
+      delegationId: rootId,
       operation: "ask",
       address: { kind: "core", scope: "independent" },
       transport: "process",
       deadline: 10_000,
-      rootDelegationId: "root",
+      rootDelegationId: rootId,
       origin: RESIDENT,
       instruction: "root",
       status: "open",
@@ -317,40 +304,45 @@ describe("durable kernel", () => {
     });
     for (let index = 1; index <= 6; index += 1) {
       DelegationStore.create({
-        delegationId: `existing-${index}`,
+        delegationId: `${prefix}${index}`,
         operation: "ask",
         address: { kind: "core", scope: "inline" },
         transport: "inline",
         deadline: 10_000,
-        parentDelegationId: "root",
-        rootDelegationId: "root",
+        parentDelegationId: rootId,
+        rootDelegationId: rootId,
         origin: {
           ...WORKER,
-          parentDelegationId: "root",
-          rootDelegationId: "root",
+          parentDelegationId: rootId,
+          rootDelegationId: rootId,
         },
         instruction: "existing child",
         status: "open",
         createdAt: index + 1,
       });
     }
-
     let prepared = 0;
     let releasePreparation!: () => void;
     const bothPreparing = new Promise<void>((resolve) => {
       releasePreparation = resolve;
     });
+    const gatedPrepare = async () => {
+      prepared += 1;
+      if (prepared === 2) releasePreparation();
+      await bothPreparing;
+      return {};
+    };
+    return { gatedPrepare };
+  }
+
+  test("atomically admits at most one concurrent child into the last fanout slot", async () => {
+    const { gatedPrepare } = saturatedFanoutRoot("root", "existing-");
     let nextId = 0;
     const kernel = createDelegationKernel({
       store: DelegationStore,
       drivers: {
         inline: {
-          prepare: async () => {
-            prepared += 1;
-            if (prepared === 2) releasePreparation();
-            await bothPreparing;
-            return {};
-          },
+          prepare: gatedPrepare,
           run: async () => ({ status: "completed", output: "done" }),
         },
       },
@@ -373,54 +365,13 @@ describe("durable kernel", () => {
   });
 
   test("cancels the commissioned WorkItem when a concurrent assign loses the final fanout claim", async () => {
-    DelegationStore.create({
-      delegationId: "assign-root",
-      operation: "ask",
-      address: { kind: "core", scope: "independent" },
-      transport: "process",
-      deadline: 10_000,
-      rootDelegationId: "assign-root",
-      origin: RESIDENT,
-      instruction: "root",
-      status: "open",
-      createdAt: 1,
-    });
-    for (let index = 1; index <= 6; index += 1) {
-      DelegationStore.create({
-        delegationId: `assign-existing-${index}`,
-        operation: "ask",
-        address: { kind: "core", scope: "inline" },
-        transport: "inline",
-        deadline: 10_000,
-        parentDelegationId: "assign-root",
-        rootDelegationId: "assign-root",
-        origin: {
-          ...WORKER,
-          parentDelegationId: "assign-root",
-          rootDelegationId: "assign-root",
-        },
-        instruction: "existing child",
-        status: "open",
-        createdAt: index + 1,
-      });
-    }
-
-    let prepared = 0;
-    let releasePreparation!: () => void;
-    const bothPreparing = new Promise<void>((resolve) => {
-      releasePreparation = resolve;
-    });
+    const { gatedPrepare } = saturatedFanoutRoot("assign-root", "assign-existing-");
     let nextId = 0;
     const kernel = createDelegationKernel({
       store: DelegationStore,
       drivers: {
         process: {
-          prepare: async () => {
-            prepared += 1;
-            if (prepared === 2) releasePreparation();
-            await bothPreparing;
-            return {};
-          },
+          prepare: gatedPrepare,
           run: () => new Promise(() => undefined),
         },
       },
@@ -648,11 +599,12 @@ describe("durable kernel", () => {
     await expect(kernel.cancelDelegation(started.handle.delegationId)).resolves.toMatchObject({ status: "cancelled" });
   });
 
-  test("stop rejects and removes a pending delegation awaiter", async () => {
+  /** A kernel with one never-finishing delegation already started. */
+  async function hangingDelegation(delegationId: string) {
     const kernel = createDelegationKernel({
       drivers: { process: { run: () => new Promise(() => undefined) } },
       now: () => 1_000,
-      newDelegationId: () => "d-stop-waiter",
+      newDelegationId: () => delegationId,
       wake: () => undefined,
       limits: LIMITS,
     });
@@ -666,6 +618,11 @@ describe("durable kernel", () => {
       RESIDENT,
     );
     if ("refused" in started) throw new Error(started.refused);
+    return { kernel, started };
+  }
+
+  test("stop rejects and removes a pending delegation awaiter", async () => {
+    const { kernel, started } = await hangingDelegation("d-stop-waiter");
     const stopped = kernel.awaitDelegation(started.handle.delegationId).then(
       () => undefined,
       (error: unknown) => error,
@@ -677,23 +634,7 @@ describe("durable kernel", () => {
   });
 
   test("awaiting an open delegation after stop rejects immediately with the stopped error", async () => {
-    const kernel = createDelegationKernel({
-      drivers: { process: { run: () => new Promise(() => undefined) } },
-      now: () => 1_000,
-      newDelegationId: () => "d-post-stop-waiter",
-      wake: () => undefined,
-      limits: LIMITS,
-    });
-    const started = await kernel.delegate(
-      {
-        address: { kind: "core", scope: "independent" },
-        operation: "ask",
-        payload: { text: "long-running" },
-        deadline: 10_000,
-      },
-      RESIDENT,
-    );
-    if ("refused" in started) throw new Error(started.refused);
+    const { kernel, started } = await hangingDelegation("d-post-stop-waiter");
 
     kernel.stop();
 

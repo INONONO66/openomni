@@ -1,14 +1,9 @@
-import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { Storage } from "@openomni/ledger";
+import { expect, test } from "bun:test";
 import { Bus } from "@openomni/telemetry";
 import type { RunInput, Sink } from "@openomni/llm";
 import { attachMachineDaemon, createMachineHost, type MachineDaemon } from "@openomni/machines";
 import { Placement } from "@openomni/placement";
 import type { Artifact, Machine } from "@openomni/protocol";
-import { startOpenOmni } from "../src/index";
 import type { DelegationOrigin } from "../src/delegation/admission";
 import type { DelegationKernel } from "../src/delegation/kernel";
 import type { ArtifactsPort } from "../src/tools/artifacts";
@@ -17,22 +12,17 @@ import { createCellRegistry } from "../src/tools/cell-registry";
 import { createDispatcher, HOST_TARGET } from "../src/tools/dispatch";
 import { type CellPorts, runCodeToolExecutor } from "../src/tools/run-code";
 import { assistantMessage } from "./helpers/assistant-message";
+import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { socketPath as testSocketPath } from "./helpers/socket-path";
+import { nextMessage, openSocket } from "./helpers/ws";
 
 const WS_TOKEN = "code-mode-e2e-token";
 const MACHINE_ID = "alpha";
 
-const directories: string[] = [];
-let stopApp: (() => void) | undefined;
 let daemon: MachineDaemon | undefined;
-
-afterEach(() => {
+const suite = residentSuite(() => {
   daemon?.close();
   daemon = undefined;
-  stopApp?.();
-  stopApp = undefined;
-  Storage.reset();
-  for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
 });
 
 const enrollment: Machine.Enrollment = {
@@ -48,23 +38,17 @@ const enrollment: Machine.Enrollment = {
  * back inside the cell rather than to the model.
  */
 test("a cell batches delegation into one turn", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "openomni-code-mode-"));
-  directories.push(directory);
   const socketPath = testSocketPath();
   const residentTurns: string[] = [];
 
-  const app = await startOpenOmni({
-    config: {
-      dbPath: join(directory, "chat.db"),
-      memoryPath: join(directory, "memory.json"),
-      host: "127.0.0.1",
-      wsPort: 0,
+  const app = await suite.boot({
+    config: suite.config("openomni-code-mode-", {
       wsToken: WS_TOKEN,
       model: { provider: "fake", id: "code-mode-test", apiKey: "test-key" },
       machines: { socketPath, enrolled: [enrollment] },
-    },
+    }),
     llm: {
-      resolveProviderModel: async (model) => ({ id: model.id, name: model.id, providerID: model.provider }),
+      resolveProviderModel: fakeProviderModel,
       run: async (input: RunInput, sink: Sink) => {
         if (input.trace.sessionId.startsWith("delegation-")) {
           // Each worker answers with the instruction it was actually given, so
@@ -103,7 +87,6 @@ test("a cell batches delegation into one turn", async () => {
       },
     },
   });
-  stopApp = app.stop;
 
   daemon = await attachMachineDaemon({
     socketPath,
@@ -117,25 +100,11 @@ test("a cell batches delegation into one turn", async () => {
   });
   expect(daemon.attachment.status).toBe("attached");
 
-  const ws = new WebSocket(`ws://127.0.0.1:${app.port}/ws?token=${WS_TOKEN}`);
-  await new Promise<void>((resolve, reject) => {
-    ws.addEventListener("open", () => resolve(), { once: true });
-    ws.addEventListener("error", () => reject(new Error("socket failed to open")), { once: true });
-  });
-  const reply = new Promise<string>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("no reply arrived")), 30_000);
-    ws.addEventListener(
-      "message",
-      (event) => {
-        clearTimeout(timer);
-        resolve(String(event.data));
-      },
-      { once: true },
-    );
-  });
+  const ws = await openSocket(`ws://127.0.0.1:${app.port}/ws?token=${WS_TOKEN}`);
+  const reply = nextMessage(ws, 30_000);
   ws.send(JSON.stringify({ type: "message", text: "check everything" }));
 
-  const answer = (JSON.parse(await reply) as { text: string }).text;
+  const answer = (JSON.parse(String((await reply).data)) as { text: string }).text;
   ws.close();
 
   // The machine was attached, so the machine-placed tool was offered.
@@ -152,22 +121,16 @@ test("a cell batches delegation into one turn", async () => {
 }, 60_000);
 
 test("the machine tool is not offered while nothing is attached", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "openomni-code-mode-off-"));
-  directories.push(directory);
   let offered: string[] = [];
 
-  const app = await startOpenOmni({
-    config: {
-      dbPath: join(directory, "chat.db"),
-      memoryPath: join(directory, "memory.json"),
-      host: "127.0.0.1",
-      wsPort: 0,
+  const app = await suite.boot({
+    config: suite.config("openomni-code-mode-off-", {
       wsToken: WS_TOKEN,
       model: { provider: "fake", id: "code-mode-test", apiKey: "test-key" },
       machines: { socketPath: testSocketPath(), enrolled: [enrollment] },
-    },
+    }),
     llm: {
-      resolveProviderModel: async (model) => ({ id: model.id, name: model.id, providerID: model.provider }),
+      resolveProviderModel: fakeProviderModel,
       run: async (input: RunInput, sink: Sink) => {
         offered = (input.tools ?? []).map((tool) => tool.name);
         // Naming it anyway must be refused, not served: what the fold declined
@@ -187,20 +150,12 @@ test("the machine tool is not offered while nothing is attached", async () => {
       },
     },
   });
-  stopApp = app.stop;
 
-  const ws = new WebSocket(`ws://127.0.0.1:${app.port}/ws?token=${WS_TOKEN}`);
-  await new Promise<void>((resolve, reject) => {
-    ws.addEventListener("open", () => resolve(), { once: true });
-    ws.addEventListener("error", () => reject(new Error("socket failed to open")), { once: true });
-  });
-  const reply = new Promise<string>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("no reply arrived")), 15_000);
-    ws.addEventListener("message", (event) => { clearTimeout(timer); resolve(String(event.data)); }, { once: true });
-  });
+  const ws = await openSocket(`ws://127.0.0.1:${app.port}/ws?token=${WS_TOKEN}`);
+  const reply = nextMessage(ws, 15_000);
   ws.send(JSON.stringify({ type: "message", text: "run something" }));
 
-  const answer = (JSON.parse(await reply) as { text: string }).text;
+  const answer = (JSON.parse(String((await reply).data)) as { text: string }).text;
   ws.close();
 
   expect(offered).toEqual(["delegate", "await_delegation", "cancel_delegation", "machines", "memory", "work_items", "complete_work", "llm", "write_artifact", "read_artifact"]);
@@ -216,8 +171,6 @@ test("the machine tool is not offered while nothing is attached", async () => {
  * serve a call under another cell's id gets the daemon's stamp instead.
  */
 test("a cell cannot present another cell's id when calling back", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "openomni-cell-id-"));
-  directories.push(directory);
   const socketPath = testSocketPath();
   const served: string[] = [];
 
@@ -479,8 +432,6 @@ test("write_artifact stores from inside a cell and read_artifact fetches it back
 
 /** The Owner's enrollment is the ceiling: a daemon cannot claim its way past it. */
 test("a machine offering more than it is enrolled for keeps only the intersection", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "openomni-overclaim-"));
-  directories.push(directory);
   const socketPath = testSocketPath();
 
   const host = await createMachineHost({
