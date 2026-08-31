@@ -15,14 +15,35 @@ import {
 const repoRoot = join(import.meta.dir, "..", "..");
 const adapterBinding = "packages/ledger/src/storage/sqlite-storage.ts";
 
+/**
+ * Manifested producers that route their appends through
+ * `LEDGER_PRODUCER_MANIFEST.sharedAppendExecutor`. They remain the OWNERS of
+ * their stream family's facts (payload, adoption genesis, conflict taxonomy)
+ * — only the commit mechanics moved — so they stay in `streams` while their
+ * lexical append call does not.
+ */
+const DELEGATING_PRODUCERS = new Set([
+  "packages/ledger/src/wait/index.ts",
+  "packages/ledger/src/work-item/facts.ts",
+  "packages/ledger/src/engagement/index.ts",
+]);
+
 describe("ledger producer drift", () => {
   test("the observed write surface equals the manifest in both directions", async () => {
     const scan = await scanLedgerProducers(repoRoot);
 
     expect(LEDGER_PRODUCER_MANIFEST.appendCore).toContain(adapterBinding);
+    // A producer that delegates commit sequencing to the shared executor owns
+    // its facts but carries no lexical append call, so the observed surface is
+    // the non-delegating producers plus the executor and the adapter binding.
+    // Both directions stay exact: a NEW append call site outside this set
+    // still fails, and a delegating producer must be declared below.
     expect([...scan.appendCallSites].sort()).toEqual(
       [
-        ...LEDGER_PRODUCER_MANIFEST.streams.flatMap((entry) => entry.producers),
+        ...LEDGER_PRODUCER_MANIFEST.streams
+          .flatMap((entry) => entry.producers)
+          .filter((producer) => !DELEGATING_PRODUCERS.has(producer)),
+        LEDGER_PRODUCER_MANIFEST.sharedAppendExecutor,
         adapterBinding,
       ].sort(),
     );
