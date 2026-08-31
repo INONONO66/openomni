@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { Storage } from "../../src/storage/storage";
 import "../../src/storage/initialize";
@@ -43,8 +44,26 @@ function seedFrozenRun(
   });
 }
 
-async function flushBus(): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, 0));
+const OBSERVER_DRAINED = "observer-drained";
+
+/**
+ * Positive control for a negative assertion. `Bus.publish` dispatches every
+ * observer in exactly one `queueMicrotask` (`packages/telemetry/src/bus.ts:38-49`)
+ * and the queue drains completely before an awaiting continuation resumes, so
+ * publishing a sentinel AFTER the frozen writes and awaiting its arrival in the
+ * same observer proves two things a timer cannot: the observer is live, and the
+ * queue drained past the point where any publish from those writes would have
+ * been delivered. A bare timer proves only that some duration elapsed, so a
+ * slow-but-real publish would still pass the `toEqual([])` below.
+ */
+async function observerDrained(): Promise<void> {
+  Bus.publish(Operational.Events.Warn, {
+    traceId: "trace-frozen-drain",
+    time: Date.now(),
+    component: OBSERVER_DRAINED,
+    msg: "drain sentinel",
+  });
+  await new Promise((resolve) => queueMicrotask(resolve));
 }
 
 beforeEach(() => {
@@ -113,8 +132,10 @@ describe("WorkerRun freeze (#510 D2b)", () => {
     }
     expectFrozen(thrownIfCurrent, "updateStatusIfCurrent");
 
-    await flushBus();
-    expect(events).toEqual([]);
+    await observerDrained();
+    // Only the drain sentinel arrived: the frozen writes published nothing,
+    // and the observer is proven live rather than merely idle for a duration.
+    expect(events).toEqual([Operational.Events.Warn.name]);
     expect(WorkerRunStateStore.get("sess-frozen", "run-legacy-store")?.status).toBe("starting");
   });
 
