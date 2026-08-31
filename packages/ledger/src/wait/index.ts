@@ -1,6 +1,6 @@
-import { Ledger, Wait, type Storage as ProtocolStorage } from "@openomni/protocol";
+import { Wait, type Storage as ProtocolStorage } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
-import { isSqliteBusyError } from "../storage/sqlite-busy";
+import { commitFact, runCommitTransaction } from "../storage/commit-coordinator";
 import { Storage } from "../storage/storage";
 import { withCreateTimestamps } from "../storage/timestamped-store";
 
@@ -60,25 +60,22 @@ function revisionConflict(waitId: string, expected: number): InstanceType<typeof
 }
 
 /**
- * Store transaction entry (#510 review fix minor): a SQLITE_BUSY at the
- * write unit (see storage/sqlite-busy.ts for how bun:sqlite surfaces it)
- * means nothing committed — mapped to the typed `unavailable` store error so
- * callers branch on the taxonomy, never on driver message text. Every other
- * error passes through unchanged.
+ * Store transaction entry (#510 review fix minor): the shared commit
+ * coordinator owns the transaction and the SQLITE_BUSY detection; this store
+ * supplies only the Wait TAXONOMY for "nothing committed", so callers branch
+ * on `data.code` and never on driver message text.
  */
 function runWaitTransaction<T>(waitId: string, write: () => T): T {
-  try {
-    return Storage.get().transaction(write);
-  } catch (error) {
-    if (isSqliteBusyError(error)) {
-      throw new Wait.StoreError({
-        message: `Wait storage busy: ${waitId} — ${error instanceof Error ? error.message : String(error)}`,
+  return runCommitTransaction(
+    Storage.get(),
+    write,
+    (cause) =>
+      new Wait.StoreError({
+        message: `Wait storage busy: ${waitId} — ${cause instanceof Error ? cause.message : String(cause)}`,
         code: "unavailable",
         waitId,
-      });
-    }
-    throw error;
-  }
+      }),
+  );
 }
 
 type CommittedOutcome = Exclude<Wait.Outcome, { kind: "rejected" } | { kind: "already_resolved" }>;
@@ -224,25 +221,29 @@ export namespace WaitStore {
         waitId: record.id,
       });
     runWaitTransaction(record.id, () => {
-      const appended = ledger.append(
+      // A non-empty stream means this wait id was already opened; a failed
+      // INSERT receipt (duplicate id or originMessageId) refuses the commit,
+      // rolling the appended fact back with the transaction. Birth has no
+      // adoption path — expectedHead 0 IS the empty-stream expectation.
+      const outcome = commitFact(
+        ledger,
         {
           streamId: waitStreamId(record.id),
-          type: "wait.opened",
-          data: {
-            ownerKind: record.ownerRef.kind,
-            ownerId: record.ownerRef.id,
-            originMessageId: record.originMessageId,
-            expiresAt: record.expiresAt,
-            revision: record.revision,
+          expectedHead: 0,
+          fact: {
+            type: "wait.opened",
+            data: {
+              ownerKind: record.ownerRef.kind,
+              ownerId: record.ownerRef.id,
+              originMessageId: record.originMessageId,
+              expiresAt: record.expiresAt,
+              revision: record.revision,
+            },
           },
         },
-        0,
+        () => adapter.create(record) || false,
       );
-      // A non-empty stream means this wait id was already opened; a failed
-      // INSERT receipt (duplicate id or originMessageId) aborts the
-      // transaction, rolling the appended fact back with it.
-      if (appended.kind === "cas_conflict") throw duplicate();
-      if (!adapter.create(record)) throw duplicate();
+      if (outcome.kind !== "committed") throw duplicate();
     });
     Bus.publish(Wait.Events.Opened, eventBase(record, record.createdAt, traceId));
     return record;
@@ -294,47 +295,43 @@ export namespace WaitStore {
     if (outcome.kind === "rejected" || outcome.kind === "already_resolved") return outcome;
     const fact = factOf(outcome);
     runWaitTransaction(id, () => {
-      const event = { streamId: waitStreamId(id), type: fact.type, data: fact.data };
-      let appended = ledger.append(event, current.revision);
-      if (appended.kind === "cas_conflict" && appended.currentHead === 0 && current.revision >= 1) {
-        // Lazy adoption (#510 review fix F3): a pre-cutover wait row exists
-        // at revision >= 1 with an EMPTY owner stream (its writes predate the
-        // phase-B cutover). Adopt the stream at the observed revision — the
-        // wait.adopted genesis lands at seq === revision — then retry the
-        // transition append at the same head. A concurrent adopter throws
-        // the typed AdoptError, which surfaces as the same revision_conflict
-        // any lost race produces. The genesis payload mirrors wait.opened
-        // and deliberately carries NO erasable data: the hash-chained ledger
-        // is immutable, so replies (responder ids), correlation identifiers,
-        // and allowed-action/identity fields must never be baked into it —
-        // the projection row remains the read model for those.
-        try {
-          ledger.adoptStream(waitStreamId(id), current.revision, {
-            type: "wait.adopted",
-            data: {
-              ownerKind: current.ownerRef.kind,
-              ownerId: current.ownerRef.id,
-              status: current.status,
-              expiresAt: current.expiresAt,
-              revision: current.revision,
+      // Lazy adoption (#510 review fix F3): a pre-cutover wait row exists at
+      // revision >= 1 with an EMPTY owner stream (its writes predate the
+      // phase-B cutover). The coordinator adopts at the observed revision and
+      // retries the append; a concurrent adopter loses the same race every
+      // stale head loses. The genesis payload stays HERE because it is a persisted
+      // Wait baseline: it mirrors wait.opened and deliberately carries NO
+      // erasable data — the hash-chained ledger is immutable, so replies
+      // (responder ids), correlation identifiers, and allowed-action/identity
+      // fields must never be baked into it. The projection row remains the
+      // read model for those.
+      const committed = commitFact(
+        ledger,
+        {
+          streamId: waitStreamId(id),
+          expectedHead: current.revision,
+          fact,
+          adoption: {
+            genesis: {
+              type: "wait.adopted",
+              data: {
+                ownerKind: current.ownerRef.kind,
+                ownerId: current.ownerRef.id,
+                status: current.status,
+                expiresAt: current.expiresAt,
+                revision: current.revision,
+              },
             },
-          });
-        } catch (error) {
-          if (Ledger.AdoptError.isInstance(error)) {
-            throw revisionConflict(id, current.revision);
-          }
-          throw error;
-        }
-        appended = ledger.append(event, current.revision);
-      }
-      if (appended.kind === "cas_conflict") throw revisionConflict(id, current.revision);
-      if (!adapter.compareAndSet(id, current.revision, outcome.record)) {
-        // Unreachable while every writer goes through this transaction (the
-        // append CAS and the projection CAS guard the same head==revision);
-        // kept as the explosive backstop — the rollback discards the
-        // appended fact so head and revision still agree.
-        throw revisionConflict(id, current.revision);
-      }
+          },
+        },
+        // A failed projection CAS is unreachable while every writer commits
+        // through this coordinator (the append CAS and the projection CAS
+        // guard the same head == revision); it stays as the explosive
+        // backstop — the rollback discards the appended fact so head and
+        // revision still agree.
+        () => adapter.compareAndSet(id, current.revision, outcome.record) || false,
+      );
+      if (committed.kind !== "committed") throw revisionConflict(id, current.revision);
     });
     publishChange(outcome, traceId);
     return outcome;
