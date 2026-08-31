@@ -6,16 +6,18 @@
  * inside fenced code blocks are never touched.
  */
 
-const SEPARATOR_ROW = /^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$/;
+const SEPARATOR_CELL = /^:?-+:?$/;
 const FENCE_LINE = /^\s*(?:`{3,}|~{3,})/;
 
 function isTableRow(line: string): boolean {
   return line.includes("|");
 }
 
+/** Cell-wise check (`---`, `:-:`, ...) — linear, no backtracking ambiguity. */
 function isSeparatorRow(line: string | undefined): line is string {
-  if (line === undefined) return false;
-  return line.includes("|") && SEPARATOR_ROW.test(line);
+  if (line === undefined || !line.includes("|")) return false;
+  const parts = cells(line);
+  return parts.length > 0 && parts.every((cell) => SEPARATOR_CELL.test(cell));
 }
 
 /** Split one pipe row into trimmed cells, dropping the outer empty edges. */
