@@ -691,6 +691,7 @@ describe("WorkItem completion admission contracts", () => {
 
     const effect = WorkItem.EffectRecord.parse(input);
 
+    expect(effect).toEqual(input);
     expect("outcome" in effect).toBe(false);
   });
 

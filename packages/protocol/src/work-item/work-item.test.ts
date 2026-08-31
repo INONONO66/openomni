@@ -607,7 +607,8 @@ describe("WorkItem.generateHash", () => {
 
 describe("WorkItem.Events", () => {
   test("exposes the complete wire event vocabulary", () => {
-    expect(Object.values(WorkItem.Events).map(({ name }) => name)).toEqual([
+    const events = Object.values(WorkItem.Events);
+    expect(events.map(({ name }) => name)).toEqual([
       "work_item.created",
       "work_item.updated",
       "work_item.status_changed",
@@ -619,5 +620,8 @@ describe("WorkItem.Events", () => {
       "work_item.outcome_recorded",
       "work_item.removed",
     ]);
+    for (const event of events) {
+      expect(event.schema).toBeTruthy();
+    }
   });
 });
