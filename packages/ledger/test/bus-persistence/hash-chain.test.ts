@@ -52,19 +52,24 @@ function chainRows(sessionId?: string): EventChainRow[] {
   return db().query("SELECT * FROM event_chain ORDER BY seq ASC").all() as EventChainRow[];
 }
 
-async function flushPersistence(): Promise<void> {
-  await new Promise((resolve) => queueMicrotask(resolve));
-  await new Promise((resolve) => queueMicrotask(resolve));
-  await new Promise((resolve) => setTimeout(resolve, 0));
-}
-
-async function waitForRows(expectedCount: number): Promise<BusEventRow[]> {
-  for (let attempt = 0; attempt < 10; attempt += 1) {
-    const current = busRows();
-    if (current.length >= expectedCount) return current;
-    await flushPersistence();
+/**
+ * `BusPersistence.flush()` is the exact quiescence barrier: it returns only on
+ * a turn that commits nothing with no writes in flight
+ * (`src/bus-persistence/runtime-state.ts:128-143`), which
+ * `flush-barrier.test.ts:50-57` pins. A shortfall after it is a real
+ * persistence defect, so this throws with the observed count instead of
+ * handing back a short array — several call sites discard the return value and
+ * would otherwise assert against a chain the writer never finished.
+ */
+async function persistedRows(expectedCount: number): Promise<BusEventRow[]> {
+  await BusPersistence.flush();
+  const current = busRows();
+  if (current.length < expectedCount) {
+    throw new Error(
+      `persistence barrier resolved with ${current.length} rows, expected at least ${expectedCount}`,
+    );
   }
-  return busRows();
+  return current;
 }
 
 function createSession(): ReturnType<typeof Session.create> {
@@ -109,7 +114,7 @@ describe("Hash Chain", () => {
       index: 0,
     });
 
-    const rows = await waitForRows(1);
+    const rows = await persistedRows(1);
     expect(rows).toHaveLength(1);
     expect(rows[0]?.prev_hash).toBe(GENESIS_SEED);
     expect(rows[0]?.event_hash).toBeString();
@@ -129,7 +134,7 @@ describe("Hash Chain", () => {
       });
     }
 
-    const rows = await waitForRows(3);
+    const rows = await persistedRows(3);
     expect(rows).toHaveLength(3);
 
     const [row0, row1, row2] = rows;
@@ -152,7 +157,7 @@ describe("Hash Chain", () => {
       index: 0,
     });
 
-    await waitForRows(1);
+    await persistedRows(1);
     const chain = chainRows(session.id);
     const events = busRows(session.id);
 
@@ -182,7 +187,7 @@ describe("Hash Chain", () => {
       });
     }
 
-    await waitForRows(5);
+    await persistedRows(5);
     const result = await BusQuery.verifyChainIntegrity(session.id);
 
     expect(result.valid).toBe(true);
@@ -203,7 +208,7 @@ describe("Hash Chain", () => {
       });
     }
 
-    await waitForRows(3);
+    await persistedRows(3);
     const rows = busRows(session.id);
     BusPersistence.stop();
     const firstRow = rows[0];
@@ -251,7 +256,7 @@ describe("Hash Chain", () => {
       });
     }
 
-    await waitForRows(2);
+    await persistedRows(2);
     BusPersistence.stop();
     // session_id is not part of the hash input, so detaching the rows from
     // the session moves them onto the sessionless chain without breaking it.
@@ -276,7 +281,7 @@ describe("Hash Chain", () => {
       });
     }
 
-    await waitForRows(3);
+    await persistedRows(3);
     const rows = busRows(session.id);
     const tamperedRow = rows[1];
     if (tamperedRow === undefined) throw new Error("shape");
@@ -302,7 +307,7 @@ describe("Hash Chain", () => {
       index: 0,
     });
 
-    await waitForRows(1);
+    await persistedRows(1);
     const rows = busRows(session.id);
     const tamperedRow = rows[0];
     if (tamperedRow === undefined) throw new Error("shape");
@@ -330,7 +335,7 @@ describe("Hash Chain", () => {
       });
     }
 
-    await waitForRows(3);
+    await persistedRows(3);
     const rows = busRows(session.id);
     const tamperedRow = rows[2];
     if (tamperedRow === undefined) throw new Error("shape");
@@ -363,7 +368,7 @@ describe("Hash Chain", () => {
       index: 0,
     });
 
-    await waitForRows(2);
+    await persistedRows(2);
     const rowsA = busRows(sessionA.id);
     const rowsB = busRows(sessionB.id);
 
@@ -390,7 +395,7 @@ describe("Hash Chain", () => {
       });
     }
 
-    await waitForRows(3);
+    await persistedRows(3);
     const chainBefore = chainRows(session.id);
     expect(chainBefore).toHaveLength(3);
 
@@ -416,7 +421,7 @@ describe("Hash Chain", () => {
       });
     }
 
-    await waitForRows(3);
+    await persistedRows(3);
     const audit = chainRows(session.id);
 
     expect(audit).toHaveLength(3);

@@ -27,12 +27,6 @@ function rows(eventType: string): BusEventRow[] {
     .all(eventType) as BusEventRow[];
 }
 
-async function flushPersistence(): Promise<void> {
-  await new Promise((resolve) => queueMicrotask(resolve));
-  await new Promise((resolve) => queueMicrotask(resolve));
-  await new Promise((resolve) => setTimeout(resolve, 0));
-}
-
 describe("persistence attribution refuses to launder foreign ids", () => {
   beforeEach(() => {
     Bus.reset();
@@ -52,7 +46,7 @@ describe("persistence attribution refuses to launder foreign ids", () => {
     // FK-failed against the session table and silently DROPPED every wait.*
     // row. Wait events carry no session; they belong to the sessionless chain.
     WaitStore.create(buildWaitCreate(), "trace-wait-persist");
-    await flushPersistence();
+    await BusPersistence.flush();
 
     expect(rows("wait.opened")).toEqual([
       { session_id: null, event_type: "wait.opened", trace_id: "trace-wait-persist" },
@@ -68,14 +62,14 @@ describe("persistence attribution refuses to launder foreign ids", () => {
       title: "Doomed",
       model: { providerID: "test", modelID: "test-model" },
     });
-    await flushPersistence();
+    await BusPersistence.flush();
     // While the session lives, its created row is session-attributed.
     expect(rows("session.created")).toEqual([
       { session_id: session.id, event_type: "session.created", trace_id: "trace-delete-persist" },
     ]);
 
     Session.remove(session.id, "trace-delete-persist");
-    await flushPersistence();
+    await BusPersistence.flush();
 
     expect(rows("session.deleted")).toEqual([
       { session_id: null, event_type: "session.deleted", trace_id: "trace-delete-persist" },
@@ -125,8 +119,7 @@ describe("persistence failure is loud and contained", () => {
       model: { providerID: "test", modelID: "test-model" },
     });
     WaitStore.create(buildWaitCreate({ id: "wait-poison" }), "trace-poison");
-    await flushPersistence();
-    await flushPersistence();
+    await BusPersistence.flush();
 
     // The poison row (session.created → bogus FK) is gone; its batch-mate
     // survived the per-row retry.
@@ -165,8 +158,7 @@ describe("persistence failure is loud and contained", () => {
       component: "test-producer",
       msg: "poison warn",
     });
-    await flushPersistence();
-    await flushPersistence();
+    await BusPersistence.flush();
 
     // Exactly ONE logical drop: the poison warn. The self-warn persisted, so
     // it must not have re-entered the drop path (no double count).
