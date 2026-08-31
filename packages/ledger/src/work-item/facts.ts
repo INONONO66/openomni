@@ -33,7 +33,8 @@ export class WorkItemRevisionError extends Error {
   }
 }
 
-export class WorkItemDuplicateError extends Error {
+/** Duplicate work item id u2014 raised by `appendCreatedFact` for either refusal. */
+class WorkItemDuplicateError extends Error {
   readonly name = "WorkItemDuplicateError";
   readonly code = "duplicate";
 
