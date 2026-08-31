@@ -42,16 +42,21 @@ function deferredDriver(): {
   };
 }
 
+/** The linkage every wiring test uses: the fake model, wall-clock now. */
+function wiringLinkage() {
+  return createWorkItemLinkage({
+    model: { provider: "fake", id: "fake-model" },
+    now: () => Date.now(),
+  });
+}
+
 function bootKernel(driver: { run(): Promise<DriverOutcome> }) {
   return createDelegationKernel({
     drivers: { process: driver as never },
     now: () => Date.now(),
     newDelegationId: () => "dg-wiring-1",
     wake: () => undefined,
-    workItems: createWorkItemLinkage({
-      model: { provider: "fake", id: "fake-model" },
-      now: () => Date.now(),
-    }),
+    workItems: wiringLinkage(),
   });
 }
 
@@ -261,10 +266,7 @@ test("a crash between settlement and closure loses nothing: the sweep rebuilds t
   kernel.stop();
   expect((await WorkItemStore.get(workItemId))?.attemptTerminal).toBeUndefined();
 
-  const linkage = createWorkItemLinkage({
-    model: { provider: "fake", id: "fake-model" },
-    now: () => Date.now(),
-  });
+  const linkage = wiringLinkage();
   await linkage.recoverAttempts((id) => DelegationStore.get(id));
   const after = await WorkItemStore.get(workItemId);
   expect(after?.attemptTerminal).toMatchObject({ usage: { tokens: 777 } });
@@ -291,10 +293,7 @@ test("a restart sweep re-closes an attempt whose settlement write was lost", asy
   expect(before?.attemptTerminal).toBeDefined();
   expect(before?.evidence).toHaveLength(1);
 
-  const linkage = createWorkItemLinkage({
-    model: { provider: "fake", id: "fake-model" },
-    now: () => Date.now(),
-  });
+  const linkage = wiringLinkage();
   // Re-running the close (what the boot sweep does) must not duplicate
   // evidence or reopen the attempt.
   const record = DelegationStore.get("dg-wiring-1");

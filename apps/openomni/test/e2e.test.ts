@@ -1,103 +1,72 @@
-import { afterEach, describe, expect, it } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { describe, expect, it } from "bun:test";
 import { join } from "node:path";
 import type { Sink } from "@openomni/llm";
-import { Session, Storage, SurfaceKey } from "@openomni/ledger";
+import { Session, SurfaceKey } from "@openomni/ledger";
 import type { Message } from "@openomni/protocol";
 import { loadConfig, type OpenOmniConfig } from "../src/config";
-import { startOpenOmni } from "../src/index";
 import { assistantMessage } from "./helpers/assistant-message";
+import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
+import { nextMessage, opened } from "./helpers/ws";
 
 const REPLY = "A deterministic Resident reply.";
-const directories: string[] = [];
-let stopApp: (() => Promise<void>) | undefined;
-
-function nextMessage(ws: WebSocket): Promise<MessageEvent> {
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(
-      () => reject(new Error("WebSocket reply timed out after 2000ms")),
-      2_000,
-    );
-    ws.addEventListener(
-      "message",
-      (event) => {
-        clearTimeout(timeout);
-        resolve(event);
-      },
-      { once: true },
-    );
-  });
-}
-
-function opened(ws: WebSocket): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(
-      () => reject(new Error("WebSocket open timed out after 2000ms")),
-      2_000,
-    );
-    ws.addEventListener(
-      "open",
-      () => {
-        clearTimeout(timeout);
-        resolve();
-      },
-      { once: true },
-    );
-    ws.addEventListener(
-      "error",
-      () => {
-        clearTimeout(timeout);
-        reject(new Error("WebSocket failed before opening"));
-      },
-      { once: true },
-    );
-  });
-}
-
-afterEach(async () => {
-  await stopApp?.();
-  stopApp = undefined;
-  Storage.reset();
-  for (const directory of directories.splice(0))
-    rmSync(directory, { recursive: true, force: true });
-});
-
 const WS_TOKEN = "e2e-upgrade-token";
+const suite = residentSuite();
 
 async function bootWithConfig(config: OpenOmniConfig): Promise<{ port: number }> {
-  const app = await startOpenOmni({
+  const app = await suite.boot({
     config,
     llm: {
-      resolveProviderModel: async (model) => ({
-        id: model.id,
-        name: model.id,
-        providerID: model.provider,
-      }),
+      resolveProviderModel: fakeProviderModel,
       run: async (input, sink: Sink) => {
         sink.onMessage(assistantMessage(input, { id: "fake-assistant-message", text: REPLY }));
         return { type: "stop" };
       },
     },
   });
-  stopApp = app.stop;
   return { port: app.port };
 }
 
-async function bootApp(
-  channels?: NonNullable<OpenOmniConfig["channels"]>,
-): Promise<{ port: number }> {
-  const directory = mkdtempSync(join(tmpdir(), "openomni-resident-"));
-  directories.push(directory);
-  return bootWithConfig({
-    dbPath: join(directory, "chat.db"),
-    memoryPath: join(directory, "memory.json"),
-    host: "127.0.0.1",
-    wsPort: 0,
-    wsToken: WS_TOKEN,
-    model: { provider: "fake", id: "resident-test", apiKey: "test-key" },
-    ...(channels === undefined ? {} : { channels }),
-  });
+function bootApp(channels?: NonNullable<OpenOmniConfig["channels"]>): Promise<{ port: number }> {
+  return bootWithConfig(
+    suite.config("openomni-resident-", {
+      wsToken: WS_TOKEN,
+      ...(channels === undefined ? {} : { channels }),
+    }),
+  );
+}
+
+/**
+ * Runs `fn` with the config env reduced to exactly `env`, restoring every
+ * variable afterwards so the parity tests are deterministic in any shell.
+ */
+async function withConfigEnv(
+  env: Record<string, string>,
+  fn: () => Promise<void>,
+): Promise<void> {
+  const saved = new Map<string, string | undefined>();
+  for (const name of CONFIG_ENV) saved.set(name, process.env[name]);
+  try {
+    for (const name of CONFIG_ENV) delete process.env[name];
+    Object.assign(process.env, env);
+    await fn();
+  } finally {
+    for (const [name, value] of saved) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+}
+
+function configEnvFor(directory: string): Record<string, string> {
+  return {
+    OPENOMNI_DB_PATH: join(directory, "chat.db"),
+    OPENOMNI_MEMORY_PATH: join(directory, "memory.json"),
+    OPENOMNI_WS_PORT: "0",
+    OPENOMNI_WS_TOKEN: WS_TOKEN,
+    OPENOMNI_MODEL_PROVIDER: "fake",
+    OPENOMNI_MODEL_ID: "resident-test",
+    OPENOMNI_MODEL_API_KEY: "test-key",
+  };
 }
 
 // Every variable loadConfig() reads, so the env-path parity test below is
@@ -166,20 +135,7 @@ describe("OpenOmni Resident WebSocket", () => {
   });
 
   it("boots WebSocket-only through loadConfig when channel env vars are unset", async () => {
-    const directory = mkdtempSync(join(tmpdir(), "openomni-resident-"));
-    directories.push(directory);
-    const saved = new Map<string, string | undefined>();
-    for (const name of CONFIG_ENV) saved.set(name, process.env[name]);
-    try {
-      for (const name of CONFIG_ENV) delete process.env[name];
-      process.env.OPENOMNI_DB_PATH = join(directory, "chat.db");
-      process.env.OPENOMNI_MEMORY_PATH = join(directory, "memory.json");
-      process.env.OPENOMNI_WS_PORT = "0";
-      process.env.OPENOMNI_WS_TOKEN = WS_TOKEN;
-      process.env.OPENOMNI_MODEL_PROVIDER = "fake";
-      process.env.OPENOMNI_MODEL_ID = "resident-test";
-      process.env.OPENOMNI_MODEL_API_KEY = "test-key";
-
+    await withConfigEnv(configEnvFor(suite.tempDir("openomni-resident-")), async () => {
       // The real env/config path: with no channel credentials present, the
       // env-presence gate must leave every driver unwired.
       const config = loadConfig();
@@ -191,30 +147,15 @@ describe("OpenOmni Resident WebSocket", () => {
       });
       expect(webhook.status).toBe(404);
       expect(await webhook.text()).toBe("Not found");
-    } finally {
-      for (const [name, value] of saved) {
-        if (value === undefined) delete process.env[name];
-        else process.env[name] = value;
-      }
-    }
+    });
   });
 
   it("wires only the credentialed driver through loadConfig when env is partially set", async () => {
-    const directory = mkdtempSync(join(tmpdir(), "openomni-resident-"));
-    directories.push(directory);
-    const saved = new Map<string, string | undefined>();
-    for (const name of CONFIG_ENV) saved.set(name, process.env[name]);
-    try {
-      for (const name of CONFIG_ENV) delete process.env[name];
-      process.env.OPENOMNI_DB_PATH = join(directory, "chat.db");
-      process.env.OPENOMNI_MEMORY_PATH = join(directory, "memory.json");
-      process.env.OPENOMNI_WS_PORT = "0";
-      process.env.OPENOMNI_WS_TOKEN = WS_TOKEN;
-      process.env.OPENOMNI_MODEL_PROVIDER = "fake";
-      process.env.OPENOMNI_MODEL_ID = "resident-test";
-      process.env.OPENOMNI_MODEL_API_KEY = "test-key";
-      process.env.GITHUB_WEBHOOK_SECRET = "github-webhook-secret";
-
+    const env = {
+      ...configEnvFor(suite.tempDir("openomni-resident-")),
+      GITHUB_WEBHOOK_SECRET: "github-webhook-secret",
+    };
+    await withConfigEnv(env, async () => {
       const config = loadConfig();
       expect(config.channels).toEqual({ github: { secret: "github-webhook-secret" } });
 
@@ -225,12 +166,7 @@ describe("OpenOmni Resident WebSocket", () => {
       });
       expect(webhook.status).toBe(401);
       expect(await webhook.text()).toBe("Missing signature");
-    } finally {
-      for (const [name, value] of saved) {
-        if (value === undefined) delete process.env[name];
-        else process.env[name] = value;
-      }
-    }
+    });
   });
 
   it("mounts a configured GitHub driver on the existing HTTP server", async () => {
@@ -261,18 +197,14 @@ describe("OpenOmni Resident WebSocket", () => {
       port: 0,
       fetch: () => new Response("occupied"),
     });
-    const directory = mkdtempSync(join(tmpdir(), "openomni-resident-"));
-    directories.push(directory);
-    const config: OpenOmniConfig = {
-      dbPath: join(directory, "chat.db"),
-      memoryPath: join(directory, "memory.json"),
-      host: "127.0.0.1",
+    const config = suite.config("openomni-resident-", {
       wsPort: occupant.port ?? 0,
       wsToken: WS_TOKEN,
-      model: { provider: "fake", id: "resident-test", apiKey: "test-key" },
-    };
+    });
     try {
-      await expect(bootWithConfig(config)).rejects.toThrow(/in use|EADDRINUSE|Failed to (listen|start server)/i);
+      await expect(bootWithConfig(config)).rejects.toThrow(
+        /in use|EADDRINUSE|Failed to (listen|start server)/i,
+      );
 
       // The rollback released storage: the same config boots cleanly once the
       // port frees up.
