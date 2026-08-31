@@ -30,7 +30,7 @@ Single source of truth for current wiring between accepted design and running co
 | Contract | Status after #792 | Notes |
 | --- | --- | --- |
 | `Wait` | implemented and wired | Protocol fold, ledger store, gateway correlation, app boot sweep, and channel-delegation resume remain live. |
-| `WorkItem` | implemented and wired | Protocol and ledger CRUD/attempt/evidence contracts are consumed by the app's delegation wiring: `assign` is the live WorkItem producer. |
+| `WorkItem` | implemented and wired, except failed-item retry 📋 | Protocol and ledger CRUD, first-attempt allocation, attempt terminal, and evidence contracts are consumed by the app's delegation wiring: `assign` is the live WorkItem producer. Failed-item re-drive, the internal-worker default of three attempts, retry exhaustion, its `waiting_input` blocker, and Owner escalation remain target semantics in `kernel-contract.md`; no retry facade or product caller is currently implemented. |
 | WorkItem completion authority | implemented and wired | The one-authority, basis-bound, record-before-terminal rules from `kernel-contract.md` are consumed by `apps/openomni/src/work-item/completion.ts` through the ledger completion-admission writer; no ledger shortcut exists. |
 | Stakes | contract-inherited, not currently wired | Consequence and escalation semantics remain normative. The deleted calculator/host seam is not claimed as shipped. |
 | `effectiveAuthority` | contract-inherited, not currently wired | Multi-axis authority semantics remain documented. Perimeter authority still runs in the channels gateway; the deleted dispatch implementation is gone. |

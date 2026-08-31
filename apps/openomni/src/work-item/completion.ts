@@ -89,8 +89,9 @@ export function createCompletionPort(options: CompletionPortOptions): Completion
     }
     if (status === "failed") {
       // A failed item outranks a completed timestamp in deriveStatus, so a
-      // receipt written here could never surface as completed — retry first.
-      return refuse(`WorkItem ${input.workItemId} is failed; retry the attempt before completing`);
+      // receipt written here could never surface as completed. Failed-item
+      // retry is a target contract, not a currently implemented product path.
+      return refuse(`WorkItem ${input.workItemId} is failed; failed-item retry is not implemented`);
     }
     const criteria = new Map(current.completionFacts.criteria.map((c) => [c.id, c]));
     const seen = new Set<string>();

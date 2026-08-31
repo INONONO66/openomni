@@ -51,7 +51,6 @@ export const StreamRegistry = {
       "work_item.cancelled",
       "work_item.updated",
       "work_item.removed",
-      "work_item.retried",
       "work_item.execution_assigned",
       "work_item.blocker_added",
       "work_item.blocker_resolved",

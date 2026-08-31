@@ -384,105 +384,35 @@ describe("WorkItemStore", () => {
     );
   });
 
-  test("retries failed work items with a new basis and stable completion contract", async () => {
+  test("assigns execution once and refuses replacement", async () => {
     configureSqlite();
-    const item = await createItem("retry", {
-      executorKind: "internal_chat_agent",
-      workerRunId: "run:retry:1",
-      workSessionId: "session:retry:1",
-    });
-    const updatedFields: string[][] = [];
-    Bus.subscribe(WorkItem.Events.Updated, (event) => updatedFields.push(event.payload.fields));
-    const failed = await WorkItemStore.fail(item.workItemId, "trace-test", "transient error");
-    const retried = await WorkItemStore.retry(item.workItemId, "trace-test");
-
-    expect(failed?.attempt).toBe(1);
-    expect(retried?.attempt).toBe(2);
-    expect(retried?.failureReason).toBeUndefined();
-    expect(retried?.timestamps.failed).toBeUndefined();
-    expect(retried?.timestamps.started).toBeNumber();
-    expect(retried ? WorkItem.deriveStatus(retried) : undefined).toBe("running");
-    expect(retried?.completionContract.revision).toBe(item.completionContract.revision);
-    expect(retried?.completionContract.basisRef).not.toBe(item.completionContract.basisRef);
-    expect(retried?.acceptanceCriteria).toEqual(item.acceptanceCriteria);
-    expect(retried?.completionFacts.criteria).toEqual(item.completionFacts.criteria);
-    expect(retried?.executorKind).toBeUndefined();
-    expect(retried?.workerRunId).toBeUndefined();
-    expect(retried?.workSessionId).toBeUndefined();
-    expect(updatedFields).toContainEqual([
-      "attempt",
-      "timestamps",
-      "failureReason",
-      "completionContract",
-      "executorKind",
-      "workerRunId",
-      "workSessionId",
-      "attemptTerminal",
-    ]);
-    await expect(
-      WorkItemStore.addEvidence(
-        item.workItemId,
-        {
-          kind: "verification",
-          description: "late connector artifact",
-          passed: true,
-        },
-        "trace-test",
-        {
-          expectedAttempt: item.attempt,
-          expectedBasisRef: item.completionContract.basisRef,
-        },
-      ),
-    ).rejects.toThrow("attempt changed before evidence recording");
-    expect(WorkItemStore.get(item.workItemId)?.evidence).toEqual([]);
+    const item = await createItem("execution-assignment");
     const assigned = await WorkItemStore.assignExecution(
       item.workItemId,
       {
         executorKind: "internal_chat_agent",
-        workerRunId: "run:retry:2",
-        workSessionId: "session:retry:2",
+        workerRunId: "run:assignment",
+        workSessionId: "session:assignment",
       },
       "trace-test",
     );
+
     expect(assigned).toMatchObject({
       executorKind: "internal_chat_agent",
-      workerRunId: "run:retry:2",
-      workSessionId: "session:retry:2",
+      workerRunId: "run:assignment",
+      workSessionId: "session:assignment",
     });
     await expect(
       WorkItemStore.assignExecution(
         item.workItemId,
         {
           executorKind: "internal_chat_agent",
-          workerRunId: "run:retry:duplicate",
-          workSessionId: "session:retry:duplicate",
+          workerRunId: "run:replacement",
+          workSessionId: "session:replacement",
         },
         "trace-test",
       ),
     ).rejects.toThrow("already has an execution assignment");
-  });
-
-  test("checks evidence replay scope before accepting an explicit evidence idempotently", async () => {
-    configureSqlite();
-    const item = await createItem("scoped-evidence-replay");
-    const scope = {
-      expectedAttempt: item.attempt,
-      expectedBasisRef: item.completionContract.basisRef,
-    };
-    const evidence = {
-      id: "evidence:scoped-replay",
-      kind: "verification" as const,
-      description: "original attempt evidence",
-      passed: true,
-    };
-
-    await WorkItemStore.addEvidence(item.workItemId, evidence, "trace-test", scope);
-    await WorkItemStore.fail(item.workItemId, "trace-test", "retry required");
-    await WorkItemStore.retry(item.workItemId, "trace-test");
-
-    await expect(
-      WorkItemStore.addEvidence(item.workItemId, evidence, "trace-test", scope),
-    ).rejects.toThrow("attempt changed before evidence recording");
   });
 
   test.each([
@@ -514,16 +444,6 @@ describe("WorkItemStore", () => {
     ).rejects.toThrow(`Cannot assign execution to a ${terminalState} work item`);
   });
 
-  test("defaults internal worker items to three max attempts", async () => {
-    configureSqlite();
-
-    const item = await createItem("internal-worker-default", {
-      executorKind: "internal_chat_agent",
-    });
-
-    expect(item.maxAttempts).toBe(3);
-  });
-
   test("keeps explicit maxAttempts overrides", async () => {
     configureSqlite();
 
@@ -533,115 +453,6 @@ describe("WorkItemStore", () => {
     });
 
     expect(item.maxAttempts).toBe(2);
-  });
-
-  test("rejects retry after max attempts and adds an Owner escalation blocker", async () => {
-    configureSqlite();
-    const item = await createItem("retry-exhaustion", { maxAttempts: 1 });
-    await WorkItemStore.fail(item.workItemId, "trace-test", "permanent error");
-
-    await expectRejectsWithMessage(
-      WorkItemStore.retry(item.workItemId, "trace-test"),
-      "retry attempts exhausted for work item",
-    );
-
-    const exhausted = WorkItemStore.get(item.workItemId);
-    expect(exhausted?.attempt).toBe(1);
-    expect(exhausted ? WorkItem.deriveStatus(exhausted) : undefined).toBe("failed");
-    expect(exhausted?.blockers).toEqual([
-      expect.objectContaining({
-        kind: "waiting_input",
-        description: "retry attempts exhausted after 1 attempts; Owner escalation required",
-      }),
-    ]);
-  });
-
-  test("allows exactly three attempts for internal worker defaults before exhaustion", async () => {
-    configureSqlite();
-    const item = await createItem("internal-three-attempts", {
-      executorKind: "internal_chat_agent",
-    });
-
-    await WorkItemStore.fail(item.workItemId, "trace-test", "first failure");
-    const secondAttempt = await WorkItemStore.retry(item.workItemId, "trace-test");
-    await WorkItemStore.fail(item.workItemId, "trace-test", "second failure");
-    const thirdAttempt = await WorkItemStore.retry(item.workItemId, "trace-test");
-    await WorkItemStore.fail(item.workItemId, "trace-test", "third failure");
-
-    await expectRejectsWithMessage(
-      WorkItemStore.retry(item.workItemId, "trace-test"),
-      "retry attempts exhausted for work item",
-    );
-
-    const exhausted = WorkItemStore.get(item.workItemId);
-    expect(secondAttempt?.attempt).toBe(2);
-    expect(thirdAttempt?.attempt).toBe(3);
-    expect(exhausted?.attempt).toBe(3);
-    expect(exhausted?.maxAttempts).toBe(3);
-    expect(exhausted?.blockers).toEqual([
-      expect.objectContaining({
-        kind: "waiting_input",
-        description: "retry attempts exhausted after 3 attempts; Owner escalation required",
-      }),
-    ]);
-  });
-
-  test("does not duplicate retry exhaustion blockers", async () => {
-    configureSqlite();
-    const item = await createItem("retry-exhaustion-idempotent", { maxAttempts: 1 });
-    await WorkItemStore.fail(item.workItemId, "trace-test", "permanent error");
-
-    await expectRejectsWithMessage(
-      WorkItemStore.retry(item.workItemId, "trace-test"),
-      "retry attempts exhausted for work item",
-    );
-    await expectRejectsWithMessage(
-      WorkItemStore.retry(item.workItemId, "trace-test"),
-      "retry attempts exhausted for work item",
-    );
-
-    const exhausted = WorkItemStore.get(item.workItemId);
-    expect(exhausted?.blockers).toHaveLength(1);
-  });
-
-  test("keeps retry available for items without maxAttempts", async () => {
-    configureSqlite();
-    const item = await createItem("retry-without-max-attempts");
-
-    await WorkItemStore.fail(item.workItemId, "trace-test", "first failure");
-    const secondAttempt = await WorkItemStore.retry(item.workItemId, "trace-test");
-    await WorkItemStore.fail(item.workItemId, "trace-test", "second failure");
-    const thirdAttempt = await WorkItemStore.retry(item.workItemId, "trace-test");
-
-    expect(secondAttempt?.attempt).toBe(2);
-    expect(thirdAttempt?.attempt).toBe(3);
-    expect(thirdAttempt ? WorkItem.deriveStatus(thirdAttempt) : undefined).toBe("running");
-  });
-
-  test("retry degrades gracefully when work item storage is missing", async () => {
-    Storage.configure({
-      transaction: (operation) => operation(),
-      session: {
-        get: () => undefined,
-        set: () => undefined,
-        list: () => [],
-        remove: () => false,
-      },
-      message: {
-        get: () => undefined,
-        set: () => undefined,
-        list: () => [],
-        remove: () => false,
-      },
-      part: {
-        get: () => undefined,
-        set: () => undefined,
-        list: () => [],
-        remove: () => false,
-      },
-    });
-
-    await expect(WorkItemStore.retry("missing", "trace-test")).resolves.toBeUndefined();
   });
 
   test("refuses to fabricate a work item when storage is missing (#606)", async () => {
@@ -673,22 +484,13 @@ describe("WorkItemStore", () => {
     await expect(createItem("graceful")).rejects.toThrow("refusing to fabricate");
   });
 
-  test("rejects starting a failed item without retry", async () => {
+  test("rejects starting a failed item", async () => {
     configureSqlite();
     const item = await createItem("start-failed");
     await WorkItemStore.fail(item.workItemId, "trace-test", "broken");
     await expectRejectsWithMessage(
       WorkItemStore.start(item.workItemId, "trace-test"),
       "Cannot start a failed work item",
-    );
-  });
-
-  test("rejects retrying a non-failed item", async () => {
-    configureSqlite();
-    const item = await createItem("retry-pending");
-    await expectRejectsWithMessage(
-      WorkItemStore.retry(item.workItemId, "trace-test"),
-      "retry() can only be called on failed work items",
     );
   });
 
@@ -733,6 +535,7 @@ describe("WorkItemStore", () => {
       "areDependenciesMet",
       "recordEffect",
       "addReadBackEvidence",
+      "retry",
     ]) {
       expect(Reflect.get(WorkItemStore, member)).toBeUndefined();
     }

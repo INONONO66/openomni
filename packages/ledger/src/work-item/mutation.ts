@@ -114,10 +114,10 @@ function assertTransition(existing: WorkItem.Info, target: WorkItemTransitionTar
     target === "started" &&
     (status === "completed" || status === "cancelled" || status === "failed")
   ) {
-    throw new Error(`Cannot start a ${status} work item — use retry() for failed items`);
+    throw new Error(`Cannot start a ${status} work item`);
   }
   if (target === "completed" && status === "failed") {
-    throw new Error("Cannot complete a failed work item — retry() first");
+    throw new Error("Cannot complete a failed work item");
   }
   if (target === "completed" && status === "cancelled") {
     throw new Error("Cannot complete a cancelled work item");

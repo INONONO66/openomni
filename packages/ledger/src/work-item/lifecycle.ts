@@ -2,8 +2,7 @@ import { WorkItem } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { Storage } from "../storage/storage.js";
 import { attemptAllocatedFact } from "./facts.js";
-import { mutate, persistMutation } from "./mutation.js";
-import { retryWorkItem } from "./retry.js";
+import { mutate } from "./mutation.js";
 
 export async function startWorkItem(
   hash: string,
@@ -244,22 +243,15 @@ export async function addWorkItemEvidence(
   });
 }
 
-export async function retryStoredWorkItem(
-  hash: string,
-  traceId: string,
-): Promise<WorkItem.Info | undefined> {
-  return retryWorkItem(hash, Storage.get().workItem, persistMutation, traceId);
-}
-
 function assertEvidenceScope(
   existing: WorkItem.Info | undefined,
   expectedScope: Readonly<{ expectedAttempt: number; expectedBasisRef: string }> | undefined,
 ): void {
+  if (!existing || !expectedScope) return;
+  const activeAttempt = existing.lastAttemptSeq || existing.attempt;
   if (
-    existing &&
-    expectedScope &&
-    (existing.attempt !== expectedScope.expectedAttempt ||
-      existing.completionContract.basisRef !== expectedScope.expectedBasisRef)
+    activeAttempt !== expectedScope.expectedAttempt ||
+    existing.completionContract.basisRef !== expectedScope.expectedBasisRef
   ) {
     throw new Error("WorkItem attempt changed before evidence recording");
   }
