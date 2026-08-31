@@ -28,10 +28,7 @@ function walkChain(rows: HashChainRow[]): ChainIntegrityResult {
 
   let expectedPrev = GENESIS_SEED;
   let totalVerified = 0;
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i] as HashChainRow | undefined;
-    if (!row) continue;
-
+  for (const row of rows) {
     // Events persisted before the hash chain migration have null hashes.
     // They cannot be verified so we skip them without breaking the chain.
     if (row.event_hash === null || row.prev_hash === null) {

@@ -5,9 +5,6 @@ export namespace PolicyPermission {
   /** Evaluation-side input cap, shared with the evaluator in @openomni/policy. */
   export const MAX_INPUT_LENGTH = 10_000;
 
-  // Label source enumeration: where a label originates from
-  // Labels use source.category naming convention to prevent namespace collisions
-  // Examples: tool.filesystem, actor.owner, surface.github, risk.tier-2, capability.write
   const Label = {
     Source: z.enum(["system", "tool_metadata", "agent_profile", "policy_rule", "operator"]),
   } as const;

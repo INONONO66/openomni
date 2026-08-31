@@ -26,10 +26,6 @@ import { EpochMs } from "../time.js";
 // (../json). Re-exported so WorkItem.canonicalDigest keeps its public seat.
 export { canonicalDigest };
 
-// ---------------------------------------------------------------------------
-// building blocks
-// ---------------------------------------------------------------------------
-
 /** Opaque execution-instance identity — no format contract, never parsed. */
 export const AttemptId = z.string().min(1).max(128);
 export type AttemptId = z.infer<typeof AttemptId>;
@@ -72,10 +68,6 @@ function declared<Value extends z.ZodTypeAny>(value: Value) {
 }
 
 const VersionMap = z.record(z.string().min(1), z.union([z.string().min(1), z.number().int()]));
-
-// ---------------------------------------------------------------------------
-// fingerprints
-// ---------------------------------------------------------------------------
 
 /**
  * Content identity coverage (issue #510): canonical task input, handler/
@@ -177,10 +169,6 @@ export function environmentFingerprintOf(
   const parsed = EnvironmentFingerprintInputs.parse(inputs);
   return { inputs: parsed, digest: canonicalDigest(parsed) };
 }
-
-// ---------------------------------------------------------------------------
-// attempt identity
-// ---------------------------------------------------------------------------
 
 export const Attempt = z
   .object({
