@@ -87,8 +87,9 @@ describe("Provider Integration", () => {
   it.each(listCases)("should list models for $name", async ({ requests }) => {
     for (const { provider, auth } of requests) {
       const models = await Provider.listModels(provider, auth);
-      expect(Array.isArray(models)).toBe(true);
       expect(models.length).toBeGreaterThan(0);
+      expect(models.every((model) => Provider.Model.safeParse(model).success)).toBe(true);
+      expect(models.every((model) => model.providerID === provider)).toBe(true);
     }
   });
 

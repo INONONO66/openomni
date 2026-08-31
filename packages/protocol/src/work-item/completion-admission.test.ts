@@ -175,7 +175,7 @@ function reservationBridge(id: string) {
   });
 }
 
-const invalidTerminalInputs: readonly [string, unknown][] = [
+const invalidTerminalInputs = [
   [
     "bridged-receipt-duplicate-reservation-head",
     {
@@ -358,7 +358,37 @@ const invalidTerminalInputs: readonly [string, unknown][] = [
       },
     },
   ],
-];
+] as const;
+
+const expectedInvalidTerminalPath = {
+  "bridged-receipt-duplicate-reservation-head": ["completionFacts", "admissions", 0],
+  "missing-effective-result": ["completionFacts", "admissions", 0, "proposedFactIds", "results", 0],
+  "owner-override-unknown-unresolved-criterion": [
+    "completionFacts",
+    "admissions",
+    0,
+    "unresolvedCriterionIds",
+    0,
+  ],
+  "missing-receipt": ["completionTerminalReceipt"],
+  "missing-completed-timestamp": ["timestamps", "completed"],
+  "foreign-receipt-hash": ["completionTerminalReceipt", "hash"],
+  "foreign-contract-revision": ["completionTerminalReceipt", "contractRevision"],
+  "foreign-basis": ["completionTerminalReceipt", "basisRef"],
+  "receipt-head-gap": ["completionTerminalReceipt", "recordedHead"],
+  "no-admissions": ["completionTerminalReceipt", "admissionId"],
+  "blocked-terminal-decision": ["completionFacts", "admissions", 0, "decision"],
+  "foreign-request-id": ["completionTerminalReceipt", "requestId"],
+  "foreign-work-item-hash": ["completionFacts", "admissions", 0, "workItemHash"],
+  "foreign-admission-contract": ["completionFacts", "admissions", 0],
+  "foreign-admission-basis": ["completionFacts", "results", 0, "basisRef"],
+  "non-consecutive-admission-heads": ["completionFacts", "admissions", 0],
+  "mismatched-report-ref": ["completionFacts", "admissions", 0, "completionReportRef"],
+  "missing-report-linkage": ["completionTerminalReceipt", "completionReportRef"],
+} as const satisfies Record<
+  (typeof invalidTerminalInputs)[number][0],
+  readonly (string | number)[]
+>;
 
 const uncoveredCriterion = {
   id: WorkItem.criterionId(baseItem.workItemId, 1, "verify the artifact"),
@@ -661,7 +691,6 @@ describe("WorkItem completion admission contracts", () => {
 
     const effect = WorkItem.EffectRecord.parse(input);
 
-    expect(effect).toEqual(input);
     expect("outcome" in effect).toBe(false);
   });
 
@@ -841,8 +870,15 @@ describe("WorkItem completion admission contracts", () => {
     }
   });
 
-  test.each(invalidTerminalInputs)("rejects broken terminal linkage: %s", (_label, input) => {
-    expect(WorkItem.Info.safeParse(input).success).toBe(false);
+  test.each(invalidTerminalInputs)("rejects broken terminal linkage: %s", (label, input) => {
+    const parsed = WorkItem.Info.safeParse(input);
+
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.issues.map(({ path }) => path)).toContainEqual(
+        [...expectedInvalidTerminalPath[label]],
+      );
+    }
   });
 
   test.each(

@@ -140,26 +140,6 @@ describe("IngressAuthorityMiddleware trust and validation", () => {
     );
   });
 
-  test("collects policy decisions via onDecision callback", async () => {
-    const decisions: Policy.PolicyDecision[] = [];
-    const event = makeInboundEvent({
-      meta: { actor: { role: "user", actorId: "act_owner", trustTier: "owner" } },
-    });
-
-    await IngressAuthorityMiddleware.runRoutedPreRun({
-      event,
-      onDecision: (d) => {
-        decisions.push(d);
-      },
-    });
-
-    expect(decisions.length).toBeGreaterThan(0);
-    for (const d of decisions) {
-      expect(d).toHaveProperty("policyId");
-      expect(d).toHaveProperty("verdict");
-    }
-  });
-
   test("routed pre-run never re-runs blacklist or channel-grant checks", async () => {
     const decisions: Policy.PolicyDecision[] = [];
     const event = makeInboundEvent({

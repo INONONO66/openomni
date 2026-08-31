@@ -31,7 +31,7 @@ describe("Storage fail-closed", () => {
 
   test("get() works after initialize with defaults", () => {
     initialize();
-    expect(Storage.get()).toBeDefined();
+    expect(Storage.get()).toBeInstanceOf(SqliteStorageAdapter);
   });
 
   test("idempotent same path — no throw", () => {
@@ -47,7 +47,7 @@ describe("Storage fail-closed", () => {
 
   test("get() works after configure", () => {
     Storage.configure(new SqliteStorageAdapter(":memory:"));
-    expect(Storage.get()).toBeDefined();
+    expect(Storage.get()).toBeInstanceOf(SqliteStorageAdapter);
   });
 
   test("withIsolation scope starts uninitialized even when the outer scope is initialized", () => {
@@ -55,6 +55,6 @@ describe("Storage fail-closed", () => {
     Storage.withIsolation(() => {
       expect(() => Storage.get()).toThrow("Storage.get() called before initialize()");
     });
-    expect(Storage.get()).toBeDefined();
+    expect(Storage.get()).toBeInstanceOf(SqliteStorageAdapter);
   });
 });

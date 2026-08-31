@@ -824,10 +824,14 @@ describe("delegation controls and tool surface", () => {
     const variants = (
       spec.inputSchema as { oneOf: readonly { properties: Record<string, unknown> }[] }
     ).oneOf;
-    expect(variants.length).toBe(2);
-    for (const variant of variants) {
-      expect(variant.properties.operation).toBeDefined();
-    }
+    expect(
+      variants.map(
+        (variant) => (variant.properties.operation as { enum?: readonly string[] }).enum,
+      ),
+    ).toEqual([
+      ["notify", "ask", "assign"],
+      ["notify", "ask", "assign"],
+    ]);
     const answer = await delegateToolExecutor(kernel, RESIDENT)({
       instruction: "send it",
       operation: "ask",

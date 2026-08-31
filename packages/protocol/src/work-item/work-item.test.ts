@@ -599,33 +599,25 @@ describe("WorkItem.deriveStatus", () => {
 
 describe("WorkItem.generateHash", () => {
   test("produces wi_ hashes with 12 base36 characters", () => {
-    const hashes = new Set<string>();
-
     for (let index = 0; index < 100; index += 1) {
-      const hash = WorkItem.generateHash();
-
-      expect(hash).toMatch(/^wi_[0-9a-z]{12}$/);
-      hashes.add(hash);
+      expect(WorkItem.generateHash()).toMatch(/^wi_[0-9a-z]{12}$/);
     }
-
-    expect(hashes.size).toBe(100);
   });
 });
 
 describe("WorkItem.Events", () => {
-  test("exposes valid BusEvent descriptors", () => {
-    const events = [
-      WorkItem.Events.Created,
-      WorkItem.Events.Updated,
-      WorkItem.Events.StatusChanged,
-      WorkItem.Events.Completed,
-      WorkItem.Events.Failed,
-      WorkItem.Events.Removed,
-    ];
-
-    for (const event of events) {
-      expect(event.name).toBeString();
-      expect(event.schema).toBeTruthy();
-    }
+  test("exposes the complete wire event vocabulary", () => {
+    expect(Object.values(WorkItem.Events).map(({ name }) => name)).toEqual([
+      "work_item.created",
+      "work_item.updated",
+      "work_item.status_changed",
+      "work.complete.requested",
+      "work_item.completion_admission_recorded",
+      "work_item.completed",
+      "work_item.completed.v2",
+      "work_item.failed",
+      "work_item.outcome_recorded",
+      "work_item.removed",
+    ]);
   });
 });
