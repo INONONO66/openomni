@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
+import { createServer } from "node:net";
 import {
   lstatSync,
   mkdirSync,
@@ -73,6 +74,28 @@ describe("daemon filesystem driver", () => {
         reason: "path_escapes_export",
         message: "path escapes export: ../secret",
       });
+    });
+  });
+
+  // Regression guard, not an exploit repro: ".." inside a link target is walked
+  // component-wise through openat, so the kernel resolves it after following the
+  // link and canonicalPath stays in agreement with the pinned descriptor. This
+  // pins that agreement so a future switch to lexical-only resolution is caught.
+  test("resolves an export root reached through an absolute link containing ..", async () => {
+    await withFixture(async ({ base, root }) => {
+      writeFileSync(join(root, "note.txt"), "inside");
+      // link -> /<base>/outside/../root, which normalizes back to root.
+      const link = join(base, "link");
+      symlinkSync(join(base, "outside", "..", "root"), link);
+
+      const fsOp = createFsDriver(new Map([["docs", link]]));
+      try {
+        await expect(fsOp({ op: "read", export: "docs", path: "note.txt" })).resolves.toMatchObject(
+          { status: "completed", value: { op: "read", data: "inside" } },
+        );
+      } finally {
+        fsOp.close();
+      }
     });
   });
 
@@ -344,6 +367,36 @@ describe("daemon filesystem driver", () => {
           value: { op: "list", entries: [{ name: "pipe", kind: "other" }], truncated: false },
         }),
       );
+    });
+  });
+
+  // A unix socket cannot be opened at all (ENXIO/EOPNOTSUPP), unlike a FIFO
+  // which opens under O_NONBLOCK. An export holding one must still list.
+  test("lists a directory containing a unix socket", async () => {
+    await withFixture(async ({ root }) => {
+      const fsOp = createFsDriver(new Map([["docs", root]]));
+      const server = createServer();
+      await new Promise<void>((ready) => server.listen(join(root, "sock"), ready));
+      try {
+        await expect(fsOp({ op: "list", export: "docs", path: "" })).resolves.toEqual({
+          status: "completed",
+          value: {
+            op: "list",
+            entries: [{ name: "sock", kind: "other" }],
+            truncated: false,
+          },
+        });
+        // A socket cannot be opened at all, so the refusal surfaces as io_error
+        // rather than wrong_kind: the driver never gets a descriptor to classify.
+        await expect(fsOp({ op: "read", export: "docs", path: "sock" })).resolves.toEqual({
+          status: "refused",
+          reason: "io_error",
+          message: "filesystem operation failed for: sock",
+        });
+      } finally {
+        await new Promise<void>((closed) => server.close(() => closed()));
+
+      }
     });
   });
 

@@ -87,9 +87,13 @@ Attached machines appear as ONE flat namespace,
   learns WHICH boundary held. `FS_READ_MAX_BYTES` / `FS_LIST_MAX_ENTRIES` are
   named in the protocol and enforced by the daemon; a bitten ceiling reports
   `truncated` rather than silently presenting a prefix as the whole thing.
-  Final-target inspection uses `O_NONBLOCK` and listing obtains no-follow
-  entry metadata with `fstatat`, so FIFOs, sockets, and devices report as kind
-  `other`; `read` refuses each with `wrong_kind` rather than blocking.
+  Final-target inspection uses `O_NONBLOCK`, so a FIFO reports kind `other`
+  instead of parking the daemon inside `open`. Listing classifies each entry by
+  a no-follow open: a directory or regular file is classified from its
+  descriptor, an entry that is neither and is not a symlink (socket, device)
+  reports kind `other` rather than failing the listing. `read` refuses a
+  non-regular target — `wrong_kind` when it could be opened and classified,
+  `io_error` when it could not be opened at all.
 - **The typed-refusal contract covers requests the host was ENTITLED to make.**
   A daemon asked for `fs.read` when it never offered `fs.read` is not looking at
   a refusable request — it is looking at a host violating the attachment it

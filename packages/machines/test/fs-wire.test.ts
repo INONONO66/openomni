@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, mkdirSync, mkdtempSync, openSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { IpcRemoteError, connectIpcClient, createIpcServer, typedCall } from "@openomni/ipc";
@@ -239,5 +239,40 @@ describe("machine fs wire surface", () => {
         daemon.close();
       }
     });
+  });
+});
+
+describe("attach failure", () => {
+  // fsOp opens a descriptor per configured export before the daemon connects.
+  // A connection failure must release them; otherwise each retry leaks an fd
+  // set and a reconnect loop exhausts the daemon's descriptor table.
+  test("releases export descriptors when the connection fails", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "openomni-fs-leak-"));
+    const root = join(dir, "docs");
+    mkdirSync(root);
+    // Never bound, so connectIpcClient rejects.
+    const deadSocket = socketPath();
+
+    const openDescriptors = (): number => {
+      const probe = openSync(dir, 0);
+      closeSync(probe);
+      return probe;
+    };
+
+    const before = openDescriptors();
+    for (let attempt = 0; attempt < 8; attempt++) {
+      await expect(
+        attachMachineDaemon({
+          socketPath: deadSocket,
+          offer: offer({ exports: [{ name: "docs" }] }),
+          fsExports: new Map([["docs", root]]),
+        }),
+      ).rejects.toBeInstanceOf(Error);
+    }
+    const after = openDescriptors();
+
+    // The lowest free descriptor must not drift: a leak per attempt walks it up.
+    expect(after).toBe(before);
+    rmSync(dir, { recursive: true, force: true });
   });
 });

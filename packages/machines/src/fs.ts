@@ -288,9 +288,14 @@ function openRoot(configuredRoot: string, testHooks: FsDriverTestHooks): RootWal
       if (expansions > MAX_SYMLINK_EXPANSIONS) {
         throw new Error(`export root has too many symlink levels: ${configuredRoot}`);
       }
-      const linkBase = isAbsolute(link.target)
-        ? link.target
-        : resolve(sep + traversed.join(sep), link.target);
+      // Both branches must be lexically normalized. An absolute target may
+      // still carry "."/".." components, and leaving them raw makes
+      // canonicalPath disagree with the pinned descriptor, which then breaks
+      // containment comparisons in resolveLink().
+      const linkBase = resolve(
+        isAbsolute(link.target) ? sep : sep + traversed.join(sep),
+        link.target,
+      );
       pending = [
         ...linkBase.split(sep).filter((segment_) => segment_.length > 0),
         ...pending.slice(1),
@@ -351,7 +356,11 @@ function entryAt(dirfd: number, name: string): { name: string; kind: EntryKind; 
   }
   const link = readLinkAt(dirfd, name);
   if ("target" in link) return { name, kind: "symlink" };
-  throw new Error("directory entry disappeared");
+  // Sockets, devices and other non-openable nodes reach here: O_NOFOLLOW open
+  // fails and the entry is not a symlink. They are listable but unreadable, so
+  // report them as "other" instead of failing the whole listing. A read of one
+  // is refused wrong_kind on its own path.
+  return { name, kind: "other" };
 }
 
 /**
