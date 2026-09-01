@@ -48,17 +48,72 @@ describe("Policy.Resource descriptors", () => {
       ).toBe(false);
     });
 
-    test("rejects mismatched id segments", () => {
+    test("enforces id arity, non-empty segments, and the kind prefix independently", () => {
+      const descriptor = {
+        labels: [],
+        capabilities: [],
+        effects: [],
+      };
+
       expect(
         Policy.Resource.Descriptor.safeParse({
-          id: "tool:project",
-          kind: "tool",
-          labels: [],
-          capabilities: [],
-          effects: [],
+          ...descriptor,
+          id: "worker:one:two:three",
+          kind: "worker",
+        }).success,
+      ).toBe(false);
+      expect(
+        Policy.Resource.Descriptor.safeParse({
+          ...descriptor,
+          id: "worker:",
+          kind: "worker",
+        }).success,
+      ).toBe(false);
+      expect(
+        Policy.Resource.Descriptor.safeParse({
+          ...descriptor,
+          id: "session:primary",
+          kind: "worker",
+        }).success,
+      ).toBe(false);
+    });
+
+    test("binds tool source presence and type to the corresponding id segments", () => {
+      const descriptor = {
+        kind: "tool" as const,
+        labels: [],
+        capabilities: [],
+        effects: [],
+      };
+
+      expect(
+        Policy.Resource.Descriptor.safeParse({
+          ...descriptor,
+          id: "tool:project:bash",
+        }).success,
+      ).toBe(false);
+      expect(
+        Policy.Resource.Descriptor.safeParse({
+          ...descriptor,
+          id: "tool:bash",
           source: { type: "project" },
         }).success,
       ).toBe(false);
+      expect(
+        Policy.Resource.Descriptor.safeParse({
+          ...descriptor,
+          id: "tool:server:bash",
+          source: { type: "project" },
+        }).success,
+      ).toBe(false);
+
+      const parsed = Policy.Resource.Descriptor.parse({
+        ...descriptor,
+        id: "tool:skill-mcp:filesystem:read_file",
+        source: { type: "skill-mcp", serverId: "filesystem" },
+      });
+      expect(parsed.id).toBe("tool:skill-mcp:filesystem:read_file");
+      expect(parsed.source).toEqual({ type: "skill-mcp", serverId: "filesystem" });
     });
 
     test("rejects descriptors with invalid source type", () => {

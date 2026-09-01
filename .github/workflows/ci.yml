@@ -53,7 +53,7 @@ jobs:
       # script/, qa/, and every test file. Lint
       # the WHOLE repo so the ~420 test files + tooling are actually covered.
       - if: matrix.task == 'lint'
-        run: bunx ultracite check --formatter-enabled=false .
+        run: bunx ultracite@7.8.3 check --formatter-enabled=false .
 
   deps:
     name: Dependency Rules

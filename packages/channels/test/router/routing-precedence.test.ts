@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { Ingress } from "@openomni/protocol";
 import { resolveRoute, type RouteInbound, type RouteState } from "../../src/router/index.js";
+import { requireRoutedDecision } from "../../src/router/routing-execution.js";
 
 const inbound = Object.freeze({
   traceId: "trace-precedence",
@@ -184,6 +185,49 @@ describe("resolveRoute precedence", () => {
     expect(decisions.map((decision) => decision.outcome)).toEqual(["block", "block"]);
     expect(decisions.every((decision) => decision.target === undefined)).toBe(true);
     expect(decisions.every((decision) => decision.sessionId === undefined)).toBe(true);
+  });
+
+  it("classifies blacklist drops as accepted while block and ambiguity stay typed failures", () => {
+    const decisions = [
+      resolveRoute(inbound, {
+        blacklist: { id: "blacklist-actor", kind: "actor", reason: "revoked" },
+        wait: matchedWait,
+        channel: trustedChannel,
+        actor: registeredActor,
+      }),
+      resolveRoute(inbound, {
+        wait: { kind: "none" },
+        actor: registeredActor,
+      }),
+      resolveRoute(inbound, {
+        wait: {
+          kind: "ambiguous",
+          candidateInteractionIds: ["wait:wait-a", "wait:wait-b"],
+        },
+        channel: trustedChannel,
+        actor: registeredActor,
+      }),
+    ].map((decision) => Ingress.Events.RoutingDecision.schema.parse(decision));
+
+    const accepted = decisions[0];
+    expect(accepted).toBeDefined();
+    if (
+      accepted === undefined ||
+      accepted.stage !== "blacklist" ||
+      accepted.outcome !== "drop"
+    ) {
+      throw new TypeError("missing accepted decision fixture");
+    }
+    expect(requireRoutedDecision(accepted)).toBe(accepted);
+    const codes = decisions.slice(1).map((decision) => {
+      try {
+        requireRoutedDecision(decision);
+        return "accepted";
+      } catch (error) {
+        return (error as { readonly code?: string }).code;
+      }
+    });
+    expect(codes).toEqual(["route_blocked", "route_ambiguous"]);
   });
 
   it("preserves evidence_only treatment while routing a broadcast channel", () => {

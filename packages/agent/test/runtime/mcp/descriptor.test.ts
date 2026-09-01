@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { RequestOptions } from "@modelcontextprotocol/sdk/shared/protocol.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { McpClient, type McpClientHandle } from "../../../src/runtime/mcp/client";
+import { createTransport } from "../../../src/runtime/mcp/client-transport";
 
 const TRACE_ID = "trace-mcp-lifecycle";
 const stdio = (name = "filesystem") => ({
@@ -148,6 +150,24 @@ function observeError(serverName: string) {
   });
   return { seen, next, unsubscribe };
 }
+
+describe("MCP transport construction", () => {
+  test("preserves the stdio command and argument vector", () => {
+    const transport = createTransport({
+      name: "filesystem",
+      transport: "stdio",
+      command: "mcp-server-filesystem",
+      args: ["--root", "/workspace"],
+    });
+
+    expect(transport).toBeInstanceOf(StdioClientTransport);
+    expect(
+      (transport as unknown as {
+        readonly _serverParams: { readonly command: string; readonly args?: string[] };
+      })._serverParams,
+    ).toEqual({ command: "mcp-server-filesystem", args: ["--root", "/workspace"] });
+  });
+});
 
 describe("McpClient listed tools", () => {
   test("namespaces listed MCP tools", async () => {

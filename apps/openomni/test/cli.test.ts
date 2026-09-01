@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import {
   lstatSync,
   mkdirSync,
@@ -30,6 +30,7 @@ import { applyEnvFile, parseEnvFile, renderEnvFile, writeEnvFile } from "../src/
 import { runDoctor } from "../src/cli/doctor";
 import { processEntryPath } from "../src/process-entry-path";
 import type { DoctorPorts } from "../src/cli/doctor";
+import { main } from "../src/cli/main";
 import { gatherOnboarding } from "../src/cli/onboard";
 
 const directories: string[] = [];
@@ -500,6 +501,19 @@ describe("doctor", () => {
     const byName = new Map(report.checks.map((check) => [check.name, check.status]));
     expect(byName.get("model config")).toBe("fail");
     expect(byName.get("health")).toBe("fail");
+  });
+});
+
+describe("cli entry point", () => {
+  test("returns the dispatch exit status without terminating an importer", async () => {
+    const stdout = spyOn(console, "log").mockImplementation(() => undefined);
+    const stderr = spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      expect(await main(["not-a-command"])).toBe(1);
+    } finally {
+      stdout.mockRestore();
+      stderr.mockRestore();
+    }
   });
 });
 

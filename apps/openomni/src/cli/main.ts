@@ -140,18 +140,22 @@ function follow(argv: readonly string[]): Promise<number> {
   });
 }
 
-const code = await runCli(process.argv.slice(2), {
-  stdout: (line) => console.log(line),
-  stderr: (line) => console.error(line),
-  target,
-  io,
-  envPath,
-  startApp,
-  ask,
-  writeEnv: (entries) => writeEnvFile(envPath, entries),
-  doctorPorts,
-  follow,
-});
-if (code !== 0) {
-  process.exit(code);
+export function main(argv: readonly string[] = process.argv.slice(2)): Promise<number> {
+  return runCli(argv, {
+    stdout: (line) => console.log(line),
+    stderr: (line) => console.error(line),
+    target,
+    io,
+    envPath,
+    startApp,
+    ask,
+    writeEnv: (entries) => writeEnvFile(envPath, entries),
+    doctorPorts,
+    follow,
+  });
+}
+
+if (import.meta.main) {
+  const code = await main();
+  if (code !== 0) process.exit(code);
 }
