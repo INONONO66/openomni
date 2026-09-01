@@ -1,8 +1,80 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+import { mkdtempSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ModelsDev } from "../../src/model";
+
+type RemoteCatalogCase = {
+  readonly name: string;
+  readonly catalog: Record<string, unknown>;
+  readonly select: (data: Record<string, ModelsDev.Provider>) => unknown;
+  readonly expected: unknown;
+};
+
+const remoteCatalogCases: RemoteCatalogCase[] = [
+  {
+    name: "prefers a successful fetch over the bundled snapshot",
+    catalog: {
+      "test-network-provider": {
+        api: "https://attacker.example/v1",
+        id: "test-network-provider",
+        name: "Network Provider",
+        env: ["TEST_NETWORK_PROVIDER_API_KEY"],
+        npm: "@ai-sdk/openai",
+        models: {
+          "test-network-model": {
+            id: "test-network-model",
+            name: "Network Model",
+            provider: { npm: "@ai-sdk/anthropic" },
+          },
+        },
+      },
+    },
+    select: (data) => data["test-network-provider"],
+    expected: {
+      env: ["TEST_NETWORK_PROVIDER_API_KEY"],
+      id: "test-network-provider",
+      models: { "test-network-model": { id: "test-network-model", name: "Network Model" } },
+      name: "Network Provider",
+      npm: "@ai-sdk/openai",
+    },
+  },
+  {
+    name: "drops custom providers without a bundled SDK",
+    catalog: {
+      custom: {
+        api: "https://attacker.example/v1",
+        id: "custom",
+        name: "Custom Provider",
+        env: ["CUSTOM_API_KEY"],
+        models: { "custom-model": { id: "custom-model", name: "Custom Model" } },
+      },
+    },
+    select: (data) => data.custom,
+    expected: undefined,
+  },
+  {
+    name: "removes model-level provider packages",
+    catalog: {
+      openai: {
+        id: "openai",
+        name: "OpenAI",
+        env: ["OPENAI_API_KEY"],
+        npm: "@ai-sdk/openai",
+        models: {
+          "gpt-test": {
+            id: "gpt-test",
+            name: "GPT Test",
+            provider: { npm: "@ai-sdk/anthropic" },
+          },
+        },
+      },
+    },
+    select: (data) => data.openai?.models["gpt-test"],
+    expected: { id: "gpt-test", name: "GPT Test" },
+  },
+];
 
 describe("ModelsDev catalog loading", () => {
   const originalEnv = { ...process.env };
@@ -21,7 +93,7 @@ describe("ModelsDev catalog loading", () => {
   });
 
   async function writeCacheCatalog(content: unknown): Promise<void> {
-    testCacheDir = join(tmpdir(), `openomni-test-${Date.now()}`);
+    testCacheDir = mkdtempSync(join(tmpdir(), "openomni-models-cache-"));
     process.env.OPENOMNI_MODELS_PATH = join(testCacheDir, "models.json");
     process.env.OPENOMNI_DISABLE_MODELS_FETCH = "1";
     await Bun.write(
@@ -31,59 +103,29 @@ describe("ModelsDev catalog loading", () => {
   }
 
   describe("get", () => {
-    it("should prefer successful network fetch over bundled snapshot when cache is absent", async () => {
-      const fetchedCatalog = {
-        "test-network-provider": {
-          api: "https://attacker.example/v1",
-          id: "test-network-provider",
-          name: "Network Provider",
-          env: ["TEST_NETWORK_PROVIDER_API_KEY"],
-          npm: "@ai-sdk/openai",
-          models: {
-            "test-network-model": {
-              id: "test-network-model",
-              name: "Network Model",
-              provider: { npm: "@ai-sdk/anthropic" },
-            },
-          },
-        },
-      };
-      testCacheDir = join(tmpdir(), `openomni-test-${Date.now()}`);
-      const fakePath = join(testCacheDir, "models.json");
-      process.env.OPENOMNI_MODELS_PATH = fakePath;
+    it.each(remoteCatalogCases)("$name", async ({ catalog, select, expected }) => {
+      testCacheDir = mkdtempSync(join(tmpdir(), "openomni-models-network-"));
+      process.env.OPENOMNI_MODELS_PATH = join(testCacheDir, "models.json");
       delete process.env.OPENOMNI_DISABLE_MODELS_FETCH;
 
       const originalFetch = globalThis.fetch;
       const fetchSpy = Object.assign(
         mock(() =>
           Promise.resolve(
-            new Response(JSON.stringify(fetchedCatalog), {
+            new Response(JSON.stringify(catalog), {
               headers: { "content-type": "application/json" },
               status: 200,
             }),
           ),
         ),
-        {
-          preconnect: originalFetch.preconnect,
-        },
+        { preconnect: originalFetch.preconnect },
       );
       globalThis.fetch = fetchSpy;
 
       try {
         const data = await ModelsDev.get();
         expect(fetchSpy).toHaveBeenCalledTimes(1);
-        expect(data["test-network-provider"]).toEqual({
-          env: ["TEST_NETWORK_PROVIDER_API_KEY"],
-          id: "test-network-provider",
-          models: {
-            "test-network-model": {
-              id: "test-network-model",
-              name: "Network Model",
-            },
-          },
-          name: "Network Provider",
-          npm: "@ai-sdk/openai",
-        });
+        expect(select(data)).toEqual(expected);
       } finally {
         globalThis.fetch = originalFetch;
       }
@@ -111,97 +153,7 @@ describe("ModelsDev catalog loading", () => {
       });
     });
 
-    it("should drop remote custom providers that are not backed by a bundled SDK", async () => {
-      const fetchedCatalog = {
-        custom: {
-          api: "https://attacker.example/v1",
-          id: "custom",
-          name: "Custom Provider",
-          env: ["CUSTOM_API_KEY"],
-          models: {
-            "custom-model": {
-              id: "custom-model",
-              name: "Custom Model",
-            },
-          },
-        },
-      };
-      testCacheDir = join(tmpdir(), `openomni-test-${Date.now()}`);
-      const fakePath = join(testCacheDir, "models.json");
-      process.env.OPENOMNI_MODELS_PATH = fakePath;
-      delete process.env.OPENOMNI_DISABLE_MODELS_FETCH;
 
-      const originalFetch = globalThis.fetch;
-      const fetchSpy = Object.assign(
-        mock(() =>
-          Promise.resolve(
-            new Response(JSON.stringify(fetchedCatalog), {
-              headers: { "content-type": "application/json" },
-              status: 200,
-            }),
-          ),
-        ),
-        {
-          preconnect: originalFetch.preconnect,
-        },
-      );
-      globalThis.fetch = fetchSpy;
-
-      try {
-        const data = await ModelsDev.get();
-        expect(fetchSpy).toHaveBeenCalledTimes(1);
-        expect(data.custom).toBeUndefined();
-      } finally {
-        globalThis.fetch = originalFetch;
-      }
-    });
-
-    it("should not trust model-level provider npm from remote catalog data", async () => {
-      const fetchedCatalog = {
-        openai: {
-          id: "openai",
-          name: "OpenAI",
-          env: ["OPENAI_API_KEY"],
-          npm: "@ai-sdk/openai",
-          models: {
-            "gpt-test": {
-              id: "gpt-test",
-              name: "GPT Test",
-              provider: { npm: "@ai-sdk/anthropic" },
-            },
-          },
-        },
-      };
-      testCacheDir = join(tmpdir(), `openomni-test-${Date.now()}`);
-      const fakePath = join(testCacheDir, "models.json");
-      process.env.OPENOMNI_MODELS_PATH = fakePath;
-      delete process.env.OPENOMNI_DISABLE_MODELS_FETCH;
-
-      const originalFetch = globalThis.fetch;
-      const fetchSpy = Object.assign(
-        mock(() =>
-          Promise.resolve(
-            new Response(JSON.stringify(fetchedCatalog), {
-              headers: { "content-type": "application/json" },
-              status: 200,
-            }),
-          ),
-        ),
-        {
-          preconnect: originalFetch.preconnect,
-        },
-      );
-      globalThis.fetch = fetchSpy;
-
-      try {
-        const data = await ModelsDev.get();
-        const model = data.openai?.models["gpt-test"] as { provider?: unknown } | undefined;
-        expect(fetchSpy).toHaveBeenCalledTimes(1);
-        expect(model?.provider).toBeUndefined();
-      } finally {
-        globalThis.fetch = originalFetch;
-      }
-    });
 
     it("should fall back to the bundled snapshot when the cache sanitizes to nothing", async () => {
       await writeCacheCatalog({
