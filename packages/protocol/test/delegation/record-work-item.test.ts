@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Delegation } from "../index";
+import { Delegation } from "../../src/index.js";
 
 const base = {
   delegationId: "dg-1",

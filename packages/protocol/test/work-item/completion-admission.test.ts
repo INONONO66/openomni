@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { WorkItem } from "./index.js";
+import { WorkItem } from "../../src/index.js";
 
 const baseItem = {
   workItemId: "wi_admission",
@@ -876,9 +876,9 @@ describe("WorkItem completion admission contracts", () => {
 
     expect(parsed.success).toBe(false);
     if (!parsed.success) {
-      expect(parsed.error.issues.map(({ path }) => path)).toContainEqual(
-        [...expectedInvalidTerminalPath[label]],
-      );
+      expect(parsed.error.issues.map(({ path }) => path)).toContainEqual([
+        ...expectedInvalidTerminalPath[label],
+      ]);
     }
   });
 

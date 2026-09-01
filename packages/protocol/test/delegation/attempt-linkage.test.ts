@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Delegation } from "./index.js";
+import { Delegation } from "../../src/index.js";
 
 describe("Delegation.settlementToAttemptOutcome", () => {
   test.each([
@@ -14,8 +14,8 @@ describe("Delegation.settlementToAttemptOutcome", () => {
   });
 
   test("refuses sent — a notify settlement carries no attempt", () => {
-    expect(() =>
-      Delegation.settlementToAttemptOutcome("sent" as never),
-    ).toThrow("notify settlement (sent) carries no attempt to close");
+    expect(() => Delegation.settlementToAttemptOutcome("sent" as never)).toThrow(
+      "notify settlement (sent) carries no attempt to close",
+    );
   });
 });

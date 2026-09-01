@@ -1,10 +1,10 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { composeEffects, PolicyEngine } from "@openomni/policy";
 // Deep import: mergeEntries is engine-internal — the root barrel stopped
 // re-exporting it when its only external reader turned out to be this test.
 import { mergeEntries } from "../src/effects/merge/rules";
 import { Policy, PolicyDecision } from "@openomni/protocol";
-import { dispatchContext } from "./point-test-fixtures";
+import { atPoint, dispatchContext } from "./point-test-fixtures";
 
 describe("PolicyEngine dispatchPoint selection", () => {
   test("passes an immutable canonical context to matching registrations", async () => {
@@ -190,6 +190,40 @@ describe("PolicyEngine dispatchPoint selection", () => {
     expect(decision.verdict).toBe("allow");
     expect(decision.policyId).toBe("agent.policy.composed");
     expect(decision.effects).toEqual([]);
+  });
+
+  test("dispatches run errors with canonical context", async () => {
+    const onError = mock((_context) =>
+      PolicyDecision.deny({
+        policyId: "test.on-error",
+        reasonCodes: ["test-error-abort"],
+        effects: [{ type: "run.abort", reason: "test-error-abort" }],
+      }),
+    );
+    const engine = PolicyEngine.create();
+    engine.register(
+      atPoint("run.error.error", {
+        name: "test:error",
+        priority: 100,
+        effects: ["run.abort"],
+        fn: onError,
+      }),
+    );
+
+    const verdict = await engine.dispatchPoint("run.error.error", {
+      sessionId: "session",
+      runId: "run",
+      errorCode: "test-error",
+      errorPhase: "turn",
+    });
+
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(verdict.verdict).toBe("deny");
+    expect(onError.mock.calls[0]?.[0]).toMatchObject({
+      timing: "error",
+      errorCode: "test-error",
+      errorPhase: "turn",
+    });
   });
 });
 
