@@ -32,6 +32,7 @@ const ORDERED_MIGRATIONS: Migration.Definition[] = [
   { name: "0025_drop_pending_tables/migration.sql" },
   { name: "0026_conversation/migration.sql" },
   { name: "0027_lease/migration.sql" },
+  { name: "0028_approval/migration.sql" },
 ];
 
 const CLEAR_ORDER = [
@@ -41,6 +42,7 @@ const CLEAR_ORDER = [
   "wait",
   "conversation",
   "lease",
+  "approval",
   "engagement",
   "delegation",
   "app_connector_installation",

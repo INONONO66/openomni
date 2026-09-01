@@ -114,5 +114,21 @@ export function createSqliteActorRegistryAdapter(
     removeEndpoint(id) {
       return db.query("DELETE FROM actor_endpoint WHERE id = ?").run(id).changes > 0;
     },
+    countProvisionalSince(channel, workspace, since) {
+      // #P3 §8.12 mint-volume bound: standing lives in the identity JSON —
+      // json_extract keeps the count schema-free (no column migration for a
+      // sweepable-row feature).
+      const row = db
+        .query(
+          `SELECT COUNT(*) AS count
+           FROM actor_identity i
+           JOIN actor_endpoint e ON e.actor_id = i.id
+           WHERE e.channel = ? AND e.workspace = ?
+             AND json_extract(i.data, '$.standing') = 'provisional'
+             AND i.time_created >= ?`,
+        )
+        .get(channel, workspaceKey(workspace), since) as { count: number };
+      return row.count;
+    },
   };
 }
