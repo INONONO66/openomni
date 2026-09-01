@@ -72,7 +72,7 @@ describe("policy no-bypass conformance — agent governed paths", () => {
         isError: false,
       }),
     );
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     engine.register(denyAllInvokePre("native tool denied by conformance policy"));
 
     const executor = createToolExecutor({
@@ -98,7 +98,7 @@ describe("policy no-bypass conformance — agent governed paths", () => {
       }),
     );
     const capturedLabels: string[][] = [];
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     engine.register({
       ...denyAllInvokePre("mcp tool denied by conformance policy"),
       fn: (ctx) => {
@@ -127,7 +127,7 @@ describe("policy no-bypass conformance — agent governed paths", () => {
   });
 
   it("blocks system prompt composition before prompt content is returned", async () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     engine.register(denyAllContextPre("system prompt denied by conformance policy"));
 
     const decision = await engine.dispatchPoint("prompt.context.pre", {

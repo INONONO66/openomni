@@ -1,4 +1,4 @@
-import type { BusEvent, Message, Policy, TraceContext } from "@openomni/protocol";
+import type { BusEvent, Clock, Message, Policy, TraceContext } from "@openomni/protocol";
 
 export type PolicyPointId = keyof typeof Policy.PolicyPoint.Registry;
 
@@ -41,6 +41,7 @@ export type PolicyDecision = Policy.PolicyDecision;
 type AuditEmit = <T>(event: BusEvent.Descriptor<T>, data: T) => void;
 
 export interface PolicyEngineConfig {
+  readonly clock: Clock;
   readonly onDecision?: (decision: Policy.PolicyDecision) => void | Promise<void>;
   readonly traceContext?: TraceContext.Type;
   /**

@@ -9,7 +9,7 @@ import { makeAgentBase, makeTurnArtifacts } from "./lifecycle-dispatch-fixture";
 
 describe("handleStop prompt injection provenance", () => {
   it("preserves assistant role through turn.finish continuation", async () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(
       engine,
       "run.turn.post",

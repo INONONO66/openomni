@@ -32,7 +32,7 @@ describe("PolicyEngine unguarded point dispatch", () => {
   }
 
   test("does not descend into the context when no policy is registered", async () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     const probe = contextWithProbe();
 
     const decision = await engine.dispatchPoint(
@@ -45,7 +45,7 @@ describe("PolicyEngine unguarded point dispatch", () => {
   });
 
   test("descends into the context once a policy is registered at the point", async () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     engine.register({
       kind: "point",
       name: "context-consumer",
@@ -66,7 +66,7 @@ describe("PolicyEngine unguarded point dispatch", () => {
   });
 
   test("still enforces the point contract with no registration", async () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
 
     const decision = await engine.dispatchPoint("dispatch.action.pre", {
       actor: { kind: "system", actorId: "system:test" },
@@ -82,6 +82,7 @@ describe("PolicyEngine unguarded point dispatch", () => {
   test("publishes a composed audit event carrying correlation", async () => {
     const events: Array<{ readonly name: string; readonly data: unknown }> = [];
     const engine = PolicyEngine.create({
+      clock: Date.now,
       auditEmit: (event, data) => events.push({ name: event.name, data }),
     });
     const traceContext = {
@@ -104,6 +105,7 @@ describe("PolicyEngine unguarded point dispatch", () => {
   test("captures accessor-defined correlation into the audit record", async () => {
     const events: Array<{ readonly name: string; readonly data: unknown }> = [];
     const engine = PolicyEngine.create({
+      clock: Date.now,
       auditEmit: (event, data) => events.push({ name: event.name, data }),
     });
     const traceContext = {
@@ -131,6 +133,7 @@ describe("PolicyEngine unguarded point dispatch", () => {
   test("keeps every capturable field when one cannot be captured", async () => {
     const events: Array<{ readonly name: string; readonly data: unknown }> = [];
     const engine = PolicyEngine.create({
+      clock: Date.now,
       auditEmit: (event, data) => events.push({ name: event.name, data }),
     });
     const traceContext = {
@@ -168,7 +171,7 @@ describe("PolicyEngine unguarded point dispatch", () => {
     ["a correlation key", "traceContext"],
     ["an unrelated key", "unrelated"],
   ])("resolves to a verdict when %s throws on read", async (_label, key) => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     const context: Record<string, unknown> = { sessionId: "s", runId: "r", turnIndex: 0 };
     Object.defineProperty(context, key, {
       enumerable: true,
@@ -193,7 +196,7 @@ describe("PolicyEngine unguarded point dispatch", () => {
    * through rather than denied.
    */
   test("allows a context that could not be snapshotted", async () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
 
     const decision = await engine.dispatchPoint("run.turn.pre", {
       sessionId: "session-1",

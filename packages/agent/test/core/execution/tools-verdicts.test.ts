@@ -23,13 +23,13 @@ function verdictPolicy(decision: Policy.PolicyDecision): PolicyRegistration {
 }
 
 function engineWith(decision: Policy.PolicyDecision) {
-  const engine = PolicyEngine.create();
+  const engine = PolicyEngine.create({ clock: Date.now });
   engine.register(verdictPolicy(decision));
   return engine;
 }
 
 function engineWithRegistrations(registrations: PolicyRegistration[]) {
-  const engine = PolicyEngine.create();
+  const engine = PolicyEngine.create({ clock: Date.now });
   for (const registration of registrations) engine.register(registration);
   return engine;
 }
@@ -477,7 +477,7 @@ describe("createToolExecutor effect application", () => {
     const executor = createToolExecutor({
       events: Bus,
       traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
-      engine: PolicyEngine.create(),
+      engine: PolicyEngine.create({ clock: Date.now }),
       getToolLabels: () => ["source:mcp"],
       toolExecutor: async (call) => {
         invoked += 1;

@@ -28,7 +28,7 @@ function expectRegistrationError(
 
 describe("PolicyEngine canonical registration", () => {
   test("accepts explicit effect-free and multi-point capabilities", () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
 
     expect(() =>
       engine.register({
@@ -52,7 +52,7 @@ describe("PolicyEngine canonical registration", () => {
   });
 
   test("exposes no legacy timing dispatch entry point around canonical registrations", async () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     let invocationCount = 0;
 
     engine.register({
@@ -154,7 +154,7 @@ describe("PolicyEngine canonical registration", () => {
   });
 
   test("rejects non-point kind and malformed canonical boundaries with typed errors", () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     const base = { ...registrationDefaults, name: "malformed" };
 
     expectRegistrationError(engine, {
@@ -185,7 +185,7 @@ describe("PolicyEngine canonical registration", () => {
     // scope: { agentType: [] } is the config-filter footgun: it used to mean
     // "unscoped" and silently applied the policy to every agent. Fail-closed
     // at the boundary — unscoped is spelled by omitting agentType.
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
 
     const error = expectRegistrationError(engine, {
       ...registrationDefaults,
@@ -200,7 +200,7 @@ describe("PolicyEngine canonical registration", () => {
   });
 
   test("rejects empty and duplicate point bindings with typed errors", () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     const base = {
       ...registrationDefaults,
       name: "invalid-points",
@@ -215,7 +215,7 @@ describe("PolicyEngine canonical registration", () => {
   });
 
   test("rejects empty, missing, unknown, and unbound capability entries with typed errors", () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     const base = {
       ...registrationDefaults,
       name: "invalid-capabilities",
@@ -243,7 +243,7 @@ describe("PolicyEngine canonical registration", () => {
   });
 
   test("rejects effects outside a point contract's allowed maximum", () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
 
     expectRegistrationError(engine, {
       ...registrationDefaults,
@@ -254,7 +254,7 @@ describe("PolicyEngine canonical registration", () => {
   });
 
   test("rejects duplicate effects with a typed error", () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
 
     expectRegistrationError(engine, {
       ...registrationDefaults,
@@ -265,7 +265,7 @@ describe("PolicyEngine canonical registration", () => {
   });
 
   test("rejects disallowed effects after attempted catalog mutation", () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     const allowedEffects = Policy.PolicyPoint.Registry["run.lifecycle.post"].allowedEffects;
     const mutated = Reflect.set(allowedEffects, allowedEffects.length, "run.abort");
 
@@ -288,7 +288,7 @@ describe("PolicyEngine canonical registration", () => {
 });
 
 test("accepts union-typed registrations through the public engine overload", () => {
-  const engine = PolicyEngine.create<GenericPolicyContext>();
+  const engine = PolicyEngine.create<GenericPolicyContext>({ clock: Date.now });
   const registerUnion = (registration: CanonicalPolicyRegistrationGeneric<GenericPolicyContext>) =>
     engine.register(registration);
 

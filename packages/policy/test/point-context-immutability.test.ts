@@ -8,7 +8,7 @@ cyclic.self = cyclic;
 
 describe("PolicyEngine canonical point context immutability", () => {
   test("rejects Map context before it can mutate across middleware", async () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     const invocations: string[] = [];
     for (const name of ["first-map-policy", "second-map-policy"] as const) {
       engine.register({
@@ -37,7 +37,7 @@ describe("PolicyEngine canonical point context immutability", () => {
   });
 
   test("deeply freezes plain structured records and arrays", async () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     let deeplyFrozen = false;
     engine.register({
       kind: "point",
@@ -77,7 +77,7 @@ describe("PolicyEngine canonical point context immutability", () => {
     { name: "non-plain object", value: new Date(0) },
   ]) {
     test(`returns input-invalid for ${testCase.name} context`, async () => {
-      const engine = PolicyEngine.create();
+      const engine = PolicyEngine.create({ clock: Date.now });
       let invoked = false;
       engine.register({
         kind: "point",
@@ -110,7 +110,7 @@ describe("PolicyEngine canonical point context immutability", () => {
    * `unsupported`, so an emitter under any other key was always refused.
    */
   test("returns input-invalid for an eventEmitter-keyed emitter", async () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     let invoked = false;
     engine.register({
       kind: "point",

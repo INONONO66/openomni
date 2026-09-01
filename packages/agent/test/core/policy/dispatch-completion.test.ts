@@ -22,7 +22,7 @@ function toolHarness(options: {
   execute?: (call: Tool.Call) => Promise<Tool.Result>;
   getContext?: () => Pick<PolicyContext, "steps" | "turnCount" | "elapsedMs" | "usage">;
 }) {
-  const engine = PolicyEngine.create();
+  const engine = PolicyEngine.create({ clock: Date.now });
   registerAt(engine, options.point, "test:policy", 100, options.fn, options.effects);
   const execute =
     options.execute ??

@@ -25,7 +25,7 @@ describe("handleStop (turn.finish + run.finish)", () => {
       expect(ctx.pointId).toBe("run.turn.post");
       return allow();
     });
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(engine, "run.turn.post", {
       name: "test-post-turn",
       priority: 100,
@@ -50,7 +50,7 @@ describe("handleStop (turn.finish + run.finish)", () => {
 
   it("turn.finish inject verdict causes continuation", async () => {
     Bus.reset();
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(
       engine,
       "run.turn.post",
@@ -76,7 +76,7 @@ describe("handleStop (turn.finish + run.finish)", () => {
     Bus.reset();
     const { createUserMessage } = await import("../../../src/core/message-factory");
     const replacement = [createUserMessage("turn replacement", "test")];
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(
       engine,
       "run.turn.post",
@@ -102,7 +102,7 @@ describe("handleStop (turn.finish + run.finish)", () => {
 
   it("turn.finish abort verdict yields complete event with guardAborted", async () => {
     Bus.reset();
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(
       engine,
       "run.turn.post",
@@ -124,7 +124,7 @@ describe("handleStop (turn.finish + run.finish)", () => {
 
   it("turn.finish abort with reason 'stalled' sets finishReason to stalled", async () => {
     Bus.reset();
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(
       engine,
       "run.turn.post",
@@ -147,7 +147,7 @@ describe("handleStop (turn.finish + run.finish)", () => {
 
   it("dispatches run.finish without modifying final text", async () => {
     Bus.reset();
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(engine, "run.lifecycle.post", "test-post-run-transform", 100, () =>
       allow("test.post-run", "observe-final"),
     );

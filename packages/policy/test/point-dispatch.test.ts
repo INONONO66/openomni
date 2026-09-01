@@ -8,7 +8,7 @@ import { atPoint, dispatchContext } from "./point-test-fixtures";
 
 describe("PolicyEngine dispatchPoint selection", () => {
   test("passes an immutable canonical context to matching registrations", async () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     let observedPointId: string | undefined;
     let observedTiming: Policy.Timing | undefined;
     let observedMarker: string | undefined;
@@ -44,7 +44,7 @@ describe("PolicyEngine dispatchPoint selection", () => {
 
   test("keeps generic run completion and canonical WorkItem completion independent", async () => {
     const timing = Policy.Timing.COMPLETION_PREPARE;
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     let observedPointId: string | undefined;
     let observedTiming: Policy.Timing | undefined;
     engine.register({
@@ -76,7 +76,7 @@ describe("PolicyEngine dispatchPoint selection", () => {
   });
 
   test("selects only the requested point and preserves stable priority order", async () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     const order: string[] = [];
     for (const [name, priority] of [
       ["first", 10],
@@ -113,7 +113,7 @@ describe("PolicyEngine dispatchPoint selection", () => {
   });
 
   test("pins the agent type that selected a scoped registration into its context", async () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     let agentTypeReads = 0;
     let observedAgentType: unknown;
     engine.register({
@@ -144,7 +144,7 @@ describe("PolicyEngine dispatchPoint selection", () => {
   });
 
   test("keeps point selection isolated with no legacy dispatch member", async () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     const invocations: string[] = [];
     engine.register({
       kind: "point",
@@ -182,7 +182,7 @@ describe("PolicyEngine dispatchPoint selection", () => {
   });
 
   test("allows valid canonical dispatches with no matching registrations", async () => {
-    const decision = await PolicyEngine.create().dispatchPoint(
+    const decision = await PolicyEngine.create({ clock: Date.now }).dispatchPoint(
       "dispatch.action.pre",
       dispatchContext,
     );
@@ -200,7 +200,7 @@ describe("PolicyEngine dispatchPoint selection", () => {
         effects: [{ type: "run.abort", reason: "test-error-abort" }],
       }),
     );
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     engine.register(
       atPoint("run.error.error", {
         name: "test:error",

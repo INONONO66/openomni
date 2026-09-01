@@ -13,7 +13,7 @@ describe("model dispatch points", () => {
   it("dispatches model.request before provider execution", async () => {
     Bus.reset();
     const fn = mock((_ctx: PolicyContext) => allow());
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(engine, "connection.llm.pre", {
       name: "test-model-request",
       priority: 100,
@@ -38,7 +38,7 @@ describe("model dispatch points", () => {
   it("dispatches model.response after provider execution and exposes outcome type", async () => {
     Bus.reset();
     const fn = mock((_ctx: PolicyContext) => allow("test.model-response", "observe-response"));
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(engine, "connection.llm.post", {
       name: "test-model-response",
       priority: 100,
@@ -66,7 +66,7 @@ describe("model dispatch points", () => {
 
   it("applies model.request prompt injection before provider execution", async () => {
     Bus.reset();
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(
       engine,
       "connection.llm.pre",
@@ -97,7 +97,7 @@ describe("model dispatch points", () => {
     Bus.reset();
     const { createUserMessage } = await import("../../../src/core/message-factory");
     const replacement = [createUserMessage("replacement", "test")];
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(
       engine,
       "connection.llm.post",
@@ -123,7 +123,7 @@ describe("model dispatch points", () => {
 
   it("blocks model.response malformed replacement messages", async () => {
     Bus.reset();
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(
       engine,
       "connection.llm.post",

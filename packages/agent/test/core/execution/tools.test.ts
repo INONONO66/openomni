@@ -7,7 +7,7 @@ import type { PolicyRegistration } from "../../../src/core/policy/types";
 import { abortRun } from "../../helpers/policy-decision";
 
 function makeEngine() {
-  return PolicyEngine.create();
+  return PolicyEngine.create({ clock: Date.now });
 }
 
 function makeCall(id = "call-1", tool = "bash"): Tool.Call {
@@ -192,7 +192,7 @@ describe("createToolExecutor bus events", () => {
       createToolExecutor({
         events: Bus,
         toolExecutor: async () => ({ id: "r", toolCallId: "c", output: "" }),
-        engine: PolicyEngine.create(),
+        engine: PolicyEngine.create({ clock: Date.now }),
       }),
     ).toThrow("tool executor requires a trace context with traceId, sessionId, runId");
   });
