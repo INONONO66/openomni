@@ -50,6 +50,14 @@ export const StreamRegistry = {
     ],
     status: "shipped",
   },
+  // SHIPPED — ledger ApprovalStore publishes; SQLite ledger append/projection consumes.
+  approval: {
+    stream: "approval:<approvalId>",
+    heads: "revision-bound (expectedHead = revision before the transition)",
+    conflictMeans: "duplicate create (id reuse impossible) or stale revision — typed store error",
+    factTypes: ["approval.requested", "approval.decided"],
+    status: "shipped",
+  },
   // SHIPPED — ledger LeaseStore publishes; SQLite ledger append/projection consumes.
   lease: {
     stream: "lease:<leaseId>",

@@ -63,7 +63,8 @@ interface LedgerStreamProducer {
     | "engagement"
     | "gateway_send"
     | "conversation"
-    | "lease";
+    | "lease"
+    | "approval";
   /**
    * Repo-relative paths of the enumerated modules that append this class's
    * facts. A retained protocol class may have no current producer.
@@ -131,6 +132,14 @@ export const LEDGER_PRODUCER_MANIFEST: LedgerProducerManifest = {
       // stream class is born with the table).
       streamClass: "lease",
       producers: ["packages/ledger/src/lease/index.ts"],
+      writes: "append",
+    },
+    {
+      // #P3 approval (docs/conversation-and-message-io.md §6) — one producer:
+      // the ledger ApprovalStore (append-before-CAS, no adoption path — the
+      // stream class is born with the table).
+      streamClass: "approval",
+      producers: ["packages/ledger/src/approval/index.ts"],
       writes: "append",
     },
     {

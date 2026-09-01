@@ -14,6 +14,7 @@ export { ChannelGrantStore } from "./channel-grant/index.js";
 export { WorkItemStore } from "./work-item/index.js";
 export { WorkItemAttemptRun } from "./work-item/attempt-run.js";
 export { ConversationStore } from "./conversation/index.js";
+export { ApprovalStore } from "./approval/index.js";
 export { LeaseStore } from "./lease/index.js";
 export { WaitStore } from "./wait/index.js";
 export { EngagementStore } from "./engagement/index.js";
