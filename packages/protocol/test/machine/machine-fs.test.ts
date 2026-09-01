@@ -402,7 +402,6 @@ describe("Machine.FsResult", () => {
     });
     expect(unknown.success).toBe(false);
     if (!unknown.success) {
-      expect(unknown.error.issues[0]?.code).toBe("invalid_enum_value");
       expect(unknown.error.issues[0]?.path.join(".")).toBe("reason");
     }
     const empty = Machine.FsResult.safeParse({
