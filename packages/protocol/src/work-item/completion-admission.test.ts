@@ -159,6 +159,10 @@ const validInput = {
   completionTerminalReceipt,
 };
 
+function validateTerminalLinkage(input: unknown) {
+  return WorkItem.validateCompletionTerminalLinkage(WorkItem.Info.parse(input));
+}
+
 function reservationBridge(id: string) {
   return WorkItem.CompletionRequestReservation.parse({
     version: 1,
@@ -670,18 +674,184 @@ describe("WorkItem completion admission contracts", () => {
     ).toBe(false);
   });
 
+  test("enforces terminal receipt linkage in the explicit durability fold", () => {
+    const ownerRefutedResult = WorkItem.CriterionResult.parse({
+      ...terminalResult,
+      id: "result:terminal-owner-refuted",
+      value: "refuted",
+      checkedPredicate: "Owner accepted the known verification failure",
+    });
+    const ownerUnresolvedCriterion = {
+      id: WorkItem.criterionId(baseItem.workItemId, 1, "accept the residual risk"),
+      revision: 1,
+      statement: "accept the residual risk",
+      required: true,
+    };
+    const ownerAdmission = WorkItem.CompletionAdmission.parse({
+      ...admission,
+      id: "admission:owner-override",
+      decision: "owner_override",
+      effectiveResultIds: [ownerRefutedResult.id],
+      unresolvedCriterionIds: [ownerUnresolvedCriterion.id],
+      ownerOverrideReceiptRef: "owner-receipt:terminal",
+      proposedFactIds: { ...admission.proposedFactIds, results: [ownerRefutedResult.id] },
+    });
+    const ownerOverrideInput = {
+      ...validInput,
+      acceptanceCriteria: [...validInput.acceptanceCriteria, ownerUnresolvedCriterion.statement],
+      completionFacts: {
+        ...completionFacts,
+        criteria: [...completionFacts.criteria, ownerUnresolvedCriterion],
+        results: [ownerRefutedResult],
+        admissions: [ownerAdmission],
+      },
+      completionTerminalReceipt: {
+        ...completionTerminalReceipt,
+        admissionId: ownerAdmission.id,
+      },
+    };
+
+    expect(validateTerminalLinkage(validInput).success).toBe(true);
+    expect(validateTerminalLinkage(ownerOverrideInput).success).toBe(true);
+    const missingCriterionClaim = {
+      ...terminalClaim,
+      criterionId: "criterion:missing",
+    };
+    const invalidOwnerClaim = validateTerminalLinkage({
+      ...ownerOverrideInput,
+      completionFacts: {
+        ...ownerOverrideInput.completionFacts,
+        claims: [missingCriterionClaim],
+      },
+    });
+    expect(invalidOwnerClaim.success).toBe(false);
+    if (!invalidOwnerClaim.success) {
+      expect(invalidOwnerClaim.error.issues.map(({ path }) => path)).toContainEqual([
+        "completionFacts",
+        "claims",
+        0,
+        "criterionId",
+      ]);
+    }
+    const directOwnerAdmission = WorkItem.CompletionAdmission.parse({
+      ...ownerAdmission,
+      id: "admission:owner-direct",
+      effectiveResultIds: [],
+      unresolvedCriterionIds: [terminalCriterionId],
+      proposedFactIds: { ...ownerAdmission.proposedFactIds, results: [] },
+    });
+    expect(
+      validateTerminalLinkage({
+        ...validInput,
+        completionFacts: {
+          ...completionFacts,
+          results: [],
+          admissions: [directOwnerAdmission],
+        },
+        completionTerminalReceipt: {
+          ...completionTerminalReceipt,
+          admissionId: directOwnerAdmission.id,
+        },
+      }).success,
+    ).toBe(true);
+    expect(
+      validateTerminalLinkage({ ...validInput, revision: 3, outcome: "adopted" }).success,
+    ).toBe(true);
+    const missingTerminalEvidence = validateTerminalLinkage({
+      ...validInput,
+      evidence: [],
+    });
+    expect(missingTerminalEvidence.success).toBe(false);
+    if (!missingTerminalEvidence.success) {
+      expect(missingTerminalEvidence.error.issues.map(({ path }) => path)).toContainEqual([
+        "completionReport",
+        "claims",
+        0,
+        "evidenceIds",
+        0,
+      ]);
+    }
+    const terminalEvidence = validInput.evidence[0];
+    if (!terminalEvidence) throw new Error("terminal evidence fixture is missing");
+    for (const evidence of [
+      [{ ...terminalEvidence, passed: false }, terminalEvidence],
+      [terminalEvidence, { ...terminalEvidence, passed: false }],
+    ]) {
+      const duplicateTerminalEvidence = validateTerminalLinkage({
+        ...validInput,
+        evidence,
+      });
+      expect(duplicateTerminalEvidence.success).toBe(false);
+      if (!duplicateTerminalEvidence.success) {
+        expect(duplicateTerminalEvidence.error.issues.map(({ path }) => path)).toContainEqual([
+          "evidence",
+          1,
+          "id",
+        ]);
+      }
+    }
+    for (const [field, value] of [
+      ["subjectRef", "wi_other"],
+      ["basisRef", "basis:other"],
+    ] as const) {
+      const foreignObservation = validateTerminalLinkage({
+        ...validInput,
+        completionFacts: {
+          ...completionFacts,
+          observations: [{ ...terminalObservation, [field]: value }],
+        },
+      });
+      expect(foreignObservation.success).toBe(false);
+      if (!foreignObservation.success) {
+        expect(foreignObservation.error.issues.map(({ path }) => path)).toContainEqual([
+          "completionFacts",
+          "observations",
+          0,
+          field,
+        ]);
+      }
+    }
+    const danglingClaim = {
+      ...terminalClaim,
+      observationIds: [...terminalClaim.observationIds, "observation:missing"],
+    };
+    const danglingClaimObservation = validateTerminalLinkage({
+      ...validInput,
+      completionFacts: {
+        ...completionFacts,
+        claims: [danglingClaim],
+      },
+    });
+    expect(danglingClaimObservation.success).toBe(false);
+    if (!danglingClaimObservation.success) {
+      expect(danglingClaimObservation.error.issues.map(({ path }) => path)).toContainEqual([
+        "completionFacts",
+        "claims",
+        0,
+        "observationIds",
+        1,
+      ]);
+    }
+  });
+
   test("parses completion terminal fields without exercising product authority", () => {
     expect(WorkItem.Info.safeParse(validInput).success).toBe(true);
   });
 
-  test.each(invalidTerminalInputs)("leaves terminal judgment to the app: %s", (_label, input) => {
+  test.each(
+    invalidTerminalInputs,
+  )("leaves terminal judgment to the durability fold: %s", (label, input) => {
     expect(WorkItem.Info.safeParse(input).success).toBe(true);
+    expect(validateTerminalLinkage(input).success).toBe(label === "blocked-terminal-decision");
   });
 
   test.each(
     terminalLinkageDefenses,
-  )("does not perform completion authority during parse: %s", (_label, input) => {
+  )("does not perform completion authority during parse: %s", (label, input) => {
     expect(WorkItem.Info.safeParse(input).success).toBe(true);
+    expect(validateTerminalLinkage(input).success).toBe(
+      label !== "blocked-admission-unknown-unresolved-criterion",
+    );
   });
 
   test("requires checked predicates only for decisive criterion results", () => {
