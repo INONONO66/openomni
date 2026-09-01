@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -67,6 +68,31 @@ describe("ChannelGrantStore SQLite persistence", () => {
   afterEach(async () => {
     Storage.reset();
     await rm(tmpDir, { recursive: true });
+  });
+
+  test("persists grant JSON bytes without resolution-derived normalization", () => {
+    ChannelGrantStore.put({
+      id: "grant-byte-fixture",
+      surface: "discord",
+      workspace: "guild",
+      channel: "design",
+      kind: "broadcast_channel",
+      defaultTier: "observer",
+      inboundTreatment: "full_access",
+      createdBy: "act_owner",
+      createdAt: 100,
+      updatedAt: 200,
+    });
+
+    const reader = new Database(dbPath, { readonly: true });
+    const row = reader
+      .query("SELECT data FROM channel_grant WHERE id = ?")
+      .get("grant-byte-fixture") as { data: string };
+    reader.close();
+
+    expect(row.data).toBe(
+      '{"id":"grant-byte-fixture","surface":"discord","workspace":"guild","channel":"design","kind":"broadcast_channel","defaultTier":"observer","inboundTreatment":"full_access","createdBy":"act_owner","createdAt":100,"updatedAt":200}',
+    );
   });
 
   test("persists and resolves the most specific matching grant", () => {
