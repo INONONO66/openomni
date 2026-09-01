@@ -1,6 +1,6 @@
 import { Conversation, type Storage as ProtocolStorage } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
-import { isSqliteBusyError } from "../storage/sqlite-busy";
+import { commitFact, runCommitTransaction } from "../storage/commit-coordinator";
 import { Storage } from "../storage/storage";
 
 // Durable Conversation writes fail closed: a missing sub-adapter is a typed
@@ -54,20 +54,18 @@ function revisionConflict(
   });
 }
 
-/** SQLITE_BUSY at the transaction entry means nothing committed — typed `unavailable`. */
+/** SQLITE_BUSY means nothing committed — map it to Conversation's typed taxonomy. */
 function runConversationTransaction<T>(conversationId: string, write: () => T): T {
-  try {
-    return Storage.get().transaction(write);
-  } catch (error) {
-    if (isSqliteBusyError(error)) {
-      throw new Conversation.StoreError({
-        message: `Conversation storage busy: ${conversationId} — ${error instanceof Error ? error.message : String(error)}`,
+  return runCommitTransaction(
+    Storage.get(),
+    write,
+    (cause) =>
+      new Conversation.StoreError({
+        message: `Conversation storage busy: ${conversationId} — ${cause instanceof Error ? cause.message : String(cause)}`,
         code: "unavailable",
         conversationId,
-      });
-    }
-    throw error;
-  }
+      }),
+  );
 }
 
 type Outcome = Conversation.CloseOutcome | Conversation.OutboundOutcome | Conversation.InboundOutcome;
@@ -156,26 +154,28 @@ export namespace ConversationStore {
         conversationId: record.id,
       });
     runConversationTransaction(record.id, () => {
-      const appended = ledger.append(
+      const committed = commitFact(
+        ledger,
         {
           streamId: streamId(record.id),
-          type: "conversation.opened",
-          data: {
-            contactId: record.contactId,
-            endpointId: record.endpointId,
-            ownerKind: record.ownerRef.kind,
-            ownerId: record.ownerRef.id,
-            openedBy: record.openedBy,
-            expiresAt: record.policy.expiresAt,
-            revision: record.revision,
+          expectedHead: 0,
+          fact: {
+            type: "conversation.opened",
+            data: {
+              contactId: record.contactId,
+              endpointId: record.endpointId,
+              ownerKind: record.ownerRef.kind,
+              ownerId: record.ownerRef.id,
+              openedBy: record.openedBy,
+              expiresAt: record.policy.expiresAt,
+              revision: record.revision,
+            },
           },
         },
-        0,
+        () => adapter.create(record) || false,
       );
-      // A non-empty stream means this id was already opened; a failed INSERT
-      // receipt aborts the transaction, rolling the appended fact back.
-      if (appended.kind === "cas_conflict") throw duplicate();
-      if (!adapter.create(record)) throw duplicate();
+      // A non-empty stream means this id was already opened.
+      if (committed.kind !== "committed") throw duplicate();
     });
     Bus.publish(Conversation.Events.Opened, {
       ...eventBase(record, traceId, record.createdAt),
@@ -223,17 +223,12 @@ export namespace ConversationStore {
     if (outcome.kind === "unchanged" || outcome.kind === "refused") return outcome;
     const fact = factOf(outcome);
     runConversationTransaction(id, () => {
-      const appended = ledger.append(
-        { streamId: streamId(id), type: fact.type, data: fact.data },
-        current.revision,
+      const committed = commitFact(
+        ledger,
+        { streamId: streamId(id), expectedHead: current.revision, fact },
+        () => adapter.compareAndSet(id, current.revision, outcome.record) || false,
       );
-      if (appended.kind === "cas_conflict") throw revisionConflict(id, current.revision);
-      if (!adapter.compareAndSet(id, current.revision, outcome.record)) {
-        // Unreachable while every writer goes through this transaction; kept
-        // as the explosive backstop — rollback discards the appended fact so
-        // head and revision still agree.
-        throw revisionConflict(id, current.revision);
-      }
+      if (committed.kind !== "committed") throw revisionConflict(id, current.revision);
     });
     publishChange(outcome, traceId);
     return outcome;
