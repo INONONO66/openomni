@@ -682,7 +682,10 @@ function selfTest(): void {
     ],
     [
       "S8: a driver may not relative-import into src/router/",
-      isChannelsDriverRouterEdge("packages/channels/src/provider/discord/surface.ts", "../router/index.js"),
+      isChannelsDriverRouterEdge(
+        "packages/channels/src/provider/discord/surface.ts",
+        "../../router/index.js",
+      ),
     ],
     [
       "S8: channel-authn (driver band) may not reach the router",
