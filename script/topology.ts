@@ -3,6 +3,13 @@ import { join } from "node:path";
 
 export type DependencyBand = "none" | "any-except-self" | readonly string[];
 
+export interface CoverageLane {
+  readonly displayName: string;
+  readonly dir: string;
+  /** Workspace-relative source root owned by this lane. */
+  readonly sourceRoot: "src/" | ".";
+}
+
 export interface WorkspaceTopology {
   readonly key: string;
   readonly displayName: string;
@@ -180,8 +187,7 @@ export const TOPOLOGY = [
       "@openomni/machines",
     ],
     testLane: true,
-    // Apps intentionally do not participate in the package coverage ratchet.
-    coverageLane: false,
+    coverageLane: true,
     knipWorkspace: true,
     tsconfigVerify: true,
   },
@@ -240,8 +246,20 @@ export function assertTopologyComplete(
   }
 }
 
-export const coverageWorkspaces = (topology: readonly WorkspaceTopology[] = TOPOLOGY) =>
-  topology.filter((workspace) => workspace.coverageLane);
+const SCRIPT_COVERAGE_LANE: CoverageLane = {
+  displayName: "scripts",
+  dir: "script",
+  sourceRoot: ".",
+};
+
+export const coverageLanes = (
+  topology: readonly WorkspaceTopology[] = TOPOLOGY,
+): readonly CoverageLane[] => [
+  ...topology
+    .filter((workspace) => workspace.coverageLane)
+    .map(({ displayName, dir }) => ({ displayName, dir, sourceRoot: "src/" as const })),
+  SCRIPT_COVERAGE_LANE,
+];
 
 export const knipWorkspaces = (topology: readonly WorkspaceTopology[] = TOPOLOGY) =>
   topology.filter((workspace) => workspace.knipWorkspace);
@@ -250,15 +268,28 @@ export const tsconfigWorkspaces = (topology: readonly WorkspaceTopology[] = TOPO
   topology.filter((workspace) => workspace.tsconfigVerify);
 
 export function ciTestSteps(topology: readonly WorkspaceTopology[] = TOPOLOGY): string {
-  return topology
+  const workspaceSteps = topology
     .filter((workspace) => workspace.testLane)
-    .map((workspace) => {
-      const command =
+    .map((workspace) => ({
+      command:
         workspace.ciTestCommand ??
         (workspace.coverageLane
           ? "bun test --timeout 15000 --coverage --coverage-reporter=lcov --coverage-dir=coverage"
-          : "bun test --timeout 15000");
-      return `      - name: Test (${workspace.displayName})\n        run: ${command}\n        working-directory: ${workspace.dir}`;
-    })
+          : "bun test --timeout 15000"),
+      dir: workspace.dir,
+      displayName: workspace.displayName,
+    }));
+  const scriptStep = {
+    command:
+      "bun test --timeout 15000 --coverage --coverage-reporter=lcov --coverage-dir=coverage",
+    dir: SCRIPT_COVERAGE_LANE.dir,
+    displayName: SCRIPT_COVERAGE_LANE.displayName,
+  };
+
+  return [...workspaceSteps, scriptStep]
+    .map(
+      ({ command, dir, displayName }) =>
+        `      - name: Test (${displayName})\n        run: ${command}\n        working-directory: ${dir}`,
+    )
     .join("\n");
 }

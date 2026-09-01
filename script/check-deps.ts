@@ -406,7 +406,8 @@ async function validateChannelsIntraPackageBanding(): Promise<string[]> {
 async function validateDeepImports(): Promise<string[]> {
   const violations: string[] = [];
   // Matches both `from "@openomni/.../src/..."` and side-effect `import "@openomni/.../src/..."`
-  const importPattern = /(?:from\s+|import\s+|import\s*\(\s*)["'](@openomni\/[^"']+\/src\/[^"']*)["']/g;
+  const importPattern =
+    /(?:from\s+|import\s+|import\s*\(\s*)["'](@openomni\/[^"']+\/src\/[^"']*)["']/g;
   const sourceGlob = new Glob("**/*.ts");
 
   for await (const filePath of sourceGlob.scan({
@@ -528,10 +529,7 @@ async function validateGoldenPrinciples(): Promise<string[]> {
 
     // #7: No catch-all filenames
     const basename = filePath.split("/").pop() ?? "";
-    if (
-      /^(utils|helpers|common|service)\.ts$/.test(basename) &&
-      filePath.includes("/src/")
-    ) {
+    if (/^(utils|helpers|common|service)\.ts$/.test(basename) && filePath.includes("/src/")) {
       violations.push(
         `VIOLATION: ${filePath} — catch-all filename detected. See docs/golden-principles.local.md #7`,
       );
@@ -584,9 +582,7 @@ async function checkDocFreshness(): Promise<string[]> {
 
     try {
       // Empty hash means no git history (untracked or new file).
-      const lastTouchHash = (
-        await gitOutput(["log", "-1", "--format=%H", "--", docPath])
-      ).trim();
+      const lastTouchHash = (await gitOutput(["log", "-1", "--format=%H", "--", docPath])).trim();
       if (!lastTouchHash) continue;
 
       const commitsSince = Number.parseInt(
@@ -641,7 +637,10 @@ function selfTest(): void {
     ["external packages are never layered", isAllowedSourceDep(twoTier, "zod")],
     [
       "S8: a channels driver may not import the policy engine",
-      isChannelsBandingViolation("packages/channels/src/provider/discord/surface.ts", "@openomni/policy"),
+      isChannelsBandingViolation(
+        "packages/channels/src/provider/discord/surface.ts",
+        "@openomni/policy",
+      ),
     ],
     [
       "S8: channels authn (perimeter judgment) may import the policy engine",
@@ -649,7 +648,10 @@ function selfTest(): void {
     ],
     [
       "S8: drivers keep the whitelisted contract deps",
-      !isChannelsBandingViolation("packages/channels/src/provider/discord/surface.ts", "@openomni/protocol"),
+      !isChannelsBandingViolation(
+        "packages/channels/src/provider/discord/surface.ts",
+        "@openomni/protocol",
+      ),
     ],
     [
       "S8: the banding rule scopes to the channels package only",
@@ -657,7 +659,10 @@ function selfTest(): void {
     ],
     [
       "S8: a channels driver may not import the ledger",
-      isChannelsBandingViolation("packages/channels/src/provider/telegram/surface.ts", "@openomni/ledger"),
+      isChannelsBandingViolation(
+        "packages/channels/src/provider/telegram/surface.ts",
+        "@openomni/ledger",
+      ),
     ],
     [
       "S8: the gateway router may import the ledger",
@@ -851,8 +856,10 @@ async function main(): Promise<void> {
   process.exit(1);
 }
 
-main().catch((error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error);
-  console.error(`ERROR: ${message}`);
-  process.exit(1);
-});
+if (import.meta.main) {
+  main().catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`ERROR: ${message}`);
+    process.exit(1);
+  });
+}

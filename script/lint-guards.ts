@@ -338,8 +338,10 @@ function lineNumberForOffset(source: string, offset: number): number {
   return line;
 }
 
-main().catch((error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error);
-  process.stderr.write(`ERROR: ${message}\n`);
-  process.exit(1);
-});
+if (import.meta.main) {
+  main().catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`ERROR: ${message}\n`);
+    process.exit(1);
+  });
+}
