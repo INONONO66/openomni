@@ -199,26 +199,28 @@ function selfTest(): void {
   console.log("OK: import-cycle self-test — planted cycle red, acyclic green, type edges erased");
 }
 
-if (process.argv.includes("--self-test")) {
-  selfTest();
-} else {
-  let graph: Map<string, readonly string[]>;
-  try {
-    assertTopologyComplete();
-    graph = buildGraph();
-  } catch (error) {
-    console.error(`ERROR: ${error instanceof Error ? error.message : String(error)}`);
-    process.exit(1);
-  }
-  const cycles = findCycles(graph);
-  if (cycles.length > 0) {
-    for (const cycle of cycles) {
-      console.error(`CYCLE: ${cycle.map((file) => relative(root, file)).join("\n    -> ")}`);
+if (import.meta.main) {
+  if (process.argv.includes("--self-test")) {
+    selfTest();
+  } else {
+    let graph: Map<string, readonly string[]>;
+    try {
+      assertTopologyComplete();
+      graph = buildGraph();
+    } catch (error) {
+      console.error(`ERROR: ${error instanceof Error ? error.message : String(error)}`);
+      process.exit(1);
     }
-    console.error(
-      `\n${cycles.length} value-import cycle(s) found — baseline is 0. Break the cycle (extract a shared leaf module) instead of adding to it.`,
-    );
-    process.exit(1);
+    const cycles = findCycles(graph);
+    if (cycles.length > 0) {
+      for (const cycle of cycles) {
+        console.error(`CYCLE: ${cycle.map((file) => relative(root, file)).join("\n    -> ")}`);
+      }
+      console.error(
+        `\n${cycles.length} value-import cycle(s) found — baseline is 0. Break the cycle (extract a shared leaf module) instead of adding to it.`,
+      );
+      process.exit(1);
+    }
+    console.log(`OK: import-cycle check — ${graph.size} modules, 0 value-import cycles`);
   }
-  console.log(`OK: import-cycle check — ${graph.size} modules, 0 value-import cycles`);
 }

@@ -50,8 +50,8 @@
     "pct": 99.11
   },
   "script": {
-    "linesFound": 1245,
-    "linesHit": 950,
-    "pct": 76.31
+    "linesFound": 3810,
+    "linesHit": 1167,
+    "pct": 30.63
   }
 }

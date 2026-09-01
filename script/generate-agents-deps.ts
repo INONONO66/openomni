@@ -19,7 +19,9 @@ function renderDependencies(dependencies: DependencyBand): string {
 }
 
 function renderWorkspaceName(workspace: WorkspaceTopology): string {
-  return workspace.dir.startsWith("apps/") ? workspace.dir : shortPackageName(workspace.packageName);
+  return workspace.dir.startsWith("apps/")
+    ? workspace.dir
+    : shortPackageName(workspace.packageName);
 }
 
 export function renderTopology(topology: readonly WorkspaceTopology[] = TOPOLOGY): string {
@@ -67,17 +69,25 @@ function replaceGeneratedSection(document: string, generated: string): string {
   return `${document.slice(0, start)}${generated}${document.slice(afterEnd)}`;
 }
 
-const current = await Bun.file(AGENTS_PATH).text();
-const expected = replaceGeneratedSection(current, renderTopology());
+async function main(): Promise<void> {
+  const current = await Bun.file(AGENTS_PATH).text();
+  const expected = replaceGeneratedSection(current, renderTopology());
 
-if (process.argv.includes("--check")) {
-  if (current !== expected) {
-    console.error("AGENTS.md dependency topology is stale. Run: bun run script/generate-agents-deps.ts");
-    process.exitCode = 1;
+  if (process.argv.includes("--check")) {
+    if (current !== expected) {
+      console.error(
+        "AGENTS.md dependency topology is stale. Run: bun run script/generate-agents-deps.ts",
+      );
+      process.exitCode = 1;
+    } else {
+      console.log("AGENTS.md dependency topology is current");
+    }
   } else {
-    console.log("AGENTS.md dependency topology is current");
+    await Bun.write(AGENTS_PATH, expected);
+    console.log("Updated AGENTS.md dependency topology");
   }
-} else {
-  await Bun.write(AGENTS_PATH, expected);
-  console.log("Updated AGENTS.md dependency topology");
+}
+
+if (import.meta.main) {
+  await main();
 }
