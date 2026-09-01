@@ -64,7 +64,7 @@ describe("StorageUnavailableError", () => {
   test.each([0, "", undefined])("retains an explicitly provided storage cause: %p", (cause) => {
     const error = new StorageUnavailableError("work-item", "wi-falsy", cause);
 
-    expect(Object.prototype.hasOwnProperty.call(error, "cause")).toBe(true);
+    expect(Object.hasOwn(error, "cause")).toBe(true);
     expect(Reflect.get(error, "cause")).toBe(cause);
   });
 });
