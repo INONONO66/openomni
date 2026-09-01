@@ -325,6 +325,12 @@ describe("Delegation.Record durable shape", () => {
     );
   });
 
+  test("an open record cannot carry a wake receipt", () => {
+    expect(recordIssueAt({ ...OPEN_RECORD, wokenAt: 5 }, "wokenAt")).toBe(
+      "an open record carries no wake receipt",
+    );
+  });
+
   test("wokenAt is a wall-clock instant — negatives refused", () => {
     expect(
       Delegation.Record.safeParse({

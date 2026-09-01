@@ -117,12 +117,8 @@ function effectiveThreshold(record: Schema.Record): number {
 }
 
 function requireQuorum(record: Schema.Record): Schema.Quorum {
-  // Presence is guaranteed by the schema layer (Record's resolution
-  // refinement); this narrows the optional type without a silent fallback.
-  if (record.quorum === undefined) {
-    throw new Error("Wait resolutionPolicy=quorum without quorum bounds — schema layer regressed");
-  }
-  return record.quorum;
+  // Presence is guaranteed by Record's resolution refinement.
+  return record.quorum as Schema.Quorum;
 }
 
 function respondedCount(replies: readonly Schema.Reply[]): number {

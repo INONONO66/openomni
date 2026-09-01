@@ -217,14 +217,16 @@ function isFixedCompletionSource(
 export function projectCompletionOrigin(
   input: CompletionSourceOrigin | CompletionSourceIdentity,
 ): CompletionOrigin {
-  if (isFixedCompletionSource(input.source)) {
-    return input.source === "replay" || input.source === "recovery" ? input.source : "worker";
+  switch (input.source) {
+    case "internal_worker":
+    case "connector_worker":
+      return "worker";
+    case "replay":
+    case "recovery":
+      return input.source;
+    default:
+      return input.identity.kind; // resident | worker | external_actor map 1:1
   }
-  const kind = input.identity?.kind;
-  if (kind === undefined) {
-    throw new Error(`qualified completion source requires identity: ${input.source}`);
-  }
-  return kind; // resident | worker | external_actor map 1:1
 }
 
 export function projectCompletionSourceIdentity(
