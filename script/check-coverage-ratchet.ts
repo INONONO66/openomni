@@ -1,15 +1,13 @@
 /**
- * Per-package line-coverage ratchet.
+ * Per-lane line-coverage ratchet.
  *
- * Each CI test step emits an lcov report (`bun test --coverage
- * --coverage-reporter=lcov --coverage-dir=coverage`). This script reads
- * `coverage/lcov.info` under every `packages/` and `apps/` workspace dir,
- * computes each package's line coverage over its OWN `src/` files, and
- * compares against the grandfathered baseline. Only `src/` records count:
- * bun's lcov also lists cross-package files loaded through workspace imports
- * (`../protocol/src/...` — ledger tests must not get credit for protocol
- * lines), compiled `dist/` duplicates (which would tie the number to build
- * staleness), and `test/` harness files.
+ * Each CI coverage step emits an lcov report (`bun test --coverage
+ * --coverage-reporter=lcov --coverage-dir=coverage`). This script reads each
+ * lane's `coverage/lcov.info`, computes coverage over the source root that
+ * lane owns, and compares it against the grandfathered baseline. Workspace
+ * lanes own `src/`; the repository-tooling lane owns top-level `script/*.ts`.
+ * Foreign workspace imports, compiled `dist/` duplicates, and test harnesses
+ * never give a lane coverage credit.
  *
  * Failure modes:
  *   - a package's coverage fell more than TOLERANCE_PP below its baseline
@@ -32,7 +30,7 @@
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
-import { assertTopologyComplete, coverageWorkspaces, TOPOLOGY } from "./topology";
+import { assertTopologyComplete, coverageLanes, TOPOLOGY } from "./topology";
 
 const BASELINE_PATH = "script/conformance/coverage-baseline.json";
 // 0.5pp absorbs the measured stable macOS<->ubuntu platform offset (coordinator
@@ -60,11 +58,14 @@ export function coveragePct(linesFound: number, linesHit: number): number {
 }
 
 /**
- * Sums LF/LH over the package's own source records. `SF:` paths are relative
- * to the package dir the suite ran in; only `src/` records count (see header
- * for why `../`, `dist/`, and `test/` records are skipped).
+ * Sums LF/LH over a lane's own source records. `SF:` paths are relative to
+ * the directory where the suite ran. Workspace lanes own `src/`; `script/`
+ * owns its top-level non-test TypeScript modules.
  */
-export function parseLcovSummary(lcovText: string): PackageCoverage {
+export function parseLcovSummary(
+  lcovText: string,
+  sourceRoot: "src/" | "." = "src/",
+): PackageCoverage {
   let linesFound = 0;
   let linesHit = 0;
   let currentFile = "";
@@ -82,7 +83,14 @@ export function parseLcovSummary(lcovText: string): PackageCoverage {
     } else if (line.startsWith("LH:")) {
       fileHit = Number(line.slice(3));
     } else if (line === "end_of_record") {
-      if (currentFile.startsWith("src/")) {
+      const isOwned =
+        sourceRoot === "src/"
+          ? currentFile.startsWith(sourceRoot)
+          : !currentFile.includes("/") &&
+            /\.tsx?$/.test(currentFile) &&
+            !currentFile.endsWith(".test.ts") &&
+            !currentFile.endsWith(".test.tsx");
+      if (isOwned) {
         linesFound += fileFound;
         linesHit += fileHit;
       }
@@ -150,23 +158,24 @@ export function compareCoverage(
 
 async function collectCurrentCoverage(): Promise<Record<string, PackageCoverage>> {
   const collected: Record<string, PackageCoverage> = {};
-  for (const workspace of TOPOLOGY) {
-    const reportPath = `${workspace.dir}/coverage/lcov.info`;
-    const report = Bun.file(reportPath);
-    if (!(await report.exists())) continue;
-    if (!workspace.coverageLane) {
+  for (const workspace of TOPOLOGY.filter((candidate) => !candidate.coverageLane)) {
+    if (await Bun.file(`${workspace.dir}/coverage/lcov.info`).exists()) {
       throw new Error(
         `${workspace.dir}: coverage report exists but topology explicitly sets coverageLane: false`,
       );
     }
-    collected[workspace.dir] = parseLcovSummary(await report.text());
+  }
+  for (const lane of coverageLanes()) {
+    const report = Bun.file(`${lane.dir}/coverage/lcov.info`);
+    if (!(await report.exists())) continue;
+    collected[lane.dir] = parseLcovSummary(await report.text(), lane.sourceRoot);
   }
   return Object.fromEntries(Object.entries(collected).sort(([a], [b]) => a.localeCompare(b)));
 }
 
 function readBaseline(): CoverageBaseline {
   const baseline = JSON.parse(readFileSync(BASELINE_PATH, "utf8")) as CoverageBaseline;
-  const expected = coverageWorkspaces().map((workspace) => workspace.dir).sort();
+  const expected = coverageLanes().map((lane) => lane.dir).sort();
   const actual = Object.keys(baseline).sort();
   if (actual.join("\n") !== expected.join("\n")) {
     throw new Error(
@@ -210,6 +219,21 @@ function selfTest(): void {
   if (parsed.linesFound !== 4 || parsed.linesHit !== 3 || parsed.pct !== 75) {
     failures.push(
       `lcov parser wrong: expected 3/4 src/ lines (75%), got ${parsed.linesHit}/${parsed.linesFound} (${parsed.pct}%)`,
+    );
+  }
+
+  const parsedScript = parseLcovSummary(
+    lcovFixture([
+      { file: "check.ts", hits: [1, 0] },
+      { file: "check.test.ts", hits: [1, 1] },
+      { file: "conformance/helper.ts", hits: [1, 1] },
+      { file: "../packages/protocol/src/foreign.ts", hits: [1, 1] },
+    ]),
+    ".",
+  );
+  if (parsedScript.linesFound !== 2 || parsedScript.linesHit !== 1 || parsedScript.pct !== 50) {
+    failures.push(
+      `lcov parser wrong: expected 1/2 top-level script lines (50%), got ${parsedScript.linesHit}/${parsedScript.linesFound} (${parsedScript.pct}%)`,
     );
   }
 
@@ -313,7 +337,7 @@ async function main(): Promise<void> {
 
   assertTopologyComplete();
   const current = await collectCurrentCoverage();
-  const expectedCoverageDirs = coverageWorkspaces().map((workspace) => workspace.dir).sort();
+  const expectedCoverageDirs = coverageLanes().map((lane) => lane.dir).sort();
 
   if (args.has("--update")) {
     const actualCoverageDirs = Object.keys(current).sort();
