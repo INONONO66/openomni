@@ -1,7 +1,17 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
-import { chmodSync, existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createInterface } from "node:readline";
+import { Readable } from "node:stream";
 import { createCliDeps } from "../src/cli/main";
 
 const entry = new URL("../src/cli/main.ts", import.meta.url).pathname;
@@ -14,6 +24,8 @@ const MUTATED_ENV_KEYS = [
   "OPENOMNI_MODEL_PROVIDER",
   "OPENOMNI_MODEL_ID",
   "OPENOMNI_MODEL_API_KEY",
+  "OPENOMNI_COMMAND_LOG",
+  "OPENOMNI_WS_HOST",
   "OPENOMNI_WS_PORT",
   "OPENOMNI_VAULT_KEY",
 ] as const;
@@ -39,20 +51,70 @@ function tempHome(): string {
 function appEnv(home: string): Record<string, string> {
   const bin = join(home, "bin");
   mkdirSync(bin, { recursive: true });
-  const launchctl = join(bin, "launchctl");
-  writeFileSync(launchctl, "#!/bin/sh\necho 'state = running'\n");
-  chmodSync(launchctl, 0o755);
+  for (const command of ["launchctl", "systemctl", "loginctl"]) {
+    const path = join(bin, command);
+    writeFileSync(
+      path,
+      `#!/bin/sh
+printf '%s' "${command}" >> "$OPENOMNI_COMMAND_LOG"
+for arg in "$@"; do printf ' %s' "$arg" >> "$OPENOMNI_COMMAND_LOG"; done
+printf '\\n' >> "$OPENOMNI_COMMAND_LOG"
+case "${command} $*" in
+  "systemctl "*"is-active"*) printf 'inactive\\n' ;;
+  "systemctl "*"is-enabled"*) printf 'disabled\\n' ;;
+  "loginctl "*"show-user"*) printf 'Linger=yes\\n' ;;
+esac
+`,
+    );
+    chmodSync(path, 0o755);
+  }
   return {
     ...process.env,
     HOME: home,
     PATH: `${bin}:${process.env.PATH ?? ""}`,
+    OPENOMNI_COMMAND_LOG: join(home, "commands.log"),
     OPENOMNI_DB_PATH: join(home, "storage.db"),
     OPENOMNI_MEMORY_PATH: join(home, "memory.json"),
     OPENOMNI_MODEL_PROVIDER: "anthropic",
     OPENOMNI_MODEL_ID: "test-model",
     OPENOMNI_MODEL_API_KEY: "test-key",
+    OPENOMNI_WS_HOST: "127.0.0.1",
     OPENOMNI_WS_PORT: "0",
   } as Record<string, string>;
+}
+
+const READY_SENTINEL = /^OpenOmni Resident listening at ws:\/\/127\.0\.0\.1:\d+\/ws$/;
+
+function waitForExactLine(
+  stdout: ReadableStream<Uint8Array>,
+  expected: RegExp,
+  timeoutMs = 5_000,
+): Promise<void> {
+  const input = Readable.from(stdout);
+  const lines = createInterface({ input });
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error(`timed out waiting for stdout line: ${expected}`));
+    }, timeoutMs);
+    const onLine = (line: string): void => {
+      if (!expected.test(line)) return;
+      cleanup();
+      resolve();
+    };
+    const onClose = (): void => {
+      cleanup();
+      reject(new Error(`stdout closed before line: ${expected}`));
+    };
+    const cleanup = (): void => {
+      clearTimeout(timeout);
+      lines.off("line", onLine);
+      lines.off("close", onClose);
+      lines.close();
+    };
+    lines.on("line", onLine);
+    lines.once("close", onClose);
+  });
 }
 
 afterEach(() => {
@@ -78,13 +140,17 @@ describe("real CLI entry", () => {
       stdout: "pipe",
       stderr: "pipe",
     });
-    const reader = child.stdout.getReader();
 
-    const ready = await reader.read();
-    expect(ready.done).toBe(false);
-    child.kill("SIGTERM");
-
-    expect(await child.exited).toBe(0);
+    try {
+      await waitForExactLine(child.stdout, READY_SENTINEL);
+      child.kill("SIGTERM");
+      expect(await child.exited).toBe(0);
+    } finally {
+      if (child.exitCode === null) {
+        child.kill("SIGTERM");
+        await child.exited;
+      }
+    }
   });
 
   test("binds doctor to the real environment, daemon query, and health probe", () => {
@@ -102,20 +168,32 @@ describe("real CLI entry", () => {
     });
 
     expect(child.exitCode).toBe(0);
+    const checks = child.stdout
+      .toString()
+      .split("\n")
+      .flatMap((line) => {
+        const match = /^(PASS|WARN|FAIL)\s+([^:]+):/.exec(line);
+        return match === null ? [] : [{ status: match[1], name: match[2] }];
+      });
+    expect(checks.length).toBeGreaterThan(0);
+    expect(checks.map((check) => check.name)).toContain("health");
   });
 
   test("binds daemon file and command IO without touching the user's home", () => {
     const home = tempHome();
     const env = appEnv(home);
+    const commandLog = join(home, "commands.log");
+    const unit =
+      process.platform === "darwin"
+        ? join(home, "Library", "LaunchAgents", "ai.openomni.resident.plist")
+        : join(home, ".config", "systemd", "user", "openomni.service");
     const install = Bun.spawnSync([process.execPath, entry, "daemon", "install"], {
       env,
       stdout: "pipe",
       stderr: "pipe",
     });
     expect(install.exitCode).toBe(0);
-    expect(existsSync(join(home, "Library", "LaunchAgents", "ai.openomni.resident.plist"))).toBe(
-      true,
-    );
+    expect(existsSync(unit)).toBe(true);
 
     const uninstall = Bun.spawnSync([process.execPath, entry, "daemon", "uninstall"], {
       env,
@@ -123,19 +201,39 @@ describe("real CLI entry", () => {
       stderr: "pipe",
     });
     expect(uninstall.exitCode).toBe(0);
-    expect(existsSync(join(home, "Library", "LaunchAgents", "ai.openomni.resident.plist"))).toBe(
-      false,
+    expect(existsSync(unit)).toBe(false);
+
+    const uid = process.getuid?.() ?? 0;
+    const invocations = readFileSync(commandLog, "utf8").trim().split("\n");
+    expect(invocations).toEqual(
+      process.platform === "darwin"
+        ? [
+            `launchctl bootout gui/${uid}/ai.openomni.resident`,
+            `launchctl bootstrap gui/${uid} ${unit}`,
+            `launchctl bootout gui/${uid}/ai.openomni.resident`,
+          ]
+        : [
+            "systemctl --user daemon-reload",
+            "systemctl --user enable openomni",
+            "systemctl --user restart openomni",
+            "loginctl enable-linger",
+            "systemctl --user disable --now openomni",
+            "systemctl --user daemon-reload",
+          ],
     );
   });
 
   test("runs provisioning initialization through the real binder", () => {
+    const home = tempHome();
     const child = Bun.spawnSync([process.execPath, entry, "init"], {
-      env: appEnv(tempHome()),
+      env: appEnv(home),
       stdout: "pipe",
       stderr: "pipe",
     });
 
-    expect([0, 1]).toContain(child.exitCode);
+    expect(child.exitCode).toBe(0);
+    expect(existsSync(join(home, ".openomni", "vault.key"))).toBe(true);
+    expect(child.stdout.toString()).toContain("minted vault key file");
   });
 
   test("refuses onboarding before prompting when stdin is not a terminal", () => {

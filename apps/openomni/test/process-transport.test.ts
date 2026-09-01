@@ -96,9 +96,12 @@ test("worker errors preserve a driven run identity and primitive failure", async
     model: WORKER.model,
     apiKey: WORKER.apiKey,
   } as const;
-  for (const [error, expectedRun] of [
-    [new WorkerRunError("failed", "run-2"), "run-2"],
-    ["primitive", "run-1"],
+  for (const [error, expected] of [
+    [
+      new WorkerRunError("failed", "run-2"),
+      { status: "failed", error: "failed", workerRunId: "run-2" },
+    ],
+    ["primitive", { status: "failed", error: "primitive", workerRunId: "run-1" }],
   ] as const) {
     const written: string[] = [];
     await serveProcessWorker(
@@ -108,7 +111,7 @@ test("worker errors preserve a driven run identity and primitive failure", async
         throw error;
       },
     );
-    expect(JSON.parse(written[1] ?? "").workerRunId).toBe(expectedRun);
+    expect(JSON.parse(written[1] ?? "")).toEqual(expected);
   }
 });
 
