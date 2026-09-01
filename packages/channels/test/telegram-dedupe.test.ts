@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, test } from "bun:test";
 import type { Channel } from "@openomni/protocol";
-import { DiscordAdapter } from "../src/discord/surface";
-import { TelegramAdapter } from "../src/telegram/surface";
+import { DiscordAdapter } from "../src/provider/discord/surface";
+import { TelegramAdapter } from "../src/provider/telegram/surface";
 import { Dedupe, DedupeWindow } from "../src/support/dedupe";
 
 /**

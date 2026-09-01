@@ -1,8 +1,8 @@
 import { Operational } from "@openomni/protocol";
-import { sleep } from "../support/fetch-retry";
-import { calculateBackoff } from "../support/reconnect-backoff";
-import { newTraceId } from "../support/trace";
-import type { PublishPort } from "../types";
+import { sleep } from "../../support/fetch-retry";
+import { calculateBackoff } from "../../support/reconnect-backoff";
+import { newTraceId } from "../../support/trace";
+import type { PublishPort } from "../../types";
 import type { SocketEnvelope } from "./types";
 
 export interface SocketCallbacks {

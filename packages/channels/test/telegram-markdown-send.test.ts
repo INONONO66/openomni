@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { TelegramClient } from "../src/telegram/client";
+import { TelegramClient } from "../src/provider/telegram/client";
 
 type SentBody = { text?: string; parse_mode?: string };
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { DiscordNormalizer } from "../src/discord/normalizer";
-import { TelegramNormalizer } from "../src/telegram/normalizer";
+import { DiscordNormalizer } from "../src/provider/discord/normalizer";
+import { TelegramNormalizer } from "../src/provider/telegram/normalizer";
 
 describe("channel normalizers", () => {
   it("maps Discord message references to replyToId", () => {

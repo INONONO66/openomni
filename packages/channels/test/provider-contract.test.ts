@@ -18,6 +18,8 @@ const noopPublish: PublishPort = () => {
 
 interface ConformanceCase {
   readonly provider: (typeof ChannelProviders)[keyof typeof ChannelProviders];
+  /** The credential the case constructs with — also the schema's positive fixture. */
+  readonly credential: Record<string, string>;
   /** Per-case construction closure — keeps each provider's credential type concrete. */
   readonly build: (publish: PublishPort) => ProviderRuntime;
 }
@@ -25,16 +27,19 @@ interface ConformanceCase {
 const cases: readonly ConformanceCase[] = [
   {
     provider: ChannelProviders.telegram,
+    credential: { token: "tg-token" },
     build: (publish) =>
       ChannelProviders.telegram.create({ token: "tg-token" }, { triggers: [] }, publish),
   },
   {
     provider: ChannelProviders.discord,
+    credential: { token: "dc-token" },
     build: (publish) =>
       ChannelProviders.discord.create({ token: "dc-token" }, { triggers: [] }, publish),
   },
   {
     provider: ChannelProviders.github,
+    credential: { secret: "hook-secret", token: "api", botUsername: "omni-bot" },
     build: (publish) =>
       ChannelProviders.github.create(
         { secret: "hook-secret", token: "api", botUsername: "omni-bot" },
@@ -44,6 +49,7 @@ const cases: readonly ConformanceCase[] = [
   },
   {
     provider: ChannelProviders.slack,
+    credential: { botToken: "xoxb-test", appToken: "xapp-test" },
     build: (publish) =>
       ChannelProviders.slack.create(
         { botToken: "xoxb-test", appToken: "xapp-test" },
@@ -72,6 +78,37 @@ describe("provider conformance", () => {
         expect(runtime.surface.id).toBe(kase.provider.id);
         expect(runtime.deliveryRoute !== undefined).toBe(kase.provider.capabilities.deliver);
         expect(runtime.webhookHandler !== undefined).toBe(kase.provider.capabilities.webhook);
+      });
+
+      test("credentials schema admits the conformance credential and refuses junk", () => {
+        expect(kase.provider.credentials.safeParse(kase.credential).success).toBe(true);
+        expect(kase.provider.credentials.safeParse({ bogus: "x" }).success).toBe(false);
+        // strict: an extra key on a valid payload is refused, never silently dropped
+        expect(kase.provider.credentials.safeParse({ ...kase.credential, extra: "x" }).success).toBe(
+          false,
+        );
+      });
+
+      test("settings schema — no shipped knobs: empty accepted, any key refused", () => {
+        expect(kase.provider.settings.safeParse({}).success).toBe(true);
+        expect(kase.provider.settings.safeParse({ knob: "x" }).success).toBe(false);
+      });
+
+      test("render policy is a usable dialect mapping with a sane limit", () => {
+        const rendered = kase.provider.capabilities.render.renderMarkdown("**hi** `code`");
+        expect(typeof rendered).toBe("string");
+        expect(rendered.length).toBeGreaterThan(0);
+        const limit = kase.provider.capabilities.render.messageLimit;
+        if (limit !== null) {
+          expect(Number.isInteger(limit)).toBe(true);
+          expect(limit).toBeGreaterThan(0);
+        }
+      });
+
+      test("preconditions are a verbatim operator checklist", () => {
+        for (const precondition of kase.provider.preconditions) {
+          expect(precondition.length).toBeGreaterThan(0);
+        }
       });
 
       test("construction is pure — nothing published before start", () => {

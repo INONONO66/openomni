@@ -1,6 +1,6 @@
 import { Operational } from "@openomni/protocol";
-import { fetchWithRetry } from "../support/fetch-retry";
-import type { PublishPort } from "../types";
+import { fetchWithRetry } from "../../support/fetch-retry";
+import type { PublishPort } from "../../types";
 
 export class GitHubClient {
   constructor(

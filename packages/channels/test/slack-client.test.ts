@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { SlackClient } from "../src/slack/client";
-import { SlackApiError } from "../src/slack/error";
+import { SlackClient } from "../src/provider/slack/client";
+import { SlackApiError } from "../src/provider/slack/error";
 import type { PublishPort } from "../src/types";
 
 const noopPublish: PublishPort = () => undefined;

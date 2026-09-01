@@ -651,7 +651,7 @@ function selfTest(): void {
     ["external packages are never layered", isAllowedSourceDep(twoTier, "zod")],
     [
       "S8: a channels driver may not import the policy engine",
-      isChannelsBandingViolation("packages/channels/src/discord/surface.ts", "@openomni/policy"),
+      isChannelsBandingViolation("packages/channels/src/provider/discord/surface.ts", "@openomni/policy"),
     ],
     [
       "S8: channels authn (perimeter judgment) may import the policy engine",
@@ -659,7 +659,7 @@ function selfTest(): void {
     ],
     [
       "S8: drivers keep the whitelisted contract deps",
-      !isChannelsBandingViolation("packages/channels/src/discord/surface.ts", "@openomni/protocol"),
+      !isChannelsBandingViolation("packages/channels/src/provider/discord/surface.ts", "@openomni/protocol"),
     ],
     [
       "S8: the banding rule scopes to the channels package only",
@@ -667,7 +667,7 @@ function selfTest(): void {
     ],
     [
       "S8: a channels driver may not import the ledger",
-      isChannelsBandingViolation("packages/channels/src/telegram/surface.ts", "@openomni/ledger"),
+      isChannelsBandingViolation("packages/channels/src/provider/telegram/surface.ts", "@openomni/ledger"),
     ],
     [
       "S8: the gateway router may import the ledger",
@@ -682,7 +682,7 @@ function selfTest(): void {
     ],
     [
       "S8: a driver may not relative-import into src/router/",
-      isChannelsDriverRouterEdge("packages/channels/src/discord/surface.ts", "../router/index.js"),
+      isChannelsDriverRouterEdge("packages/channels/src/provider/discord/surface.ts", "../router/index.js"),
     ],
     [
       "S8: channel-authn (driver band) may not reach the router",
