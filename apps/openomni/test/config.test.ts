@@ -103,6 +103,8 @@ describe("ws exposure enforcement", () => {
     { name: "a bare string", value: JSON.stringify("x-tenant: acme") },
     { name: "non-string header values", value: JSON.stringify({ "x-retries": 3 }) },
     { name: "an empty header name", value: JSON.stringify({ "": "acme" }) },
+    { name: "a header name containing a CR/LF", value: JSON.stringify({ "x-bad\r\ninjected": "acme" }) },
+    { name: "a header value containing a CR/LF", value: JSON.stringify({ "x-tenant": "acme\r\ninjected" }) },
   ])("fails closed on $name", ({ value }) => {
     process.env.OPENOMNI_MODEL_HEADERS = value;
 

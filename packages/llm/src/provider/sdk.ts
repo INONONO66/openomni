@@ -104,7 +104,7 @@ function transportFingerprint(transport: Transport | undefined): string {
     headers === undefined
       ? ""
       : JSON.stringify(Object.entries(headers).sort(([a], [b]) => (a < b ? -1 : 1)));
-  return `${transport.baseUrl ?? ""}|${canonicalHeaders}`;
+  return `${transport.baseUrl ?? ""}|${new Bun.CryptoHasher("sha256").update(canonicalHeaders).digest("hex")}`;
 }
 
 export function getSDK(

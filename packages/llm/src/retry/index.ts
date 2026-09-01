@@ -265,28 +265,27 @@ export namespace Retry {
   }
 
   /**
-   * Balance/quota exhaustion, matched on the raw payload rather than on parsed
-   * JSON: providers put it in `error.code` (`insufficient_quota`), in prose
-   * ("You exceeded your current quota"), and in plain-text gateway bodies
-   * alike. Each pattern names a spent account, never a per-minute rate limit —
-   * `rate limit exceeded` and Anthropic's `quota_exhausted` capacity signal do
-   * not match, and stay on their transient paths.
+   * Balance exhaustion must be unambiguous: these signals identify a spent
+   * account, unlike a provider's billing service outage or a per-minute quota.
+   * The check precedes retryability because no wait restores a spent balance.
    */
   const BILLING_PATTERNS = [
     "insufficient_quota",
-    "quota exceeded",
     "out of budget",
-    "billing",
     "monthly usage limit",
+    "billing_error",
+    "billing required",
+    "billing balance",
   ] as const;
 
   function isBillingExhaustion(payload: string | undefined): boolean {
     if (!payload) return false;
     const haystack = payload.toLowerCase();
     if (BILLING_PATTERNS.some((pattern) => haystack.includes(pattern))) return true;
-    // "exceeded your current quota" / "exceeded your monthly quota": the same
-    // fact with the possessive between the verb and the noun.
-    return /exceeded\s+(?:your|the)\s+[a-z\s]*quota/.test(haystack);
+    // "You exceeded your current quota" and "You exceeded your monthly quota"
+    // name an account limit. Do not accept bare "quota exceeded": it can name
+    // a short-lived per-minute limit.
+    return /exceeded\s+your\s+(?:current|monthly)\s+(?:usage\s+)?quota/.test(haystack);
   }
 
   function classifyErrorPayload(payload: string | undefined): RetryableReason | undefined {

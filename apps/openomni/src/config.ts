@@ -119,7 +119,10 @@ export function assertWsExposure(config: Pick<OpenOmniConfig, "host" | "wsToken"
  * misconfiguration that must fail at boot, not produce a silently dropped
  * header on every model call.
  */
-const ModelHeaders = z.record(z.string().min(1), z.string());
+const ModelHeaders = z.record(
+  z.string().regex(/^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/),
+  z.string().regex(/^[^\r\n]*$/),
+);
 
 const Enrollments = z.array(Machine.Enrollment).min(1);
 const SocialBudgets = z.array(Gateway.SocialBudget);

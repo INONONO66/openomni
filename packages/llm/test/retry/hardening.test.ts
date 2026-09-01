@@ -159,6 +159,26 @@ describe("Retry billing classification", () => {
     expect(decision).toMatchObject({ retry: false, reason: "billing" });
   });
 
+  test.each([
+    {
+      message: "billing service temporarily unavailable; retry later",
+      statusCode: 503,
+      reason: "server_error",
+    },
+    {
+      message: "request exceeded your per minute quota; retry after 1 second",
+      statusCode: 429,
+      reason: "rate_limit",
+    },
+    { message: "quota exceeded for this minute", statusCode: 429, reason: "rate_limit" },
+  ])("does not confuse transient failures with spent balances: $message", ({ message, statusCode, reason }) => {
+    const decision = withRandom(0, () =>
+      Retry.decide(1, apiError({ message, isRetryable: true, statusCode })),
+    );
+
+    expect(decision).toMatchObject({ retry: true, reason });
+  });
+
   test("a transient 429 is NOT billing — rate limits stay retryable", () => {
     const decision = Retry.decide(
       1,
@@ -207,7 +227,7 @@ describe("Retry billing classification", () => {
     void widened;
 
     // Runtime half: no retryable Decision can carry it.
-    const decision = Retry.decide(1, apiError({ message: "billing", isRetryable: true }));
+    const decision = Retry.decide(1, apiError({ message: "billing required", isRetryable: true }));
     expect(decision.retry).toBe(false);
   });
 });
