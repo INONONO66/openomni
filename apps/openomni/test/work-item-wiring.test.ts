@@ -10,12 +10,14 @@ import { createDelegationKernel, type DriverOutcome } from "../src/delegation/ke
 import { createWorkItemLinkage } from "../src/delegation/work-item-linkage";
 import { catalogEntries } from "../src/tools/catalog";
 import { createCompletionPort } from "../src/work-item/completion";
+import { validateCompletionTerminalLinkage } from "../src/work-item/terminal-linkage";
 
 const directories: string[] = [];
 
 afterEach(() => {
   Storage.reset();
-  for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
+  for (const directory of directories.splice(0))
+    rmSync(directory, { recursive: true, force: true });
 });
 
 const RESIDENT: DelegationOrigin = { role: "resident", depth: 0, sessionId: "sess-owner" };
@@ -76,7 +78,10 @@ async function delegateAssign(kernel: ReturnType<typeof bootKernel>) {
 function attemptClosed(workItemId: string): Promise<void> {
   return new Promise((resolve) => {
     const unsubscribe = Bus.subscribe(WorkItem.Events.Updated, (event) => {
-      if (event.payload.workItemId === workItemId && event.payload.fields.includes("attemptTerminal")) {
+      if (
+        event.payload.workItemId === workItemId &&
+        event.payload.fields.includes("attemptTerminal")
+      ) {
         unsubscribe();
         resolve();
       }
@@ -226,9 +231,107 @@ test("completion admission admits verified judgments and writes the terminal rec
   const after = await WorkItemStore.get(workItemId);
   expect(WorkItem.deriveStatus(after as WorkItem.Info)).toBe("completed");
   expect(after?.completionTerminalReceipt).toBeDefined();
-  // Info.parse runs the terminal-linkage refinement: a completed item with a
-  // receipt that does not resolve through its admission would throw here.
-  expect(() => WorkItem.Info.parse(after)).not.toThrow();
+  expect(validateCompletionTerminalLinkage(after as WorkItem.Info).success).toBe(true);
+});
+
+test("protocol parsing is structural while app admission rejects broken terminal linkage", async () => {
+  const { workItemId, completion } = await settledAssign();
+  const item = await WorkItemStore.get(workItemId);
+  const evidenceId = item?.evidence[0]?.id ?? "";
+  const outcome = await completion.complete({
+    workItemId,
+    judgments: (item?.completionFacts.criteria ?? []).map((criterion) => ({
+      criterionId: criterion.id,
+      value: "verified" as const,
+      checkedPredicate: `checked: ${criterion.statement}`,
+      evidenceIds: [evidenceId],
+    })),
+  });
+  expect(outcome.admitted).toBe(true);
+  const completed = await WorkItemStore.get(workItemId);
+  if (completed === undefined) throw new Error("completed WorkItem is missing");
+
+  const firstResult = completed.completionFacts.results[0];
+  if (firstResult === undefined || completed.completionFacts.admissions.length === 0) {
+    throw new Error("completed WorkItem linkage facts are missing");
+  }
+  const refutedResult: WorkItem.CriterionResult = {
+    ...firstResult,
+    id: `${firstResult.id}:refuted`,
+    value: "refuted",
+    checkedPredicate: "the completion predicate was refuted",
+  };
+
+  const brokenCandidates = [
+    {
+      ...completed,
+      completionTerminalReceipt: undefined,
+    },
+    {
+      ...completed,
+      timestamps: { ...completed.timestamps, completed: undefined },
+    },
+    {
+      ...completed,
+      completionTerminalReceipt: {
+        ...completed.completionTerminalReceipt,
+        hash: "wi_foreign",
+      },
+    },
+    {
+      ...completed,
+      completionFacts: {
+        ...completed.completionFacts,
+        admissions: completed.completionFacts.admissions.map((admission) => ({
+          ...admission,
+          effectiveResultIds: [],
+        })),
+      },
+    },
+    {
+      ...completed,
+      completionFacts: {
+        ...completed.completionFacts,
+        results: completed.completionFacts.results.map((result) => {
+          const { checkedPredicate: _checkedPredicate, ...shape } =
+            result as WorkItem.CriterionResult & Readonly<{ checkedPredicate?: string }>;
+          return { ...shape, value: "asserted" as const };
+        }),
+      },
+    },
+    {
+      ...completed,
+      completionFacts: {
+        ...completed.completionFacts,
+        results: [...completed.completionFacts.results, refutedResult],
+        admissions: completed.completionFacts.admissions.map((admission) => ({
+          ...admission,
+          proposedFactIds: {
+            ...admission.proposedFactIds,
+            results: [...admission.proposedFactIds.results, refutedResult.id],
+          },
+        })),
+      },
+    },
+    {
+      ...completed,
+      completionFacts: {
+        ...completed.completionFacts,
+        admissions: completed.completionFacts.admissions.map((admission) => ({
+          ...admission,
+          decision: "owner_override" as const,
+          ownerOverrideReceiptRef: "owner-override:test",
+        })),
+      },
+    },
+  ];
+
+  for (const candidate of brokenCandidates) {
+    const parsed = WorkItem.Info.safeParse(candidate);
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) continue;
+    expect(validateCompletionTerminalLinkage(parsed.data).success).toBe(false);
+  }
 });
 
 test("work_items and complete_work are a Resident-only catalog surface", () => {
