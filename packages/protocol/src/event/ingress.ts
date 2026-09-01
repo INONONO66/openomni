@@ -28,6 +28,12 @@ function routingDecisionUnion(candidateId: z.ZodType<string>) {
       outcome: z.literal("drop"),
     }).strict(),
     RoutingDecisionBase.extend({
+      stage: z.literal("conversation"),
+      outcome: z.literal("route"),
+      target: z.string(),
+      conversationId: z.string().min(1),
+    }).strict(),
+    RoutingDecisionBase.extend({
       stage: z.literal("wait_correlation"),
       outcome: z.literal("route"),
       target: z.string(),

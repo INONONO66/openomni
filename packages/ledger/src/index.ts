@@ -13,6 +13,7 @@ export { BlacklistStore } from "./blacklist/index.js";
 export { ChannelGrantStore } from "./channel-grant/index.js";
 export { WorkItemStore } from "./work-item/index.js";
 export { WorkItemAttemptRun } from "./work-item/attempt-run.js";
+export { ConversationStore } from "./conversation/index.js";
 export { WaitStore } from "./wait/index.js";
 export { EngagementStore } from "./engagement/index.js";
 export { DelegationStore } from "./delegation/index.js";

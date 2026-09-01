@@ -14,9 +14,40 @@ export class TelegramClient implements ChannelClient {
   }
 
   async send(channelId: string, text: string, traceId: string): Promise<string | undefined> {
+    return await this.sendMessage(channelId, text, traceId);
+  }
+
+  /**
+   * MarkdownV2 send with a plain-text floor: rendering is a nice-to-have and
+   * a parse rejection must never lose the message, so Telegram's entity-parse
+   * refusal downgrades this one send to plain text (recorded as a warning).
+   */
+  async sendMarkdown(channelId: string, text: string, traceId: string): Promise<string | undefined> {
+    try {
+      return await this.sendMessage(channelId, text, traceId, "MarkdownV2");
+    } catch (error) {
+      if (!/can't parse entities/i.test(String(error))) throw error;
+      this.publish(Operational.Events.Warn, {
+        traceId,
+        time: Date.now(),
+        component: "server",
+        msg: "telegram markdown rejected — delivered as plain text",
+        context: { err: String(error) },
+      });
+      return await this.sendMessage(channelId, text, traceId);
+    }
+  }
+
+  private async sendMessage(
+    channelId: string,
+    text: string,
+    traceId: string,
+    parseMode?: string,
+  ): Promise<string | undefined> {
     const message = await this.api<{ message_id?: unknown }>("sendMessage", traceId, {
       chat_id: channelId,
       text,
+      ...(parseMode === undefined ? {} : { parse_mode: parseMode }),
     });
     return typeof message.message_id === "number" || typeof message.message_id === "string"
       ? String(message.message_id)

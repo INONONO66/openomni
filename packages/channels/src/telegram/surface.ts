@@ -1,7 +1,8 @@
 import { type Channel, Operational, PolicyDecision } from "@openomni/protocol";
 import { newTraceId } from "@openomni/protocol";
 import { Dedupe, DedupeWindow } from "../support/dedupe";
-import { splitText } from "../support/chunk-text";
+import { chunkMarkdown } from "../support/format/chunk";
+import { renderTelegramMarkdown } from "../support/format/telegram";
 import { TelegramClient } from "./client";
 import { TelegramNormalizer } from "./normalizer";
 import { TelegramPoller } from "./poller";
@@ -202,8 +203,9 @@ export class TelegramAdapter implements Channel.Surface {
   ): Promise<string | undefined> {
     if (!message.text) return undefined;
     let lastMessageId: string | undefined;
-    for (const chunk of splitText(message.text, TELEGRAM_MESSAGE_LIMIT)) {
-      lastMessageId = (await this.client.send(chatId, chunk, traceId)) ?? lastMessageId;
+    const rendered = renderTelegramMarkdown(message.text);
+    for (const chunk of chunkMarkdown(rendered, TELEGRAM_MESSAGE_LIMIT)) {
+      lastMessageId = (await this.client.sendMarkdown(chatId, chunk, traceId)) ?? lastMessageId;
     }
     return lastMessageId;
   }

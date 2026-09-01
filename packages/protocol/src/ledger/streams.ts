@@ -36,6 +36,20 @@ export const StreamRegistry = {
     ],
     status: "shipped",
   },
+  // SHIPPED — ledger ConversationStore publishes; SQLite ledger append/projection consumes.
+  conversation: {
+    stream: "conversation:<conversationId>",
+    heads: "revision-bound (expectedHead = revision before the transition)",
+    conflictMeans: "duplicate create (id reuse impossible) or stale revision — typed store error",
+    factTypes: [
+      "conversation.opened",
+      "conversation.closed",
+      "conversation.outbound_admitted",
+      "conversation.inbound_recorded",
+      "conversation.cap_breached",
+    ],
+    status: "shipped",
+  },
   // SHIPPED — ledger WorkItem fact writers publish; SQLite ledger append/projection consumes.
   work: {
     stream: "work:<workItemId>",
