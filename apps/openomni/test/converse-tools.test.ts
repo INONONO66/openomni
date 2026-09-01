@@ -28,6 +28,7 @@ function recordingPort(): ConversePort & {
       closed.push(id);
       return { kind: "closed", record: { id } } as never;
     },
+    closeLeases: () => 0,
   };
 }
 
