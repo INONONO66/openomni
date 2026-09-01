@@ -131,8 +131,11 @@ jobs:
         run: bun test --timeout 15000 --coverage --coverage-reporter=lcov --coverage-dir=coverage
         working-directory: packages/channels
       - name: Test (openomni app)
-        run: bun test --timeout 15000
+        run: bun test --timeout 15000 --coverage --coverage-reporter=lcov --coverage-dir=coverage
         working-directory: apps/openomni
+      - name: Test (scripts)
+        run: bun test --timeout 15000 --coverage --coverage-reporter=lcov --coverage-dir=coverage
+        working-directory: script
       # topology:test-steps:end
       - name: Test (conformance)
         run: bun test --timeout 15000 script/conformance
@@ -149,6 +152,7 @@ jobs:
           path: |
             packages/*/coverage/
             apps/*/coverage/
+            script/coverage/
           if-no-files-found: ignore
 
   quality:

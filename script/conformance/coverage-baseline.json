@@ -1,4 +1,9 @@
 {
+  "apps/openomni": {
+    "linesFound": 5983,
+    "linesHit": 5561,
+    "pct": 92.95
+  },
   "packages/agent": {
     "linesFound": 2883,
     "linesHit": 2831,
@@ -43,5 +48,10 @@
     "linesFound": 225,
     "linesHit": 223,
     "pct": 99.11
+  },
+  "script": {
+    "linesFound": 3810,
+    "linesHit": 1167,
+    "pct": 30.63
   }
 }

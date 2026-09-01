@@ -1,15 +1,13 @@
 /**
- * Per-package line-coverage ratchet.
+ * Per-lane line-coverage ratchet.
  *
- * Each CI test step emits an lcov report (`bun test --coverage
- * --coverage-reporter=lcov --coverage-dir=coverage`). This script reads
- * `coverage/lcov.info` under every `packages/` and `apps/` workspace dir,
- * computes each package's line coverage over its OWN `src/` files, and
- * compares against the grandfathered baseline. Only `src/` records count:
- * bun's lcov also lists cross-package files loaded through workspace imports
- * (`../protocol/src/...` — ledger tests must not get credit for protocol
- * lines), compiled `dist/` duplicates (which would tie the number to build
- * staleness), and `test/` harness files.
+ * Each CI coverage step emits an lcov report (`bun test --coverage
+ * --coverage-reporter=lcov --coverage-dir=coverage`). This script reads each
+ * lane's `coverage/lcov.info`, computes coverage over the source root that
+ * lane owns, and compares it against the grandfathered baseline. Workspace
+ * lanes own `src/`; the repository-tooling lane owns top-level `script/*.ts`.
+ * Foreign workspace imports, compiled `dist/` duplicates, and test harnesses
+ * never give a lane coverage credit.
  *
  * Failure modes:
  *   - a package's coverage fell more than TOLERANCE_PP below its baseline
@@ -31,8 +29,10 @@
  *                                                        synthetic fixtures only
  */
 
-import { readFileSync, writeFileSync } from "node:fs";
-import { assertTopologyComplete, coverageWorkspaces, TOPOLOGY } from "./topology";
+import { mkdtempSync, readdirSync, rmSync, writeFileSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { assertTopologyComplete, coverageLanes, TOPOLOGY } from "./topology";
 
 const BASELINE_PATH = "script/conformance/coverage-baseline.json";
 // 0.5pp absorbs the measured stable macOS<->ubuntu platform offset (coordinator
@@ -60,11 +60,68 @@ export function coveragePct(linesFound: number, linesHit: number): number {
 }
 
 /**
- * Sums LF/LH over the package's own source records. `SF:` paths are relative
- * to the package dir the suite ran in; only `src/` records count (see header
- * for why `../`, `dist/`, and `test/` records are skipped).
+ * Sums LF/LH over a lane's own source records. `SF:` paths are relative to
+ * the directory where the suite ran. Workspace lanes own `src/`; `script/`
+ * owns its top-level non-test TypeScript modules.
  */
-export function parseLcovSummary(lcovText: string): PackageCoverage {
+export interface SourceInventoryDrift {
+  readonly missing: readonly string[];
+  readonly unexpected: readonly string[];
+}
+
+function isOwnedScriptSource(file: string): boolean {
+  return (
+    !file.includes("/") &&
+    /\.tsx?$/.test(file) &&
+    !file.endsWith(".test.ts") &&
+    !file.endsWith(".test.tsx")
+  );
+}
+
+export function scriptSourceInventoryDrift(
+  lcovText: string,
+  ownedSources: readonly string[],
+): SourceInventoryDrift {
+  const reported = new Set(
+    lcovText
+      .split("\n")
+      .filter((line) => line.startsWith("SF:"))
+      .map((line) => line.slice(3).trim())
+      .filter(isOwnedScriptSource),
+  );
+  const owned = new Set(ownedSources);
+  return {
+    missing: [...owned].filter((file) => !reported.has(file)).sort(),
+    unexpected: [...reported].filter((file) => !owned.has(file)).sort(),
+  };
+}
+
+function ownedScriptSources(scriptDir = "script"): string[] {
+  return readdirSync(scriptDir, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && isOwnedScriptSource(entry.name))
+    .map((entry) => entry.name)
+    .sort();
+}
+
+function assertScriptSourceInventory(lcovText: string, scriptDir = "script"): readonly string[] {
+  const ownedSources = ownedScriptSources(scriptDir);
+  const { missing, unexpected } = scriptSourceInventoryDrift(lcovText, ownedSources);
+  if (missing.length > 0 || unexpected.length > 0) {
+    const details = [
+      ...(missing.length > 0 ? [`missing owned source(s): ${missing.join(", ")}`] : []),
+      ...(unexpected.length > 0 ? [`unexpected/stale source(s): ${unexpected.join(", ")}`] : []),
+    ];
+    throw new Error(
+      `script: LCOV source inventory does not match ${ownedSources.length} on-disk top-level non-test TypeScript modules — ${details.join("; ")}`,
+    );
+  }
+  return ownedSources;
+}
+
+export function parseLcovSummary(
+  lcovText: string,
+  sourceRoot: "src/" | "." = "src/",
+): PackageCoverage {
   let linesFound = 0;
   let linesHit = 0;
   let currentFile = "";
@@ -82,7 +139,11 @@ export function parseLcovSummary(lcovText: string): PackageCoverage {
     } else if (line.startsWith("LH:")) {
       fileHit = Number(line.slice(3));
     } else if (line === "end_of_record") {
-      if (currentFile.startsWith("src/")) {
+      const isOwned =
+        sourceRoot === "src/"
+          ? currentFile.startsWith(sourceRoot)
+          : isOwnedScriptSource(currentFile);
+      if (isOwned) {
         linesFound += fileFound;
         linesHit += fileHit;
       }
@@ -150,23 +211,33 @@ export function compareCoverage(
 
 async function collectCurrentCoverage(): Promise<Record<string, PackageCoverage>> {
   const collected: Record<string, PackageCoverage> = {};
-  for (const workspace of TOPOLOGY) {
-    const reportPath = `${workspace.dir}/coverage/lcov.info`;
-    const report = Bun.file(reportPath);
-    if (!(await report.exists())) continue;
-    if (!workspace.coverageLane) {
+  for (const workspace of TOPOLOGY.filter((candidate) => !candidate.coverageLane)) {
+    if (await Bun.file(`${workspace.dir}/coverage/lcov.info`).exists()) {
       throw new Error(
         `${workspace.dir}: coverage report exists but topology explicitly sets coverageLane: false`,
       );
     }
-    collected[workspace.dir] = parseLcovSummary(await report.text());
+  }
+  for (const lane of coverageLanes()) {
+    const report = Bun.file(`${lane.dir}/coverage/lcov.info`);
+    if (!(await report.exists())) continue;
+    const lcovText = await report.text();
+    if (lane.sourceRoot === ".") {
+      const inventory = assertScriptSourceInventory(lcovText, lane.dir);
+      process.stdout.write(
+        `INVENTORY: ${lane.dir} ${inventory.length}/${inventory.length} owned modules — ${inventory.join(", ")}\n`,
+      );
+    }
+    collected[lane.dir] = parseLcovSummary(lcovText, lane.sourceRoot);
   }
   return Object.fromEntries(Object.entries(collected).sort(([a], [b]) => a.localeCompare(b)));
 }
 
 function readBaseline(): CoverageBaseline {
   const baseline = JSON.parse(readFileSync(BASELINE_PATH, "utf8")) as CoverageBaseline;
-  const expected = coverageWorkspaces().map((workspace) => workspace.dir).sort();
+  const expected = coverageLanes()
+    .map((lane) => lane.dir)
+    .sort();
   const actual = Object.keys(baseline).sort();
   if (actual.join("\n") !== expected.join("\n")) {
     throw new Error(
@@ -196,6 +267,24 @@ function lcovFixture(records: ReadonlyArray<{ file: string; hits: readonly numbe
   return `${chunks.join("\n")}\n`;
 }
 
+function missingSourceSelfTest(): never {
+  const fixtureDir = mkdtempSync(join(tmpdir(), "openomni-coverage-inventory-"));
+  try {
+    writeFileSync(join(fixtureDir, "covered.ts"), "export const covered = true;\n");
+    writeFileSync(
+      join(fixtureDir, "coverage-blind-spot.ts"),
+      "export const branch = (value: boolean) => (value ? 1 : 0);\n",
+    );
+    assertScriptSourceInventory(lcovFixture([{ file: "covered.ts", hits: [1] }]), fixtureDir);
+    process.stderr.write("SELF-TEST FAIL: missing owned source was accepted\n");
+  } catch (error) {
+    process.stderr.write(`VIOLATION [coverage-ratchet] ${String(error)}\n`);
+  } finally {
+    rmSync(fixtureDir, { recursive: true, force: true });
+  }
+  process.exit(1);
+}
+
 function selfTest(): void {
   const failures: string[] = [];
 
@@ -210,6 +299,19 @@ function selfTest(): void {
   if (parsed.linesFound !== 4 || parsed.linesHit !== 3 || parsed.pct !== 75) {
     failures.push(
       `lcov parser wrong: expected 3/4 src/ lines (75%), got ${parsed.linesHit}/${parsed.linesFound} (${parsed.pct}%)`,
+    );
+  }
+
+  const scriptFixture = lcovFixture([
+    { file: "check.ts", hits: [1, 0] },
+    { file: "check.test.ts", hits: [1, 1] },
+    { file: "conformance/helper.ts", hits: [1, 1] },
+    { file: "../packages/protocol/src/foreign.ts", hits: [1, 1] },
+  ]);
+  const parsedScript = parseLcovSummary(scriptFixture, ".");
+  if (parsedScript.linesFound !== 2 || parsedScript.linesHit !== 1 || parsedScript.pct !== 50) {
+    failures.push(
+      `lcov parser wrong: expected 1/2 top-level script lines (50%), got ${parsedScript.linesHit}/${parsedScript.linesFound} (${parsedScript.pct}%)`,
     );
   }
 
@@ -288,6 +390,33 @@ function selfTest(): void {
     failures.push("an instrumented-line collapse below half the baseline was not flagged");
   }
 
+  const inventoryDrift = scriptSourceInventoryDrift(scriptFixture, [
+    "check.ts",
+    "coverage-blind-spot.ts",
+  ]);
+  if (
+    inventoryDrift.missing.join(",") !== "coverage-blind-spot.ts" ||
+    inventoryDrift.unexpected.length !== 0
+  ) {
+    failures.push("an unimported owned script was not identified as missing from LCOV");
+  }
+
+  const missingSourceProcess = Bun.spawnSync([
+    process.execPath,
+    import.meta.path,
+    "--self-test-missing-source",
+  ]);
+  const missingSourceOutput = `${missingSourceProcess.stdout}${missingSourceProcess.stderr}`;
+  if (
+    missingSourceProcess.exitCode === 0 ||
+    !missingSourceOutput.includes("coverage-blind-spot.ts") ||
+    !missingSourceOutput.includes("missing owned source")
+  ) {
+    failures.push(
+      `missing-source repro did not exit non-zero naming coverage-blind-spot.ts: ${missingSourceOutput.trim()}`,
+    );
+  }
+
   if (failures.length > 0) {
     for (const failure of failures) {
       process.stderr.write(`SELF-TEST FAIL: ${failure}\n`);
@@ -295,7 +424,7 @@ function selfTest(): void {
     process.exit(1);
   }
   process.stdout.write(
-    "OK: coverage-ratchet self-test — regression/growth/missing-report/zero-record/line-collapse discriminate, equal-or-better passes\n",
+    "OK: coverage-ratchet self-test — regression/growth/missing-report/zero-record/line-collapse/source-inventory discriminate, equal-or-better passes\n",
   );
 }
 
@@ -306,6 +435,9 @@ function selfTest(): void {
 async function main(): Promise<void> {
   const args = new Set(process.argv.slice(2));
 
+  if (args.has("--self-test-missing-source")) {
+    missingSourceSelfTest();
+  }
   if (args.has("--self-test")) {
     selfTest();
     return;
@@ -313,7 +445,9 @@ async function main(): Promise<void> {
 
   assertTopologyComplete();
   const current = await collectCurrentCoverage();
-  const expectedCoverageDirs = coverageWorkspaces().map((workspace) => workspace.dir).sort();
+  const expectedCoverageDirs = coverageLanes()
+    .map((lane) => lane.dir)
+    .sort();
 
   if (args.has("--update")) {
     const actualCoverageDirs = Object.keys(current).sort();
