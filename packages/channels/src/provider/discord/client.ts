@@ -1,9 +1,20 @@
 import { Operational } from "@openomni/protocol";
+import { z } from "zod";
 import { fetchWithRetry } from "../../support/fetch-retry";
 import type { ChannelClient, PublishPort } from "../../types";
 import { DiscordApiError, DiscordGatewayFetchError } from "./error";
 
 const BASE_URL = "https://discord.com/api/v10";
+
+/** Discord rate-limit body carries the wait in seconds. */
+const RetryAfterSchema = z.object({ retry_after: z.number().optional() });
+
+/** Created message — the snowflake id anchors reply threading; absence means nothing to anchor. */
+const CreatedMessageSchema = z.object({ id: z.string().optional() });
+
+const DmChannelSchema = z.object({ id: z.string().optional() });
+
+const GatewayUrlSchema = z.object({ url: z.string() });
 
 export class DiscordClient implements ChannelClient {
   constructor(
@@ -12,14 +23,13 @@ export class DiscordClient implements ChannelClient {
   ) {}
 
   async send(channelId: string, text: string, traceId: string): Promise<string | undefined> {
-    const message = (await this.api(
+    const message = await this.api(
       `/channels/${channelId}/messages`,
       { content: text },
       traceId,
-    )) as {
-      id?: unknown;
-    };
-    return typeof message.id === "string" ? message.id : undefined;
+      CreatedMessageSchema,
+    );
+    return message.id;
   }
 
   async sendTyping(channelId: string, traceId: string): Promise<void> {
@@ -38,12 +48,13 @@ export class DiscordClient implements ChannelClient {
   }
 
   async createDmChannel(recipientId: string, traceId: string): Promise<string> {
-    const channel = (await this.api(
+    const channel = await this.api(
       "/users/@me/channels",
       { recipient_id: recipientId },
       traceId,
-    )) as { id?: unknown };
-    if (typeof channel.id !== "string") {
+      DmChannelSchema,
+    );
+    if (channel.id === undefined) {
       throw new DiscordApiError({
         message: "Discord DM channel response carried no string id",
       });
@@ -63,15 +74,21 @@ export class DiscordClient implements ChannelClient {
       });
     }
 
-    const { url } = (await res.json()) as { url: string };
-    return `${url}?v=10&encoding=json`;
+    const gateway = GatewayUrlSchema.safeParse(await res.json());
+    if (!gateway.success) {
+      throw new DiscordGatewayFetchError({
+        message: "Discord gateway response carried no url",
+      });
+    }
+    return `${gateway.data.url}?v=10&encoding=json`;
   }
 
-  private async api(
+  private async api<T>(
     path: string,
-    body: Record<string, unknown>,
+    body: Record<string, string>,
     traceId: string,
-  ): Promise<unknown> {
+    schema: z.ZodType<T>,
+  ): Promise<T> {
     const res = await fetchWithRetry(
       `${BASE_URL}${path}`,
       {
@@ -86,8 +103,8 @@ export class DiscordClient implements ChannelClient {
         traceId,
         publish: this.publish,
         parseRetryAfter: (data) => {
-          const r = data as { retry_after?: number };
-          return r.retry_after ?? 5;
+          const hint = RetryAfterSchema.safeParse(data);
+          return (hint.success ? hint.data.retry_after : undefined) ?? 5;
         },
         label: `discord${path}`,
       },
@@ -100,6 +117,12 @@ export class DiscordClient implements ChannelClient {
       });
     }
 
-    return res.json();
+    const parsed = schema.safeParse(await res.json());
+    if (!parsed.success) {
+      throw new DiscordApiError({
+        message: `Discord API ${path} returned a malformed body`,
+      });
+    }
+    return parsed.data;
   }
 }

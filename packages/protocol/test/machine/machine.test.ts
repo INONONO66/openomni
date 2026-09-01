@@ -79,7 +79,7 @@ describe("Machine.Enrollment", () => {
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.error.issues[0]?.code).toBe("unrecognized_keys");
-      expect(result.error.issues[0]?.message).toBe("Unrecognized key(s) in object: 'extra'");
+      expect(result.error.issues[0]?.message).toBe("Unrecognized key: \"extra\"");
       expect(result.error.issues[0]?.path).toEqual([]);
     }
   });
@@ -167,7 +167,7 @@ describe("Machine.AttachResult", () => {
     const result = Machine.AttachResult.safeParse({ status: "refused", reason: "bad_weather" });
     expect(result.success).toBe(false);
     if (!result.success) {
-      expect(result.error.issues[0]?.code).toBe("invalid_enum_value");
+      expect(result.error.issues[0]?.code).toBe("invalid_value");
       expect(result.error.issues[0]?.path.join(".")).toBe("reason");
     }
   });
@@ -182,7 +182,7 @@ describe("Machine.AttachResult", () => {
     if (!result.success) {
       expect(result.error.issues[0]?.code).toBe("unrecognized_keys");
       expect(result.error.issues[0]?.message).toBe(
-        "Unrecognized key(s) in object: 'effectiveCapabilities'",
+        "Unrecognized key: \"effectiveCapabilities\"",
       );
       expect(result.error.issues[0]?.path).toEqual([]);
     }

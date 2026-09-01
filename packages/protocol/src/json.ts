@@ -86,7 +86,7 @@ export function isPlainValue(value: unknown): value is PlainValue {
  * JSON.stringify (never emits -0) and read with JSON.parse (only dense
  * arrays and plain data properties), so no historical row is invalidated.
  */
-export const PlainValueSchema: z.ZodType<PlainValue> = z.custom<PlainValue>(
+export const PlainValueSchema: z.ZodType<PlainValue, PlainValue> = z.custom<PlainValue>(
   (value) => {
     try {
       return isPlainValueUnsafe(value, persistedPlainKey);

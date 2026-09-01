@@ -90,7 +90,7 @@ export const ChannelInstance = z
     id: ChannelInstanceId,
     provider: z.string().min(1),
     enabled: z.boolean(),
-    settings: z.record(PlainValueSchema),
+    settings: z.record(z.string(), PlainValueSchema),
     credentialRef: SecretId.optional(),
     grant: GrantPolicy.optional(),
     revision: z.number().int().nonnegative(),

@@ -1,5 +1,5 @@
 import { Channel } from "@openomni/protocol";
-import { normalizeContent } from "../../support/trigger";
+import { strippedMentionContent } from "../../support/trigger";
 import type { InboundNormalizer } from "../../types";
 import type { SlackMessageEvent } from "./types";
 
@@ -23,11 +23,12 @@ export class SlackNormalizer implements InboundNormalizer<SlackMessageEvent> {
     const isDM = event.channel_type === "im";
     const mentioned = event.text.includes(`<@${this.ctx.botUserId}>`);
 
-    let content = event.text;
-    if (mentioned && !isDM) {
-      content = content.replaceAll(new RegExp(`<@${this.ctx.botUserId}>\\s*`, "g"), "").trim();
-    }
-    content = normalizeContent(content, this.ctx.triggers);
+    const content = strippedMentionContent(
+      event.text,
+      new RegExp(`<@${this.ctx.botUserId}>\\s*`, "g"),
+      mentioned && !isDM,
+      this.ctx.triggers,
+    );
     if (!content) return null;
 
     const surfaceKey = Channel.SurfaceKey.fromChannel({

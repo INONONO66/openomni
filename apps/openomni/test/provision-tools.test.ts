@@ -459,3 +459,86 @@ describe("channel administration ends in reconcile (§5, §8.7)", () => {
     );
   });
 });
+
+describe("refusal branches", () => {
+  test("malformed inputs refuse with the tool's typed refusal", async () => {
+    const { port } = portWith();
+    expect(await personDeclareToolExecutor(port, () => NOW)({})).toContain(
+      "person_declare refused",
+    );
+    expect(await personRemoveToolExecutor(port)({})).toContain("person_remove refused");
+    expect(await channelDeclareToolExecutor(port, () => NOW)({})).toContain(
+      "channel_declare refused",
+    );
+    expect(await channelEnableToolExecutor(port, () => NOW)({})).toContain(
+      "channel_enable refused",
+    );
+    expect(await secretRotateToolExecutor(port, () => NOW)({})).toContain("secret_rotate refused");
+    expect(await provisionStatusToolExecutor(port)("nope")).toBe(
+      "provision_status refused: provision_status takes no arguments",
+    );
+  });
+
+  test("an approval for another subject kind or another person refuses consumption", async () => {
+    const { port } = portWith();
+    ApprovalStore.request(
+      {
+        id: "approval:kind",
+        subject: { kind: "contact_promotion", actorId: "actor:a1" },
+        deadline: NOW + 60_000,
+      },
+      BOUND,
+      TRACE,
+      NOW,
+    );
+    ApprovalStore.decide("approval:kind", "approved", TRACE, NOW + 1);
+    expect(
+      await personDeclareToolExecutor(port, () => NOW + 2)({
+        manifest: MANAGER_MANIFEST,
+        approvalId: "approval:kind",
+      }),
+    ).toContain("approves a contact_promotion, not a person_mutation");
+
+    approvePersonMutation("approval:other", "person:other", managerDigest(), NOW);
+    expect(
+      await personDeclareToolExecutor(port, () => NOW + 2)({
+        manifest: MANAGER_MANIFEST,
+        approvalId: "approval:other",
+      }),
+    ).toContain("names person:other, not person:sunwoo");
+  });
+
+  test("an approval-lane open failure is a typed refusal, never a throw", async () => {
+    const { port } = portWith({
+      approvals: {
+        request: () => {
+          throw new Error("request bound exceeded");
+        },
+        get: ApprovalStore.get,
+        decision: ApprovalStore.decision,
+      },
+    });
+    expect(await personDeclareToolExecutor(port, () => NOW)({ manifest: MANAGER_MANIFEST })).toBe(
+      "person_declare refused: request bound exceeded",
+    );
+  });
+
+  test("a durable-write failure in channel_declare is a typed refusal", async () => {
+    const { port } = portWith({
+      instances: {
+        get: ChannelInstanceStore.get,
+        list: ChannelInstanceStore.list,
+        put: () => {
+          throw new Error("disk full");
+        },
+      },
+    });
+    expect(
+      await channelDeclareToolExecutor(port, () => NOW)({
+        id: "channel:telegram:main",
+        provider: "telegram",
+        credential: { token: "t" },
+      }),
+    ).toBe("channel_declare refused: disk full");
+  });
+});

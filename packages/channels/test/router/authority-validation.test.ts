@@ -136,7 +136,7 @@ describe("IngressAuthorityMiddleware trust and validation", () => {
     (event as Record<string, unknown>).mode = "fork";
 
     await expect(IngressAuthorityMiddleware.runRoutedPreRun({ event })).rejects.toThrow(
-      "invalid_literal",
+      "invalid_value",
     );
   });
 

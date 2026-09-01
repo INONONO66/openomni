@@ -273,3 +273,34 @@ describe("channel supervisor", () => {
     expect(supervisor.status()).toEqual([]);
   });
 });
+
+describe("supervisor status passthrough", () => {
+  test("profile statuses surface verbatim in the reconcile verdict, detail included", async () => {
+    const deliveryRoutes = new Map<string, ChannelDeliveryRoute>();
+    const webhookHandlers = new Map<string, (request: Request) => Promise<Response>>();
+    const supervisor = createChannelSupervisor({
+      desired: () => ({
+        source: "declared",
+        rows: [],
+        statuses: [
+          { id: "channel:discord:main", provider: "discord", state: "vault_locked", detail: "no KEK" },
+          { id: "channel:slack:main", provider: "slack", state: "disabled" },
+        ],
+      }),
+      build: () => {
+        throw new Error("nothing to build");
+      },
+      grant: registerTrustedChannelGrant,
+      deliveryRoutes,
+      webhookHandlers,
+      traceId: () => "00-11111111111111111111111111111111-2222222222222222-01",
+    });
+
+    const statuses = await supervisor.reconcile();
+
+    expect(statuses).toEqual([
+      { id: "channel:discord:main", surface: "discord", state: "vault_locked", detail: "no KEK" },
+      { id: "channel:slack:main", surface: "slack", state: "disabled" },
+    ]);
+  });
+});
