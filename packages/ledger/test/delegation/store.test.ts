@@ -36,6 +36,37 @@ for (const { name, create } of adapters) {
       Storage.reset();
     });
 
+    test("create and atomic claim enforce duplicate identity and fanout", () => {
+      const created = buildDelegationRecord();
+      expect(DelegationStore.create(created)).toEqual(created);
+      expect(() => DelegationStore.create(created)).toThrow("Delegation already exists");
+
+      const claimed = buildDelegationRecord({
+        delegationId: "delegation-claim",
+        waitId: "wait-claim",
+      });
+      expect(DelegationStore.claimOpenWithinRoot(claimed, 8)).toEqual({
+        claimed: true,
+        record: claimed,
+      });
+      expect(DelegationStore.claimOpenWithinRoot(claimed, 8)).toEqual({
+        claimed: true,
+        record: claimed,
+      });
+      expect(() =>
+        DelegationStore.claimOpenWithinRoot({ ...claimed, createdAt: claimed.createdAt + 1 }, 8),
+      ).toThrow("Delegation already exists");
+
+      const refused = buildDelegationRecord({
+        delegationId: "delegation-refused",
+        waitId: "wait-refused",
+      });
+      expect(DelegationStore.claimOpenWithinRoot(refused, 0)).toEqual({
+        claimed: false,
+        reason: "fanout_cap",
+      });
+    });
+
     test("settles once under concurrent calls and preserves the winner", async () => {
       DelegationStore.create(buildDelegationRecord());
       const completed = Delegation.Settled.parse({

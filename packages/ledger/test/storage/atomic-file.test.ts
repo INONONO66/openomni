@@ -10,7 +10,10 @@ describe("replaceFileAtomically", () => {
     const path = join(directory, "state.json");
     try {
       writeFileSync(path, "previous\n");
-      replaceFileAtomically(path, "replacement\n", { temporaryId: () => "success" });
+      replaceFileAtomically(path, "replacement\n", {
+        temporaryId: () => "success",
+        durable: true,
+      });
       expect(readFileSync(path, "utf8")).toBe("replacement\n");
       expect(readdirSync(directory)).toEqual(["state.json"]);
 
