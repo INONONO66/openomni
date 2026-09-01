@@ -32,7 +32,7 @@ src/
 │   ├── atomic-file.ts # sole temp-write/rename owner for durable file replacement (optional fsync durability)
 │   ├── migration-runner.ts / sqlite-busy.ts / sqlite-json-data.ts / timestamped-store.ts # shared SQLite helpers (requireSubAdapter lives in timestamped-store)
 │   └── initialize.ts     # initialize({ dbPath }) — bootstraps the default SQLite adapter
-├── ledger-core/          # Ledger append core (#510 A): serialized CAS append, adoptStream, headFact/factsByType, verifyTail over the hash-chained ledger_event table (schema.ts = drizzle DDL source)
+├── ledger-core/          # Ledger append core (#510 A): serialized CAS append, adoptStream, headFact/factsByType over the hash-chained ledger_event table (schema.ts = drizzle DDL source)
 ├── bus-persistence/      # Observational hash-chained bus journal + BusQuery; payload status/diagnostic preserves invalid raw values
 ├── actor/                # ActorIdentity / ActorEndpoint registry stores
 ├── blacklist/            # Raw Blacklist entry CRUD; channels owns active/pattern matching

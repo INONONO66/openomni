@@ -127,7 +127,6 @@ export namespace Storage {
     // fakes only — decision-class writers fail closed without it.
     ledger?: ProtocolStorage.LedgerSubAdapter;
     workerRunState?: WorkerRunStateStore.Adapter;
-    cronJob?: ProtocolStorage.CronJobSubAdapter;
     // Active-egress debit ledger (#219, perimeter domain). Optional for test
     // fakes only — EgressBudgetStore fails closed when it is missing;
     // production adapters wire it as required (SqliteStorageAdapter). Sole
@@ -164,7 +163,6 @@ export namespace Storage {
     "delegation",
     "ledger",
     "workerRunState",
-    "cronJob",
     "egressBudget",
     "actorRegistry",
     "blacklist",

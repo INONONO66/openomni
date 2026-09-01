@@ -220,7 +220,6 @@ describe("GatewayRouter durable routing resolution", () => {
         },
         headFact: () => undefined,
         factsByType: () => [],
-        verifyTail: () => [],
       },
     });
     const router = makeRouter();

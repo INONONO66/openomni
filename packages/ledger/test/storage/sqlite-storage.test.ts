@@ -269,7 +269,6 @@ describe("SqliteStorageAdapter", () => {
       applyMigrationFixture(legacyDb, "0001_initial/migration.sql");
       applyMigrationFixture(legacyDb, "0002_communication_state/migration.sql");
       applyMigrationFixture(legacyDb, "0003_communication_state_constraints/migration.sql");
-      applyMigrationFixture(legacyDb, "0004_cron_job/migration.sql");
       legacyDb
         .query(
           `INSERT INTO session (id, data, time_created, time_updated)

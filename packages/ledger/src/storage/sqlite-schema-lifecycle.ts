@@ -50,7 +50,6 @@ const CLEAR_ORDER = [
   "blacklist",
   "actor_endpoint",
   "actor_identity",
-  "cron_job",
   "egress_debit",
   "worker_grant",
   "worker_run_state",

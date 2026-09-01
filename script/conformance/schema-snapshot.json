@@ -187,16 +187,6 @@
     "state",
     "updatedAt"
   ],
-  "CronJob.Info": [
-    "agentName",
-    "createdAt",
-    "id",
-    "nextFireAt",
-    "payload",
-    "schedule",
-    "target"
-  ],
-  "CronJob.Target": ["kind", "sessionId"],
   "Delegation.Handle": [
     "address",
     "deadline",
