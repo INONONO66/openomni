@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import {
   fromTraceparent,
   isSpanId,
@@ -16,10 +16,34 @@ const SPEC_SPAN_ID = "b7ad6b7169203331";
 const SPEC_HEADER = `00-${SPEC_TRACE_ID}-${SPEC_SPAN_ID}-01`;
 
 describe("trace ids", () => {
-  test("minted ids satisfy their own predicates", () => {
-    for (let i = 0; i < 200; i += 1) {
-      expect(isTraceId(newTraceId())).toBe(true);
-      expect(isSpanId(newSpanId())).toBe(true);
+  test("mints valid ids from deterministic entropy and retries an all-zero span", () => {
+    const randomUUID = spyOn(crypto, "randomUUID").mockReturnValue(
+      "0af76519-16cd-43dd-8448-eb211c80319c",
+    );
+    const vectors = [new Uint8Array(8), Uint8Array.from([0xb7, 0xad, 0x6b, 0x71, 0x69, 0x20, 0x33, 0x31])];
+    let vectorIndex = 0;
+    const getRandomValues = spyOn(crypto, "getRandomValues").mockImplementation(
+      ((target: Uint8Array) => {
+        const vector = vectors[vectorIndex];
+        if (vector === undefined) throw new Error("unexpected entropy request");
+        vectorIndex += 1;
+        target.set(vector);
+        return target;
+      }) as typeof crypto.getRandomValues,
+    );
+
+    try {
+      const traceId = newTraceId();
+      const spanId = newSpanId();
+
+      expect(traceId).toBe(SPEC_TRACE_ID);
+      expect(spanId).toBe(SPEC_SPAN_ID);
+      expect(isTraceId(traceId)).toBe(true);
+      expect(isSpanId(spanId)).toBe(true);
+      expect(getRandomValues).toHaveBeenCalledTimes(2);
+    } finally {
+      randomUUID.mockRestore();
+      getRandomValues.mockRestore();
     }
   });
 
@@ -112,12 +136,12 @@ describe("scope construction", () => {
    * calling {@link newTraceId}. This pins that the shortcut does not exist.
    */
   test("an opaque uuid is rejected rather than normalized", () => {
-    const opaque = crypto.randomUUID();
+    const opaque = "550e8400-e29b-41d4-a716-446655440000";
     const base = { sessionId: "s", runId: "r" };
 
     expect(() => requireTraceScope({ ...base, traceId: opaque })).toThrow(
       "traceId must be 32 lowercase hex characters",
     );
-    expect(requireTraceScope({ ...base, traceId: newTraceId() }).traceId).toMatch(/^[0-9a-f]{32}$/);
+    expect(requireTraceScope({ ...base, traceId: SPEC_TRACE_ID }).traceId).toBe(SPEC_TRACE_ID);
   });
 });
