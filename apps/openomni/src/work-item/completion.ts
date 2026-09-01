@@ -1,6 +1,7 @@
 import type { Storage } from "@openomni/ledger";
 import { WorkItemStore } from "@openomni/ledger";
 import { newTraceId, WorkItem } from "@openomni/protocol";
+import { validateCompletionTerminalLinkage } from "./terminal-linkage";
 
 /**
  * Resident-side completion admission (kernel-contract completion law): a
@@ -50,6 +51,11 @@ export interface CompletionPortOptions {
 }
 
 const POLICY_REF = "policy:resident-completion-v1";
+
+function linkageRefusal(path: readonly PropertyKey[] | undefined): string {
+  const location = path?.join(".") || "terminal";
+  return `completion linkage rejected at ${location}`;
+}
 
 function summarize(item: WorkItem.Info): WorkItemSummary {
   return {
@@ -146,7 +152,10 @@ export function createCompletionPort(options: CompletionPortOptions): Completion
     for (let round = 0; round < 2; round += 1) {
       const settledLate = WorkItemStore.get(input.workItemId);
       if (settledLate?.completionTerminalReceipt !== undefined) {
-        return { admitted: true, workItemId: input.workItemId };
+        const linkage = validateCompletionTerminalLinkage(settledLate);
+        return linkage.success
+          ? { admitted: true, workItemId: input.workItemId }
+          : refuse(linkageRefusal(linkage.error.issues[0]?.path));
       }
       const outcome = await finalize(settledLate ?? current);
       if (outcome === "admission_race") continue;
@@ -314,6 +323,10 @@ export function createCompletionPort(options: CompletionPortOptions): Completion
         },
         timestamps: { ...base.timestamps, updated: now },
       });
+      const recordedLinkage = validateCompletionTerminalLinkage(recorded);
+      if (!recordedLinkage.success) {
+        return refuse(linkageRefusal(recordedLinkage.error.issues[0]?.path));
+      }
       if (!options.writer(input.workItemId, base.revision, recorded)) {
         return "admission_race";
       }
@@ -346,6 +359,10 @@ export function createCompletionPort(options: CompletionPortOptions): Completion
         completionTerminalReceipt: receipt,
         timestamps: { ...recorded.timestamps, completed: completedAt, updated: completedAt },
       });
+      const completedLinkage = validateCompletionTerminalLinkage(completed);
+      if (!completedLinkage.success) {
+        return refuse(linkageRefusal(completedLinkage.error.issues[0]?.path));
+      }
       if (!options.writer(input.workItemId, recorded.revision, completed)) {
         return "receipt_race";
       }

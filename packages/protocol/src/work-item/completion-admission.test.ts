@@ -159,6 +159,10 @@ const validInput = {
   completionTerminalReceipt,
 };
 
+function validateTerminalLinkage(input: unknown) {
+  return WorkItem.validateCompletionTerminalLinkage(WorkItem.Info.parse(input));
+}
+
 function reservationBridge(id: string) {
   return WorkItem.CompletionRequestReservation.parse({
     version: 1,
@@ -317,27 +321,6 @@ const invalidTerminalInputs = [
     },
   ],
   [
-    "mismatched-report-ref",
-    {
-      ...validInput,
-      completionFacts: {
-        ...completionFacts,
-        admissions: [
-          {
-            ...admission,
-            completionReportRef:
-              "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-          },
-        ],
-      },
-      completionTerminalReceipt: {
-        ...completionTerminalReceipt,
-        completionReportRef:
-          "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-      },
-    },
-  ],
-  [
     "missing-report-linkage",
     {
       ...validInput,
@@ -360,36 +343,6 @@ const invalidTerminalInputs = [
   ],
 ] as const;
 
-const expectedInvalidTerminalPath = {
-  "bridged-receipt-duplicate-reservation-head": ["completionFacts", "admissions", 0],
-  "missing-effective-result": ["completionFacts", "admissions", 0, "proposedFactIds", "results", 0],
-  "owner-override-unknown-unresolved-criterion": [
-    "completionFacts",
-    "admissions",
-    0,
-    "unresolvedCriterionIds",
-    0,
-  ],
-  "missing-receipt": ["completionTerminalReceipt"],
-  "missing-completed-timestamp": ["timestamps", "completed"],
-  "foreign-receipt-hash": ["completionTerminalReceipt", "hash"],
-  "foreign-contract-revision": ["completionTerminalReceipt", "contractRevision"],
-  "foreign-basis": ["completionTerminalReceipt", "basisRef"],
-  "receipt-head-gap": ["completionTerminalReceipt", "recordedHead"],
-  "no-admissions": ["completionTerminalReceipt", "admissionId"],
-  "blocked-terminal-decision": ["completionFacts", "admissions", 0, "decision"],
-  "foreign-request-id": ["completionTerminalReceipt", "requestId"],
-  "foreign-work-item-hash": ["completionFacts", "admissions", 0, "workItemHash"],
-  "foreign-admission-contract": ["completionFacts", "admissions", 0],
-  "foreign-admission-basis": ["completionFacts", "results", 0, "basisRef"],
-  "non-consecutive-admission-heads": ["completionFacts", "admissions", 0],
-  "mismatched-report-ref": ["completionFacts", "admissions", 0, "completionReportRef"],
-  "missing-report-linkage": ["completionTerminalReceipt", "completionReportRef"],
-} as const satisfies Record<
-  (typeof invalidTerminalInputs)[number][0],
-  readonly (string | number)[]
->;
-
 const uncoveredCriterion = {
   id: WorkItem.criterionId(baseItem.workItemId, 1, "verify the artifact"),
   revision: 1,
@@ -402,12 +355,8 @@ const refutedResult = WorkItem.CriterionResult.parse({
   value: "refuted",
   checkedPredicate: "the artifact publication was checked and failed",
 });
-// Each row trips exactly one terminal-linkage defense; the expected message
-// pins that layer instead of accepting any rejection.
-const terminalLinkageDefenses: readonly [string, unknown, string][] = [
+const terminalLinkageDefenses: readonly [string, unknown][] = [
   [
-    // The CompletionAdmission schema only forbids admit+unresolved; it never
-    // checks coverage, so only terminal-linkage rejects this forged admit.
     "admit-uncovered-required-criterion",
     {
       ...validInput,
@@ -417,7 +366,6 @@ const terminalLinkageDefenses: readonly [string, unknown, string][] = [
         criteria: [...completionFacts.criteria, uncoveredCriterion],
       },
     },
-    "does not cover a required criterion",
   ],
   [
     "admit-refuted-effective-result",
@@ -435,12 +383,8 @@ const terminalLinkageDefenses: readonly [string, unknown, string][] = [
         ],
       },
     },
-    "effective result is not admissible",
   ],
   [
-    // Terminal linkage returns early without a receipt and only inspects the
-    // receipt's admission, so the unknown-unresolved check is reachable only
-    // through a receipt-referenced blocked admission.
     "blocked-admission-unknown-unresolved-criterion",
     {
       ...validInput,
@@ -455,7 +399,6 @@ const terminalLinkageDefenses: readonly [string, unknown, string][] = [
         ],
       },
     },
-    "references an unknown unresolved criterion",
   ],
 ];
 
@@ -695,7 +638,43 @@ describe("WorkItem completion admission contracts", () => {
     expect("outcome" in effect).toBe(false);
   });
 
-  test("enforces terminal receipt linkage to its completion head and admission", () => {
+  test("folds contiguous completion reservation bridges structurally", () => {
+    const bridge = reservationBridge("reservation:terminal:bridge");
+    expect(
+      WorkItem.hasContiguousReservationBridge(
+        [bridge],
+        admission.requestId,
+        admission.recordedHead,
+        admission.recordedHead + 2,
+      ),
+    ).toBe(true);
+    expect(
+      WorkItem.hasContiguousReservationBridge(
+        [bridge, { ...bridge, id: "reservation:terminal:duplicate" }],
+        admission.requestId,
+        admission.recordedHead,
+        admission.recordedHead + 2,
+      ),
+    ).toBe(false);
+    expect(
+      WorkItem.hasContiguousReservationBridge(
+        [bridge],
+        "completion-request:foreign",
+        admission.recordedHead,
+        admission.recordedHead + 2,
+      ),
+    ).toBe(false);
+    expect(
+      WorkItem.hasContiguousReservationBridge(
+        [],
+        admission.requestId,
+        admission.recordedHead,
+        admission.recordedHead + 1,
+      ),
+    ).toBe(false);
+  });
+
+  test("enforces terminal receipt linkage in the explicit durability fold", () => {
     const ownerRefutedResult = WorkItem.CriterionResult.parse({
       ...terminalResult,
       id: "result:terminal-owner-refuted",
@@ -732,13 +711,13 @@ describe("WorkItem completion admission contracts", () => {
       },
     };
 
-    expect(WorkItem.Info.safeParse(validInput).success).toBe(true);
-    expect(WorkItem.Info.safeParse(ownerOverrideInput).success).toBe(true);
+    expect(validateTerminalLinkage(validInput).success).toBe(true);
+    expect(validateTerminalLinkage(ownerOverrideInput).success).toBe(true);
     const missingCriterionClaim = {
       ...terminalClaim,
       criterionId: "criterion:missing",
     };
-    const invalidOwnerClaim = WorkItem.Info.safeParse({
+    const invalidOwnerClaim = validateTerminalLinkage({
       ...ownerOverrideInput,
       completionFacts: {
         ...ownerOverrideInput.completionFacts,
@@ -762,7 +741,7 @@ describe("WorkItem completion admission contracts", () => {
       proposedFactIds: { ...ownerAdmission.proposedFactIds, results: [] },
     });
     expect(
-      WorkItem.Info.safeParse({
+      validateTerminalLinkage({
         ...validInput,
         completionFacts: {
           ...completionFacts,
@@ -776,25 +755,9 @@ describe("WorkItem completion admission contracts", () => {
       }).success,
     ).toBe(true);
     expect(
-      WorkItem.Info.safeParse({ ...validInput, revision: 3, outcome: "adopted" }).success,
+      validateTerminalLinkage({ ...validInput, revision: 3, outcome: "adopted" }).success,
     ).toBe(true);
-    const unresolvedAdmission = WorkItem.Info.safeParse({
-      ...validInput,
-      completionFacts: {
-        ...completionFacts,
-        admissions: [{ ...admission, unresolvedCriterionIds: ["criterion:missing"] }],
-      },
-    });
-    expect(unresolvedAdmission.success).toBe(false);
-    if (!unresolvedAdmission.success) {
-      expect(unresolvedAdmission.error.issues.map(({ path }) => path)).toContainEqual([
-        "completionFacts",
-        "admissions",
-        0,
-        "unresolvedCriterionIds",
-      ]);
-    }
-    const missingTerminalEvidence = WorkItem.Info.safeParse({
+    const missingTerminalEvidence = validateTerminalLinkage({
       ...validInput,
       evidence: [],
     });
@@ -814,7 +777,7 @@ describe("WorkItem completion admission contracts", () => {
       [{ ...terminalEvidence, passed: false }, terminalEvidence],
       [terminalEvidence, { ...terminalEvidence, passed: false }],
     ]) {
-      const duplicateTerminalEvidence = WorkItem.Info.safeParse({
+      const duplicateTerminalEvidence = validateTerminalLinkage({
         ...validInput,
         evidence,
       });
@@ -831,7 +794,7 @@ describe("WorkItem completion admission contracts", () => {
       ["subjectRef", "wi_other"],
       ["basisRef", "basis:other"],
     ] as const) {
-      const foreignObservation = WorkItem.Info.safeParse({
+      const foreignObservation = validateTerminalLinkage({
         ...validInput,
         completionFacts: {
           ...completionFacts,
@@ -852,7 +815,7 @@ describe("WorkItem completion admission contracts", () => {
       ...terminalClaim,
       observationIds: [...terminalClaim.observationIds, "observation:missing"],
     };
-    const danglingClaimObservation = WorkItem.Info.safeParse({
+    const danglingClaimObservation = validateTerminalLinkage({
       ...validInput,
       completionFacts: {
         ...completionFacts,
@@ -871,26 +834,24 @@ describe("WorkItem completion admission contracts", () => {
     }
   });
 
-  test.each(invalidTerminalInputs)("rejects broken terminal linkage: %s", (label, input) => {
-    const parsed = WorkItem.Info.safeParse(input);
+  test("parses completion terminal fields without exercising product authority", () => {
+    expect(WorkItem.Info.safeParse(validInput).success).toBe(true);
+  });
 
-    expect(parsed.success).toBe(false);
-    if (!parsed.success) {
-      expect(parsed.error.issues.map(({ path }) => path)).toContainEqual(
-        [...expectedInvalidTerminalPath[label]],
-      );
-    }
+  test.each(
+    invalidTerminalInputs,
+  )("leaves terminal judgment to the durability fold: %s", (label, input) => {
+    expect(WorkItem.Info.safeParse(input).success).toBe(true);
+    expect(validateTerminalLinkage(input).success).toBe(label === "blocked-terminal-decision");
   });
 
   test.each(
     terminalLinkageDefenses,
-  )("pins the terminal-linkage defense: %s", (_label, input, message) => {
-    const parsed = WorkItem.Info.safeParse(input);
-
-    expect(parsed.success).toBe(false);
-    if (!parsed.success) {
-      expect(parsed.error.issues.some((issue) => issue.message.includes(message))).toBe(true);
-    }
+  )("does not perform completion authority during parse: %s", (label, input) => {
+    expect(WorkItem.Info.safeParse(input).success).toBe(true);
+    expect(validateTerminalLinkage(input).success).toBe(
+      label !== "blocked-admission-unknown-unresolved-criterion",
+    );
   });
 
   test("requires checked predicates only for decisive criterion results", () => {

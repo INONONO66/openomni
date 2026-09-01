@@ -8,7 +8,6 @@ import {
   CompletionTerminalReceipt,
 } from "./completion-admission.js";
 import { criterionId } from "./hash.js";
-import { validateTerminalLinkage } from "./terminal-linkage.js";
 const HttpMethod = z.enum(["GET", "HEAD"]);
 const HttpUrl = z.string().url().refine(isHttpUrl, "read-back target must use http or https");
 
@@ -248,13 +247,7 @@ function upcastInfoKeys(value: unknown): unknown {
 }
 
 export const Info = Object.assign(
-  z.preprocess(
-    upcastInfoKeys,
-    InfoShape.superRefine((item, ctx) => {
-      validateCompletionContract(item, ctx);
-      validateTerminalLinkage(item, ctx);
-    }),
-  ),
+  z.preprocess(upcastInfoKeys, InfoShape.superRefine(validateCompletionContract)),
   { shape: InfoShape.shape },
 );
 export type Info = z.infer<typeof InfoShape>;

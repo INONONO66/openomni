@@ -1,46 +1,17 @@
-import type { RefinementCtx } from "zod";
+import { z, type RefinementCtx } from "zod";
 import {
   completionReportReference,
   type CompletionAdmission,
-  type CompletionContract,
   type CompletionReport,
-  type CompletionRequestReservation,
-  type CompletionTerminalReceipt,
-  type Claim,
-  type Criterion,
-  type CriterionResult,
-  type Observation,
 } from "./completion-admission.js";
+import type { Info as TerminalLinkageItem } from "./schemas.js";
 
-type TerminalLinkageItem = Readonly<{
-  workItemId: string;
-  revision: number;
-  attempt: number;
-  timestamps: Readonly<{ completed?: number }>;
-  evidence: readonly Readonly<{
-    id: string;
-    passed: boolean;
-    attempt?: number;
-    basisRef?: string;
-    readBack?: Readonly<{ passed: boolean }>;
-  }>[];
-  completionContract: CompletionContract;
-  completionFacts: Readonly<{
-    criteria: readonly Criterion[];
-    claims: readonly Claim[];
-    observations: readonly Observation[];
-    results: readonly CriterionResult[];
-    invalidations: readonly Readonly<{ id: string }>[];
-    verificationErrors: readonly Readonly<{ id: string }>[];
-    effects: readonly Readonly<{ id: string }>[];
-    admissions: readonly CompletionAdmission[];
-    requestReservations: readonly CompletionRequestReservation[];
-  }>;
-  completionReport?: CompletionReport;
-  completionTerminalReceipt?: CompletionTerminalReceipt;
-}>;
-
-export function validateTerminalLinkage(item: TerminalLinkageItem, ctx: RefinementCtx): void {
+/**
+ * Pure terminal durability linkage. This validates cross-record references
+ * without deciding which result values or admission decisions a product may
+ * accept. Protocol schema parsing deliberately does not invoke this fold.
+ */
+function validateTerminalLinkage(item: TerminalLinkageItem, ctx: RefinementCtx): void {
   const evidenceIds = new Set<string>();
   for (const [index, evidence] of item.evidence.entries()) {
     if (evidenceIds.has(evidence.id)) {
@@ -88,9 +59,6 @@ export function validateTerminalLinkage(item: TerminalLinkageItem, ctx: Refineme
     return;
   }
   validateProposedFactIds(item, admission, admissionIndex, ctx);
-  if (admission.decision !== "admit" && admission.decision !== "owner_override") {
-    addIssue(ctx, ["completionFacts", "admissions", admissionIndex, "decision"]);
-  }
   const criteriaById = new Map(
     item.completionFacts.criteria.map((criterion) => [criterion.id, criterion]),
   );
@@ -157,31 +125,7 @@ export function validateTerminalLinkage(item: TerminalLinkageItem, ctx: Refineme
         addIssue(ctx, ["completionFacts", "observations", resolved.index, "basisRef"]);
       }
     }
-    if (
-      admission.decision === "admit" &&
-      result.value !== "asserted" &&
-      result.value !== "verified"
-    ) {
-      addIssue(
-        ctx,
-        ["completionFacts", "results", effective.index, "value"],
-        "terminal admission effective result is not admissible",
-      );
-    }
     effectiveCriterionIds.add(result.criterionId);
-  }
-  for (const [index, criterion] of item.completionFacts.criteria.entries()) {
-    if (
-      admission.decision === "admit" &&
-      criterion.required &&
-      !effectiveCriterionIds.has(criterion.id)
-    ) {
-      addIssue(
-        ctx,
-        ["completionFacts", "criteria", index, "id"],
-        "terminal admission does not cover a required criterion",
-      );
-    }
   }
   if (admission.requestId !== receipt.requestId) {
     addIssue(ctx, ["completionTerminalReceipt", "requestId"]);
@@ -227,29 +171,6 @@ export function validateTerminalLinkage(item: TerminalLinkageItem, ctx: Refineme
   ) {
     addIssue(ctx, ["completionFacts", "admissions", admissionIndex]);
   }
-}
-
-export function hasContiguousReservationBridge(
-  reservations: readonly Pick<CompletionRequestReservation, "requestId" | "recordedHead">[],
-  requestId: string,
-  fromHead: number,
-  toHead: number,
-): boolean {
-  const expected = toHead - fromHead - 1;
-  if (expected <= 0) return false;
-  const bridging = reservations.filter(
-    (reservation) =>
-      reservation.requestId === requestId &&
-      reservation.recordedHead > fromHead &&
-      reservation.recordedHead < toHead,
-  );
-  if (bridging.length !== expected) return false;
-  const heads = new Set(bridging.map(({ recordedHead }) => recordedHead));
-  if (heads.size !== expected) return false;
-  for (let head = fromHead + 1; head < toHead; head += 1) {
-    if (!heads.has(head)) return false;
-  }
-  return true;
 }
 
 function validateProposedFactIds(
@@ -394,4 +315,34 @@ function addIssue(
   message = "terminal linkage mismatch",
 ): void {
   ctx.addIssue({ code: "custom", path, message });
+}
+
+const TerminalLinkage = z.custom<TerminalLinkageItem>().superRefine(validateTerminalLinkage);
+
+export function validateCompletionTerminalLinkage(item: TerminalLinkageItem) {
+  return TerminalLinkage.safeParse(item);
+}
+
+/** Pure structural fold for receipt heads separated by durable reservations. */
+export function hasContiguousReservationBridge(
+  reservations: readonly Readonly<{ requestId: string; recordedHead: number }>[],
+  requestId: string,
+  fromHead: number,
+  toHead: number,
+): boolean {
+  const expected = toHead - fromHead - 1;
+  if (expected <= 0) return false;
+  const bridging = reservations.filter(
+    (reservation) =>
+      reservation.requestId === requestId &&
+      reservation.recordedHead > fromHead &&
+      reservation.recordedHead < toHead,
+  );
+  if (bridging.length !== expected) return false;
+  const heads = new Set(bridging.map(({ recordedHead }) => recordedHead));
+  if (heads.size !== expected) return false;
+  for (let head = fromHead + 1; head < toHead; head += 1) {
+    if (!heads.has(head)) return false;
+  }
+  return true;
 }
