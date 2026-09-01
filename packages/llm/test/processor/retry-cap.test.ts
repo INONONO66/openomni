@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import {
   anthropicModel as model,
   assistantMessage as buildAssistantMessage,
@@ -170,6 +170,10 @@ describe("Processor instant transport-failure streak", () => {
 
   test("three instant connection failures end the run instead of burning the backoff budget", async () => {
     let attemptCount = 0;
+    // Delay selection is observable through both the retry event and this
+    // scheduler boundary. Resolve it synchronously so the test pins the exact
+    // probe ladder without spending 500ms on real timers.
+    const sleep = spyOn(Retry, "sleep").mockResolvedValue(undefined);
     const processor = Processor.create({
       assistantMessage: buildAssistantMessage(
         "msg-instant-streak",
@@ -192,24 +196,36 @@ describe("Processor instant transport-failure streak", () => {
       }),
     });
 
-    const startedAt = Date.now();
-    await expect(processor.process({ system: "" })).rejects.toBeDefined();
-    const elapsed = Date.now() - startedAt;
+    try {
+      await expect(processor.process({ system: "" })).rejects.toBeDefined();
 
-    // The streak declines on the third instant failure: exactly three
-    // attempts, and the two waits between them are probe delays, not the
-    // 2s/4s exponential ladder (which alone would exceed 6s here).
-    expect(attemptCount).toBe(3);
-    expect(elapsed).toBeLessThan(2000);
+      // The streak declines on the third instant failure: exactly three
+      // attempts, and the two waits between them are probe delays, not the
+      // 2s/4s exponential ladder.
+      expect(attemptCount).toBe(3);
+      // 250ms is the externally required short-probe contract. Keep the
+      // expectation independent of the production constant so drift is loud.
+      expect(sleep.mock.calls.map(([delay]) => delay)).toEqual([250, 250]);
 
-    // A retryable error declined for a non-"non_retryable" reason must say
-    // why, through the port.
-    const declined = events
-      .named(Operational.Events.Error.name)
-      .map((event) => event as { component?: string; msg?: string; error?: string });
-    const fromRetry = declined.filter((event) => event.component === "llm.retry");
-    expect(fromRetry).toHaveLength(1);
-    expect(fromRetry[0]?.msg).toBe("retry declined");
-    expect(String(fromRetry[0]?.error)).toContain("transport");
+      // Each decided delay is also published as `backoffMs` on RetryDecided
+      // (src/processor/index.ts:308-317), pinning the externally visible
+      // decision rather than inferring it from an elapsed-time upper bound.
+      const decided = events
+        .named(LlmCall.Events.RetryDecided.name)
+        .map((event) => (event as { backoffMs?: number }).backoffMs);
+      expect(decided).toEqual([250, 250]);
+
+      // A retryable error declined for a non-"non_retryable" reason must say
+      // why, through the port.
+      const declined = events
+        .named(Operational.Events.Error.name)
+        .map((event) => event as { component?: string; msg?: string; error?: string });
+      const fromRetry = declined.filter((event) => event.component === "llm.retry");
+      expect(fromRetry).toHaveLength(1);
+      expect(fromRetry[0]?.msg).toBe("retry declined");
+      expect(String(fromRetry[0]?.error)).toContain("transport");
+    } finally {
+      sleep.mockRestore();
+    }
   });
 });
