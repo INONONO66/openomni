@@ -616,29 +616,41 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
     };
   }
 
-  async function prepareTransport(
+  function prepareTransport(
     decision: Admitted,
     baseHandle: Delegation.Handle,
-  ): Promise<Delegation.Handle | DelegationRefusal> {
-    const driver = options.drivers[decision.transport];
-    if (driver?.prepare === undefined) return baseHandle;
-    try {
-      const prepared = await driver.prepare(decision, baseHandle);
-      return Delegation.Handle.parse({
-        ...baseHandle,
-        ...(prepared.waitId === undefined ? {} : { waitId: prepared.waitId }),
-      });
-    } catch (error) {
-      const message = `transport preparation failed: ${error instanceof Error ? error.message : String(error)}`;
-      return refuseDelegation("prepare_failed", message);
-    }
+  ): DriverPreparation | Promise<DriverPreparation> | undefined {
+    return options.drivers[decision.transport]?.prepare?.(decision, baseHandle);
   }
 
-  async function commissionWorkItem(
+  function preparedHandle(
+    baseHandle: Delegation.Handle,
+    prepared: DriverPreparation,
+  ): Delegation.Handle {
+    return Delegation.Handle.parse({
+      ...baseHandle,
+      ...(prepared.waitId === undefined ? {} : { waitId: prepared.waitId }),
+    });
+  }
+
+  function preparationRefusal(error: unknown): DelegationRefusal {
+    const message = `transport preparation failed: ${error instanceof Error ? error.message : String(error)}`;
+    return refuseDelegation("prepare_failed", message);
+  }
+
+  function workItemCommissionRefusal(error: unknown): DelegationRefusal {
+    const message = `WorkItem commissioning failed: ${error instanceof Error ? error.message : String(error)}`;
+    return refuseDelegation("work_item_failed", message);
+  }
+
+  function commissionWorkItem(
     decision: Admitted,
     handle: Delegation.Handle,
     origin: DelegationOrigin,
-  ): Promise<{ readonly workItemId?: string } | DelegationRefusal> {
+  ):
+    | { readonly workItemId?: string }
+    | DelegationRefusal
+    | Promise<{ readonly workItemId?: string } | DelegationRefusal> {
     if (decision.request.operation !== "assign") return {};
     if (options.workItems === undefined) {
       return refuseDelegation(
@@ -647,21 +659,24 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
       );
     }
     try {
-      const workItemId = await options.workItems.openAssign({
-        delegationId: handle.delegationId,
-        ...(decision.workerRunId === undefined && handle.waitId === undefined
-          ? {}
-          : { workerRunId: decision.workerRunId ?? handle.waitId }),
-        transport: decision.transport,
-        instruction: decision.request.payload.text,
-        acceptanceCriteria: decision.request.acceptanceCriteria ?? [],
-        sessionId:
-          decision.transport === "process" ? `delegation-${handle.delegationId}` : origin.sessionId,
-      });
-      return { workItemId };
+      return options.workItems
+        .openAssign({
+          delegationId: handle.delegationId,
+          ...(decision.workerRunId === undefined && handle.waitId === undefined
+            ? {}
+            : { workerRunId: decision.workerRunId ?? handle.waitId }),
+          transport: decision.transport,
+          instruction: decision.request.payload.text,
+          acceptanceCriteria: decision.request.acceptanceCriteria ?? [],
+          sessionId:
+            decision.transport === "process" ? `delegation-${handle.delegationId}` : origin.sessionId,
+        })
+        .then(
+          (workItemId) => ({ workItemId }),
+          (error: unknown) => workItemCommissionRefusal(error),
+        );
     } catch (error) {
-      const message = `WorkItem commissioning failed: ${error instanceof Error ? error.message : String(error)}`;
-      return refuseDelegation("work_item_failed", message);
+      return workItemCommissionRefusal(error);
     }
   }
 
@@ -693,17 +708,29 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
     });
   }
 
-  async function claimDelegationRecord(
+  function claimRefusal(
+    record: Delegation.Record,
+    reason: "fanout_cap" | "parent_settled",
+  ): DelegationRefusal {
+    const message =
+      reason === "parent_settled"
+        ? `parent delegation ${record.parentDelegationId ?? ""} is already settled`
+        : `delegation fanout is capped at ${limits.maxFanout} open records for root ${record.rootDelegationId}`;
+    return refuseDelegation(reason, message);
+  }
+
+  function claimDelegationRecord(
     record: Delegation.Record,
     workItemId: string | undefined,
-  ): Promise<DelegationRefusal | undefined> {
+  ): DelegationRefusal | undefined | Promise<DelegationRefusal> {
     const claim = store.claimOpenWithinRoot(record, limits.maxFanout, {
       ...(record.parentDelegationId === undefined
         ? {}
         : { requireOpenParent: record.parentDelegationId }),
     });
     if (claim.claimed) return undefined;
-    if (workItemId !== undefined) {
+    if (workItemId === undefined) return claimRefusal(record, claim.reason);
+    return (async () => {
       try {
         await options.workItems?.cancelAssign(workItemId);
       } catch (error) {
@@ -721,12 +748,8 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
           },
         });
       }
-    }
-    const message =
-      claim.reason === "parent_settled"
-        ? `parent delegation ${record.parentDelegationId ?? ""} is already settled`
-        : `delegation fanout is capped at ${limits.maxFanout} open records for root ${record.rootDelegationId}`;
-    return refuseDelegation(claim.reason, message);
+      return claimRefusal(record, claim.reason);
+    })();
   }
 
   async function awaitImmediate(handle: Delegation.Handle): Promise<DelegationResult> {
@@ -737,22 +760,11 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
     return { handle, settled: settled.settlement };
   }
 
-  async function delegate(candidate: unknown, origin: DelegationOrigin): Promise<DelegationResult> {
-    if (stopped) throw stoppedKernelError();
-    const now = options.now();
-    const delegationId = options.newDelegationId();
-    const admission = admitCandidate(candidate, origin, now, delegationId);
-    if ("refused" in admission) return admission;
-
-    const prepared = await prepareTransport(admission, baseHandleFor(admission, delegationId));
-    if ("refused" in prepared) return prepared;
-    const handle = prepared;
-    const commission = await commissionWorkItem(admission, handle, origin);
-    if ("refused" in commission) return commission;
-    const record = delegationRecord(admission, handle, origin, now, commission.workItemId);
-    const refusal = await claimDelegationRecord(record, commission.workItemId);
-    if (refusal !== undefined) return refusal;
-
+  function startDelegation(
+    admission: Admitted,
+    handle: Delegation.Handle,
+    record: Delegation.Record,
+  ): DelegationResult | Promise<DelegationResult> {
     publishAdmitted(record);
     arm(record);
     const controller = new AbortController();
@@ -763,6 +775,49 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
     }
     void completion;
     return { handle };
+  }
+
+  function completeDelegationAdmission(
+    admission: Admitted,
+    handle: Delegation.Handle,
+    origin: DelegationOrigin,
+    now: number,
+    commission: { readonly workItemId?: string } | DelegationRefusal,
+  ): DelegationResult | Promise<DelegationResult> {
+    if ("refused" in commission) return commission;
+    const record = delegationRecord(admission, handle, origin, now, commission.workItemId);
+    const refusal = claimDelegationRecord(record, commission.workItemId);
+    if (refusal instanceof Promise) return refusal;
+    if (refusal !== undefined) return refusal;
+    return startDelegation(admission, handle, record);
+  }
+
+  async function delegate(candidate: unknown, origin: DelegationOrigin): Promise<DelegationResult> {
+    if (stopped) throw stoppedKernelError();
+    const now = options.now();
+    const delegationId = options.newDelegationId();
+    const admission = admitCandidate(candidate, origin, now, delegationId);
+    if ("refused" in admission) return admission;
+
+    const baseHandle = baseHandleFor(admission, delegationId);
+    let preparation: DriverPreparation | Promise<DriverPreparation> | undefined;
+    try {
+      preparation = prepareTransport(admission, baseHandle);
+    } catch (error) {
+      return preparationRefusal(error);
+    }
+    let handle = baseHandle;
+    if (preparation !== undefined) {
+      try {
+        handle = preparedHandle(baseHandle, await preparation);
+      } catch (error) {
+        return preparationRefusal(error);
+      }
+    }
+    const pendingCommission = commissionWorkItem(admission, handle, origin);
+    const commission =
+      pendingCommission instanceof Promise ? await pendingCommission : pendingCommission;
+    return completeDelegationAdmission(admission, handle, origin, now, commission);
   }
 
   function awaitDelegation(

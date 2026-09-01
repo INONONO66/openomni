@@ -262,6 +262,7 @@ async function runConnection(
   turn: TurnArtifacts,
   progress: RunProgress,
 ): Promise<AgentResult | undefined> {
+  const runLlm = config.llm?.run ?? llmRun;
   const gate = await dispatchModelRequest(state, engine, config, agentBase, providerModel.id);
   if (gate.blocked) return gate.blocked;
   const call = await resolveConnectionModel(
@@ -272,7 +273,7 @@ async function runConnection(
     turn,
     gate.overrideModel,
   );
-  const outcome = await (config.llm?.run ?? llmRun)(call.runInput, turn.trackingSink);
+  const outcome = await runLlm(call.runInput, turn.trackingSink);
   const responseResult = await dispatchModelResponse(
     state,
     engine,

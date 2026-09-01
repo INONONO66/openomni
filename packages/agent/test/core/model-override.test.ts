@@ -75,6 +75,53 @@ function harness(windows: Record<string, number | undefined>) {
 }
 
 describe("model.override at connection.llm.pre (#753)", () => {
+  it("captures the configured runner before model-request policy effects", async () => {
+    const calls: string[] = [];
+    const captured: MockLlmFn = async (_input, sink) => {
+      calls.push("captured");
+      sink.onMessage(assistantSnapshot("captured", "captured runner"));
+      return createStopOutcome();
+    };
+    const replacement: MockLlmFn = async (_input, sink) => {
+      calls.push("replacement");
+      sink.onMessage(assistantSnapshot("replacement", "replacement runner"));
+      return createStopOutcome();
+    };
+    let activeRun = captured;
+    const llm = {
+      get run(): MockLlmFn {
+        return activeRun;
+      },
+      resolveProviderModel: async (model: Model.Ref) => ({
+        id: model.id,
+        name: model.id,
+        providerID: model.provider,
+      }),
+    };
+
+    const result = await ChatAgent.create({
+      events: Bus,
+      model: primary,
+      llm,
+      middleware: [
+        {
+          kind: "point",
+          name: "test-runner-capture-timing",
+          pointIds: ["connection.llm.pre" as const],
+          effectCapabilities: { "connection.llm.pre": ["audit.annotate" as const] },
+          priority: 100,
+          fn: () => {
+            activeRun = replacement;
+            return allow("test.runner-capture-timing");
+          },
+        },
+      ],
+    }).run(runInput([{ role: "user", content: "go" }]));
+
+    expect(result.finishReason).toBe("stop");
+    expect(calls).toEqual(["captured"]);
+  });
+
   it("reroutes exactly one connection and reverts on the next — connection scope", async () => {
     const { calls, resolved, llm } = harness({});
     const observedPostIds: unknown[] = [];
