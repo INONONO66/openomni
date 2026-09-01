@@ -227,7 +227,7 @@ export function delegateToolExecutor(kernel: DelegationKernel, origin: Delegatio
       operation: input.operation,
       payload: { text: input.instruction },
       ...(input.acceptanceCriteria === undefined ? {} : { acceptanceCriteria: input.acceptanceCriteria }),
-      deadline: (typeof kernel.now === "function" ? kernel.now() : Date.now()) + input.timeoutMs,
+      deadline: kernel.now() + input.timeoutMs,
     };
 
     let result: Awaited<ReturnType<DelegationKernel["delegate"]>>;
