@@ -27,6 +27,11 @@ export const MessagingEvents = {
       grantId: z.string().min(1),
       endpointId: z.string().min(1),
       waitId: z.string().min(1).optional(),
+      // #P2 lease stamping (§3.5): a lease send records WHO it speaks for
+      // (the Resident — external identity never changes) and WHICH lease
+      // carried it. Absent on owner sends.
+      onBehalfOf: z.string().min(1).optional(),
+      via: z.string().min(1).optional(),
     }),
     { visibility: "llm_reason" },
   ),

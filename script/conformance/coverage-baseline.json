@@ -1,28 +1,28 @@
 {
   "packages/agent": {
-    "linesFound": 2883,
-    "linesHit": 2831,
+    "linesFound": 2885,
+    "linesHit": 2833,
     "pct": 98.2
   },
   "packages/channels": {
-    "linesFound": 3266,
-    "linesHit": 3128,
-    "pct": 95.77
+    "linesFound": 3622,
+    "linesHit": 3484,
+    "pct": 96.19
   },
   "packages/ipc": {
-    "linesFound": 480,
-    "linesHit": 444,
-    "pct": 92.5
+    "linesFound": 459,
+    "linesHit": 438,
+    "pct": 95.42
   },
   "packages/ledger": {
-    "linesFound": 4860,
-    "linesHit": 4679,
-    "pct": 96.28
+    "linesFound": 5341,
+    "linesHit": 5169,
+    "pct": 96.78
   },
   "packages/llm": {
-    "linesFound": 2022,
-    "linesHit": 1966,
-    "pct": 97.23
+    "linesFound": 2030,
+    "linesHit": 1970,
+    "pct": 97.04
   },
   "packages/placement": {
     "linesFound": 44,
@@ -30,18 +30,18 @@
     "pct": 100
   },
   "packages/policy": {
-    "linesFound": 1620,
-    "linesHit": 1569,
-    "pct": 96.85
+    "linesFound": 1577,
+    "linesHit": 1526,
+    "pct": 96.77
   },
   "packages/protocol": {
-    "linesFound": 6446,
-    "linesHit": 6297,
-    "pct": 97.69
+    "linesFound": 6222,
+    "linesHit": 6062,
+    "pct": 97.43
   },
   "packages/telemetry": {
-    "linesFound": 225,
-    "linesHit": 223,
-    "pct": 99.11
+    "linesFound": 296,
+    "linesHit": 293,
+    "pct": 98.99
   }
 }

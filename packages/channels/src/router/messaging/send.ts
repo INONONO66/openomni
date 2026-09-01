@@ -5,6 +5,7 @@ import {
   type Actor,
   type BusEvent,
   type Conversation,
+  type Lease,
   type Wait,
 } from "@openomni/protocol";
 import {
@@ -13,6 +14,7 @@ import {
   ConversationStore,
   EgressBudgetStore,
   LedgerAppend,
+  LeaseStore,
   WaitStore,
 } from "@openomni/ledger";
 import { WaitService } from "../wait/index.js";
@@ -112,18 +114,22 @@ function conversationForSend(input: SendInput): Conversation.Record | undefined 
   return ConversationStore.get(input.conversationId);
 }
 
+/** Reads the lease a lease-pinned send claims (same read-then-gate discipline). */
+function leaseForSend(input: SendInput): Lease.Record | undefined {
+  if (input.leaseId === undefined) return undefined;
+  return LeaseStore.get(input.leaseId);
+}
+
 /**
  * The conversational send right (§3.4): the window must be open, unexpired,
  * and pinned to THIS actor at THIS endpoint; the absolute blacklist deny
  * (DNC) still binds. Returns the denial reason, or undefined when admitted.
  */
 function conversationGate(
-  input: SendInput,
+  conversationId: string,
   conversation: Conversation.Record | undefined,
   target: DeliveryTarget,
 ): string | undefined {
-  const conversationId = input.conversationId;
-  if (conversationId === undefined) return undefined;
   if (conversation === undefined) {
     return `conversation ${conversationId} does not exist`;
   }
@@ -145,10 +151,10 @@ function conversationGate(
   return undefined;
 }
 
-/** The grant stamp a conversation-pinned send carries on its audit events. */
-function conversationGrant(input: SendInput): SenderTargetGrant {
+/** The grant stamp a conversation- or lease-pinned send carries on its audit events. */
+function pinnedGrant(input: SendInput, id: string): SenderTargetGrant {
   return {
-    id: `conversation:${input.conversationId ?? ""}`,
+    id,
     senderId: input.senderId,
     targetActorId: input.target.actorId,
     operations: [input.operation],
@@ -353,15 +359,17 @@ export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAge
       operation: input.operation,
       at: input.at,
     };
-    // #P1 conversational arm (docs/conversation-and-message-io.md §3.4): a
-    // conversation-pinned send derives its authority from the open window,
-    // not from grants — but the target still resolves and the absolute
-    // blacklist deny still binds BEFORE any window fact is consulted, so an
-    // unauthorized sender learns nothing from the window.
+    // #P1 conversational arm / #P2 lease arm (§3.4/§3.5): a pinned send
+    // derives its authority from the open window or the live lease, not
+    // from grants — but the target still resolves and the absolute
+    // blacklist deny still binds BEFORE any window/lease fact is consulted,
+    // so an unauthorized sender learns nothing from either.
     const conversationPinned = input.conversationId !== undefined;
+    const leasePinned = input.leaseId !== undefined;
     const conversation = conversationForSend(input);
+    const lease = leaseForSend(input);
     let grant: SenderTargetGrant | undefined;
-    if (!conversationPinned) {
+    if (!conversationPinned && !leasePinned) {
       // Scope-aware arm (#708): a rule-materialized instance carries a
       // replyScope that can only be checked against the RESOLVED delivery
       // endpoint, so with a candidate present the target resolves first and
@@ -381,12 +389,40 @@ export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAge
     if (!resolution.ok) {
       return deny(input, resolution.code, resolution.reason);
     }
-    if (conversationPinned) {
-      const conversationDenial = conversationGate(input, conversation, resolution.target);
+    if (leasePinned) {
+      const leaseId = input.leaseId ?? "";
+      if (lease === undefined) {
+        return deny(input, "lease_denied", `lease ${leaseId} does not exist`);
+      }
+      if (conversationPinned && input.conversationId !== lease.conversationId) {
+        return deny(
+          input,
+          "lease_denied",
+          `lease ${leaseId} scopes conversation ${lease.conversationId}, not ${input.conversationId ?? ""}`,
+        );
+      }
+      // The lease scopes exactly one conversation; the window's own pin and
+      // the absolute DNC deny bind the send the same way (§3.5, §8.8).
+      const scopedConversation = ConversationStore.get(lease.conversationId);
+      const conversationDenial = conversationGate(
+        lease.conversationId,
+        scopedConversation,
+        resolution.target,
+      );
       if (conversationDenial !== undefined) {
         return deny(input, "conversation_denied", conversationDenial);
       }
-      grant = conversationGrant(input);
+      grant = pinnedGrant(input, `lease:${leaseId}`);
+    } else if (conversationPinned) {
+      const conversationDenial = conversationGate(
+        input.conversationId ?? "",
+        conversation,
+        resolution.target,
+      );
+      if (conversationDenial !== undefined) {
+        return deny(input, "conversation_denied", conversationDenial);
+      }
+      grant = pinnedGrant(input, `conversation:${input.conversationId ?? ""}`);
     } else if (grant === undefined) {
       const surfaceKey = deliverySurfaceKey(resolution.target);
       grant = resolveScopedSenderTargetGrant(grants, { ...claim, surfaceKey });
@@ -421,8 +457,23 @@ export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAge
       // A conversation-pinned send debits the WINDOW instead — the egress
       // budget never double-counts it.
       const budgeted =
-        !conversationPinned && ports.budgets !== undefined && grant.replyScope === undefined;
-      if (conversationPinned && conversation !== undefined) {
+        !conversationPinned &&
+        !leasePinned &&
+        ports.budgets !== undefined &&
+        grant.replyScope === undefined;
+      if (leasePinned && lease !== undefined) {
+        // Record-before-act: THE lease-send debit (LeaseStore.sendDebit)
+        // folds the carved allocation AND the scoped conversation's outbound
+        // cap in one transaction — a refusal at either fold writes nothing.
+        const debit = LeaseStore.sendDebit(lease.id, input.at);
+        if (debit.kind === "refused") {
+          return deny(
+            input,
+            "lease_denied",
+            `lease ${lease.id} refused the outbound send (${debit.reason})`,
+          );
+        }
+      } else if (conversationPinned && conversation !== undefined) {
         // Record-before-act: the durable outbound debit lands before the
         // delivery effect. A refusal here (closed/expired/cap/quiet-hours
         // raced past the read above) is the same typed denial.
@@ -557,6 +608,12 @@ export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAge
       grantId: grant.id,
       endpointId: resolution.target.endpointId,
       ...(wait === undefined ? {} : { waitId: wait.id }),
+      // §3.5 egress stamping: a lease send records whose work it speaks for
+      // (the holder delegation) and which lease carried it. Owner sends
+      // carry neither; the external identity is always the Resident's.
+      ...(leasePinned && lease !== undefined
+        ? { onBehalfOf: lease.holderDelegationId, via: `lease:${lease.id}` }
+        : {}),
       time: input.at,
     });
 
