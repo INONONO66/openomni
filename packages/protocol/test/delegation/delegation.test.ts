@@ -326,8 +326,12 @@ describe("Delegation.Record durable shape", () => {
   });
 
   test("an open record cannot carry a wake receipt", () => {
-    expect(recordIssueAt({ ...OPEN_RECORD, wokenAt: 5 }, "wokenAt")).toBe(
-      "an open record carries no wake receipt",
+    const result = Delegation.Record.safeParse({ ...OPEN_RECORD, wokenAt: 5 });
+
+    expect(result.success).toBe(false);
+    if (result.success) throw new Error("expected rejection");
+    expect(result.error.issues).toContainEqual(
+      expect.objectContaining({ code: "custom", path: ["wokenAt"] }),
     );
   });
 

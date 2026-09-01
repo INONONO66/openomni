@@ -117,8 +117,12 @@ function effectiveThreshold(record: Schema.Record): number {
 }
 
 function requireQuorum(record: Schema.Record): Schema.Quorum {
-  // Presence is guaranteed by Record's resolution refinement.
-  return record.quorum as Schema.Quorum;
+  // Validated records carry quorum bounds, but Record's exported TypeScript
+  // type cannot encode that refinement, so public callers still need a guard.
+  if (record.quorum === undefined) {
+    throw new Error("Wait resolutionPolicy=quorum without quorum bounds — schema layer regressed");
+  }
+  return record.quorum;
 }
 
 function respondedCount(replies: readonly Schema.Reply[]): number {

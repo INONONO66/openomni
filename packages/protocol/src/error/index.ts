@@ -19,6 +19,9 @@ export abstract class NamedError extends Error {
     this.name = "NamedError";
   }
 
+  abstract schema(): z.ZodType;
+  abstract toObject(): { name: string; data: unknown };
+
   static create<Name extends string, Data extends z.ZodType>(name: Name, data: Data) {
     const schema = z.object({
       name: z.literal(name),
