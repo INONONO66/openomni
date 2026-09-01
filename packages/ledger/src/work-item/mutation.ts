@@ -5,7 +5,6 @@ import {
   appendTransitionFact,
   requireWorkItemLedger,
   runWorkItemTransaction,
-  WorkItemRevisionError,
   type WorkItemFact,
 } from "./facts.js";
 import type { WorkItemAdapter, WorkItemMutation, WorkItemTransitionTarget } from "./types.js";
@@ -57,13 +56,13 @@ export function commitMutation(
     ...updated,
     revision: existing.revision + 1,
   };
-  appendTransitionFact(ledger, existing, fact);
-  if (!adapter.compareAndSet(updated.workItemId, existing.revision, versioned)) {
-    // Unreachable while every writer appends first (the append CAS and the
-    // projection CAS guard the same head==revision); kept as the explosive
-    // backstop — the rollback discards the appended fact.
-    throw new WorkItemRevisionError(updated.workItemId);
-  }
+  // One commit: the fact appends at `existing.revision`, then the projection
+  // CAS lands against the same head. Either refusal raises the SAME typed
+  // revision error the two-step spelling raised, and the coordinator discards
+  // the fact when the CAS loses, so head never outruns revision.
+  appendTransitionFact(ledger, existing, fact, () =>
+    adapter.compareAndSet(updated.workItemId, existing.revision, versioned),
+  );
   return versioned;
 }
 

@@ -1,6 +1,6 @@
 import { Deadline, Engagement, type Storage as ProtocolStorage } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
-import { isSqliteBusyError } from "../storage/sqlite-busy";
+import { commitFact, runCommitTransaction } from "../storage/commit-coordinator";
 import { Storage } from "../storage/storage";
 
 // Durable engagement writes fail closed (the Wait precedent): a missing
@@ -55,21 +55,24 @@ function revisionConflict(
   });
 }
 
+/**
+ * The shared commit coordinator owns the transaction and the SQLITE_BUSY
+ * detection; this store supplies only the Engagement TAXONOMY for "nothing
+ * committed".
+ */
 function runEngagementTransaction<T>(engagementId: string, write: () => T): T {
-  try {
-    return Storage.get().transaction(write);
-  } catch (error) {
-    if (isSqliteBusyError(error)) {
-      throw new Engagement.StoreError({
+  return runCommitTransaction(
+    Storage.get(),
+    write,
+    (cause) =>
+      new Engagement.StoreError({
         message: `Engagement storage busy: ${engagementId} — ${
-          error instanceof Error ? error.message : String(error)
+          cause instanceof Error ? cause.message : String(cause)
         }`,
         code: "unavailable",
         engagementId,
-      });
-    }
-    throw error;
-  }
+      }),
+  );
 }
 
 type CommittedOutcome = Exclude<Engagement.Outcome, { kind: "rejected" }>;
@@ -163,20 +166,23 @@ export namespace EngagementStore {
         engagementId: record.id,
       });
     runEngagementTransaction(record.id, () => {
-      const appended = ledger.append(
+      const outcome = commitFact(
+        ledger,
         {
           streamId: engagementStreamId(record.id),
-          type: "engagement.opened",
-          data: {
-            ownerSessionId: record.ownerSessionId,
-            expiresAt: record.expiresAt,
-            revision: record.revision,
+          expectedHead: 0,
+          fact: {
+            type: "engagement.opened",
+            data: {
+              ownerSessionId: record.ownerSessionId,
+              expiresAt: record.expiresAt,
+              revision: record.revision,
+            },
           },
         },
-        0,
+        () => adapter.create(record) || false,
       );
-      if (appended.kind === "cas_conflict") throw duplicate();
-      if (!adapter.create(record)) throw duplicate();
+      if (outcome.kind !== "committed") throw duplicate();
     });
     Bus.publish(Engagement.Events.Opened, {
       ...eventBase(record, record.createdAt, traceId),
@@ -283,18 +289,21 @@ export namespace EngagementStore {
     }
     const fact = factOf(outcome, meta.requested);
     runEngagementTransaction(id, () => {
-      const appended = ledger.append(
-        { streamId: engagementStreamId(id), type: fact.type, data: fact.data },
-        current.revision,
+      // No `adoption`: the engagement stream class was born with its table,
+      // so a projection row at revision >= 1 with an empty stream cannot
+      // exist. An empty stale head here is a genuine lost race, and omitting
+      // adoption is what keeps it one.
+      const committed = commitFact(
+        ledger,
+        { streamId: engagementStreamId(id), expectedHead: current.revision, fact },
+        // A failed projection CAS is unreachable while every writer commits
+        // through this coordinator (the append CAS and the projection CAS
+        // guard the same head == revision); it stays as the explosive
+        // backstop — the rollback discards the appended fact so head and
+        // revision still agree.
+        () => adapter.compareAndSet(id, current.revision, outcome.record) || false,
       );
-      if (appended.kind === "cas_conflict") throw revisionConflict(id, current.revision);
-      if (!adapter.compareAndSet(id, current.revision, outcome.record)) {
-        // Unreachable while every writer goes through this transaction (the
-        // append CAS and the projection CAS guard the same head==revision);
-        // kept as the explosive backstop — the rollback discards the appended
-        // fact so head and revision still agree.
-        throw revisionConflict(id, current.revision);
-      }
+      if (committed.kind !== "committed") throw revisionConflict(id, current.revision);
     });
     publishChange(outcome, meta.reason, traceId);
     return outcome;

@@ -7,7 +7,6 @@ import {
   appendCreatedFact,
   requireWorkItemLedger,
   runWorkItemTransaction,
-  WorkItemDuplicateError,
 } from "./facts.js";
 import { commitMutation } from "./mutation.js";
 import type { CreateWorkItemInput } from "./types.js";
@@ -42,18 +41,25 @@ export async function createWorkItem(
   // whole create back — no compensating remove.
   let linkedParent: WorkItem.Info | undefined;
   runWorkItemTransaction(storage, item.workItemId, () => {
-    appendCreatedFact(ledger, item, {
-      name: item.name,
-      sourceMessageId: item.sourceMessageId,
-      sourceChannel: item.sourceChannel,
-      dependsOn: item.relations.dependsOn,
-      maxAttempts: item.maxAttempts,
-      ...(item.sessionId === undefined ? {} : { sessionId: item.sessionId }),
-      ...(item.assigneeId === undefined ? {} : { assigneeId: item.assigneeId }),
-      ...(item.relations.parentId === undefined ? {} : { parentId: item.relations.parentId }),
-      ...(item.executorKind === undefined ? {} : { executorKind: item.executorKind }),
-    });
-    if (!workItem.create(item.workItemId, item)) throw new WorkItemDuplicateError(item.workItemId);
+    // The birth fact and the projection INSERT commit together: a duplicate
+    // detected by EITHER the append CAS or the INSERT raises the same typed
+    // duplicate error, and a refused INSERT leaves no orphan birth fact.
+    appendCreatedFact(
+      ledger,
+      item,
+      {
+        name: item.name,
+        sourceMessageId: item.sourceMessageId,
+        sourceChannel: item.sourceChannel,
+        dependsOn: item.relations.dependsOn,
+        maxAttempts: item.maxAttempts,
+        ...(item.sessionId === undefined ? {} : { sessionId: item.sessionId }),
+        ...(item.assigneeId === undefined ? {} : { assigneeId: item.assigneeId }),
+        ...(item.relations.parentId === undefined ? {} : { parentId: item.relations.parentId }),
+        ...(item.executorKind === undefined ? {} : { executorKind: item.executorKind }),
+      },
+      () => workItem.create(item.workItemId, item),
+    );
     if (parent && !parent.relations.childIds.includes(item.workItemId)) {
       linkedParent = commitMutation(
         workItem,

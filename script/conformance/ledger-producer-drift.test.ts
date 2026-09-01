@@ -6,6 +6,7 @@ import { buildLedgerArchiveManifest } from "../generate-ledger-archive-manifest"
 import {
   LEDGER_PRODUCER_MANIFEST,
   matchesFrozenTableWriteSql,
+  matchesCommitExecutorCall,
   matchesLedgerTableWriteSql,
   matchesLedgerWriteCall,
   matchesMigrationTableWriteSql,
@@ -15,14 +16,21 @@ import {
 const repoRoot = join(import.meta.dir, "..", "..");
 const adapterBinding = "packages/ledger/src/storage/sqlite-storage.ts";
 
+
+
 describe("ledger producer drift", () => {
   test("the observed write surface equals the manifest in both directions", async () => {
     const scan = await scanLedgerProducers(repoRoot);
 
     expect(LEDGER_PRODUCER_MANIFEST.appendCore).toContain(adapterBinding);
+    // The write surface counts BOTH direct appenders and callers of the shared
+    // commit executor: delegating the mechanics does not exempt a module from
+    // the manifest, or the executor would become a laundering channel for
+    // unmanifested stream classes.
     expect([...scan.appendCallSites].sort()).toEqual(
       [
         ...LEDGER_PRODUCER_MANIFEST.streams.flatMap((entry) => entry.producers),
+        LEDGER_PRODUCER_MANIFEST.sharedAppendExecutor,
         adapterBinding,
       ].sort(),
     );
@@ -73,6 +81,26 @@ describe("ledger producer drift", () => {
         "-- historical backfill\nUPDATE worker_run_state SET executor_kind = 'internal_chat_agent';",
       ),
     ).toBe(true);
+
+    // Shared commit-executor entries: invocation, alias, bind, destructure,
+    // and bracket access all identify the calling module.
+    expect(matchesCommitExecutorCall("const out = commitFact(ledger, request, project);")).toBe(
+      true,
+    );
+    expect(matchesCommitExecutorCall("commitFact(\n ledger,\n request,\n project)")).toBe(true);
+    expect(matchesCommitExecutorCall("const write = commitFact; write(ledger, req, p)")).toBe(true);
+    expect(matchesCommitExecutorCall("const write = commitFact.bind(null); write(l, r, p)")).toBe(
+      true,
+    );
+    expect(
+      matchesCommitExecutorCall('const { commitFact } = await import("./coordinator.js");'),
+    ).toBe(true);
+    expect(matchesCommitExecutorCall('coordinator["commitFact"](ledger, request, project);')).toBe(
+      true,
+    );
+    // ...and prose about it is not a call.
+    expect(matchesCommitExecutorCall("// commitFactoid is unrelated")).toBe(false);
+    expect(matchesCommitExecutorCall("/* see commitFact for the ordering rules */")).toBe(false);
 
     expect(matchesLedgerWriteCall("// calls Ledger.append(event, expectedHead) later")).toBe(false);
     expect(matchesLedgerTableWriteSql("db.query(`SELECT * FROM ledger_event`)")).toBe(false);

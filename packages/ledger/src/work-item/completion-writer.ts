@@ -35,10 +35,21 @@ export function createWorkItemCompletionWriter(
       runWorkItemTransaction(storage, hash, () => {
         const existing = adapter.get(hash);
         if (!existing || existing.revision !== expectedHead) return false;
-        if (!appendTransitionFactReceipt(ledger, existing, completionFactOf(existing, item))) {
-          return false;
-        }
-        return adapter.compareAndSet(hash, expectedHead, item);
+        // The admission fact and the projection CAS commit together. This
+        // writer reports a lost race by RETURNING false, which commits the
+        // transaction rather than rolling it back, so the CAS has to run
+        // inside the commit — otherwise a refused projection would leave the
+        // appended admission fact stranded above the row's revision.
+        return appendTransitionFactReceipt(
+          ledger,
+          existing,
+          completionFactOf(existing, item),
+          () => adapter.compareAndSet(hash, expectedHead, item),
+          // Nested transaction: this writer returns false instead of throwing,
+          // so only a savepoint can discard the admission fact when the CAS
+          // loses.
+          (unit) => storage.transaction(unit),
+        );
       }),
     );
   };
