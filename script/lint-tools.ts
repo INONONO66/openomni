@@ -333,7 +333,10 @@ function shapeKeys(schema: ZodObjectLike, seen: Set<unknown> = new Set()): strin
 
 function discriminatorValue(option: ZodObjectLike, discriminator: string): string | undefined {
   const field = (option.shape as Record<string, unknown> | undefined)?.[discriminator];
-  const value = isZodSchema(field) ? field._def?.value : undefined;
+  if (!isZodSchema(field)) return undefined;
+  // Zod 4 literals expose the public `.value` getter and store `_def.values`;
+  // Zod 3 stored `_def.value`. Accept either so the snapshot stays stable.
+  const value = (field as { value?: unknown }).value ?? field._def?.value;
   return typeof value === "string" ? value : undefined;
 }
 

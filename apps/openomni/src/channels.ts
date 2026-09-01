@@ -147,7 +147,7 @@ function credentialRow<TCredentials, TId extends keyof typeof ChannelProviders>(
   provider: ChannelProvider<TCredentials, TId>,
   plaintext: Uint8Array,
 ): ChannelComponent | { readonly invalid: string } {
-  let parsed: z.SafeParseReturnType<TCredentials, TCredentials>;
+  let parsed: z.ZodSafeParseResult<TCredentials>;
   try {
     parsed = provider.credentials.safeParse(JSON.parse(new TextDecoder().decode(plaintext)));
   } catch (error) {

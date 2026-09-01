@@ -79,8 +79,10 @@ describe("policy module public surface", () => {
     expect(Object.keys(PolicyDecisionIndex)).toEqual(expectedPolicyDecisionKeys);
     const policyPointKeys = Object.keys(Policy.PolicyPoint);
     expect(policyPointKeys).toEqual(Object.keys(PolicyIndex.PolicyPoint));
-    const zodObjectKeys = new Set(Object.keys(z.object({})));
-    const policyPointStaticKeys = policyPointKeys.filter((key) => !zodObjectKeys.has(key));
+    // Zod 4.5 memoizes prototype-getter methods (e.g. `parse`) as own keys on
+    // first access, so filter against the prototype chain, not own keys.
+    const zodObjectProbe = z.object({});
+    const policyPointStaticKeys = policyPointKeys.filter((key) => !(key in zodObjectProbe));
     expect(policyPointStaticKeys).toEqual(expectedPolicyPointStaticKeys);
     expect(Object.keys(Policy.Resource)).toEqual(expectedResourceKeys);
     expect(Object.keys(PolicyIndex.Resource)).toEqual(expectedResourceKeys);

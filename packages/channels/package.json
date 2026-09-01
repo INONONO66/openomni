@@ -14,7 +14,7 @@
     "@openomni/ledger": "workspace:*",
     "@openomni/policy": "workspace:*",
     "@openomni/protocol": "workspace:*",
-    "zod": "^3.22.4"
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@openomni/telemetry": "workspace:*",

@@ -104,7 +104,7 @@ test("a request that does not parse never acks", async () => {
   const written: string[] = [];
   await expect(
     serveProcessWorker('{"instruction":"no origin"}', (line) => written.push(line), async () => ({ text: "x", tokens: 0 })),
-  ).rejects.toThrow("Required");
+  ).rejects.toThrow("Invalid input");
   expect(written).toEqual([]);
 });
 
