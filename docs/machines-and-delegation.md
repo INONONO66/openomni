@@ -87,15 +87,19 @@ Attached machines appear as ONE flat namespace,
   named in the protocol and enforced by the daemon; a bitten ceiling reports
   `truncated` rather than silently presenting a prefix as the whole thing.
 - **The typed-refusal contract covers requests the host was ENTITLED to make.**
-  A daemon asked for `fs.read` when it never offered `fs.read`, or for an
-  export name absent from its own `Offer.exports`, is not looking at a refusable
-  request — it is looking at a host violating the attachment it negotiated. That
-  is a transport-level protocol error, not an `FsResult` refusal, and it is
-  correct that it is: `FsResult` reasons are answers the ASKER is meant to read
-  and act on, and there is no honest thing for a compromised host to learn from
-  "you may not do what you already agreed you could not do". The distinction is
-  the trust boundary itself — refusals speak to callers inside the contract,
-  protocol errors to peers who broke it.
+  A daemon asked for `fs.read` when it never offered `fs.read` is not looking at
+  a refusable request — it is looking at a host violating the attachment it
+  negotiated. That arm is a transport-level protocol error
+  (`MachineDaemonProtocolError`, reason `capability_not_offered`), not an
+  `FsResult` refusal, and it is correct that it is: `FsResult` reasons are
+  answers the ASKER is meant to read and act on, and there is no honest thing
+  for a compromised host to learn from "you may not do what you already agreed
+  you could not do". The distinction is the trust boundary itself — refusals
+  speak to callers inside the contract, protocol errors to peers who broke it.
+  An export NAME absent from the daemon's own `Offer.exports` stays inside the
+  contract: the capability was negotiated, only the name was not, so the daemon
+  answers with the typed `export_not_available` refusal that already exists for
+  exactly that boundary.
 
 The app surface is three host-placed tools — `fs_read`, `fs_list`, `fs_stat` —
 over a router that parses the namespace path
