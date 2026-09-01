@@ -451,6 +451,62 @@ describe("Processor", () => {
       expect(statusStates(events)).toEqual(["busy", "idle"]);
     });
 
+    test("publishes idle before a microtask queued by message.finished", async () => {
+      const order: string[] = [];
+      const orderedEvents = {
+        publish(event: { name: string }, data: unknown) {
+          const state = (data as { context?: { stateType?: string } }).context?.stateType;
+          if (event.name === Operational.Events.Info.name && state === "idle") {
+            order.push("idle");
+          }
+        },
+      };
+      const processor = createProcessor({
+        events: orderedEvents,
+        sink: {
+          onMessage(message) {
+            if ("completed" in message.info.time && message.info.time.completed !== undefined) {
+              order.push("finish");
+              queueMicrotask(() => order.push("queued"));
+            }
+          },
+          onToolCall: () => undefined,
+          onToolResult: () => undefined,
+        },
+      });
+
+      await processor.process({ system: "" });
+
+      expect(order).toEqual(["finish", "idle", "queued"]);
+    });
+
+    test("starts a zero-delay retry after the retry sleep settles", async () => {
+      let attempts = 0;
+      const retryError = new APIError({
+        message: "retry",
+        isRetryable: true,
+        responseHeaders: { "retry-after-ms": "0" },
+      });
+      const processor = createProcessor({
+        maxRetryAttempts: 1,
+        createStream: async () => {
+          attempts += 1;
+          if (attempts === 1) throw retryError;
+          return {
+            fullStream: (async function* () {
+              yield { type: "finish" };
+            })(),
+          };
+        },
+      });
+
+      const processing = processor.process({ system: "" });
+      await Promise.resolve();
+      expect(attempts).toBe(1);
+      await processing;
+      expect(attempts).toBe(2);
+    });
+
     test("projects sink callbacks onto the events port", async () => {
       const sinkEvents: string[] = [];
       const toolCalls: Tool.Call[] = [];
