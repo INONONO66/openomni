@@ -107,6 +107,19 @@ describe("messaging-composed gateway router (#708)", () => {
     if (receipt.kind === "denied") expect(receipt.code).toBe("ungranted");
   });
 
+  test("constructs without a ledger sub-adapter and replays no authority", () => {
+    const adapter = Storage.get();
+    Storage.configure({
+      ...adapter,
+      transaction: adapter.transaction.bind(adapter),
+      ledger: undefined,
+    });
+
+    const router = makeRouter();
+
+    expect(router.messaging).toBeDefined();
+  });
+
   test("a routed registered actor on a rule-covered channel materializes a reply-scoped grant, enabling the persona reply", async () => {
     const router = makeRouter();
     // Ingest the stranger's first contact verbatim — the router's actor
@@ -190,6 +203,17 @@ describe("messaging-composed gateway router (#708)", () => {
           ...(modern?.data as Record<string, unknown>),
           runId: "run-legacy",
           pendingInteractionId: "ask_legacy",
+        },
+      },
+      0,
+    );
+    Storage.get().ledger?.append(
+      {
+        streamId: "route:discord:shop-ws:market:equal-time-row",
+        type: "route.decided",
+        data: {
+          ...(modern?.data as Record<string, unknown>),
+          inboundId: "equal-time-row",
         },
       },
       0,

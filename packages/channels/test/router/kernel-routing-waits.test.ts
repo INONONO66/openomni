@@ -245,6 +245,81 @@ describe("GatewayRouter durable wait routing", () => {
     expect(correction?.seq).toBe(1);
   });
 
+  test("rejects same-precedence wait ambiguity before execution", async () => {
+    registerResponder("actor-external-worker", "seller-1");
+    openSessionWait("wait-ambiguous-a");
+    openSessionWait("wait-ambiguous-b");
+
+    const error = await captureError(kernelRouter().ingest(replyEvent("inbound-wait-ambiguous")));
+
+    expect(error).toBeInstanceOf(IngressRoutingError);
+    expect((error as IngressRoutingError).code).toBe("route_ambiguous");
+    expect(routingDecisions()[0]).toMatchObject({
+      stage: "wait_correlation",
+      outcome: "ambiguous",
+      candidateInteractionIds: ["wait:wait-ambiguous-a", "wait:wait-ambiguous-b"],
+    });
+    expect(deliveries).toEqual([]);
+  });
+
+  test.each(["throw", "empty_conflict"] as const)(
+    "fails closed when the wait-rejection correction append returns %s",
+    async (fault) => {
+      registerResponder("actor-external-worker", "seller-1");
+      openSessionWait(`wait-correction-${fault}`, {
+        expectedResponders: ["actor-someone-else"],
+      });
+      const adapter = Storage.get();
+      const ledger = adapter.ledger;
+      if (ledger === undefined) throw new Error("ledger sub-adapter missing");
+      Storage.configure({
+        ...adapter,
+        transaction: adapter.transaction.bind(adapter),
+        ledger: {
+          ...ledger,
+          append: (fact, expectedHead) => {
+            if (fact.type !== Ingress.ROUTE_NOT_DELIVERED_FACT_TYPE) {
+              return ledger.append(fact, expectedHead);
+            }
+            if (fault === "throw") throw new Error("correction unavailable");
+            return { kind: "cas_conflict", currentHead: 0 };
+          },
+          headFact: (id) =>
+            id.startsWith("route_correction:") ? undefined : ledger.headFact(id),
+        },
+      });
+
+      const error = await captureError(
+        kernelRouter().ingest(replyEvent(`inbound-correction-${fault}`)),
+      );
+
+      expect(error).toBeInstanceOf(IngressRoutingError);
+      expect((error as IngressRoutingError).code).toBe("route_record_failed");
+      expect(deliveries).toEqual([]);
+    },
+  );
+
+  test("accepts an already-recorded wait-rejection correction idempotently", async () => {
+    registerResponder("actor-external-worker", "seller-1");
+    openSessionWait("wait-correction-replay", {
+      expectedResponders: ["actor-external-worker", "actor-b"],
+      resolutionPolicy: "quorum",
+      quorum: { expected: 2, threshold: 2 },
+    });
+    const event = replyEvent("inbound-correction-replay");
+    await kernelRouter().ingest(event);
+    await captureError(kernelRouter().ingest(event));
+
+    const error = await captureError(kernelRouter().ingest(event));
+
+    expect(error).toBeInstanceOf(IngressRoutingError);
+    expect((error as IngressRoutingError).code).toBe("wait_reply_rejected");
+    expect(
+      Storage.get().ledger?.headFact(Ingress.routeCorrectionStreamId(event)),
+    ).toMatchObject({ type: Ingress.ROUTE_NOT_DELIVERED_FACT_TYPE, seq: 1 });
+    expect(deliveries).toHaveLength(1);
+  });
+
   test("blocks a disallowed action on a matched durable wait instead of surface routing", async () => {
     registerResponder("actor-external-worker", "seller-1");
     openSessionWait("wait-disallowed-action");

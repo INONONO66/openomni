@@ -532,10 +532,8 @@ type WaitOpening =
 /** Opens or resumes the awaited-send record before delivery. */
 function openSendWait(input: SendInput, target: DeliveryTarget, deny: DenySend): WaitOpening {
   if (input.operation !== "awaited") return { ok: true, wait: undefined };
-  const spec = input.waitSpec;
-  if (spec === undefined) {
-    throw new Error("awaited send without waitSpec — schema layer regressed");
-  }
+  // SendInput's refinement requires waitSpec for awaited sends.
+  const spec = input.waitSpec as NonNullable<SendInput["waitSpec"]>;
   try {
     const wait = WaitService.open(
       {
