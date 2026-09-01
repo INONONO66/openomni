@@ -107,8 +107,9 @@ describe("Machine.Offer.exports", () => {
     });
     expect(result.success).toBe(false);
     if (!result.success) {
-      expect(result.error.issues[0]?.code).toBe("unrecognized_keys");
-      expect(result.error.issues[0]?.message).toBe("Unrecognized key(s) in object: 'path'");
+      const issue = result.error.issues[0];
+      expect(issue?.code).toBe("unrecognized_keys");
+      expect(issue?.code === "unrecognized_keys" ? issue.keys : []).toEqual(["path"]);
     }
   });
 });
