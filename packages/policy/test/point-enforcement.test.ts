@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { PolicyEngine, PolicyRegistrationError } from "@openomni/policy";
-import { type Policy, PolicyDecision } from "@openomni/protocol";
+import { Operational, type Policy, PolicyDecision } from "@openomni/protocol";
 import { dispatchContext, turnPostContext } from "./point-test-fixtures";
 
 function assertDispatchPointRequiresPointInput(engine: ReturnType<typeof PolicyEngine.create>) {
@@ -277,6 +277,40 @@ describe("PolicyEngine dispatchPoint", () => {
       expect(decision.verdict).toBe(testCase.verdict);
       expect(decision.reasonCodes).toEqual([testCase.reason]);
     }
+  });
+
+  test("audits middleware failures under the dispatch trace", async () => {
+    const events: Array<{ name: string; data: unknown }> = [];
+    const engine = PolicyEngine.create({
+      clock: () => 42,
+      traceContext: { traceId: "engine-trace" },
+      auditEmit: (event, data) => events.push({ name: event.name, data }),
+    });
+    engine.register({
+      kind: "point",
+      name: "audited-crash",
+      pointIds: ["dispatch.action.pre"],
+      effectCapabilities: { "dispatch.action.pre": [] },
+      priority: 0,
+      fn: () => {
+        throw new Error("crash");
+      },
+    });
+
+    const decision = await engine.dispatchPoint("dispatch.action.pre", {
+      ...dispatchContext,
+      traceContext: { traceId: "dispatch-trace" },
+    });
+
+    expect(decision.verdict).toBe("deny");
+    expect(events).toContainEqual({
+      name: Operational.Events.Warn.name,
+      data: expect.objectContaining({
+        traceId: "dispatch-trace",
+        time: 42,
+        context: expect.objectContaining({ name: "audited-crash", failPolicy: "fail-closed" }),
+      }),
+    });
   });
 
   test("records a fail-open middleware crash in the composed allow without auditEmit", async () => {

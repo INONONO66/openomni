@@ -199,6 +199,25 @@ describe("Gateway.SendInput (re-homed #215 vocabulary)", () => {
     expect(parsed.class).toBeUndefined();
   });
 
+  test("conversation and lease pins reject an explicit notify class", () => {
+    expect(
+      Gateway.SendInput.safeParse({
+        ...base,
+        operation: "fire_and_forget",
+        class: "notify",
+        conversationId: "conversation-1",
+      }).success,
+    ).toBe(false);
+    expect(
+      Gateway.SendInput.safeParse({
+        ...base,
+        operation: "fire_and_forget",
+        class: "notify",
+        leaseId: "lease-1",
+      }).success,
+    ).toBe(false);
+  });
+
   test("class coherence: converse ⟺ awaited, notify ⟺ fire_and_forget", () => {
     // Coherent pairings parse.
     expect(

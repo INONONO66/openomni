@@ -425,6 +425,36 @@ describe("policy effect composition conformance", () => {
     );
   });
 
+  it("keeps the highest-priority suppression and combines equal-priority reasons", () => {
+    const result = composeEffects([
+      d("policy.high-a", [{ type: "writeback.suppress", reason: "sensitive" }], 20),
+      d("policy.low", [{ type: "writeback.suppress", reason: "low-priority" }], 10),
+      d("policy.high-b", [{ type: "writeback.suppress", reason: "private" }], 20),
+    ]);
+
+    expect(result.mergedEffects).toEqual([
+      { type: "writeback.suppress", reason: "sensitive; private" },
+    ]);
+  });
+
+  it("keeps the first skip and abort effect", () => {
+    const result = composeEffects([
+      d("policy.first", [
+        { type: "tool.skip_invocation", reason: "first skip" },
+        { type: "run.abort", reason: "first abort" },
+      ]),
+      d("policy.second", [
+        { type: "tool.skip_invocation", reason: "second skip" },
+        { type: "run.abort", reason: "second abort" },
+      ]),
+    ]);
+
+    expect(result.mergedEffects).toEqual([
+      { type: "tool.skip_invocation", reason: "first skip" },
+      { type: "run.abort", reason: "first abort" },
+    ]);
+  });
+
   it("concatenates approval reasons", () => {
     const result = composeEffects([
       d("policy.alpha", [

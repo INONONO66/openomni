@@ -233,6 +233,55 @@ test("rejects legacy timing snapshot registrations fail-closed without storing t
   expect(store.selectPoint("run.turn.pre", "resident")).toHaveLength(0);
 });
 
+test("rejects non-object registrations at the public boundary", () => {
+  const engine = PolicyEngine.create({ clock: Date.now });
+  for (const registration of [null, [], "policy"]) {
+    try {
+      Reflect.apply(engine.register, engine, [registration]);
+      throw new Error("expected registration rejection");
+    } catch (error) {
+      expect(error).toBeInstanceOf(PolicyRegistrationError);
+      expect((error as PolicyRegistrationError).code).toBe("invalid_canonical_registration");
+    }
+  }
+});
+
+test("rejects unreadable and non-string capability arrays", () => {
+  const unreadable = new Proxy(["audit.annotate"], {
+    get(target, property, receiver) {
+      if (property === "0") throw new Error("unreadable capability");
+      return Reflect.get(target, property, receiver);
+    },
+  });
+  for (const capabilities of [unreadable, [1]]) {
+    const error = registrationErrorFor({
+      kind: "point",
+      name: "invalid-capability-array",
+      pointIds: ["run.lifecycle.post"],
+      effectCapabilities: { "run.lifecycle.post": capabilities },
+      priority: 0,
+      fn: allow,
+    });
+    expect(error.code).toBe("invalid_canonical_registration");
+    expect(error.pointId).toBe("run.lifecycle.post");
+  }
+});
+
+test("reports the rejected effect capability as structured error data", () => {
+  const error = registrationErrorFor({
+    kind: "point",
+    name: "unknown-effect",
+    pointIds: ["run.lifecycle.post"],
+    effectCapabilities: { "run.lifecycle.post": ["not.an.effect"] },
+    priority: 0,
+    fn: allow,
+  });
+
+  expect(error.code).toBe("disallowed_effect_capability");
+  expect(error.pointId).toBe("run.lifecycle.post");
+  expect(error.effectType).toBe("not.an.effect");
+});
+
 test("rejects canonical point arrays with unsafe proxy lengths", () => {
   const pointIds = new Proxy(["run.lifecycle.post"], {
     get(target, property, receiver) {

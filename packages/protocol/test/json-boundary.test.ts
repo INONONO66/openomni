@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { canonicalKey, isPlainValue, PlainValueSchema, WorkItem } from "../src/index.js";
+import {
+  canonicalKey,
+  isPlainValue,
+  PlainValueSchema,
+  WorkItem,
+} from "../src/index.js";
 
 describe("plain JSON owner", () => {
   test("the typed key profile retains its established bytes", () => {
@@ -14,6 +19,23 @@ describe("plain JSON owner", () => {
     expect(() => canonicalKey({ gap: undefined } as never)).toThrow(
       "canonical key accepts plain JSON values only",
     );
+  });
+
+  test("rejects values whose property descriptors cannot be read", () => {
+    const hostile = new Proxy(
+      {},
+      {
+        ownKeys: () => {
+          throw new Error("unreadable keys");
+        },
+      },
+    );
+
+    expect(PlainValueSchema.safeParse(hostile).success).toBe(false);
+  });
+
+  test("canonical digest rejects values outside the JSON grammar", () => {
+    expect(() => WorkItem.canonicalDigest(undefined)).toThrow();
   });
 
   test("canonical digest bytes remain pinned independently of object key order", () => {

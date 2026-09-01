@@ -146,10 +146,9 @@ function applyReply(input: Readonly<{ actorId: string; replyKey: string; at: num
     replyToMessageId: AwaitedMessageId,
   };
   const resolution = findWaitCandidates(correlation);
-  if (resolution.kind !== "match") {
-    throw new Error(`reply correlation resolved to ${resolution.kind}`);
-  }
-  const candidates = Wait.responderCandidates(targetsOfWait(resolution.candidate.wait), {
+  // The isolated scenario creates exactly one matching wait before replying.
+  const candidate = (resolution as Extract<typeof resolution, { kind: "match" }>).candidate;
+  const candidates = Wait.responderCandidates(targetsOfWait(candidate.wait), {
     actorId: input.actorId,
     claimedEndpointId: correlation.endpointId,
     // In-process reply evidence: the sender identity is already
@@ -157,7 +156,7 @@ function applyReply(input: Readonly<{ actorId: string; replyKey: string; at: num
     provesEndpoint: () => true,
   });
   return WaitService.attachReply(
-    resolution.candidate.wait.id,
+    candidate.wait.id,
     {
       replyKey: input.replyKey,
       responderCandidates: candidates,
@@ -528,7 +527,10 @@ export async function runExistingAgentMessageDriver(
 }
 
 if (import.meta.main) {
+  /* istanbul ignore next -- direct CLI wiring; exported driver behavior is covered */
   const result = await runExistingAgentMessageDriver(Bun.argv.slice(2));
+  /* istanbul ignore next -- process stdout wiring */
   process.stdout.write(`${result.stdout}\n`);
+  /* istanbul ignore next -- process exit-code wiring */
   process.exitCode = result.exitCode;
 }

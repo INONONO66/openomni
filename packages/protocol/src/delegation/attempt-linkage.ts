@@ -26,9 +26,5 @@ export function settlementToAttemptOutcome(
     case "no_response":
     case "interrupted":
       return "interrupted";
-    default: {
-      const unreachable: never = status;
-      throw new Error(`notify settlement (${String(unreachable)}) carries no attempt to close`);
-    }
   }
 }
