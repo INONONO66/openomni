@@ -1,43 +1,47 @@
-interface GitHubUser {
-  login: string;
-  type: string;
-}
+import { z } from "zod";
 
-interface GitHubLabel {
-  name: string;
-}
+const GitHubUserSchema = z.object({ login: z.string(), type: z.string() });
 
-interface GitHubRepository {
-  full_name: string;
-  owner: { login: string };
-  name: string;
-}
+const GitHubIssueSchema = z.object({
+  number: z.number(),
+  title: z.string(),
+  // GitHub sends both null and empty-string bodies.
+  body: z.string().nullish(),
+  // Presence flag only — an issue payload carrying `pull_request` is a PR.
+  pull_request: z.object({}).optional(),
+  labels: z.array(z.object({ name: z.string() })).optional(),
+  user: GitHubUserSchema,
+});
 
-interface GitHubIssue {
-  number: number;
-  title: string;
-  body?: string;
-  pull_request?: unknown;
-  labels?: GitHubLabel[];
-  user: GitHubUser;
-}
+const GitHubRepositorySchema = z.object({
+  full_name: z.string(),
+  owner: z.object({ login: z.string() }),
+  name: z.string(),
+});
 
-export interface GitHubIssueCommentPayload {
-  action: string;
-  issue: GitHubIssue;
-  comment: {
-    id: number;
-    body: string;
-    user: GitHubUser;
-  };
-  repository: GitHubRepository;
-}
+/**
+ * Wire schemas for the two webhook payloads the surface consumes — THE typed
+ * boundary where a signature-verified body becomes data. A payload that does
+ * not parse is an unsupported event, never a duck-typed walk.
+ */
+export const GitHubWebhookPayloadSchemas = {
+  issue_comment: z.object({
+    action: z.string(),
+    issue: GitHubIssueSchema,
+    comment: z.object({ id: z.number(), body: z.string(), user: GitHubUserSchema }),
+    repository: GitHubRepositorySchema,
+  }),
+  issues: z.object({
+    action: z.string(),
+    issue: GitHubIssueSchema,
+    repository: GitHubRepositorySchema,
+  }),
+} as const;
 
-export interface GitHubIssuesPayload {
-  action: string;
-  issue: GitHubIssue;
-  repository: GitHubRepository;
-}
+export type GitHubUser = z.infer<typeof GitHubUserSchema>;
+export type GitHubIssuePayload = z.infer<
+  (typeof GitHubWebhookPayloadSchemas)["issues" | "issue_comment"]
+>;
 
 export interface GitHubEventContent {
   text: string;

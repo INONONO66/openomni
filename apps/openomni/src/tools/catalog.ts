@@ -46,20 +46,22 @@ import { machinesToolExecutor, machinesToolSpec } from "./machines";
 import type { ProvisionPort } from "./provision";
 import {
   channelDeclareToolExecutor,
-  channelDeclareToolSpec,
   channelDisableToolExecutor,
-  channelDisableToolSpec,
   channelEnableToolExecutor,
-  channelEnableToolSpec,
   personDeclareToolExecutor,
-  personDeclareToolSpec,
   personRemoveToolExecutor,
-  personRemoveToolSpec,
   provisionStatusToolExecutor,
-  provisionStatusToolSpec,
   secretRotateToolExecutor,
-  secretRotateToolSpec,
 } from "./provision";
+import {
+  channelDeclareToolSpec,
+  channelDisableToolSpec,
+  channelEnableToolSpec,
+  personDeclareToolSpec,
+  personRemoveToolSpec,
+  provisionStatusToolSpec,
+  secretRotateToolSpec,
+} from "./provision-specs";
 import type { CellPorts } from "./run-code";
 import { runCodeToolExecutor, runCodeToolSpec } from "./run-code";
 import type { CompletionPort } from "../work-item/completion";
