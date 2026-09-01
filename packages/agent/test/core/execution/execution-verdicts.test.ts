@@ -136,7 +136,6 @@ describe("execution helper deny verdicts", () => {
     let outcome: Awaited<ReturnType<typeof handleStop>>;
     try {
       outcome = await handleStop(state, makeConfig(), engine, makeAgentBase(), makeTurnArtifacts());
-      await Promise.resolve();
     } finally {
       unsubscribe();
     }
