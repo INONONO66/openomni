@@ -16,7 +16,7 @@ import type { ChannelProvider, ProviderDeliveryRoute } from "@openomni/channels"
 import { ChannelProviders } from "@openomni/channels";
 import type { Channel, Provisioning } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
-import { z } from "zod";
+import type { z } from "zod";
 import type { OpenOmniConfig } from "./config";
 
 export interface BuiltChannel {
@@ -105,29 +105,6 @@ export function channelProfile(
 }
 
 /**
- * Vault plaintexts are JSON credential payloads. This is THE validation
- * layer for DB-sourced credentials — the trust boundary where ciphertext
- * from the provisioning store becomes a provider's typed credential.
- */
-const CredentialSchemas = {
-  telegram: z.object({ token: z.string().min(1) }).strict(),
-  discord: z.object({ token: z.string().min(1) }).strict(),
-  github: z
-    .object({
-      secret: z.string().min(1),
-      token: z.string().min(1).optional(),
-      botUsername: z.string().min(1).optional(),
-    })
-    .strict(),
-  slack: z
-    .object({
-      botToken: z.string().startsWith("xoxb-"),
-      appToken: z.string().startsWith("xapp-"),
-    })
-    .strict(),
-} as const;
-
-/**
  * Trigger policy per provider — identical to the env-config path above by
  * design (PR-B changes where credentials live, not how channels behave).
  * Per-instance trigger settings arrive with the runtime-administration PR.
@@ -160,14 +137,19 @@ export type CredentialReader = (
   ref: string,
 ) => { kind: "ok"; plaintext: Uint8Array } | { kind: "locked"; reason: string };
 
+/**
+ * Vault plaintexts are JSON credential payloads. The provider's own
+ * `credentials` schema is THE validation layer for DB-sourced credentials —
+ * the trust boundary where ciphertext from the provisioning store becomes
+ * the provider's typed credential.
+ */
 function credentialRow<TCredentials, TId extends keyof typeof ChannelProviders>(
   provider: ChannelProvider<TCredentials, TId>,
-  schema: z.ZodType<TCredentials>,
   plaintext: Uint8Array,
 ): ChannelComponent | { readonly invalid: string } {
   let parsed: z.SafeParseReturnType<TCredentials, TCredentials>;
   try {
-    parsed = schema.safeParse(JSON.parse(new TextDecoder().decode(plaintext)));
+    parsed = provider.credentials.safeParse(JSON.parse(new TextDecoder().decode(plaintext)));
   } catch (error) {
     return { invalid: `credential payload is not JSON (${String(error)})` };
   }
@@ -181,18 +163,18 @@ function declaredRow(
   providers: typeof ChannelProviders,
 ): ChannelComponent | { readonly invalid: string } {
   if (key === "telegram") {
-    return credentialRow(providers.telegram, CredentialSchemas.telegram, plaintext);
+    return credentialRow(providers.telegram, plaintext);
   }
   if (key === "discord") {
-    return credentialRow(providers.discord, CredentialSchemas.discord, plaintext);
+    return credentialRow(providers.discord, plaintext);
   }
   if (key === "slack") {
-    return credentialRow(providers.slack, CredentialSchemas.slack, plaintext);
+    return credentialRow(providers.slack, plaintext);
   }
-  return credentialRow(providers.github, CredentialSchemas.github, plaintext);
+  return credentialRow(providers.github, plaintext);
 }
 
-function isRegisteredProvider(provider: string): provider is keyof typeof ChannelProviders {
+export function isRegisteredProvider(provider: string): provider is keyof typeof ChannelProviders {
   return provider in ChannelProviders;
 }
 
@@ -209,7 +191,24 @@ export function validateProviderCredential(
   if (!isRegisteredProvider(provider)) {
     return `unknown provider ${provider}`;
   }
-  const parsed = CredentialSchemas[provider].safeParse(payload);
+  const parsed = ChannelProviders[provider].credentials.safeParse(payload);
+  return parsed.success ? undefined : parsed.error.message;
+}
+
+/**
+ * The pre-persist settings gate for `channel_declare`: knobs must parse under
+ * the provider's `settings` schema before the row lands. No shipped provider
+ * carries knobs yet, so any settings key is a typed refusal — never
+ * accepted-and-ignored.
+ */
+export function validateProviderSettings(
+  provider: string,
+  settings: Record<string, string | number | boolean>,
+): string | undefined {
+  if (!isRegisteredProvider(provider)) {
+    return `unknown provider ${provider}`;
+  }
+  const parsed = ChannelProviders[provider].settings.safeParse(settings);
   return parsed.success ? undefined : parsed.error.message;
 }
 
