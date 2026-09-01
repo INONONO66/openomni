@@ -73,33 +73,47 @@ function collectEntry(
   keys.add(`${issueType} ${file} ${parent ? `${parent}.${name}` : name}`);
 }
 
+function collectMemberEntries(
+  keys: Set<string>,
+  issueType: string,
+  file: string,
+  members: object,
+): void {
+  // enumMembers / namespaceMembers: { ParentName: [entry, ...] }
+  for (const [parent, entries] of Object.entries(members)) {
+    if (!Array.isArray(entries)) continue;
+    for (const entry of entries) {
+      collectEntry(keys, issueType, file, entry, parent);
+    }
+  }
+}
+
+function collectIssueValue(
+  keys: Set<string>,
+  issueType: string,
+  file: string,
+  value: unknown,
+): void {
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      collectEntry(keys, issueType, file, entry, undefined);
+    }
+  } else if (typeof value === "object" && value !== null) {
+    collectMemberEntries(keys, issueType, file, value);
+  }
+}
+
+function collectRecordIssues(keys: Set<string>, record: KnipFileRecord): void {
+  for (const [issueType, value] of Object.entries(record)) {
+    if (issueType === "file" || value === null || value === undefined) continue;
+    collectIssueValue(keys, issueType, record.file, value);
+  }
+}
+
 /** Flattens a knip JSON report into sorted, stable issue keys. */
 export function normalizeKnipIssues(report: KnipReport): string[] {
   const keys = new Set<string>();
-
-  for (const record of report.issues) {
-    for (const [issueType, value] of Object.entries(record)) {
-      if (issueType === "file" || value === null || value === undefined) {
-        continue;
-      }
-      if (Array.isArray(value)) {
-        for (const entry of value) {
-          collectEntry(keys, issueType, record.file, entry, undefined);
-        }
-      } else if (typeof value === "object") {
-        // enumMembers / namespaceMembers: { ParentName: [entry, ...] }
-        for (const [parent, entries] of Object.entries(value)) {
-          if (!Array.isArray(entries)) {
-            continue;
-          }
-          for (const entry of entries) {
-            collectEntry(keys, issueType, record.file, entry, parent);
-          }
-        }
-      }
-    }
-  }
-
+  for (const record of report.issues) collectRecordIssues(keys, record);
   return Array.from(keys).sort((a, b) => a.localeCompare(b));
 }
 
