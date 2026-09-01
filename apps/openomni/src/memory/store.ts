@@ -1,5 +1,7 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { mkdirSync, readFileSync } from "node:fs";
+import { dirname } from "node:path";
+import { replaceFileAtomically } from "@openomni/ledger";
+import type { IdSource } from "@openomni/protocol";
 import { z } from "zod";
 
 /**
@@ -89,13 +91,14 @@ function renderSnapshot(file: MemoryFile): string {
  * write that silently skipped persistence would be a lie the next session
  * acts on.
  */
-export function openCuratedMemory(path: string): CuratedMemory {
+export function openCuratedMemory(
+  path: string,
+  idSource: IdSource = () => crypto.randomUUID(),
+): CuratedMemory {
   mkdirSync(dirname(path), { recursive: true });
 
   function persist(file: MemoryFile): void {
-    const tmp = join(dirname(path), `.memory-${process.pid}.tmp`);
-    writeFileSync(tmp, JSON.stringify(file, null, 2), "utf8");
-    renameSync(tmp, path);
+    replaceFileAtomically(path, JSON.stringify(file, null, 2));
   }
 
   function assertBudget(store: MemoryStoreName, nextChars: number): void {
@@ -129,9 +132,9 @@ export function openCuratedMemory(path: string): CuratedMemory {
   }
 
   function mintId(file: MemoryFile): string {
-    let id = crypto.randomUUID().slice(0, 8);
+    let id = idSource().slice(0, 8);
     while (MEMORY_STORES.some((store) => file[store].some((entry) => entry.id === id))) {
-      id = crypto.randomUUID().slice(0, 8);
+      id = idSource().slice(0, 8);
     }
     return id;
   }

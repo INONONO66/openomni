@@ -27,7 +27,7 @@ describe("ledger archive manifest", () => {
       expect(await readdir(directory)).toEqual(["ledger-archive-manifest.json"]);
 
       await expect(
-        writeArchiveManifestAtomically(outPath, "partial\n", async () => {
+        writeArchiveManifestAtomically(outPath, "partial\n", () => {
           throw new Error("injected replacement failure");
         }),
       ).rejects.toThrow("injected replacement failure");
