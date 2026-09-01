@@ -331,10 +331,10 @@ describe("delivery receipt", () => {
     expect(stored?.correlation.replyToMessageId).toBe("platform:msg-77");
     // Correlation now answers the platform id, not the internal message id.
     expect(
-      WaitStore.findByCorrelation({ replyToMessageId: "platform:msg-77" }, messagingNow),
+      WaitStore.findByCorrelation({ replyToMessageId: "platform:msg-77" }),
     ).toHaveLength(1);
     expect(
-      WaitStore.findByCorrelation({ replyToMessageId: "message:test-awaited" }, messagingNow),
+      WaitStore.findByCorrelation({ replyToMessageId: "message:test-awaited" }),
     ).toHaveLength(0);
   });
 

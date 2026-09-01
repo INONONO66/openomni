@@ -3,8 +3,9 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { resolveChannelGrant } from "@openomni/channels";
 import type { RunInput } from "@openomni/llm";
-import { ActorRegistry, ChannelGrantStore, Session, Storage } from "@openomni/ledger";
+import { ActorRegistry, Session, Storage } from "@openomni/ledger";
 import { Gateway, type Message } from "@openomni/protocol";
 import { createResidentGateway, registerTrustedChannelGrant } from "../src/gateway";
 import { openCuratedMemory } from "../src/memory/store";
@@ -114,19 +115,15 @@ describe("channel grant registration", () => {
   test("the revoker removes exactly the grant it registered", () => {
     const revokeTelegram = registerTrustedChannelGrant("telegram");
     const revokeDiscord = registerTrustedChannelGrant("discord");
-    expect(ChannelGrantStore.resolve({ surface: "telegram" })?.grant.kind).toBe(
-      "trusted_channel",
-    );
+    expect(resolveChannelGrant({ surface: "telegram" })?.grant.kind).toBe("trusted_channel");
 
     revokeTelegram();
 
     // Only the telegram grant is gone; the sibling surface keeps its authority.
-    expect(ChannelGrantStore.resolve({ surface: "telegram" })).toBeUndefined();
-    expect(ChannelGrantStore.resolve({ surface: "discord" })?.grant.kind).toBe(
-      "trusted_channel",
-    );
+    expect(resolveChannelGrant({ surface: "telegram" })).toBeUndefined();
+    expect(resolveChannelGrant({ surface: "discord" })?.grant.kind).toBe("trusted_channel");
     revokeDiscord();
-    expect(ChannelGrantStore.resolve({ surface: "discord" })).toBeUndefined();
+    expect(resolveChannelGrant({ surface: "discord" })).toBeUndefined();
   });
 });
 

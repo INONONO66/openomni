@@ -78,8 +78,8 @@ describe("GatewayRouter kernel routing", () => {
     // Given
     registerOwnerDm();
     createMappedOwnerSession();
-    const blacklistRead = spyOn(BlacklistStore, "match");
-    const channelRead = spyOn(ChannelGrantStore, "resolve");
+    const blacklistRead = spyOn(BlacklistStore, "list");
+    const channelRead = spyOn(ChannelGrantStore, "list");
     let blacklistReads = 0;
     let channelReads = 0;
 
