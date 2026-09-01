@@ -51,7 +51,12 @@ async function ask(question: string, options?: AskOptions): Promise<string> {
   }
 }
 
-export function createCliDeps(home: string = homedir()): CliDeps {
+export interface CliRuntimeOptions {
+  /** Cancels a long-running follow child, with hard-kill escalation. */
+  readonly followSignal?: AbortSignal;
+}
+
+export function createCliDeps(home: string = homedir(), options: CliRuntimeOptions = {}): CliDeps {
   const envPath = join(home, ".openomni", "env");
   const target: DaemonTarget = {
     platform: resolvePlatform(),
@@ -81,7 +86,7 @@ export function createCliDeps(home: string = homedir()): CliDeps {
   async function startApp(): Promise<void> {
     applyEnvFile(envPath, process.env);
     mkdirSync(join(home, ".openomni"), { recursive: true });
-    const config = loadConfig();
+    const config = loadConfig(home);
     const app = await startOpenOmni({ config });
     installShutdownHandlers({
       stop: app.stop,
@@ -134,8 +139,20 @@ export function createCliDeps(home: string = homedir()): CliDeps {
         return;
       }
       const child = spawn(command, rest, { stdio: "inherit" });
-      child.on("exit", (code) => resolve(code ?? 1));
-      child.on("error", () => resolve(1));
+      let killTimer: ReturnType<typeof setTimeout> | undefined;
+      const abort = (): void => {
+        child.kill("SIGTERM");
+        killTimer = setTimeout(() => child.kill("SIGKILL"), 2_000);
+      };
+      const settle = (code: number): void => {
+        if (killTimer !== undefined) clearTimeout(killTimer);
+        options.followSignal?.removeEventListener("abort", abort);
+        resolve(code);
+      };
+      child.once("exit", (code) => settle(code ?? 1));
+      child.once("error", () => settle(1));
+      options.followSignal?.addEventListener("abort", abort, { once: true });
+      if (options.followSignal?.aborted) abort();
     });
   }
 
@@ -149,7 +166,7 @@ export function createCliDeps(home: string = homedir()): CliDeps {
     runInit: () => {
       applyEnvFile(envPath, process.env);
       return Promise.resolve(
-        runProvisioningInit({ config: loadConfig(), env: process.env, home, now: Date.now }),
+        runProvisioningInit({ config: loadConfig(home), env: process.env, home, now: Date.now }),
       );
     },
     ask,

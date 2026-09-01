@@ -275,28 +275,27 @@ function modelFromEnv(): OpenOmniConfig["model"] {
  * rather than inferred from whoever connects. Ledger-backed enrollment is a
  * later slice; the shape the host consumes is already the protocol's.
  */
-function machinesFromEnv(): OpenOmniConfig["machines"] {
+function machinesFromEnv(home: string): OpenOmniConfig["machines"] {
   const enrolled = parseEnvJson("OPENOMNI_MACHINES_ENROLLED", Enrollments);
   if (enrolled === undefined) return undefined;
   return {
     socketPath:
-      process.env.OPENOMNI_MACHINES_SOCKET?.trim() || join(homedir(), ".openomni", "machines.sock"),
+      process.env.OPENOMNI_MACHINES_SOCKET?.trim() || join(home, ".openomni", "machines.sock"),
     enrolled,
   };
 }
 
-export function loadConfig(): OpenOmniConfig {
+export function loadConfig(home: string = homedir()): OpenOmniConfig {
   const host = process.env.OPENOMNI_WS_HOST?.trim() || "127.0.0.1";
   const wsToken = process.env.OPENOMNI_WS_TOKEN?.trim();
-  const machines = machinesFromEnv();
+  const machines = machinesFromEnv(home);
   const actors = actorsFromEnv();
   const channels = channelsFromEnv();
   const socialBudgets = socialBudgetsFromEnv();
   const channelAllowedSenders = channelAllowedSendersFromEnv();
   return {
-    dbPath: process.env.OPENOMNI_DB_PATH?.trim() || join(homedir(), ".openomni", "storage.db"),
-    memoryPath:
-      process.env.OPENOMNI_MEMORY_PATH?.trim() || join(homedir(), ".openomni", "memory.json"),
+    dbPath: process.env.OPENOMNI_DB_PATH?.trim() || join(home, ".openomni", "storage.db"),
+    memoryPath: process.env.OPENOMNI_MEMORY_PATH?.trim() || join(home, ".openomni", "memory.json"),
     host,
     wsPort: portFromEnv(),
     ...(wsToken === undefined || wsToken.length === 0 ? {} : { wsToken }),

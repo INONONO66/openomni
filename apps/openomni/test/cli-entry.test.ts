@@ -14,10 +14,20 @@ import { createCliDeps } from "../src/cli/main";
 
 const entry = new URL("../src/cli/main.ts", import.meta.url).pathname;
 const directories: string[] = [];
-const children = new Set<Bun.Subprocess>();
+const children = new Set<RunningCli>();
+const followControllers = new Set<AbortController>();
 const READY_SENTINEL = /^OpenOmni Resident listening at ws:\/\/127\.0\.0\.1:\d+\/ws$/;
 const CHILD_TIMEOUT_MS = 10_000;
 const KILL_TIMEOUT_MS = 2_000;
+const INHERITED_CHILD_ENV_KEYS = [
+  "LANG",
+  "LC_ALL",
+  "LC_CTYPE",
+  "TMPDIR",
+  "TMP",
+  "TEMP",
+  "TZ",
+] as const;
 
 function tempHome(): string {
   const home = mkdtempSync(join(tmpdir(), "openomni-entry-"));
@@ -26,9 +36,12 @@ function tempHome(): string {
 }
 
 function appEnv(home: string): Record<string, string> {
-  const env = Object.fromEntries(
-    Object.entries(process.env).filter(([key, value]) => !key.startsWith("OPENOMNI_") && value),
-  ) as Record<string, string>;
+  const inherited = Object.fromEntries(
+    INHERITED_CHILD_ENV_KEYS.flatMap((key) => {
+      const value = process.env[key];
+      return value === undefined ? [] : [[key, value]];
+    }),
+  );
   const bin = join(home, "bin");
   mkdirSync(bin, { recursive: true });
   for (const command of ["launchctl", "systemctl", "loginctl"]) {
@@ -49,9 +62,9 @@ esac
     chmodSync(path, 0o755);
   }
   return {
-    ...env,
+    ...inherited,
     HOME: home,
-    PATH: `${bin}:${env.PATH ?? ""}`,
+    PATH: `${bin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
     OPENOMNI_COMMAND_LOG: join(home, "commands.log"),
     OPENOMNI_DB_PATH: join(home, "storage.db"),
     OPENOMNI_MEMORY_PATH: join(home, "memory.json"),
@@ -92,35 +105,61 @@ function bounded<T>(promise: Promise<T>, timeoutMs: number, message: string): Pr
   });
 }
 
-async function terminate(child: Bun.Subprocess): Promise<void> {
-  if (child.exitCode !== null) {
-    children.delete(child);
-    return;
-  }
-  child.kill("SIGTERM");
+async function boundedFollow(
+  promise: Promise<number>,
+  controller: AbortController,
+): Promise<number> {
   try {
-    await bounded(child.exited, KILL_TIMEOUT_MS, "child ignored SIGTERM");
-  } catch {
-    child.kill("SIGKILL");
-    await bounded(child.exited, KILL_TIMEOUT_MS, "child did not exit after SIGKILL");
-  } finally {
-    children.delete(child);
+    return await bounded(promise, CHILD_TIMEOUT_MS, "follow child did not exit");
+  } catch (error) {
+    controller.abort();
+    await bounded(promise, KILL_TIMEOUT_MS * 2, "follow child did not settle after cancellation");
+    throw error;
   }
+}
+
+interface StreamConsumer {
+  readonly result: Promise<string>;
+  readonly cancel: () => Promise<void>;
 }
 
 interface RunningCli {
   readonly child: Bun.Subprocess<"ignore", "pipe", "pipe">;
-  readonly stdout: Promise<string>;
-  readonly stderr: Promise<string>;
+  readonly stdout: StreamConsumer;
+  readonly stderr: StreamConsumer;
   readonly ready: Promise<void>;
+}
+
+async function terminate(running: RunningCli): Promise<void> {
+  const { child } = running;
+  try {
+    if (child.exitCode === null) {
+      child.kill("SIGTERM");
+      try {
+        await bounded(child.exited, KILL_TIMEOUT_MS, "child ignored SIGTERM");
+      } catch {
+        child.kill("SIGKILL");
+        await bounded(child.exited, KILL_TIMEOUT_MS, "child did not exit after SIGKILL");
+      }
+    }
+  } finally {
+    await Promise.all([running.stdout.cancel(), running.stderr.cancel()]);
+    await bounded(
+      Promise.all([running.stdout.result, running.stderr.result]),
+      KILL_TIMEOUT_MS,
+      "child output readers did not settle after cancellation",
+    );
+    children.delete(running);
+  }
 }
 
 function consumeLines(
   stream: ReadableStream<Uint8Array>,
   onLine: (line: string) => void,
-): Promise<string> {
-  return (async () => {
-    const reader = stream.getReader();
+): StreamConsumer {
+  const reader = stream.getReader();
+  let active = true;
+  const result = (async () => {
     const decoder = new TextDecoder();
     let output = "";
     let pending = "";
@@ -144,9 +183,16 @@ function consumeLines(
       if (pending.length > 0) onLine(pending.replace(/\r$/, ""));
       return output;
     } finally {
+      active = false;
       reader.releaseLock();
     }
   })();
+  return {
+    result,
+    cancel: async () => {
+      if (active) await reader.cancel();
+    },
+  };
 }
 
 function spawnCli(args: readonly string[], env: Record<string, string>): RunningCli {
@@ -156,19 +202,20 @@ function spawnCli(args: readonly string[], env: Record<string, string>): Running
     stdout: "pipe",
     stderr: "pipe",
   });
-  children.add(child);
   let resolveReady!: () => void;
   const ready = new Promise<void>((resolve) => {
     resolveReady = resolve;
   });
-  return {
+  const running = {
     child,
     stdout: consumeLines(child.stdout, (line) => {
       if (READY_SENTINEL.test(line)) resolveReady();
     }),
-    stderr: new Response(child.stderr).text(),
+    stderr: consumeLines(child.stderr, () => undefined),
     ready,
-  };
+  } satisfies RunningCli;
+  children.add(running);
+  return running;
 }
 
 async function runCli(
@@ -183,13 +230,13 @@ async function runCli(
       `CLI did not exit: ${args.join(" ")}`,
     );
     const [stdout, stderr] = await bounded(
-      Promise.all([running.stdout, running.stderr]),
+      Promise.all([running.stdout.result, running.stderr.result]),
       KILL_TIMEOUT_MS,
       `CLI output did not close: ${args.join(" ")}`,
     );
     return { exitCode, stdout, stderr };
   } finally {
-    await terminate(running.child);
+    await terminate(running);
   }
 }
 
@@ -203,17 +250,19 @@ async function stopAtReady(running: RunningCli): Promise<number> {
       "CLI did not exit after SIGTERM",
     );
     await bounded(
-      Promise.all([running.stdout, running.stderr]),
+      Promise.all([running.stdout.result, running.stderr.result]),
       KILL_TIMEOUT_MS,
       "CLI output did not close after exit",
     );
     return exitCode;
   } finally {
-    await terminate(running.child);
+    await terminate(running);
   }
 }
 
 afterEach(async () => {
+  for (const controller of followControllers) controller.abort();
+  followControllers.clear();
   await Promise.all([...children].map(terminate));
   for (const directory of directories.splice(0)) {
     rmSync(directory, { recursive: true, force: true });
@@ -221,6 +270,24 @@ afterEach(async () => {
 });
 
 describe("real CLI entry", () => {
+  test("managed output cancellation settles a blocked stream read", async () => {
+    let canceled = false;
+    const consumer = consumeLines(
+      new ReadableStream<Uint8Array>({
+        cancel: () => {
+          canceled = true;
+        },
+      }),
+      () => undefined,
+    );
+
+    await consumer.cancel();
+    expect(await bounded(consumer.result, KILL_TIMEOUT_MS, "canceled reader did not settle")).toBe(
+      "",
+    );
+    expect(canceled).toBe(true);
+  });
+
   test("executes the import.meta.main exit path", async () => {
     const child = await runCli(["not-a-command"], appEnv(tempHome()));
     expect(child.exitCode).toBe(1);
@@ -287,10 +354,21 @@ describe("real CLI entry", () => {
 
   test("runs provisioning initialization through the real binder", async () => {
     const home = tempHome();
-    const child = await runCli(["init"], appEnv(home));
-    expect(child.exitCode).toBe(0);
-    expect(existsSync(join(home, ".openomni", "vault.key"))).toBe(true);
-    expect(child.stdout).toContain("minted vault key file");
+    const savedDiscordToken = process.env.DISCORD_BOT_TOKEN;
+    process.env.DISCORD_BOT_TOKEN = "poisoned-parent-token";
+    try {
+      const env = appEnv(home);
+      expect("DISCORD_BOT_TOKEN" in env).toBe(false);
+      const child = await runCli(["init"], env);
+      expect(child.exitCode).toBe(0);
+      expect(existsSync(join(home, ".openomni", "vault.key"))).toBe(true);
+      expect(child.stdout).toContain("minted vault key file");
+      expect(child.stdout).toContain("no channel credentials in env config; nothing to import");
+      expect(child.stdout).not.toContain("channel:discord:main");
+    } finally {
+      if (savedDiscordToken === undefined) delete process.env.DISCORD_BOT_TOKEN;
+      else process.env.DISCORD_BOT_TOKEN = savedDiscordToken;
+    }
   });
 
   test("refuses onboarding before prompting when stdin is not a terminal", async () => {
@@ -300,9 +378,11 @@ describe("real CLI entry", () => {
 
   test("real IO adapters execute, follow, and mutate only the requested paths", async () => {
     const root = tempHome();
+    const followController = new AbortController();
+    followControllers.add(followController);
+    const deps = createCliDeps(root, { followSignal: followController.signal });
     const restore = replaceEnvironment(appEnv(root));
     try {
-      const deps = createCliDeps(root);
       const file = join(root, "nested", "value");
       expect(() => deps.io.exec([])).toThrow();
       expect(deps.io.exec([process.execPath, "-e", "process.stdout.write('ok')"])).toEqual({
@@ -317,27 +397,71 @@ describe("real CLI entry", () => {
       deps.io.makeDir(file);
       expect(existsSync(file)).toBe(true);
 
-      expect(await deps.follow([])).toBe(1);
-      expect(await deps.follow(["/usr/bin/true"])).toBe(0);
-      expect(await deps.follow([join(root, "missing-command")])).toBe(1);
+      expect(await boundedFollow(deps.follow([]), followController)).toBe(1);
+      expect(await boundedFollow(deps.follow(["/usr/bin/true"]), followController)).toBe(0);
+      expect(
+        await boundedFollow(deps.follow([join(root, "missing-command")]), followController),
+      ).toBe(1);
+
+      const canceledFollow = deps.follow(["/usr/bin/tail", "-f", "/dev/null"]);
+      followController.abort();
+      expect(
+        await bounded(canceledFollow, KILL_TIMEOUT_MS * 2, "canceled follow child did not settle"),
+      ).toBe(1);
     } finally {
+      followController.abort();
+      followControllers.delete(followController);
       restore();
     }
   });
 
   test("real doctor and init adapters read effective process state", async () => {
     const root = tempHome();
+    const deps = createCliDeps(root);
     const env = appEnv(root);
-    env.OPENOMNI_DB_PATH = join(root, "init.db");
-    env.OPENOMNI_VAULT_KEY = Buffer.alloc(32, 7).toString("base64");
+    const dbPath = join(root, "effective-init.db");
+    const vaultKey = Buffer.alloc(32, 7).toString("base64");
+    env.OPENOMNI_DB_PATH = dbPath;
+    env.OPENOMNI_MODEL_PROVIDER = "anthropic";
+    env.OPENOMNI_MODEL_ID = "effective-model";
+    env.OPENOMNI_MODEL_API_KEY = "effective-key";
+    env.OPENOMNI_VAULT_KEY = vaultKey;
     const restore = replaceEnvironment(env);
     try {
-      const deps = createCliDeps(root);
       const ports = await deps.doctorPorts();
-      expect(ports.effectiveEnv).toBeInstanceOf(Map);
+      expect(Object.fromEntries(ports.effectiveEnv)).toMatchObject({
+        OPENOMNI_DB_PATH: dbPath,
+        OPENOMNI_MODEL_PROVIDER: "anthropic",
+        OPENOMNI_MODEL_ID: "effective-model",
+        OPENOMNI_MODEL_API_KEY: "effective-key",
+        OPENOMNI_VAULT_KEY: vaultKey,
+      });
       expect(await ports.probeHealth(1)).toBe(false);
-      expect(await deps.runInit()).toBeArray();
+      expect(await deps.runInit()).toEqual([
+        "no channel credentials in env config; nothing to import",
+      ]);
+      expect(existsSync(dbPath)).toBe(true);
       await expect(deps.ask("question")).rejects.toThrow();
+    } finally {
+      restore();
+    }
+  });
+
+  test("factory home owns default state paths even when process HOME differs", async () => {
+    const root = tempHome();
+    const differentHome = tempHome();
+    const deps = createCliDeps(root);
+    const env = appEnv(differentHome);
+    delete env.OPENOMNI_DB_PATH;
+    delete env.OPENOMNI_MEMORY_PATH;
+    env.OPENOMNI_VAULT_KEY = Buffer.alloc(32, 9).toString("base64");
+    const restore = replaceEnvironment(env);
+    try {
+      expect(await deps.runInit()).toEqual([
+        "no channel credentials in env config; nothing to import",
+      ]);
+      expect(existsSync(join(root, ".openomni", "storage.db"))).toBe(true);
+      expect(existsSync(join(differentHome, ".openomni", "storage.db"))).toBe(false);
     } finally {
       restore();
     }
@@ -345,6 +469,7 @@ describe("real CLI entry", () => {
 
   test("real start adapter owns shutdown through the installed signal handler", async () => {
     const root = tempHome();
+    const deps = createCliDeps(root);
     const restore = replaceEnvironment(appEnv(root));
     const log = spyOn(console, "log").mockImplementation(() => undefined);
     const handlers = new Map<string, () => void>();
@@ -364,7 +489,7 @@ describe("real CLI entry", () => {
       return undefined as never;
     }) as typeof process.exit);
     try {
-      await createCliDeps(root).startApp();
+      await deps.startApp();
       const handler = handlers.get("SIGTERM");
       if (handler === undefined) throw new Error("expected SIGTERM handler");
       handler();
