@@ -2,9 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { connectIpcClient, createIpcServer, typedCall } from "@openomni/ipc";
+import { IpcRemoteError, connectIpcClient, createIpcServer, typedCall } from "@openomni/ipc";
 import type { BusEvent, Machine } from "@openomni/protocol";
 import { attachMachineDaemon } from "../src/daemon";
+import { MachineDaemonProtocolError } from "../src/errors";
 import { type MachineHost, createMachineHost } from "../src/host";
 import { socketPath } from "./helpers/socket-path";
 
@@ -113,9 +114,9 @@ describe("machine fs wire surface", () => {
 
   test("refuses an unattached machine and an attachment without fs.read", async () => {
     await withHost(enrollment(), async ({ host, path }) => {
-      await expect(
-        host.fsOp("missing", { op: "stat", export: "docs", path: "" }),
-      ).resolves.toEqual({ status: "refused", reason: "machine_not_attached" });
+      await expect(host.fsOp("missing", { op: "stat", export: "docs", path: "" })).resolves.toEqual(
+        { status: "refused", reason: "machine_not_attached" },
+      );
 
       const daemon = await attachMachineDaemon({
         socketPath: path,
@@ -133,18 +134,40 @@ describe("machine fs wire surface", () => {
   });
 
   test("daemon re-checks its own capability offer across the wire boundary", async () => {
+    const protocolError = new MachineDaemonProtocolError({
+      reason: "capability_not_offered",
+      capability: "fs.read",
+      message: "fs.read was not offered by this machine",
+    });
+    expect(protocolError).toBeInstanceOf(MachineDaemonProtocolError);
+    expect(protocolError.data.reason).toBe("capability_not_offered");
+    expect(protocolError.message).toBe("fs.read was not offered by this machine");
+
     const path = socketPath();
     const rogueHost = await createIpcServer(path, (_method, _params, respond) => {
-      respond({ status: "attached", effectiveCapabilities: ["fs.read"], effectiveExports: ["docs"] });
+      respond({
+        status: "attached",
+        effectiveCapabilities: ["fs.read"],
+        effectiveExports: ["docs"],
+      });
     });
     const daemon = await attachMachineDaemon({
       socketPath: path,
       offer: offer({ offeredCapabilities: [] }),
     });
     try {
-      await expect(
-        typedCall(rogueHost, "machine.fs_op", { op: "stat", export: "docs", path: "" }, 5000),
-      ).rejects.toThrow("fs.read was not offered by this machine");
+      try {
+        await typedCall(rogueHost, "machine.fs_op", { op: "stat", export: "docs", path: "" }, 5000);
+        throw new Error("expected an fs capability protocol error");
+      } catch (error) {
+        expect(error).toBeInstanceOf(IpcRemoteError);
+        if (!(error instanceof IpcRemoteError)) throw error;
+        expect(error.data).toEqual({
+          code: 1000,
+          message: "IPC error 1000: fs.read was not offered by this machine",
+        });
+        expect(error.message).toBe("IPC error 1000: fs.read was not offered by this machine");
+      }
     } finally {
       daemon.close();
       rogueHost.close();
@@ -157,7 +180,11 @@ describe("machine fs wire surface", () => {
     mkdirSync(root);
     const path = socketPath();
     const rogueHost = await createIpcServer(path, (_method, _params, respond) => {
-      respond({ status: "attached", effectiveCapabilities: ["fs.read"], effectiveExports: ["private"] });
+      respond({
+        status: "attached",
+        effectiveCapabilities: ["fs.read"],
+        effectiveExports: ["private"],
+      });
     });
     const daemon = await attachMachineDaemon({
       socketPath: path,
@@ -166,12 +193,7 @@ describe("machine fs wire surface", () => {
     });
     try {
       await expect(
-        typedCall(
-          rogueHost,
-          "machine.fs_op",
-          { op: "stat", export: "private", path: "" },
-          5000,
-        ),
+        typedCall(rogueHost, "machine.fs_op", { op: "stat", export: "private", path: "" }, 5000),
       ).resolves.toEqual({
         status: "refused",
         reason: "export_not_available",
@@ -191,7 +213,10 @@ describe("machine fs wire surface", () => {
         onRequest(method, _params, respond) {
           if (method === "machine.fs_op") {
             fsRequests += 1;
-            respond({ status: "completed", value: { op: "stat", kind: "file", size: 1, mtimeMs: 0 } });
+            respond({
+              status: "completed",
+              value: { op: "stat", kind: "file", size: 1, mtimeMs: 0 },
+            });
           }
         },
       });

@@ -1,5 +1,6 @@
 import { type IpcClient, connectIpcClient, typedCall } from "@openomni/ipc";
 import { Machine } from "@openomni/protocol";
+import { MachineDaemonProtocolError } from "./errors";
 import { createFsDriver } from "./fs";
 import { PythonKernel } from "./kernel";
 
@@ -56,7 +57,12 @@ export async function attachMachineDaemon(options: MachineDaemonOptions): Promis
         // The host gate owns normal authorization; the daemon still re-checks
         // its own offer because the host is across a trust boundary.
         if (!offersFs) {
-          throw new Error(`${Machine.WellKnownCapability.fsRead} was not offered by this machine`);
+          const capability = Machine.WellKnownCapability.fsRead;
+          throw new MachineDaemonProtocolError({
+            reason: "capability_not_offered",
+            capability,
+            message: `${capability} was not offered by this machine`,
+          });
         }
         const request = Machine.FsRequest.parse(params);
         if (!offeredExports.has(request.export)) {
@@ -100,11 +106,13 @@ export async function attachMachineDaemon(options: MachineDaemonOptions): Promis
       attachment,
       close() {
         closeKernels();
+        fsOp.close();
         client.close();
       },
     };
   } catch (error) {
     closeKernels();
+    fsOp.close();
     client.close();
     throw error;
   }

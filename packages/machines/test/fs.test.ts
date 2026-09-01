@@ -3,6 +3,7 @@ import {
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  renameSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -12,7 +13,9 @@ import { join } from "node:path";
 import { Machine } from "@openomni/protocol";
 import { createFsDriver } from "../src/fs";
 
-function withFixture(run: (fixture: { base: string; root: string; outside: string }) => Promise<void>) {
+function withFixture(
+  run: (fixture: { base: string; root: string; outside: string }) => Promise<void>,
+) {
   const base = mkdtempSync(join(tmpdir(), "openomni-machine-fs-"));
   const root = join(base, "root");
   const outside = join(base, "outside");
@@ -22,20 +25,122 @@ function withFixture(run: (fixture: { base: string; root: string; outside: strin
 }
 
 describe("machine fs request boundary", () => {
-  test.each(["/etc/passwd", "../secret", "dir/../secret", "nul\0byte"])(
-    "rejects non-relative or escaping path %p",
-    (path) => {
-      const parsed = Machine.FsRequest.safeParse({ op: "stat", export: "docs", path });
-      expect(parsed.success).toBe(false);
-      if (parsed.success) throw new Error("expected the fs path schema to refuse the request");
-      expect(parsed.error.issues[0]?.message).toBe(
-        "path must be relative to the export root, with no .. segment or NUL",
-      );
-    },
-  );
+  test.each([
+    "/etc/passwd",
+    "../secret",
+    "dir/../secret",
+    "nul\0byte",
+  ])("rejects non-relative or escaping path %p", (path) => {
+    const parsed = Machine.FsRequest.safeParse({ op: "stat", export: "docs", path });
+    expect(parsed.success).toBe(false);
+    if (parsed.success) throw new Error("expected the fs path schema to refuse the request");
+    expect(parsed.error.issues[0]?.message).toBe(
+      "path must be relative to the export root, with no .. segment or NUL",
+    );
+  });
 });
 
 describe("daemon filesystem driver", () => {
+  test("rejects a schema-bypassing lexical escape at the driver boundary", async () => {
+    await withFixture(async ({ root }) => {
+      const fsOp = createFsDriver(new Map([["docs", root]]));
+      const request: Machine.FsRequest = { op: "stat", export: "docs", path: "../secret" };
+
+      await expect(fsOp(request)).resolves.toEqual({
+        status: "refused",
+        reason: "path_escapes_export",
+        message: "path escapes export: ../secret",
+      });
+    });
+  });
+
+  test("keeps using the opened export inode after its pathname is replaced", async () => {
+    await withFixture(async ({ base, root, outside }) => {
+      writeFileSync(join(root, "note.txt"), "inside");
+      writeFileSync(join(outside, "note.txt"), "outside");
+      const fsOp = createFsDriver(new Map([["docs", root]]));
+      renameSync(root, join(base, "original-root"));
+      symlinkSync(outside, root);
+
+      await expect(fsOp({ op: "read", export: "docs", path: "note.txt" })).resolves.toEqual({
+        status: "completed",
+        value: {
+          op: "read",
+          data: "inside",
+          bytesRead: 6,
+          size: 6,
+          truncated: false,
+        },
+      });
+    });
+  });
+
+  test("refuses dangling outside symlinks without revealing target existence", async () => {
+    await withFixture(async ({ root, outside }) => {
+      symlinkSync(join(outside, "missing.txt"), join(root, "escape"));
+      const fsOp = createFsDriver(new Map([["docs", root]]));
+
+      await expect(fsOp({ op: "read", export: "docs", path: "escape" })).resolves.toEqual({
+        status: "refused",
+        reason: "path_escapes_export",
+        message: "path escapes export: escape",
+      });
+    });
+  });
+
+  test("does not confuse an export path with a sibling sharing its prefix", async () => {
+    const base = mkdtempSync(join(tmpdir(), "openomni-machine-fs-prefix-"));
+    const root = join(base, "export");
+    const evil = join(base, "export-evil");
+    mkdirSync(root);
+    mkdirSync(evil);
+    writeFileSync(join(evil, "secret.txt"), "secret");
+    symlinkSync(join(evil, "secret.txt"), join(root, "escape"));
+    try {
+      const fsOp = createFsDriver(new Map([["docs", root]]));
+      await expect(fsOp({ op: "read", export: "docs", path: "escape" })).resolves.toEqual({
+        status: "refused",
+        reason: "path_escapes_export",
+        message: "path escapes export: escape",
+      });
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
+  });
+
+  test("canonicalizes an export root symlink before opening its directory", async () => {
+    await withFixture(async ({ base, root }) => {
+      writeFileSync(join(root, "note.txt"), "inside");
+      const rootAlias = join(base, "root-alias");
+      symlinkSync(root, rootAlias);
+      const fsOp = createFsDriver(new Map([["docs", rootAlias]]));
+
+      await expect(fsOp({ op: "read", export: "docs", path: "note.txt" })).resolves.toMatchObject({
+        status: "completed",
+        value: { op: "read", data: "inside" },
+      });
+    });
+  });
+
+  test("re-evaluates a component replaced by an outside symlink between calls", async () => {
+    await withFixture(async ({ root, outside }) => {
+      const victim = join(root, "victim.txt");
+      writeFileSync(victim, "inside");
+      writeFileSync(join(outside, "secret.txt"), "outside");
+      const fsOp = createFsDriver(new Map([["docs", root]]));
+
+      const first = await fsOp({ op: "read", export: "docs", path: "victim.txt" });
+      expect(first).toMatchObject({ status: "completed", value: { op: "read", data: "inside" } });
+      rmSync(victim);
+      symlinkSync(join(outside, "secret.txt"), victim);
+      await expect(fsOp({ op: "read", export: "docs", path: "victim.txt" })).resolves.toEqual({
+        status: "refused",
+        reason: "path_escapes_export",
+        message: "path escapes export: victim.txt",
+      });
+    });
+  });
+
   test("refuses an unknown export", async () => {
     await withFixture(async ({ root }) => {
       const fsOp = createFsDriver(new Map([["docs", root]]));
@@ -154,9 +259,9 @@ describe("daemon filesystem driver", () => {
       expect(result.value.entries.every((entry) => entry.kind !== "file" || entry.size === 1)).toBe(
         true,
       );
-      expect(result.value.entries.every((entry) => entry.kind === "file" || entry.size === undefined)).toBe(
-        true,
-      );
+      expect(
+        result.value.entries.every((entry) => entry.kind === "file" || entry.size === undefined),
+      ).toBe(true);
     });
   });
 
