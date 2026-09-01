@@ -34,6 +34,24 @@ function overrideOnce() {
   };
 }
 
+function overrideAfterFirstConnection() {
+  let connections = 0;
+  return {
+    kind: "point" as const,
+    name: "test-delayed-model-override",
+    pointIds: ["connection.llm.pre" as const],
+    effectCapabilities: { "connection.llm.pre": ["model.override" as const] },
+    priority: 100,
+    fn: () => {
+      connections += 1;
+      if (connections === 1) return allow("test.delayed-model-override");
+      return allow("test.delayed-model-override", undefined, [
+        { type: "model.override", provider: override.provider, id: override.id },
+      ]);
+    },
+  };
+}
+
 function continueOnce() {
   let injected = false;
   return {
@@ -205,6 +223,44 @@ describe("model.override at connection.llm.pre (#753)", () => {
       { modelId: override.id, yieldAt: 400 },
       { modelId: primary.id, yieldAt: 800 },
     ]);
+  });
+
+  it("keeps a reclaimed-nothing window yield disarmed across a model override", async () => {
+    const yieldArms: Array<number | undefined> = [];
+    let calls = 0;
+    const llm = {
+      run: (async (input, sink: Sink) => {
+        calls += 1;
+        yieldArms.push(input.yieldAtInputTokens);
+        sink.onMessage(
+          assistantSnapshot(
+            `msg-${calls}`,
+            `turn ${calls}`,
+            calls === 1 ? "tool-calls" : "stop",
+          ),
+        );
+        return createStopOutcome();
+      }) as MockLlmFn,
+      resolveProviderModel: async (model: Model.Ref) => ({
+        id: model.id,
+        name: model.id,
+        providerID: model.provider,
+        limit: { context: model.id === primary.id ? 1000 : 500, output: 1000 },
+      }),
+    };
+
+    const result = await ChatAgent.create({
+      events: Bus,
+      model: primary,
+      llm,
+      middleware: [overrideAfterFirstConnection()],
+    }).run(runInput([{ role: "user", content: "go" }]));
+
+    expect(result.finishReason).toBe("stop");
+    // The first call yields at the primary window and reclaims nothing, so
+    // the remaining headroom is real. A connection-scoped override on the
+    // continuation must not arm another yield against that same history.
+    expect(yieldArms).toEqual([800, undefined]);
   });
 
   it("fails honestly on an override to a nonexistent model — bounded retries, zero llm calls", async () => {
