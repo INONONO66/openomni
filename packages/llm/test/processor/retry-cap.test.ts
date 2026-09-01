@@ -160,14 +160,7 @@ describe("Processor retry cap", () => {
   test("stops retrying after configured retry cap", async () => {
     const retryErrors = [rateLimitError(), rateLimitError(), rateLimitError()];
     let attemptCount = 0;
-    const retries: number[] = [];
-    const unsubRetry = Bus.subscribe(LlmCall.Events.RetryDecided, (event) => {
-      retries.push(event.maxAttempts);
-    });
-    const exhausted: string[] = [];
-    const unsubExhausted = Bus.subscribe(Operational.Events.Error, (event) => {
-      if (event.msg === "retry attempts exhausted") exhausted.push(String(event.error));
-    });
+    const events = collector();
 
     const processor = Processor.create({
       assistantMessage: buildAssistantMessage(
@@ -183,7 +176,7 @@ describe("Processor retry cap", () => {
         traceId: "trace-processor-retry-cap",
         sessionId: "session-retry-cap",
       },
-      events: Bus,
+      events,
       createStream: async () => ({
         fullStream: (async function* () {
           const error = retryErrors[attemptCount];
@@ -201,15 +194,19 @@ describe("Processor retry cap", () => {
       expect.unreachable("Should have thrown the retry error that exceeded the cap");
     } catch (e) {
       expect(e).toBe(retryErrors[2]);
-    } finally {
-      unsubRetry();
-      unsubExhausted();
     }
 
     expect(attemptCount).toBe(3);
-    expect(retries).toHaveLength(2);
+    const retries = (
+      events.named(LlmCall.Events.RetryDecided.name) as Array<{ maxAttempts: number }>
+    ).map((event) => event.maxAttempts);
     expect(retries).toEqual([2, 2]);
     // Pin (#606 audit): budget exhaustion is a decline too — it must say why.
+    const exhausted = (
+      events.named(Operational.Events.Error.name) as Array<{ msg: string; error?: string }>
+    )
+      .filter((event) => event.msg === "retry attempts exhausted")
+      .map((event) => event.error);
     expect(exhausted).toEqual(["rate_limit: attempt cap 2 exceeded"]);
   });
 });
@@ -225,17 +222,7 @@ describe("Processor retry header-delay cap (#532 candidate 3)", () => {
     const reason = "rate_limit" satisfies Retry.RetryableReason;
     expect(Retry.RETRY_HEADER_DELAY_CAP).toBe(cap);
 
-    const decisions: Array<{
-      traceId: string;
-      time: number;
-      sessionId?: string;
-      component: string;
-      msg: string;
-      error?: string;
-    }> = [];
-    const unsubscribe = Bus.subscribe(Operational.Events.Error, (event) => {
-      if (event.component === "llm.retry") decisions.push(event);
-    });
+    const events = collector();
     const serverError = new APIError({
       message: JSON.stringify({ type: "error", error: { type: "too_many_requests" } }),
       isRetryable: true,
@@ -256,7 +243,7 @@ describe("Processor retry header-delay cap (#532 candidate 3)", () => {
         onToolCall: () => undefined,
         onToolResult: () => undefined,
       },
-      events: Bus,
+      events,
       trace: { traceId: "trace-retry-cap", sessionId: "session-retry-cap" },
       createStream: async () => ({
         fullStream: (async function* () {
@@ -266,12 +253,18 @@ describe("Processor retry header-delay cap (#532 candidate 3)", () => {
       }),
     });
 
-    try {
-      await expect(processor.process({ system: "" })).rejects.toBe(serverError);
-    } finally {
-      unsubscribe();
-    }
+    await expect(processor.process({ system: "" })).rejects.toBe(serverError);
 
+    const decisions = (
+      events.named(Operational.Events.Error.name) as Array<{
+        traceId: string;
+        time: number;
+        sessionId?: string;
+        component: string;
+        msg: string;
+        error?: string;
+      }>
+    ).filter((event) => event.component === "llm.retry");
     expect(decisions).toHaveLength(1);
     const decision = decisions[0];
     if (decision === undefined) expect.unreachable("Expected one retry decline decision");

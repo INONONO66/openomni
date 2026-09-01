@@ -41,6 +41,15 @@ function decideWithoutJitter(attempt: number, error: unknown): Retry.Decision {
   return withoutJitter(() => Retry.decide(attempt, error));
 }
 
+function withNow<T>(now: number, fn: () => T): T {
+  const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+  try {
+    return fn();
+  } finally {
+    clock.mockRestore();
+  }
+}
+
 function delayOf(attempt: number, error: unknown): number {
   const decision = decideWithoutJitter(attempt, error);
   if (!decision.retry) throw new Error(`expected a retry decision, got ${decision.reason}`);
@@ -214,10 +223,11 @@ describe("Retry", () => {
       assert(delayOf(attempt, retryableError(headers as Record<string, string> | undefined))));
 
     test("parses Retry-After as HTTP date if not a number", () => {
-      const futureDate = new Date(Date.now() + 5000).toUTCString();
-      const delayMs = delayOf(1, retryableError({ "retry-after": futureDate }));
-      expect(delayMs).toBeGreaterThan(4000);
-      expect(delayMs).toBeLessThanOrEqual(5000);
+      const now = Date.parse("2030-01-01T00:00:00.000Z");
+      const futureDate = new Date(now + 5000).toUTCString();
+      expect(withNow(now, () => delayOf(1, retryableError({ "retry-after": futureDate })))).toBe(
+        5000,
+      );
     });
 
     test("does not throw when error payload code fields are not strings", () => {
@@ -375,10 +385,13 @@ describe("Retry.decide ratelimit-reset parsing (#532 candidate 3)", () => {
   });
 
   test("anthropic-ratelimit reset timestamp is used when retry-after is absent", () => {
-    const resetAt = new Date(Date.now() + 5000).toISOString();
-    const ms = delayOf(1, rateLimitError({ "anthropic-ratelimit-requests-reset": resetAt }));
-    expect(ms).toBeGreaterThan(3500);
-    expect(ms).toBeLessThanOrEqual(5100);
+    const now = Date.parse("2030-01-01T00:00:00.000Z");
+    const resetAt = new Date(now + 5000).toISOString();
+    expect(
+      withNow(now, () =>
+        delayOf(1, rateLimitError({ "anthropic-ratelimit-requests-reset": resetAt })),
+      ),
+    ).toBe(5000);
   });
 
   test("retry-after still wins over ratelimit resets", () => {
