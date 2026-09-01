@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { z } from "zod";
 import { BusEvent } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
+import { withinTimeout } from "./delivery-signal";
 
 describe("Bus async dispatch", () => {
   beforeEach(() => {
@@ -15,51 +16,54 @@ describe("Bus async dispatch", () => {
   it("publish() returns immediately (non-blocking)", async () => {
     const event = BusEvent.define("test:event", z.unknown());
     let handlerCalled = false;
+    const delivered = Promise.withResolvers<void>();
 
     Bus.subscribe(event, () => {
       handlerCalled = true;
+      delivered.resolve();
     });
 
     Bus.publish(event, "data");
 
     expect(handlerCalled).toBe(false);
-
-    await new Promise((resolve) => queueMicrotask(resolve));
-
+    await withinTimeout(delivered.promise);
     expect(handlerCalled).toBe(true);
   });
 
   it("handler errors are logged and other handlers continue", async () => {
     const event = BusEvent.define("test:error", z.unknown());
     const results: string[] = [];
+    const delivered = Promise.withResolvers<void>();
 
     const originalWarn = console.warn;
     const warnSpy = mock(() => undefined);
     console.warn = warnSpy;
 
-    Bus.subscribe(event, () => {
-      results.push("handler1");
-      throw new Error("handler1 error");
-    });
+    try {
+      Bus.subscribe(event, () => {
+        results.push("handler1");
+        throw new Error("handler1 error");
+      });
 
-    Bus.subscribe(event, () => {
-      results.push("handler2");
-    });
+      Bus.subscribe(event, () => {
+        results.push("handler2");
+        delivered.resolve();
+      });
 
-    Bus.publish(event, "data");
+      Bus.publish(event, "data");
+      await withinTimeout(delivered.promise);
 
-    await new Promise((resolve) => queueMicrotask(resolve));
-    await new Promise((resolve) => queueMicrotask(resolve));
-
-    expect(results).toEqual(["handler1", "handler2"]);
-    expect(warnSpy).toHaveBeenCalled();
-
-    console.warn = originalWarn;
+      expect(results).toEqual(["handler1", "handler2"]);
+      expect(warnSpy).toHaveBeenCalled();
+    } finally {
+      console.warn = originalWarn;
+    }
   });
 
   it("FIFO order is preserved across multiple publishes", async () => {
     const event = BusEvent.define("test:order", z.unknown());
     const order: string[] = [];
+    const delivered = Promise.withResolvers<void>();
 
     Bus.subscribe(event, () => {
       order.push("handler1");
@@ -67,22 +71,20 @@ describe("Bus async dispatch", () => {
 
     Bus.subscribe(event, () => {
       order.push("handler2");
+      if (order.length === 4) delivered.resolve();
     });
 
     Bus.publish(event, "data1");
     Bus.publish(event, "data2");
 
-    await new Promise((resolve) => queueMicrotask(resolve));
-    await new Promise((resolve) => queueMicrotask(resolve));
-    await new Promise((resolve) => queueMicrotask(resolve));
-    await new Promise((resolve) => queueMicrotask(resolve));
-
+    await withinTimeout(delivered.promise);
     expect(order).toEqual(["handler1", "handler2", "handler1", "handler2"]);
   });
 
   it("handler snapshot prevents mutation during dispatch", async () => {
     const event = BusEvent.define("test:snapshot", z.unknown());
     const results: string[] = [];
+    const delivered = Promise.withResolvers<void>();
 
     const unsubscribe = Bus.subscribe(event, () => {
       results.push("handler1");
@@ -91,13 +93,12 @@ describe("Bus async dispatch", () => {
 
     Bus.subscribe(event, () => {
       results.push("handler2");
+      delivered.resolve();
     });
 
     Bus.publish(event, "data");
 
-    await new Promise((resolve) => queueMicrotask(resolve));
-    await new Promise((resolve) => queueMicrotask(resolve));
-
+    await withinTimeout(delivered.promise);
     expect(results).toEqual(["handler1", "handler2"]);
   });
 
@@ -113,13 +114,11 @@ describe("Bus async dispatch", () => {
       observerCount: 0,
     });
 
-    let called = false;
+    const delivered = Promise.withResolvers<void>();
     Bus.subscribe(event, () => {
-      called = true;
+      delivered.resolve();
     });
     Bus.publish(event, "data");
-    await new Promise((resolve) => queueMicrotask(resolve));
-
-    expect(called).toBe(true);
+    await withinTimeout(delivered.promise);
   });
 });
