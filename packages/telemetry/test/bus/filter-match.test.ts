@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { BusEvent } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { z } from "zod";
+import { signalAfterDeliveries } from "./delivery-signal";
 
 const TestEventSchema = z.object({
   sessionId: z.string().optional(),
@@ -53,11 +54,6 @@ const cases: ReadonlyArray<{
   },
 ];
 
-const flush = async () => {
-  await new Promise((resolve) => queueMicrotask(resolve));
-  await new Promise((resolve) => queueMicrotask(resolve));
-};
-
 describe("Bus.subscribe match filter", () => {
   beforeEach(Bus.reset);
   afterEach(Bus.reset);
@@ -69,8 +65,9 @@ describe("Bus.subscribe match filter", () => {
       const handler = (data: TestEvent) => seen.push(data.label ?? "");
       if (match === undefined) Bus.subscribe(event, handler);
       else Bus.subscribe(event, handler, { match });
+      const delivered = signalAfterDeliveries(event, events.length);
       for (const data of events) Bus.publish(event, data);
-      await flush();
+      await delivered;
       expect(seen).toEqual(expected);
     });
   }
@@ -81,12 +78,14 @@ describe("Bus.subscribe match filter", () => {
     const seenB: string[] = [];
     Bus.subscribe(event, ({ label }) => seenA.push(label ?? ""), { match: { sessionId: "A" } });
     Bus.subscribe(event, ({ label }) => seenB.push(label ?? ""), { match: { sessionId: "B" } });
-    for (const data of [
+    const events = [
       { sessionId: "A", label: "alpha" },
       { sessionId: "B", label: "bravo" },
       { sessionId: "C", label: "charlie" },
-    ]) Bus.publish(event, data);
-    await flush();
+    ];
+    const delivered = signalAfterDeliveries(event, events.length);
+    for (const data of events) Bus.publish(event, data);
+    await delivered;
     expect(seenA).toEqual(["alpha"]);
     expect(seenB).toEqual(["bravo"]);
   });
@@ -95,12 +94,15 @@ describe("Bus.subscribe match filter", () => {
     const event = BusEvent.define<TestEvent>("test:unsub", TestEventSchema);
     const seen: string[] = [];
     const unsub = Bus.subscribe(event, ({ label }) => seen.push(label ?? ""), { match: { sessionId: "x" } });
+    const firstDelivered = signalAfterDeliveries(event, 1);
     Bus.publish(event, { sessionId: "x", label: "first" });
-    await flush();
+    await firstDelivered;
     expect(seen).toEqual(["first"]);
+
     unsub();
+    const secondDelivered = signalAfterDeliveries(event, 1);
     Bus.publish(event, { sessionId: "x", label: "second" });
-    await flush();
+    await secondDelivered;
     expect(seen).toEqual(["first"]);
   });
 
