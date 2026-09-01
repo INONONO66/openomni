@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { DiscordNormalizer } from "../src/discord/normalizer";
-import type { DiscordMessage } from "../src/discord/types";
-import { GitHubNormalizer } from "../src/github/normalizer";
-import type { GitHubEventContent } from "../src/github/types";
-import { SlackNormalizer } from "../src/slack/normalizer";
-import type { SlackMessageEvent } from "../src/slack/types";
-import { TelegramNormalizer } from "../src/telegram/normalizer";
-import type { TelegramMessage } from "../src/telegram/types";
+import { DiscordNormalizer } from "../src/provider/discord/normalizer";
+import type { DiscordMessage } from "../src/provider/discord/types";
+import { GitHubNormalizer } from "../src/provider/github/normalizer";
+import type { GitHubEventContent } from "../src/provider/github/types";
+import { SlackNormalizer } from "../src/provider/slack/normalizer";
+import type { SlackMessageEvent } from "../src/provider/slack/types";
+import { TelegramNormalizer } from "../src/provider/telegram/normalizer";
+import type { TelegramMessage } from "../src/provider/telegram/types";
 
 /**
  * Golden normalizer fixtures — exact-equality snapshots of the full

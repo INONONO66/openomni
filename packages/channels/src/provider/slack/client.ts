@@ -1,5 +1,5 @@
-import { fetchWithRetry } from "../support/fetch-retry";
-import type { ChannelClient, PublishPort } from "../types";
+import { fetchWithRetry } from "../../support/fetch-retry";
+import type { ChannelClient, PublishPort } from "../../types";
 import { SlackApiError } from "./error";
 
 const BASE_URL = "https://slack.com/api";

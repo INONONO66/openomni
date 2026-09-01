@@ -1,9 +1,10 @@
 import { type Channel, Operational, PolicyDecision } from "@openomni/protocol";
-import { ChannelAuthnMiddleware, type ChannelAuthnDecisionObserver } from "../channel-authn";
-import { Dedupe, DedupeWindow } from "../support/dedupe";
-import { chunkMarkdown } from "../support/format/chunk";
-import { newTraceId } from "../support/trace";
-import type { ChannelClient, PublishPort } from "../types";
+import { ChannelAuthnMiddleware, type ChannelAuthnDecisionObserver } from "../../channel-authn";
+import { Dedupe, DedupeWindow } from "../../support/dedupe";
+import { chunkMarkdown } from "../../support/format/chunk";
+import { SLACK_RENDER } from "./format";
+import { newTraceId } from "../../support/trace";
+import type { ChannelClient, PublishPort } from "../../types";
 import { SlackClient } from "./client";
 import { SlackEndpointKeyError, SlackHandlerMissingError } from "./error";
 import { SlackNormalizer } from "./normalizer";
@@ -172,7 +173,6 @@ export class SlackAdapter implements Channel.Surface {
   }
 }
 
-const SLACK_MESSAGE_LIMIT = 4000;
 
 async function sendSlackMessage(
   client: ChannelClient & Pick<SlackClient, "sendInThread">,
@@ -183,7 +183,7 @@ async function sendSlackMessage(
 ): Promise<string | undefined> {
   if (!message.text) return undefined;
   let lastMessageId: string | undefined;
-  for (const chunk of chunkMarkdown(message.text, SLACK_MESSAGE_LIMIT)) {
+  for (const chunk of chunkMarkdown(SLACK_RENDER.renderMarkdown(message.text), SLACK_RENDER.messageLimit)) {
     const ts =
       threadTs === undefined
         ? await client.send(channelId, chunk, traceId)

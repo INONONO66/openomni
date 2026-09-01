@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { Channel } from "@openomni/protocol";
-import { normalizeContent } from "../support/trigger";
+import { normalizeContent } from "../../support/trigger";
 import type { GitHubEventContent } from "./types";
 
 export interface GitHubNormalizerContext {

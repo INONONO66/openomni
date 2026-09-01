@@ -1,7 +1,7 @@
-import { newTraceId } from "../support/trace";
+import { newTraceId } from "../../support/trace";
 import { Operational } from "@openomni/protocol";
-import { sleep } from "../support/fetch-retry";
-import type { PublishPort } from "../types";
+import { sleep } from "../../support/fetch-retry";
+import type { PublishPort } from "../../types";
 import type { TelegramClient } from "./client";
 import type { TelegramMessage, TelegramUpdate } from "./types";
 
