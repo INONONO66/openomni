@@ -125,6 +125,25 @@ describe("findWaitCandidates", () => {
     });
   });
 
+  test("keeps resolved waits visible through the inclusive follow-up boundary only", () => {
+    const resolved = buildWaitRecord("wait-resolved", {
+      status: "resolved",
+      resolvedAt: 1_000,
+      followUpWindow: 1_000,
+    });
+    spyOn(WaitStore, "findByCorrelation").mockReturnValue([resolved]);
+
+    expect(findWaitCandidates(correlation, 2_000).kind).toBe("match");
+    expect(findWaitCandidates(correlation, 2_001)).toEqual({ kind: "none" });
+  });
+
+  test("keeps expired-open waits visible for a typed deadline rejection", () => {
+    const open = buildWaitRecord("wait-expired-open", { expiresAt: 1_000 });
+    spyOn(WaitStore, "findByCorrelation").mockReturnValue([open]);
+
+    expect(findWaitCandidates(correlation, 1_001).kind).toBe("match");
+  });
+
   test("deduplicates duplicate records within the winning precedence level", () => {
     const record = buildWaitRecord("same-wait");
     spyOn(WaitStore, "findByCorrelation").mockImplementation((query) =>

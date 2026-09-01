@@ -2,7 +2,15 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Wait } from "@openomni/protocol";
 import { Storage, WaitStore } from "../../src/index";
 import { Bus } from "@openomni/telemetry";
-import { bareStorageAdapter, buildWaitCreate, captureStoreError } from "../helpers/wait";
+import {
+  bareStorageAdapter,
+  buildWaitCreate,
+  captureStoreError,
+  commitCancel,
+  commitDeliveryReceipt,
+  commitExpiry,
+  commitReply,
+} from "../helpers/wait";
 
 beforeEach(() => {
   Bus.reset();
@@ -27,7 +35,7 @@ describe("WaitStore", () => {
     });
 
     const record = WaitStore.create(buildWaitCreate(), "trace-open");
-    WaitStore.attachReply(
+    commitReply(
       record.id,
       {
         replyKey: "reply-key-1",
@@ -41,7 +49,7 @@ describe("WaitStore", () => {
       buildWaitCreate({ id: "wait-cancel", originMessageId: "message-cancel" }),
       "trace-open-2",
     );
-    WaitStore.cancel(second.id, "trace-cancel");
+    commitCancel(second.id, "trace-cancel");
 
     await flushBus();
     expect(traced).toEqual([
@@ -67,7 +75,7 @@ describe("WaitStore", () => {
       buildWaitCreate({ resolutionPolicy: "first_reply", quorum: undefined }),
       "trace-wait-store",
     );
-    const resolved = WaitStore.attachReply(
+    const resolved = commitReply(
       created.id,
       {
         replyKey: "reply-key-1",
@@ -150,24 +158,18 @@ describe("WaitStore", () => {
     WaitStore.create(buildWaitCreate(), "trace-wait-store");
 
     expect(
-      WaitStore.findByCorrelation(
-        {
-          endpointId: "telegram:seller-1",
-          channelId: "telegram:dm",
-          replyToMessageId: "reply-1",
-        },
-        1_000,
-      ),
+      WaitStore.findByCorrelation({
+        endpointId: "telegram:seller-1",
+        channelId: "telegram:dm",
+        replyToMessageId: "reply-1",
+      }),
     ).toHaveLength(1);
     expect(
-      WaitStore.findByCorrelation(
-        {
-          endpointId: "telegram:seller-1",
-          channelId: "telegram:other",
-          replyToMessageId: "reply-1",
-        },
-        1_000,
-      ),
+      WaitStore.findByCorrelation({
+        endpointId: "telegram:seller-1",
+        channelId: "telegram:other",
+        replyToMessageId: "reply-1",
+      }),
     ).toHaveLength(0);
   });
 
@@ -178,18 +180,18 @@ describe("WaitStore", () => {
     // expiresAt still correlates, the fold rejects the reply as
     // deadline_passed, and the kernel folds the wait to expired. Silently
     // dropping it here would leak late replies into surface routing.
-    const matches = WaitStore.findByCorrelation({ tokenHash: "tok-1" }, 10_001);
+    const matches = WaitStore.findByCorrelation({ tokenHash: "tok-1" });
 
     expect(matches).toHaveLength(1);
     expect(matches[0]).toMatchObject({ id: "wait-1", status: "open" });
   });
 
-  test("keeps resolved waits correlatable only inside the follow-up window", () => {
+  test("returns resolved rows raw without judging follow-up eligibility", () => {
     WaitStore.create(
       buildWaitCreate({ resolutionPolicy: "first_reply", quorum: undefined }),
       "trace-wait-store",
     );
-    const outcome = WaitStore.attachReply(
+    const outcome = commitReply(
       "wait-1",
       {
         replyKey: "reply-key-1",
@@ -201,8 +203,7 @@ describe("WaitStore", () => {
     );
     expect(outcome.kind).toBe("resolved");
 
-    expect(WaitStore.findByCorrelation({ tokenHash: "tok-1" }, 2_000)).toHaveLength(1);
-    expect(WaitStore.findByCorrelation({ tokenHash: "tok-1" }, 2_001)).toHaveLength(0);
+    expect(WaitStore.findByCorrelation({ tokenHash: "tok-1" })).toHaveLength(1);
   });
 
   test("adopts a pre-cutover row (revision >= 1, empty stream) at ITS revision before the first transition", () => {
@@ -220,7 +221,7 @@ describe("WaitStore", () => {
     });
     expect(adapter.create(record)).toBe(true);
 
-    const outcome = WaitStore.attachReply(
+    const outcome = commitReply(
       "wait-1",
       {
         replyKey: "reply-key-1",
@@ -249,7 +250,7 @@ describe("WaitStore", () => {
     Bus.observe((event) => events.push(event.name));
     WaitStore.create(buildWaitCreate(), "trace-wait-store");
 
-    const attached = WaitStore.attachReply(
+    const attached = commitReply(
       "wait-1",
       {
         replyKey: "reply-key-1",
@@ -259,7 +260,7 @@ describe("WaitStore", () => {
       },
       "trace-wait-store",
     );
-    const resolved = WaitStore.attachReply(
+    const resolved = commitReply(
       "wait-1",
       {
         replyKey: "reply-key-2",
@@ -286,7 +287,7 @@ describe("WaitStore", () => {
     const events: string[] = [];
     Bus.observe((event) => events.push(event.name));
     WaitStore.create(buildWaitCreate(), "trace-wait-store");
-    WaitStore.attachReply(
+    commitReply(
       "wait-1",
       {
         replyKey: "reply-key-1",
@@ -297,7 +298,7 @@ describe("WaitStore", () => {
       "trace-wait-store",
     );
 
-    const duplicate = WaitStore.attachReply(
+    const duplicate = commitReply(
       "wait-1",
       {
         replyKey: "reply-key-1",
@@ -307,7 +308,7 @@ describe("WaitStore", () => {
       },
       "trace-wait-store",
     );
-    const ambiguous = WaitStore.attachReply(
+    const ambiguous = commitReply(
       "wait-1",
       {
         replyKey: "reply-key-3",
@@ -337,7 +338,7 @@ describe("WaitStore", () => {
     const events: string[] = [];
     Bus.observe((event) => events.push(event.name));
     WaitStore.create(buildWaitCreate(), "trace-wait-store");
-    WaitStore.attachReply(
+    commitReply(
       "wait-1",
       {
         replyKey: "reply-key-1",
@@ -348,7 +349,7 @@ describe("WaitStore", () => {
       "trace-wait-store",
     );
 
-    const outcome = WaitStore.expire("wait-1", "trace-wait-store", 10_001);
+    const outcome = commitExpiry("wait-1", "trace-wait-store", 10_001);
     const persisted = WaitStore.get("wait-1");
 
     expect(outcome.kind).toBe("expired");
@@ -366,7 +367,7 @@ describe("WaitStore", () => {
     Bus.observe((event) => events.push(event.name));
     WaitStore.create(buildWaitCreate(), "trace-wait-store");
 
-    const outcome = WaitStore.recordDeliveryReceipt(
+    const outcome = commitDeliveryReceipt(
       "wait-1",
       {
         externalMessageId: "platform:msg-1",
@@ -381,10 +382,8 @@ describe("WaitStore", () => {
     expect(persisted?.revision).toBe(2);
     // The adapter's correlation projection columns moved with the record:
     // lookups answer the platform id and no longer the internal one.
-    expect(WaitStore.findByCorrelation({ replyToMessageId: "platform:msg-1" }, 1_000)).toHaveLength(
-      1,
-    );
-    expect(WaitStore.findByCorrelation({ replyToMessageId: "reply-1" }, 1_000)).toHaveLength(0);
+    expect(WaitStore.findByCorrelation({ replyToMessageId: "platform:msg-1" })).toHaveLength(1);
+    expect(WaitStore.findByCorrelation({ replyToMessageId: "reply-1" })).toHaveLength(0);
     await flushBus();
     // No Bus projection for this transition: the durable
     // wait.delivery_recorded fact lives on the owner stream only.
@@ -393,9 +392,9 @@ describe("WaitStore", () => {
 
   test("a delivery receipt on a terminal wait rejects wait_terminal and writes nothing", () => {
     WaitStore.create(buildWaitCreate(), "trace-wait-store");
-    WaitStore.cancel("wait-1", "trace-wait-store", 400);
+    commitCancel("wait-1", "trace-wait-store", 400);
 
-    const outcome = WaitStore.recordDeliveryReceipt(
+    const outcome = commitDeliveryReceipt(
       "wait-1",
       {
         externalMessageId: "platform:msg-late",
@@ -415,16 +414,14 @@ describe("WaitStore", () => {
     const events: string[] = [];
     Bus.observe((event) => events.push(event.name));
 
+    const current = WaitStore.get("wait-1");
+    if (current === undefined) throw new Error("wait fixture missing");
+    const staleOutcome = Wait.expire(current, { at: 20_000 });
+    // Concurrent writer advances the revision after channels decided from
+    // the prior raw row but before storage commits that produced outcome.
+    commitCancel("wait-1", "trace-wait-store", 500);
     const error = captureStoreError(() =>
-      WaitStore.transition(
-        "wait-1",
-        (record) => {
-          // Concurrent writer advances the revision after this step read it.
-          WaitStore.cancel("wait-1", "trace-wait-store", 500);
-          return Wait.expire(record, { at: 20_000 });
-        },
-        "trace-wait-store",
-      ),
+      WaitStore.commit(staleOutcome, "trace-wait-store"),
     );
 
     expect(error.data.code).toBe("revision_conflict");
@@ -441,13 +438,16 @@ describe("WaitStore", () => {
     expect(events).not.toContain("wait.expired");
   });
 
-  test("transition on a missing wait raises a typed not_found error", () => {
+  test("commit on a missing wait raises a typed not_found error", () => {
+    const missing = Wait.Record.parse({
+      ...buildWaitCreate({ id: "wait-missing", originMessageId: "out-missing" }),
+      status: "open",
+      partial: false,
+      replies: [],
+      revision: 1,
+    });
     const error = captureStoreError(() =>
-      WaitStore.transition(
-        "wait-missing",
-        (record) => Wait.cancel(record, { at: 1 }),
-        "trace-wait-store",
-      ),
+      WaitStore.commit(Wait.cancel(missing, { at: 1 }), "trace-wait-store"),
     );
 
     expect(error.data.code).toBe("not_found");
