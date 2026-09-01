@@ -1,9 +1,16 @@
 import { Operational } from "@openomni/protocol";
 import { sleep } from "../../support/fetch-retry";
-import { calculateBackoff } from "../../support/reconnect-backoff";
+import { SocketReconnectShell } from "../../support/socket-shell";
 import { newTraceId } from "../../support/trace";
 import type { PublishPort } from "../../types";
-import type { SocketEnvelope } from "./types";
+import { type SocketEnvelope, SocketEnvelopeSchema } from "./types";
+
+const SLACK_SHELL_MESSAGES = {
+  urlFetchFailed: "slack socket url fetch failed, retrying",
+  closed: "slack socket closed, reconnecting",
+  reconnectFailed: "slack reconnect failed",
+  socketError: "slack websocket error",
+} as const;
 
 export interface SocketCallbacks {
   /** `traceId` is minted per envelope — the first frame of an inbound Slack event (D11 origin). */
@@ -20,26 +27,26 @@ export interface SocketCallbacks {
  * sends routinely to refresh connections.
  */
 export class SlackSocket {
-  private ws: WebSocket | null = null;
-  private running = false;
-  private reconnectAttempt = 0;
+  private readonly shell: SocketReconnectShell;
 
   constructor(
     private readonly fetchSocketUrl: (traceId: string) => Promise<string>,
     private readonly callbacks: SocketCallbacks,
     private readonly publish: PublishPort,
-    private readonly delay: (ms: number) => Promise<void> = sleep,
-  ) {}
+    delay: (ms: number) => Promise<void> = sleep,
+  ) {
+    this.shell = new SocketReconnectShell(publish, SLACK_SHELL_MESSAGES, delay, (url) =>
+      this.openSocket(url),
+    );
+  }
 
   async start(): Promise<void> {
-    this.running = true;
+    this.shell.begin();
     await this.openSocket(await this.fetchSocketUrl(newTraceId()));
   }
 
   stop(): void {
-    this.running = false;
-    this.ws?.close(1000);
-    this.ws = null;
+    this.shell.stop();
   }
 
   /**
@@ -48,109 +55,53 @@ export class SlackSocket {
    * during exactly the transient outages that cluster reconnects — the same
    * failure mode the discord gateway hit in #540.
    */
-  private async reconnect(traceId: string): Promise<void> {
-    let url: string | undefined;
-    while (url === undefined && this.running) {
-      try {
-        url = await this.fetchSocketUrl(traceId);
-      } catch (err) {
-        this.reconnectAttempt++;
-        const backoffMs = calculateBackoff(this.reconnectAttempt);
-        this.publish(Operational.Events.Error, {
-          traceId,
-          time: Date.now(),
-          component: "server",
-          msg: "slack socket url fetch failed, retrying",
-          context: { err: String(err), backoffMs: Math.round(backoffMs) },
-        });
-        await this.delay(backoffMs);
-      }
-    }
-    if (url === undefined) return;
-    await this.openSocket(url);
+  private reconnect(traceId: string): Promise<void> {
+    return this.shell.reconnectVia(() => this.fetchSocketUrl(traceId), traceId);
   }
 
   private openSocket(url: string): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
-      const ws = new WebSocket(url);
-      this.ws = ws;
-      let resolved = false;
-
+    return this.shell.openWebSocket(url, (ws, settle) => {
       ws.addEventListener("message", (event) => {
         const envelope = this.parseEnvelope(String(event.data));
         if (envelope === undefined) return;
         if (envelope.type === "hello") {
-          this.reconnectAttempt = 0;
-          if (!resolved) {
-            resolved = true;
-            resolve();
-          }
+          this.shell.reset();
+          settle.resolveOnce();
           return;
         }
         this.handleEnvelope(envelope, ws);
       });
 
       ws.addEventListener("close", async (event) => {
-        if (!resolved) {
+        if (!settle.settled()) {
           // A close before hello fails THIS start() — the caller owns retry
           // policy at boot; a rejected start must not leave a zombie
           // reconnect loop behind.
-          resolved = true;
-          this.running = false;
-          reject(new Error(`slack socket closed before hello: ${event.code}`));
+          this.shell.end();
+          settle.rejectOnce(new Error(`slack socket closed before hello: ${event.code}`));
           return;
         }
-        if (!this.running) return;
-        this.reconnectAttempt++;
-        const backoffMs = calculateBackoff(this.reconnectAttempt);
-        // ONE trace for the whole close→backoff→reconnect chain (D11).
-        const traceId = newTraceId();
-        this.publish(Operational.Events.Warn, {
-          traceId,
-          time: Date.now(),
-          component: "server",
-          msg: "slack socket closed, reconnecting",
-          context: { code: event.code, backoffMs: Math.round(backoffMs) },
-        });
-        await this.delay(backoffMs);
-        if (this.running) {
-          this.reconnect(traceId).catch((err) =>
-            this.publish(Operational.Events.Error, {
-              traceId,
-              time: Date.now(),
-              component: "server",
-              msg: "slack reconnect failed",
-              context: { err: String(err) },
-            }),
-          );
-        }
+        if (!this.shell.running) return;
+        await this.shell.scheduleReconnect(event.code, (traceId) => this.reconnect(traceId));
       });
-
-      ws.addEventListener("error", (err) =>
-        this.publish(Operational.Events.Error, {
-          traceId: newTraceId(),
-          time: Date.now(),
-          component: "server",
-          msg: "slack websocket error",
-          context: { err: String(err) },
-        }),
-      );
     });
   }
 
   private parseEnvelope(data: string): SocketEnvelope | undefined {
+    let raw: object;
     try {
-      return JSON.parse(data) as SocketEnvelope;
+      raw = JSON.parse(data) as object;
     } catch {
       // One malformed frame must not become an uncaught listener throw.
-      this.publish(Operational.Events.Warn, {
-        traceId: newTraceId(),
-        time: Date.now(),
-        component: "server",
-        msg: "slack socket frame was not valid JSON; dropped",
-      });
+      this.shell.warnDrop("slack socket frame was not valid JSON; dropped");
       return undefined;
     }
+    const envelope = SocketEnvelopeSchema.safeParse(raw);
+    if (!envelope.success) {
+      this.shell.warnDrop("slack socket frame had no envelope shape; dropped");
+      return undefined;
+    }
+    return envelope.data;
   }
 
   private handleEnvelope(envelope: SocketEnvelope, ws: WebSocket): void {
