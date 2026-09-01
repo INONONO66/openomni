@@ -56,6 +56,7 @@ test("the entry acks before it works, so delivery is observable separately from 
   await serveProcessWorker(
     JSON.stringify({
       delegationId: "d-1",
+      workerRunId: "run-1",
       operation: "ask",
       instruction: "summarize",
       acceptanceCriteria: [],
@@ -74,7 +75,7 @@ test("the entry acks before it works, so delivery is observable separately from 
   );
   expect(written[0]).toBe(PROCESS_WORKER_ACK);
   expect(order).toEqual(["write", "run", "write"]);
-  expect(JSON.parse(written[1] ?? "")).toEqual({ status: "completed", output: "done", usage: { tokens: 7 } });
+  expect(JSON.parse(written[1] ?? "")).toEqual({ status: "completed", output: "done", workerRunId: "run-1", usage: { tokens: 7 } });
 });
 
 test("a worker that throws is a failed result, not a lost delivery", async () => {
@@ -82,6 +83,7 @@ test("a worker that throws is a failed result, not a lost delivery", async () =>
   await serveProcessWorker(
     JSON.stringify({
       delegationId: "d-1",
+      workerRunId: "run-1",
       operation: "ask",
       instruction: "summarize",
       acceptanceCriteria: [],
@@ -95,7 +97,7 @@ test("a worker that throws is a failed result, not a lost delivery", async () =>
     },
   );
   expect(written[0]).toBe(PROCESS_WORKER_ACK);
-  expect(JSON.parse(written[1] ?? "")).toEqual({ status: "failed", error: "model refused" });
+  expect(JSON.parse(written[1] ?? "")).toEqual({ status: "failed", error: "model refused", workerRunId: "run-1" });
 });
 
 test("a request that does not parse never acks", async () => {
@@ -121,6 +123,7 @@ test("the request schema carries lineage and refuses a malformed origin", () => 
   expect(
     ProcessWorkerRequest.parse({
       delegationId: "d-1",
+      workerRunId: "run-1",
       operation: "ask",
       instruction: "x",
       acceptanceCriteria: [],
@@ -144,7 +147,7 @@ test("an independent delegation returns its handle before a real process result,
     const line = await new Response(Bun.stdin.stream()).text();
     const request = JSON.parse(line);
     console.log(JSON.stringify({ delivered: true }));
-    console.log(JSON.stringify({ status: "completed", output: "handled: " + request.instruction + " pid:" + process.pid }));
+    console.log(JSON.stringify({ status: "completed", output: "handled: " + request.instruction + " pid:" + process.pid, workerRunId: request.workerRunId }));
   `);
   const kernel = kernelWith(entry);
   const result = await kernel.delegate(independentAsk("audit the ledger", Date.now() + 20_000), RESIDENT);
@@ -233,7 +236,7 @@ test("the child receives the admission-stamped worker lineage", async () => {
   const entry = fakeEntry(`
     const request = JSON.parse(await new Response(Bun.stdin.stream()).text());
     console.log(JSON.stringify({ delivered: true }));
-    console.log(JSON.stringify({ status: "completed", output: JSON.stringify(request.origin) }));
+    console.log(JSON.stringify({ status: "completed", output: JSON.stringify(request.origin), workerRunId: request.workerRunId }));
   `);
   const kernel = kernelWith(entry);
   const result = await kernel.delegate(independentAsk("audit", Date.now() + 20_000), RESIDENT);
@@ -287,7 +290,7 @@ test("concurrent process delegations have independent durable ids and answers", 
   const entry = fakeEntry(`
     const request = JSON.parse(await new Response(Bun.stdin.stream()).text());
     console.log(JSON.stringify({ delivered: true }));
-    console.log(JSON.stringify({ status: "completed", output: request.instruction }));
+    console.log(JSON.stringify({ status: "completed", output: request.instruction, workerRunId: request.workerRunId }));
   `);
   const kernel = kernelWith(entry);
   const results = await Promise.all(
@@ -325,7 +328,7 @@ const llm = {
         path: { cwd: "", root: "" }, cost: 0, tokens,
       },
       parts: [
-        { id: id + "-text", sessionID, messageID: id, type: "text", text: "BLOCKED: the registry is unreachable" },
+        { id: id + "-text", sessionID, messageID: id, type: "text", text: input.messages.length === 1 && JSON.stringify(input.messages).includes("single") ? "done" : "BLOCKED: the registry is unreachable" },
         { id: id + "-finish", sessionID, messageID: id, type: "step-finish", reason: "stop", cost: 0, tokens },
       ],
     });
@@ -410,5 +413,34 @@ test("an assign rides the real wire: parent driver, spawned child, drive loop, u
   await closed;
   const item = await WorkItemStore.get(workItemId);
   expect(item?.attemptTerminal).toMatchObject({ usage: { tokens: 27 } });
+  expect(item?.attemptTerminal?.workerRunId).toBe(settled.settlement.workerRunId);
+  expect(settled.settlement.workerRunId).toBeDefined();
+  expect(settled.settlement.workerRunId).not.toBe(commissioned?.workerRunId);
+  expect(item?.workSessionId).toBe(`delegation-d-wire-drive`);
+  kernel.stop();
+}, 20_000);
+
+test("a single process run consumes the commissioned run identity", async () => {
+  const entry = fakeEntry(CHILD_DRIVE_ENTRY);
+  const kernel = createDelegationKernel({
+    drivers: { process: createProcessDriver({ command: [process.execPath, entry], worker: WORKER }) },
+    now: () => Date.now(),
+    newDelegationId: () => "d-wire-single",
+    wake: () => undefined,
+    workItems: createWorkItemLinkage({ model: WORKER.model, now: () => Date.now() }),
+  });
+  const result = await kernel.delegate({
+    operation: "assign",
+    address: { kind: "core", scope: "independent" },
+    payload: { text: "single run" },
+    acceptanceCriteria: ["done"],
+    deadline: Date.now() + 20_000,
+  }, RESIDENT);
+  if ("refused" in result) throw new Error(result.refused);
+  const record = DelegationStore.get("d-wire-single");
+  const item = await WorkItemStore.get(record?.workItemId ?? "");
+  const settled = await kernel.awaitDelegation("d-wire-single", 20_000);
+  if (settled.kind !== "settled" || settled.settlement.status !== "completed") throw new Error("not settled");
+  expect(settled.settlement.workerRunId).toBe(item?.workerRunId);
   kernel.stop();
 }, 20_000);

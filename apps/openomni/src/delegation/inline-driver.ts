@@ -15,7 +15,7 @@ export type InlineWorkerRunner = (
     readonly origin: DelegationOrigin;
     readonly signal: AbortSignal;
   },
-) => Promise<{ readonly text: string; readonly tokens: number }>;
+) => Promise<{ readonly text: string; readonly tokens: number; readonly runId?: string }>;
 
 /**
  * The volatile inline transport. The kernel still records it before this runs,
@@ -45,7 +45,12 @@ export function createInlineDriver(run: InlineWorkerRunner): DelegationDriver {
       // kernel's terminal CAS. Reporting cancelled also avoids presenting it
       // as usable output to a caller whose inline turn is still unwinding.
       if (signal.aborted) return { status: "cancelled", reason: "delegation stopped" };
-      return { status: "completed", output: output.text, usage: { tokens: output.tokens } };
+      return {
+        status: "completed",
+        output: output.text,
+        ...(output.runId === undefined ? {} : { workerRunId: output.runId }),
+        usage: { tokens: output.tokens },
+      };
     },
   };
 }

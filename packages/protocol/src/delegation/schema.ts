@@ -165,6 +165,7 @@ const SettledUnion = z.discriminatedUnion("status", [
     .object({
       status: z.literal("completed"),
       delegationId: z.string().min(1),
+      workerRunId: z.string().min(1).optional(),
       output: z.string(),
       at: EpochMs,
       /** Transport-reported spend; visibility only, never an admission input. */
@@ -175,6 +176,7 @@ const SettledUnion = z.discriminatedUnion("status", [
     .object({
       status: z.literal("failed"),
       delegationId: z.string().min(1),
+      workerRunId: z.string().min(1).optional(),
       error: z.string().min(1),
       at: EpochMs,
     })
@@ -183,6 +185,7 @@ const SettledUnion = z.discriminatedUnion("status", [
     .object({
       status: z.literal("cancelled"),
       delegationId: z.string().min(1),
+      workerRunId: z.string().min(1).optional(),
       reason: z.string().min(1),
       at: EpochMs,
     })
@@ -191,6 +194,7 @@ const SettledUnion = z.discriminatedUnion("status", [
     .object({
       status: z.literal("delivery_failed"),
       delegationId: z.string().min(1),
+      workerRunId: z.string().min(1).optional(),
       reason: z.string().min(1),
       at: EpochMs,
     })
@@ -199,6 +203,7 @@ const SettledUnion = z.discriminatedUnion("status", [
     .object({
       status: z.literal("no_response"),
       delegationId: z.string().min(1),
+      workerRunId: z.string().min(1).optional(),
       /** The deadline (epoch ms) whose expiry produced this terminal. */
       deadline: EpochMs.int().positive(),
       at: EpochMs,
@@ -208,6 +213,7 @@ const SettledUnion = z.discriminatedUnion("status", [
     .object({
       status: z.literal("interrupted"),
       delegationId: z.string().min(1),
+      workerRunId: z.string().min(1).optional(),
       at: EpochMs,
     })
     .strict(),

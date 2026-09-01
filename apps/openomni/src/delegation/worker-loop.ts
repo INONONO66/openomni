@@ -82,14 +82,14 @@ export function createInlineWorkerRunner(options: WorkerLoopOptions): InlineWork
         }),
       );
       tokens += result.usage.totalTokens;
-      if (input.operation !== "assign") return { text: result.text, tokens };
+      if (input.operation !== "assign") return { text: result.text, tokens, runId };
       const decision = decideDrive(state, {
         text: result.text,
         finishReason: result.finishReason,
       });
-      if (decision.action === "done") return { text: result.text, tokens };
+      if (decision.action === "done") return { text: result.text, tokens, runId };
       if (decision.action === "stop") {
-        return { text: `[drive stopped: ${decision.reason}]\n${result.text}`, tokens };
+        return { text: `[drive stopped: ${decision.reason}]\n${result.text}`, tokens, runId };
       }
       state = decision.state;
       messages.push(

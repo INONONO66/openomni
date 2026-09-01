@@ -48,6 +48,9 @@ export function createProcessDriver(options: ProcessDriverOptions): DelegationDr
       report?: DriverReport,
     ): Promise<DriverOutcome> {
       if (signal.aborted) return { status: "cancelled", reason: "delegation stopped" };
+      if (admitted.workerRunId === undefined) {
+        return { status: "delivery_failed", reason: "process worker run identity was not admitted" };
+      }
       let child: Bun.Subprocess<"pipe", "pipe", "pipe">;
       try {
         child = Bun.spawn({
@@ -68,7 +71,7 @@ export function createProcessDriver(options: ProcessDriverOptions): DelegationDr
       try {
         const request: ProcessWorkerRequest = {
           delegationId: handle.delegationId,
-          ...(admitted.workerRunId === undefined ? {} : { workerRunId: admitted.workerRunId }),
+          workerRunId: admitted.workerRunId,
           operation: admitted.request.operation,
           instruction: admitted.request.payload.text,
           acceptanceCriteria: admitted.request.acceptanceCriteria ?? [],

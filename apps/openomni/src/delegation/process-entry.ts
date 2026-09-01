@@ -9,7 +9,8 @@ import { createInlineWorkerRunner } from "./worker-loop";
 export const ProcessWorkerRequest = z
   .object({
     delegationId: z.string().min(1),
-    workerRunId: z.string().min(1).optional(),
+    /** Wire v2: every process request carries the run identity it must consume. */
+    workerRunId: z.string().min(1),
     operation: Delegation.Operation,
     instruction: z.string().min(1),
     acceptanceCriteria: z.array(z.string()),
@@ -41,16 +42,17 @@ export const ProcessWorkerResult = z.discriminatedUnion("status", [
     .object({
       status: z.literal("completed"),
       output: z.string(),
+      workerRunId: z.string().min(1),
       usage: z.object({ tokens: z.number().int().nonnegative() }).strict().optional(),
     })
     .strict(),
-  z.object({ status: z.literal("failed"), error: z.string() }).strict(),
+  z.object({ status: z.literal("failed"), error: z.string(), workerRunId: z.string().min(1) }).strict(),
 ]);
 export type ProcessWorkerResult = z.infer<typeof ProcessWorkerResult>;
 
 export type ProcessWorkerRun = (
   request: ProcessWorkerRequest,
-) => Promise<{ readonly text: string; readonly tokens: number }>;
+) => Promise<{ readonly text: string; readonly tokens: number; readonly runId?: string }>;
 
 /** Child processes may only open inline children; independent work is refused. */
 export function createChildKernel(runner: InlineWorkerRunner): DelegationKernel {
@@ -79,11 +81,17 @@ export async function serveProcessWorker(
   let result: ProcessWorkerResult;
   try {
     const output = await run(request);
-    result = { status: "completed", output: output.text, usage: { tokens: output.tokens } };
+    result = {
+      status: "completed",
+      output: output.text,
+      workerRunId: output.runId ?? request.workerRunId,
+      usage: { tokens: output.tokens },
+    };
   } catch (error) {
     result = {
       status: "failed",
       error: error instanceof Error ? error.message : String(error),
+      workerRunId: request.workerRunId,
     };
   }
   writeLine(JSON.stringify(result));
@@ -92,7 +100,7 @@ export async function serveProcessWorker(
 /** Runs the same Worker loop in the child process. */
 function processWorkerRun(
   request: ProcessWorkerRequest,
-): Promise<{ readonly text: string; readonly tokens: number }> {
+): Promise<{ readonly text: string; readonly tokens: number; readonly runId?: string }> {
   if (request.dbPath !== undefined && Storage.getInitializedDbPath() === null) {
     initialize({ dbPath: request.dbPath });
   }

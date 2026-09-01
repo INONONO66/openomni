@@ -167,17 +167,18 @@ export function createWorkItemLinkage(options: WorkItemLinkageOptions): WorkItem
       },
       traceId,
     );
-    // The assignment is the source of truth for the run correlation. Older
-    // records fall back to delegationId for compatibility with pre-correlation
-    // rows; new process assignments carry the actual worker-loop run UUID.
-    const workerRunId = item.workerRunId ?? record.delegationId;
+    // Locate the attempt using its commissioned pair. The settlement carries
+    // the final driven run ID and stores it on the terminal attempt fact.
+    const assignedRunId = item.workerRunId ?? record.delegationId;
+    const workSessionId = item.workSessionId ?? record.origin.sessionId;
     await WorkItemAttemptRun.finish(
-      record.origin.sessionId,
-      workerRunId,
+      workSessionId,
+      assignedRunId,
       Delegation.settlementToAttemptOutcome(settlement.status),
       traceId,
       {
         endedAt: options.now(),
+        ...(settlement.workerRunId === undefined ? {} : { workerRunId: settlement.workerRunId }),
         usage: WorkItem.AttemptUsage.parse({
           seconds: Math.max(0, (settlement.at - record.createdAt) / 1000),
           ...(tokens === undefined ? {} : { tokens }),

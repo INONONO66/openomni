@@ -240,6 +240,8 @@ export type AttemptUsage = z.infer<typeof AttemptUsage>;
 export const AttemptTerminal = z
   .object({
     attemptId: AttemptId,
+    /** Worker run that produced the terminal outcome, distinct across driven reruns. */
+    workerRunId: z.string().min(1).optional(),
     outcome: AttemptOutcome,
     endedAt: EpochMs,
     error: z.string().optional(),

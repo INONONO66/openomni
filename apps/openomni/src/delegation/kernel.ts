@@ -18,12 +18,14 @@ export type DriverOutcome =
   | {
       readonly status: "completed";
       readonly output: string;
+      /** The worker run that produced this outcome, when the transport reports one. */
+      readonly workerRunId?: string;
       /** Transport-reported spend; visibility only, never an admission input. */
       readonly usage?: { readonly tokens: number };
     }
-  | { readonly status: "failed"; readonly error: string }
-  | { readonly status: "cancelled"; readonly reason: string }
-  | { readonly status: "delivery_failed"; readonly reason: string }
+  | { readonly status: "failed"; readonly error: string; readonly workerRunId?: string }
+  | { readonly status: "cancelled"; readonly reason: string; readonly workerRunId?: string }
+  | { readonly status: "delivery_failed"; readonly reason: string; readonly workerRunId?: string }
   | { readonly status: "sent" };
 
 /** Transport identifiers allocated before the durable record is written. */
@@ -211,14 +213,33 @@ function outcomeToSettlement(
         delegationId,
         output: outcome.output,
         at,
+        ...(outcome.workerRunId === undefined ? {} : { workerRunId: outcome.workerRunId }),
         ...(outcome.usage === undefined ? {} : { usage: outcome.usage }),
       };
     case "failed":
-      return { status: "failed", delegationId, error: outcome.error, at };
+      return {
+        status: "failed",
+        delegationId,
+        error: outcome.error,
+        at,
+        ...(outcome.workerRunId === undefined ? {} : { workerRunId: outcome.workerRunId }),
+      };
     case "cancelled":
-      return { status: "cancelled", delegationId, reason: outcome.reason, at };
+      return {
+        status: "cancelled",
+        delegationId,
+        reason: outcome.reason,
+        at,
+        ...(outcome.workerRunId === undefined ? {} : { workerRunId: outcome.workerRunId }),
+      };
     case "delivery_failed":
-      return { status: "delivery_failed", delegationId, reason: outcome.reason, at };
+      return {
+        status: "delivery_failed",
+        delegationId,
+        reason: outcome.reason,
+        at,
+        ...(outcome.workerRunId === undefined ? {} : { workerRunId: outcome.workerRunId }),
+      };
     case "sent":
       return { status: "sent", delegationId, at };
   }
@@ -538,10 +559,6 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
     }
     const now = options.now();
     const delegationId = options.newDelegationId();
-    // Process workers need a real run identity before their WorkItem attempt
-    // is commissioned; the worker loop consumes this as its first run ID.
-    const workerRunId =
-      candidate !== undefined && origin.role === "resident" ? crypto.randomUUID() : undefined;
     const parentDelegationId = origin.parentDelegationId;
     const parent = parentDelegationId === undefined ? undefined : store.get(parentDelegationId);
     const rootDelegationId = parent?.rootDelegationId ?? delegationId;
@@ -551,16 +568,22 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
       origin.role === "worker" && parentDelegationId !== undefined
         ? options.leases?.listLiveByHolder(parentDelegationId, now)
         : undefined;
-    const decision = admit(candidate, origin, now, limits, {
+    const admitted = admit(candidate, origin, now, limits, {
       delegationId,
       rootDelegationId,
-      ...(workerRunId === undefined ? {} : { workerRunId }),
       ...(parent === undefined ? {} : { parent }),
       ...(parentDelegationId !== undefined && parent === undefined ? { parentMissing: true } : {}),
       openFanout: store.countOpenByRoot(rootDelegationId),
       ...(liveLeases === undefined ? {} : { leases: liveLeases }),
     });
-    if (!decision.ok) return { refused: decision.reason, error: decision.error };
+    if (!admitted.ok) return { refused: admitted.reason, error: admitted.error };
+    // Only an internal process worker has a worker loop that can consume this
+    // identity. Channel assignments must never persist a fabricated UUID.
+    const workerRunId = admitted.transport === "process" ? crypto.randomUUID() : undefined;
+    const decision: Admitted = {
+      ...admitted,
+      ...(workerRunId === undefined ? {} : { workerRunId }),
+    };
 
     const baseHandle: Delegation.Handle = {
       delegationId,
@@ -601,11 +624,14 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
       try {
         workItemId = await options.workItems.openAssign({
           delegationId,
-          ...(decision.workerRunId === undefined ? {} : { workerRunId: decision.workerRunId }),
+          ...(decision.workerRunId === undefined && handle.waitId === undefined
+            ? {}
+            : { workerRunId: decision.workerRunId ?? handle.waitId }),
           transport: decision.transport,
           instruction: decision.request.payload.text,
           acceptanceCriteria: decision.request.acceptanceCriteria ?? [],
-          sessionId: origin.sessionId,
+          sessionId:
+            decision.transport === "process" ? `delegation-${delegationId}` : origin.sessionId,
         });
       } catch (error) {
         const message = `WorkItem commissioning failed: ${error instanceof Error ? error.message : String(error)}`;
