@@ -74,133 +74,161 @@ function unreachable(_value: never): never {
   throw new TypeError("Unreachable routing state");
 }
 
-export function resolveRoute(
-  inbound: RouteInbound,
-  state: RouteState,
-): Ingress.RoutingDecisionPayload {
-  const common = {
+type RouteCommon = Readonly<{
+  traceId: string;
+  time: number;
+  inboundId: string;
+  surface: string;
+  mode: "direct";
+}>;
+
+type WaitResolution =
+  | Readonly<{ decision: Ingress.RoutingDecisionPayload }>
+  | Readonly<{ facts: readonly string[] }>;
+
+function routeCommon(inbound: RouteInbound): RouteCommon {
+  return {
     traceId: inbound.traceId,
     time: inbound.time,
     inboundId: inbound.id,
     surface: inbound.surface,
     mode: inbound.mode,
   };
+}
 
-  if (state.blacklist !== undefined) {
-    return {
-      ...common,
-      stage: "blacklist",
-      outcome: "drop",
-      reason: "Inbound principal matched the blacklist",
-      factsUsed: [
-        `blacklist:${state.blacklist.id}`,
-        `blacklist.kind:${state.blacklist.kind}`,
-        ...(state.blacklist.reason === undefined
-          ? []
-          : [`blacklist.reason:${state.blacklist.reason}`]),
-      ],
-    };
-  }
+function resolveBlacklist(
+  common: RouteCommon,
+  blacklist: NonNullable<RouteState["blacklist"]>,
+): Ingress.RoutingDecisionPayload {
+  return {
+    ...common,
+    stage: "blacklist",
+    outcome: "drop",
+    reason: "Inbound principal matched the blacklist",
+    factsUsed: [
+      `blacklist:${blacklist.id}`,
+      `blacklist.kind:${blacklist.kind}`,
+      ...(blacklist.reason === undefined ? [] : [`blacklist.reason:${blacklist.reason}`]),
+    ],
+  };
+}
 
-  const conversation = state.conversation;
-  if (conversation !== undefined && conversation.state === "open") {
-    // Conversation tier (#P1, docs/conversation-and-message-io.md §3.4): an
-    // open window pinned to the sender's endpoint admits the inbound to the
-    // window owner's session. Cap breach demotes the treatment to
-    // evidence_only (§3.4 onInboundCapBreach:"demote") — the durable
-    // increment + one owner wake happen in the store write after this pure
-    // fold; the fold only reports the treatment.
-    const demoted = conversation.inboundCapBreachedAt !== undefined;
-    return {
-      ...common,
-      stage: "conversation",
-      outcome: "route",
-      target: "resident",
-      sessionId: conversation.ownerRef.id,
-      conversationId: conversation.id,
-      // The window IS the authority for this delivery — the contact's trust
-      // tier is irrelevant inside it, so the treatment the brain consumes is
-      // the window's, not the tier ladder's. A cap-breached window demotes
-      // to evidence_only (§3.4 onInboundCapBreach:"demote").
-      inboundTreatment: demoted ? "evidence_only" : "full_access",
-      reason: "Inbound message matched an open conversation",
-      factsUsed: [
-        `conversation:${conversation.id}`,
-        `conversation.owner:session:${conversation.ownerRef.id}`,
-        "conversation.authority:window",
-        ...(demoted ? ["conversation.cap:breached"] : []),
-      ],
-    };
-  }
+function resolveConversation(
+  common: RouteCommon,
+  conversation: Conversation.Record,
+): Ingress.RoutingDecisionPayload {
+  // Conversation tier (#P1, docs/conversation-and-message-io.md §3.4): an
+  // open window pinned to the sender's endpoint admits the inbound to the
+  // window owner's session. Cap breach demotes the treatment to
+  // evidence_only (§3.4 onInboundCapBreach:"demote") — the durable
+  // increment + one owner wake happen in the store write after this pure
+  // fold; the fold only reports the treatment.
+  const demoted = conversation.inboundCapBreachedAt !== undefined;
+  return {
+    ...common,
+    stage: "conversation",
+    outcome: "route",
+    target: "resident",
+    sessionId: conversation.ownerRef.id,
+    conversationId: conversation.id,
+    // The window IS the authority for this delivery — the contact's trust
+    // tier is irrelevant inside it, so the treatment the brain consumes is
+    // the window's, not the tier ladder's. A cap-breached window demotes
+    // to evidence_only (§3.4 onInboundCapBreach:"demote").
+    inboundTreatment: demoted ? "evidence_only" : "full_access",
+    reason: "Inbound message matched an open conversation",
+    factsUsed: [
+      `conversation:${conversation.id}`,
+      `conversation.owner:session:${conversation.ownerRef.id}`,
+      "conversation.authority:window",
+      ...(demoted ? ["conversation.cap:breached"] : []),
+    ],
+  };
+}
 
-  const waitFacts: string[] = [];
-  switch (state.wait.kind) {
+function resolveWait(inbound: RouteInbound, wait: RouteWait, common: RouteCommon): WaitResolution {
+  switch (wait.kind) {
     case "none":
-      waitFacts.push("wait:none");
-      break;
+      return { facts: ["wait:none"] };
     case "ambiguous":
       return {
-        ...common,
-        stage: "wait_correlation",
-        outcome: "ambiguous",
-        candidateInteractionIds: [...state.wait.candidateInteractionIds],
-        reason: "Multiple pending waits matched the inbound message",
-        factsUsed: state.wait.candidateInteractionIds.map((id) => `wait.candidate:${id}`),
+        decision: {
+          ...common,
+          stage: "wait_correlation",
+          outcome: "ambiguous",
+          candidateInteractionIds: [...wait.candidateInteractionIds],
+          reason: "Multiple pending waits matched the inbound message",
+          factsUsed: wait.candidateInteractionIds.map((id) => `wait.candidate:${id}`),
+        },
       };
     case "match": {
       const action = inbound.requestedAction;
-      if (action === undefined || !state.wait.allowed.includes(action)) {
+      if (action === undefined || !wait.allowed.includes(action)) {
         // Fail closed: a matched durable wait never falls through to
         // surface routing — a disallowed action is a typed block, mirroring
         // the owner gate below.
         return {
-          ...common,
-          stage: "wait_correlation",
-          outcome: "block",
-          reason: "Matched wait does not allow the requested action",
-          factsUsed: [
-            `wait:${state.wait.key}`,
-            `wait.action:${action ?? "missing"}`,
-            "wait.action:disallowed",
-          ],
+          decision: {
+            ...common,
+            stage: "wait_correlation",
+            outcome: "block",
+            reason: "Matched wait does not allow the requested action",
+            factsUsed: [
+              `wait:${wait.key}`,
+              `wait.action:${action ?? "missing"}`,
+              "wait.action:disallowed",
+            ],
+          },
         };
       }
-      if (state.wait.owner.kind !== "session") {
+      if (wait.owner.kind !== "session") {
         // Fail closed: a matched wait must never fall through to surface
         // routing, and workItem-owned resumption has no ingress delivery
         // path yet (#216/#217 wire it).
         return {
-          ...common,
-          stage: "wait_correlation",
-          outcome: "block",
-          reason: "Matched wait owner has no ingress delivery path",
-          factsUsed: [
-            `wait:${state.wait.key}`,
-            `wait.action:${action}`,
-            `wait.owner:${state.wait.owner.kind}:${state.wait.owner.id}`,
-            "wait.owner:unsupported_ingress_delivery",
-          ],
+          decision: {
+            ...common,
+            stage: "wait_correlation",
+            outcome: "block",
+            reason: "Matched wait owner has no ingress delivery path",
+            factsUsed: [
+              `wait:${wait.key}`,
+              `wait.action:${action}`,
+              `wait.owner:${wait.owner.kind}:${wait.owner.id}`,
+              "wait.owner:unsupported_ingress_delivery",
+            ],
+          },
         };
       }
       return {
-        ...common,
-        stage: "wait_correlation",
-        outcome: "route",
-        target: "resident",
-        sessionId: state.wait.owner.id,
-        reason: "Inbound message matched an open wait",
-        factsUsed: [
-          `wait:${state.wait.key}`,
-          `wait.action:${action}`,
-          `wait.owner:session:${state.wait.owner.id}`,
-        ],
+        decision: {
+          ...common,
+          stage: "wait_correlation",
+          outcome: "route",
+          target: "resident",
+          sessionId: wait.owner.id,
+          reason: "Inbound message matched an open wait",
+          factsUsed: [
+            `wait:${wait.key}`,
+            `wait.action:${action}`,
+            `wait.owner:session:${wait.owner.id}`,
+          ],
+        },
       };
     }
     default:
-      return unreachable(state.wait);
+      return unreachable(wait);
   }
+}
 
-  if (state.channel === undefined) {
+function resolveChannelRoute(
+  inbound: RouteInbound,
+  state: RouteState,
+  common: RouteCommon,
+  waitFacts: readonly string[],
+): Ingress.RoutingDecisionPayload {
+  const channel = state.channel;
+  if (channel === undefined) {
     return {
       ...common,
       stage: "channel_ceiling",
@@ -210,36 +238,36 @@ export function resolveRoute(
     };
   }
 
-  switch (state.channel.kind) {
+  switch (channel.kind) {
     case "blocked_channel":
       return {
         ...common,
         stage: "channel_ceiling",
         outcome: "block",
-        inboundTreatment: state.channel.inboundTreatment,
+        inboundTreatment: channel.inboundTreatment,
         reason: "Channel grant blocks inbound messages",
         factsUsed: [
           ...waitFacts,
-          `channel:${state.channel.id}`,
-          `channel.kind:${state.channel.kind}`,
-          `channel.treatment:${state.channel.inboundTreatment}`,
+          `channel:${channel.id}`,
+          `channel.kind:${channel.kind}`,
+          `channel.treatment:${channel.inboundTreatment}`,
         ],
       };
     case "broadcast_channel":
     case "trusted_channel":
       break;
     default:
-      return unreachable(state.channel);
+      return unreachable(channel);
   }
 
   const channelFacts = [
     ...waitFacts,
-    `channel:${state.channel.id}`,
-    `channel.kind:${state.channel.kind}`,
-    `channel.treatment:${state.channel.inboundTreatment}`,
+    `channel:${channel.id}`,
+    `channel.kind:${channel.kind}`,
+    `channel.treatment:${channel.inboundTreatment}`,
   ];
   const actorId = state.actor?.id;
-  const trustTier = effectiveTrustTier(state.actor?.trustTier, state.channel.defaultTier);
+  const trustTier = effectiveTrustTier(state.actor?.trustTier, channel.defaultTier);
 
   if (trustTier === undefined) {
     return {
@@ -259,7 +287,7 @@ export function resolveRoute(
     ...(state.surfaceSessionId === undefined ? {} : { sessionId: state.surfaceSessionId }),
     ...(actorId === undefined ? {} : { actorId }),
     trustTier,
-    inboundTreatment: state.channel.inboundTreatment,
+    inboundTreatment: channel.inboundTreatment,
     reason: "Inbound message routed to the surface session",
     factsUsed: [
       ...channelFacts,
@@ -272,4 +300,22 @@ export function resolveRoute(
       `target:${inbound.target}`,
     ],
   };
+}
+
+export function resolveRoute(
+  inbound: RouteInbound,
+  state: RouteState,
+): Ingress.RoutingDecisionPayload {
+  const common = routeCommon(inbound);
+  if (state.blacklist !== undefined) return resolveBlacklist(common, state.blacklist);
+
+  const conversation = state.conversation;
+  if (conversation !== undefined && conversation.state === "open") {
+    return resolveConversation(common, conversation);
+  }
+
+  const waitResolution = resolveWait(inbound, state.wait, common);
+  if ("decision" in waitResolution) return waitResolution.decision;
+
+  return resolveChannelRoute(inbound, state, common, waitResolution.facts);
 }
