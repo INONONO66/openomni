@@ -5,7 +5,9 @@ import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
 const CHANNEL_ROOT = fileURLToPath(new URL("../src", import.meta.url));
-const DRIVER_ALLOWED_PACKAGES = new Set(["@openomni/protocol"]);
+// zod is pure schema validation — no I/O, no authority — and providers declare
+// their credential/settings schemas in-band (docs/provisioning-and-providers.md §4).
+const DRIVER_ALLOWED_PACKAGES = new Set(["@openomni/protocol", "zod"]);
 const JUDGMENT_ALLOWED_PACKAGES = new Set(["@openomni/policy", "@openomni/ledger"]);
 const JUDGMENT_DIRS = ["src/router/", "src/authn/"] as const;
 
@@ -85,8 +87,8 @@ describe("channels band import boundary", () => {
 
   test("rejects arbitrary external packages", () => {
     expect(
-      detectBandViolations([{ path: "src/websocket.ts", text: 'import { z } from "zod";' }]),
-    ).toEqual(["src/websocket.ts: imports zod"]);
+      detectBandViolations([{ path: "src/websocket.ts", text: 'import ky from "ky";' }]),
+    ).toEqual(["src/websocket.ts: imports ky"]);
   });
 
   test("rejects non-literal dynamic imports", () => {

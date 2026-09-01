@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import type { Channel } from "@openomni/protocol";
-import { SlackAdapter } from "../src/slack/surface";
-import { SlackEndpointKeyError, SlackHandlerMissingError } from "../src/slack/error";
+import { SlackAdapter } from "../src/provider/slack/surface";
+import { SlackEndpointKeyError, SlackHandlerMissingError } from "../src/provider/slack/error";
 import type { PublishPort } from "../src/types";
 
 /**

@@ -1,8 +1,8 @@
-import { newTraceId } from "../support/trace";
+import { newTraceId } from "../../support/trace";
 import { Operational } from "@openomni/protocol";
-import { sleep } from "../support/fetch-retry";
-import { calculateBackoff } from "../support/reconnect-backoff";
-import type { PublishPort } from "../types";
+import { sleep } from "../../support/fetch-retry";
+import { calculateBackoff } from "../../support/reconnect-backoff";
+import type { PublishPort } from "../../types";
 import { GatewayOp, Intents, type DiscordUser, type GatewayPayload } from "./types";
 
 export interface GatewayCallbacks {

@@ -20,30 +20,33 @@ src/
 │   └── messaging/    # #215 send kernel: createExistingAgentMessaging, grant evaluation (scope-less + scope-aware
 │                     #   arms), #708 reply-grant instance materialization (in-memory by ruling; durable store = #709),
 │                     #   #219 social-budget egress gate (pure fold + EgressBudgetStore debits), audit events
-├── provider/         # ChannelProvider contract + shipped registry (pure data; PR-A of
-│                     #   docs/provisioning-and-providers.md): each driver folder exports one
-│                     #   provider (id, ingest mode, credential type, capabilities, create());
-│                     #   the websocket loopback surface deliberately stays outside the registry
-├── discord/          # Discord gateway client + surface (mention-trigger by default) + provider.ts
-├── telegram/         # Ordered long-poll surface; offset advances only after successful handoff + provider.ts
-├── github/           # Webhooks with retryable 5xx failures and delivery-marker comment read-back + provider.ts
-├── slack/            # Socket Mode surface (two tokens: xoxb- bot + xapp- app-level; ack-before-dispatch,
-│                     #   fresh-URL reconnect) with workspace-mandatory TEAM:USER endpoint keys + provider.ts
+├── provider/         # ChannelProvider contract + shipped registry + every shipped driver
+│   │                 #   (docs/provisioning-and-providers.md §4): each driver folder exports one
+│   │                 #   provider declaring id, ingest mode, credentials/settings zod schemas,
+│   │                 #   capabilities (deliver/webhook/render policy), operator preconditions,
+│   │                 #   and pure create(); the websocket loopback surface deliberately stays
+│   │                 #   outside the registry. Each driver's format.ts is the single source for
+│   │                 #   its outbound render policy — the provider declares it, the surface applies it.
+│   ├── discord/      # Discord gateway client + surface (mention-trigger by default)
+│   ├── telegram/     # Ordered long-poll surface; offset advances only after successful handoff
+│   ├── github/       # Webhooks with retryable 5xx failures and delivery-marker comment read-back
+│   └── slack/        # Socket Mode surface (two tokens: xoxb- bot + xapp- app-level; ack-before-dispatch,
+│                     #   fresh-URL reconnect) with workspace-mandatory TEAM:USER endpoint keys
 └── support/          # Band-local helpers: format renderers/chunking, bounded dedupe, fetch retry, trigger evaluation
 ```
 
 ## DEPENDENCIES (the band import contract)
 
-Whitelist at stage 2: **{`@openomni/protocol`, `@openomni/policy`, `@openomni/ledger`}** for `src/` (ipc left the whitelist once no channels source imported it; re-admit only with a real driver consumer) (the manifest may additionally carry `@openomni/telemetry` for tests only — the llm/agent precedent). Enforced twice:
+Whitelist at stage 2: **{`@openomni/protocol`, `@openomni/policy`, `@openomni/ledger`}** for `src/` (ipc left the whitelist once no channels source imported it; re-admit only with a real driver consumer) (the manifest may additionally carry `@openomni/telemetry` for tests only — the llm/agent precedent). `zod` is additionally admitted package-wide: pure schema validation with no I/O and no authority, required because providers declare their credential/settings schemas in-band (§4). Enforced twice:
 
-- `script/check-deps.ts` — package-level whitelist (manifest **and** source imports), plus the **S8 intra-package banding check**: only the judgment band (`src/router/`, `src/authn/`) may import `@openomni/policy` or `@openomni/ledger`; the driver sub-band (`discord/`, `github/`, `telegram/`, `slack/`, `support/`, `websocket.ts`, `channel-authn.ts`) stays on the dumb-driver contract {protocol} and may not relative-import into `src/router/`. Router files importing the ledger may name ONLY the perimeter store surfaces (ActorRegistry, BlacklistStore, ChannelGrantStore, WaitStore, ConversationStore — the conversation-inbound accounting surface, written only by the router's route resolution, LeaseStore — the §3.5 carved send-lease surface, debited only by the send kernel's lease arm, SurfaceKey, EgressBudgetStore — the #219 debit ledger, written only by the send kernel) plus the scoped `LedgerAppend` port (append + headFact — never the master `Storage` entry) — brain surfaces (Session, WorkItem*, transcripts, artifacts) are unreachable, and namespace/default imports, wholesale re-exports, dynamic `import()`, and `require()` of the ledger are all refused (the static named clause is the only road).
+- `script/check-deps.ts` — package-level whitelist (manifest **and** source imports), plus the **S8 intra-package banding check**: only the judgment band (`src/router/`, `src/authn/`) may import `@openomni/policy` or `@openomni/ledger`; the driver sub-band (`provider/` including every driver folder, `support/`, `websocket.ts`, `channel-authn.ts`) stays on the dumb-driver contract {protocol, zod} and may not relative-import into `src/router/`. Router files importing the ledger may name ONLY the perimeter store surfaces (ActorRegistry, BlacklistStore, ChannelGrantStore, WaitStore, ConversationStore — the conversation-inbound accounting surface, written only by the router's route resolution, LeaseStore — the §3.5 carved send-lease surface, debited only by the send kernel's lease arm, SurfaceKey, EgressBudgetStore — the #219 debit ledger, written only by the send kernel) plus the scoped `LedgerAppend` port (append + headFact — never the master `Storage` entry) — brain surfaces (Session, WorkItem*, transcripts, artifacts) are unreachable, and namespace/default imports, wholesale re-exports, dynamic `import()`, and `require()` of the ledger are all refused (the static named clause is the only road).
 - `test/channel-band-boundary.test.ts` — the AST-level scan: every import in `src/**` must be a whitelisted package, a node builtin, or relative; policy/ledger only under the judgment band. Telemetry is NOT allowed anywhere in `src/**` — observation goes through the injected sink (`PublishPort` for drivers, the router's `sink` port).
 
 No app import from this package: both sides meet in protocol contracts (`Gateway.Deliver`, `Gateway.Send*`) plus injected ports.
 
 ## CONTRACT
 
-- Providers are the uniform driver contract: `ChannelProvider.create()` is pure construction (no I/O until `surface.start()`), runtime seams (`deliveryRoute`, `webhookHandler`) must match the declared `capabilities`, and credential validation stays where credentials enter the system (one enforcement layer) — `test/provider-contract.test.ts` enforces the correspondence and `test/provider-golden.test.ts` freezes each provider's exact normalized inbound shape.
+- Providers are the uniform driver contract: `ChannelProvider.create()` is pure construction (no I/O until `surface.start()`), runtime seams (`deliveryRoute`, `webhookHandler`) must match the declared `capabilities`, the provider's own `credentials`/`settings` schemas ARE the validation layer where credentials and knobs enter the system (one enforcement layer — the app's gates call them, never a parallel table), `capabilities.render` is the surface's actual outbound policy (dialect mapping + chunk limit, single-sourced from the driver's `format.ts`), and `preconditions` is the verbatim operator checklist `provision_status` reports — `test/provider-contract.test.ts` enforces all of it and `test/provider-golden.test.ts` freezes each provider's exact normalized inbound shape.
 - Adapters are ingress-agnostic: inbound flows through the injected `onMessage(routingHandler)` (bound to the router's `ingest` by the composition root); observation flows through injected sinks.
 - The router is constructed ONCE (`createGatewayRouter({ sink, deliver, onPolicyDecision?, messaging? })`) — no post-construction mutation. `ingest` sanitizes gateway-derived fields off the inbound event at the trust boundary (audit A T2: `activation.durableSessionId`, `meta.channelGrant*`; `inboundTreatment` keeps only the harmless `evidence_only` self-downgrade), records `route.decided` before anything acts (record-before-act, #510 C3), mints/claims the resident surface-session label before deliver (S1: the sessionId is an opaque label; session ROWS are brain domain), and never reads session content. A wait-correlated routed reply the fold rejects appends a correcting `route.not_delivered` fact on `route_correction:<scope>:<id>` before the typed rejection returns, so the ledger never claims a delivery that never happened (#743).
 - Wire/persisted vocabulary is byte-frozen: `route.decided` stream ids and decision payloads, `route.not_delivered` corrections, `messaging.sent`/`messaging.denied`, wait rows, surface-key rows, egress-budget debit rows.

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import type { ServerWebSocket } from "bun";
-import { SlackSocket } from "../src/slack/socket";
-import type { SocketEnvelope } from "../src/slack/types";
+import { SlackSocket } from "../src/provider/slack/socket";
+import type { SocketEnvelope } from "../src/provider/slack/types";
 import type { PublishPort } from "../src/types";
 
 /**

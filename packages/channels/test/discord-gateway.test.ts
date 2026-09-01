@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import type { ServerWebSocket } from "bun";
-import { DiscordGateway } from "../src/discord/gateway";
-import { GatewayOp } from "../src/discord/types";
+import { DiscordGateway } from "../src/provider/discord/gateway";
+import { GatewayOp } from "../src/provider/discord/types";
 import type { PublishPort } from "../src/types";
 
 const noopPublish: PublishPort = () => undefined;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { GitHubClient } from "../src/github/client";
+import { GitHubClient } from "../src/provider/github/client";
 import { fetchWithRetry } from "../src/support/fetch-retry";
 
 describe("GitHubClient", () => {
