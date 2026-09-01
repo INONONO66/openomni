@@ -114,15 +114,15 @@ describe("WorkItem oracle storage concurrency", () => {
       return originalCompareAndSet(hash, expectedHead, candidate);
     };
 
-    const recorded = await WorkItemStore.addBlocker(
+    const recorded = await WorkItemStore.addEvidence(
       item.workItemId,
-      { kind: "waiting_input", description: "owner follow-up" },
+      { kind: "verification", description: "owner follow-up", passed: true },
       "trace-test",
     );
 
     expect(attemptedHeads).toEqual([[completed.revision, completed.revision + 1]]);
     expect(recorded).toMatchObject({ revision: completed.revision + 1 });
-    expect(recorded?.blockers).toHaveLength(1);
+    expect(recorded?.evidence).toHaveLength(completed.evidence.length + 1);
     expect(recorded?.completionTerminalReceipt).toEqual(completed.completionTerminalReceipt);
   });
 
@@ -157,9 +157,9 @@ describe("WorkItem oracle storage concurrency", () => {
     };
 
     await expectRejectsWithMessage(
-      WorkItemStore.addBlocker(
+      WorkItemStore.addEvidence(
         item.workItemId,
-        { kind: "waiting_input", description: "loses the race" },
+        { kind: "verification", description: "loses the race", passed: true },
         "trace-test",
       ),
       `stale WorkItem revision: ${item.workItemId}`,
@@ -170,7 +170,7 @@ describe("WorkItem oracle storage concurrency", () => {
       revision: completed.revision + 1,
       name: "competing winner",
     });
-    expect(WorkItemStore.get(item.workItemId)?.blockers).toEqual([]);
+    expect(WorkItemStore.get(item.workItemId)?.evidence).toEqual(completed.evidence);
   });
 
   test("removes the inserted child when parent relation CAS loses", async () => {

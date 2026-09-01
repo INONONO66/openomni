@@ -35,7 +35,6 @@ describe("Retry.sleep", () => {
     // abort races nothing: no 5ms timer and no wall-clock bound needed. The
     // rejection identity IS the proof that the abort cut the pending sleep
     // short - a 5s sleep that ran to completion resolves, it does not reject.
-    await Promise.resolve();
     controller.abort();
 
     await expect(sleeping).rejects.toThrow(/aborted/i);
@@ -59,12 +58,12 @@ describe("Retry.sleep", () => {
     }) as AbortSignal["removeEventListener"];
 
     let fireTimer: (() => void) | undefined;
-    const timeout = spyOn(globalThis, "setTimeout").mockImplementation(
-      ((callback: Parameters<typeof setTimeout>[0]) => {
-        if (typeof callback === "function") fireTimer = callback;
-        return 0 as unknown as ReturnType<typeof setTimeout>;
-      }) as typeof setTimeout,
-    );
+    const timeout = spyOn(globalThis, "setTimeout").mockImplementation(((
+      callback: Parameters<typeof setTimeout>[0],
+    ) => {
+      if (typeof callback === "function") fireTimer = callback;
+      return 0 as unknown as ReturnType<typeof setTimeout>;
+    }) as typeof setTimeout);
 
     try {
       const sleeping = Retry.sleep(1, signal);

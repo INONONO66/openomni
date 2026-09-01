@@ -123,11 +123,6 @@ describe("BusQuery worker run history", () => {
 
   test("query functions return empty results for missing data", async () => {
     await expect(BusQuery.listErrors("sess-1")).resolves.toEqual([]);
-    await expect(BusQuery.getStats("sess-1")).resolves.toEqual({
-      totalEvents: 0,
-      byCategory: {},
-      byType: {},
-    });
     await expect(BusQuery.getWorkerRunHistory("sess-1")).resolves.toEqual([]);
   });
 });

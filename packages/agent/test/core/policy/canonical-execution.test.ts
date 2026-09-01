@@ -16,6 +16,7 @@ import {
   mockProviderModel,
 } from "../../helpers/mock-llm";
 import { runInput } from "../../helpers/run-input";
+import { captureBusEvents } from "../../helpers/bus-event";
 
 const allow = () => PolicyDecision.allow({ policyId: "test.allow" });
 
@@ -148,11 +149,8 @@ describe("canonical tool policy execution", () => {
       readonly runId: unknown;
     }> = [];
     const delegatedContexts: Array<{ sessionId?: string; runId?: string } | undefined> = [];
-    const warningErrors: unknown[] = [];
     const observerFailure = { toString: () => "observer-failure" };
-    const unsubscribeWarnings = Bus.subscribe(Operational.Events.Warn, (event) => {
-      warningErrors.push(event.context?.error);
-    });
+    const warnings = captureBusEvents(Operational.Events.Warn, 2);
     const engine = buildPolicyEngine(
       {
         events: Bus,
@@ -192,9 +190,10 @@ describe("canonical tool policy execution", () => {
     try {
       // When
       await executor({ id: "call", tool: "read_file", input: {} });
-      await Promise.resolve();
+      const warningErrors = (await warnings.done).map((event) => event.context?.error);
 
       // Then
+      expect(warnings.events).toHaveLength(2);
       expect(policyIdentities).toHaveLength(1);
       expect(typeof policyIdentities[0]?.sessionId).toBe("string");
       expect(typeof policyIdentities[0]?.runId).toBe("string");
@@ -203,7 +202,7 @@ describe("canonical tool policy execution", () => {
       expect(typeof delegatedContexts[0]?.runId).toBe("string");
       expect(warningErrors).toEqual(["observer-failure", "observer-failure"]);
     } finally {
-      unsubscribeWarnings();
+      warnings.unsubscribe();
     }
   });
 

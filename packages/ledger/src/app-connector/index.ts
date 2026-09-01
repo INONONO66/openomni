@@ -2,14 +2,9 @@ import { Actor, AppConnector } from "@openomni/protocol";
 import { createHash } from "node:crypto";
 import { Storage } from "../storage/storage";
 import { requireSubAdapter } from "../storage/timestamped-store";
-import { assertConsentMatchesRequirements } from "./consent-validation";
 
 type InstallationInput = Omit<AppConnector.Installation, "createdAt" | "updatedAt" | "endpointId"> &
   Partial<Pick<AppConnector.Installation, "createdAt" | "endpointId">>;
-type ConsentInput = Omit<AppConnector.Consent, "grantedAt"> &
-  Partial<Pick<AppConnector.Consent, "grantedAt">>;
-type SmokeVerifiedInput = Pick<AppConnector.Installation, "detectedVersion">;
-type SmokeVerificationFailedInput = Partial<Pick<AppConnector.Installation, "detectedVersion">>;
 
 function requireAdapter(): NonNullable<Storage.Adapter["appConnectorInstallation"]> {
   return requireSubAdapter(
@@ -41,13 +36,6 @@ function requireInstallation(id: string): AppConnector.Installation {
 
 function removeInstallation(id: string): boolean {
   return requireAdapter().remove(id);
-}
-
-function consentRecord(input: ConsentInput): AppConnector.Consent {
-  return AppConnector.Consent.parse({
-    ...input,
-    grantedAt: input.grantedAt ?? Date.now(),
-  });
 }
 
 function endpointIdFor(installationId: string): string {
@@ -150,63 +138,6 @@ export namespace AppConnectorInstallationStore {
 
   export function list(): AppConnector.Installation[] {
     return requireAdapter().list();
-  }
-
-  export function requestConsent(id: string): AppConnector.Installation {
-    const installation = requireInstallation(id);
-    if (installation.status !== "registered") {
-      throw new Error(`Cannot request consent for ${installation.status} installation: ${id}`);
-    }
-    return set({ ...installation, status: "pending_consent" });
-  }
-
-  export function grantConsent(id: string, input: ConsentInput): AppConnector.Installation {
-    const installation = requireInstallation(id);
-    if (installation.status !== "pending_consent") {
-      throw new Error(`Cannot grant consent for ${installation.status} installation: ${id}`);
-    }
-
-    assertConsentMatchesRequirements(input, installation.definition);
-
-    return set({
-      ...installation,
-      status: "consented",
-      consent: consentRecord(input),
-    });
-  }
-
-  export function markSmokeVerified(
-    id: string,
-    input: SmokeVerifiedInput,
-  ): AppConnector.Installation {
-    const installation = requireInstallation(id);
-    if (installation.status !== "consented") {
-      throw new Error(`Cannot smoke verify ${installation.status} installation: ${id}`);
-    }
-
-    return set({
-      ...installation,
-      status: "enabled",
-      detectedVersion: input.detectedVersion,
-    });
-  }
-
-  export function markSmokeVerificationFailed(
-    id: string,
-    input: SmokeVerificationFailedInput = {},
-  ): AppConnector.Installation {
-    const installation = requireInstallation(id);
-    if (installation.status !== "consented") {
-      throw new Error(
-        `Cannot mark smoke verification failed for ${installation.status} installation: ${id}`,
-      );
-    }
-
-    return set({
-      ...installation,
-      status: "verification_failed",
-      ...(input.detectedVersion !== undefined ? { detectedVersion: input.detectedVersion } : {}),
-    });
   }
 
   export function disable(id: string): AppConnector.Installation {
