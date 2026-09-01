@@ -16,6 +16,7 @@ const ENV_KEYS = [
   "OPENOMNI_SOCIAL_BUDGETS",
   "OPENOMNI_MACHINES_ENROLLED",
   "OPENOMNI_MACHINES_SOCKET",
+  "OPENOMNI_CHANNEL_ALLOWED_SENDERS",
 ] as const;
 
 let saved: Record<string, string | undefined>;
@@ -239,5 +240,13 @@ describe("ws exposure enforcement", () => {
         cooldownMs: 0,
       },
     ]);
+  });
+
+  it("reads per-surface sender allowlists, absent by default", () => {
+    expect(loadConfig().channelAllowedSenders).toBeUndefined();
+    process.env.OPENOMNI_CHANNEL_ALLOWED_SENDERS = JSON.stringify({ telegram: ["111"] });
+    expect(loadConfig().channelAllowedSenders).toEqual({ telegram: ["111"] });
+    process.env.OPENOMNI_CHANNEL_ALLOWED_SENDERS = "not-json";
+    expect(() => loadConfig()).toThrow("OPENOMNI_CHANNEL_ALLOWED_SENDERS is invalid JSON");
   });
 });

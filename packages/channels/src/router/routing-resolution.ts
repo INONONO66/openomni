@@ -79,23 +79,23 @@ export class IngressRoutingError extends IngressRoutingErrorBase {
 type KernelWaitExecution =
   | Readonly<{ kind: "none" }>
   | Readonly<{
-      kind: "wait";
-      // Required: a wait match can only come from the wait tier, which
-      // refuses without a correlation envelope — optionality here would
-      // weaken the sender-match evidence below its real invariant.
-      correlation: ScopedCorrelation;
-      requestedAction: Wait.RequestedWaitAction;
-      record: Wait.Record;
-    }>
+    kind: "wait";
+    // Required: a wait match can only come from the wait tier, which
+    // refuses without a correlation envelope — optionality here would
+    // weaken the sender-match evidence below its real invariant.
+    correlation: ScopedCorrelation;
+    requestedAction: Wait.RequestedWaitAction;
+    record: Wait.Record;
+  }>
   | Readonly<{
-      // Conversation tier (#P1, §3.4): the reply rides the open window, but
-      // the window's deterministic `conv:<waitId>` id still names the wait
-      // the window was opened for — the delivery settles that delegation
-      // through the same WaitContext the wait tier carries.
-      kind: "conversation";
-      waitId: string;
-      conversationId: string;
-    }>
+    // Conversation tier (#P1, §3.4): the reply rides the open window, but
+    // the window's deterministic `conv:<waitId>` id still names the wait
+    // the window was opened for — the delivery settles that delegation
+    // through the same WaitContext the wait tier carries.
+    kind: "conversation";
+    waitId: string;
+    conversationId: string;
+  }>
   | Readonly<{ kind: "ambiguous" }>;
 
 export type KernelRouteResolution<Event extends Gateway.DeliveredEvent = Gateway.DeliveredEvent> =
@@ -318,6 +318,7 @@ function resolveKernelRoute<Event extends Gateway.DeliveredEvent>(
     surface: event.surface,
     workspace: event.workspace,
     channel: event.channel,
+    ...(event.userId === undefined ? {} : { sender: event.userId }),
   });
   const channel = channelState(channelResolution, event.meta?.inboundTreatment === "evidence_only");
   const actor = actorState(event);
