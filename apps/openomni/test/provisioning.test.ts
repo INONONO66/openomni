@@ -15,7 +15,7 @@ import {
 import type { Provisioning } from "@openomni/protocol";
 import { declaredChannelProfile } from "../src/channels";
 import type { OpenOmniConfig } from "../src/config";
-import { materializePersons, selectChannelProfile, vaultCredentialReader } from "../src/provisioning/declared";
+import { desiredChannels, materializePersons, vaultCredentialReader } from "../src/provisioning/declared";
 import { runProvisioningInit } from "../src/provisioning/init";
 import { ensureVaultKeyFile, resolveKek, vaultKeyPath } from "../src/provisioning/vault-key";
 
@@ -106,8 +106,9 @@ describe("declared channel profile", () => {
       { id: "channel:telegram:main", provider: "telegram", state: "ready" },
     ]);
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.id).toBe("telegram");
-    const built = rows[0]?.build(() => Promise.resolve(null));
+    expect(rows[0]?.instanceId).toBe("channel:telegram:main");
+    expect(rows[0]?.component.id).toBe("telegram");
+    const built = rows[0]?.component.build(() => Promise.resolve(null));
     expect(built?.surface.config).toEqual({ triggers: [] });
     expect(built?.surface.id).toBe("telegram");
   });
@@ -203,15 +204,18 @@ describe("boot profile selection (§8.1, §8.4)", () => {
   const envConfig = baseConfig({ channels: { telegram: { token: "env-token" } } });
 
   test("with no declarations the env path mounts exactly as before", () => {
-    const selection = selectChannelProfile(envConfig, {}, home);
+    const selection = desiredChannels(envConfig, {}, home);
     expect(selection.source).toBe("env");
-    expect(selection.rows.map((row) => row.id)).toEqual(["telegram"]);
+    expect(selection.rows.map((row) => row.component.id)).toEqual(["telegram"]);
+    // Env rows carry a constant bounce key: only process restart re-reads env.
+    expect(selection.rows[0]?.instanceId).toBe("env:telegram");
+    expect(selection.rows[0]?.key).toBe("env");
     expect(selection.statuses).toEqual([]);
   });
 
   test("§8.1 env ghost law: one disabled declaration shadows a live env token", () => {
     ChannelInstanceStore.put(instance({ enabled: false, credentialRef: undefined }));
-    const selection = selectChannelProfile(envConfig, { OPENOMNI_VAULT_KEY: KEY_B64 }, home);
+    const selection = desiredChannels(envConfig, { OPENOMNI_VAULT_KEY: KEY_B64 }, home);
     expect(selection.source).toBe("declared");
     expect(selection.rows).toEqual([]);
     expect(selection.statuses).toEqual([
@@ -221,11 +225,42 @@ describe("boot profile selection (§8.1, §8.4)", () => {
 
   test("§8.4 locked vault: enabled declarations become vault_locked statuses, nothing mounts", () => {
     ChannelInstanceStore.put(instance({}));
-    const selection = selectChannelProfile(envConfig, {}, home);
+    const selection = desiredChannels(envConfig, {}, home);
     expect(selection.source).toBe("declared");
     expect(selection.rows).toEqual([]);
     expect(selection.statuses[0]?.state).toBe("vault_locked");
     expect(selection.statuses[0]?.detail).toContain("no OPENOMNI_VAULT_KEY");
+  });
+
+  test("§8.7 the declared bounce key folds revision with the secret's rotation epoch", () => {
+    const envelope = Vault.seal(
+      new TextEncoder().encode('{"token":"tg"}'),
+      Vault.kekOf(new Uint8Array(32).fill(7)),
+    );
+    SecretStore.put({
+      id: "secret:channel-telegram-main",
+      ciphertext: envelope.ciphertext,
+      wrappedDek: envelope.wrappedDek,
+      kekId: envelope.kekId,
+      purpose: "channel_credential",
+      createdAt: NOW,
+    });
+    ChannelInstanceStore.put(instance({ revision: 4 }));
+    const before = desiredChannels(envConfig, { OPENOMNI_VAULT_KEY: KEY_B64 }, home);
+    expect(before.rows[0]?.instanceId).toBe("channel:telegram:main");
+    expect(before.rows[0]?.key).toBe(`4:${NOW}`);
+
+    SecretStore.put({
+      id: "secret:channel-telegram-main",
+      ciphertext: envelope.ciphertext,
+      wrappedDek: envelope.wrappedDek,
+      kekId: envelope.kekId,
+      purpose: "channel_credential",
+      createdAt: NOW,
+      rotatedAt: NOW + 50,
+    });
+    const after = desiredChannels(envConfig, { OPENOMNI_VAULT_KEY: KEY_B64 }, home);
+    expect(after.rows[0]?.key).toBe(`4:${NOW + 50}`);
   });
 });
 

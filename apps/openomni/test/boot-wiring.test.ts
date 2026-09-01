@@ -6,9 +6,16 @@ import {
 } from "@openomni/channels";
 import { Storage } from "@openomni/ledger";
 import type { Channel } from "@openomni/protocol";
-import type { BuiltChannel } from "../src/channels";
+import type { BuiltChannel, ChannelComponent } from "../src/channels";
 import { createComposer } from "../src/composition/composer";
-import { createMachinesPort, mountChannelStages, replyText } from "../src/index";
+import { registerTrustedChannelGrant } from "../src/gateway";
+import { createMachinesPort, replyText } from "../src/index";
+import {
+  type ChannelSupervisor,
+  createChannelSupervisor,
+  type DesiredChannelRow,
+  type DesiredChannels,
+} from "../src/provisioning/supervisor";
 
 describe("replyText", () => {
   test("hands a string payload back verbatim and serializes anything else", () => {
@@ -43,7 +50,7 @@ describe("createMachinesPort", () => {
   });
 });
 
-describe("mountChannelStages", () => {
+describe("channel supervisor", () => {
   beforeEach(() => {
     Storage.initialize({ dbPath: ":memory:" });
   });
@@ -52,55 +59,217 @@ describe("mountChannelStages", () => {
     Storage.reset();
   });
 
-  function fakeChannel(id: string, deliveryRoute?: ProviderDeliveryRoute) {
-    const calls: string[] = [];
-    const surface: Channel.Surface = {
-      id,
-      config: { triggers: [] },
-      async start() {
-        calls.push("start");
-      },
-      async stop() {
-        calls.push("stop");
-      },
-      onMessage() {
-        // The handler was bound at build time; the stage never rebinds it.
-      },
-    };
-    const built: BuiltChannel = {
-      surface,
-      ...(deliveryRoute === undefined ? {} : { deliveryRoute }),
-    };
-    return { built, calls };
+  interface FakeChannel {
+    readonly component: ChannelComponent;
+    readonly calls: string[];
+    failNextStarts: number;
   }
 
-  test("a stage owns its grant, route, and surface; dispose revokes all three", async () => {
-    const composer = createComposer();
+  function fakeChannel(
+    id: ChannelComponent["id"],
+    calls: string[],
+    options: { deliveryRoute?: ProviderDeliveryRoute; webhook?: boolean } = {},
+  ): FakeChannel {
+    const channel: FakeChannel = {
+      calls,
+      failNextStarts: 0,
+      component: {
+        id,
+        build: (): BuiltChannel => {
+          const surface: Channel.Surface = {
+            id,
+            config: { triggers: [] },
+            async start() {
+              if (channel.failNextStarts > 0) {
+                channel.failNextStarts -= 1;
+                throw new Error(`${id} start refused`);
+              }
+              calls.push(`start:${id}`);
+            },
+            async stop() {
+              calls.push(`stop:${id}`);
+            },
+            onMessage() {
+              // The handler was bound at build time; the stage never rebinds it.
+            },
+          };
+          return {
+            surface,
+            ...(options.deliveryRoute === undefined
+              ? {}
+              : { deliveryRoute: options.deliveryRoute }),
+            ...(options.webhook === true
+              ? { webhookHandler: async () => new Response("ok") }
+              : {}),
+          };
+        },
+      },
+    };
+    return channel;
+  }
+
+  function supervisorFor(desired: () => DesiredChannels): {
+    supervisor: ChannelSupervisor;
+    deliveryRoutes: Map<string, ChannelDeliveryRoute>;
+    webhookHandlers: Map<string, (request: Request) => Promise<Response>>;
+  } {
     const deliveryRoutes = new Map<string, ChannelDeliveryRoute>();
-    const route: ProviderDeliveryRoute = async () => ({});
-    const routed = fakeChannel("telegram", route);
-    const ingressOnly = fakeChannel("github");
-
-    await mountChannelStages(
-      composer,
-      [routed.built, ingressOnly.built],
+    const webhookHandlers = new Map<string, (request: Request) => Promise<Response>>();
+    const supervisor = createChannelSupervisor({
+      desired,
+      build: (component) => component.build(async () => null),
+      grant: registerTrustedChannelGrant,
       deliveryRoutes,
-      "00-11111111111111111111111111111111-2222222222222222-01",
-    );
+      webhookHandlers,
+      traceId: () => "00-11111111111111111111111111111111-2222222222222222-01",
+    });
+    return { supervisor, deliveryRoutes, webhookHandlers };
+  }
 
-    expect(routed.calls).toEqual(["start"]);
+  const row = (channel: FakeChannel, key: string, instanceId?: string): DesiredChannelRow => ({
+    instanceId: instanceId ?? `channel:${channel.component.id}:main`,
+    key,
+    component: channel.component,
+  });
+
+  test("a stage owns its grant, route, and webhook; stopAll revokes all of them", async () => {
+    const calls: string[] = [];
+    const route: ProviderDeliveryRoute = async () => ({});
+    const routed = fakeChannel("telegram", calls, { deliveryRoute: route });
+    const ingressOnly = fakeChannel("github", calls, { webhook: true });
+    const { supervisor, deliveryRoutes, webhookHandlers } = supervisorFor(() => ({
+      source: "declared",
+      rows: [row(routed, "0:0"), row(ingressOnly, "0:0")],
+      statuses: [],
+    }));
+
+    const statuses = await supervisor.reconcile();
+
+    expect(statuses.map((status) => status.state)).toEqual(["mounted", "mounted"]);
+    expect(calls).toEqual(["start:telegram", "start:github"]);
     expect(deliveryRoutes.get("telegram")).toBe(route);
-    // Ingress-only channels register no outbound route.
+    // Ingress-only channels register no outbound route; webhook channels land
+    // in the live webhook table the HTTP surface reads per request.
     expect(deliveryRoutes.has("github")).toBe(false);
+    expect(webhookHandlers.has("github")).toBe(true);
     expect(resolveChannelGrant({ surface: "telegram" })?.grant.kind).toBe("trusted_channel");
-    expect(resolveChannelGrant({ surface: "github" })?.grant.kind).toBe("trusted_channel");
+    expect(supervisor.source()).toBe("declared");
 
-    await composer.dispose();
+    await supervisor.stopAll();
 
-    expect(routed.calls).toEqual(["start", "stop"]);
-    expect(ingressOnly.calls).toEqual(["start", "stop"]);
+    expect(calls).toEqual(["start:telegram", "start:github", "stop:github", "stop:telegram"]);
     expect(deliveryRoutes.has("telegram")).toBe(false);
+    expect(webhookHandlers.has("github")).toBe(false);
     expect(resolveChannelGrant({ surface: "telegram" })).toBeUndefined();
     expect(resolveChannelGrant({ surface: "github" })).toBeUndefined();
+  });
+
+  test("§8.7 rotation bounces exactly the changed stage, stop before start", async () => {
+    const calls: string[] = [];
+    const rotated = fakeChannel("telegram", calls);
+    const untouched = fakeChannel("discord", calls);
+    let key = "1:100";
+    const { supervisor } = supervisorFor(() => ({
+      source: "declared",
+      rows: [row(rotated, key), row(untouched, "1:0")],
+      statuses: [],
+    }));
+
+    await supervisor.reconcile();
+    calls.length = 0;
+    key = "1:200"; // secret_rotate bumped the rotation epoch, same revision.
+    const statuses = await supervisor.reconcile();
+
+    // The old mount released everything BEFORE its replacement started, and
+    // the untouched stage never restarted.
+    expect(calls).toEqual(["stop:telegram", "start:telegram"]);
+    expect(statuses).toEqual([
+      { id: "channel:telegram:main", surface: "telegram", state: "mounted" },
+      { id: "channel:discord:main", surface: "discord", state: "mounted" },
+    ]);
+  });
+
+  test("a removed declaration unmounts and a failed start unwinds fail-closed", async () => {
+    const calls: string[] = [];
+    const flaky = fakeChannel("telegram", calls);
+    let rows: DesiredChannelRow[] = [row(flaky, "0:0")];
+    const { supervisor, deliveryRoutes } = supervisorFor(() => ({
+      source: "declared",
+      rows,
+      statuses: [],
+    }));
+
+    flaky.failNextStarts = 1;
+    const failed = await supervisor.reconcile();
+    expect(failed[0]).toEqual({
+      id: "channel:telegram:main",
+      surface: "telegram",
+      state: "start_failed",
+      detail: "telegram start refused",
+    });
+    // Fail-closed: the stage that never started owns no grant and no route.
+    expect(resolveChannelGrant({ surface: "telegram" })).toBeUndefined();
+    expect(deliveryRoutes.has("telegram")).toBe(false);
+
+    await supervisor.reconcile();
+    expect(calls).toEqual(["start:telegram"]);
+    rows = [];
+    const removed = await supervisor.reconcile();
+    expect(removed).toEqual([]);
+    expect(calls).toEqual(["start:telegram", "stop:telegram"]);
+    expect(resolveChannelGrant({ surface: "telegram" })).toBeUndefined();
+  });
+
+  test("three consecutive start failures trip the breaker; only resume re-arms it", async () => {
+    const calls: string[] = [];
+    const broken = fakeChannel("telegram", calls);
+    broken.failNextStarts = 3;
+    const { supervisor } = supervisorFor(() => ({
+      source: "declared",
+      rows: [row(broken, "0:0")],
+      statuses: [],
+    }));
+
+    const first = await supervisor.reconcile();
+    const second = await supervisor.reconcile();
+    const third = await supervisor.reconcile();
+    expect(first[0]?.state).toBe("start_failed");
+    expect(second[0]?.state).toBe("start_failed");
+    expect(third[0]?.state).toBe("paused_by_breaker");
+
+    // Paused means paused: further reconciles never touch the surface again.
+    const paused = await supervisor.reconcile();
+    expect(paused[0]?.state).toBe("paused_by_breaker");
+    expect(paused[0]?.detail).toBe("3 consecutive start failures; channel_enable re-arms it");
+    expect(calls).toEqual([]);
+
+    expect(supervisor.resume("channel:telegram:main")).toBe(true);
+    expect(supervisor.resume("channel:telegram:main")).toBe(false);
+    const resumed = await supervisor.reconcile();
+    expect(resumed[0]?.state).toBe("mounted");
+    expect(calls).toEqual(["start:telegram"]);
+    expect(supervisor.status()).toEqual(resumed);
+    await supervisor.stopAll();
+  });
+
+  test("composer stage disposal drives stopAll exactly like shutdown", async () => {
+    const calls: string[] = [];
+    const channel = fakeChannel("telegram", calls);
+    const { supervisor } = supervisorFor(() => ({
+      source: "env",
+      rows: [row(channel, "env", "env:telegram")],
+      statuses: [],
+    }));
+    const composer = createComposer();
+    await composer.mount("channels", async (ctx) => {
+      ctx.effect(() => supervisor.stopAll());
+      await supervisor.reconcile();
+    });
+
+    expect(calls).toEqual(["start:telegram"]);
+    expect(supervisor.source()).toBe("env");
+    await composer.dispose();
+    expect(calls).toEqual(["start:telegram", "stop:telegram"]);
+    expect(supervisor.status()).toEqual([]);
   });
 });
