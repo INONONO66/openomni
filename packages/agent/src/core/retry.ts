@@ -134,6 +134,8 @@ export interface AgentFailureFacts {
   readonly reason: TerminalReason;
   readonly attempt: number;
   readonly maxAttempts: number;
+  /** True only when the terminal error came from an llm.run outcome. */
+  readonly llm: true;
 }
 
 /**

@@ -126,10 +126,10 @@ describe("ws exposure enforcement", () => {
   });
 
   it("keeps a model id containing slashes intact — only the first slash splits", () => {
-    process.env.OPENOMNI_MODEL_FALLBACKS = "openrouter/meta-llama/llama-4";
+    process.env.OPENOMNI_MODEL_FALLBACKS = "openai/meta-llama/llama-4";
 
     expect(loadConfig().model.fallbacks).toEqual([
-      { provider: "openrouter", id: "meta-llama/llama-4" },
+      { provider: "openai", id: "meta-llama/llama-4" },
     ]);
   });
 
@@ -139,6 +139,7 @@ describe("ws exposure enforcement", () => {
     { name: "an empty model segment", value: "openai/" },
     { name: "a blank entry between two valid ones", value: "openai/gpt-5,,anthropic/claude-x" },
     { name: "whitespace inside a segment", value: "open ai/gpt-5" },
+    { name: "a provider absent from the bundled catalog", value: "definitely-unknown-provider/model" },
   ])("fails closed on $name", ({ value }) => {
     process.env.OPENOMNI_MODEL_FALLBACKS = value;
 

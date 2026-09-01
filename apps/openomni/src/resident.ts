@@ -1,4 +1,4 @@
-import { ChatAgent, type ChatAgentConfig, type ChatAgentInput } from "@openomni/agent";
+import { ChatAgent, failureFacts, type ChatAgentConfig, type ChatAgentInput } from "@openomni/agent";
 import { Session } from "@openomni/ledger";
 import type { Placement } from "@openomni/placement";
 import type { Gateway, Ingress, Message, Model } from "@openomni/protocol";
@@ -322,8 +322,10 @@ export function createResident(options: ResidentOptions) {
     //    the wake and lose the settlement instead of leaving it for the next
     //    boot's rescan. Nobody is waiting on a channel for it either.
     //
-    // Everything else has a person on the other end, and a throw here reaches
-    // them as a dropped gateway result — silence.
+    // Everything else has a person on the other end, but only a failure with
+    // agent-owned LLM provenance is converted. Configuration, policy, host,
+    // and observation faults must still fail loudly rather than masquerade as
+    // a provider reply.
     const surfaceFailures = turn.systemKind !== "delegation.settled";
     let result: Awaited<ReturnType<typeof agent.run>>;
     try {
@@ -339,7 +341,7 @@ export function createResident(options: ResidentOptions) {
         }),
       );
     } catch (error) {
-      if (!surfaceFailures || isAbort(error)) throw error;
+      if (!surfaceFailures || isAbort(error) || failureFacts(error)?.llm !== true) throw error;
       const classified = classifyTurnFailure(error);
       // Recorded like any other assistant turn: what the user was told is
       // part of the session, not a side channel.

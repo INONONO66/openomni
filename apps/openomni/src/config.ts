@@ -143,6 +143,11 @@ const ModelHeaders = z.record(
  * rather than silently shortening the chain — a fallback the operator thinks
  * they configured but which never loads is worse than no fallback at all.
  */
+// The bundled catalog intentionally supports only these provider SDKs. Keep
+// this synchronous with config parsing so an unknown fallback cannot defer its
+// failure until a live turn reaches it.
+const CATALOG_PROVIDER_IDS = new Set(["anthropic", "openai"]);
+
 function modelFallbacksFromEnv(): readonly Model.Ref[] | undefined {
   const raw = process.env.OPENOMNI_MODEL_FALLBACKS?.trim();
   if (raw === undefined || raw.length === 0) return undefined;
@@ -154,6 +159,11 @@ function modelFallbacksFromEnv(): readonly Model.Ref[] | undefined {
     if (provider.length === 0 || id.length === 0 || /\s/.test(trimmed)) {
       throw new Error(
         `OPENOMNI_MODEL_FALLBACKS is invalid: "${entry}" is not a "provider/model" entry`,
+      );
+    }
+    if (!CATALOG_PROVIDER_IDS.has(provider)) {
+      throw new Error(
+        `OPENOMNI_MODEL_FALLBACKS is invalid: provider "${provider}" is not in the bundled catalog`,
       );
     }
     return { provider, id };

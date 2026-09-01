@@ -47,6 +47,7 @@ describe("terminal failure facts on the raised error", () => {
       reason: "transient_error",
       attempt: 3,
       maxAttempts: 3,
+      llm: true,
     });
   });
 
@@ -57,6 +58,7 @@ describe("terminal failure facts on the raised error", () => {
       reason: "validation_error",
       attempt: 1,
       maxAttempts: 3,
+      llm: true,
     });
   });
 
@@ -68,6 +70,26 @@ describe("terminal failure facts on the raised error", () => {
     // Non-enumerable: nothing serializes the facts by accident.
     expect(Object.keys(error as object)).not.toContain("failureFacts");
     expect(JSON.stringify({ ...(error as object) })).toBe("{}");
+  });
+
+  it("does not mark a configuration failure as an LLM terminal", async () => {
+    let thrown: unknown;
+    try {
+      await runAgent(runInput([{ role: "user", content: "hi" }]), {
+        events: Bus,
+        model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+        middleware: [zeroBackoff],
+        llm: {
+          resolveProviderModel: async () => {
+            throw new Error("catalog invariant failed");
+          },
+        },
+      });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(failureFacts(thrown)).toBeUndefined();
   });
 
   it("answers undefined for an error no agent run decided", () => {

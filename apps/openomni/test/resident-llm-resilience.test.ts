@@ -6,6 +6,7 @@ import type { ChatAgentConfig } from "@openomni/agent";
 import { initialize, Session, Storage } from "@openomni/ledger";
 import { type Gateway, type Model, PolicyDecision } from "@openomni/protocol";
 import { createPolicyRegistry } from "../src/composition/policy-registry";
+import { createResidentGateway } from "../src/gateway";
 import { createResident } from "../src/resident";
 import { assistantMessage } from "./helpers/assistant-message";
 
@@ -93,6 +94,7 @@ describe("Resident model fallback wiring", () => {
   it("resolves the configured fallback on the retry after a transient failure", async () => {
     const sessionId = openSession("openomni-resident-fallback-");
     const resolved: Model.Ref[] = [];
+    const auths: unknown[] = [];
     let calls = 0;
 
     const resident = createResident({
@@ -108,6 +110,7 @@ describe("Resident model fallback wiring", () => {
           return { id: model.id, name: model.id, providerID: model.provider };
         },
         run: async (input, sink) => {
+          auths.push(input.auth);
           calls += 1;
           if (calls === 1) {
             return { type: "error", error: { message: "transient blip", name: "Error" } };
@@ -121,6 +124,7 @@ describe("Resident model fallback wiring", () => {
     const result = await resident(delivery(sessionId));
 
     expect(resolved).toEqual([PRIMARY, FALLBACK]);
+    expect(auths).toEqual([{ type: "api", key: "test-key" }, undefined]);
     expect(result.kind).not.toBe("dropped");
   });
 
@@ -232,10 +236,13 @@ describe("Resident terminal LLM failure surfacing", () => {
     expect(result.result.output).not.toContain("may be exhausted");
   });
 
-  it("hedges an ambiguous payment failure as MAY be exhausted", async () => {
+  it.each([
+    { message: "402 Payment Required", name: "a bare payment-required response" },
+    { message: "billing_error: card declined", name: "a declined-card billing error" },
+  ])("hedges $name as MAY be exhausted", async ({ message }) => {
     const sessionId = openSession("openomni-resident-billing-hedged-");
     const resident = residentThatAlwaysFails(
-      providerError({ message: "402 Payment Required", isRetryable: false, statusCode: 402 }),
+      providerError({ message, isRetryable: false, statusCode: 402 }),
     );
 
     const result = await resident(delivery(sessionId));
@@ -262,15 +269,58 @@ describe("Resident terminal LLM failure surfacing", () => {
     expect(result.result.output).toContain("content policy");
   });
 
-  it("falls back to an unknown-fault reply for an unclassifiable throw", async () => {
+  it("does not expose raw unknown-fault details", async () => {
     const sessionId = openSession("openomni-resident-unknown-");
-    const resident = residentThatAlwaysFails(new Error("socket hang up"));
+    const resident = residentThatAlwaysFails(
+      new Error("request failed apiKey=sk-live-SECRET baseURL=https://internal.example/v1"),
+    );
 
     const result = await resident(delivery(sessionId));
 
     if (result.kind === "dropped") throw new Error("terminal failure was dropped, not answered");
     expect(result.result.output).toContain("could not reach the model");
-    expect(result.result.output).toContain("socket hang up");
+    expect(result.result.output).not.toContain("sk-live-SECRET");
+    expect(result.result.output).not.toContain("https://internal.example/v1");
+  });
+
+  it("returns one sanitized reply through gateway ingestion", async () => {
+    openSession("openomni-resident-gateway-");
+    const resident = residentThatAlwaysFails(
+      providerError({ message: "rate limited", isRetryable: true, statusCode: 429 }),
+    );
+    const gateway = createResidentGateway(resident);
+
+    const result = await gateway.ingest({
+      id: "inbound-resilience-gateway",
+      traceId: "0af7651916cd43dd8448eb211c80319c",
+      mode: "direct",
+      surface: "ws",
+      userId: "owner",
+      payload: "please answer",
+      meta: { actor: { role: "user" } },
+    });
+
+    if (result.kind === "dropped") throw new Error("terminal failure was dropped, not answered");
+    expect(result.result.output).toContain("rate limited upstream");
+    expect(Session.getMessages(result.sessionId).filter((message) => message.role === "assistant")).toHaveLength(1);
+  });
+
+  it("does not convert a configuration failure into a model reply", async () => {
+    const sessionId = openSession("openomni-resident-config-failure-");
+    const resident = createResident({
+      model: PRIMARY,
+      apiKey: "test-key",
+      policies: policies(),
+      tools: {},
+      targets: () => [],
+      llm: {
+        resolveProviderModel: async () => {
+          throw new Error("catalog invariant failed");
+        },
+      },
+    });
+
+    await expect(resident(delivery(sessionId))).rejects.toThrow("catalog invariant failed");
   });
 
   it("records the classified reply in session history so the turn is auditable", async () => {

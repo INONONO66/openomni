@@ -65,6 +65,18 @@ describe("Retry.classifyFailure", () => {
     expect(Retry.classifyFailure(wrapped)).toBe("billing");
   });
 
+  test("classifies a declined-card billing error as terminal", () => {
+    expect(
+      Retry.classifyFailure(
+        new APIError({
+          message: "billing_error: card declined",
+          isRetryable: false,
+          statusCode: 402,
+        }),
+      ),
+    ).toBe("billing");
+  });
+
   test("reports non_retryable for an error carrying no provider facts", () => {
     expect(Retry.classifyFailure(new Error("socket hang up"))).toBe("non_retryable");
   });

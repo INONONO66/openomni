@@ -35,19 +35,14 @@ function attemptClause(error: unknown): string {
   return facts.attempt === 1 ? ", tried once" : `, tried ${facts.attempt} times`;
 }
 
-function detailOf(error: unknown): string {
-  if (!(error instanceof Error)) return String(error);
-  return error.message;
-}
-
 /**
  * Classifies a terminal turn failure into the message the channel shows.
  *
  * Hedging is deliberate and load-bearing on the billing arm: an unambiguous
  * exhaustion signal (the llm package's `billing` class) states the account is
- * spent, while a bare payment-required status only suggests it — telling an
- * operator their balance is gone when it might be a card decline sends them
- * to the wrong place.
+ * spent, while payment-required status only suggests it — telling an operator
+ * their balance is gone when it might be a card decline sends them to the
+ * wrong place. These messages never include a thrown error's raw details.
  */
 export function classifyTurnFailure(error: unknown): ClassifiedFailure {
   const reason = Retry.classifyFailure(error);
@@ -60,7 +55,9 @@ export function classifyTurnFailure(error: unknown): ClassifiedFailure {
     case "billing":
       return {
         reason,
-        text: "I could not answer: the provider reports quota/billing exhausted — check provider account balance or limits. Retrying will not help until it is topped up.",
+        text: paymentRequired(error)
+          ? "I could not answer: the provider returned payment required, so the account's quota or balance may be exhausted — check provider account. (402 Payment Required)"
+          : "I could not answer: the provider reports quota/billing exhausted — check provider account balance or limits. Retrying will not help until it is topped up.",
       };
     case "content_policy":
       return {
@@ -71,7 +68,7 @@ export function classifyTurnFailure(error: unknown): ClassifiedFailure {
     case "server_error":
       return {
         reason,
-        text: `I could not answer: the model provider failed server-side${attemptClause(error)}. This is upstream, not your request — retry shortly. (${detailOf(error)})`,
+        text: `I could not answer: the model provider failed server-side${attemptClause(error)}. This is upstream, not your request — retry shortly.`,
       };
     case "non_retryable":
       return {
@@ -92,7 +89,7 @@ function unclassifiedText(error: unknown): string {
   if (paymentRequired(error)) {
     return "I could not answer: the provider returned payment required, so the account's quota or balance may be exhausted — check provider account. (402 Payment Required)";
   }
-  return `I could not answer: I could not reach the model. (${detailOf(error)})`;
+  return "I could not answer: I could not reach the model. Retry shortly.";
 }
 
 /**
