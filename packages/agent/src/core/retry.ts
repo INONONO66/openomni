@@ -123,6 +123,49 @@ function asLlmFailure(error: Error): Run.Failure | undefined {
 }
 
 /**
+ * What the run decided about the failure it is about to raise: the classified
+ * reason, how many attempts were spent, and the ceiling they were spent
+ * against. The loop already owns these facts for its terminal record; a host
+ * that has to TELL someone why the turn produced nothing needs the same ones,
+ * and re-deriving them from the error message is exactly the string matching
+ * the closed vocabulary exists to avoid.
+ */
+export interface AgentFailureFacts {
+  readonly reason: TerminalReason;
+  readonly attempt: number;
+  readonly maxAttempts: number;
+}
+
+/**
+ * Carried on the error object itself rather than by wrapping it: wrapping
+ * would change the identity and message every existing catcher already reads.
+ * The symbol keeps the facts off enumeration (JSON, logging, structured
+ * clone) so nothing serializes them by accident.
+ */
+const FAILURE_FACTS = Symbol.for("openomni.agent.failureFacts");
+
+/** Stamps the decided facts onto the error the run is raising. */
+export function attachFailureFacts(error: Error, facts: AgentFailureFacts): void {
+  Object.defineProperty(error, FAILURE_FACTS, {
+    value: facts,
+    enumerable: false,
+    configurable: true,
+    writable: true,
+  });
+}
+
+/**
+ * The facts the run decided for this error, or undefined when it did not come
+ * from an agent run (or died before any decision was reached). Absent is a
+ * real answer: a host must not invent an attempt count.
+ */
+export function failureFacts(error: unknown): AgentFailureFacts | undefined {
+  if (typeof error !== "object" || error === null) return undefined;
+  const carried = (error as Record<symbol, unknown>)[FAILURE_FACTS];
+  return carried === undefined ? undefined : (carried as AgentFailureFacts);
+}
+
+/**
  * Whether this attempt may be retried. An empty or absent `retryOn` means no
  * filter, so every reason is retryable up to `maxAttempts`.
  */

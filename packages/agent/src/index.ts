@@ -11,6 +11,10 @@ export { PolicyEngine } from "./core/policy";
 // only what someone actually imports (#647).
 export { checkBudget, describeBudgetRemaining } from "./core/budget";
 export { RunReasonCode } from "./core/policy/reason-codes";
+// The decided terminal facts, for a host that has to explain a failed turn
+// to a person. Read-only: the loop is the sole producer.
+export { failureFacts } from "./core/retry";
+export type { AgentFailureFacts } from "./core/retry";
 export type { BudgetState } from "./core/budget";
 export type {
   CanonicalPolicyRegistration,

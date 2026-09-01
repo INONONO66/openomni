@@ -275,12 +275,17 @@ export async function runAgent(
     }
   } catch (error) {
     engine.endRun();
+    const facts = thrownFailure ?? undecidedFacts(error);
     emitRunFailed(
       config.events,
       agentBase,
       error instanceof Error ? error.message : String(error),
-      thrownFailure ?? undecidedFacts(error),
+      facts,
     );
+    // The same decided facts the terminal record carries, stamped onto the
+    // error so the host catching it can say WHY the turn produced nothing
+    // without re-deriving a reason or inventing an attempt count.
+    if (error instanceof Error) Retry.attachFailureFacts(error, facts);
     throw error;
   }
 }
