@@ -1,4 +1,6 @@
 export * from "./error/index.js";
+export { canonicalKey, isPlainValue, PlainValueSchema } from "./json.js";
+export type { PlainObject, PlainValue } from "./json.js";
 export * from "./tool/index.js";
 export * from "./token/index.js";
 export * from "./message/index.js";

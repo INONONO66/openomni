@@ -1,4 +1,4 @@
-import { Operational, PolicyDecision, type BusEvent } from "@openomni/protocol";
+import { Operational, Policy, PolicyDecision, type BusEvent } from "@openomni/protocol";
 import { Compaction, DEFAULT_PROTECT_RECENT, type CompactionOptions } from "./compact";
 import { DEFAULT_PREPARE_RATIO, createSpeculator, type Speculator } from "./speculate";
 import type { PolicyRegistrationFactory } from "../core/policy/types";
@@ -205,7 +205,9 @@ function buildRegistration(
       return PolicyDecision.allow({
         policyId: "builtin.compaction",
         reasonCodes: ["compaction_threshold_exceeded", ...candidateReason, ...summarizerReason],
-        effects: [{ type: "run.replace_messages", messages: result.messages }],
+        effects: [
+          Policy.PolicyEffect.parse({ type: "run.replace_messages", messages: result.messages }),
+        ],
       });
     },
   };

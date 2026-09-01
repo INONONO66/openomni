@@ -19,6 +19,19 @@ describe("failure classes stay honest (#606 re-audit)", () => {
     for (const s of servers.splice(0)) s.close();
   });
 
+  test("public IPC errors use the shared serializable error contract", () => {
+    const connection = new IpcConnectionError("closed");
+    const remote = new IpcRemoteError(4000, "bad request");
+    expect(IpcConnectionError.isInstance(connection)).toBe(true);
+    expect(connection.toObject()).toEqual({
+      name: "IpcConnectionError",
+      data: { message: "closed" },
+    });
+    expect(IpcRemoteError.isInstance(remote)).toBe(true);
+    expect(remote.code).toBe(4000);
+    expect(remote.message).toBe("IPC error 4000: bad request");
+  });
+
   test("a dying connection fails ITS in-flight calls as connection loss, not timeout", async () => {
     const socketPath = socketPathForTest("per-conn");
     let survivorConnectionId: string | undefined;

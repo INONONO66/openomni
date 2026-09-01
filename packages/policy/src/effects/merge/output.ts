@@ -1,3 +1,4 @@
+import type { PlainObject } from "@openomni/protocol";
 import type {
   ApprovalAccumulator,
   MergedEffect,
@@ -11,7 +12,7 @@ export interface EffectAccumulatorSet {
   /** Single-winner model.override (#753) — the priority-selected reroute for the gated connection. */
   readonly modelOverride?: MergedEffect;
   readonly toolFilters: ReadonlyMap<string, number>;
-  readonly toolRewrite?: { readonly input: Record<string, unknown>; readonly order: number };
+  readonly toolRewrite?: { readonly input: PlainObject; readonly order: number };
   readonly toolOutputRewrite?: MergedEffect;
   readonly toolSkip?: MergedEffect;
   readonly toolApproval?: ApprovalAccumulator;
@@ -20,7 +21,7 @@ export interface EffectAccumulatorSet {
   readonly retryAfter?: RetryAccumulator;
   readonly runReplaceMessages?: MergedEffect;
   readonly delegationConstraints?: {
-    readonly constraints: Record<string, unknown>;
+    readonly constraints: PlainObject;
     readonly order: number;
   };
   readonly delegationApproval?: ApprovalAccumulator;

@@ -1,3 +1,4 @@
+import type { PlainObject } from "@openomni/protocol";
 import type {
   ApprovalAccumulator,
   EffectEntry,
@@ -18,7 +19,7 @@ import { assertNever, deepMergeRecords } from "../records";
 export function mergeEntries(entries: readonly EffectEntry[]): MergeResult {
   const merged: MergedEffect[] = [];
   const toolFilters = new Map<string, number>();
-  let toolRewrite: { readonly input: Record<string, unknown>; readonly order: number } | undefined;
+  let toolRewrite: { readonly input: PlainObject; readonly order: number } | undefined;
   let toolOutputRewrite: MergedEffect | undefined;
   let toolSkip: MergedEffect | undefined;
   let toolApproval: ApprovalAccumulator | undefined;
@@ -27,7 +28,7 @@ export function mergeEntries(entries: readonly EffectEntry[]): MergeResult {
   let retryAfter: RetryAccumulator | undefined;
   let runReplaceMessages: MergedEffect | undefined;
   let delegationConstraints:
-    | { readonly constraints: Record<string, unknown>; readonly order: number }
+    | { readonly constraints: PlainObject; readonly order: number }
     | undefined;
   let delegationApproval: ApprovalAccumulator | undefined;
   let promptReplace: MergedEffect | undefined;

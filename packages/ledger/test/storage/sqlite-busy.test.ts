@@ -78,6 +78,11 @@ describe("runWorkItemTransaction", () => {
     expect((thrown as StorageUnavailableError).code).toBe("unavailable");
     expect((thrown as StorageUnavailableError).store).toBe("work-item");
     expect((thrown as StorageUnavailableError).resourceId).toBe("wi-busy");
+    expect(StorageUnavailableError.isInstance(thrown)).toBe(true);
+    expect((thrown as StorageUnavailableError).toObject()).toMatchObject({
+      name: "StorageUnavailableError",
+      data: { code: "unavailable", store: "work-item", resourceId: "wi-busy" },
+    });
 
     const failingStorage = {
       transaction<T>(_operation: () => T): T {

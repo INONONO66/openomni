@@ -8,13 +8,9 @@ import { z } from "zod";
  * (policy effects, work-item attempt identity).
  */
 
-export type PlainValue =
-  | null
-  | boolean
-  | number
-  | string
-  | PlainValue[]
-  | { readonly [key: string]: PlainValue };
+export type PlainObject = { [key: string]: PlainValue };
+
+export type PlainValue = null | boolean | number | string | PlainValue[] | PlainObject;
 
 // Validation at this boundary must never execute caller-supplied code:
 // property values are read through data-property descriptors (an accessor
@@ -100,19 +96,39 @@ function renderCanonical(value: unknown): string {
   if (typeof value === "string") return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map((entry) => renderCanonical(entry)).join(",")}]`;
   if (typeof value === "object") {
-    const prototype: unknown = Object.getPrototypeOf(value);
+    const prototype = Object.getPrototypeOf(value);
     if (prototype !== Object.prototype && prototype !== null) {
       throw new Error("canonical JSON accepts plain objects only");
     }
     const fields: string[] = [];
     for (const key of Object.keys(value).sort()) {
-      const nested = (value as Record<string, unknown>)[key];
+      const nested = (value as PlainObject)[key];
       if (nested === undefined) throw new Error(`canonical JSON cannot express undefined at ${key}`);
       fields.push(`${JSON.stringify(key)}:${renderCanonical(nested)}`);
     }
     return `{${fields.join(",")}}`;
   }
   throw new Error(`canonical JSON cannot express a ${typeof value}`);
+}
+
+/**
+ * Stable typed-key profile used when canonical JSON values need an in-memory
+ * equality key rather than persisted JSON bytes. The primitive tags are an
+ * established profile and deliberately remain byte-for-byte compatible with
+ * policy conflict keys; accepting values is still owned by the one plain-JSON
+ * grammar above.
+ */
+export function canonicalKey(value: PlainValue): string {
+  if (!isPlainValue(value)) throw new Error("canonical key accepts plain JSON values only");
+  if (value === null) return "null";
+  if (Array.isArray(value)) return `[${value.map(canonicalKey).join(",")}]`;
+  if (typeof value === "object") {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalKey(value[key] as PlainValue)}`)
+      .join(",")}}`;
+  }
+  return `${typeof value}:${JSON.stringify(value)}`;
 }
 
 /**
