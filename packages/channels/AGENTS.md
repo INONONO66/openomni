@@ -20,9 +20,13 @@ src/
 │   └── messaging/    # #215 send kernel: createExistingAgentMessaging, grant evaluation (scope-less + scope-aware
 │                     #   arms), #708 reply-grant instance materialization (in-memory by ruling; durable store = #709),
 │                     #   #219 social-budget egress gate (pure fold + EgressBudgetStore debits), audit events
-├── discord/          # Discord gateway client + surface (mention-trigger by default)
-├── telegram/         # Ordered long-poll surface; offset advances only after successful handoff
-├── github/           # Webhooks with retryable 5xx failures and delivery-marker comment read-back
+├── provider/         # ChannelProvider contract + shipped registry (pure data; PR-A of
+│                     #   docs/provisioning-and-providers.md): each driver folder exports one
+│                     #   provider (id, ingest mode, credential type, capabilities, create());
+│                     #   the websocket loopback surface deliberately stays outside the registry
+├── discord/          # Discord gateway client + surface (mention-trigger by default) + provider.ts
+├── telegram/         # Ordered long-poll surface; offset advances only after successful handoff + provider.ts
+├── github/           # Webhooks with retryable 5xx failures and delivery-marker comment read-back + provider.ts
 └── support/          # Band-local helpers: format renderers/chunking, bounded dedupe, fetch retry, trigger evaluation
 ```
 
@@ -37,6 +41,7 @@ No app import from this package: both sides meet in protocol contracts (`Gateway
 
 ## CONTRACT
 
+- Providers are the uniform driver contract: `ChannelProvider.create()` is pure construction (no I/O until `surface.start()`), runtime seams (`deliveryRoute`, `webhookHandler`) must match the declared `capabilities`, and credential validation stays where credentials enter the system (one enforcement layer) — `test/provider-contract.test.ts` enforces the correspondence and `test/provider-golden.test.ts` freezes each provider's exact normalized inbound shape.
 - Adapters are ingress-agnostic: inbound flows through the injected `onMessage(routingHandler)` (bound to the router's `ingest` by the composition root); observation flows through injected sinks.
 - The router is constructed ONCE (`createGatewayRouter({ sink, deliver, onPolicyDecision?, messaging? })`) — no post-construction mutation. `ingest` sanitizes gateway-derived fields off the inbound event at the trust boundary (audit A T2: `activation.durableSessionId`, `meta.channelGrant*`; `inboundTreatment` keeps only the harmless `evidence_only` self-downgrade), records `route.decided` before anything acts (record-before-act, #510 C3), mints/claims the resident surface-session label before deliver (S1: the sessionId is an opaque label; session ROWS are brain domain), and never reads session content. A wait-correlated routed reply the fold rejects appends a correcting `route.not_delivered` fact on `route_correction:<scope>:<id>` before the typed rejection returns, so the ledger never claims a delivery that never happened (#743).
 - Wire/persisted vocabulary is byte-frozen: `route.decided` stream ids and decision payloads, `route.not_delivered` corrections, `messaging.sent`/`messaging.denied`, wait rows, surface-key rows, egress-budget debit rows.

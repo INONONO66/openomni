@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { resolveChannelGrant, type ChannelDeliveryRoute } from "@openomni/channels";
+import {
+  type ChannelDeliveryRoute,
+  type ProviderDeliveryRoute,
+  resolveChannelGrant,
+} from "@openomni/channels";
 import { Storage } from "@openomni/ledger";
 import type { Channel } from "@openomni/protocol";
 import type { BuiltChannel } from "../src/channels";
@@ -48,7 +52,7 @@ describe("mountChannelStages", () => {
     Storage.reset();
   });
 
-  function fakeChannel(id: string, deliveryRoute?: ChannelDeliveryRoute) {
+  function fakeChannel(id: string, deliveryRoute?: ProviderDeliveryRoute) {
     const calls: string[] = [];
     const surface: Channel.Surface = {
       id,
@@ -73,7 +77,7 @@ describe("mountChannelStages", () => {
   test("a stage owns its grant, route, and surface; dispose revokes all three", async () => {
     const composer = createComposer();
     const deliveryRoutes = new Map<string, ChannelDeliveryRoute>();
-    const route: ChannelDeliveryRoute = async () => ({});
+    const route: ProviderDeliveryRoute = async () => ({});
     const routed = fakeChannel("telegram", route);
     const ingressOnly = fakeChannel("github");
 
