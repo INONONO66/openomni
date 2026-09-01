@@ -6,7 +6,7 @@ import {
   handleError,
   handleStop,
 } from "./turn";
-import { ModelsDev, Provider, Retry as LlmRetry, run as llmRun } from "@openomni/llm";
+import { ModelsDev, Provider, Retry as LlmRetry, type Run, run as llmRun } from "@openomni/llm";
 import type { Sink } from "@openomni/llm";
 import { Placement } from "@openomni/placement";
 import { DEFAULT_THRESHOLD_RATIO } from "../../compaction/compact";
@@ -29,6 +29,9 @@ import {
   requireTrace,
   type AgentRunBase,
   type RunFailureFacts,
+  type RunState,
+  type RunTrace,
+  type TurnArtifacts,
 } from "./state";
 
 /**
@@ -39,264 +42,317 @@ import {
  * The `AgentEvent` generator that used to carry all three had no consumer
  * outside this package's own tests.
  */
+type RetryPolicy = Parameters<typeof handleError>[6];
+
+type AttemptModel = ChatAgentConfig["model"];
+
+interface RunProgress {
+  attempt: number;
+  thrownFailure?: RunFailureFacts;
+  terminalLlmError?: Error;
+  readonly failureReasons: string[];
+  lastModelKey?: string;
+}
+
+/** Runs an agent to a result. */
 export async function runAgent(
   input: ChatAgentInput,
   config: ChatAgentConfig,
   sink?: Sink,
 ): Promise<AgentResult> {
-  // With a fallback chain configured, validation_error joins the retryable
-  // set (#752 review F1): a refusal/unusable shape is model-specific, so a
-  // DIFFERENT candidate can plausibly succeed. Without a chain it stays
-  // terminal (blind same-model retry). Once a chain is spent, placement
-  // clamps to the last candidate, so the remaining attempts DO re-ask the
-  // same model — bounded by maxAttempts, and the retry policy stays the
-  // termination owner.
-  const retryPolicy =
-    (config.modelFallbacks?.length ?? 0) > 0
-      ? {
-          ...Retry.DEFAULT_RETRY_POLICY,
-          retryOn: [...(Retry.DEFAULT_RETRY_POLICY.retryOn ?? []), "validation_error" as const],
-        }
-      : Retry.DEFAULT_RETRY_POLICY;
-  let attempt = 1;
-  let thrownFailure: RunFailureFacts | undefined;
-  // Set only at the llm.run boundary. A later policy/configuration failure
-  // must not inherit public-facing provenance from an earlier model error.
-  let terminalLlmError: Error | undefined;
-  // The decided reason of every finished attempt, oldest first — the input
-  // to the placement fold below. Decided facts only (the retry decision's
-  // own record), never re-derived from the thrown error (#752).
-  const failureReasons: string[] = [];
-  // The previous attempt's model, for invalidating model-scoped window
-  // guards on a fallback switch (#752 review F3).
-  let lastModelKey: string | undefined;
-
+  const retryPolicy = retryPolicyFor(config);
+  const progress: RunProgress = { attempt: 1, failureReasons: [] };
   const trace = requireTrace("agent run", input.traceContext);
   const { traceId, sessionId, runId } = trace;
-  // The actor defaults to the run identity: no production caller threads a
-  // real actor principal yet (none supplies `agentName` either), so today
-  // actor ≡ runId. A validated principal lane replaces this when one exists
-  // (#606). The former `input.metadata?.actorId` leg was an unvalidated
-  // side-channel with zero producers and is gone.
   const actorId = nonEmptyString(trace.agentName) ?? runId;
   const agentBase = { traceId, sessionId, runId, actorId };
-  // All validators run before the run is opened: `buildPolicyEngine`
-  // rejects a malformed middleware registration, and a configuration error
-  // must not open a run it cannot close.
+
+  // Configuration is validated before opening the run.
   assertToolExecutor(config);
   assertUnambiguousToolMetadata(config);
   const engine = buildPolicyEngine(config, agentBase);
   emitRunStarted(config.events, trace, config.model.id);
-
-  // #546: run state and pre-run dispatch are run-scoped, living across
-  // attempts — an agent-level retry regenerates only the attempt (turn
-  // artifacts), never the history, budget/usage (no double-billing reset),
-  // or run.lifecycle.pre effects (prompt injections apply exactly once).
   const state = createRunState({ ...input, traceContext: trace });
 
-  /**
-   * The run's two terminals. Both live here because the run is opened here:
-   * a branch that records its own end can only be relied on for the ends it
-   * knows about, and the ends it does not know about are exactly the ones
-   * that go unrecorded. `handleError` used to emit the failure, so anything
-   * raised from inside it — an abort from `Retry.sleep`, a non-`Error` throw
-   * — escaped past its own record.
-   */
   const finish = (result: AgentResult): AgentResult => {
     engine.endRun();
     emitRunCompleted(config.events, state, agentBase, result.finishReason);
     return result;
   };
 
-  /**
-   * A throw that never reached a retry decision — nothing decided a reason or
-   * a ceiling for it, so the record says what the throw itself can support.
-   * Every path that *did* reach one carries the decided facts instead.
-   * Aborts are recognized by identity, never by message substrings (M4).
-   */
-  const undecidedFacts = (error: unknown): RunFailureFacts => ({
-    reason:
-      error instanceof Error && Retry.isAbort(error, config.signal)
-        ? "aborted"
-        : Retry.classifyRetryReason(error instanceof Error ? error.message : String(error)),
-    attempt,
-    maxAttempts: retryPolicy.maxAttempts,
-  });
-
   try {
     const preRunResult = await dispatchPreRun(state, engine, config, agentBase);
     if (preRunResult) return finish(preRunResult);
-
-    for (;;) {
-      try {
-        // Attempt identity for lifecycle policies (#694 observation material):
-        // stamped before any dispatch of this attempt, so run.turn.pre can
-        // pair it with turnIndex to tell a retry re-entry from progress.
-        recordRunAttempt(state, attempt);
-        // Fallback chain (#752): THIS attempt's model is a pure placement
-        // selection over the decided failure history — the primary when no
-        // fallbacks are configured. Resolution stays per-attempt, so a
-        // fallback switch also re-records the window fact below and the
-        // per-call assistant records carry the model actually used.
-        const attemptModel = Placement.selectModel(
-          [config.model, ...(config.modelFallbacks ?? [])],
-          failureReasons,
-        ).model;
-        // A model SWITCH invalidates the model-scoped window guards (#752
-        // review F3): "the remaining headroom is real" (windowYieldDisarmed)
-        // and the spent L5 overflow recovery were judgments about the
-        // PREVIOUS model's window — carried over, a smaller fallback window
-        // would run blind with its one recovery already consumed.
-        const modelKey = `${attemptModel.provider}/${attemptModel.id}`;
-        if (lastModelKey !== undefined && modelKey !== lastModelKey) {
-          resetModelWindowGuards(state);
-        }
-        lastModelKey = modelKey;
-        const providerModel = await (config.llm?.resolveProviderModel ?? resolveProviderModel)(
-          attemptModel,
-        );
-        recordRunWindow(state, providerModel.limit?.context ?? 0);
-        const configuredToolChoice = config.toolChoice;
-
-        for (;;) {
-          const budgetResult = await dispatchBudgetCheck(state, engine, config, agentBase);
-          if (budgetResult) return finish(budgetResult);
-
-          emitTurnStart(config.events, state, agentBase);
-          const turnResult = await buildTurn(
-            state,
-            config,
-            engine,
-            providerModel,
-            configuredToolChoice,
-            trace,
-            agentBase,
-            sink,
-          );
-          if (turnResult.type === "complete") return finish(turnResult.result);
-
-          const runLlm = config.llm?.run ?? llmRun;
-          const gate = await dispatchModelRequest(
-            state,
-            engine,
-            config,
-            agentBase,
-            providerModel.id,
-          );
-          if (gate.blocked) return finish(gate.blocked);
-          // model.override (#753): a connection.llm.pre policy reroutes THIS
-          // connection to a different model — connection-scoped: the next
-          // call re-resolves from the per-attempt selection. The window-yield
-          // arm point is recomputed from the OVERRIDE's window locally; run
-          // state keeps the attempt model's window fact (the next connection
-          // reverts to it), so nothing is re-recorded.
-          let callModel = providerModel;
-          let callRunInput = turnResult.turn.runInput;
-          if (
-            gate.overrideModel !== undefined &&
-            (gate.overrideModel.provider !== attemptModel.provider ||
-              gate.overrideModel.id !== attemptModel.id)
-          ) {
-            callModel = await (config.llm?.resolveProviderModel ?? resolveProviderModel)(
-              gate.overrideModel,
-            );
-            const overrideWindow = callModel.limit?.context ?? 0;
-            const yieldAt =
-              overrideWindow > 0 && state.windowYieldDisarmed !== true
-                ? Math.floor(overrideWindow * DEFAULT_THRESHOLD_RATIO)
-                : undefined;
-            const { yieldAtInputTokens: _priorYield, ...restInput } = turnResult.turn.runInput;
-            callRunInput = {
-              ...restInput,
-              model: callModel,
-              auth: callModel.providerID === config.model.provider ? config.auth : undefined,
-              ...(yieldAt === undefined ? {} : { yieldAtInputTokens: yieldAt }),
-            };
-            // turnYield reads this to classify the stop — it must describe
-            // the call that actually ran, not the one buildTurn planned.
-            turnResult.turn.windowYieldArmed = yieldAt !== undefined;
-          }
-          const outcome = await runLlm(callRunInput, turnResult.turn.trackingSink);
-          const modelResponseResult = await dispatchModelResponse(
-            state,
-            engine,
-            config,
-            {
-              outcome,
-              responseTokens: turnResult.turn.turnUsage.outputTokens,
-            },
-            agentBase,
-            callModel.id,
-          );
-          if (modelResponseResult) return finish(modelResponseResult);
-
-          if (outcome.type === "stop") {
-            const stopOutcome = await handleStop(state, config, engine, agentBase, turnResult.turn);
-            if (stopOutcome !== "continue") return finish(stopOutcome);
-            continue;
-          }
-
-          if (outcome.type === "continue") {
-            handleContinue(config.events, state, agentBase, turnResult.turn.turnUsage);
-            continue;
-          }
-
-          if (outcome.type === "aborted") throw outcome.error ?? Retry.abortError();
-          if (outcome.type === "error") {
-            const error =
-              outcome.error instanceof Error ? outcome.error : new Error(outcome.error.message);
-            terminalLlmError = error;
-            throw error;
-          }
-          const _exhaustive: never = outcome;
-          throw new Error(`Unknown outcome type: ${unknownOutcomeType(_exhaustive)}`);
-        }
-      } catch (error) {
-        if (!(error instanceof Error)) throw error;
-        const decision = await handleError(
-          state,
-          engine,
-          config,
-          agentBase,
-          error,
-          attempt,
-          retryPolicy,
-        );
-        if (decision.action === "retry") {
-          // Carried across the wait, not after it: an abort raises from inside
-          // `Retry.sleep`, and the reason and ceiling it has to report are the
-          // ones decided here — re-deriving them from the abort would make the
-          // terminal record contradict this run's own retry record.
-          failureReasons.push(decision.failure.reason);
-          thrownFailure = decision.failure;
-          await LlmRetry.sleep(decision.backoffMs, config.signal);
-          thrownFailure = undefined;
-          attempt += 1;
-          continue;
-        }
-        if (decision.action === "complete") return finish(decision.result);
-        thrownFailure = decision.failure;
-        throw decision.error;
-      }
-    }
+    return finish(
+      await runAttempts(state, config, sink, engine, trace, agentBase, retryPolicy, progress),
+    );
   } catch (error) {
     engine.endRun();
-    const facts = thrownFailure ?? undecidedFacts(error);
+    const facts =
+      progress.thrownFailure ?? undecidedFailureFacts(error, config, retryPolicy, progress);
     emitRunFailed(
       config.events,
       agentBase,
       error instanceof Error ? error.message : String(error),
       facts,
     );
-    // Only a failure raised by llm.run carries public-facing provenance. The
-    // same retry machinery also observes policy, catalog, host, and telemetry
-    // faults; stamping those would let a host misrepresent an internal defect
-    // as a provider terminal.
-    if (error instanceof Error && error === terminalLlmError) {
+    if (error instanceof Error && error === progress.terminalLlmError) {
       Retry.attachFailureFacts(error, { ...facts, llm: true });
     }
     throw error;
   }
+}
+
+/** Fallbacks make validation failures retryable on a different candidate. */
+function retryPolicyFor(config: ChatAgentConfig): RetryPolicy {
+  if ((config.modelFallbacks?.length ?? 0) === 0) return Retry.DEFAULT_RETRY_POLICY;
+  return {
+    ...Retry.DEFAULT_RETRY_POLICY,
+    retryOn: [...(Retry.DEFAULT_RETRY_POLICY.retryOn ?? []), "validation_error"],
+  };
+}
+
+function undecidedFailureFacts(
+  error: unknown,
+  config: ChatAgentConfig,
+  retryPolicy: RetryPolicy,
+  progress: RunProgress,
+): RunFailureFacts {
+  return {
+    reason:
+      error instanceof Error && Retry.isAbort(error, config.signal)
+        ? "aborted"
+        : Retry.classifyRetryReason(error instanceof Error ? error.message : String(error)),
+    attempt: progress.attempt,
+    maxAttempts: retryPolicy.maxAttempts,
+  };
+}
+
+async function runAttempts(
+  state: RunState,
+  config: ChatAgentConfig,
+  sink: Sink | undefined,
+  engine: RunPolicyEngine,
+  trace: RunTrace,
+  agentBase: AgentRunBase,
+  retryPolicy: RetryPolicy,
+  progress: RunProgress,
+): Promise<AgentResult> {
+  for (;;) {
+    try {
+      return await runAttempt(state, config, sink, engine, trace, agentBase, progress);
+    } catch (error) {
+      if (!(error instanceof Error)) throw error;
+      const decision = await handleError(
+        state,
+        engine,
+        config,
+        agentBase,
+        error,
+        progress.attempt,
+        retryPolicy,
+      );
+      if (decision.action === "complete") return decision.result;
+      if (decision.action === "throw") {
+        progress.thrownFailure = decision.failure;
+        throw decision.error;
+      }
+      // Preserve the decided failure across an abort raised by the backoff.
+      progress.failureReasons.push(decision.failure.reason);
+      progress.thrownFailure = decision.failure;
+      await LlmRetry.sleep(decision.backoffMs, config.signal);
+      progress.thrownFailure = undefined;
+      progress.attempt += 1;
+    }
+  }
+}
+
+async function runAttempt(
+  state: RunState,
+  config: ChatAgentConfig,
+  sink: Sink | undefined,
+  engine: RunPolicyEngine,
+  trace: RunTrace,
+  agentBase: AgentRunBase,
+  progress: RunProgress,
+): Promise<AgentResult> {
+  recordRunAttempt(state, progress.attempt);
+  const attemptModel = selectAttemptModel(config, state, progress);
+  const providerModel = await (config.llm?.resolveProviderModel ?? resolveProviderModel)(
+    attemptModel,
+  );
+  recordRunWindow(state, providerModel.limit?.context ?? 0);
+  return runTurns(
+    state,
+    config,
+    sink,
+    engine,
+    trace,
+    agentBase,
+    attemptModel,
+    providerModel,
+    progress,
+  );
+}
+
+function selectAttemptModel(
+  config: ChatAgentConfig,
+  state: RunState,
+  progress: RunProgress,
+): AttemptModel {
+  const attemptModel = Placement.selectModel(
+    [config.model, ...(config.modelFallbacks ?? [])],
+    progress.failureReasons,
+  ).model;
+  const modelKey = `${attemptModel.provider}/${attemptModel.id}`;
+  if (progress.lastModelKey !== undefined && modelKey !== progress.lastModelKey) {
+    resetModelWindowGuards(state);
+  }
+  progress.lastModelKey = modelKey;
+  return attemptModel;
+}
+
+async function runTurns(
+  state: RunState,
+  config: ChatAgentConfig,
+  sink: Sink | undefined,
+  engine: RunPolicyEngine,
+  trace: RunTrace,
+  agentBase: AgentRunBase,
+  attemptModel: AttemptModel,
+  providerModel: Provider.Model,
+  progress: RunProgress,
+): Promise<AgentResult> {
+  for (;;) {
+    const budgetResult = await dispatchBudgetCheck(state, engine, config, agentBase);
+    if (budgetResult) return budgetResult;
+    emitTurnStart(config.events, state, agentBase);
+    const turnResult = await buildTurn(
+      state,
+      config,
+      engine,
+      providerModel,
+      config.toolChoice,
+      trace,
+      agentBase,
+      sink,
+    );
+    if (turnResult.type === "complete") return turnResult.result;
+    const connectionResult = await runConnection(
+      state,
+      config,
+      engine,
+      agentBase,
+      attemptModel,
+      providerModel,
+      turnResult.turn,
+      progress,
+    );
+    if (connectionResult !== undefined) return connectionResult;
+  }
+}
+
+async function runConnection(
+  state: RunState,
+  config: ChatAgentConfig,
+  engine: RunPolicyEngine,
+  agentBase: AgentRunBase,
+  attemptModel: AttemptModel,
+  providerModel: Provider.Model,
+  turn: TurnArtifacts,
+  progress: RunProgress,
+): Promise<AgentResult | undefined> {
+  const gate = await dispatchModelRequest(state, engine, config, agentBase, providerModel.id);
+  if (gate.blocked) return gate.blocked;
+  const call = await resolveConnectionModel(
+    state,
+    config,
+    attemptModel,
+    providerModel,
+    turn,
+    gate.overrideModel,
+  );
+  const outcome = await (config.llm?.run ?? llmRun)(call.runInput, turn.trackingSink);
+  const responseResult = await dispatchModelResponse(
+    state,
+    engine,
+    config,
+    { outcome, responseTokens: turn.turnUsage.outputTokens },
+    agentBase,
+    call.model.id,
+  );
+  if (responseResult) return responseResult;
+  return handleModelOutcome(outcome, state, config, engine, agentBase, turn, progress);
+}
+
+async function resolveConnectionModel(
+  state: RunState,
+  config: ChatAgentConfig,
+  attemptModel: AttemptModel,
+  providerModel: Provider.Model,
+  turn: TurnArtifacts,
+  overrideModel: AttemptModel | undefined,
+): Promise<{ model: Provider.Model; runInput: TurnArtifacts["runInput"] }> {
+  if (
+    overrideModel === undefined ||
+    (overrideModel.provider === attemptModel.provider && overrideModel.id === attemptModel.id)
+  ) {
+    return { model: providerModel, runInput: turn.runInput };
+  }
+  const model = await (config.llm?.resolveProviderModel ?? resolveProviderModel)(overrideModel);
+  const overrideWindow = model.limit?.context ?? 0;
+  const yieldAt =
+    overrideWindow > 0 && state.windowYieldDisarmed !== true
+      ? Math.floor(overrideWindow * DEFAULT_THRESHOLD_RATIO)
+      : undefined;
+  const { yieldAtInputTokens: _priorYield, ...restInput } = turn.runInput;
+  turn.windowYieldArmed = yieldAt !== undefined;
+  return {
+    model,
+    runInput: {
+      ...restInput,
+      model,
+      auth: model.providerID === config.model.provider ? config.auth : undefined,
+      ...(yieldAt === undefined ? {} : { yieldAtInputTokens: yieldAt }),
+    },
+  };
+}
+
+async function handleModelOutcome(
+  outcome: Run.Outcome,
+  state: RunState,
+  config: ChatAgentConfig,
+  engine: RunPolicyEngine,
+  agentBase: AgentRunBase,
+  turn: TurnArtifacts,
+  progress: RunProgress,
+): Promise<AgentResult | undefined> {
+  if (outcome.type === "stop") {
+    const stopOutcome = await handleStop(state, config, engine, agentBase, turn);
+    return stopOutcome === "continue" ? undefined : stopOutcome;
+  }
+  if (outcome.type === "continue") {
+    handleContinue(config.events, state, agentBase, turn.turnUsage);
+    return undefined;
+  }
+  if (outcome.type === "aborted") throw outcome.error ?? Retry.abortError();
+  if (outcome.type === "error") {
+    const source = outcome.error;
+    const error =
+      source instanceof Error
+        ? source
+        : new Error(
+            typeof source === "object" &&
+              source !== null &&
+              "message" in source &&
+              typeof source.message === "string"
+              ? source.message
+              : String(source),
+          );
+    progress.terminalLlmError = error;
+    throw error;
+  }
+  throw new Error(`Unknown outcome type: ${unknownOutcomeType(outcome)}`);
 }
 
 function unknownOutcomeType(value: unknown): string {
