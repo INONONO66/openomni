@@ -77,124 +77,74 @@ export function stringifyToolOutput(output: unknown): string {
   }
 }
 
-export function toModelMessages(
-  messagesWithParts: Message.WithParts[],
-  model: Provider.Model,
-): SDKMessage[] {
-  const coreMessages: SDKMessage[] = [];
+function buildToolResult(result: Message.ToolPart): ToolMessage {
+  const output = result.state.status === "completed"
+    ? stringifyToolOutput(result.state.output)
+    : result.state.status === "error"
+      ? `Error: ${result.state.error}`
+      : "[Tool execution was interrupted]";
+  return {
+    role: "tool",
+    content: [buildToolResultBlock({ id: result.callID, tool: result.tool, output })],
+  };
+}
 
-  for (const msg of messagesWithParts) {
-    if (msg.parts.length === 0) continue;
+type AssistantWithParts = { info: Message.AssistantMessage; parts: Message.Part[] };
 
-    if (msg.info.role === "user") {
-      const textParts = msg.parts.filter((p): p is Message.TextPart => p.type === "text");
-      const content = textParts.map((p) => p.text).join("\n");
-      if (content.length > 0) {
-        coreMessages.push({ role: "user", content });
-      }
-    }
+function isAssistantMessage(msg: Message.WithParts): msg is AssistantWithParts {
+  return msg.info.role === "assistant";
+}
 
-    if (msg.info.role === "assistant") {
-      // Skip error-finished turns from replay: an attempt that closed with
-      // finish:"error" (#545 message.finished projection) never produced a
-      // durable assistant turn the provider should see again.
-      if (msg.info.finish === "error") continue;
-
-      const resendSignature =
-        msg.info.providerID === model.providerID && msg.info.modelID === model.id;
-
-      const textContent: string[] = [];
-      const reasoningBlocks: AssistantReasoningBlock[] = [];
-      const toolCalls: AssistantToolCallBlock[] = [];
-      const toolResults: ToolMessage[] = [];
-
-      for (const part of msg.parts) {
-        if (part.type === "text") {
-          textContent.push(part.text);
-        }
-
-        if (part.type === "reasoning") {
-          reasoningBlocks.push(buildAssistantReasoningBlock(part, resendSignature));
-        }
-
-        if (part.type === "tool") {
-          toolCalls.push(
-            buildToolCallBlock({
-              id: part.callID,
-              tool: part.tool,
-              input: part.state.input,
-            }),
-          );
-
-          if (part.state.status === "completed") {
-            toolResults.push({
-              role: "tool",
-              content: [
-                buildToolResultBlock({
-                  id: part.callID,
-                  tool: part.tool,
-                  output: stringifyToolOutput(part.state.output),
-                }),
-              ],
-            });
-          } else if (part.state.status === "error") {
-            toolResults.push({
-              role: "tool",
-              content: [
-                buildToolResultBlock({
-                  id: part.callID,
-                  tool: part.tool,
-                  output: `Error: ${part.state.error}`,
-                }),
-              ],
-            });
-          } else {
-            // pending/running — interrupted
-            toolResults.push({
-              role: "tool",
-              content: [
-                buildToolResultBlock({
-                  id: part.callID,
-                  tool: part.tool,
-                  output: "[Tool execution was interrupted]",
-                }),
-              ],
-            });
-          }
-        }
-      }
-
-      // Reasoning blocks must precede text/tool-call blocks: Anthropic rejects
-      // assistant turns where a thinking block follows other content. Each
-      // reasoning part stays its own block — signatures are per-block.
-      if (toolCalls.length > 0) {
-        const assistantContent: Array<
-          AssistantTextBlock | AssistantReasoningBlock | AssistantToolCallBlock
-        > = [...reasoningBlocks];
-
-        if (textContent.length > 0) {
-          assistantContent.push({ type: "text", text: textContent.join("\n") });
-        }
-        assistantContent.push(...toolCalls);
-
-        coreMessages.push({ role: "assistant", content: assistantContent });
-
-        for (const result of toolResults) {
-          coreMessages.push(result);
-        }
-      } else if (reasoningBlocks.length > 0) {
-        const assistantContent: Array<AssistantTextBlock | AssistantReasoningBlock> = [
-          ...reasoningBlocks,
-        ];
-        if (textContent.length > 0) {
-          assistantContent.push({ type: "text", text: textContent.join("\n") });
-        }
-        coreMessages.push({ role: "assistant", content: assistantContent });
-      } else if (textContent.length > 0) {
-        coreMessages.push({ role: "assistant", content: textContent.join("\n") });
-      }
+function buildAssistantMessage(msg: AssistantWithParts, model: Provider.Model): SDKMessage[] {
+  if (msg.info.finish === "error") return [];
+  const resendSignature = msg.info.providerID === model.providerID && msg.info.modelID === model.id;
+  const textContent: string[] = [];
+  const reasoningBlocks: AssistantReasoningBlock[] = [];
+  const toolCalls: AssistantToolCallBlock[] = [];
+  const toolResults: ToolMessage[] = [];
+  for (const part of msg.parts) {
+    if (part.type === "text") textContent.push(part.text);
+    if (part.type === "reasoning") reasoningBlocks.push(buildAssistantReasoningBlock(part, resendSignature));
+    if (part.type === "tool") {
+      toolCalls.push(buildToolCallBlock({ id: part.callID, tool: part.tool, input: part.state.input }));
+      toolResults.push(buildToolResult(part));
     }
   }
+  return assembleAssistantMessages(textContent, reasoningBlocks, toolCalls, toolResults);
+}
 
+function assembleAssistantMessages(
+  textContent: string[],
+  reasoningBlocks: AssistantReasoningBlock[],
+  toolCalls: AssistantToolCallBlock[],
+  toolResults: ToolMessage[],
+): SDKMessage[] {
+  if (toolCalls.length > 0) {
+    const content: Array<AssistantTextBlock | AssistantReasoningBlock | AssistantToolCallBlock> = [...reasoningBlocks];
+    if (textContent.length > 0) content.push({ type: "text", text: textContent.join("\n") });
+    content.push(...toolCalls);
+    return [{ role: "assistant", content }, ...toolResults];
+  }
+  if (reasoningBlocks.length > 0) {
+    const content: Array<AssistantTextBlock | AssistantReasoningBlock> = [...reasoningBlocks];
+    if (textContent.length > 0) content.push({ type: "text", text: textContent.join("\n") });
+    return [{ role: "assistant", content }];
+  }
+  return textContent.length > 0 ? [{ role: "assistant", content: textContent.join("\n") }] : [];
+}
+
+function messageToSDK(msg: Message.WithParts, model: Provider.Model): SDKMessage[] {
+  if (msg.parts.length === 0) return [];
+  if (msg.info.role === "user") {
+    const content = msg.parts.filter((p): p is Message.TextPart => p.type === "text").map((p) => p.text).join("\n");
+    return content.length > 0 ? [{ role: "user", content }] : [];
+  }
+  if (isAssistantMessage(msg)) return buildAssistantMessage(msg, model);
+  return [];
+}
+
+export function toModelMessages(messagesWithParts: Message.WithParts[], model: Provider.Model): SDKMessage[] {
+  const coreMessages: SDKMessage[] = [];
+  for (const msg of messagesWithParts) coreMessages.push(...messageToSDK(msg, model));
   return ProviderTransform.normalizeMessages(coreMessages, model);
 }

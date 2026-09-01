@@ -19,7 +19,7 @@ export const DiscordProvider: ChannelProvider<DiscordCredentials, "discord"> = {
   ingest: "socket",
   capabilities: { deliver: true, webhook: false, render: DISCORD_RENDER },
   credentials: z.object({ token: z.string().min(1) }).strict(),
-  settings: z.record(z.never()),
+  settings: z.record(z.string(), z.never()),
   preconditions: [
     "MESSAGE CONTENT gateway intent enabled in the developer portal",
     "bot invited to the target guild with read/send permissions",

@@ -156,7 +156,7 @@ export const StreamRegistry = {
  * `ingress.routing.decision` Bus event schema; the observe-only Bus publish
  * is a projection of this fact.
  */
-export const RouteDecided: z.ZodType<RoutingDecisionPayload> = IngressEvents.RoutingDecision.schema;
+export const RouteDecided: z.ZodType<RoutingDecisionPayload, RoutingDecisionPayload> = IngressEvents.RoutingDecision.schema;
 export type RouteDecided = RoutingDecisionPayload;
 
 /**

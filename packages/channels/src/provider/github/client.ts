@@ -1,6 +1,10 @@
 import { Operational } from "@openomni/protocol";
+import { z } from "zod";
 import { fetchWithRetry } from "../../support/fetch-retry";
 import type { PublishPort } from "../../types";
+
+/** One comment page from the list endpoint — only `body` is read, extra keys pass. */
+const CommentsPageSchema = z.array(z.object({ body: z.string().optional() }));
 
 export class GitHubClient {
   constructor(
@@ -100,20 +104,10 @@ export class GitHubClient {
         throw new Error(`GitHub API failed (${response.status}): ${text}`);
       }
 
-      const comments: unknown = await response.json();
-      if (!Array.isArray(comments)) throw new Error("GitHub API returned invalid comments");
-      for (const comment of comments) {
-        if (
-          typeof comment === "object" &&
-          comment !== null &&
-          "body" in comment &&
-          typeof comment.body === "string" &&
-          comment.body.includes(marker)
-        ) {
-          return true;
-        }
-      }
-      if (comments.length < perPage) return false;
+      const listing = CommentsPageSchema.safeParse(await response.json());
+      if (!listing.success) throw new Error("GitHub API returned invalid comments");
+      if (listing.data.some((comment) => comment.body?.includes(marker))) return true;
+      if (listing.data.length < perPage) return false;
     }
   }
 }

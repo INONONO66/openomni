@@ -37,7 +37,7 @@ import { Delegation } from "../../src/delegation/index.js";
 
 const T0 = 1_700_000_000_000;
 
-function issues(result: z.SafeParseReturnType<unknown, unknown>) {
+function issues(result: z.ZodSafeParseResult<unknown>) {
   if (result.success) throw new Error("expected a parse failure, but parsing succeeded");
   return result.error.issues.map((issue) => ({
     path: issue.path.join("."),
@@ -125,7 +125,9 @@ describe("Delegation.Settled arm vocabulary", () => {
       const withoutReason = { status, delegationId: "del-1", at: T0 };
       const reported = issues(Delegation.Settled.safeParse(withoutReason));
       const key = status === "failed" ? "error" : "reason";
-      expect(reported).toEqual([{ path: key, message: "Required", code: "invalid_type" }]);
+      expect(reported).toEqual([
+        { path: key, message: "Invalid input: expected string, received undefined", code: "invalid_type" },
+      ]);
     }
   });
 
@@ -149,7 +151,7 @@ describe("Delegation.Settled arm vocabulary", () => {
       ).toEqual([
         {
           path: key,
-          message: "String must contain at least 1 character(s)",
+          message: "Too small: expected string to have >=1 characters",
           code: "too_small",
         },
       ]);
@@ -186,7 +188,7 @@ describe("Delegation.Settled arm vocabulary", () => {
     expect(reported).toEqual([
       {
         path: "",
-        message: "Unrecognized key(s) in object: 'deadline'",
+        message: "Unrecognized key: \"deadline\"",
         code: "unrecognized_keys",
       },
     ]);
@@ -212,7 +214,7 @@ describe("Delegation.Settled arm vocabulary", () => {
         }),
       ),
     ).toEqual([
-      { path: "", message: "Unrecognized key(s) in object: 'reason'", code: "unrecognized_keys" },
+      { path: "", message: "Unrecognized key: \"reason\"", code: "unrecognized_keys" },
     ]);
   });
 
@@ -221,7 +223,7 @@ describe("Delegation.Settled arm vocabulary", () => {
       Delegation.Settled.safeParse({ status: "abandoned", delegationId: "del-1", at: T0 }),
     );
     expect(reported).toEqual([
-      { path: "status", message: expect.any(String), code: "invalid_union_discriminator" },
+      { path: "status", message: expect.any(String), code: "invalid_union" },
     ]);
   });
 

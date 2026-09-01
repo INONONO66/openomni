@@ -21,7 +21,7 @@ const RoutingDecisionBase = Base.extend({
   inboundTreatment: Actor.InboundTreatment.optional(),
 });
 
-function routingDecisionUnion(candidateId: z.ZodType<string>) {
+function routingDecisionUnion(candidateId: z.ZodType<string, string>) {
   return z.union([
     RoutingDecisionBase.extend({
       stage: z.literal("blacklist"),

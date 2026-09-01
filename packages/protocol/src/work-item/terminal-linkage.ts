@@ -423,7 +423,6 @@ export function hasContiguousReservationBridge(
   );
   if (bridging.length !== expected) return false;
   const heads = new Set(bridging.map(({ recordedHead }) => recordedHead));
-  if (heads.size !== expected) return false;
   for (let head = fromHead + 1; head < toHead; head += 1) {
     if (!heads.has(head)) return false;
   }

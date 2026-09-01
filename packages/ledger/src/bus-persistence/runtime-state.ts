@@ -79,7 +79,7 @@ export function startBusPersistence(options: BusPersistenceOptions = {}): () => 
 
     writeOperationalToStdout(event.name, normalizedPayload);
 
-    if ((event.visibility ?? "internal") === BusEvent.Visibility.Enum.ephemeral) {
+    if ((event.visibility ?? "internal") === BusEvent.Visibility.enum.ephemeral) {
       return;
     }
 

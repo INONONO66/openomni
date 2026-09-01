@@ -54,6 +54,14 @@ describe("toModelMessages", () => {
     expect(toModelMessages([], anthropicModel)).toEqual([]);
   });
 
+  test("joins multiple text parts with a real LF", () => {
+    const result = toModelMessages(
+      [{ ...userMessage(), parts: [textPart("msg-1", "first", "part-1"), textPart("msg-1", "second", "part-2")] }],
+      anthropicModel,
+    );
+    expect(result[0]?.content).toBe("first\nsecond");
+  });
+
   test("converts UserMessage to model message", () => {
     const result = toModelMessages([userMessage()], anthropicModel);
     expect(result).toHaveLength(1);

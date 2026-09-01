@@ -5,13 +5,6 @@ import { z } from "zod";
 export const EventVisibility = BusEvent.Visibility;
 export type EventVisibility = BusEvent.Visibility;
 
-export const QueryStats = z.object({
-  totalEvents: z.number().describe("Total number of events"),
-  byCategory: z.record(z.number()).describe("Event count by category"),
-  byType: z.record(z.number()).describe("Event count by type"),
-});
-export type QueryStats = z.infer<typeof QueryStats>;
-
 const PayloadStatus = z.enum(["valid", "invalid", "parse_failed", "unmarked"]);
 
 export const EventRecord = z.object({

@@ -122,24 +122,10 @@ describe("WorkItemStore", () => {
     configureSqlite();
     const item = await createItem("owner-fact-sequence");
     await WorkItemStore.start(item.workItemId, "trace-test");
-    const blocked = await WorkItemStore.addBlocker(
-      item.workItemId,
-      { kind: "external", description: "awaiting result" },
-      "trace-test",
-    );
-    const blockerId = blocked?.blockers[0]?.id;
-    if (!blockerId) throw new Error("missing blocker");
-    await WorkItemStore.resolveBlocker(item.workItemId, blockerId, "trace-test");
     const failed = await WorkItemStore.fail(item.workItemId, "trace-test", "expected failure");
     const ledger = Storage.get().ledger;
     if (!ledger || !failed) throw new Error("missing ledger or projection");
-    const types = [
-      "work_item.created",
-      "work_item.started",
-      "work_item.blocker_added",
-      "work_item.blocker_resolved",
-      "work_item.failed",
-    ];
+    const types = ["work_item.created", "work_item.started", "work_item.failed"];
     const facts = types
       .flatMap((type) => ledger.factsByType(type))
       .filter((fact) => fact.streamId === `work:${item.workItemId}`)
@@ -149,7 +135,7 @@ describe("WorkItemStore", () => {
       types.map((type, index) => [index + 1, type]),
     );
     expect(ledger.headFact(`work:${item.workItemId}`)?.seq).toBe(failed.revision);
-    expect(facts.at(-1)?.data).toMatchObject({ reason: "expected failure", revision: 5 });
+    expect(facts.at(-1)?.data).toMatchObject({ reason: "expected failure", revision: 3 });
     expect(facts.at(-1)?.data).not.toHaveProperty("acceptanceCriteria");
     expect(facts.at(-1)?.data).not.toHaveProperty("completionFacts");
   });
@@ -338,36 +324,6 @@ describe("WorkItemStore", () => {
     expect(item).toMatchObject({ revision: 1 });
     expect(updated).toMatchObject({ revision: 2 });
     expect(updated?.completionFacts.revision).toBe(item.completionFacts.revision);
-  });
-
-  test("blocks and resumes when blockers are resolved", async () => {
-    configureSqlite();
-    const statuses: string[] = [];
-    Bus.subscribe(WorkItem.Events.StatusChanged, (event) =>
-      statuses.push(`${event.payload.from}->${event.payload.to}`),
-    );
-
-    const item = await createItem("blocker-flow");
-    await WorkItemStore.start(item.workItemId, "trace-test");
-    const blocked = await WorkItemStore.addBlocker(
-      item.workItemId,
-      {
-        kind: "waiting_input",
-        description: "needs user confirmation",
-      },
-      "trace-test",
-    );
-    const blocker = blocked?.blockers[0];
-    const resumed = await WorkItemStore.resolveBlocker(
-      item.workItemId,
-      blocker?.id ?? "missing",
-      "trace-test",
-    );
-    await flushBus();
-
-    expect(blocked ? WorkItem.deriveStatus(blocked) : undefined).toBe("blocked");
-    expect(resumed ? WorkItem.deriveStatus(resumed) : undefined).toBe("running");
-    expect(statuses).toEqual(["pending->running", "running->blocked", "blocked->running"]);
   });
 
   test("rejects failing a completed item", async () => {

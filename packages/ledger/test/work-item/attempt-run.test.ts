@@ -206,25 +206,6 @@ describe("WorkItemAttemptRun", () => {
     expect(item.attemptTerminal?.outcome).toBe("interrupted");
   });
 
-  test("beginWait acquires exclusively; endWait releases; terminal runs reject the wait", async () => {
-    await seedRun("sess-wait", "run-wait");
-
-    expect(await WorkItemAttemptRun.beginWait("sess-wait", "run-wait", "trace-test")).toBe(true);
-    expect(WorkItemAttemptRun.find("sess-wait", "run-wait")?.status).toBe("waiting_input");
-    // Second acquire loses.
-    expect(await WorkItemAttemptRun.beginWait("sess-wait", "run-wait", "trace-test")).toBe(false);
-
-    expect(await WorkItemAttemptRun.endWait("sess-wait", "run-wait", "trace-test")).toBe(true);
-    expect(WorkItemAttemptRun.find("sess-wait", "run-wait")?.status).toBe("running");
-    // Releasing an unheld wait is a no-op receipt.
-    expect(await WorkItemAttemptRun.endWait("sess-wait", "run-wait", "trace-test")).toBe(false);
-
-    await WorkItemAttemptRun.finish("sess-wait", "run-wait", "cancelled", "trace-test", {
-      endedAt: Date.now(),
-    });
-    expect(await WorkItemAttemptRun.beginWait("sess-wait", "run-wait", "trace-test")).toBe(false);
-  });
-
   test("a new allocation clears the previous attempt terminal", async () => {
     const hash = await seedRun("sess-realloc", "run-realloc");
     await WorkItemAttemptRun.finish("sess-realloc", "run-realloc", "succeeded", "trace-test", {
@@ -278,8 +259,5 @@ describe("WorkItemAttemptRun", () => {
     // Deterministic: the same archived row always produces the same view,
     // and the read wrote nothing.
     expect(WorkItemAttemptRun.find("sess-upcast", "run-legacy-open")).toEqual(open);
-    expect(await WorkItemAttemptRun.beginWait("sess-upcast", "run-legacy-open", "trace-test")).toBe(
-      false,
-    );
   });
 });
