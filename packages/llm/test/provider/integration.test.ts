@@ -114,6 +114,25 @@ describe("Provider Integration", () => {
     expect(unsized.limit?.context).toBe(0);
   });
 
+  it("carries no write-only catalog metadata — status and release_date have no reader", () => {
+    const mapped = Provider.fromModelsDevModel(
+      { id: "custom", name: "Custom", env: [], models: {} },
+      { id: "m", name: "M", status: "beta", release_date: "2025-01-01" },
+    );
+
+    // Stored-but-never-read fields are absent from the mapping AND rejected
+    // by the schema, so re-adding one without a reader fails here.
+    expect("status" in mapped).toBe(false);
+    expect("release_date" in mapped).toBe(false);
+    const parsed = Provider.Model.parse({
+      ...mapped,
+      status: "beta",
+      release_date: "2025-01-01",
+    });
+    expect("status" in parsed).toBe(false);
+    expect("release_date" in parsed).toBe(false);
+  });
+
   it("honors model.api.url for openai models (#audit L5)", () => {
     const auth: Auth.Info = { type: "api", key: "test-openai-key" };
     const model: Provider.Model = {

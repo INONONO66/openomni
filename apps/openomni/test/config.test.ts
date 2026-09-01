@@ -12,6 +12,7 @@ const ENV_KEYS = [
   "OPENOMNI_MODEL_API_KEY",
   "OPENOMNI_MODEL_BASE_URL",
   "OPENOMNI_MODEL_HEADERS",
+  "OPENOMNI_MODEL_FALLBACKS",
   "OPENOMNI_SOCIAL_BUDGETS",
 ] as const;
 
@@ -109,6 +110,45 @@ describe("ws exposure enforcement", () => {
     process.env.OPENOMNI_MODEL_HEADERS = value;
 
     expect(() => loadConfig()).toThrow("OPENOMNI_MODEL_HEADERS is invalid");
+  });
+
+  it("leaves the fallback chain absent when unset", () => {
+    expect(loadConfig().model.fallbacks).toBeUndefined();
+  });
+
+  it("reads a comma-separated provider/model fallback chain in order", () => {
+    process.env.OPENOMNI_MODEL_FALLBACKS = "openai/gpt-5, anthropic/claude-x";
+
+    expect(loadConfig().model.fallbacks).toEqual([
+      { provider: "openai", id: "gpt-5" },
+      { provider: "anthropic", id: "claude-x" },
+    ]);
+  });
+
+  it("keeps a model id containing slashes intact — only the first slash splits", () => {
+    process.env.OPENOMNI_MODEL_FALLBACKS = "openrouter/meta-llama/llama-4";
+
+    expect(loadConfig().model.fallbacks).toEqual([
+      { provider: "openrouter", id: "meta-llama/llama-4" },
+    ]);
+  });
+
+  it.each([
+    { name: "an entry with no provider separator", value: "gpt-5" },
+    { name: "an empty provider segment", value: "/gpt-5" },
+    { name: "an empty model segment", value: "openai/" },
+    { name: "a blank entry between two valid ones", value: "openai/gpt-5,,anthropic/claude-x" },
+    { name: "whitespace inside a segment", value: "open ai/gpt-5" },
+  ])("fails closed on $name", ({ value }) => {
+    process.env.OPENOMNI_MODEL_FALLBACKS = value;
+
+    expect(() => loadConfig()).toThrow("OPENOMNI_MODEL_FALLBACKS is invalid");
+  });
+
+  it("treats a whitespace-only value as unset rather than as an empty chain", () => {
+    process.env.OPENOMNI_MODEL_FALLBACKS = "   ";
+
+    expect(loadConfig().model.fallbacks).toBeUndefined();
   });
 
   it("reads explicit social budgets while keeping the default absent", () => {
