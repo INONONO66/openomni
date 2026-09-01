@@ -1,6 +1,7 @@
 import {
   type Gateway,
   Ingress,
+  NamedError,
   Wait,
   extractSurfaceKey,
   resolveTarget,
@@ -19,17 +20,23 @@ import { replyGrantEndpointFacts, replyGrantEndpointFromFacts } from "./messagin
 import { resolveRoute, type RouteState } from "./resolve-route.js";
 import { findWaitCandidates, type WaitResolution } from "./wait/index.js";
 
-export type IngressRoutingErrorCode =
-  | "route_blocked"
-  | "route_ambiguous"
-  | "route_record_failed"
+const ingressRoutingErrorCodes = [
+  "route_blocked",
+  "route_ambiguous",
+  "route_record_failed",
   /** Redelivered inbound whose fresh decision diverges from the recorded route.decided fact — fail closed, no action, no second fact (#510 review fix F2). */
-  | "route_replay_divergent"
-  | "dispatch_runtime_missing"
-  | "dispatch_route_invalid"
-  | "dispatch_failed"
-  | "dispatch_output_unsupported"
-  | "wait_reply_rejected";
+  "route_replay_divergent",
+  "dispatch_runtime_missing",
+  "dispatch_route_invalid",
+  "dispatch_failed",
+  "dispatch_output_unsupported",
+  "wait_reply_rejected",
+] as const;
+export type IngressRoutingErrorCode = (typeof ingressRoutingErrorCodes)[number];
+const IngressRoutingErrorCode = NamedError.Unknown.Schema.shape.data.shape.message.refine(
+  (value): value is IngressRoutingErrorCode =>
+    ingressRoutingErrorCodes.includes(value as IngressRoutingErrorCode),
+);
 
 /**
  * #498 C3: ingress correlation claims reuse THE one Wait.Correlation shape.
@@ -44,19 +51,28 @@ const ScopedCorrelationClaim = Wait.Correlation.refine(
   { message: "correlation claims require endpointId and channelId" },
 );
 
-export class IngressRoutingError extends Error {
-  readonly code: IngressRoutingErrorCode;
-  readonly decision: Ingress.RoutingDecisionPayload;
+const IngressRoutingErrorBase = NamedError.create(
+  "IngressRoutingError",
+  NamedError.Unknown.Schema.shape.data.extend({
+    code: IngressRoutingErrorCode,
+    decision: Ingress.Events.RoutingDecision.schema,
+  }),
+);
 
+export class IngressRoutingError extends IngressRoutingErrorBase {
   constructor(
     code: IngressRoutingErrorCode,
     message: string,
     decision: Ingress.RoutingDecisionPayload,
   ) {
-    super(message);
-    this.name = "IngressRoutingError";
-    this.code = code;
-    this.decision = decision;
+    super({ code, message, decision });
+  }
+
+  get code(): IngressRoutingErrorCode {
+    return this.data.code as IngressRoutingErrorCode;
+  }
+  get decision(): Ingress.RoutingDecisionPayload {
+    return this.data.decision;
   }
 }
 

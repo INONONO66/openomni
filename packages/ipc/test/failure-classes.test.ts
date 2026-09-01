@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import net from "node:net";
 import { Ipc } from "@openomni/protocol";
 import { connectIpcClient } from "../src/client";
-import { IpcConnectionError, IpcRemoteError } from "../src/errors";
+import { IpcConnectionError, IpcProtocolError, IpcRemoteError } from "../src/errors";
 import { LineDecoder, encode } from "../src/framing";
 import { createIpcServer } from "../src/server";
 import { deferred, within } from "./helpers/signal";
@@ -17,6 +17,36 @@ describe("failure classes stay honest (#606 re-audit)", () => {
     for (const s of rawSockets.splice(0)) s.destroy();
     for (const c of clients.splice(0)) c.close();
     for (const s of servers.splice(0)) s.close();
+  });
+
+  test("public IPC errors use the shared serializable error contract", () => {
+    const connection = new IpcConnectionError("closed");
+    const remote = new IpcRemoteError(4000, "bad request");
+    expect(IpcConnectionError.isInstance(connection)).toBe(true);
+    expect(connection.toObject()).toEqual({
+      name: "IpcConnectionError",
+      data: { message: "closed" },
+    });
+    expect(IpcRemoteError.isInstance(remote)).toBe(true);
+    expect(remote.code).toBe(4000);
+    expect(remote.message).toBe("IPC error 4000: bad request");
+  });
+
+  test("IPC constructors retain defined falsy causes but omit undefined", () => {
+    const nullCause = new IpcConnectionError("closed", null);
+    const falseCause = new IpcProtocolError("bad frame", false);
+    const emptyCause = new IpcConnectionError("empty", "");
+    const undefinedCause = new IpcProtocolError("absent", undefined);
+
+    for (const [error, cause] of [
+      [nullCause, null],
+      [falseCause, false],
+      [emptyCause, ""],
+    ] as const) {
+      expect(Object.getOwnPropertyDescriptor(error, "cause") !== undefined).toBe(true);
+      expect(Reflect.get(error, "cause")).toBe(cause);
+    }
+    expect(Object.getOwnPropertyDescriptor(undefinedCause, "cause") !== undefined).toBe(false);
   });
 
   test("a dying connection fails ITS in-flight calls as connection loss, not timeout", async () => {

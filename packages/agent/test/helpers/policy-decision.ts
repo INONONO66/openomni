@@ -1,4 +1,9 @@
-import { PolicyDecision, type Policy, type Message } from "@openomni/protocol";
+import {
+  Policy,
+  PolicyDecision,
+  type Message,
+  type PlainObject,
+} from "@openomni/protocol";
 import type { PolicyPointId } from "@openomni/policy";
 import type {
   CanonicalPolicyRegistration,
@@ -175,7 +180,7 @@ export function filterTools(
 }
 
 export function rewriteToolInput(
-  input: Record<string, unknown>,
+  input: PlainObject,
   policyId = "test.rewrite-input",
   reason = "rewrite_input",
 ): Policy.PolicyDecision {
@@ -195,5 +200,7 @@ export function replaceMessages(
   policyId = "test.replace-messages",
   reason = "replace_messages",
 ): Policy.PolicyDecision {
-  return allow(policyId, reason, [{ type: "run.replace_messages", messages }]);
+  return allow(policyId, reason, [
+    Policy.PolicyEffect.parse({ type: "run.replace_messages", messages }),
+  ]);
 }

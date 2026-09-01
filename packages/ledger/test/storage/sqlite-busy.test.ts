@@ -60,6 +60,15 @@ describe("isSqliteBusyError", () => {
   });
 });
 
+describe("StorageUnavailableError", () => {
+  test.each([0, "", undefined])("retains an explicitly provided storage cause: %p", (cause) => {
+    const error = new StorageUnavailableError("work-item", "wi-falsy", cause);
+
+    expect(Object.getOwnPropertyDescriptor(error, "cause") !== undefined).toBe(true);
+    expect(Reflect.get(error, "cause")).toBe(cause);
+  });
+});
+
 describe("runWorkItemTransaction", () => {
   test("maps SQLITE_BUSY to the shared typed storage error; other errors pass through", () => {
     const busyStorage = {
@@ -78,6 +87,11 @@ describe("runWorkItemTransaction", () => {
     expect((thrown as StorageUnavailableError).code).toBe("unavailable");
     expect((thrown as StorageUnavailableError).store).toBe("work-item");
     expect((thrown as StorageUnavailableError).resourceId).toBe("wi-busy");
+    expect(StorageUnavailableError.isInstance(thrown)).toBe(true);
+    expect((thrown as StorageUnavailableError).toObject()).toMatchObject({
+      name: "StorageUnavailableError",
+      data: { code: "unavailable", store: "work-item", resourceId: "wi-busy" },
+    });
 
     const failingStorage = {
       transaction<T>(_operation: () => T): T {

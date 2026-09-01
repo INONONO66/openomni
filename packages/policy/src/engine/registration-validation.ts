@@ -7,7 +7,8 @@
  * path — but keep the two boundaries in sync deliberately; they must not
  * drift apart silently.
  */
-import { Policy } from "@openomni/protocol";
+import { NamedError, Policy } from "@openomni/protocol";
+import { z } from "zod";
 import type {
   RuntimePolicyRegistrationGeneric,
   GenericPolicyContext,
@@ -16,48 +17,61 @@ import type {
 import { captureFrozenArray } from "./array-snapshot";
 import { snapshotCanonicalBindings } from "./registration-snapshot";
 
-type PolicyRegistrationErrorCode =
-  | "invalid_registration_kind"
-  | "legacy_timing_registration"
-  | "invalid_canonical_registration"
-  | "empty_point_ids"
-  | "duplicate_point_id"
-  | "unknown_point_id"
-  | "empty_effect_capabilities"
-  | "missing_effect_capabilities"
-  | "unbound_effect_capabilities"
-  | "duplicate_effect_capability"
-  | "disallowed_effect_capability"
-  | "empty_scope_agent_type"
-  | "async_policy_callback";
+const PolicyRegistrationErrorCode = z.enum([
+  "invalid_registration_kind",
+  "legacy_timing_registration",
+  "invalid_canonical_registration",
+  "empty_point_ids",
+  "duplicate_point_id",
+  "unknown_point_id",
+  "empty_effect_capabilities",
+  "missing_effect_capabilities",
+  "unbound_effect_capabilities",
+  "duplicate_effect_capability",
+  "disallowed_effect_capability",
+  "empty_scope_agent_type",
+  "async_policy_callback",
+]);
+type PolicyRegistrationErrorCode = z.infer<typeof PolicyRegistrationErrorCode>;
 
-interface PolicyRegistrationErrorOptions {
-  readonly code: PolicyRegistrationErrorCode;
-  readonly registrationName: string;
-  readonly pointId?: string;
-  readonly effectType?: string;
-}
+const PolicyRegistrationErrorData = z.object({
+  message: z.string(),
+  code: PolicyRegistrationErrorCode,
+  registrationName: z.string(),
+  pointId: z.string().optional(),
+  effectType: z.string().optional(),
+});
+const PolicyRegistrationErrorBase = NamedError.create(
+  "PolicyRegistrationError",
+  PolicyRegistrationErrorData,
+);
 
-export class PolicyRegistrationError extends Error {
-  readonly code: PolicyRegistrationErrorCode;
-  readonly registrationName: string;
-  readonly pointId?: string;
-  readonly effectType?: string;
+type PolicyRegistrationErrorOptions = Omit<z.input<typeof PolicyRegistrationErrorData>, "message">;
 
+export class PolicyRegistrationError extends PolicyRegistrationErrorBase {
   constructor(options: PolicyRegistrationErrorOptions) {
     const detail = [options.pointId, options.effectType].filter(
       (value): value is string => value !== undefined,
     );
-    super(
-      `Invalid policy registration "${options.registrationName}": ${options.code}${
+    super({
+      ...options,
+      message: `Invalid policy registration "${options.registrationName}": ${options.code}${
         detail.length > 0 ? ` (${detail.join(", ")})` : ""
       }`,
-    );
-    this.name = "PolicyRegistrationError";
-    this.code = options.code;
-    this.registrationName = options.registrationName;
-    if (options.pointId !== undefined) this.pointId = options.pointId;
-    if (options.effectType !== undefined) this.effectType = options.effectType;
+    });
+  }
+
+  get code(): PolicyRegistrationErrorCode {
+    return this.data.code;
+  }
+  get registrationName(): string {
+    return this.data.registrationName;
+  }
+  get pointId(): string | undefined {
+    return this.data.pointId;
+  }
+  get effectType(): string | undefined {
+    return this.data.effectType;
   }
 }
 
