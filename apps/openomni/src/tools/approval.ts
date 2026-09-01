@@ -281,7 +281,10 @@ export function endpointMergeToolExecutor(port: ApprovalPort, now: () => number 
 }
 
 function describeSubject(subject: Approval.Subject): string {
-  return subject.kind === "contact_promotion"
-    ? `promote contact ${subject.actorId}`
-    : `merge endpoint ${subject.endpointId} from ${subject.fromActorId} into ${subject.toActorId}`;
+  if (subject.kind === "contact_promotion") return `promote contact ${subject.actorId}`;
+  if (subject.kind === "person_mutation") {
+    // Opened by person_declare (the guarded act pins its own manifest digest).
+    return `apply Person manifest ${subject.personId} (digest ${subject.manifestDigest.slice(0, 12)}…)`;
+  }
+  return `merge endpoint ${subject.endpointId} from ${subject.fromActorId} into ${subject.toActorId}`;
 }

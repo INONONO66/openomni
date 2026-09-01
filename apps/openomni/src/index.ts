@@ -6,15 +6,19 @@ import {
   WaitService,
   WebSocketHandler,
 } from "@openomni/channels";
+import { homedir } from "node:os";
 import {
   ActorRegistry,
   ApprovalStore,
   Artifact,
   BusPersistence,
+  ChannelInstanceStore,
   ConversationStore,
   DelegationStore,
   initialize,
   LeaseStore,
+  PersonStore,
+  SecretStore,
   Session,
   Storage,
 } from "@openomni/ledger";
@@ -28,8 +32,10 @@ import {
   type Machine,
 } from "@openomni/protocol";
 import { Bus, newTraceId } from "@openomni/telemetry";
-import type { BuiltChannel } from "./channels";
-import { materializePersons, selectChannelProfile } from "./provisioning/declared";
+import { desiredChannels, materializePersons } from "./provisioning/declared";
+import { type ChannelSupervisor, createChannelSupervisor } from "./provisioning/supervisor";
+import { resolveKek } from "./provisioning/vault-key";
+import type { ProvisionPort } from "./tools/provision";
 import {
   assertWsExposure,
   loadConfig,
@@ -54,7 +60,7 @@ import { createCompletionPort } from "./work-item/completion";
 import { createProcessDriver } from "./delegation/process-driver";
 import { createInlineWorkerRunner } from "./delegation/worker-loop";
 import { createResidentGateway, registerTrustedChannelGrant } from "./gateway";
-import { type Composer, createComposer, rollbackToCause } from "./composition/composer";
+import { createComposer, rollbackToCause } from "./composition/composer";
 import { createPolicyRegistry } from "./composition/policy-registry";
 import { createDriverRegistry } from "./composition/driver-registry";
 import { openCuratedMemory } from "./memory/store";
@@ -140,11 +146,13 @@ export function createMachinesPort(
 /**
  * The app's HTTP surface: the ws upgrade seam, unauthenticated liveness (no
  * clock, no version, no state), and — only when a GitHub channel is composed —
- * its webhook ingress. Everything else is 404.
+ * its webhook ingress. Everything else is 404. The webhook handler is read
+ * live from the supervisor's table so a channel_declare landing a GitHub
+ * instance mid-run is reachable without rebinding the server.
  */
-function createHttpRoutes(
+export function createHttpRoutes(
   wsHandler: WebSocketHandler,
-  githubWebhookHandler: ((request: Request) => Promise<Response>) | undefined,
+  githubWebhookHandler: () => ((request: Request) => Promise<Response>) | undefined,
 ) {
   return (
     request: Request,
@@ -158,45 +166,12 @@ function createHttpRoutes(
     if (request.method === "GET" && url.pathname === "/health") {
       return Response.json({ ok: true });
     }
-    if (
-      request.method === "POST" &&
-      url.pathname === "/github/webhook" &&
-      githubWebhookHandler !== undefined
-    ) {
-      return githubWebhookHandler(request);
+    if (request.method === "POST" && url.pathname === "/github/webhook") {
+      const handler = githubWebhookHandler();
+      if (handler !== undefined) return handler(request);
     }
     return new Response("Not found", { status: 404 });
   };
-}
-
-/**
- * Each channel component is its own stage, mounted before the ws server so
- * its authority and outbound route exist before any ingress is reachable.
- * Disposal revokes exactly what the component registered: the listener, the
- * delivery route, and the trusted-channel grant — fail-closed for any
- * traffic that arrives afterwards.
- */
-export async function mountChannelStages(
-  composer: Composer,
-  builtChannels: readonly BuiltChannel[],
-  deliveryRoutes: Map<string, ChannelDeliveryRoute>,
-  recoveryTraceId: string,
-): Promise<void> {
-  for (const built of builtChannels) {
-    const surfaceId = built.surface.id;
-    await composer.mount(`channel.${surfaceId}`, async (ctx) => {
-      ctx.effect(registerTrustedChannelGrant(surfaceId));
-      const route = built.deliveryRoute;
-      if (route !== undefined) {
-        deliveryRoutes.set(surfaceId, route);
-        ctx.effect(() => {
-          deliveryRoutes.delete(surfaceId);
-        });
-      }
-      await built.surface.start(recoveryTraceId);
-      ctx.effect(() => built.surface.stop(newTraceId()));
-    });
-  }
 }
 
 /** How a correlated reply's payload reads when handed back to the waiting delegation. */
@@ -344,6 +319,34 @@ export async function startOpenOmni(options: StartOptions = {}) {
     };
     // The catalog's approval lane (§6): Owner-consent requests plus the two
     // acts they authorize — promotion and cross-channel endpoint merge.
+    // Provisioning administration port: the supervisor is created after the
+    // Resident (it needs the routing handler), so the port reaches it through
+    // a late binding — tools cannot run before composition finishes anyway.
+    let channelSupervisor: ChannelSupervisor | undefined;
+    const liveSupervisor = (): ChannelSupervisor => {
+      if (channelSupervisor === undefined)
+        throw new Error("provisioning used before composition finished");
+      return channelSupervisor;
+    };
+    const provisioningPort: ProvisionPort = {
+      persons: PersonStore,
+      instances: ChannelInstanceStore,
+      secrets: SecretStore,
+      kek: resolveKek(process.env, homedir()),
+      supervisor: {
+        reconcile: () => liveSupervisor().reconcile(),
+        resume: (instanceId) => liveSupervisor().resume(instanceId),
+        status: () => liveSupervisor().status(),
+        source: () => liveSupervisor().source(),
+      },
+      approvals: {
+        request: ApprovalStore.request,
+        get: ApprovalStore.get,
+        decision: ApprovalStore.decision,
+      },
+      materialize: materializePersons,
+      removeIdentity: ActorRegistry.removeIdentity,
+    };
     const approvalPort = {
       request: ApprovalStore.request,
       get: ApprovalStore.get,
@@ -441,6 +444,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
                   conversations: conversePort,
                   leases: leasePort,
                   approvals: approvalPort,
+                  provisioning: provisioningPort,
                 },
                 origin,
               ),
@@ -480,6 +484,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
         conversations: conversePort,
         leases: leasePort,
         approvals: approvalPort,
+        provisioning: provisioningPort,
       },
       targets: () => attachedTargets(host, machines?.enrolled ?? []),
       ...(options.llm === undefined ? {} : { llm: options.llm }),
@@ -522,15 +527,6 @@ export async function startOpenOmni(options: StartOptions = {}) {
       const result = await gateway.ingest(buildInboundEvent(message));
       return result.kind === "dropped" ? null : { text: result.result.output };
     };
-    // The profile is the declarative row list of external channels; each row
-    // becomes its own composition stage below. Any declared ChannelInstance
-    // shadows env channel config entirely (env ghost law, §8.1).
-    const channelSelection = selectChannelProfile(config);
-    const builtChannels = channelSelection.rows.map((row) => row.build(routingHandler));
-    const githubWebhookHandler = builtChannels.find(
-      (built) => built.webhookHandler !== undefined,
-    )?.webhookHandler;
-
     let wsHandler: WebSocketHandler | undefined;
     const wsRoute = async (externalId: string, body: string) => {
       if (wsHandler === undefined) throw new Error("ws delivery used before composition finished");
@@ -540,6 +536,19 @@ export async function startOpenOmni(options: StartOptions = {}) {
     // routes while the gateway keeps reading it per delivery.
     const deliveryRoutes = new Map<string, ChannelDeliveryRoute>();
     deliveryRoutes.set("ws", wsRoute);
+    // One runtime owner for external channels (provisioning §5): boot
+    // reconcile and every tool-driven mutation run the SAME diff — any
+    // declared ChannelInstance shadows env channel config entirely (§8.1).
+    const webhookHandlers = new Map<string, (request: Request) => Promise<Response>>();
+    const supervisor = createChannelSupervisor({
+      desired: () => desiredChannels(config),
+      build: (component) => component.build(routingHandler),
+      grant: registerTrustedChannelGrant,
+      deliveryRoutes,
+      webhookHandlers,
+      traceId: newTraceId,
+    });
+    channelSupervisor = supervisor;
     gateway = createResidentGateway(
       deliver,
       actors.length === 0
@@ -567,7 +576,10 @@ export async function startOpenOmni(options: StartOptions = {}) {
     // kernel's deliverWake is the single owner of wake-failure reporting.
     wakeDelivery.arm((wake) => residentDeliver(delegationWakeDelivery(wake)).then(() => undefined));
 
-    await mountChannelStages(composer, builtChannels, deliveryRoutes, recoveryTraceId);
+    await composer.mount("channels", async (ctx) => {
+      ctx.effect(() => supervisor.stopAll());
+      await supervisor.reconcile();
+    });
 
     wsHandler = new WebSocketHandler(
       routingHandler,
@@ -579,7 +591,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       hostname: config.host,
       port: config.wsPort,
       websocket: wsHandler.ws,
-      fetch: createHttpRoutes(wsHandler, githubWebhookHandler),
+      fetch: createHttpRoutes(wsHandler, () => webhookHandlers.get("github")),
     });
 
     if (server.port === undefined) throw new Error("OpenOmni ws server did not bind a TCP port");
@@ -597,7 +609,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       port: boundPort,
       // The boot's honest channel record: where config came from and why each
       // declared row did or did not mount (provision_status reads this later).
-      channels: { source: channelSelection.source, statuses: channelSelection.statuses },
+      channels: { source: liveSupervisor().source(), statuses: liveSupervisor().status() },
       // Shutdown is the same reverse-order release boot rollback uses: the
       // composer owns the sequence, so a new stage cannot leak by forgetting
       // a line here.

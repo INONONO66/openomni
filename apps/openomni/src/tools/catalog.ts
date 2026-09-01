@@ -43,6 +43,23 @@ import { llmToolExecutor, llmToolSpec } from "./llm";
 import { memoryToolExecutor, memoryToolSpec } from "./memory";
 import type { MachinesPort } from "./machines";
 import { machinesToolExecutor, machinesToolSpec } from "./machines";
+import type { ProvisionPort } from "./provision";
+import {
+  channelDeclareToolExecutor,
+  channelDeclareToolSpec,
+  channelDisableToolExecutor,
+  channelDisableToolSpec,
+  channelEnableToolExecutor,
+  channelEnableToolSpec,
+  personDeclareToolExecutor,
+  personDeclareToolSpec,
+  personRemoveToolExecutor,
+  personRemoveToolSpec,
+  provisionStatusToolExecutor,
+  provisionStatusToolSpec,
+  secretRotateToolExecutor,
+  secretRotateToolSpec,
+} from "./provision";
 import type { CellPorts } from "./run-code";
 import { runCodeToolExecutor, runCodeToolSpec } from "./run-code";
 import type { CompletionPort } from "../work-item/completion";
@@ -64,6 +81,7 @@ export interface CatalogPorts {
   readonly workItems?: CompletionPort;
   readonly llm?: LlmPort;
   readonly artifacts?: ArtifactsPort;
+  readonly provisioning?: ProvisionPort;
 }
 
 type ToolRun = CatalogEntry["run"];
@@ -153,6 +171,58 @@ const CATALOG_TOOLS: readonly CatalogTool[] = [
       ports.approvals === undefined || origin.role !== "resident"
         ? undefined
         : endpointMergeToolExecutor(ports.approvals),
+  },
+  {
+    // Provisioning administration is the Resident's surface (provisioning
+    // §5, §8.5): a delegated worker never edits Persons, channels, or
+    // secrets — the same role gate as the approval lane it consumes.
+    spec: personDeclareToolSpec,
+    wire: (ports, origin) =>
+      ports.provisioning === undefined || origin.role !== "resident"
+        ? undefined
+        : personDeclareToolExecutor(ports.provisioning),
+  },
+  {
+    spec: personRemoveToolSpec,
+    wire: (ports, origin) =>
+      ports.provisioning === undefined || origin.role !== "resident"
+        ? undefined
+        : personRemoveToolExecutor(ports.provisioning),
+  },
+  {
+    spec: channelDeclareToolSpec,
+    wire: (ports, origin) =>
+      ports.provisioning === undefined || origin.role !== "resident"
+        ? undefined
+        : channelDeclareToolExecutor(ports.provisioning),
+  },
+  {
+    spec: channelEnableToolSpec,
+    wire: (ports, origin) =>
+      ports.provisioning === undefined || origin.role !== "resident"
+        ? undefined
+        : channelEnableToolExecutor(ports.provisioning),
+  },
+  {
+    spec: channelDisableToolSpec,
+    wire: (ports, origin) =>
+      ports.provisioning === undefined || origin.role !== "resident"
+        ? undefined
+        : channelDisableToolExecutor(ports.provisioning),
+  },
+  {
+    spec: secretRotateToolSpec,
+    wire: (ports, origin) =>
+      ports.provisioning === undefined || origin.role !== "resident"
+        ? undefined
+        : secretRotateToolExecutor(ports.provisioning),
+  },
+  {
+    spec: provisionStatusToolSpec,
+    wire: (ports, origin) =>
+      ports.provisioning === undefined || origin.role !== "resident"
+        ? undefined
+        : provisionStatusToolExecutor(ports.provisioning),
   },
   {
     spec: runCodeToolSpec,

@@ -1,13 +1,8 @@
 import { homedir } from "node:os";
 import { ActorRegistry, ChannelInstanceStore, PersonStore, SecretStore, Vault } from "@openomni/ledger";
-import {
-  type ChannelComponent,
-  type CredentialReader,
-  type DeclaredChannelStatus,
-  channelProfile,
-  declaredChannelProfile,
-} from "../channels";
+import { type CredentialReader, channelProfile, declaredChannelProfile } from "../channels";
 import type { OpenOmniConfig } from "../config";
+import type { DesiredChannels } from "./supervisor";
 import { type KekResolution, resolveKek } from "./vault-key";
 
 /**
@@ -36,25 +31,48 @@ export function vaultCredentialReader(resolution: KekResolution): CredentialRead
   };
 }
 
-export interface ChannelProfileSelection {
-  /** `declared` iff at least one ChannelInstance row exists — env config is shadowed then. */
-  readonly source: "declared" | "env";
-  readonly rows: ChannelComponent[];
-  readonly statuses: DeclaredChannelStatus[];
-}
-
-export function selectChannelProfile(
+/**
+ * What the supervisor should be running right now (`declared` iff at least
+ * one ChannelInstance row exists — env config is shadowed then, §8.1). The
+ * bounce key folds the declaration revision with the secret's rotation epoch,
+ * so `channel_declare` edits and `secret_rotate` both bounce exactly the
+ * stages they touch (§8.7) while everything else keeps running.
+ */
+export function desiredChannels(
   config: OpenOmniConfig,
   env: Record<string, string | undefined> = process.env,
   home: string = homedir(),
-): ChannelProfileSelection {
+): DesiredChannels {
   const instances = ChannelInstanceStore.list();
   if (instances.length === 0) {
-    return { source: "env", rows: channelProfile(config), statuses: [] };
+    return {
+      source: "env",
+      rows: channelProfile(config).map((component) => ({
+        instanceId: `env:${component.id}`,
+        key: "env",
+        component,
+      })),
+      statuses: [],
+    };
   }
   const reader = vaultCredentialReader(resolveKek(env, home));
   const { rows, statuses } = declaredChannelProfile(instances, reader);
-  return { source: "declared", rows, statuses };
+  const byId = new Map(instances.map((instance) => [instance.id, instance]));
+  return {
+    source: "declared",
+    rows: rows.map((row) => {
+      const instance = byId.get(row.instanceId);
+      const secret =
+        instance?.credentialRef === undefined ? undefined : SecretStore.get(instance.credentialRef);
+      const rotation = secret?.rotatedAt ?? secret?.createdAt ?? 0;
+      return {
+        instanceId: row.instanceId,
+        key: `${instance?.revision ?? 0}:${rotation}`,
+        component: row.component,
+      };
+    }),
+    statuses,
+  };
 }
 
 /**

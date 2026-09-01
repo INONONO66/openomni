@@ -39,7 +39,26 @@ const MergeSubject = z
   })
   .strict();
 
-export const Subject = z.discriminatedUnion("kind", [PromotionSubject, MergeSubject]);
+/**
+ * A Person-manifest mutation the Owner must see whole (provisioning §8.5/§8.6):
+ * tier raises above collaborator and ANY change to the owner Person route
+ * here. The digest pins the exact manifest the Owner approved — the act
+ * executor recomputes it, so an edited manifest cannot ride an old consent.
+ */
+const PersonMutationSubject = z
+  .object({
+    kind: z.literal("person_mutation"),
+    personId: z.string().min(1),
+    /** sha256 hex of the canonical manifest JSON the Owner approved. */
+    manifestDigest: z.string().regex(/^[0-9a-f]{64}$/),
+  })
+  .strict();
+
+export const Subject = z.discriminatedUnion("kind", [
+  PromotionSubject,
+  MergeSubject,
+  PersonMutationSubject,
+]);
 export type Subject = z.infer<typeof Subject>;
 
 const RecordBase = z

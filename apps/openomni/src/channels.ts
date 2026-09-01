@@ -187,6 +187,29 @@ function isRegisteredProvider(provider: string): provider is keyof typeof Channe
 }
 
 /**
+ * The pre-persist credential gate for `channel_declare`/`secret_rotate`
+ * (docs/provisioning-and-providers.md §5): the payload must parse under the
+ * provider's credential schema BEFORE any row lands — an invalid credential
+ * is a typed refusal string, and nothing is sealed or mounted.
+ */
+export function validateProviderCredential(
+  provider: string,
+  payload: Record<string, string>,
+): string | undefined {
+  if (!isRegisteredProvider(provider)) {
+    return `unknown provider ${provider}`;
+  }
+  const parsed = CredentialSchemas[provider].safeParse(payload);
+  return parsed.success ? undefined : parsed.error.message;
+}
+
+/** A declaration the profile could mount: the instance it came from plus its built row. */
+export interface DeclaredChannelRow {
+  readonly instanceId: string;
+  readonly component: ChannelComponent;
+}
+
+/**
  * The declared path (docs/provisioning-and-providers.md §8.1): one row per
  * ChannelInstance declaration, credentials opened through the vault seam.
  * Fail-closed per row — a declaration that cannot mount is a status, never a
@@ -197,8 +220,8 @@ export function declaredChannelProfile(
   instances: readonly Provisioning.ChannelInstance[],
   readCredential: CredentialReader,
   providers: typeof ChannelProviders = ChannelProviders,
-): { rows: ChannelComponent[]; statuses: DeclaredChannelStatus[] } {
-  const rows: ChannelComponent[] = [];
+): { rows: DeclaredChannelRow[]; statuses: DeclaredChannelStatus[] } {
+  const rows: DeclaredChannelRow[] = [];
   const statuses: DeclaredChannelStatus[] = [];
   const record = (
     instance: Provisioning.ChannelInstance,
@@ -237,7 +260,7 @@ export function declaredChannelProfile(
       continue;
     }
     record(instance, "ready");
-    rows.push(row);
+    rows.push({ instanceId: instance.id, component: row });
   }
 
   return { rows, statuses };
