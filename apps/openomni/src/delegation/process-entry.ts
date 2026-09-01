@@ -9,6 +9,7 @@ import { createInlineWorkerRunner } from "./worker-loop";
 export const ProcessWorkerRequest = z
   .object({
     delegationId: z.string().min(1),
+    workerRunId: z.string().min(1).optional(),
     operation: Delegation.Operation,
     instruction: z.string().min(1),
     acceptanceCriteria: z.array(z.string()),
@@ -105,6 +106,7 @@ function processWorkerRun(
   kernel = createChildKernel(runner);
   return runner({
     delegationId: request.delegationId,
+    ...(request.workerRunId === undefined ? {} : { workerRunId: request.workerRunId }),
     operation: request.operation,
     instruction: request.instruction,
     acceptanceCriteria: request.acceptanceCriteria,

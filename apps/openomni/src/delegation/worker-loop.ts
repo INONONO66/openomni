@@ -46,10 +46,13 @@ export function createInlineWorkerRunner(options: WorkerLoopOptions): InlineWork
     // once — a question is answered, never nannied.
     let tokens = 0;
     let state: DriveState = initialDriveState();
+    let firstRun = true;
     for (;;) {
-      // Each driven run is its own run identity so telemetry never conflates
-      // two agent runs under one runId.
-      const runId = crypto.randomUUID();
+      // The initial run identity is allocated during admission and recorded
+      // on the commissioned WorkItem. Driven follow-ups remain distinct runs
+      // for telemetry, while the attempt remains correlated to its first run.
+      const runId = firstRun && input.workerRunId !== undefined ? input.workerRunId : crypto.randomUUID();
+      firstRun = false;
       const observation = observeComponent({
         traceId,
         sessionId,

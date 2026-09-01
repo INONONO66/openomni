@@ -6,6 +6,8 @@ import type { DelegationDriver, DriverOutcome, DriverReport } from "./kernel";
 export type InlineWorkerRunner = (
   input: {
     readonly delegationId: string;
+    /** Run identity allocated before commissioning, when this is an assigned worker. */
+    readonly workerRunId?: string;
     readonly operation: Delegation.Operation;
     readonly instruction: string;
     readonly acceptanceCriteria: readonly string[];
@@ -31,6 +33,7 @@ export function createInlineDriver(run: InlineWorkerRunner): DelegationDriver {
       report?.delivered();
       const output = await run({
         delegationId: handle.delegationId,
+        ...(admitted.workerRunId === undefined ? {} : { workerRunId: admitted.workerRunId }),
         operation: admitted.request.operation,
         instruction: admitted.request.payload.text,
         acceptanceCriteria: admitted.request.acceptanceCriteria ?? [],

@@ -24,6 +24,8 @@ export interface WorkItemLinkage {
 
 interface OpenAssignInput {
   readonly delegationId: string;
+  /** The worker run identity allocated before the WorkItem assignment. */
+  readonly workerRunId?: string;
   readonly transport: Delegation.Transport;
   readonly instruction: string;
   readonly acceptanceCriteria: readonly string[];
@@ -93,7 +95,7 @@ export function createWorkItemLinkage(options: WorkItemLinkageOptions): WorkItem
       workItemId,
       {
         executorKind: executorKindOf(input.transport),
-        workerRunId: input.delegationId,
+        workerRunId: input.workerRunId ?? input.delegationId,
         workSessionId: input.sessionId,
       },
       traceId,
@@ -165,9 +167,13 @@ export function createWorkItemLinkage(options: WorkItemLinkageOptions): WorkItem
       },
       traceId,
     );
+    // The assignment is the source of truth for the run correlation. Older
+    // records fall back to delegationId for compatibility with pre-correlation
+    // rows; new process assignments carry the actual worker-loop run UUID.
+    const workerRunId = item.workerRunId ?? record.delegationId;
     await WorkItemAttemptRun.finish(
       record.origin.sessionId,
-      record.delegationId,
+      workerRunId,
       Delegation.settlementToAttemptOutcome(settlement.status),
       traceId,
       {

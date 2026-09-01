@@ -538,6 +538,10 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
     }
     const now = options.now();
     const delegationId = options.newDelegationId();
+    // Process workers need a real run identity before their WorkItem attempt
+    // is commissioned; the worker loop consumes this as its first run ID.
+    const workerRunId =
+      candidate !== undefined && origin.role === "resident" ? crypto.randomUUID() : undefined;
     const parentDelegationId = origin.parentDelegationId;
     const parent = parentDelegationId === undefined ? undefined : store.get(parentDelegationId);
     const rootDelegationId = parent?.rootDelegationId ?? delegationId;
@@ -550,6 +554,7 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
     const decision = admit(candidate, origin, now, limits, {
       delegationId,
       rootDelegationId,
+      ...(workerRunId === undefined ? {} : { workerRunId }),
       ...(parent === undefined ? {} : { parent }),
       ...(parentDelegationId !== undefined && parent === undefined ? { parentMissing: true } : {}),
       openFanout: store.countOpenByRoot(rootDelegationId),
@@ -596,6 +601,7 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
       try {
         workItemId = await options.workItems.openAssign({
           delegationId,
+          ...(decision.workerRunId === undefined ? {} : { workerRunId: decision.workerRunId }),
           transport: decision.transport,
           instruction: decision.request.payload.text,
           acceptanceCriteria: decision.request.acceptanceCriteria ?? [],

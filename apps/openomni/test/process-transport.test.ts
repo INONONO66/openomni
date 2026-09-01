@@ -345,6 +345,7 @@ kernel = createChildKernel(runner);
 await serveProcessWorker(line, (out) => console.log(out), (request) =>
   runner({
     delegationId: request.delegationId,
+    workerRunId: request.workerRunId,
     operation: request.operation,
     instruction: request.instruction,
     acceptanceCriteria: request.acceptanceCriteria,
@@ -382,6 +383,9 @@ test("an assign rides the real wire: parent driver, spawned child, drive loop, u
   if ("refused" in result) throw new Error(result.refused);
   const workItemId = DelegationStore.get("d-wire-drive")?.workItemId ?? "";
   expect(workItemId).not.toBe("");
+  const commissioned = await WorkItemStore.get(workItemId);
+  expect(commissioned?.workerRunId).toBeDefined();
+  expect(commissioned?.workerRunId).not.toBe("d-wire-drive");
   // Subscribe after admission, correlated to THIS work item: attempt
   // ALLOCATION also publishes an Updated event whose fields clear
   // `attemptTerminal` — only the post-settlement closure event counts.

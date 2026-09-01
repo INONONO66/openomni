@@ -68,6 +68,7 @@ export function createProcessDriver(options: ProcessDriverOptions): DelegationDr
       try {
         const request: ProcessWorkerRequest = {
           delegationId: handle.delegationId,
+          ...(admitted.workerRunId === undefined ? {} : { workerRunId: admitted.workerRunId }),
           operation: admitted.request.operation,
           instruction: admitted.request.payload.text,
           acceptanceCriteria: admitted.request.acceptanceCriteria ?? [],
