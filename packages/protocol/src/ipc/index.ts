@@ -65,6 +65,16 @@ const methods = {
     params: Machine.ToolCall,
     result: Machine.ToolCallResult,
   },
+  /**
+   * Machine host → machine daemon: one read-only filesystem op against a named
+   * export. The host has already gated attachment, the `fs.read` capability,
+   * and the effective-export set; the daemon re-checks its own offer and owns
+   * path confinement, because only it knows where the export really lives.
+   */
+  [Machine.WireMethod.FsOp]: {
+    params: Machine.FsRequest,
+    result: Machine.FsResult,
+  },
 };
 
 export namespace Ipc {
