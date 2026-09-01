@@ -30,10 +30,9 @@ export { canonicalDigest };
 export const AttemptId = z.string().min(1).max(128);
 export type AttemptId = z.infer<typeof AttemptId>;
 
-/** Mints a fresh opaque attemptId (128 random bits, base36). */
-export function generateAttemptId(): string {
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
+/** Encodes exactly 128 caller-supplied entropy bits in the persisted base36 grammar. */
+export function generateAttemptId(bytes: Uint8Array): string {
+  if (bytes.byteLength !== 16) throw new RangeError("attempt ids require exactly 16 entropy bytes");
   let n = 0n;
   for (const byte of bytes) n = (n << 8n) | BigInt(byte);
   return `attempt_${n.toString(36)}`;

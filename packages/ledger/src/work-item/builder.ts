@@ -1,9 +1,10 @@
 import { WorkItem } from "@openomni/protocol";
+import { newWorkItemId } from "./identity.js";
 import type { CreateWorkItemInput } from "./types.js";
 
 export function buildWorkItem(input: CreateWorkItemInput, now: number): WorkItem.Info {
   const maxAttempts = input.maxAttempts;
-  const hash = WorkItem.generateHash();
+  const hash = newWorkItemId();
   const criteria = input.acceptanceCriteria.map((statement, index) => ({
     id: WorkItem.criterionId(hash, index, statement),
     revision: 1,

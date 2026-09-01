@@ -1,4 +1,5 @@
-import { Deadline, Delegation, NamedError, newTraceId, Operational, type BusEvent } from "@openomni/protocol";
+import { newTraceId } from "@openomni/telemetry";
+import { Deadline, Delegation, NamedError, Operational, type BusEvent } from "@openomni/protocol";
 import { DelegationStore } from "@openomni/ledger";
 import type { WorkItemLinkage } from "./work-item-linkage";
 import { delegationTraceId } from "./trace";

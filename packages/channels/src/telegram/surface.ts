@@ -1,5 +1,5 @@
+import { newTraceId } from "../support/trace";
 import { type Channel, Operational, PolicyDecision } from "@openomni/protocol";
-import { newTraceId } from "@openomni/protocol";
 import { Dedupe, DedupeWindow } from "../support/dedupe";
 import { chunkMarkdown } from "../support/format/chunk";
 import { renderTelegramMarkdown } from "../support/format/telegram";

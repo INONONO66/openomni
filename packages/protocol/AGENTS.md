@@ -29,7 +29,7 @@ src/
 ├── storage/              # Storage namespace: sub-adapter interface contracts (single file)
 ├── token/                # Token usage contracts
 ├── tool/                 # Tool.Spec / Call / Result / State
-├── trace/                # TraceContext schema and newTraceId()
+├── trace/                # TraceContext contract and pure UUID-to-trace-id codec
 ├── transcript/           # Transcript facts and pure fold
 ├── wait/                 # Wait schemas, events, matching, and pure folds
 └── work-item/            # WorkItem schemas, attempt identity, completion admission, events, status, and linkage
@@ -48,7 +48,7 @@ Namespace additions are gated: `script/lint-tools.ts` (#467) enforces a grandfat
 - **WorkItem namespace**: `work-item/index.ts` is the public facade. `work-item/schemas.ts` defines `WorkItem.Info`; `attempt.ts` owns attempt and environment-fingerprint contracts; `completion-admission.ts` defines stable criteria, claims, observations, requests, admissions, and terminal receipts. Rows parse through `WorkItem.Info` directly. `work-item/events.ts` preserves the shipped `Completed` meaning and carries distinct request/admission/CompletedV2 descriptors; `status.ts`, `hash.ts`, and `terminal-linkage.ts` own pure lifecycle derivation and linkage validation.
 - **IPC contracts**: `ipc/` describes the generic wire envelopes and the machine wire method schemas only. Process delegation lifecycle lives in the product app.
 - **AppConnector namespace**: `app-connector/index.ts` defines installed-app connector schema contracts. Runtime install, consent, and process execution live above protocol.
-- **Trace contract**: `trace/index.ts` defines `TraceContext` and the shared `newTraceId()` origin helper.
+- **Trace contract**: `trace/index.ts` defines `TraceContext` and the pure `traceIdFromUuid()` format codec. Runtime entropy belongs to telemetry or the consuming driver package.
 
 ## CONTRACT BOUNDARY
 

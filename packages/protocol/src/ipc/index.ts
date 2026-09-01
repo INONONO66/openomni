@@ -79,8 +79,12 @@ export namespace Ipc {
 
   const version = 2;
 
-  export function createRequest(method: string, params?: Record<string, unknown>): Request {
-    return { v: version, type: "request", id: crypto.randomUUID(), method, params };
+  export function createRequest(
+    id: string,
+    method: string,
+    params?: Record<string, unknown>,
+  ): Request {
+    return { v: version, type: "request", id, method, params };
   }
 
   export function createResponse(id: string, result: unknown): Response {

@@ -1,6 +1,7 @@
+import { newTraceId } from "@openomni/telemetry";
 import type { Storage } from "@openomni/ledger";
 import { WorkItemStore } from "@openomni/ledger";
-import { newTraceId, WorkItem } from "@openomni/protocol";
+import { WorkItem } from "@openomni/protocol";
 import { validateCompletionTerminalLinkage } from "./terminal-linkage";
 
 /**
