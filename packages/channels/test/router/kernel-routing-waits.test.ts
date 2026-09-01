@@ -156,6 +156,10 @@ describe("GatewayRouter durable wait routing", () => {
     expect(error).toBeInstanceOf(IngressRoutingError);
     expect((error as IngressRoutingError).code).toBe("wait_reply_rejected");
     expect(error?.message).toBe("wait reply rejected: duplicate_reply");
+    // The typed rejection carries the routing decision that produced it.
+    expect((error as IngressRoutingError).decision).toMatchObject({
+      outcome: "route",
+    });
     const record = WaitStore.get("wait-duplicate");
     expect(record?.replies).toHaveLength(1);
   });
