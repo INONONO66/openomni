@@ -22,8 +22,27 @@ function rateLimitError(headers?: Record<string, string>) {
   });
 }
 
+/**
+ * The backoff ladder is jittered by `1 - random*RETRY_JITTER_RATIO`, so every
+ * assertion about a LADDER delay pins the draw instead of allowing a range: a
+ * draw of 0 is the full ladder value, which is exactly what these cases are
+ * about. Header-directed delays are never jittered and need no pin.
+ */
+function withoutJitter<T>(fn: () => T): T {
+  const random = vi.spyOn(Math, "random").mockReturnValue(0);
+  try {
+    return fn();
+  } finally {
+    random.mockRestore();
+  }
+}
+
+function decideWithoutJitter(attempt: number, error: unknown): Retry.Decision {
+  return withoutJitter(() => Retry.decide(attempt, error));
+}
+
 function delayOf(attempt: number, error: unknown): number {
-  const decision = Retry.decide(attempt, error);
+  const decision = decideWithoutJitter(attempt, error);
   if (!decision.retry) throw new Error(`expected a retry decision, got ${decision.reason}`);
   return decision.delayMs;
 }
@@ -347,7 +366,7 @@ describe("Retry.decide ratelimit-reset parsing (#532 candidate 3)", () => {
   });
 
   test("x-ratelimit-reset duration with compound units parses", () => {
-    expect(Retry.decide(1, rateLimitError({ "x-ratelimit-reset-tokens": "1m30s" }))).toEqual({
+    expect(decideWithoutJitter(1, rateLimitError({ "x-ratelimit-reset-tokens": "1m30s" }))).toEqual({
       retry: true,
       reason: "rate_limit",
       delayMs: Retry.RETRY_INITIAL_DELAY,
@@ -392,12 +411,12 @@ describe("Retry.decide (#532 candidate 3)", () => {
   });
 
   test("headless retry keeps the exponential backoff and its 30s cap", () => {
-    expect(Retry.decide(1, rateLimitError())).toEqual({
+    expect(decideWithoutJitter(1, rateLimitError())).toEqual({
       retry: true,
       reason: "rate_limit",
       delayMs: Retry.RETRY_INITIAL_DELAY,
     });
-    const late = Retry.decide(10, rateLimitError());
+    const late = decideWithoutJitter(10, rateLimitError());
     if (late.retry) expect(late.delayMs).toBe(Retry.RETRY_MAX_DELAY_NO_HEADERS);
   });
 });
@@ -420,8 +439,8 @@ describe("Retry.decide cap semantics for inferred resets", () => {
       expected: { retry: true, reason: "rate_limit", delayMs: Retry.RETRY_INITIAL_DELAY },
     },
   ])("$name", ({ header, expected }) => {
-    expect(Retry.decide(1, rateLimitError({ "x-ratelimit-reset-requests": header }))).toEqual(
-      expected,
-    );
+    expect(
+      decideWithoutJitter(1, rateLimitError({ "x-ratelimit-reset-requests": header })),
+    ).toEqual(expected);
   });
 });

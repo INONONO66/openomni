@@ -65,8 +65,13 @@ export namespace Retry {
    * switch — reasons are branched on as literals, never as prose. Human
    * prose lives only in Decision.detail.
    */
-  export type Reason = "rate_limit" | "overloaded" | "server_error" | "non_retryable";
-  export type RetryableReason = Exclude<Reason, "non_retryable">;
+  export type Reason =
+    | "rate_limit"
+    | "overloaded"
+    | "server_error"
+    | "billing"
+    | "non_retryable";
+  export type RetryableReason = Exclude<Reason, "non_retryable" | "billing">;
 
   export type Decision =
     | {
@@ -86,6 +91,16 @@ export namespace Retry {
     const reason = classify(error);
     if (reason === "non_retryable") {
       return { retry: false, reason };
+    }
+    // Terminal before any delay is considered: a spent balance is not a wait,
+    // so neither a retry-after header nor the transport-streak probe applies.
+    if (reason === "billing") {
+      return {
+        retry: false,
+        reason,
+        detail:
+          "the account's quota or billing balance is exhausted — retrying cannot restore it; top up or raise the limit",
+      };
     }
     if (instantFailureStreak >= INSTANT_FAILURE_STREAK_LIMIT) {
       return {
@@ -118,11 +133,26 @@ export namespace Retry {
     return { retry: true, reason, delayMs: backoffDelayMs(attempt) };
   }
 
+  /**
+   * How much of a ladder delay jitter may subtract. Full jitter (down to 0)
+   * would let a retry land on the same tick as the failure it is backing off
+   * from; a quarter is enough to break the fleet-wide stampede that identical
+   * exponential delays produce, while keeping the backoff's shape.
+   */
+  export const RETRY_JITTER_RATIO = 0.25;
+
+  /**
+   * Jitter applies to the ladder only, never to a server-directed wait: a
+   * provider that named a delay gets exactly that delay.
+   */
   function backoffDelayMs(attempt: number): number {
-    return Math.min(
+    const ladder = Math.min(
       RETRY_INITIAL_DELAY * RETRY_BACKOFF_FACTOR ** (attempt - 1),
       RETRY_MAX_DELAY_NO_HEADERS,
     );
+    // Rounded: the delay is a millisecond wait and a published `backoffMs`,
+    // and a fractional tail is noise in both.
+    return Math.round(ladder * (1 - Math.random() * RETRY_JITTER_RATIO));
   }
 
   /** Provider-directed delay retained on the terminal typed failure. */
@@ -200,6 +230,16 @@ export namespace Retry {
       return "non_retryable";
     }
 
+    // Balance exhaustion outranks the provider's retryable flag: a 429 whose
+    // body says the quota is spent is not a wait, and burning the ladder on it
+    // only delays the operator's one real remedy.
+    if (
+      isBillingExhaustion(error.data.message) ||
+      isBillingExhaustion(error.data.responseBody)
+    ) {
+      return "billing";
+    }
+
     if (!error.data.isRetryable) {
       return "non_retryable";
     }
@@ -222,6 +262,31 @@ export namespace Retry {
     // x-should-retry, network failures) without a recognizable class — no
     // consumer distinguishes these, so they share the server_error bucket.
     return "server_error";
+  }
+
+  /**
+   * Balance/quota exhaustion, matched on the raw payload rather than on parsed
+   * JSON: providers put it in `error.code` (`insufficient_quota`), in prose
+   * ("You exceeded your current quota"), and in plain-text gateway bodies
+   * alike. Each pattern names a spent account, never a per-minute rate limit —
+   * `rate limit exceeded` and Anthropic's `quota_exhausted` capacity signal do
+   * not match, and stay on their transient paths.
+   */
+  const BILLING_PATTERNS = [
+    "insufficient_quota",
+    "quota exceeded",
+    "out of budget",
+    "billing",
+    "monthly usage limit",
+  ] as const;
+
+  function isBillingExhaustion(payload: string | undefined): boolean {
+    if (!payload) return false;
+    const haystack = payload.toLowerCase();
+    if (BILLING_PATTERNS.some((pattern) => haystack.includes(pattern))) return true;
+    // "exceeded your current quota" / "exceeded your monthly quota": the same
+    // fact with the possessive between the verb and the noun.
+    return /exceeded\s+(?:your|the)\s+[a-z\s]*quota/.test(haystack);
   }
 
   function classifyErrorPayload(payload: string | undefined): RetryableReason | undefined {

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test, vi } from "bun:test";
 import { APIError } from "../../src/error";
 import { Retry } from "../../src/retry";
 
@@ -67,7 +67,11 @@ describe("Retry.decide with an instant-failure streak", () => {
   });
 
   test("a zero streak keeps the existing backoff behavior byte-identical", () => {
+    // Ladder delays are jittered; a pinned zero draw is the full ladder value,
+    // which is the fact this case is about.
+    const random = vi.spyOn(Math, "random").mockReturnValue(0);
     const decision = Retry.decide(1, transportError(), 0);
+    random.mockRestore();
     expect(decision.retry).toBe(true);
     if (decision.retry) {
       expect(decision.delayMs).toBe(Retry.RETRY_INITIAL_DELAY);
