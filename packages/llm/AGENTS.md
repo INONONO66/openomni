@@ -19,7 +19,7 @@ src/
 │   └── index.ts      # Retry.decide / sleep / instant-failure detection; typed finite backoff decisions
 ├── auth/
 │   ├── index.ts      # Auth barrel
-│   └── storage.ts    # Auth get/set/all/withFile; atomic mode-0600 credential writes
+│   └── storage.ts    # Auth get/set/all; atomic mode-0600 credential writes
 ├── provider/
 │   ├── index.ts      # Provider + ModelsDev public namespaces; internal provider helpers stay deep
 │   ├── identity.ts   # clientIdentity() — the single owner of the `pi/<version> (<platform> <kernelRelease>; <arch>)` user-agent

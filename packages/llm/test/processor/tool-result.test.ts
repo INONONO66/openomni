@@ -4,6 +4,7 @@ import type { Message, Tool } from "@openomni/protocol";
 import type { Sink } from "../../src/sink";
 import { Bus } from "@openomni/telemetry";
 import { Processor } from "../../src/processor";
+import type { StreamEvent } from "../../src/processor/stream-events";
 
 function deferred(): { promise: Promise<void>; resolve: () => void } {
   let resolve!: () => void;
@@ -12,6 +13,105 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
   });
   return { promise, resolve };
 }
+
+type ToolProjectionCase = {
+  readonly name: string;
+  readonly chunks: readonly StreamEvent[];
+  readonly toolNames?: ReadonlyMap<string, string>;
+  readonly expectedCalls?: Tool.Call[];
+  readonly expectedResults?: number;
+  readonly expectedResult?: Partial<Tool.Result>;
+  readonly expectedPart: {
+    readonly callID: string;
+    readonly tool?: string;
+    readonly state: Record<string, unknown>;
+  };
+};
+
+const toolProjectionCases: ToolProjectionCase[] = [
+  {
+    name: "restores dotted internal names through the reverse map",
+    toolNames: new Map([["message_send", "message.send"]]),
+    chunks: [
+      {
+        type: "tool-call",
+        toolCallId: "call-send",
+        toolName: "message_send",
+        input: { text: "hi" },
+      },
+      { type: "tool-result", toolCallId: "call-send", toolName: "message_send", output: "sent" },
+      { type: "finish" },
+    ],
+    expectedCalls: [
+      { id: "call-send", tool: "message.send", input: { text: "hi" } },
+    ],
+    expectedPart: {
+      callID: "call-send",
+      tool: "message.send",
+      state: { status: "completed", title: "message.send" },
+    },
+  },
+  {
+    name: "synthesizes an error part for unmatched results",
+    chunks: [
+      {
+        type: "tool-result",
+        toolCallId: "forged-call",
+        toolName: "weather",
+        output: "forged",
+      },
+      { type: "finish" },
+    ],
+    expectedCalls: [],
+    expectedResults: 0,
+    expectedPart: {
+      callID: "forged-call",
+      state: { status: "error", error: "tool result for unknown call: forged" },
+    },
+  },
+  {
+    name: "projects tool-error parts as failed results",
+    chunks: [
+      {
+        type: "tool-call",
+        toolCallId: "call-weather",
+        toolName: "weather",
+        input: { city: "Seoul" },
+      },
+      { type: "tool-error", toolCallId: "call-weather", error: "network down" },
+      { type: "finish" },
+    ],
+    expectedResults: 1,
+    expectedResult: { toolCallId: "call-weather", output: "network down", isError: true },
+    expectedPart: {
+      callID: "call-weather",
+      state: { status: "error", error: "network down" },
+    },
+  },
+  {
+    name: "keeps original call input when a result supplies different input",
+    chunks: [
+      {
+        type: "tool-call",
+        toolCallId: "call-weather",
+        toolName: "weather",
+        input: { city: "Seoul" },
+      },
+      {
+        type: "tool-result",
+        toolCallId: "call-weather",
+        toolName: "weather",
+        input: { city: "Tampered" },
+        output: "sunny",
+      },
+      { type: "finish" },
+    ],
+    expectedPart: {
+      callID: "call-weather",
+      state: { status: "completed", input: { city: "Seoul" }, output: "sunny" },
+    },
+  },
+];
 
 describe("Processor tool result projection", () => {
   afterEach(() => {
@@ -91,196 +191,47 @@ describe("Processor tool result projection", () => {
     expect(state.time.end).toBeGreaterThanOrEqual(state.time.start);
   });
 
-  test("restores the dotted internal name on the recorded part via the reverse map", async () => {
-    // W4: the provider echoes the sanitized WIRE name on stream events, so
-    // without the reverse map the recorded ToolPart.tool would drift to
-    // "message_send". The map keeps the transcript on the native vocabulary.
-    const toolCalls: Tool.Call[] = [];
-    const toolResults: Tool.Result[] = [];
-    const messages: Message.WithParts[] = [];
-    const sink: Sink = {
-      onMessage: (message) => messages.push(message),
-      onToolCall: (call) => toolCalls.push(call),
-      onToolResult: (result) => toolResults.push(result),
-    };
+  test.each(toolProjectionCases)(
+    "$name",
+    async ({ chunks, toolNames, expectedCalls, expectedResults, expectedResult, expectedPart }) => {
+      const toolCalls: Tool.Call[] = [];
+      const toolResults: Tool.Result[] = [];
+      const messages: Message.WithParts[] = [];
+      const sink: Sink = {
+        onMessage: (message) => messages.push(message),
+        onToolCall: (call) => toolCalls.push(call),
+        onToolResult: (result) => toolResults.push(result),
+      };
 
-    const processor = Processor.create({
-      assistantMessage: buildAssistantMessage("msg-tool-result", "session-tool-result", "parent-tool-result"),
-      sessionID: "session-tool-result",
-      model,
-      abort: new AbortController().signal,
-      sink,
-      events: Bus,
-      toolNames: new Map([["message_send", "message.send"]]),
-      trace: { traceId: "trace-processor-test", sessionId: "session-tool-result" },
-      createStream: async () => ({
-        fullStream: (async function* () {
-          yield {
-            type: "tool-call",
-            toolCallId: "call-send",
-            toolName: "message_send",
-            input: { text: "hi" },
-          };
-          yield {
-            type: "tool-result",
-            toolCallId: "call-send",
-            toolName: "message_send",
-            output: "sent",
-          };
-          yield { type: "finish" };
-        })(),
-      }),
-    });
+      const processor = Processor.create({
+        assistantMessage: buildAssistantMessage(
+          "msg-tool-result",
+          "session-tool-result",
+          "parent-tool-result",
+        ),
+        sessionID: "session-tool-result",
+        model,
+        abort: new AbortController().signal,
+        sink,
+        events: Bus,
+        toolNames,
+        trace: { traceId: "trace-processor-test", sessionId: "session-tool-result" },
+        createStream: async () => ({
+          fullStream: (async function* () {
+            yield* chunks;
+          })(),
+        }),
+      });
 
-    await processor.process({ system: "" });
+      await processor.process({ system: "" });
 
-    expect(toolCalls[0]?.tool).toBe("message.send");
-    const toolPart = messages.at(-1)?.parts.find((part) => part.type === "tool");
-    expect(toolPart).toMatchObject({
-      callID: "call-send",
-      tool: "message.send",
-      state: { status: "completed", title: "message.send" },
-    });
-  });
-
-  test("synthesizes an error part for unmatched AI SDK tool-result stream parts", async () => {
-    const toolCalls: Tool.Call[] = [];
-    const toolResults: Tool.Result[] = [];
-    const messages: Message.WithParts[] = [];
-    const sink: Sink = {
-      onMessage: (message) => messages.push(message),
-      onToolCall: (call) => toolCalls.push(call),
-      onToolResult: (result) => toolResults.push(result),
-    };
-
-    const processor = Processor.create({
-      assistantMessage: buildAssistantMessage("msg-tool-result", "session-tool-result", "parent-tool-result"),
-      sessionID: "session-tool-result",
-      model,
-      abort: new AbortController().signal,
-      sink,
-      events: Bus,
-      trace: { traceId: "trace-processor-test", sessionId: "session-tool-result" },
-      createStream: async () => ({
-        fullStream: (async function* () {
-          yield {
-            type: "tool-result",
-            toolCallId: "forged-call",
-            toolName: "weather",
-            output: "forged",
-          };
-          yield { type: "finish" };
-        })(),
-      }),
-    });
-
-    await processor.process({ system: "" });
-
-    // #532-6: no Tool.Call/Tool.Result is emitted (no call to correlate),
-    // but the anomaly is recorded as an error tool part.
-    expect(toolCalls).toEqual([]);
-    expect(toolResults).toEqual([]);
-    const toolPart = messages.at(-1)?.parts.find((part) => part.type === "tool");
-    expect(toolPart).toMatchObject({
-      callID: "forged-call",
-      state: { status: "error", error: "tool result for unknown call: forged" },
-    });
-  });
-
-  test("projects AI SDK tool-error stream parts as failed tool results", async () => {
-    const toolResults: Tool.Result[] = [];
-    const messages: Message.WithParts[] = [];
-    const sink: Sink = {
-      onMessage: (message) => messages.push(message),
-      onToolCall: () => undefined,
-      onToolResult: (result) => toolResults.push(result),
-    };
-
-    const processor = Processor.create({
-      assistantMessage: buildAssistantMessage("msg-tool-result", "session-tool-result", "parent-tool-result"),
-      sessionID: "session-tool-result",
-      model,
-      abort: new AbortController().signal,
-      sink,
-      events: Bus,
-      trace: { traceId: "trace-processor-test", sessionId: "session-tool-result" },
-      createStream: async () => ({
-        fullStream: (async function* () {
-          yield {
-            type: "tool-call",
-            toolCallId: "call-weather",
-            toolName: "weather",
-            input: { city: "Seoul" },
-          };
-          yield {
-            type: "tool-error",
-            toolCallId: "call-weather",
-            error: "network down",
-          };
-          yield { type: "finish" };
-        })(),
-      }),
-    });
-
-    await processor.process({ system: "" });
-
-    expect(toolResults).toHaveLength(1);
-    expect(toolResults[0]).toMatchObject({
-      toolCallId: "call-weather",
-      output: "network down",
-      isError: true,
-    });
-    const toolPart = messages.at(-1)?.parts.find((part) => part.type === "tool");
-    expect(toolPart).toMatchObject({
-      callID: "call-weather",
-      state: { status: "error", error: "network down" },
-    });
-  });
-
-  test("keeps original tool-call input when matching tool-result has different input", async () => {
-    const messages: Message.WithParts[] = [];
-    const sink: Sink = {
-      onMessage: (message) => messages.push(message),
-      onToolCall: () => undefined,
-      onToolResult: () => undefined,
-    };
-
-    const processor = Processor.create({
-      assistantMessage: buildAssistantMessage("msg-tool-result", "session-tool-result", "parent-tool-result"),
-      sessionID: "session-tool-result",
-      model,
-      abort: new AbortController().signal,
-      sink,
-      events: Bus,
-      trace: { traceId: "trace-processor-test", sessionId: "session-tool-result" },
-      createStream: async () => ({
-        fullStream: (async function* () {
-          yield {
-            type: "tool-call",
-            toolCallId: "call-weather",
-            toolName: "weather",
-            input: { city: "Seoul" },
-          };
-          yield {
-            type: "tool-result",
-            toolCallId: "call-weather",
-            toolName: "weather",
-            input: { city: "Tampered" },
-            output: "sunny",
-          };
-          yield { type: "finish" };
-        })(),
-      }),
-    });
-
-    await processor.process({ system: "" });
-
-    const toolPart = messages.at(-1)?.parts.find((part) => part.type === "tool");
-    expect(toolPart).toMatchObject({
-      callID: "call-weather",
-      state: { status: "completed", input: { city: "Seoul" }, output: "sunny" },
-    });
-  });
+      if (expectedCalls !== undefined) expect(toolCalls).toEqual(expectedCalls);
+      if (expectedResults !== undefined) expect(toolResults).toHaveLength(expectedResults);
+      if (expectedResult !== undefined) expect(toolResults[0]).toMatchObject(expectedResult);
+      const toolPart = messages.at(-1)?.parts.find((part) => part.type === "tool");
+      expect(toolPart).toMatchObject(expectedPart);
+    },
+  );
 });
 
 describe("Processor tool output normalization", () => {

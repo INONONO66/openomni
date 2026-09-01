@@ -40,6 +40,30 @@ const testModel: Provider.Model = {
   api: { npm: "@ai-sdk/anthropic" },
 };
 
+type ToolExecutionCase = {
+  readonly name: string;
+  readonly result: (call: Tool.Call) => Tool.Result;
+  readonly expected: { readonly output: string; readonly isError?: boolean };
+};
+
+const toolExecutionCases: ToolExecutionCase[] = [
+  {
+    name: "returns successful tool output without projecting sink events",
+    result: (call) => ({ id: "result-1", toolCallId: call.id, output: "tool-output" }),
+    expected: { output: "tool-output" },
+  },
+  {
+    name: "preserves tool execution error state for the SDK",
+    result: (call) => ({
+      id: "result-error",
+      toolCallId: call.id,
+      output: "tool-error",
+      isError: true,
+    }),
+    expected: { output: "tool-error", isError: true },
+  },
+];
+
 describe("run() tool execution ownership", () => {
   let capturedToolCalls: Tool.Call[];
   let capturedToolResults: Tool.Result[];
@@ -65,14 +89,8 @@ describe("run() tool execution ownership", () => {
     aiCapture.__openomniAiStreamArgs = undefined;
   });
 
-  test("does not project tool sink events from AI SDK execute callbacks", async () => {
-    const toolExecutor = mock(async (call: Tool.Call): Promise<Tool.Result> => {
-      return {
-        id: "result-1",
-        toolCallId: call.id,
-        output: "tool-output",
-      };
-    });
+  test.each(toolExecutionCases)("$name", async ({ result, expected }) => {
+    const toolExecutor = mock(async (call: Tool.Call): Promise<Tool.Result> => result(call));
 
     await run(
       {
@@ -109,61 +127,13 @@ describe("run() tool execution ownership", () => {
       { toolCallId: "call-from-sdk" },
     );
 
-    expect(output).toEqual({ output: "tool-output" });
+    expect(output).toEqual(expected);
     expect(toolExecutor).toHaveBeenCalledWith(
       { id: "call-from-sdk", tool: "test_tool", input: { query: "value" } },
       { signal: expect.any(AbortSignal) },
     );
     expect(capturedToolCalls).toEqual([]);
     expect(capturedToolResults).toEqual([]);
-  });
-
-  test("preserves tool execution error state for AI SDK tool results", async () => {
-    const toolExecutor = mock(async (call: Tool.Call): Promise<Tool.Result> => {
-      return {
-        id: "result-error",
-        toolCallId: call.id,
-        output: "tool-error",
-        isError: true,
-      };
-    });
-
-    await run(
-      {
-        trace: TEST_TRACE,
-        events: Bus,
-        messages: [],
-        tools: [
-          {
-            name: "test_tool",
-            description: "A test tool",
-            inputSchema: { type: "object", properties: {} },
-          },
-        ],
-        model: testModel,
-        auth: { type: "api", key: "test-key-run-tool" },
-        toolExecutor,
-      },
-      mockSink,
-    );
-
-    const streamArgs = aiCapture.__openomniAiStreamArgs;
-    const tools = streamArgs?.tools as Record<
-      string,
-      {
-        execute?: (
-          args: Record<string, unknown>,
-          options?: { toolCallId?: string; abortSignal?: AbortSignal },
-        ) => Promise<{ output: string; isError?: boolean }>;
-      }
-    >;
-    expect(tools.test_tool).toBeDefined();
-    const output = await tools.test_tool?.execute?.(
-      { query: "value" },
-      { toolCallId: "call-from-sdk" },
-    );
-
-    expect(output).toEqual({ output: "tool-error", isError: true });
   });
 
   test("SDK invoking the sanitized wire key routes the dotted internal name to the executor", async () => {

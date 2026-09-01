@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeAll, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -214,8 +214,13 @@ describe("run", () => {
 
   test("publishes LlmCall.Events.Failed on error so every Started call terminates", async () => {
     const failures: Array<{ readonly error: string; readonly traceId: string }> = [];
+    let observeFailure!: () => void;
+    const failureObserved = new Promise<void>((resolve) => {
+      observeFailure = resolve;
+    });
     const unsub = Bus.subscribe(LlmCall.Events.Failed, (event) => {
       failures.push(event);
+      observeFailure();
     });
 
     const outcome = await run(
@@ -233,6 +238,7 @@ describe("run", () => {
       },
       mockSink,
     );
+    await failureObserved;
     unsub();
 
     expect(outcome.type).toBe("error");
@@ -247,31 +253,33 @@ describe("run", () => {
   test("does not read stored auth when fallback is disabled", async () => {
     const authFile = join(tmpdir(), `openomni-run-auth-${crypto.randomUUID()}.json`);
 
+    const previousAuthFile = process.env.OPENOMNI_AUTH_FILE;
+    process.env.OPENOMNI_AUTH_FILE = authFile;
     try {
-      await Auth.withFile(authFile, async () => {
-        await Auth.set("stored-auth-provider", testAuth);
+      await Auth.set("stored-auth-provider", testAuth);
 
-        const outcome = await run(
-          {
-            trace: TEST_TRACE,
-            events: Bus,
-            messages: [],
-            tools: [],
-            allowAuthFallback: false,
-            model: {
-              id: "claude-3-haiku",
-              providerID: "stored-auth-provider",
-              name: "Test Model",
-              api: { npm: "@ai-sdk/anthropic" },
-            },
+      const outcome = await run(
+        {
+          trace: TEST_TRACE,
+          events: Bus,
+          messages: [],
+          tools: [],
+          allowAuthFallback: false,
+          model: {
+            id: "claude-3-haiku",
+            providerID: "stored-auth-provider",
+            name: "Test Model",
+            api: { npm: "@ai-sdk/anthropic" },
           },
-          mockSink,
-        );
+        },
+        mockSink,
+      );
 
-        expect(outcome.type).toBe("error");
-        expect(aiCapture.__openomniAiStreamArgs).toBeUndefined();
-      });
+      expect(outcome.type).toBe("error");
+      expect(aiCapture.__openomniAiStreamArgs).toBeUndefined();
     } finally {
+      if (previousAuthFile === undefined) delete process.env.OPENOMNI_AUTH_FILE;
+      else process.env.OPENOMNI_AUTH_FILE = previousAuthFile;
       rmSync(authFile, { force: true });
     }
   });
@@ -423,8 +431,7 @@ describe("run", () => {
    */
   test("reports through the injected sink, not a global bus", async () => {
     const collected = collector();
-    const busSaw: string[] = [];
-    const unsubscribe = Bus.observe((descriptor) => busSaw.push(descriptor.name));
+    const globalPublish = spyOn(Bus, "publish");
 
     try {
       await run(
@@ -438,19 +445,15 @@ describe("run", () => {
         },
         mockSink,
       );
-      await Bun.sleep(0);
-    } finally {
-      unsubscribe();
-    }
 
-    expect(collected.named(LlmCall.Events.Started.name)).toHaveLength(1);
-    // Every `Started` gets a terminal event — the success half of the pair the
-    // failure test covers.
-    expect(collected.named(LlmCall.Events.Completed.name)).toHaveLength(1);
-    // Not filtered to `llm.*`: an `operational.*` record routed back through
-    // the global bus is the same defect, and the filter hid six of the eight
-    // publish sites from this assertion.
-    expect(busSaw).toEqual([]);
+      expect(collected.named(LlmCall.Events.Started.name)).toHaveLength(1);
+      // Every `Started` gets a terminal event — the success half of the pair the
+      // failure test covers.
+      expect(collected.named(LlmCall.Events.Completed.name)).toHaveLength(1);
+      expect(globalPublish).not.toHaveBeenCalled();
+    } finally {
+      globalPublish.mockRestore();
+    }
   });
 
   /**
@@ -459,8 +462,7 @@ describe("run", () => {
    */
   test("reports a failed call through the injected sink too", async () => {
     const collected = collector();
-    const busSaw: string[] = [];
-    const unsubscribe = Bus.observe((descriptor) => busSaw.push(descriptor.name));
+    const globalPublish = spyOn(Bus, "publish");
 
     try {
       const outcome = await run(
@@ -479,14 +481,12 @@ describe("run", () => {
         mockSink,
       );
       expect(outcome.type).toBe("error");
-      await Bun.sleep(0);
+      expect(collected.named(LlmCall.Events.Started.name)).toHaveLength(1);
+      expect(collected.named(LlmCall.Events.Failed.name)).toHaveLength(1);
+      expect(globalPublish).not.toHaveBeenCalled();
     } finally {
-      unsubscribe();
+      globalPublish.mockRestore();
     }
-
-    expect(collected.named(LlmCall.Events.Started.name)).toHaveLength(1);
-    expect(collected.named(LlmCall.Events.Failed.name)).toHaveLength(1);
-    expect(busSaw).toEqual([]);
   });
 
   /**

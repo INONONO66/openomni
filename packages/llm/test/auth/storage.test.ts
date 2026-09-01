@@ -9,9 +9,13 @@ const testAuthRoot = join(tmpdir(), "openomni-auth-storage-");
 async function withTestAuthFile<T>(fn: (filepath: string, dir: string) => Promise<T>): Promise<T> {
   const dir = mkdtempSync(testAuthRoot);
   const filepath = join(dir, "auth.json");
+  const previousAuthFile = process.env.OPENOMNI_AUTH_FILE;
+  process.env.OPENOMNI_AUTH_FILE = filepath;
   try {
-    return await Auth.withFile(filepath, () => fn(filepath, dir));
+    return await fn(filepath, dir);
   } finally {
+    if (previousAuthFile === undefined) delete process.env.OPENOMNI_AUTH_FILE;
+    else process.env.OPENOMNI_AUTH_FILE = previousAuthFile;
     if (existsSync(dir)) rmSync(dir, { recursive: true, force: true });
   }
 }
