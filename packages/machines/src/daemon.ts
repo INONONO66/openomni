@@ -1,10 +1,13 @@
 import { type IpcClient, connectIpcClient, typedCall } from "@openomni/ipc";
 import { Machine } from "@openomni/protocol";
+import { createFsDriver } from "./fs";
 import { PythonKernel } from "./kernel";
 
 export interface MachineDaemonOptions {
   readonly socketPath: string;
   readonly offer: Machine.Offer;
+  /** Daemon-local export roots; absolute paths never cross the wire. */
+  readonly fsExports?: ReadonlyMap<string, string>;
   readonly attachTimeoutMs?: number;
 }
 
@@ -27,6 +30,9 @@ export async function attachMachineDaemon(options: MachineDaemonOptions): Promis
   const offersKernel = options.offer.offeredCapabilities.includes(
     Machine.WellKnownCapability.pythonKernel,
   );
+  const offersFs = options.offer.offeredCapabilities.includes(Machine.WellKnownCapability.fsRead);
+  const offeredExports = new Set((options.offer.exports ?? []).map((entry) => entry.name));
+  const fsOp = createFsDriver(options.fsExports ?? new Map());
   const kernels = new Map<string, PythonKernel>();
   const kernelFor = (tenant: string | undefined): PythonKernel => {
     const key = tenant ?? "default";
@@ -46,13 +52,33 @@ export async function attachMachineDaemon(options: MachineDaemonOptions): Promis
   let client!: IpcClient;
   client = await connectIpcClient(options.socketPath, {
     onRequest: async (method, params, respond) => {
+      if (method === Machine.WireMethod.FsOp) {
+        // The host gate owns normal authorization; the daemon still re-checks
+        // its own offer because the host is across a trust boundary.
+        if (!offersFs) {
+          throw new Error(`${Machine.WellKnownCapability.fsRead} was not offered by this machine`);
+        }
+        const request = Machine.FsRequest.parse(params);
+        if (!offeredExports.has(request.export)) {
+          respond({
+            status: "refused",
+            reason: "export_not_available",
+            message: `export is not available: ${request.export}`,
+          } satisfies Machine.FsResult);
+          return;
+        }
+        respond(await fsOp(request));
+        return;
+      }
       if (method !== Machine.WireMethod.RunCell) {
         throw new Error(`unknown method: ${method}`);
       }
       // The host gate owns this refusal; a daemon that never offered the Python-kernel capability
       // still re-checks because the host is across a trust boundary.
       if (!offersKernel) {
-        throw new Error(`${Machine.WellKnownCapability.pythonKernel} was not offered by this machine`);
+        throw new Error(
+          `${Machine.WellKnownCapability.pythonKernel} was not offered by this machine`,
+        );
       }
       const request = Machine.CellRequest.parse(params);
       respond(
