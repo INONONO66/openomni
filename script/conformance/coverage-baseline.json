@@ -17,7 +17,7 @@
   "packages/ledger": {
     "linesFound": 5341,
     "linesHit": 5169,
-    "pct": 96.78
+    "pct": 97.12
   },
   "packages/llm": {
     "linesFound": 2022,

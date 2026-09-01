@@ -3,6 +3,9 @@ import type { RequestOptions } from "@modelcontextprotocol/sdk/shared/protocol.j
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { McpClient, type McpClientHandle } from "../../../src/runtime/mcp/client";
 
 const TRACE_ID = "trace-mcp-lifecycle";
@@ -148,6 +151,88 @@ function observeError(serverName: string) {
   });
   return { seen, next, unsubscribe };
 }
+
+describe("MCP stdio transport", () => {
+  test("round-trips initialization and tool discovery through the spawned process", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "openomni-mcp-stdio-"));
+    const serverPath = join(directory, "server.mjs");
+    writeFileSync(
+      serverPath,
+      `
+let buffer = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (chunk) => {
+  buffer += chunk;
+  let newline = buffer.indexOf("\\n");
+  while (newline >= 0) {
+    const line = buffer.slice(0, newline);
+    buffer = buffer.slice(newline + 1);
+    if (line.length > 0) {
+      const request = JSON.parse(line);
+      if (request.method === "initialize") {
+        process.stdout.write(JSON.stringify({
+          jsonrpc: "2.0",
+          id: request.id,
+          result: {
+            protocolVersion: request.params.protocolVersion,
+            capabilities: { tools: {} },
+            serverInfo: { name: "stdio-test-server", version: "1.0.0" }
+          }
+        }) + "\\n");
+      } else if (request.method === "tools/list") {
+        process.stdout.write(JSON.stringify({
+          jsonrpc: "2.0",
+          id: request.id,
+          result: {
+            tools: [{
+              name: "echo_roundtrip",
+              description: process.argv[2],
+              inputSchema: {
+                type: "object",
+                properties: { value: { type: "string" } },
+                required: ["value"]
+              }
+            }]
+          }
+        }) + "\\n");
+      }
+    }
+    newline = buffer.indexOf("\\n");
+  }
+});
+`,
+    );
+
+    const client = new McpClient(
+      {
+        name: "filesystem",
+        transport: "stdio",
+        command: process.execPath,
+        args: [serverPath, "argument-received"],
+        timeout: 3_000,
+      },
+      { events: Bus, traceId: TRACE_ID },
+    );
+
+    try {
+      await client.connect();
+      expect(await client.listTools()).toEqual([
+        {
+          name: "filesystem.echo_roundtrip",
+          description: "argument-received",
+          inputSchema: {
+            type: "object",
+            properties: { value: { type: "string" } },
+            required: ["value"],
+          },
+        },
+      ]);
+    } finally {
+      await client.disconnect();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+});
 
 describe("McpClient listed tools", () => {
   test("namespaces listed MCP tools", async () => {
