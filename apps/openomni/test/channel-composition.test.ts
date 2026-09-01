@@ -4,6 +4,7 @@ import type {
   ChannelProviders,
   DiscordCredentials,
   GitHubCredentials,
+  SlackCredentials,
   TelegramCredentials,
 } from "@openomni/channels";
 import type { Channel } from "@openomni/protocol";
@@ -120,7 +121,23 @@ function fakeProviders(): FakeBuild {
       };
     },
   };
-  return { surfaces, providers: { telegram, discord, github }, delivered, webhookCalls };
+  const slack: ChannelProvider<SlackCredentials, "slack"> = {
+    id: "slack",
+    ingest: "socket",
+    capabilities: { deliver: true, webhook: false },
+    create(credentials, config) {
+      const surface = new FakeSurface("slack", config, credentials);
+      surfaces.push(surface);
+      return {
+        surface,
+        deliveryRoute: (externalId, body) => {
+          delivered.push({ externalId, body });
+          return Promise.resolve({ externalMessageId: "sl-1" });
+        },
+      };
+    },
+  };
+  return { surfaces, providers: { telegram, discord, github, slack }, delivered, webhookCalls };
 }
 
 const handler: Channel.MessageHandler = () => Promise.resolve(null);

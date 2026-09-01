@@ -1,6 +1,7 @@
 import { newTraceId } from "../support/trace";
 import { Operational } from "@openomni/protocol";
 import { sleep } from "../support/fetch-retry";
+import { calculateBackoff } from "../support/reconnect-backoff";
 import type { PublishPort } from "../types";
 import { GatewayOp, Intents, type DiscordUser, type GatewayPayload } from "./types";
 
@@ -376,10 +377,4 @@ export class DiscordGateway {
   }
 }
 
-// merged from reconnect-backoff.ts (#453 hygiene: sub-30-LOC single-importer)
 const FATAL_CLOSE_CODES = new Set([4004, 4010, 4011, 4012, 4013, 4014]);
-const MAX_BACKOFF_MS = 60_000;
-
-function calculateBackoff(attempt: number): number {
-  return Math.min(1000 * 2 ** attempt, MAX_BACKOFF_MS) + Math.random() * 1000;
-}

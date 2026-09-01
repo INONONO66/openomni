@@ -119,6 +119,12 @@ const CredentialSchemas = {
       botUsername: z.string().min(1).optional(),
     })
     .strict(),
+  slack: z
+    .object({
+      botToken: z.string().startsWith("xoxb-"),
+      appToken: z.string().startsWith("xapp-"),
+    })
+    .strict(),
 } as const;
 
 /**
@@ -130,6 +136,7 @@ const DECLARED_TRIGGERS: Record<keyof typeof ChannelProviders, Channel.Config["t
   telegram: [],
   github: [{ type: "event", events: ["issue_comment.created", "issues.opened"] }],
   discord: [{ type: "mention" }],
+  slack: [{ type: "mention" }],
 };
 
 type DeclaredChannelState =
@@ -178,6 +185,9 @@ function declaredRow(
   }
   if (key === "discord") {
     return credentialRow(providers.discord, CredentialSchemas.discord, plaintext);
+  }
+  if (key === "slack") {
+    return credentialRow(providers.slack, CredentialSchemas.slack, plaintext);
   }
   return credentialRow(providers.github, CredentialSchemas.github, plaintext);
 }
