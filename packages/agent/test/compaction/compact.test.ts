@@ -105,6 +105,8 @@ describe("Compaction", () => {
         { trigger: "threshold" },
       );
       const seen = [...(await started.done), ...(await completed.done)];
+      expect(started.events).toHaveLength(1);
+      expect(completed.events).toHaveLength(1);
       // The bracket: started + completed, both filed under the run's trace.
       expect(seen.filter((event) => event.traceId === TEST_TRACE_ID)).toHaveLength(2);
     } finally {
@@ -778,6 +780,7 @@ describe("Compaction", () => {
         );
         expect(result.compacted).toBe(true);
         const cut = (await completed.done).find((event) => event.outcome === "cut");
+        expect(completed.events).toHaveLength(1);
         expect(cut?.anchored).toBe(anchored);
       } finally {
         completed.unsubscribe();

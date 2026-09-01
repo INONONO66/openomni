@@ -172,6 +172,7 @@ describe("handleError (error)", () => {
         { maxAttempts: 3, backoffMs: { initial: 50, multiplier: 2, max: 1000 } },
       );
       const [retry] = await retries.done;
+      expect(retries.events).toHaveLength(1);
       expect(retry).toMatchObject({
         traceId: agentBase.traceId,
         sessionId: agentBase.sessionId,
@@ -261,6 +262,7 @@ describe("handleError (error)", () => {
         { maxAttempts: 5, backoffMs: { initial: 0, multiplier: 1, max: 0 } },
       );
       const [retry] = await retries.done;
+      expect(retries.events).toHaveLength(1);
       // 2 from the effect, not the 5 the policy configured.
       expect(retry?.maxAttempts).toBe(2);
     } finally {

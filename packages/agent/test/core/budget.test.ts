@@ -160,6 +160,7 @@ describe("publishBudgetTelemetry is the command (emits once, returns status)", (
         publishBudgetTelemetry({ ...createBudgetState(), turns }, TEST_RUN, Bus, { maxTurns: 24 }),
       ).toBe(status);
       const [seen] = await capture.done;
+      expect(capture.events).toHaveLength(1);
       expect(seen).toMatchObject({ traceId: TEST_RUN.traceId, sessionId: TEST_RUN.sessionId });
     } finally {
       capture.unsubscribe();

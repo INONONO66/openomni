@@ -27,6 +27,7 @@ describe("dispatchBudgetCheck (budget exhaustion)", () => {
         agentBase,
       );
       const [seen] = await warning.done;
+      expect(warning.events).toHaveLength(1);
       expect(seen).toMatchObject({
         traceId: agentBase.traceId,
         sessionId: agentBase.sessionId,

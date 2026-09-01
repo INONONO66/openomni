@@ -193,6 +193,7 @@ describe("canonical tool policy execution", () => {
       const warningErrors = (await warnings.done).map((event) => event.context?.error);
 
       // Then
+      expect(warnings.events).toHaveLength(2);
       expect(policyIdentities).toHaveLength(1);
       expect(typeof policyIdentities[0]?.sessionId).toBe("string");
       expect(typeof policyIdentities[0]?.runId).toBe("string");

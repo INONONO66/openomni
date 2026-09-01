@@ -64,6 +64,7 @@ describe("PolicyEngine audit emission", () => {
       await engine.dispatchPoint("tool.native.pre", ctx);
       const [event] = (await evaluated.done) as readonly PolicyEvaluatedEvent[];
 
+      expect(evaluated.events).toHaveLength(1);
       expect(event).toMatchObject({
         traceId: "trace-request",
         sessionId: "sess-request",

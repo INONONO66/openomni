@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { Mcp } from "@openomni/protocol";
-import type { BusEvent } from "@openomni/protocol";
 import { Bus, collector } from "@openomni/telemetry";
 import { captureBusEvents } from "../../helpers/bus-event";
 import { McpClient, type McpClientHandle } from "../../../src/runtime/mcp/client";
@@ -27,13 +26,6 @@ function createClient(callTool: McpClientHandle["callTool"]): McpClient {
   });
 }
 
-function nextEvent<T>(event: BusEvent.Descriptor<T>): Promise<T> {
-  return captureBusEvents(event).done.then(([data]) => {
-    if (data === undefined) throw new Error(`Expected ${event.name}`);
-    return data;
-  });
-}
-
 describe("McpClient call audit trace", () => {
   afterEach(() => {
     Bus.reset();
@@ -41,7 +33,7 @@ describe("McpClient call audit trace", () => {
 
   test("publishes the exact success payload for a completed tool call", async () => {
     const client = createClient(async () => ({ content: [{ type: "text", text: "found it" }] }));
-    const completed = nextEvent(Mcp.Events.ToolCompleted);
+    const completed = captureBusEvents(Mcp.Events.ToolCompleted);
 
     const result = await client.callTool("search-server.search", {}, "call-complete", {
       traceContext: {
@@ -50,16 +42,18 @@ describe("McpClient call audit trace", () => {
         runId: "run-mcp-complete",
       },
     });
+    const [event] = await completed.done;
 
     expect(result.output).toBe("found it");
-    expect(await completed).toMatchObject({
+    expect(completed.events).toHaveLength(1);
+    expect(event).toMatchObject({
       traceId: "trace-mcp-complete",
       serverName: "search-server",
       toolName: "search",
       toolCallId: "call-complete",
       resultSummary: "found it",
     });
-    expect((await completed).durationMs).toBeGreaterThanOrEqual(0);
+    expect(event?.durationMs).toBeGreaterThanOrEqual(0);
   });
 
   test("uses the execution trace for called and failed events", async () => {
@@ -74,8 +68,8 @@ describe("McpClient call audit trace", () => {
     const client = createClient(async () => {
       throw failure;
     });
-    const called = nextEvent(Mcp.Events.ToolCalled);
-    const failed = nextEvent(Mcp.Events.ToolFailed);
+    const called = captureBusEvents(Mcp.Events.ToolCalled);
+    const failed = captureBusEvents(Mcp.Events.ToolFailed);
 
     // When
     const result = client.callTool("search-server.search", {}, "call-active", {
@@ -84,8 +78,12 @@ describe("McpClient call audit trace", () => {
 
     // Then
     expect(await result.catch((error: unknown) => error)).toBe(failure);
-    expect((await called).traceId).toBe(traceContext.traceId);
-    expect((await failed).traceId).toBe(traceContext.traceId);
+    const [calledEvent] = await called.done;
+    const [failedEvent] = await failed.done;
+    expect(called.events).toHaveLength(1);
+    expect(failed.events).toHaveLength(1);
+    expect(calledEvent?.traceId).toBe(traceContext.traceId);
+    expect(failedEvent?.traceId).toBe(traceContext.traceId);
   });
 
   /**
@@ -111,15 +109,19 @@ describe("McpClient call audit trace", () => {
    */
   test("files connect and disconnect under the lifecycle trace", async () => {
     Bus.reset();
-    const connected = nextEvent(Mcp.Events.Connected);
-    const disconnected = nextEvent(Mcp.Events.Disconnected);
+    const connected = captureBusEvents(Mcp.Events.Connected);
+    const disconnected = captureBusEvents(Mcp.Events.Disconnected);
     const client = createClient(async () => ({ content: [] }));
 
     await client.connect();
     await client.disconnect();
 
-    expect((await connected).traceId).toBe(TEST_LIFECYCLE_TRACE_ID);
-    expect((await disconnected).traceId).toBe(TEST_LIFECYCLE_TRACE_ID);
+    const [connectedEvent] = await connected.done;
+    const [disconnectedEvent] = await disconnected.done;
+    expect(connected.events).toHaveLength(1);
+    expect(disconnected.events).toHaveLength(1);
+    expect(connectedEvent?.traceId).toBe(TEST_LIFECYCLE_TRACE_ID);
+    expect(disconnectedEvent?.traceId).toBe(TEST_LIFECYCLE_TRACE_ID);
   });
 
   /**
