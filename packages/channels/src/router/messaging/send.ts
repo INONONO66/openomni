@@ -10,7 +10,6 @@ import {
 } from "@openomni/protocol";
 import {
   ActorRegistry,
-  BlacklistStore,
   ConversationStore,
   EgressBudgetStore,
   LedgerAppend,
@@ -18,6 +17,7 @@ import {
   WaitStore,
 } from "@openomni/ledger";
 import { WaitService } from "../wait/index.js";
+import { matchBlacklist } from "../blacklist.js";
 import {
   deliverySurfaceKey,
   hasScopedSenderTargetCandidate,
@@ -139,7 +139,7 @@ function conversationGate(
   if (conversation.contactId !== target.actorId || conversation.endpointId !== target.endpointId) {
     return `conversation ${conversationId} is not pinned to ${target.actorId} at ${target.endpointId}`;
   }
-  const dnc = BlacklistStore.match({
+  const dnc = matchBlacklist({
     actorId: target.actorId,
     endpointId: target.endpointId,
     channel: target.channel,

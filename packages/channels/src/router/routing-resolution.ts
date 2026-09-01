@@ -9,13 +9,13 @@ import {
   type BusEvent,
 } from "@openomni/protocol";
 import {
-  BlacklistStore,
-  ChannelGrantStore,
   ConversationStore,
   LedgerAppend,
   SurfaceKey,
 } from "@openomni/ledger";
 import { applyChannelGrantTreatment } from "./authority.js";
+import { matchBlacklist } from "./blacklist.js";
+import { resolveChannelGrant, type ChannelGrantResolution } from "./channel-grant.js";
 import { replyGrantEndpointFacts, replyGrantEndpointFromFacts } from "./messaging/reply-grant.js";
 import { resolveRoute, type RouteState } from "./resolve-route.js";
 import { findWaitCandidates, type WaitResolution } from "./wait/index.js";
@@ -189,7 +189,7 @@ function selectedRouteTarget(
   throw new TypeError("wait-correlation route has no executable wait target");
 }
 
-type ChannelResolution = ReturnType<typeof ChannelGrantStore.resolve>;
+type ChannelResolution = ChannelGrantResolution | undefined;
 
 function channelState(
   resolution: ChannelResolution,
@@ -260,7 +260,7 @@ function blacklistState(
   correlation: ScopedCorrelation | undefined,
 ): RouteState["blacklist"] {
   const actor = event.meta?.actor;
-  const entry = BlacklistStore.match({
+  const entry = matchBlacklist({
     actorId: typeof actor?.actorId === "string" ? actor.actorId : undefined,
     endpointId:
       (typeof actor?.endpointId === "string" ? actor.endpointId : undefined) ??
@@ -314,7 +314,7 @@ function resolveKernelRoute<Event extends Gateway.DeliveredEvent>(
     event.activation?.durableSessionId ?? SurfaceKey.lookup(extractSurfaceKey(event));
   const blacklist = blacklistState(event, correlation);
   const conversation = conversationState(event, correlation);
-  const channelResolution = ChannelGrantStore.resolve({
+  const channelResolution = resolveChannelGrant({
     surface: event.surface,
     workspace: event.workspace,
     channel: event.channel,

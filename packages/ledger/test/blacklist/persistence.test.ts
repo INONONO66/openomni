@@ -20,47 +20,37 @@ describe("BlacklistStore SQLite persistence", () => {
     await rm(tmpDir, { recursive: true });
   });
 
-  test("persists and matches active blacklist entries across storage re-init", () => {
-    BlacklistStore.put({
+  test("round-trips raw blacklist facts across storage reconfiguration", () => {
+    const stored = BlacklistStore.put({
       id: "bl-actor",
       kind: "actor",
       value: "act_bad",
       reason: "abuse",
       createdBy: "act_owner",
+      createdAt: 100,
+      updatedAt: 200,
     });
 
     Storage.configure(new SqliteStorageAdapter(dbPath));
 
-    const matched = BlacklistStore.match({ actorId: "act_bad" });
-    expect(matched?.id).toBe("bl-actor");
-    expect(matched?.reason).toBe("abuse");
+    expect(BlacklistStore.get(stored.id)).toEqual(stored);
+    expect(BlacklistStore.list()).toEqual([stored]);
   });
 
-  test("ignores expired blacklist entries", () => {
+  test("removes exactly one stored fact", () => {
     BlacklistStore.put({
-      id: "bl-expired",
-      kind: "endpoint",
-      value: "ep_old",
-      expiresAt: 1,
+      id: "bl-actor",
+      kind: "actor",
+      value: "act_bad",
       createdBy: "act_owner",
     });
 
-    expect(BlacklistStore.match({ endpointId: "ep_old" }, 2)).toBeUndefined();
+    expect(BlacklistStore.remove("bl-actor")).toBe(true);
+    expect(BlacklistStore.get("bl-actor")).toBeUndefined();
+    expect(BlacklistStore.remove("bl-actor")).toBe(false);
   });
 
-  test("matches wildcard pattern entries against candidates", () => {
-    BlacklistStore.put({
-      id: "bl-pattern",
-      kind: "pattern",
-      value: "discord:guild:*",
-      createdBy: "act_owner",
-    });
-
-    expect(BlacklistStore.match({ candidates: ["discord:guild:dev"] })?.id).toBe("bl-pattern");
-    expect(BlacklistStore.match({ candidates: ["discord:other:dev"] })).toBeUndefined();
-  });
-
-  test("match fails closed when the blacklist sub-adapter is absent", () => {
+  test("raw reads fail closed when the blacklist sub-adapter is absent", () => {
     const bare = Storage.get();
     Storage.configure({
       transaction: bare.transaction.bind(bare),
@@ -69,10 +59,6 @@ describe("BlacklistStore SQLite persistence", () => {
       part: bare.part,
     });
 
-    // Pre-fix behavior returned undefined ("not blacklisted") on an absent
-    // adapter — a fail-open read of absolute-deny-gate data.
-    expect(() => BlacklistStore.match({ actorId: "act_bad" })).toThrow(
-      "does not implement blacklist",
-    );
+    expect(() => BlacklistStore.list()).toThrow("does not implement blacklist");
   });
 });
