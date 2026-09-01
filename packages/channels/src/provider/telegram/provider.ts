@@ -1,4 +1,6 @@
-import type { ChannelProvider } from "../provider/contract.js";
+import { z } from "zod";
+import type { ChannelProvider } from "../contract.js";
+import { TELEGRAM_RENDER } from "./format.js";
 import { TelegramAdapter } from "./surface.js";
 
 export interface TelegramCredentials {
@@ -10,7 +12,10 @@ export interface TelegramCredentials {
 export const TelegramProvider: ChannelProvider<TelegramCredentials, "telegram"> = {
   id: "telegram",
   ingest: "poll",
-  capabilities: { deliver: true, webhook: false },
+  capabilities: { deliver: true, webhook: false, render: TELEGRAM_RENDER },
+  credentials: z.object({ token: z.string().min(1) }).strict(),
+  settings: z.record(z.never()),
+  preconditions: [],
   create(credentials, config, publish) {
     const surface = new TelegramAdapter(credentials.token, config, publish);
     return {

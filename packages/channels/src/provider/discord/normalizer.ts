@@ -1,6 +1,6 @@
 import { Channel } from "@openomni/protocol";
-import { normalizeContent } from "../support/trigger";
-import type { InboundNormalizer } from "../types";
+import { normalizeContent } from "../../support/trigger";
+import type { InboundNormalizer } from "../../types";
 import type { DiscordMessage } from "./types";
 
 export interface DiscordNormalizerContext {

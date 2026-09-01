@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import type { Channel } from "@openomni/protocol";
-import { DiscordAdapter } from "../src/discord/surface";
-import { GitHubAdapter } from "../src/github/surface";
-import { TelegramClient } from "../src/telegram/client";
+import { DiscordAdapter } from "../src/provider/discord/surface";
+import { GitHubAdapter } from "../src/provider/github/surface";
+import { TelegramClient } from "../src/provider/telegram/client";
 
 const config = { triggers: [] } satisfies Channel.Config;
 const realFetch = globalThis.fetch;
