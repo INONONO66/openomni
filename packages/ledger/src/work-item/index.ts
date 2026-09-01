@@ -2,13 +2,11 @@ import type { WorkItem } from "@openomni/protocol";
 import { createWorkItem } from "./create.js";
 import { getWorkItem, listWorkItems } from "./crud.js";
 import {
-  addWorkItemBlocker,
   addWorkItemEvidence,
   allocateWorkItemAttempt,
   assignWorkItemExecution,
   cancelWorkItem,
   failWorkItem,
-  resolveWorkItemBlocker,
   startWorkItem,
   type AttemptAllocationInput,
 } from "./lifecycle.js";
@@ -56,22 +54,6 @@ export namespace WorkItemStore {
 
   export async function cancel(hash: string, traceId: string): Promise<WorkItem.Info | undefined> {
     return cancelWorkItem(hash, traceId);
-  }
-
-  export async function addBlocker(
-    hash: string,
-    blocker: Omit<WorkItem.Blocker, "id" | "createdAt"> & Readonly<{ id?: string }>,
-    traceId: string,
-  ): Promise<WorkItem.Info | undefined> {
-    return addWorkItemBlocker(hash, blocker, traceId);
-  }
-
-  export async function resolveBlocker(
-    hash: string,
-    blockerId: string,
-    traceId: string,
-  ): Promise<WorkItem.Info | undefined> {
-    return resolveWorkItemBlocker(hash, blockerId, traceId);
   }
 
   export async function addEvidence(

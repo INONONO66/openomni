@@ -6,6 +6,7 @@ import type { PolicyContext } from "../../../src/core/policy/types";
 import { registerAt, abortRun, allow } from "../../helpers/policy-decision";
 import { handleError } from "../../../src/core/execution/turn";
 import { makeAgentBase, makeConfig, makeState } from "./lifecycle-dispatch-fixture";
+import { captureBusEvents } from "../../helpers/bus-event";
 
 describe("handleError (error)", () => {
   it("dispatches error and respects abort verdict", async () => {
@@ -154,10 +155,7 @@ describe("handleError (error)", () => {
    * lost — this is what holds them there.
    */
   it("reports the retry reason and backoff on the run's own trace", async () => {
-    const retries: Array<Record<string, unknown>> = [];
-    const unsubscribe = Bus.subscribe(RunEvents.ErrorRetry, (event) => {
-      retries.push(event as unknown as Record<string, unknown>);
-    });
+    const retries = captureBusEvents(RunEvents.ErrorRetry);
     const engine = PolicyEngine.create({ clock: Date.now });
     const agentBase = makeAgentBase();
 
@@ -173,19 +171,18 @@ describe("handleError (error)", () => {
         // hardcoded to 0, which is what the first version of this test did.
         { maxAttempts: 3, backoffMs: { initial: 50, multiplier: 2, max: 1000 } },
       );
-      await Bun.sleep(0);
+      const [retry] = await retries.done;
+      expect(retries.events).toHaveLength(1);
+      expect(retry).toMatchObject({
+        traceId: agentBase.traceId,
+        sessionId: agentBase.sessionId,
+        reason: "timeout",
+        backoffMs: 50,
+        attempt: 1,
+      });
     } finally {
-      unsubscribe();
+      retries.unsubscribe();
     }
-
-    expect(retries).toHaveLength(1);
-    expect(retries[0]).toMatchObject({
-      traceId: agentBase.traceId,
-      sessionId: agentBase.sessionId,
-      reason: "timeout",
-      backoffMs: 50,
-      attempt: 1,
-    });
   });
 
   /**
@@ -240,10 +237,7 @@ describe("handleError (error)", () => {
    * attempts and narrowed to two could still report five on every retry.
    */
   it("reports the narrowed ceiling on the retry path too", async () => {
-    const retries: Array<{ maxAttempts: number }> = [];
-    const unsubscribe = Bus.subscribe(RunEvents.ErrorRetry, (event) => {
-      retries.push(event as unknown as { maxAttempts: number });
-    });
+    const retries = captureBusEvents(RunEvents.ErrorRetry);
     const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(
       engine,
@@ -267,13 +261,12 @@ describe("handleError (error)", () => {
         1,
         { maxAttempts: 5, backoffMs: { initial: 0, multiplier: 1, max: 0 } },
       );
-      await Bun.sleep(0);
+      const [retry] = await retries.done;
+      expect(retries.events).toHaveLength(1);
+      // 2 from the effect, not the 5 the policy configured.
+      expect(retry?.maxAttempts).toBe(2);
     } finally {
-      unsubscribe();
+      retries.unsubscribe();
     }
-
-    expect(retries).toHaveLength(1);
-    // 2 from the effect, not the 5 the policy configured.
-    expect(retries[0]?.maxAttempts).toBe(2);
   });
 });

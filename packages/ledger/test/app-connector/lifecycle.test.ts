@@ -8,12 +8,15 @@ import { installation } from "./fixture";
 import { removeSqliteFiles, tempDbPath } from "../helpers/sqlite";
 
 function consentInstallation(id: string): AppConnector.Installation {
-  const registered = AppConnectorInstallationStore.set(installation(id));
-  AppConnectorInstallationStore.requestConsent(registered.id);
-  return AppConnectorInstallationStore.grantConsent(registered.id, {
-    grantedBy: "act_owner",
-    capabilities: ["git"],
-    permissions: [{ action: "tool.call", allowlist: ["git.*"] }],
+  return AppConnectorInstallationStore.set({
+    ...installation(id),
+    status: "consented",
+    consent: {
+      grantedBy: "act_owner",
+      grantedAt: Date.now(),
+      capabilities: ["git"],
+      permissions: [{ action: "tool.call", allowlist: ["git.*"] }],
+    },
   });
 }
 
@@ -85,24 +88,6 @@ describe("AppConnectorInstallationStore lifecycle", () => {
     );
   });
 
-  test("marks a consented installation enabled when smoke verification succeeds", () => {
-    // Given
-    const consented = consentInstallation("install-1");
-
-    // When
-    const enabled = AppConnectorInstallationStore.markSmokeVerified(consented.id, {
-      detectedVersion: "0.139.1",
-    });
-
-    // Then
-    expect(enabled.status).toBe("enabled");
-    expect(enabled.detectedVersion).toBe("0.139.1");
-    expect(enabled.consent).toEqual(consented.consent);
-    expect(enabled.createdAt).toBe(consented.createdAt);
-    expect(enabled.updatedAt).toBeGreaterThanOrEqual(consented.updatedAt);
-    expect(AppConnectorInstallationStore.get(consented.id)).toEqual(enabled);
-  });
-
   test("creates an ai agent actor endpoint when an installation is stored", () => {
     const stored = AppConnectorInstallationStore.set(installation("install-actor"));
 
@@ -117,24 +102,6 @@ describe("AppConnectorInstallationStore lifecycle", () => {
       channel: "app_connector",
       externalId: "install-actor",
     });
-  });
-
-  test("marks a consented installation verification_failed when smoke verification fails", () => {
-    // Given
-    const consented = consentInstallation("install-1");
-
-    // When
-    const failed = AppConnectorInstallationStore.markSmokeVerificationFailed(consented.id, {
-      detectedVersion: "9.0.0",
-    });
-
-    // Then
-    expect(failed.status).toBe("verification_failed");
-    expect(failed.detectedVersion).toBe("9.0.0");
-    expect(failed.consent).toEqual(consented.consent);
-    expect(failed.createdAt).toBe(consented.createdAt);
-    expect(failed.updatedAt).toBeGreaterThanOrEqual(consented.updatedAt);
-    expect(AppConnectorInstallationStore.get(consented.id)).toEqual(failed);
   });
 
   test("disables every pre-wire installation status", () => {
@@ -210,15 +177,4 @@ describe("AppConnectorInstallationStore lifecycle", () => {
     expect(ActorRegistry.getEndpoint(stored.endpointId)).toBeDefined();
   });
 
-  test("rejects consent request after disable", () => {
-    // Given
-    const consented = consentInstallation("install-1");
-    const disabled = AppConnectorInstallationStore.disable(consented.id);
-
-    // When / Then
-    expect(() => AppConnectorInstallationStore.requestConsent(disabled.id)).toThrow(
-      "Cannot request consent for disabled installation",
-    );
-    expect(AppConnectorInstallationStore.get(disabled.id)).toEqual(disabled);
-  });
 });

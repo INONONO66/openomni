@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeAll, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { Sink } from "../src/sink";
 import { Bus, collector, newTraceId } from "@openomni/telemetry";
 import { Operational } from "@openomni/protocol";
@@ -427,8 +427,7 @@ describe("run() streamText arguments", () => {
    */
   test("reports a stream error through the injected sink", async () => {
     const collected = collector();
-    const busSaw: string[] = [];
-    const unsubscribe = Bus.observe((descriptor) => busSaw.push(descriptor.name));
+    const globalPublish = spyOn(Bus, "publish");
 
     try {
       await run(
@@ -452,17 +451,16 @@ describe("run() streamText arguments", () => {
         | undefined;
       if (onError === undefined) throw new Error("streamText received no onError");
       onError({ error: new Error("upstream exploded") });
-      await Bun.sleep(0);
-    } finally {
-      unsubscribe();
-    }
 
-    const errors = collected
-      .named(Operational.Events.Error.name)
-      .map((event) => event as { component?: string; error?: string });
-    const fromStream = errors.filter((event) => event.component === "llm.stream");
-    expect(fromStream).toHaveLength(1);
-    expect(fromStream[0]?.error).toContain("upstream exploded");
-    expect(busSaw).toEqual([]);
+      const errors = collected
+        .named(Operational.Events.Error.name)
+        .map((event) => event as { component?: string; error?: string });
+      const fromStream = errors.filter((event) => event.component === "llm.stream");
+      expect(fromStream).toHaveLength(1);
+      expect(fromStream[0]?.error).toContain("upstream exploded");
+      expect(globalPublish).not.toHaveBeenCalled();
+    } finally {
+      globalPublish.mockRestore();
+    }
   });
 });

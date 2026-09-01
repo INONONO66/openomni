@@ -212,69 +212,6 @@ export namespace WorkItemAttemptRun {
   }
 
   /**
-   * Acquires the run's inbound wait: appends the `waiting_input` blocker
-   * fact carrying the `attempt-wait:<attemptId>` marker. Returns false when
-   * the run is missing, not active, already waiting, or a concurrent
-   * transition wins the head CAS — the acquire semantics the retired
-   * worker-run `updateStatusIfCurrent(running -> waiting_input)` provided.
-   */
-  export async function beginWait(
-    sessionId: string,
-    runId: string,
-    traceId: string,
-  ): Promise<boolean> {
-    return mutateRun(sessionId, runId, traceId, (existing, now) => {
-      if (!isActiveItem(existing) || openAttemptWaitBlocker(existing)) {
-        throw new AttemptRunNotActiveError();
-      }
-      const blocker: WorkItem.Blocker = {
-        id: crypto.randomUUID(),
-        kind: "waiting_input",
-        description: `${ATTEMPT_WAIT_PREFIX}${existing.currentAttemptId} is waiting for inbound input`,
-        createdAt: now,
-      };
-      return {
-        changedFields: ["blockers"],
-        fact: {
-          type: "work_item.blocker_added",
-          data: { blockerId: blocker.id, kind: blocker.kind, description: blocker.description },
-        },
-        updated: {
-          ...existing,
-          blockers: [...existing.blockers, blocker],
-          timestamps: { ...existing.timestamps, updated: now },
-        },
-      };
-    });
-  }
-
-  /** Releases the inbound wait (resolves the attempt-wait blocker). */
-  export async function endWait(
-    sessionId: string,
-    runId: string,
-    traceId: string,
-  ): Promise<boolean> {
-    return mutateRun(sessionId, runId, traceId, (existing, now) => {
-      const open = openAttemptWaitBlocker(existing);
-      if (!open) throw new AttemptRunNotActiveError();
-      return {
-        changedFields: ["blockers"],
-        fact: {
-          type: "work_item.blocker_resolved",
-          data: { blockerId: open.id, resolvedAt: now },
-        },
-        updated: {
-          ...existing,
-          blockers: existing.blockers.map((blocker) =>
-            blocker.id === open.id ? { ...blocker, resolvedAt: now } : blocker,
-          ),
-          timestamps: { ...existing.timestamps, updated: now },
-        },
-      };
-    });
-  }
-
-  /**
    * Records the attempt's terminal outcome as ONE `work_item.attempt_finished`
    * fact: the attemptTerminal projection (outcome, endedAt, error — durable
    * where the worker-run store kept in-memory extras), the honest work-item

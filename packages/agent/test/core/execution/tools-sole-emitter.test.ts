@@ -67,7 +67,6 @@ describe("sole emitter — worker executor owns Tool.Events events", () => {
     });
 
     await executor(makeCall("call-sole"));
-    await Promise.resolve();
 
     expect(started).toHaveLength(1);
     expect(completed).toHaveLength(1);
@@ -86,7 +85,6 @@ describe("sole emitter — worker executor owns Tool.Events events", () => {
     });
 
     await executor(makeCall("call-sole-err"));
-    await Promise.resolve();
 
     expect(completed).toHaveLength(1);
     expect((completed[0] as { isError: boolean }).isError).toBe(true);
@@ -105,7 +103,6 @@ describe("sole emitter — worker executor owns Tool.Events events", () => {
     });
 
     await expect(executor(makeCall("call-sole-throw"))).rejects.toThrow("boom");
-    await Promise.resolve();
 
     expect(completed).toHaveLength(1);
   });

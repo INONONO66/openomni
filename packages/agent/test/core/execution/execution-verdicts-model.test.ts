@@ -52,7 +52,6 @@ describe("model execution deny verdicts", () => {
         makeAgentBase(),
         "test-model",
       );
-      await Promise.resolve();
 
       expect(result).toBeNull();
       expect(findDenyDiagnostic(diagnostics.payloads, "model.response")).toEqual({

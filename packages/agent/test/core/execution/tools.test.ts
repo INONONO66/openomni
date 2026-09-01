@@ -25,10 +25,6 @@ function abortMiddleware(reason: string): PolicyRegistration {
   };
 }
 
-async function flushBus(): Promise<void> {
-  await Promise.resolve();
-}
-
 describe("createToolExecutor bus events", () => {
   // #522 defect 2: the worker-side executor beneath this wrapper is the sole
   // emitter of Tool.Events.Started/Completed. This layer delegates with
@@ -60,7 +56,6 @@ describe("createToolExecutor bus events", () => {
     });
 
     await executor(makeCall());
-    await flushBus();
     stopObserve();
 
     expect(publishedNames).toEqual([]);
@@ -86,7 +81,6 @@ describe("createToolExecutor bus events", () => {
     });
 
     const result = await executor(makeCall("call-err"));
-    await flushBus();
 
     expect(result.isError).toBe(true);
     expect(completed).toHaveLength(0);
@@ -116,7 +110,6 @@ describe("createToolExecutor bus events", () => {
     });
 
     const result = await executor(makeCall("call-deny"));
-    await flushBus();
     stopObserve();
 
     expect(result.isError).toBe(true);
@@ -149,7 +142,6 @@ describe("createToolExecutor bus events", () => {
     });
 
     await expect(executor(makeCall("call-throw"))).rejects.toThrow("boom");
-    await flushBus();
 
     expect(started).toHaveLength(0);
     expect(completed).toHaveLength(0);
@@ -217,7 +209,6 @@ describe("createToolExecutor bus events", () => {
     });
 
     await denyExecutor(makeCall("call-denied-actor"));
-    await flushBus();
 
     expect((denied[0] as { actor: Record<string, unknown> }).actor).toEqual({
       agentName: "reviewer",

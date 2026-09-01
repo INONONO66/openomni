@@ -308,6 +308,35 @@ describe("the machines tool", () => {
     expect(after.output).toBe("alpha — attached, may: kernel.py");
   });
 
+  it("names the exports an attached machine's files can be read through", async () => {
+    const catalog = machinesCatalog(() => [
+      {
+        machineId: "alpha",
+        attached: true,
+        capabilities: ["fs.read"],
+        effectiveExports: ["notes", "src"],
+      },
+    ]);
+
+    const result = await catalog.execute({ id: "m6", tool: MACHINES_TOOL_NAME, input: {} });
+
+    expect(result.output).toBe(
+      "alpha — attached, may: fs.read; files: /machines/alpha/notes, /machines/alpha/src",
+    );
+  });
+
+  it("says nothing about files when the machine publishes no export", async () => {
+    const catalog = machinesCatalog(() => [
+      { machineId: "alpha", attached: true, capabilities: ["fs.read"], effectiveExports: [] },
+    ]);
+
+    const result = await catalog.execute({ id: "m7", tool: MACHINES_TOOL_NAME, input: {} });
+
+    // A capability with no export behind it reaches nothing: silence is the
+    // honest report, not an empty file list the model would try to browse.
+    expect(result.output).toBe("alpha — attached, may: fs.read");
+  });
+
   it("refuses arguments — the tool takes none", async () => {
     const catalog = machinesCatalog(() => statuses);
     const result = await catalog.execute({
