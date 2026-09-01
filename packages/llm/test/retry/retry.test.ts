@@ -42,19 +42,48 @@ describe("Retry", () => {
 
   describe("sleep(ms, abortSignal)", () => {
     test("resolves without an abort signal", async () => {
-      await Retry.sleep(0);
+      let fireTimer: (() => void) | undefined;
+      const timeout = vi.spyOn(globalThis, "setTimeout").mockImplementation(
+        ((callback: Parameters<typeof setTimeout>[0]) => {
+          if (typeof callback === "function") fireTimer = callback;
+          return 0 as unknown as ReturnType<typeof setTimeout>;
+        }) as typeof setTimeout,
+      );
+      try {
+        const sleeping = Retry.sleep(0);
+        if (fireTimer === undefined) expect.unreachable("Expected sleep to schedule a timer");
+        fireTimer();
+        await sleeping;
+      } finally {
+        timeout.mockRestore();
+      }
     });
 
-    test("resolves after specified milliseconds", async () => {
-      const start = Date.now();
-      await Retry.sleep(100, new AbortController().signal);
-      expect(Date.now() - start).toBeGreaterThanOrEqual(90);
+    test("schedules exactly the requested delay", async () => {
+      // The contract is which delay reaches the timer, not how long the test
+      // process actually slept: an elapsed-time assertion pins the platform
+      // scheduler instead of `sleep` and costs the full delay every run.
+      const timeout = vi.spyOn(globalThis, "setTimeout");
+      const controller = new AbortController();
+      try {
+        const sleeping = Retry.sleep(100, controller.signal);
+
+        expect(timeout).toHaveBeenCalledWith(expect.any(Function), 100);
+        controller.abort();
+        await expect(sleeping).rejects.toHaveProperty("name", "AbortError");
+      } finally {
+        timeout.mockRestore();
+      }
     });
 
     test("respects AbortSignal and throws AbortError", async () => {
       const controller = new AbortController();
       const promise = Retry.sleep(1000, controller.signal);
-      setTimeout(() => controller.abort(), 50);
+      // Aborting on the next microtask, not after a 50ms timer: the sleep is
+      // already pending (its `setTimeout` was registered synchronously by
+      // src/retry/index.ts:19-26), so the abort races nothing.
+      await Promise.resolve();
+      controller.abort();
       try {
         await promise;
         expect.unreachable("Should have thrown AbortError");
@@ -79,15 +108,20 @@ describe("Retry", () => {
     test("rejects immediately when signal is already aborted", async () => {
       const controller = new AbortController();
       controller.abort();
-      const start = Date.now();
+      // "Immediately" means no timer was ever scheduled (src/retry/index.ts:10-12
+      // throws before the Promise body runs). Pinning that is exact; the old
+      // `elapsed < 100` bound was a proxy that a loaded machine could fail and
+      // that a 50ms regression would still pass.
+      const timeout = vi.spyOn(globalThis, "setTimeout");
       try {
-        await Retry.sleep(5000, controller.signal);
-        expect.unreachable("Should have thrown AbortError");
-      } catch (error) {
-        expect(error).toBeInstanceOf(DOMException);
-        expect((error as DOMException).name).toBe("AbortError");
+        await expect(Retry.sleep(5000, controller.signal)).rejects.toHaveProperty(
+          "name",
+          "AbortError",
+        );
+        expect(timeout).not.toHaveBeenCalled();
+      } finally {
+        timeout.mockRestore();
       }
-      expect(Date.now() - start).toBeLessThan(100);
     });
 
     test("caps delay at RETRY_MAX_DELAY", async () => {
