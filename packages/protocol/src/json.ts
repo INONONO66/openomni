@@ -20,30 +20,41 @@ export type PlainValue = null | boolean | number | string | PlainValue[] | Plain
 // the guard and reported as an ordinary parse failure. A fully transparent
 // Proxy over plain data is indistinguishable by design — the contract here
 // is structural.
-function isPlainValueUnsafe(value: unknown, allowLegacyKeys: boolean): value is PlainValue {
+type PlainKeyPolicy = (key: string) => boolean;
+
+const strictPlainKey: PlainKeyPolicy = (key) =>
+  key !== "__proto__" && key !== "constructor" && key !== "prototype";
+const persistedPlainKey: PlainKeyPolicy = () => true;
+
+function isPlainValueUnsafe(value: unknown, keyPolicy: PlainKeyPolicy): value is PlainValue {
   if (value === null || typeof value === "boolean" || typeof value === "string") return true;
   if (typeof value === "number") return Number.isFinite(value) && !Object.is(value, -0);
-  if (Array.isArray(value)) {
-    if (Object.getOwnPropertySymbols(value).length > 0) return false;
-    // Named own properties make key count exceed length; holes surface as
-    // absent index descriptors below — together this refuses sparse arrays,
-    // extra properties, and the one-hole + one-named-property cancellation.
-    if (Object.keys(value).length !== value.length) return false;
-    for (let index = 0; index < value.length; index += 1) {
-      const descriptor = Object.getOwnPropertyDescriptor(value, index);
-      if (descriptor === undefined || !("value" in descriptor)) return false;
-      if (!isPlainValueUnsafe(descriptor.value, allowLegacyKeys)) return false;
-    }
-    return true;
-  }
+  if (Array.isArray(value)) return isPlainArray(value, keyPolicy);
   if (typeof value !== "object" || Object.getPrototypeOf(value) !== Object.prototype) return false;
+  return isPlainObject(value, keyPolicy);
+}
+
+function isPlainArray(value: readonly unknown[], keyPolicy: PlainKeyPolicy): value is PlainValue[] {
+  if (Object.getOwnPropertySymbols(value).length > 0) return false;
+  // Named own properties make key count exceed length; holes surface as
+  // absent index descriptors below — together this refuses sparse arrays,
+  // extra properties, and the one-hole + one-named-property cancellation.
+  if (Object.keys(value).length !== value.length) return false;
+  for (let index = 0; index < value.length; index += 1) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, index);
+    if (descriptor === undefined || !("value" in descriptor)) return false;
+    if (!isPlainValueUnsafe(descriptor.value, keyPolicy)) return false;
+  }
+  return true;
+}
+
+function isPlainObject(value: object, keyPolicy: PlainKeyPolicy): value is PlainObject {
   if (Object.getOwnPropertySymbols(value).length > 0) return false;
   for (const key of Object.keys(value)) {
-    if (!allowLegacyKeys && (key === "__proto__" || key === "constructor" || key === "prototype"))
-      return false;
+    if (!keyPolicy(key)) return false;
     const descriptor = Object.getOwnPropertyDescriptor(value, key);
     if (descriptor === undefined || !("value" in descriptor)) return false;
-    if (!isPlainValueUnsafe(descriptor.value, allowLegacyKeys)) return false;
+    if (!isPlainValueUnsafe(descriptor.value, keyPolicy)) return false;
   }
   return true;
 }
@@ -55,7 +66,7 @@ function isPlainValueUnsafe(value: unknown, allowLegacyKeys: boolean): value is 
  */
 export function isPlainValue(value: unknown): value is PlainValue {
   try {
-    return isPlainValueUnsafe(value, false);
+    return isPlainValueUnsafe(value, strictPlainKey);
   } catch {
     return false;
   }
@@ -78,7 +89,7 @@ export function isPlainValue(value: unknown): value is PlainValue {
 export const PlainValueSchema: z.ZodType<PlainValue, PlainValue> = z.custom<PlainValue>(
   (value) => {
     try {
-      return isPlainValueUnsafe(value, true);
+      return isPlainValueUnsafe(value, persistedPlainKey);
     } catch {
       return false;
     }

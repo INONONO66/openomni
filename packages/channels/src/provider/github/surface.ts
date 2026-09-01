@@ -1,15 +1,83 @@
 import { newTraceId } from "../../support/trace";
 import { type Channel, Operational, PolicyDecision } from "@openomni/protocol";
-import { Dedupe } from "../../support/dedupe";
+import { z } from "zod";
+import { Dedupe, type DedupeToken } from "../../support/dedupe";
+import { requireHandler } from "../../support/handler-frame";
 import { GitHubClient } from "./client";
 import { GitHubNormalizer } from "./normalizer";
-import type { GitHubEventContent, GitHubIssueCommentPayload, GitHubIssuesPayload } from "./types";
+import {
+  type GitHubEventContent,
+  type GitHubIssuePayload,
+  type GitHubUser,
+  GitHubWebhookPayloadSchemas,
+} from "./types";
 import type { PublishPort } from "../../types";
-import { ChannelAuthnMiddleware, type ChannelAuthnDecisionObserver } from "../../channel-authn";
+import {
+  ChannelAuthnMiddleware,
+  type ChannelAuthnDecisionObserver,
+  decisionOption,
+} from "../../channel-authn";
 
 export interface GitHubAuthOptions {
   readonly onDecision?: ChannelAuthnDecisionObserver;
 }
+
+/** Every webhook payload carries `action`; unsupported events may not — optional keeps the event-key log honest. */
+const EventActionSchema = z.object({ action: z.string().optional() });
+
+function actionOf(raw: object): string | undefined {
+  const parsed = EventActionSchema.safeParse(raw);
+  return parsed.success ? parsed.data.action : undefined;
+}
+
+/** Shared shape of both supported payloads — one construction site, not two cloned literals. */
+function issueContent(
+  text: string,
+  user: GitHubUser,
+  payload: GitHubIssuePayload,
+): GitHubEventContent | null {
+  if (user.type === "Bot") return null;
+  return {
+    text,
+    sender: user.login,
+    senderType: user.type,
+    repo: payload.repository.full_name,
+    issueNumber: payload.issue.number,
+    issueKind: payload.issue.pull_request ? "pr" : "issue",
+    labels: (payload.issue.labels ?? []).map((label) => label.name),
+  };
+}
+
+function extractContent(event: string, raw: object): GitHubEventContent | null {
+  if (event === "issue_comment") {
+    const parsed = GitHubWebhookPayloadSchemas.issue_comment.safeParse(raw);
+    if (!parsed.success || parsed.data.action !== "created") return null;
+    return issueContent(parsed.data.comment.body, parsed.data.comment.user, parsed.data);
+  }
+  if (event === "issues") {
+    const parsed = GitHubWebhookPayloadSchemas.issues.safeParse(raw);
+    if (!parsed.success || parsed.data.action !== "opened") return null;
+    // `||`, not `??`: GitHub sends empty-STRING bodies too — an issue opened
+    // with no body must fall back to its title, or the empty normalization
+    // drop (#606) silently vanishes a label-triggered event.
+    return issueContent(
+      parsed.data.issue.body || parsed.data.issue.title,
+      parsed.data.issue.user,
+      parsed.data,
+    );
+  }
+  return null;
+}
+
+type PreparedWebhook = Readonly<{
+  traceId: string;
+  deliveryId: string | null;
+  dedupeToken: DedupeToken | undefined;
+  content: GitHubEventContent;
+  inbound: Channel.InboundMessage;
+}>;
+
+type WebhookPreparation = PreparedWebhook | Readonly<{ response: Response }>;
 
 export class GitHubAdapter implements Channel.Surface {
   readonly id = "github";
@@ -39,9 +107,7 @@ export class GitHubAdapter implements Channel.Surface {
   }
 
   async start(traceId: string): Promise<void> {
-    if (!this.handler) {
-      throw new Error("[github] No message handler registered. Call onMessage() before start().");
-    }
+    requireHandler(this.handler, "github");
     this.publish(Operational.Events.Info, {
       traceId,
       time: Date.now(),
@@ -61,26 +127,29 @@ export class GitHubAdapter implements Channel.Surface {
     const auth = await ChannelAuthnMiddleware.authenticateGitHubWebhook({
       request,
       secret: this.secret,
-      ...(this.authOptions.onDecision !== undefined
-        ? { onDecision: this.authOptions.onDecision }
-        : {}),
+      ...decisionOption(this.authOptions.onDecision),
     });
     if (auth.response) return auth.response;
 
-    const body = auth.body ?? "";
+    const preparation = this.prepareWebhook(request, auth.body ?? "", traceId);
+    if ("response" in preparation) return preparation.response;
 
+    return this.dispatchWebhook(preparation);
+  }
+
+  private prepareWebhook(request: Request, body: string, traceId: string): WebhookPreparation {
     const deliveryId = request.headers.get("x-github-delivery");
     const dedupeAcquisition = deliveryId === null ? undefined : this.dedupe.acquire(deliveryId);
     if (dedupeAcquisition?.duplicate) {
-      return new Response("Already processed", { status: 200 });
+      return { response: new Response("Already processed", { status: 200 }) };
     }
     const dedupeToken = dedupeAcquisition?.token;
 
     const event = request.headers.get("x-github-event");
-    if (!event) return new Response("Missing event", { status: 400 });
+    if (!event) return { response: new Response("Missing event", { status: 400 }) };
 
-    const payload = JSON.parse(body) as Record<string, unknown>;
-    const eventKey = `${event}.${payload.action}`;
+    const raw: object = JSON.parse(body);
+    const eventKey = `${event}.${actionOf(raw)}`;
     this.publish(Operational.Events.Info, {
       traceId,
       time: Date.now(),
@@ -91,28 +160,17 @@ export class GitHubAdapter implements Channel.Surface {
       context: { event: eventKey, deliveryId },
     });
 
-    const content = this.extractContent(event, payload);
-    if (!content) return new Response("Unsupported event", { status: 200 });
+    const content = extractContent(event, raw);
+    if (!content) {
+      return { response: new Response("Unsupported event", { status: 200 }) };
+    }
 
-    const triggerAuth = ChannelAuthnMiddleware.authenticateGitHubTriggers({
-      triggers: this.config.triggers,
-      ctx: {
-        event: eventKey,
-        mentioned: this.botUsername ? content.text.includes(`@${this.botUsername}`) : false,
-        senderId: content.sender,
-        channelId: `${content.issueKind}-${content.issueNumber}`,
-        labels: content.labels,
-        text: content.text,
-      },
-      ...(this.authOptions.onDecision !== undefined
-        ? { onDecision: this.authOptions.onDecision }
-        : {}),
-    });
-    if (PolicyDecision.isBlocking(triggerAuth.verdict))
-      return new Response("Filtered", { status: 200 });
+    if (this.triggerBlocks(content, eventKey)) {
+      return { response: new Response("Filtered", { status: 200 }) };
+    }
 
     const inbound = this.normalizer.normalize(content, eventKey, traceId, deliveryId ?? undefined);
-    if (!inbound) return new Response("Filtered", { status: 200 });
+    if (!inbound) return { response: new Response("Filtered", { status: 200 }) };
 
     this.publish(Operational.Events.Debug, {
       traceId,
@@ -126,73 +184,58 @@ export class GitHubAdapter implements Channel.Surface {
       },
     });
 
+    return { traceId, deliveryId, dedupeToken, content, inbound };
+  }
+
+  private triggerBlocks(content: GitHubEventContent, eventKey: string): boolean {
+    const triggerAuth = ChannelAuthnMiddleware.authenticateGitHubTriggers({
+      triggers: this.config.triggers,
+      ctx: {
+        event: eventKey,
+        mentioned: this.botUsername ? content.text.includes(`@${this.botUsername}`) : false,
+        senderId: content.sender,
+        channelId: `${content.issueKind}-${content.issueNumber}`,
+        labels: content.labels,
+        text: content.text,
+      },
+      ...decisionOption(this.authOptions.onDecision),
+    });
+    return PolicyDecision.isBlocking(triggerAuth.verdict);
+  }
+
+  /** The run-and-reply frame: a handler throw or comment failure releases the delivery claim and returns 500 so GitHub retries. */
+  private async dispatchWebhook(prepared: PreparedWebhook): Promise<Response> {
     try {
-      const outbound = await this.getHandler()(inbound);
+      const outbound = await this.getHandler()(prepared.inbound);
       if (outbound?.text) {
         await this.client.postComment(
-          content.repo,
-          content.issueNumber,
+          prepared.content.repo,
+          prepared.content.issueNumber,
           outbound.text,
-          traceId,
-          deliveryId ?? undefined,
+          prepared.traceId,
+          prepared.deliveryId ?? undefined,
         );
       }
     } catch (err) {
       this.publish(Operational.Events.Error, {
-        traceId,
+        traceId: prepared.traceId,
         time: Date.now(),
         component: "server",
         msg: "github message handler error",
         context: {
-          repo: content.repo,
-          issue: content.issueNumber,
+          repo: prepared.content.repo,
+          issue: prepared.content.issueNumber,
           error: err instanceof Error ? err.message : String(err),
           stack: err instanceof Error ? err.stack : undefined,
         },
       });
-      if (deliveryId && dedupeToken !== undefined) this.dedupe.forget(deliveryId, dedupeToken);
+      if (prepared.deliveryId && prepared.dedupeToken !== undefined) {
+        this.dedupe.forget(prepared.deliveryId, prepared.dedupeToken);
+      }
       return new Response("Processing failed", { status: 500 });
     }
 
     return new Response("OK", { status: 200 });
-  }
-
-  private extractContent(event: string, payload: unknown): GitHubEventContent | null {
-    switch (event) {
-      case "issue_comment": {
-        const p = payload as GitHubIssueCommentPayload;
-        if (p.action !== "created") return null;
-        if (p.comment.user.type === "Bot") return null;
-        return {
-          text: p.comment.body,
-          sender: p.comment.user.login,
-          senderType: p.comment.user.type,
-          repo: p.repository.full_name,
-          issueNumber: p.issue.number,
-          issueKind: p.issue.pull_request ? "pr" : "issue",
-          labels: p.issue.labels?.map((l) => l.name) ?? [],
-        };
-      }
-      case "issues": {
-        const p = payload as GitHubIssuesPayload;
-        if (p.action !== "opened") return null;
-        if (p.issue.user.type === "Bot") return null;
-        return {
-          // `||`, not `??`: GitHub sends empty-STRING bodies too — an issue
-          // opened with no body must fall back to its title, or the empty
-          // normalization drop (#606) silently vanishes a label-triggered event.
-          text: p.issue.body || p.issue.title,
-          sender: p.issue.user.login,
-          senderType: p.issue.user.type,
-          repo: p.repository.full_name,
-          issueNumber: p.issue.number,
-          issueKind: p.issue.pull_request ? "pr" : "issue",
-          labels: p.issue.labels?.map((l) => l.name) ?? [],
-        };
-      }
-      default:
-        return null;
-    }
   }
 
   private getHandler(): Channel.MessageHandler {

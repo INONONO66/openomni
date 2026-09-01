@@ -279,6 +279,49 @@ function checkDeclarationOutputs(manifest: Manifest, projectLabel: string): Prob
   return problems;
 }
 
+function verifyProject(
+  manifest: Manifest,
+  project: string,
+  basePath: string,
+  claimed: Set<string>,
+): Problem[] {
+  const configPath = resolve(manifest.root, project);
+  if (!existsSync(configPath)) {
+    return [{ code: "config_parse_error", message: `${project}: config does not exist` }];
+  }
+
+  const { chain, problem } = extendsChainOf(configPath, project);
+  if (problem) return [problem];
+  if (!chain.includes(basePath)) {
+    return [
+      {
+        code: "not_extending_base",
+        message: `${project}: extends chain never reaches ${manifest.base}`,
+      },
+    ];
+  }
+
+  const parsed = parseProject(configPath, project);
+  if (!("options" in parsed)) return [parsed];
+  for (const file of parsed.fileNames) claimed.add(resolve(file));
+  const expectation = manifest.emitPolicy?.[project];
+  return expectation ? checkEmitPolicy(project, parsed, expectation) : [];
+}
+
+function verifyProjects(
+  manifest: Manifest,
+  basePath: string,
+  problems: Problem[],
+  claimed: Set<string>,
+): number {
+  let projectCount = 0;
+  for (const project of manifest.projects) {
+    projectCount += 1;
+    problems.push(...verifyProject(manifest, project, basePath, claimed));
+  }
+  return projectCount;
+}
+
 export function verifyManifest(manifest: Manifest): VerifyResult {
   const problems: Problem[] = [];
   const claimed = new Set<string>();
@@ -291,40 +334,8 @@ export function verifyManifest(manifest: Manifest): VerifyResult {
       message: `shared base ${manifest.base} does not exist under ${manifest.root}`,
     });
   } else {
-    for (const project of manifest.projects) {
-      projectCount += 1;
-      const configPath = resolve(manifest.root, project);
-      if (!existsSync(configPath)) {
-        problems.push({
-          code: "config_parse_error",
-          message: `${project}: config does not exist`,
-        });
-        continue;
-      }
-      const { chain, problem } = extendsChainOf(configPath, project);
-      if (problem) {
-        problems.push(problem);
-        continue;
-      }
-      if (!chain.includes(basePath)) {
-        problems.push({
-          code: "not_extending_base",
-          message: `${project}: extends chain never reaches ${manifest.base}`,
-        });
-        continue;
-      }
-      const parsed = parseProject(configPath, project);
-      if (!("options" in parsed)) {
-        problems.push(parsed);
-        continue;
-      }
-      for (const file of parsed.fileNames) claimed.add(resolve(file));
-      const expectation = manifest.emitPolicy?.[project];
-      if (expectation) problems.push(...checkEmitPolicy(project, parsed, expectation));
-    }
-
+    projectCount = verifyProjects(manifest, basePath, problems, claimed);
     problems.push(...checkSourceCoverage(manifest, claimed));
-
     if (manifest.declarationProject !== undefined && problems.length === 0) {
       problems.push(...checkDeclarationOutputs(manifest, manifest.declarationProject));
     }
