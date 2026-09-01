@@ -1,13 +1,13 @@
-import { newTraceId } from "../support/trace";
+import { newTraceId } from "../../support/trace";
 import { type Channel, Operational, PolicyDecision } from "@openomni/protocol";
-import { Dedupe, DedupeWindow } from "../support/dedupe";
+import { Dedupe, DedupeWindow } from "../../support/dedupe";
 import { DiscordClient } from "./client";
 import { DiscordHandlerMissingError } from "./error";
 import { DiscordGateway } from "./gateway";
 import { DiscordNormalizer } from "./normalizer";
 import type { DiscordMessage } from "./types";
-import type { PublishPort } from "../types";
-import { ChannelAuthnMiddleware, type ChannelAuthnDecisionObserver } from "../channel-authn";
+import type { PublishPort } from "../../types";
+import { ChannelAuthnMiddleware, type ChannelAuthnDecisionObserver } from "../../channel-authn";
 
 export interface DiscordAuthOptions {
   readonly onDecision?: ChannelAuthnDecisionObserver;
@@ -200,11 +200,10 @@ export class DiscordAdapter implements Channel.Surface {
 }
 
 // merged from formatter.ts (#453 hygiene: sub-30-LOC single-importer)
-import { chunkMarkdown } from "../support/format/chunk";
-import { renderDiscordMarkdown } from "../support/format/discord";
-import type { ChannelClient } from "../types";
+import { chunkMarkdown } from "../../support/format/chunk";
+import { DISCORD_RENDER } from "./format";
+import type { ChannelClient } from "../../types";
 
-const DISCORD_MESSAGE_LIMIT = 2000;
 
 async function sendDiscordMessage(
   client: ChannelClient,
@@ -214,8 +213,8 @@ async function sendDiscordMessage(
 ): Promise<string | undefined> {
   if (!message.text) return undefined;
   let lastMessageId: string | undefined;
-  const rendered = renderDiscordMarkdown(message.text);
-  for (const chunk of chunkMarkdown(rendered, DISCORD_MESSAGE_LIMIT)) {
+  const rendered = DISCORD_RENDER.renderMarkdown(message.text);
+  for (const chunk of chunkMarkdown(rendered, DISCORD_RENDER.messageLimit)) {
     lastMessageId = (await client.send(channelId, chunk, traceId)) ?? lastMessageId;
   }
   return lastMessageId;

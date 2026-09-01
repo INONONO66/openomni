@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { Channel } from "@openomni/protocol";
-import { GitHubAdapter } from "../src/github/surface";
+import { GitHubAdapter } from "../src/provider/github/surface";
 
 const secret = "github-webhook-secret";
 const deliveryId = "delivery-retry-1";

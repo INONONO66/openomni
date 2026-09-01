@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { TelegramPoller } from "../src/telegram/poller";
-import type { TelegramMessage, TelegramUpdate } from "../src/telegram/types";
+import { TelegramPoller } from "../src/provider/telegram/poller";
+import type { TelegramMessage, TelegramUpdate } from "../src/provider/telegram/types";
 
 function message(updateId: number): TelegramMessage {
   return {
