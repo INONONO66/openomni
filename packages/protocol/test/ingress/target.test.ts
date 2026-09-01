@@ -4,7 +4,7 @@ import { resolveTarget, targetKey } from "../../src/ingress/index.js";
 
 describe("ingress target helpers", () => {
   it("defaults events without explicit target to resident", () => {
-    const event = Ingress.InboundEventSchema.parse({
+    const event = Ingress.DirectEventSchema.parse({
       id: "event-resident-default",
       traceId: "trace-test",
       surface: "cli",
@@ -17,7 +17,7 @@ describe("ingress target helpers", () => {
   });
 
   it("resolves explicit target before metadata target", () => {
-    const event = Ingress.InboundEventSchema.parse({
+    const event = Ingress.DirectEventSchema.parse({
       id: "event-worker-explicit",
       traceId: "trace-test",
       surface: "cli",
