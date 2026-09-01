@@ -462,6 +462,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
 
     residentDeliver = createResident({
       model: config.model,
+      ...(config.model.fallbacks === undefined ? {} : { modelFallbacks: config.model.fallbacks }),
       apiKey: config.model.apiKey,
       ...(transport === undefined ? {} : { transport }),
       policies: policyRegistry,

@@ -56,7 +56,10 @@ function openSession(prefix: string): string {
   }).id;
 }
 
-function delivery(sessionId: string): Gateway.Deliver {
+function delivery(
+  sessionId: string,
+  meta?: Readonly<Record<string, unknown>>,
+): Gateway.Deliver {
   const traceId = "0af7651916cd43dd8448eb211c80319c";
   return {
     sessionId,
@@ -68,6 +71,7 @@ function delivery(sessionId: string): Gateway.Deliver {
       payload: "please answer",
       target: { kind: "resident" },
       mode: "direct",
+      ...(meta === undefined ? {} : { meta }),
     },
     decision: {
       traceId,
@@ -286,6 +290,27 @@ describe("Resident terminal LLM failure surfacing", () => {
       .map((part) => (part.type === "text" ? part.text : ""))
       .join("");
     expect(text).toContain("rate limited upstream");
+  });
+
+  it("lets a failed delegation wake keep throwing — the receipt must not be consumed", async () => {
+    // A wake's RESOLUTION is the durable `markWoken` receipt. Converting its
+    // failure into a reply would mark the settlement delivered and lose it,
+    // and no one is waiting on a channel for it — so it stays a throw and the
+    // next boot's rescan retries.
+    const sessionId = openSession("openomni-resident-wake-");
+    const resident = residentThatAlwaysFails(
+      providerError({ message: "rate limit exceeded", isRetryable: true, statusCode: 429 }),
+    );
+
+    await expect(
+      resident(delivery(sessionId, { kind: "delegation.settled" })),
+    ).rejects.toBeInstanceOf(Error);
+
+    // And no reply was fabricated into the session either.
+    const assistant = Session.getMessages(sessionId).filter(
+      (message) => message.role === "assistant",
+    );
+    expect(assistant).toEqual([]);
   });
 
   it("lets an abort keep propagating — a stopped run is not a model fault", async () => {

@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { Actor, Gateway, Machine } from "@openomni/protocol";
+import { Actor, Gateway, Machine, type Model } from "@openomni/protocol";
 import { z } from "zod";
 
 export interface OpenOmniConfig {
@@ -26,6 +26,12 @@ export interface OpenOmniConfig {
      * identity, which any entry here overrides by name.
      */
     readonly headers?: Readonly<Record<string, string>>;
+    /**
+     * Ordered models tried AFTER `id` when a run's failures advance the
+     * chain (the agent loop's `modelFallbacks`). Absent means every attempt
+     * uses the primary.
+     */
+    readonly fallbacks?: readonly Model.Ref[];
   };
   /**
    * Absent means this brain has no body: no socket is bound and machine-placed
@@ -124,6 +130,36 @@ const ModelHeaders = z.record(
   z.string().regex(/^[^\r\n]*$/),
 );
 
+/**
+ * `OPENOMNI_MODEL_FALLBACKS` — the chain the run advances to, as a
+ * comma-separated list of `provider/model` entries, in order:
+ *
+ *     OPENOMNI_MODEL_FALLBACKS="openai/gpt-5,anthropic/claude-x"
+ *
+ * Surrounding whitespace around each entry is trimmed; only the FIRST slash
+ * separates, so a model id containing slashes (`openrouter/meta-llama/llama-4`)
+ * survives intact. Validation is fail-closed on the whole variable: an entry
+ * with no separator, an empty segment, or inner whitespace rejects the boot
+ * rather than silently shortening the chain — a fallback the operator thinks
+ * they configured but which never loads is worse than no fallback at all.
+ */
+function modelFallbacksFromEnv(): readonly Model.Ref[] | undefined {
+  const raw = process.env.OPENOMNI_MODEL_FALLBACKS?.trim();
+  if (raw === undefined || raw.length === 0) return undefined;
+  return raw.split(",").map((entry) => {
+    const trimmed = entry.trim();
+    const separator = trimmed.indexOf("/");
+    const provider = separator === -1 ? "" : trimmed.slice(0, separator);
+    const id = separator === -1 ? "" : trimmed.slice(separator + 1);
+    if (provider.length === 0 || id.length === 0 || /\s/.test(trimmed)) {
+      throw new Error(
+        `OPENOMNI_MODEL_FALLBACKS is invalid: "${entry}" is not a "provider/model" entry`,
+      );
+    }
+    return { provider, id };
+  });
+}
+
 const Enrollments = z.array(Machine.Enrollment).min(1);
 const SocialBudgets = z.array(Gateway.SocialBudget);
 
@@ -199,12 +235,14 @@ function socialBudgetsFromEnv(): OpenOmniConfig["socialBudgets"] {
 function modelFromEnv(): OpenOmniConfig["model"] {
   const baseUrl = process.env.OPENOMNI_MODEL_BASE_URL?.trim();
   const headers = parseEnvJson("OPENOMNI_MODEL_HEADERS", ModelHeaders);
+  const fallbacks = modelFallbacksFromEnv();
   return {
     provider: required("OPENOMNI_MODEL_PROVIDER"),
     id: required("OPENOMNI_MODEL_ID"),
     apiKey: required("OPENOMNI_MODEL_API_KEY"),
     ...(baseUrl === undefined || baseUrl.length === 0 ? {} : { baseUrl }),
     ...(headers === undefined ? {} : { headers }),
+    ...(fallbacks === undefined ? {} : { fallbacks }),
   };
 }
 
