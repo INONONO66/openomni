@@ -145,6 +145,67 @@ describe("admission fold", () => {
 });
 
 describe("durable kernel", () => {
+  test("admits a synchronous no-op path before delegate returns", async () => {
+    const events = eventCollector();
+    const kernel = createDelegationKernel({
+      drivers: { process: { run: () => new Promise(() => undefined) } },
+      now: () => 1_000,
+      newDelegationId: () => "d-synchronous-admission",
+      wake: () => undefined,
+      events,
+      limits: LIMITS,
+    });
+
+    const delegated = kernel.delegate(
+      ask({ address: { kind: "core", scope: "independent" } }),
+      RESIDENT,
+    );
+    const statusBeforeAwait = DelegationStore.get("d-synchronous-admission")?.status;
+    const eventsBeforeAwait = events.events.map((event) => event.name);
+
+    await delegated;
+    kernel.stop();
+    expect(statusBeforeAwait).toBe("open");
+    expect(eventsBeforeAwait).toEqual(["delegation.admitted"]);
+  });
+
+  test("carries the parent-clamped deadline into the handle and durable record", async () => {
+    DelegationStore.create({
+      delegationId: "deadline-parent",
+      operation: "ask",
+      address: { kind: "core", scope: "independent" },
+      transport: "process",
+      deadline: 4_000,
+      rootDelegationId: "deadline-parent",
+      origin: RESIDENT,
+      instruction: "parent",
+      status: "open",
+      createdAt: 1,
+    });
+    const kernel = createDelegationKernel({
+      drivers: { process: { run: () => new Promise(() => undefined) } },
+      now: () => 1_000,
+      newDelegationId: () => "deadline-child",
+      wake: () => undefined,
+      bootSweep: false,
+      limits: LIMITS,
+    });
+
+    const result = await kernel.delegate(
+      ask({ address: { kind: "core", scope: "independent" }, deadline: 9_000 }),
+      {
+        ...RESIDENT,
+        parentDelegationId: "deadline-parent",
+        rootDelegationId: "deadline-parent",
+      },
+    );
+
+    if ("refused" in result) throw new Error(result.refused);
+    expect(result.handle.deadline).toBe(4_000);
+    expect(DelegationStore.get("deadline-child")?.deadline).toBe(4_000);
+    kernel.stop();
+  });
+
   test("records before dispatching and emits admitted, delivered, settled in fact order", async () => {
     const events = eventCollector();
     let sawRecord = false;

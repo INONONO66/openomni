@@ -43,7 +43,10 @@ export interface DriverReport {
 
 export interface DelegationDriver {
   /** Optional prepare phase; channel uses it to allocate a durable waitId. */
-  prepare?(admitted: Admitted, handle: Delegation.Handle): DriverPreparation | Promise<DriverPreparation>;
+  prepare?(
+    admitted: Admitted,
+    handle: Delegation.Handle,
+  ): DriverPreparation | Promise<DriverPreparation>;
   run(
     admitted: Admitted,
     handle: Delegation.Handle,
@@ -128,6 +131,8 @@ function leaseClosedBy(status: Delegation.Settled["status"]): "settled" | "cance
 type DelegationResult =
   | { readonly refused: string; readonly error: AdmissionRefusal }
   | { readonly handle: Delegation.Handle; readonly settled?: Delegation.Settled };
+
+type DelegationRefusal = Extract<DelegationResult, { readonly refused: string }>;
 
 type DelegationAwaitResult =
   | { readonly kind: "settled"; readonly settlement: Delegation.Settled }
@@ -254,7 +259,10 @@ function controlError(code: "not_found" | "not_open", delegationId: string): Nam
   return new DelegationControlError({
     code,
     delegationId,
-    message: code === "not_found" ? `delegation ${delegationId} was not found` : `delegation ${delegationId} is not open`,
+    message:
+      code === "not_found"
+        ? `delegation ${delegationId} was not found`
+        : `delegation ${delegationId} is not open`,
   });
 }
 
@@ -333,7 +341,10 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
    * waiter notification, timer cleanup, and wake delivery happen only after
    * that CAS has recorded the settlement.
    */
-  function settle(delegationId: string, candidate: Delegation.Settled): Delegation.Settled | undefined {
+  function settle(
+    delegationId: string,
+    candidate: Delegation.Settled,
+  ): Delegation.Settled | undefined {
     const current = store.get(delegationId);
     if (current === undefined) return undefined;
     if (current.status === "settled") return current.settled;
@@ -387,11 +398,13 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
     // synchronous, so the ledger write runs behind it and reports its own
     // failure instead of blocking settlement.
     const workItems = options.workItems;
-    if (persisted.operation === "assign" && persisted.workItemId !== undefined && workItems !== undefined) {
+    if (
+      persisted.operation === "assign" &&
+      persisted.workItemId !== undefined &&
+      workItems !== undefined
+    ) {
       void Promise.resolve()
-        .then(() =>
-          workItems.closeAttempt({ record: persisted, settlement: winner }),
-        )
+        .then(() => workItems.closeAttempt({ record: persisted, settlement: winner }))
         .catch((error: unknown) => {
           events.publish(Operational.Events.Error, {
             traceId: delegationTraceId(delegationId),
@@ -444,22 +457,25 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
 
   function arm(record: Delegation.Record): void {
     if (record.status !== "open" || timers.has(record.delegationId)) return;
-    const timer = setTimeout(() => {
-      timers.delete(record.delegationId);
-      const current = store.get(record.delegationId);
-      if (current?.status !== "open") return;
-      const now = options.now();
-      if (!Deadline.isExpired(now, current.deadline)) {
-        arm(current);
-        return;
-      }
-      settle(current.delegationId, {
-        status: "no_response",
-        delegationId: current.delegationId,
-        deadline: current.deadline,
-        at: Math.max(now, current.deadline),
-      });
-    }, nextTimerDelay(options.now(), record.deadline));
+    const timer = setTimeout(
+      () => {
+        timers.delete(record.delegationId);
+        const current = store.get(record.delegationId);
+        if (current?.status !== "open") return;
+        const now = options.now();
+        if (!Deadline.isExpired(now, current.deadline)) {
+          arm(current);
+          return;
+        }
+        settle(current.delegationId, {
+          status: "no_response",
+          delegationId: current.delegationId,
+          deadline: current.deadline,
+          at: Math.max(now, current.deadline),
+        });
+      },
+      nextTimerDelay(options.now(), record.deadline),
+    );
     // Timers are lifecycle guards, not process-liveness handles.
     const unref = (timer as unknown as { unref?: () => void }).unref;
     unref?.call(timer);
@@ -473,8 +489,9 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
     if (workItems !== undefined) {
       // Re-close attempts whose settlement committed but whose ledger write
       // was lost before the restart (closeAttempt is idempotent).
-      void workItems.recoverAttempts((delegationId) => store.get(delegationId)).catch(
-        (error: unknown) => {
+      void workItems
+        .recoverAttempts((delegationId) => store.get(delegationId))
+        .catch((error: unknown) => {
           events.publish(Operational.Events.Error, {
             traceId: newTraceId(),
             time: options.now(),
@@ -483,8 +500,7 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
             error: error instanceof Error ? error.message : String(error),
             context: {},
           });
-        },
-      );
+        });
     }
     for (const record of store.listSettledUnwoken()) {
       if (record.transport !== "inline" && record.settled !== undefined) {
@@ -553,17 +569,22 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
     return completion;
   }
 
-  async function delegate(candidate: unknown, origin: DelegationOrigin): Promise<DelegationResult> {
-    if (stopped) {
-      throw stoppedKernelError();
-    }
-    const now = options.now();
-    const delegationId = options.newDelegationId();
+  function refuseDelegation(
+    code: ConstructorParameters<typeof AdmissionRefusal>[0]["code"],
+    message: string,
+  ): DelegationRefusal {
+    return { refused: message, error: new AdmissionRefusal({ code, message }) };
+  }
+
+  function admitCandidate(
+    candidate: unknown,
+    origin: DelegationOrigin,
+    now: number,
+    delegationId: string,
+  ): Admitted | DelegationRefusal {
     const parentDelegationId = origin.parentDelegationId;
     const parent = parentDelegationId === undefined ? undefined : store.get(parentDelegationId);
     const rootDelegationId = parent?.rootDelegationId ?? delegationId;
-    // Live-lease facts are read only for a worker origin with a durable
-    // parent — the only origin the §3.5 relaxation can ever admit.
     const liveLeases =
       origin.role === "worker" && parentDelegationId !== undefined
         ? options.leases?.listLiveByHolder(parentDelegationId, now)
@@ -577,15 +598,12 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
       ...(liveLeases === undefined ? {} : { leases: liveLeases }),
     });
     if (!admitted.ok) return { refused: admitted.reason, error: admitted.error };
-    // Only an internal process worker has a worker loop that can consume this
-    // identity. Channel assignments must never persist a fabricated UUID.
     const workerRunId = admitted.transport === "process" ? crypto.randomUUID() : undefined;
-    const decision: Admitted = {
-      ...admitted,
-      ...(workerRunId === undefined ? {} : { workerRunId }),
-    };
+    return { ...admitted, ...(workerRunId === undefined ? {} : { workerRunId }) };
+  }
 
-    const baseHandle: Delegation.Handle = {
+  function baseHandleFor(decision: Admitted, delegationId: string): Delegation.Handle {
+    return {
       delegationId,
       operation: decision.request.operation,
       address: decision.request.address,
@@ -596,34 +614,54 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
         : { parentDelegationId: decision.parentDelegationId }),
       rootDelegationId: decision.rootDelegationId,
     };
+  }
 
-    const driver = options.drivers[decision.transport];
-    let handle = baseHandle;
-    if (driver?.prepare !== undefined) {
-      try {
-        const prepared = await driver.prepare(decision, baseHandle);
-        handle = Delegation.Handle.parse({
-          ...baseHandle,
-          ...(prepared.waitId === undefined ? {} : { waitId: prepared.waitId }),
-        });
-      } catch (error) {
-        const message = `transport preparation failed: ${error instanceof Error ? error.message : String(error)}`;
-        return {
-          refused: message,
-          error: new AdmissionRefusal({ code: "prepare_failed", message }),
-        };
-      }
+  function prepareTransport(
+    decision: Admitted,
+    baseHandle: Delegation.Handle,
+  ): DriverPreparation | Promise<DriverPreparation> | undefined {
+    return options.drivers[decision.transport]?.prepare?.(decision, baseHandle);
+  }
+
+  function preparedHandle(
+    baseHandle: Delegation.Handle,
+    prepared: DriverPreparation,
+  ): Delegation.Handle {
+    return Delegation.Handle.parse({
+      ...baseHandle,
+      ...(prepared.waitId === undefined ? {} : { waitId: prepared.waitId }),
+    });
+  }
+
+  function preparationRefusal(error: unknown): DelegationRefusal {
+    const message = `transport preparation failed: ${error instanceof Error ? error.message : String(error)}`;
+    return refuseDelegation("prepare_failed", message);
+  }
+
+  function workItemCommissionRefusal(error: unknown): DelegationRefusal {
+    const message = `WorkItem commissioning failed: ${error instanceof Error ? error.message : String(error)}`;
+    return refuseDelegation("work_item_failed", message);
+  }
+
+  function commissionWorkItem(
+    decision: Admitted,
+    handle: Delegation.Handle,
+    origin: DelegationOrigin,
+  ):
+    | { readonly workItemId?: string }
+    | DelegationRefusal
+    | Promise<{ readonly workItemId?: string } | DelegationRefusal> {
+    if (decision.request.operation !== "assign") return {};
+    if (options.workItems === undefined) {
+      return refuseDelegation(
+        "work_item_failed",
+        "assign requires the WorkItem linkage and this kernel carries none",
+      );
     }
-
-    let workItemId: string | undefined;
-    if (decision.request.operation === "assign") {
-      if (options.workItems === undefined) {
-        const message = "assign requires the WorkItem linkage and this kernel carries none";
-        return { refused: message, error: new AdmissionRefusal({ code: "work_item_failed", message }) };
-      }
-      try {
-        workItemId = await options.workItems.openAssign({
-          delegationId,
+    try {
+      return options.workItems
+        .openAssign({
+          delegationId: handle.delegationId,
           ...(decision.workerRunId === undefined && handle.waitId === undefined
             ? {}
             : { workerRunId: decision.workerRunId ?? handle.waitId }),
@@ -631,14 +669,24 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
           instruction: decision.request.payload.text,
           acceptanceCriteria: decision.request.acceptanceCriteria ?? [],
           sessionId:
-            decision.transport === "process" ? `delegation-${delegationId}` : origin.sessionId,
-        });
-      } catch (error) {
-        const message = `WorkItem commissioning failed: ${error instanceof Error ? error.message : String(error)}`;
-        return { refused: message, error: new AdmissionRefusal({ code: "work_item_failed", message }) };
-      }
+            decision.transport === "process" ? `delegation-${handle.delegationId}` : origin.sessionId,
+        })
+        .then(
+          (workItemId) => ({ workItemId }),
+          (error: unknown) => workItemCommissionRefusal(error),
+        );
+    } catch (error) {
+      return workItemCommissionRefusal(error);
     }
+  }
 
+  function delegationRecord(
+    decision: Admitted,
+    handle: Delegation.Handle,
+    origin: DelegationOrigin,
+    now: number,
+    workItemId: string | undefined,
+  ): Delegation.Record {
     const recordOrigin: DelegationOrigin = {
       role: origin.role,
       depth: origin.depth,
@@ -650,7 +698,7 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
             rootDelegationId: decision.rootDelegationId,
           }),
     };
-    const record = Delegation.Record.parse({
+    return Delegation.Record.parse({
       ...handle,
       origin: Delegation.Origin.parse(recordOrigin),
       instruction: decision.request.payload.text,
@@ -658,64 +706,118 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
       createdAt: now,
       ...(workItemId === undefined ? {} : { workItemId }),
     });
+  }
+
+  function claimRefusal(
+    record: Delegation.Record,
+    reason: "fanout_cap" | "parent_settled",
+  ): DelegationRefusal {
+    const message =
+      reason === "parent_settled"
+        ? `parent delegation ${record.parentDelegationId ?? ""} is already settled`
+        : `delegation fanout is capped at ${limits.maxFanout} open records for root ${record.rootDelegationId}`;
+    return refuseDelegation(reason, message);
+  }
+
+  function claimDelegationRecord(
+    record: Delegation.Record,
+    workItemId: string | undefined,
+  ): DelegationRefusal | undefined | Promise<DelegationRefusal> {
     const claim = store.claimOpenWithinRoot(record, limits.maxFanout, {
       ...(record.parentDelegationId === undefined
         ? {}
         : { requireOpenParent: record.parentDelegationId }),
     });
-    if (!claim.claimed) {
-      if (workItemId !== undefined) {
-        try {
-          await options.workItems?.cancelAssign(workItemId);
-        } catch (error) {
-          events.publish(Operational.Events.Error, {
-            traceId: delegationTraceId(record.delegationId),
-            sessionId: record.origin.sessionId,
-            time: options.now(),
-            component: "delegation",
-            msg: `WorkItem rollback failed for ${record.delegationId}`,
-            error: error instanceof Error ? error.message : String(error),
-            context: {
-              delegationId: record.delegationId,
-              workItemId,
-              refusal: claim.reason,
-            },
-          });
-        }
+    if (claim.claimed) return undefined;
+    if (workItemId === undefined) return claimRefusal(record, claim.reason);
+    return (async () => {
+      try {
+        await options.workItems?.cancelAssign(workItemId);
+      } catch (error) {
+        events.publish(Operational.Events.Error, {
+          traceId: delegationTraceId(record.delegationId),
+          sessionId: record.origin.sessionId,
+          time: options.now(),
+          component: "delegation",
+          msg: `WorkItem rollback failed for ${record.delegationId}`,
+          error: error instanceof Error ? error.message : String(error),
+          context: {
+            delegationId: record.delegationId,
+            workItemId,
+            refusal: claim.reason,
+          },
+        });
       }
-      const message =
-        claim.reason === "parent_settled"
-          ? `parent delegation ${record.parentDelegationId ?? ""} is already settled`
-          : `delegation fanout is capped at ${limits.maxFanout} open records for root ${record.rootDelegationId}`;
-      return {
-        refused: message,
-        error: new AdmissionRefusal({ code: claim.reason, message }),
-      };
+      return claimRefusal(record, claim.reason);
+    })();
+  }
+
+  async function awaitImmediate(handle: Delegation.Handle): Promise<DelegationResult> {
+    const settled = await awaitDelegation(handle.delegationId);
+    if (settled.kind === "timeout") {
+      throw new Error(`delegation ${handle.delegationId} remained open at its deadline`);
     }
+    return { handle, settled: settled.settlement };
+  }
+
+  function startDelegation(
+    admission: Admitted,
+    handle: Delegation.Handle,
+    record: Delegation.Record,
+  ): DelegationResult | Promise<DelegationResult> {
     publishAdmitted(record);
     arm(record);
-
     const controller = new AbortController();
     controllers.set(handle.delegationId, controller);
-    const completion = dispatch(decision, handle, controller);
-
-    // Inline is intentionally volatile and awaited. Await the durable fold,
-    // rather than the driver promise alone, so an uncooperative worker still
-    // returns the timer's no_response settlement at the effective deadline.
-    // Notify likewise waits only until transport acceptance (or its deadline).
+    const completion = dispatch(admission, handle, controller);
     if (handle.transport === "inline" || handle.operation === "notify") {
-      const settled = await awaitDelegation(handle.delegationId);
-      if (settled.kind === "timeout") {
-        throw new Error(`delegation ${handle.delegationId} remained open at its deadline`);
-      }
-      return { handle, settled: settled.settlement };
+      return awaitImmediate(handle);
     }
-
-    // Process/channel ask|assign are durable background work. The handle is
-    // returned without waiting for a result; the settlement fold will wake the
-    // owner session later.
     void completion;
     return { handle };
+  }
+
+  function completeDelegationAdmission(
+    admission: Admitted,
+    handle: Delegation.Handle,
+    origin: DelegationOrigin,
+    now: number,
+    commission: { readonly workItemId?: string } | DelegationRefusal,
+  ): DelegationResult | Promise<DelegationResult> {
+    if ("refused" in commission) return commission;
+    const record = delegationRecord(admission, handle, origin, now, commission.workItemId);
+    const refusal = claimDelegationRecord(record, commission.workItemId);
+    if (refusal instanceof Promise) return refusal;
+    if (refusal !== undefined) return refusal;
+    return startDelegation(admission, handle, record);
+  }
+
+  async function delegate(candidate: unknown, origin: DelegationOrigin): Promise<DelegationResult> {
+    if (stopped) throw stoppedKernelError();
+    const now = options.now();
+    const delegationId = options.newDelegationId();
+    const admission = admitCandidate(candidate, origin, now, delegationId);
+    if ("refused" in admission) return admission;
+
+    const baseHandle = baseHandleFor(admission, delegationId);
+    let preparation: DriverPreparation | Promise<DriverPreparation> | undefined;
+    try {
+      preparation = prepareTransport(admission, baseHandle);
+    } catch (error) {
+      return preparationRefusal(error);
+    }
+    let handle = baseHandle;
+    if (preparation !== undefined) {
+      try {
+        handle = preparedHandle(baseHandle, await preparation);
+      } catch (error) {
+        return preparationRefusal(error);
+      }
+    }
+    const pendingCommission = commissionWorkItem(admission, handle, origin);
+    const commission =
+      pendingCommission instanceof Promise ? await pendingCommission : pendingCommission;
+    return completeDelegationAdmission(admission, handle, origin, now, commission);
   }
 
   function awaitDelegation(
@@ -726,7 +828,8 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
     const record = store.get(delegationId);
     if (record === undefined) return Promise.reject(controlError("not_found", delegationId));
     if (record.status === "settled") {
-      if (record.settled === undefined) return Promise.reject(controlError("not_open", delegationId));
+      if (record.settled === undefined)
+        return Promise.reject(controlError("not_open", delegationId));
       return Promise.resolve({ kind: "settled", settlement: record.settled });
     }
 
@@ -783,27 +886,30 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
       }
       const deadlineBound = end === record.deadline;
       const scheduleAwaitTimeout = (): void => {
-        timer = setTimeout(() => {
-          const currentNow = options.now();
-          if (!Deadline.isExpired(currentNow, end)) {
-            scheduleAwaitTimeout();
-            return;
-          }
-          removeWaiter();
-          if (deadlineBound) {
-            const settled = settle(delegationId, {
-              status: "no_response",
-              delegationId,
-              deadline: record.deadline,
-              at: Math.max(currentNow, record.deadline),
-            });
-            if (settled !== undefined) {
-              resolve({ kind: "settled", settlement: settled });
+        timer = setTimeout(
+          () => {
+            const currentNow = options.now();
+            if (!Deadline.isExpired(currentNow, end)) {
+              scheduleAwaitTimeout();
               return;
             }
-          }
-          resolve({ kind: "timeout", delegationId, deadline: record.deadline });
-        }, nextTimerDelay(options.now(), end));
+            removeWaiter();
+            if (deadlineBound) {
+              const settled = settle(delegationId, {
+                status: "no_response",
+                delegationId,
+                deadline: record.deadline,
+                at: Math.max(currentNow, record.deadline),
+              });
+              if (settled !== undefined) {
+                resolve({ kind: "settled", settlement: settled });
+                return;
+              }
+            }
+            resolve({ kind: "timeout", delegationId, deadline: record.deadline });
+          },
+          nextTimerDelay(options.now(), end),
+        );
         const unref = (timer as unknown as { unref?: () => void }).unref;
         unref?.call(timer);
       };

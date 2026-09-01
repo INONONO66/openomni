@@ -329,6 +329,329 @@ function debitRow(input: SendInput, sendClass: MessageClass): Gateway.EgressDebi
   };
 }
 
+type DenySend = (input: SendInput, code: MessageDenialCode, reason: string) => SendReceipt;
+
+interface AuthorizedSend {
+  readonly input: SendInput;
+  readonly target: DeliveryTarget;
+  readonly grant: SenderTargetGrant;
+  readonly conversationPinned: boolean;
+  readonly leasePinned: boolean;
+  readonly conversation: Conversation.Record | undefined;
+  readonly lease: Lease.Record | undefined;
+}
+
+/** Resolves sender authority and its exact allocated endpoint without mutating durable state. */
+function authorizeSend(
+  input: SendInput,
+  ports: MessagingPorts,
+  deny: DenySend,
+): AuthorizedSend | SendReceipt {
+  const grants = ports.grants();
+  const claim = {
+    senderId: input.senderId,
+    targetActorId: input.target.actorId,
+    operation: input.operation,
+    at: input.at,
+  };
+  const conversationPinned = input.conversationId !== undefined;
+  const leasePinned = input.leaseId !== undefined;
+  const conversation = conversationForSend(input);
+  const lease = leaseForSend(input);
+  let grant: SenderTargetGrant | undefined;
+  if (!conversationPinned && !leasePinned) {
+    grant = resolveSenderTargetGrant(grants, claim);
+    if (grant === undefined && !hasScopedSenderTargetCandidate(grants, claim)) {
+      return deny(
+        input,
+        "ungranted",
+        `no active sender-target grant covers ${input.senderId} -> ${input.target.actorId} (${input.operation})`,
+      );
+    }
+  }
+  const resolution = resolveExistingTarget(input.target);
+  if (!resolution.ok) return deny(input, resolution.code, resolution.reason);
+
+  if (leasePinned) {
+    const leaseResult = authorizeLeaseSend(
+      input,
+      resolution.target,
+      lease,
+      conversationPinned,
+      deny,
+    );
+    if ("kind" in leaseResult) return leaseResult;
+    grant = leaseResult;
+  } else if (conversationPinned) {
+    const conversationDenial = conversationGate(
+      input.conversationId ?? "",
+      conversation,
+      resolution.target,
+    );
+    if (conversationDenial !== undefined) {
+      return deny(input, "conversation_denied", conversationDenial);
+    }
+    grant = pinnedGrant(input, `conversation:${input.conversationId ?? ""}`);
+  } else if (grant === undefined) {
+    const surfaceKey = deliverySurfaceKey(resolution.target);
+    grant = resolveScopedSenderTargetGrant(grants, { ...claim, surfaceKey });
+    if (grant === undefined) {
+      return deny(
+        input,
+        "ungranted",
+        `reply-scoped grant does not cover surface ${surfaceKey} — replies stay inside the initiating container`,
+      );
+    }
+  }
+
+  return {
+    input,
+    target: resolution.target,
+    grant,
+    conversationPinned,
+    leasePinned,
+    conversation,
+    lease,
+  };
+}
+
+function authorizeLeaseSend(
+  input: SendInput,
+  target: DeliveryTarget,
+  lease: Lease.Record | undefined,
+  conversationPinned: boolean,
+  deny: DenySend,
+): SenderTargetGrant | SendReceipt {
+  const leaseId = input.leaseId ?? "";
+  if (lease === undefined) return deny(input, "lease_denied", `lease ${leaseId} does not exist`);
+  if (conversationPinned && input.conversationId !== lease.conversationId) {
+    return deny(
+      input,
+      "lease_denied",
+      `lease ${leaseId} scopes conversation ${lease.conversationId}, not ${input.conversationId ?? ""}`,
+    );
+  }
+  const conversationDenial = conversationGate(
+    lease.conversationId,
+    ConversationStore.get(lease.conversationId),
+    target,
+  );
+  if (conversationDenial !== undefined) {
+    return deny(input, "conversation_denied", conversationDenial);
+  }
+  return pinnedGrant(input, `lease:${leaseId}`);
+}
+
+/** Records all admission debits before the delivery effect. */
+function admitSend(
+  authorization: AuthorizedSend,
+  ports: MessagingPorts,
+  deny: DenySend,
+): SendAdmission | SendReceipt {
+  const { input, target, grant, conversationPinned, leasePinned } = authorization;
+  const sendClass = sendClassOf(input);
+  let admission: SendAdmission | undefined;
+  try {
+    admission = existingAdmission(input, target);
+  } catch (error) {
+    if (error instanceof SendAdmissionConflict && input.operation === "awaited") {
+      return deny(input, "wait_duplicate", error.message);
+    }
+    throw error;
+  }
+  if (admission !== undefined) {
+    repairBudgetDebit(input, admission);
+    return admission;
+  }
+
+  const budgeted =
+    !conversationPinned &&
+    !leasePinned &&
+    ports.budgets !== undefined &&
+    grant.replyScope === undefined;
+  const pinnedDenial = debitPinnedAuthority(authorization, deny);
+  if (pinnedDenial !== undefined) return pinnedDenial;
+  if (budgeted) {
+    const budget = ports
+      .budgets?.()
+      .find((candidate) => candidate.targetActorId === input.target.actorId);
+    const budgetClaim = EgressBudgetStore.claim(
+      debitRow(input, sendClass),
+      input.at - (budget?.windowMs ?? 0),
+      (state) => evaluateSocialBudget(budget, state, { class: sendClass, at: input.at }),
+    );
+    if (budgetClaim.kind === "refused") {
+      return deny(
+        input,
+        budgetClaim.reason.suppress,
+        `active-egress budget suppressed a ${sendClass} send ${input.senderId} -> ${input.target.actorId} (${budgetClaim.reason.suppress})`,
+      );
+    }
+  }
+  admission = recordAdmission(input, target, budgeted, sendClass);
+  repairBudgetDebit(input, admission);
+  return admission;
+}
+
+function debitPinnedAuthority(
+  authorization: AuthorizedSend,
+  deny: DenySend,
+): SendReceipt | undefined {
+  const { input, leasePinned, conversationPinned, lease, conversation } = authorization;
+  if (leasePinned && lease !== undefined) {
+    const debit = LeaseStore.sendDebit(lease.id, input.at);
+    if (debit.kind === "refused") {
+      return deny(
+        input,
+        "lease_denied",
+        `lease ${lease.id} refused the outbound send (${debit.reason})`,
+      );
+    }
+  } else if (conversationPinned && conversation !== undefined) {
+    const debit = ConversationStore.admitOutbound(conversation.id, input.traceId, input.at);
+    if (debit.kind === "refused") {
+      return deny(
+        input,
+        "conversation_denied",
+        `conversation ${conversation.id} refused the outbound send (${debit.reason})`,
+      );
+    }
+  }
+  return undefined;
+}
+
+function repairBudgetDebit(input: SendInput, admission: SendAdmission): void {
+  if (!admission.budgeted) return;
+  EgressBudgetStore.claim(debitRow(input, admission.sendClass), input.at, () => "allow");
+}
+
+type WaitOpening =
+  | { readonly ok: true; readonly wait: Wait.Record | undefined }
+  | { readonly ok: false; readonly receipt: SendReceipt };
+
+/** Opens or resumes the awaited-send record before delivery. */
+function openSendWait(input: SendInput, target: DeliveryTarget, deny: DenySend): WaitOpening {
+  if (input.operation !== "awaited") return { ok: true, wait: undefined };
+  const spec = input.waitSpec;
+  if (spec === undefined) {
+    throw new Error("awaited send without waitSpec — schema layer regressed");
+  }
+  try {
+    const wait = WaitService.open(
+      {
+        id: spec.waitId,
+        ownerRef: spec.ownerRef,
+        originMessageId: input.messageId,
+        correlation: {
+          ...spec.correlation,
+          endpointId: target.endpointId,
+          replyToMessageId: input.messageId,
+        },
+        allowedActions: spec.allowedActions,
+        expectedResponders: spec.expectedResponders,
+        resolutionPolicy: spec.resolutionPolicy,
+        ...(spec.quorum === undefined ? {} : { quorum: spec.quorum }),
+        expiresAt: spec.expiresAt,
+        followUpWindow: spec.followUpWindow,
+        createdAt: input.at,
+        updatedAt: input.at,
+      },
+      input.traceId,
+    );
+    return { ok: true, wait };
+  } catch (error) {
+    if (WaitProtocol.StoreError.isInstance(error)) {
+      if (error.data.code !== "duplicate") throw error;
+      const recorded = WaitStore.get(spec.waitId);
+      if (recorded?.originMessageId === input.messageId) return { ok: true, wait: recorded };
+      return {
+        ok: false,
+        receipt: deny(
+          input,
+          "wait_duplicate",
+          `a different Wait already exists for message ${input.messageId} or wait ${spec.waitId}`,
+        ),
+      };
+    }
+    throw error;
+  }
+}
+
+/** Delivers under the stable idempotency key and records external correlation when present. */
+async function deliverSend(
+  input: SendInput,
+  target: DeliveryTarget,
+  wait: Wait.Record | undefined,
+  ports: MessagingPorts,
+): Promise<Wait.Record | undefined> {
+  const recordedExternalId =
+    wait !== undefined && wait.correlation.replyToMessageId !== input.messageId
+      ? wait.correlation.replyToMessageId
+      : undefined;
+  const delivery =
+    recordedExternalId === undefined
+      ? await ports.deliver({
+          messageId: input.messageId,
+          idempotencyKey: input.messageId,
+          senderId: input.senderId,
+          operation: input.operation,
+          body: input.body,
+          target,
+          ...(wait === undefined ? {} : { waitId: wait.id }),
+        })
+      : { externalMessageId: recordedExternalId };
+  if (wait === undefined || delivery?.externalMessageId === undefined) return wait;
+  const receipt = WaitService.recordDeliveryReceipt(
+    wait.id,
+    { externalMessageId: delivery.externalMessageId, at: input.at },
+    input.traceId,
+  );
+  return receipt.kind === "delivery_recorded" ? receipt.record : wait;
+}
+
+function recordSent(
+  authorization: AuthorizedSend,
+  wait: Wait.Record | undefined,
+  ports: MessagingPorts,
+): SendReceipt {
+  const { input, target, grant, leasePinned, lease } = authorization;
+  ports.publish(MessagingEvents.Sent, {
+    messageId: input.messageId,
+    traceId: input.traceId,
+    senderId: input.senderId,
+    targetActorId: input.target.actorId,
+    operation: input.operation,
+    grantId: grant.id,
+    endpointId: target.endpointId,
+    ...(wait === undefined ? {} : { waitId: wait.id }),
+    ...(leasePinned && lease !== undefined
+      ? { onBehalfOf: lease.holderDelegationId, via: `lease:${lease.id}` }
+      : {}),
+    time: input.at,
+  });
+  if (wait !== undefined) {
+    return {
+      kind: "sent",
+      operation: "awaited",
+      messageId: input.messageId,
+      senderId: input.senderId,
+      grantId: grant.id,
+      target,
+      wait,
+      at: input.at,
+    };
+  }
+  return {
+    kind: "sent",
+    operation: "fire_and_forget",
+    messageId: input.messageId,
+    senderId: input.senderId,
+    grantId: grant.id,
+    target,
+    at: input.at,
+  };
+}
+
 export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAgentMessaging {
   function deny(input: SendInput, code: MessageDenialCode, reason: string): SendReceipt {
     ports.publish(MessagingEvents.Denied, {
@@ -352,292 +675,17 @@ export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAge
 
   async function send(rawInput: SendInput): Promise<SendReceipt> {
     const input = SendInput.parse(rawInput);
-    const grants = ports.grants();
-    const claim = {
-      senderId: input.senderId,
-      targetActorId: input.target.actorId,
-      operation: input.operation,
-      at: input.at,
-    };
-    // #P1 conversational arm / #P2 lease arm (§3.4/§3.5): a pinned send
-    // derives its authority from the open window or the live lease, not
-    // from grants — but the target still resolves and the absolute
-    // blacklist deny still binds BEFORE any window/lease fact is consulted,
-    // so an unauthorized sender learns nothing from either.
-    const conversationPinned = input.conversationId !== undefined;
-    const leasePinned = input.leaseId !== undefined;
-    const conversation = conversationForSend(input);
-    const lease = leaseForSend(input);
-    let grant: SenderTargetGrant | undefined;
-    if (!conversationPinned && !leasePinned) {
-      // Scope-aware arm (#708): a rule-materialized instance carries a
-      // replyScope that can only be checked against the RESOLVED delivery
-      // endpoint, so with a candidate present the target resolves first and
-      // the scope check follows. With no candidate the denial stays
-      // `ungranted` BEFORE any registry lookup — an ungranted sender learns
-      // nothing from the registry (pinned by the send suite).
-      grant = resolveSenderTargetGrant(grants, claim);
-      if (grant === undefined && !hasScopedSenderTargetCandidate(grants, claim)) {
-        return deny(
-          input,
-          "ungranted",
-          `no active sender-target grant covers ${input.senderId} -> ${input.target.actorId} (${input.operation})`,
-        );
-      }
-    }
-    const resolution = resolveExistingTarget(input.target);
-    if (!resolution.ok) {
-      return deny(input, resolution.code, resolution.reason);
-    }
-    if (leasePinned) {
-      const leaseId = input.leaseId ?? "";
-      if (lease === undefined) {
-        return deny(input, "lease_denied", `lease ${leaseId} does not exist`);
-      }
-      if (conversationPinned && input.conversationId !== lease.conversationId) {
-        return deny(
-          input,
-          "lease_denied",
-          `lease ${leaseId} scopes conversation ${lease.conversationId}, not ${input.conversationId ?? ""}`,
-        );
-      }
-      // The lease scopes exactly one conversation; the window's own pin and
-      // the absolute DNC deny bind the send the same way (§3.5, §8.8).
-      const scopedConversation = ConversationStore.get(lease.conversationId);
-      const conversationDenial = conversationGate(
-        lease.conversationId,
-        scopedConversation,
-        resolution.target,
-      );
-      if (conversationDenial !== undefined) {
-        return deny(input, "conversation_denied", conversationDenial);
-      }
-      grant = pinnedGrant(input, `lease:${leaseId}`);
-    } else if (conversationPinned) {
-      const conversationDenial = conversationGate(
-        input.conversationId ?? "",
-        conversation,
-        resolution.target,
-      );
-      if (conversationDenial !== undefined) {
-        return deny(input, "conversation_denied", conversationDenial);
-      }
-      grant = pinnedGrant(input, `conversation:${input.conversationId ?? ""}`);
-    } else if (grant === undefined) {
-      const surfaceKey = deliverySurfaceKey(resolution.target);
-      grant = resolveScopedSenderTargetGrant(grants, { ...claim, surfaceKey });
-      if (grant === undefined) {
-        // Cross-surface use of a reply-scoped instance fails closed: the
-        // instance authorizes replies INTO the initiating container only.
-        return deny(
-          input,
-          "ungranted",
-          `reply-scoped grant does not cover surface ${surfaceKey} — replies stay inside the initiating container`,
-        );
-      }
-    }
+    const authorization = authorizeSend(input, ports, deny);
+    if ("kind" in authorization) return authorization;
+    const { target } = authorization;
 
-    // A durable admission marker distinguishes a retry from a new send before
-    // any mutable budget/Wait state is revisited. It is also the immutable
-    // binding from messageId to content + resolved endpoint: reusing a key for
-    // different bytes fails closed.
-    const sendClass = sendClassOf(input);
-    let admission: SendAdmission | undefined;
-    try {
-      admission = existingAdmission(input, resolution.target);
-    } catch (error) {
-      if (error instanceof SendAdmissionConflict && input.operation === "awaited") {
-        return deny(input, "wait_duplicate", error.message);
-      }
-      throw error;
-    }
-    if (admission === undefined) {
-      // #219 active-egress gate: evaluate only for a NEW admission. A resumed
-      // send already passed this judgment and must not consume capacity twice.
-      // A conversation-pinned send debits the WINDOW instead — the egress
-      // budget never double-counts it.
-      const budgeted =
-        !conversationPinned &&
-        !leasePinned &&
-        ports.budgets !== undefined &&
-        grant.replyScope === undefined;
-      if (leasePinned && lease !== undefined) {
-        // Record-before-act: THE lease-send debit (LeaseStore.sendDebit)
-        // folds the carved allocation AND the scoped conversation's outbound
-        // cap in one transaction — a refusal at either fold writes nothing.
-        const debit = LeaseStore.sendDebit(lease.id, input.at);
-        if (debit.kind === "refused") {
-          return deny(
-            input,
-            "lease_denied",
-            `lease ${lease.id} refused the outbound send (${debit.reason})`,
-          );
-        }
-      } else if (conversationPinned && conversation !== undefined) {
-        // Record-before-act: the durable outbound debit lands before the
-        // delivery effect. A refusal here (closed/expired/cap/quiet-hours
-        // raced past the read above) is the same typed denial.
-        const debit = ConversationStore.admitOutbound(conversation.id, input.traceId, input.at);
-        if (debit.kind === "refused") {
-          return deny(
-            input,
-            "conversation_denied",
-            `conversation ${conversation.id} refused the outbound send (${debit.reason})`,
-          );
-        }
-      }
-      if (budgeted) {
-        const budget = ports
-          .budgets?.()
-          .find((candidate) => candidate.targetActorId === input.target.actorId);
-        const budgetClaim = EgressBudgetStore.claim(
-          debitRow(input, sendClass),
-          input.at - (budget?.windowMs ?? 0),
-          (state) => evaluateSocialBudget(budget, state, { class: sendClass, at: input.at }),
-        );
-        if (budgetClaim.kind === "refused") {
-          return deny(
-            input,
-            budgetClaim.reason.suppress,
-            `active-egress budget suppressed a ${sendClass} send ${input.senderId} -> ${input.target.actorId} (${budgetClaim.reason.suppress})`,
-          );
-        }
-      }
-      admission = recordAdmission(input, resolution.target, budgeted, sendClass);
-    }
-    if (admission.budgeted) {
-      // Repair admissions written by an older process (or a crash between its
-      // admission and debit). Deterministic claim identity makes this a no-op
-      // for the normal claim-before-admission path.
-      EgressBudgetStore.claim(debitRow(input, admission.sendClass), input.at, () => "allow");
-    }
-    // #219 escalation seam (DEFERRED, out of this PR): the autonomous
-    // timer-fired 봉수 rung-advance would attach its counting coordinate HERE —
-    // blocked by the #469 accumulator + a missing periodic-timeout firing
-    // source. The synchronous suppression gate above ships without it.
+    const admission = admitSend(authorization, ports, deny);
+    if ("kind" in admission) return admission;
 
-    let wait: Wait.Record | undefined;
-    if (input.operation === "awaited") {
-      const spec = input.waitSpec;
-      // Presence is guaranteed by the SendInput refinement; this narrows the
-      // optional type without a silent fallback.
-      if (spec === undefined) {
-        throw new Error("awaited send without waitSpec — schema layer regressed");
-      }
-      // Record-before-act: the durable Wait lands before the delivery effect.
-      // A delivery failure then leaves an open Wait that expires on schedule;
-      // the reverse order could deliver a message the ledger never awaits.
-      try {
-        wait = WaitService.open(
-          {
-            id: spec.waitId,
-            ownerRef: spec.ownerRef,
-            originMessageId: input.messageId,
-            correlation: {
-              ...spec.correlation,
-              endpointId: resolution.target.endpointId,
-              replyToMessageId: input.messageId,
-            },
-            allowedActions: spec.allowedActions,
-            expectedResponders: spec.expectedResponders,
-            resolutionPolicy: spec.resolutionPolicy,
-            ...(spec.quorum === undefined ? {} : { quorum: spec.quorum }),
-            expiresAt: spec.expiresAt,
-            followUpWindow: spec.followUpWindow,
-            createdAt: input.at,
-            updatedAt: input.at,
-          },
-          input.traceId,
-        );
-      } catch (error) {
-        if (WaitProtocol.StoreError.isInstance(error) && error.data.code === "duplicate") {
-          const recorded = WaitStore.get(spec.waitId);
-          if (recorded?.originMessageId === input.messageId) {
-            wait = recorded;
-          } else {
-            return deny(
-              input,
-              "wait_duplicate",
-              `a different Wait already exists for message ${input.messageId} or wait ${spec.waitId}`,
-            );
-          }
-        } else {
-          throw error;
-        }
-      }
-    }
-
-    // A recorded external correlation is durable proof that the effect and
-    // receipt CAS completed. Otherwise call the owner under the stable key;
-    // its contract requires API idempotency/read-back reconciliation.
-    const recordedExternalId =
-      wait !== undefined && wait.correlation.replyToMessageId !== input.messageId
-        ? wait.correlation.replyToMessageId
-        : undefined;
-    const delivery =
-      recordedExternalId === undefined
-        ? await ports.deliver({
-            messageId: input.messageId,
-            idempotencyKey: input.messageId,
-            senderId: input.senderId,
-            operation: input.operation,
-            body: input.body,
-            target: resolution.target,
-            ...(wait === undefined ? {} : { waitId: wait.id }),
-          })
-        : { externalMessageId: recordedExternalId };
-    if (wait !== undefined && delivery !== undefined && delivery.externalMessageId !== undefined) {
-      // The channel returned the platform message id: re-key the wait's
-      // correlation.replyToMessageId to it so real platform replies (which
-      // reference the platform id, not our internal one) correlate. A wait
-      // that turned terminal while the delivery was in flight rejects the
-      // receipt (wait_terminal) and keeps its recorded correlation.
-      const receipt = WaitService.recordDeliveryReceipt(
-        wait.id,
-        { externalMessageId: delivery.externalMessageId, at: input.at },
-        input.traceId,
-      );
-      if (receipt.kind === "delivery_recorded") wait = receipt.record;
-    }
-    ports.publish(MessagingEvents.Sent, {
-      messageId: input.messageId,
-      traceId: input.traceId,
-      senderId: input.senderId,
-      targetActorId: input.target.actorId,
-      operation: input.operation,
-      grantId: grant.id,
-      endpointId: resolution.target.endpointId,
-      ...(wait === undefined ? {} : { waitId: wait.id }),
-      // §3.5 egress stamping: a lease send records whose work it speaks for
-      // (the holder delegation) and which lease carried it. Owner sends
-      // carry neither; the external identity is always the Resident's.
-      ...(leasePinned && lease !== undefined
-        ? { onBehalfOf: lease.holderDelegationId, via: `lease:${lease.id}` }
-        : {}),
-      time: input.at,
-    });
-
-    if (wait !== undefined) {
-      return {
-        kind: "sent",
-        operation: "awaited",
-        messageId: input.messageId,
-        senderId: input.senderId,
-        grantId: grant.id,
-        target: resolution.target,
-        wait,
-        at: input.at,
-      };
-    }
-    return {
-      kind: "sent",
-      operation: "fire_and_forget",
-      messageId: input.messageId,
-      senderId: input.senderId,
-      grantId: grant.id,
-      target: resolution.target,
-      at: input.at,
-    };
+    const waitOpening = openSendWait(input, target, deny);
+    if (!waitOpening.ok) return waitOpening.receipt;
+    const wait = await deliverSend(input, target, waitOpening.wait, ports);
+    return recordSent(authorization, wait, ports);
   }
 
   return { send };
