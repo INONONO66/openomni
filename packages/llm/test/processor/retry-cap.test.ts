@@ -161,6 +161,7 @@ describe("Processor retry cap", () => {
     const retryErrors = [rateLimitError(), rateLimitError(), rateLimitError()];
     let attemptCount = 0;
     const events = collector();
+    const sleep = spyOn(Retry, "sleep").mockResolvedValue(undefined);
 
     const processor = Processor.create({
       assistantMessage: buildAssistantMessage(
@@ -170,7 +171,7 @@ describe("Processor retry cap", () => {
       ),
       sessionID: "session-retry-cap",
       model,
-      abort: AbortSignal.timeout(50),
+      abort: new AbortController().signal,
       maxRetryAttempts: 2,
       trace: {
         traceId: "trace-processor-retry-cap",
@@ -197,6 +198,8 @@ describe("Processor retry cap", () => {
     }
 
     expect(attemptCount).toBe(3);
+    // Exact sequence of requested delays: the retry-after-ms header provides "1ms" delays.
+    expect(sleep.mock.calls.map(([delay]) => delay)).toEqual([1, 1]);
     const retries = (
       events.named(LlmCall.Events.RetryDecided.name) as Array<{ maxAttempts: number }>
     ).map((event) => event.maxAttempts);
@@ -208,6 +211,7 @@ describe("Processor retry cap", () => {
       .filter((event) => event.msg === "retry attempts exhausted")
       .map((event) => event.error);
     expect(exhausted).toEqual(["rate_limit: attempt cap 2 exceeded"]);
+    sleep.mockRestore();
   });
 });
 
