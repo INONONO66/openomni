@@ -1,48 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import { PolicyEngine } from "../../../src/core/policy";
 import { handleStop } from "../../../src/core/execution/turn";
-import {
-  createRunState,
-  type AgentRunBase,
-  type TurnArtifacts,
-} from "../../../src/core/execution/state";
+import { createRunState } from "../../../src/core/execution/state";
 import { registerAt, allow } from "../../helpers/policy-decision";
 import { runInput } from "../../helpers/run-input";
-import { testProviderModel } from "../../helpers/provider-model";
 import { Bus } from "@openomni/telemetry";
-
-// The run and the input it produces share one identity, stated once. The base
-// is the origin because that is the direction production runs in: the runner
-// derives both from the trace it was handed.
-const runTrace = { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" };
-
-function makeAgentBase(): AgentRunBase {
-  return { ...runTrace, actorId: "actor-1" };
-}
-
-function makeTurnArtifacts(): TurnArtifacts {
-  return {
-    runInput: {
-      messages: [],
-      tools: [],
-      events: Bus,
-      model: testProviderModel,
-      maxSteps: 24,
-      trace: runTrace,
-    },
-    trackingSink: {
-      onMessage: () => undefined,
-      onToolCall: () => undefined,
-      onToolResult: () => undefined,
-    },
-    turnAssistant: {},
-    turnUsage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-    toolPolicyDecisions: [],
-    stepCap: 24,
-    windowYieldArmed: false,
-    steering: { requested: false },
-  };
-}
+import { makeAgentBase, makeTurnArtifacts } from "./lifecycle-dispatch-fixture";
 
 describe("handleStop prompt injection provenance", () => {
   it("preserves assistant role through turn.finish continuation", async () => {
@@ -70,7 +33,7 @@ describe("handleStop prompt injection provenance", () => {
       { events: Bus, model: { provider: "test", id: "test-model" } },
       engine,
       makeAgentBase(),
-      makeTurnArtifacts(),
+      makeTurnArtifacts({ turnUsage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } }),
     );
 
     expect(outcome).toBe("continue");
