@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import {
   lstatSync,
   mkdirSync,
@@ -10,6 +11,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { Machine } from "@openomni/protocol";
 import { createFsDriver } from "../src/fs";
 
@@ -22,6 +24,26 @@ function withFixture(
   mkdirSync(root);
   mkdirSync(outside);
   return run({ base, root, outside }).finally(() => rmSync(base, { recursive: true, force: true }));
+}
+
+function runFifoRequest(root: string, request: Machine.FsRequest): string {
+  const moduleUrl = pathToFileURL(join(import.meta.dir, "../src/fs.ts")).href;
+  const script = `
+    import { createFsDriver } from ${JSON.stringify(moduleUrl)};
+    const driver = createFsDriver(new Map([["docs", ${JSON.stringify(root)}]]));
+    const result = await driver(${JSON.stringify(request)});
+    driver.close();
+    process.stdout.write(JSON.stringify(result));
+  `;
+  const child = spawnSync(process.execPath, ["--eval", script], {
+    encoding: "utf8",
+    timeout: 2_000,
+  });
+  expect(child.error).toBeUndefined();
+  expect(child.signal).toBeNull();
+  expect(child.status).toBe(0);
+  expect(child.stderr).toBe("");
+  return child.stdout;
 }
 
 describe("machine fs request boundary", () => {
@@ -51,6 +73,34 @@ describe("daemon filesystem driver", () => {
         reason: "path_escapes_export",
         message: "path escapes export: ../secret",
       });
+    });
+  });
+
+  test("pins the resolved export root before its pathname can be replaced", async () => {
+    await withFixture(async ({ base, root, outside }) => {
+      writeFileSync(join(root, "note.txt"), "inside");
+      writeFileSync(join(outside, "note.txt"), "outside");
+      let swapped = false;
+      const fsOp = createFsDriver(new Map([["docs", root]]), {
+        afterRootPathResolution: () => {
+          renameSync(root, join(base, "original-root"));
+          symlinkSync(outside, root);
+          swapped = true;
+        },
+      });
+
+      expect(swapped).toBe(true);
+      await expect(fsOp({ op: "read", export: "docs", path: "note.txt" })).resolves.toEqual({
+        status: "completed",
+        value: {
+          op: "read",
+          data: "inside",
+          bytesRead: 6,
+          size: 6,
+          truncated: false,
+        },
+      });
+      fsOp.close();
     });
   });
 
@@ -262,6 +312,38 @@ describe("daemon filesystem driver", () => {
       expect(
         result.value.entries.every((entry) => entry.kind === "file" || entry.size === undefined),
       ).toBe(true);
+    });
+  });
+
+  test("handles FIFOs without blocking read, stat, or list", async () => {
+    await withFixture(async ({ root }) => {
+      const fifo = join(root, "pipe");
+      const created = spawnSync("mkfifo", [fifo], { encoding: "utf8" });
+      expect(created.error).toBeUndefined();
+      expect(created.signal).toBeNull();
+      expect(created.status).toBe(0);
+      expect(created.stdout).toBe("");
+      expect(created.stderr).toBe("");
+
+      expect(runFifoRequest(root, { op: "read", export: "docs", path: "pipe" })).toBe(
+        JSON.stringify({
+          status: "refused",
+          reason: "wrong_kind",
+          message: "path is not a file: pipe",
+        }),
+      );
+      expect(runFifoRequest(root, { op: "stat", export: "docs", path: "pipe" })).toBe(
+        JSON.stringify({
+          status: "completed",
+          value: { op: "stat", kind: "other", size: 0, mtimeMs: lstatSync(fifo).mtimeMs },
+        }),
+      );
+      expect(runFifoRequest(root, { op: "list", export: "docs", path: "" })).toBe(
+        JSON.stringify({
+          status: "completed",
+          value: { op: "list", entries: [{ name: "pipe", kind: "other" }], truncated: false },
+        }),
+      );
     });
   });
 

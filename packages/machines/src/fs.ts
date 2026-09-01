@@ -1,5 +1,5 @@
 import { CString, FFIType, dlopen, toArrayBuffer, type Pointer } from "bun:ffi";
-import { closeSync, constants, fstatSync, openSync, readSync, realpathSync } from "node:fs";
+import { closeSync, constants, fstatSync, openSync, readSync } from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { Machine } from "@openomni/protocol";
 
@@ -11,6 +11,12 @@ type WalkResult = OpenedTarget | Refusal;
 export type FsDriver = ((request: Machine.FsRequest) => Promise<Machine.FsResult>) & {
   close(): void;
 };
+
+type FsDriverTestHooks = {
+  readonly afterRootPathResolution?: (canonicalPath: string) => void;
+};
+
+type RootWalk = { readonly canonicalPath: string; readonly fd: number };
 
 type Root = {
   readonly canonicalPath: string;
@@ -38,6 +44,12 @@ const O_DIRECTORY = constants.O_DIRECTORY;
 const O_NOFOLLOW = constants.O_NOFOLLOW;
 const O_CLOEXEC = process.platform === "darwin" ? 0x100_0000 : 0x8_0000;
 const O_OPEN_SYMLINK = process.platform === "darwin" ? 0x20_0000 : 0x20_0000 | O_NOFOLLOW;
+/**
+ * Every descriptor this driver opens is opened non-blocking. A regular file or
+ * directory is unaffected, while a FIFO or device node in an export would
+ * otherwise park the daemon inside open(2) until a writer appeared.
+ */
+const O_TARGET = constants.O_RDONLY | constants.O_NONBLOCK;
 const MAX_SYMLINK_EXPANSIONS = 40;
 const READLINK_BUFFER_BYTES = 4096;
 
@@ -174,7 +186,7 @@ function walk(
       const opened = openAt(
         dirfd,
         ".",
-        constants.O_RDONLY | O_CLOEXEC | (finalDirectory ? O_DIRECTORY : 0),
+        O_TARGET | O_CLOEXEC | (finalDirectory ? O_DIRECTORY : 0),
       );
       if (!("fd" in opened)) return fail(refusalForOpenError(opened.errno, shown));
       closeOwned();
@@ -187,7 +199,10 @@ function walk(
     const segment = pending[0] as string;
     const isFinal = pending.length === 1;
     const flags =
-      constants.O_RDONLY | O_NOFOLLOW | O_CLOEXEC | (!isFinal || finalDirectory ? O_DIRECTORY : 0);
+      (isFinal ? O_TARGET : constants.O_RDONLY) |
+      O_NOFOLLOW |
+      O_CLOEXEC |
+      (!isFinal || finalDirectory ? O_DIRECTORY : 0);
     const opened = openAt(dirfd, segment, flags);
     if ("fd" in opened) {
       closeOwned();
@@ -234,6 +249,66 @@ function walk(
   }
 }
 
+/**
+ * Resolve an Owner-configured export root into a pinned descriptor by walking
+ * its components with openat(O_NOFOLLOW) from the filesystem root, expanding
+ * any symlink component explicitly and restarting the walk. The canonical path
+ * is recorded from the components actually traversed, so the descriptor and the
+ * recorded path are produced by one traversal instead of a resolution that is
+ * verified and then re-resolved by name when the descriptor is opened.
+ */
+function openRoot(configuredRoot: string, testHooks: FsDriverTestHooks): RootWalk {
+  const absolute = resolve(configuredRoot);
+  let pending = absolute.split(sep).filter((segment) => segment.length > 0);
+  let traversed: string[] = [];
+  let dirfd = openSync(sep, constants.O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+  let expansions = 0;
+
+  try {
+    while (pending.length > 0) {
+      const segment = pending[0] as string;
+      const opened = openAt(
+        dirfd,
+        segment,
+        constants.O_RDONLY | O_NOFOLLOW | O_DIRECTORY | O_CLOEXEC,
+      );
+      if ("fd" in opened) {
+        closeSync(dirfd);
+        dirfd = opened.fd;
+        traversed.push(segment);
+        pending.shift();
+        continue;
+      }
+
+      const link = readLinkAt(dirfd, segment);
+      if (!("target" in link)) {
+        throw new Error(`export root is not a directory: ${configuredRoot}`);
+      }
+      expansions += 1;
+      if (expansions > MAX_SYMLINK_EXPANSIONS) {
+        throw new Error(`export root has too many symlink levels: ${configuredRoot}`);
+      }
+      const linkBase = isAbsolute(link.target)
+        ? link.target
+        : resolve(sep + traversed.join(sep), link.target);
+      pending = [
+        ...linkBase.split(sep).filter((segment_) => segment_.length > 0),
+        ...pending.slice(1),
+      ];
+      traversed = [];
+      closeSync(dirfd);
+      dirfd = openSync(sep, constants.O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    }
+  } catch (error) {
+    closeSync(dirfd);
+    throw error;
+  }
+
+  const canonicalPath = sep + traversed.join(sep);
+  testHooks.afterRootPathResolution?.(canonicalPath);
+  return { canonicalPath, fd: dirfd };
+}
+
 function directoryNames(fd: number): string[] {
   const duplicate = openAt(fd, ".", constants.O_RDONLY | O_DIRECTORY | O_CLOEXEC);
   if (!("fd" in duplicate)) throw new Error("directory duplication failed");
@@ -264,7 +339,7 @@ function directoryNames(fd: number): string[] {
 }
 
 function entryAt(dirfd: number, name: string): { name: string; kind: EntryKind; size?: number } {
-  const opened = openAt(dirfd, name, constants.O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
+  const opened = openAt(dirfd, name, O_TARGET | O_NOFOLLOW | O_CLOEXEC);
   if ("fd" in opened) {
     try {
       const metadata = fstatSync(opened.fd);
@@ -285,15 +360,14 @@ function entryAt(dirfd: number, name: string): { name: string; kind: EntryKind; 
  * Symlinks are expanded lexically and every expansion restarts at the root fd,
  * so no pathname is checked and then resolved again for use.
  */
-export function createFsDriver(exports: ReadonlyMap<string, string>): FsDriver {
+export function createFsDriver(
+  exports: ReadonlyMap<string, string>,
+  testHooks: FsDriverTestHooks = {},
+): FsDriver {
   const roots = new Map<string, Root>();
   try {
     for (const [name, configuredRoot] of exports) {
-      const canonicalPath = realpathSync(configuredRoot);
-      roots.set(name, {
-        canonicalPath,
-        fd: openSync(canonicalPath, constants.O_RDONLY | O_DIRECTORY | O_CLOEXEC),
-      });
+      roots.set(name, openRoot(configuredRoot, testHooks));
     }
   } catch (error) {
     for (const root of roots.values()) closeSync(root.fd);
