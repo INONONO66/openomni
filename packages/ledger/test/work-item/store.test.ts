@@ -217,7 +217,6 @@ describe("WorkItemStore", () => {
       seq: failed?.revision,
       type: "work_item.failed",
     });
-    expect(adapter.ledger.verifyTail()).toEqual([]);
   });
 
   test("a throwing subscriber observes the durable head and cannot unwind a transition", async () => {

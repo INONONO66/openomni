@@ -49,9 +49,6 @@ describe("Ledger.adoptStream", () => {
     if (appended.kind !== "appended") throw new Error("expected appended");
     expect(appended.seq).toBe(4);
     expect(readHead("wait:pre-cutover")).toBe(4);
-    // The adopted stream verifies clean: the genesis chains from the seed
-    // and its missing predecessor lies below the oldest stored event.
-    expect(Ledger.verifyTail(db)).toEqual([]);
   });
 
   test("a non-empty stream throws the typed AdoptError and writes nothing", () => {

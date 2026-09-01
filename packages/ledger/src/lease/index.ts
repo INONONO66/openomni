@@ -1,6 +1,6 @@
 import { Conversation, Lease, type Storage as ProtocolStorage } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
-import { isSqliteBusyError } from "../storage/sqlite-busy";
+import { commitFact, runCommitTransaction } from "../storage/commit-coordinator";
 import { Storage } from "../storage/storage";
 
 // Durable Lease writes fail closed: a missing sub-adapter is a typed error,
@@ -65,20 +65,18 @@ function revisionConflict(leaseId: string, expected: number): InstanceType<typeo
   });
 }
 
-/** SQLITE_BUSY at the transaction entry means nothing committed — typed `unavailable`. */
+/** SQLITE_BUSY means nothing committed — map it to Lease's typed taxonomy. */
 function runLeaseTransaction<T>(leaseId: string, write: () => T): T {
-  try {
-    return Storage.get().transaction(write);
-  } catch (error) {
-    if (isSqliteBusyError(error)) {
-      throw new Lease.StoreError({
-        message: `Lease storage busy: ${leaseId} — ${error instanceof Error ? error.message : String(error)}`,
+  return runCommitTransaction(
+    Storage.get(),
+    write,
+    (cause) =>
+      new Lease.StoreError({
+        message: `Lease storage busy: ${leaseId} — ${cause instanceof Error ? cause.message : String(cause)}`,
         code: "unavailable",
         leaseId,
-      });
-    }
-    throw error;
-  }
+      }),
+  );
 }
 
 // Every lease event inherits its caller's trace — no mint in the store (D11).
@@ -163,23 +161,26 @@ export namespace LeaseStore {
           code: "duplicate",
           leaseId: record.id,
         });
-      const appended = ledger.append(
+      const committed = commitFact(
+        ledger,
         {
           streamId: streamId(record.id),
-          type: "lease.issued",
-          data: {
-            conversationId: record.conversationId,
-            holderDelegationId: record.holderDelegationId,
-            contactId: record.contactId,
-            maxOutbound: record.budget.maxOutbound,
-            expiresAt: record.expiresAt,
-            revision: record.revision,
+          expectedHead: 0,
+          fact: {
+            type: "lease.issued",
+            data: {
+              conversationId: record.conversationId,
+              holderDelegationId: record.holderDelegationId,
+              contactId: record.contactId,
+              maxOutbound: record.budget.maxOutbound,
+              expiresAt: record.expiresAt,
+              revision: record.revision,
+            },
           },
         },
-        0,
+        () => adapter.create(record) || false,
       );
-      if (appended.kind === "cas_conflict") throw duplicate();
-      if (!adapter.create(record)) throw duplicate();
+      if (committed.kind !== "committed") throw duplicate();
       issued = record;
     });
     if (issued === undefined) {
@@ -254,33 +255,40 @@ export namespace LeaseStore {
         return;
       }
       const debited = leaseOutcome.record;
-      const leaseAppended = ledger.append(
+      // Two sequential commit units (lease, then conversation) replace the
+      // pre-coordinator interleaved order (append both, then project both).
+      // The refusal contract is unchanged: a stale head on EITHER stream
+      // throws revisionConflict, and the enclosing transaction rolls back
+      // both units, so nothing commits unless both commit.
+      const leaseCommitted = commitFact(
+        ledger,
         {
           streamId: streamId(leaseId),
-          type: "lease.debited",
-          data: { outboundUsed: debited.budget.outboundUsed, revision: debited.revision },
+          expectedHead: lease.revision,
+          fact: {
+            type: "lease.debited",
+            data: { outboundUsed: debited.budget.outboundUsed, revision: debited.revision },
+          },
         },
-        lease.revision,
+        () => adapter.compareAndSet(leaseId, lease.revision, debited) || false,
+        (unit) => Storage.get().transaction(unit),
       );
-      if (leaseAppended.kind === "cas_conflict") throw revisionConflict(leaseId, lease.revision);
+      if (leaseCommitted.kind !== "committed") throw revisionConflict(leaseId, lease.revision);
       const admitted = conversationOutcome.record;
-      const conversationAppended = ledger.append(
+      const conversationCommitted = commitFact(
+        ledger,
         {
           streamId: conversationStreamId(conversation.id),
-          type: "conversation.outbound_admitted",
-          data: { outboundUsed: admitted.outboundUsed, revision: admitted.revision },
+          expectedHead: conversation.revision,
+          fact: {
+            type: "conversation.outbound_admitted",
+            data: { outboundUsed: admitted.outboundUsed, revision: admitted.revision },
+          },
         },
-        conversation.revision,
+        () => conversationAdapter.compareAndSet(conversation.id, conversation.revision, admitted) || false,
+        (unit) => Storage.get().transaction(unit),
       );
-      if (conversationAppended.kind === "cas_conflict") {
-        throw revisionConflict(leaseId, lease.revision);
-      }
-      if (!adapter.compareAndSet(leaseId, lease.revision, debited)) {
-        throw revisionConflict(leaseId, lease.revision);
-      }
-      if (
-        !conversationAdapter.compareAndSet(conversation.id, conversation.revision, admitted)
-      ) {
+      if (conversationCommitted.kind !== "committed") {
         throw revisionConflict(leaseId, lease.revision);
       }
       outcome = { kind: "debited", lease: debited, conversation: admitted };
@@ -315,18 +323,16 @@ export namespace LeaseStore {
     const outcome = Lease.close(current, closedBy, at);
     if (outcome.kind === "unchanged") return outcome;
     runLeaseTransaction(id, () => {
-      const appended = ledger.append(
+      const committed = commitFact(
+        ledger,
         {
           streamId: streamId(id),
-          type: "lease.closed",
-          data: { closedBy, revision: outcome.record.revision },
+          expectedHead: current.revision,
+          fact: { type: "lease.closed", data: { closedBy, revision: outcome.record.revision } },
         },
-        current.revision,
+        () => adapter.compareAndSet(id, current.revision, outcome.record) || false,
       );
-      if (appended.kind === "cas_conflict") throw revisionConflict(id, current.revision);
-      if (!adapter.compareAndSet(id, current.revision, outcome.record)) {
-        throw revisionConflict(id, current.revision);
-      }
+      if (committed.kind !== "committed") throw revisionConflict(id, current.revision);
     });
     Bus.publish(Lease.Events.Closed, {
       ...eventBase(outcome.record, traceId, outcome.record.updatedAt),
