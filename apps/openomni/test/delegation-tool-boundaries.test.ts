@@ -1,0 +1,161 @@
+import { describe, expect, test } from "bun:test";
+import type { Delegation } from "@openomni/protocol";
+import type { DelegationOrigin } from "../src/delegation/admission";
+import { formatSettlement, type DelegationKernel } from "../src/delegation/kernel";
+import {
+  awaitDelegationToolExecutor,
+  cancelDelegationToolExecutor,
+  delegateToolExecutor,
+} from "../src/delegation/tool";
+
+const ORIGIN: DelegationOrigin = { role: "resident", depth: 0, sessionId: "session" };
+const HANDLE: Delegation.Handle = {
+  delegationId: "d-1",
+  operation: "ask",
+  address: { kind: "core", scope: "independent" },
+  transport: "process",
+  deadline: 100,
+  rootDelegationId: "d-1",
+};
+
+function kernel(overrides: Partial<DelegationKernel>): DelegationKernel {
+  return {
+    now: () => 0,
+    delegate: () => Promise.resolve({ handle: HANDLE }),
+    awaitDelegation: () => Promise.resolve({ kind: "timeout", delegationId: "d-1", deadline: 100 }),
+    cancelDelegation: () =>
+      Promise.resolve({ status: "cancelled", delegationId: "d-1", reason: "cancelled", at: 1 }),
+    await: () => Promise.resolve({ kind: "timeout", delegationId: "d-1", deadline: 100 }),
+    cancel: () =>
+      Promise.resolve({ status: "cancelled", delegationId: "d-1", reason: "cancelled", at: 1 }),
+    settleFromReply: () => false,
+    start: () => undefined,
+    stop: () => undefined,
+    ...overrides,
+  };
+}
+
+const valid = {
+  instruction: "work",
+  operation: "ask",
+  scope: "independent",
+  timeoutMs: 10,
+} as const;
+
+describe("delegation tool boundaries", () => {
+  test("rejects every invalid addressing and operation combination before the kernel", async () => {
+    let calls = 0;
+    const execute = delegateToolExecutor(
+      kernel({
+        delegate: () => {
+          calls += 1;
+          return Promise.resolve({ handle: HANDLE });
+        },
+      }),
+      ORIGIN,
+    );
+    const invalid = [
+      null,
+      { ...valid, scope: undefined },
+      { ...valid, actorId: "actor" },
+      { ...valid, operation: "notify" },
+      { ...valid, operation: "assign", scope: "inline", acceptanceCriteria: ["done"] },
+      { ...valid, operation: "assign" },
+      { ...valid, acceptanceCriteria: ["not allowed"] },
+    ];
+
+    for (const input of invalid) expect(await execute(input)).toBeString();
+    expect(calls).toBe(0);
+  });
+
+  test("supports the legacy mode boundary and every kernel result arm", async () => {
+    let request: unknown;
+    const accepted = delegateToolExecutor(
+      kernel({
+        delegate: (candidate) => {
+          request = candidate;
+          return Promise.resolve({ handle: { ...HANDLE, waitId: "wait-1" } });
+        },
+      }),
+      ORIGIN,
+    );
+    expect(
+      await accepted({ instruction: "work", mode: "ask", scope: "independent", timeoutMs: 10 }),
+    ).toBeString();
+    expect(request).toMatchObject({ operation: "ask", deadline: 10 });
+
+    const refused = delegateToolExecutor(
+      kernel({
+        delegate: () => Promise.resolve({ refused: "no", error: new Error("no") as never }),
+      }),
+      ORIGIN,
+    );
+    expect(await refused(valid)).toBeString();
+
+    const settled = delegateToolExecutor(
+      kernel({
+        delegate: () =>
+          Promise.resolve({
+            handle: HANDLE,
+            settled: { status: "completed", delegationId: "d-1", output: "done", at: 1 },
+          }),
+      }),
+      ORIGIN,
+    );
+    expect(await settled(valid)).toBe("done");
+  });
+
+  test("renders structured, ordinary, and primitive refusals", async () => {
+    for (const error of [{ data: { message: "structured" } }, new Error("ordinary"), "primitive"]) {
+      const execute = delegateToolExecutor(
+        kernel({ delegate: () => Promise.reject(error) }),
+        ORIGIN,
+      );
+      expect(await execute(valid)).toBeString();
+    }
+  });
+
+  test("await and cancel cover malformed, timeout, settlement, and failure results", async () => {
+    expect(await awaitDelegationToolExecutor(kernel({}))({})).toBeString();
+    expect(
+      await awaitDelegationToolExecutor(kernel({}))({ delegationId: "d-1", timeoutMs: 1 }),
+    ).toBeString();
+    expect(
+      await awaitDelegationToolExecutor(
+        kernel({
+          awaitDelegation: () =>
+            Promise.resolve({
+              kind: "settled",
+              settlement: { status: "completed", delegationId: "d-1", output: "done", at: 1 },
+            }),
+        }),
+      )({ delegationId: "d-1" }),
+    ).toBe("done");
+    expect(
+      await awaitDelegationToolExecutor(
+        kernel({ awaitDelegation: () => Promise.reject({ data: { message: "no" } }) }),
+      )({ delegationId: "d-1" }),
+    ).toBeString();
+
+    expect(await cancelDelegationToolExecutor(kernel({}))({})).toBeString();
+    expect(await cancelDelegationToolExecutor(kernel({}))({ delegationId: "d-1" })).toBeString();
+    expect(
+      await cancelDelegationToolExecutor(
+        kernel({ cancelDelegation: () => Promise.reject(new Error("no")) }),
+      )({ delegationId: "d-1" }),
+    ).toBeString();
+  });
+
+  test("formats every durable settlement status", () => {
+    const settlements: Delegation.Settled[] = [
+      { status: "completed", delegationId: "d", output: "", at: 1 },
+      { status: "failed", delegationId: "d", error: "x", at: 1 },
+      { status: "cancelled", delegationId: "d", reason: "x", at: 1 },
+      { status: "delivery_failed", delegationId: "d", reason: "x", at: 1 },
+      { status: "no_response", delegationId: "d", deadline: 1, at: 1 },
+      { status: "interrupted", delegationId: "d", at: 1 },
+      { status: "sent", delegationId: "d", at: 1 },
+    ];
+    expect(settlements.map(formatSettlement)).toHaveLength(settlements.length);
+  });
+});

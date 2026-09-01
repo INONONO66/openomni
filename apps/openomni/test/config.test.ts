@@ -14,9 +14,22 @@ const ENV_KEYS = [
   "OPENOMNI_MODEL_HEADERS",
   "OPENOMNI_MODEL_FALLBACKS",
   "OPENOMNI_SOCIAL_BUDGETS",
+  "OPENOMNI_MACHINES_ENROLLED",
+  "OPENOMNI_MACHINES_SOCKET",
+  "OPENOMNI_CHANNEL_ALLOWED_SENDERS",
 ] as const;
 
 let saved: Record<string, string | undefined>;
+
+/** Runs `act`, returning its thrown value and failing if it returns. */
+function thrownBy(act: () => unknown): unknown {
+  try {
+    act();
+  } catch (error) {
+    return error;
+  }
+  throw new Error("expected an enrollment refusal, got a value");
+}
 
 beforeEach(() => {
   saved = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
@@ -74,6 +87,11 @@ describe("ws exposure enforcement", () => {
     expect("wsToken" in config).toBe(false);
   });
 
+  it("refuses a missing required model value", () => {
+    delete process.env.OPENOMNI_MODEL_API_KEY;
+    expect(() => loadConfig()).toThrow();
+  });
+
   it("leaves the model transport overrides absent when unset", () => {
     const config = loadConfig();
     expect("baseUrl" in config.model).toBe(false);
@@ -104,8 +122,14 @@ describe("ws exposure enforcement", () => {
     { name: "a bare string", value: JSON.stringify("x-tenant: acme") },
     { name: "non-string header values", value: JSON.stringify({ "x-retries": 3 }) },
     { name: "an empty header name", value: JSON.stringify({ "": "acme" }) },
-    { name: "a header name containing a CR/LF", value: JSON.stringify({ "x-bad\r\ninjected": "acme" }) },
-    { name: "a header value containing a CR/LF", value: JSON.stringify({ "x-tenant": "acme\r\ninjected" }) },
+    {
+      name: "a header name containing a CR/LF",
+      value: JSON.stringify({ "x-bad\r\ninjected": "acme" }),
+    },
+    {
+      name: "a header value containing a CR/LF",
+      value: JSON.stringify({ "x-tenant": "acme\r\ninjected" }),
+    },
   ])("fails closed on $name", ({ value }) => {
     process.env.OPENOMNI_MODEL_HEADERS = value;
 
@@ -139,7 +163,10 @@ describe("ws exposure enforcement", () => {
     { name: "an empty model segment", value: "openai/" },
     { name: "a blank entry between two valid ones", value: "openai/gpt-5,,anthropic/claude-x" },
     { name: "whitespace inside a segment", value: "open ai/gpt-5" },
-    { name: "a provider absent from the bundled catalog", value: "definitely-unknown-provider/model" },
+    {
+      name: "a provider absent from the bundled catalog",
+      value: "definitely-unknown-provider/model",
+    },
   ])("fails closed on $name", ({ value }) => {
     process.env.OPENOMNI_MODEL_FALLBACKS = value;
 
@@ -150,6 +177,61 @@ describe("ws exposure enforcement", () => {
     process.env.OPENOMNI_MODEL_FALLBACKS = "   ";
 
     expect(loadConfig().model.fallbacks).toBeUndefined();
+  });
+
+  it("reads the Owner's export allowlist off the enrollment", () => {
+    process.env.OPENOMNI_MACHINES_SOCKET = "/tmp/machines-config-test.sock";
+    process.env.OPENOMNI_MACHINES_ENROLLED = JSON.stringify([
+      {
+        machineId: "alpha",
+        name: "the laptop",
+        allowedCapabilities: ["fs.read"],
+        allowedExports: ["notes", "src"],
+        enrolledAt: 0,
+      },
+    ]);
+
+    expect(loadConfig().machines?.enrolled[0]?.allowedExports).toEqual(["notes", "src"]);
+  });
+
+  it("leaves the allowlist absent when the Owner named no export — no config, no reach", () => {
+    process.env.OPENOMNI_MACHINES_ENROLLED = JSON.stringify([
+      { machineId: "alpha", name: "the laptop", allowedCapabilities: ["fs.read"], enrolledAt: 0 },
+    ]);
+
+    expect(loadConfig().machines?.enrolled[0]?.allowedExports).toBeUndefined();
+  });
+
+  it("refuses an enrollment whose export names collide or break the grammar", () => {
+    process.env.OPENOMNI_MACHINES_ENROLLED = JSON.stringify([
+      {
+        machineId: "alpha",
+        name: "the laptop",
+        allowedCapabilities: ["fs.read"],
+        allowedExports: ["notes", "notes"],
+        enrolledAt: 0,
+      },
+    ]);
+    const duplicate = thrownBy(loadConfig);
+    expect(duplicate).toBeInstanceOf(Error);
+    expect((duplicate as Error).message).toBe(
+      "OPENOMNI_MACHINES_ENROLLED is invalid: export names must be unique",
+    );
+
+    process.env.OPENOMNI_MACHINES_ENROLLED = JSON.stringify([
+      {
+        machineId: "alpha",
+        name: "the laptop",
+        allowedCapabilities: ["fs.read"],
+        allowedExports: ["../escape"],
+        enrolledAt: 0,
+      },
+    ]);
+    const invalidName = thrownBy(loadConfig);
+    expect(invalidName).toBeInstanceOf(Error);
+    expect((invalidName as Error).message).toBe(
+      "OPENOMNI_MACHINES_ENROLLED is invalid: export name must be lowercase alphanumeric with - or _ (e.g. notes)",
+    );
   });
 
   it("reads explicit social budgets while keeping the default absent", () => {
@@ -172,5 +254,13 @@ describe("ws exposure enforcement", () => {
         cooldownMs: 0,
       },
     ]);
+  });
+
+  it("reads per-surface sender allowlists, absent by default", () => {
+    expect(loadConfig().channelAllowedSenders).toBeUndefined();
+    process.env.OPENOMNI_CHANNEL_ALLOWED_SENDERS = JSON.stringify({ telegram: ["111"] });
+    expect(loadConfig().channelAllowedSenders).toEqual({ telegram: ["111"] });
+    process.env.OPENOMNI_CHANNEL_ALLOWED_SENDERS = "not-json";
+    expect(() => loadConfig()).toThrow("OPENOMNI_CHANNEL_ALLOWED_SENDERS is invalid JSON");
   });
 });

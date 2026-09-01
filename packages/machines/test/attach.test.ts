@@ -89,6 +89,7 @@ describe("machine attach handshake", () => {
         expect(daemon.attachment).toEqual({
           status: "attached",
           effectiveCapabilities: ["fs.read"],
+          effectiveExports: [],
         });
         expect(host.attached("mac-studio")).toEqual(["fs.read"]);
         expect(collector.events).toEqual([
@@ -139,6 +140,7 @@ describe("machine attach handshake", () => {
           expect(await client.call("machine.attach", offer())).toEqual({
             status: "attached",
             effectiveCapabilities: ["fs.read"],
+            effectiveExports: [],
           });
         } finally {
           client.close();
@@ -182,6 +184,7 @@ describe("machine attach handshake", () => {
         expect(second.attachment).toEqual({
           status: "attached",
           effectiveCapabilities: ["shell.exec"],
+          effectiveExports: [],
         });
         expect(host.attached("mac-studio")).toEqual(["shell.exec"]);
         second.close();

@@ -38,16 +38,27 @@ export type RunCellOutcome =
       readonly reason: "machine_not_attached" | "kernel_not_available";
     };
 
+export type FsOpOutcome =
+  | Machine.FsResult
+  | {
+      readonly status: "refused";
+      readonly reason: "machine_not_attached" | "fs_not_available";
+    };
+
 export interface MachineHost {
   /** Effective capability set of a currently attached machine. */
   attached(machineId: Machine.MachineId): readonly Machine.CapabilityId[] | undefined;
+  /** Effective export names of a currently attached machine. */
+  attachedExports(machineId: Machine.MachineId): readonly Machine.ExportName[] | undefined;
   runCell(machineId: Machine.MachineId, request: Machine.CellRequest): Promise<RunCellOutcome>;
+  fsOp(machineId: Machine.MachineId, request: Machine.FsRequest): Promise<FsOpOutcome>;
   close(): void;
 }
 
 interface Attachment {
   readonly machineId: Machine.MachineId;
   readonly capabilities: readonly Machine.CapabilityId[];
+  readonly exports: readonly Machine.ExportName[];
 }
 
 /**
@@ -107,7 +118,10 @@ export async function createMachineHost(options: MachineHostOptions): Promise<Ma
         respond(
           options.callTool
             ? await options.callTool(call)
-            : ({ status: "failed", error: "this host exposes no tools" } satisfies Machine.ToolCallResult),
+            : ({
+                status: "failed",
+                error: "this host exposes no tools",
+              } satisfies Machine.ToolCallResult),
         );
         return;
       }
@@ -117,11 +131,19 @@ export async function createMachineHost(options: MachineHostOptions): Promise<Ma
       const offer = Machine.Offer.parse(params);
       const enrollment = options.enrollment(offer.machineId);
       if (enrollment === undefined) {
-        respond({ status: "refused", reason: "machine_not_enrolled" } satisfies Machine.AttachResult);
+        respond({
+          status: "refused",
+          reason: "machine_not_enrolled",
+        } satisfies Machine.AttachResult);
         return;
       }
       const outcome = Machine.effectiveCapabilities(enrollment, offer);
       if (outcome.kind === "machine_mismatch") {
+        respond({ status: "refused", reason: "machine_mismatch" } satisfies Machine.AttachResult);
+        return;
+      }
+      const exportOutcome = Machine.effectiveExports(enrollment, offer);
+      if (exportOutcome.kind === "machine_mismatch") {
         respond({ status: "refused", reason: "machine_mismatch" } satisfies Machine.AttachResult);
         return;
       }
@@ -133,6 +155,7 @@ export async function createMachineHost(options: MachineHostOptions): Promise<Ma
       attachments.set(connectionId, {
         machineId: outcome.machineId,
         capabilities: outcome.capabilities,
+        exports: exportOutcome.exports,
       });
       connectionByMachine.set(outcome.machineId, connectionId);
       options.events.publish(Machine.Events.Attached, {
@@ -143,6 +166,7 @@ export async function createMachineHost(options: MachineHostOptions): Promise<Ma
       respond({
         status: "attached",
         effectiveCapabilities: [...outcome.capabilities],
+        effectiveExports: [...exportOutcome.exports],
       } satisfies Machine.AttachResult);
     },
     {
@@ -158,6 +182,11 @@ export async function createMachineHost(options: MachineHostOptions): Promise<Ma
       const connectionId = connectionByMachine.get(machineId);
       if (connectionId === undefined) return undefined;
       return attachments.get(connectionId)?.capabilities;
+    },
+    attachedExports(machineId) {
+      const connectionId = connectionByMachine.get(machineId);
+      if (connectionId === undefined) return undefined;
+      return attachments.get(connectionId)?.exports;
     },
     async runCell(machineId, request) {
       const connectionId = connectionByMachine.get(machineId);
@@ -191,6 +220,27 @@ export async function createMachineHost(options: MachineHostOptions): Promise<Ma
       } finally {
         cells.delete(request.cellId);
       }
+    },
+    async fsOp(machineId, request) {
+      const connectionId = connectionByMachine.get(machineId);
+      if (connectionId === undefined) {
+        return { status: "refused", reason: "machine_not_attached" };
+      }
+      const attachment = attachments.get(connectionId);
+      if (!attachment?.capabilities.includes(Machine.WellKnownCapability.fsRead)) {
+        return { status: "refused", reason: "fs_not_available" };
+      }
+      if (!attachment.exports.includes(request.export)) {
+        return {
+          status: "refused",
+          reason: "export_not_available",
+          message: `export is not available: ${request.export}`,
+        };
+      }
+      server.useConnection(connectionId);
+      return Machine.FsResult.parse(
+        await typedCall(server, Machine.WireMethod.FsOp, Machine.FsRequest.parse(request)),
+      );
     },
     close() {
       server.close();

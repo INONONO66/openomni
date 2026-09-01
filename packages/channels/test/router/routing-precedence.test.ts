@@ -230,6 +230,48 @@ describe("resolveRoute precedence", () => {
     expect(codes).toEqual(["route_blocked", "route_ambiguous"]);
   });
 
+  it("classifies a blocked channel through the typed routing error", () => {
+    const decision = Ingress.Events.RoutingDecision.schema.parse(
+      resolveRoute(inbound, {
+        wait: { kind: "none" },
+        channel: {
+          id: "grant-blocked",
+          kind: "blocked_channel",
+          inboundTreatment: "drop",
+        },
+      }),
+    );
+
+    let code: string | undefined;
+    try {
+      requireRoutedDecision(decision);
+    } catch (error) {
+      code = (error as { readonly code?: string }).code;
+    }
+    expect(code).toBe("route_blocked");
+  });
+
+  it("classifies an actor-identity block through the typed routing error", () => {
+    const decision = Ingress.Events.RoutingDecision.schema.parse(
+      resolveRoute(inbound, {
+        wait: { kind: "none" },
+        channel: {
+          id: "grant-no-default",
+          kind: "trusted_channel",
+          inboundTreatment: "full_access",
+        },
+      }),
+    );
+
+    let code: string | undefined;
+    try {
+      requireRoutedDecision(decision);
+    } catch (error) {
+      code = (error as { readonly code?: string }).code;
+    }
+    expect(code).toBe("route_blocked");
+  });
+
   it("preserves evidence_only treatment while routing a broadcast channel", () => {
     // Given
     const state = Object.freeze({

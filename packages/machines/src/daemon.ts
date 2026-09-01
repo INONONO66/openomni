@@ -1,10 +1,14 @@
 import { type IpcClient, connectIpcClient, typedCall } from "@openomni/ipc";
 import { Machine } from "@openomni/protocol";
+import { MachineDaemonProtocolError } from "./errors";
+import { createFsDriver } from "./fs";
 import { PythonKernel } from "./kernel";
 
 export interface MachineDaemonOptions {
   readonly socketPath: string;
   readonly offer: Machine.Offer;
+  /** Daemon-local export roots; absolute paths never cross the wire. */
+  readonly fsExports?: ReadonlyMap<string, string>;
   readonly attachTimeoutMs?: number;
 }
 
@@ -27,6 +31,9 @@ export async function attachMachineDaemon(options: MachineDaemonOptions): Promis
   const offersKernel = options.offer.offeredCapabilities.includes(
     Machine.WellKnownCapability.pythonKernel,
   );
+  const offersFs = options.offer.offeredCapabilities.includes(Machine.WellKnownCapability.fsRead);
+  const offeredExports = new Set((options.offer.exports ?? []).map((entry) => entry.name));
+  const fsOp = createFsDriver(options.fsExports ?? new Map());
   const kernels = new Map<string, PythonKernel>();
   const kernelFor = (tenant: string | undefined): PythonKernel => {
     const key = tenant ?? "default";
@@ -43,43 +50,89 @@ export async function attachMachineDaemon(options: MachineDaemonOptions): Promis
   };
   // Assigned before any request can arrive: the host can only send RunCell
   // over a connection this call establishes.
-  let client!: IpcClient;
-  client = await connectIpcClient(options.socketPath, {
+  let client: IpcClient | undefined;
+  // The host can only send requests over the connection this call establishes,
+  // so a handler firing before assignment would be a transport bug, not input.
+  const requireClient = (): IpcClient => {
+    if (client === undefined) {
+      throw new Error("machine daemon received a request before its client was connected");
+    }
+    return client;
+  };
+  // fsOp already holds open export descriptors, so a failure to connect must
+  // release them rather than leak one set of fds per attach attempt.
+  const connecting = connectIpcClient(options.socketPath, {
     onRequest: async (method, params, respond) => {
+      if (method === Machine.WireMethod.FsOp) {
+        // The host gate owns normal authorization; the daemon still re-checks
+        // its own offer because the host is across a trust boundary.
+        if (!offersFs) {
+          const capability = Machine.WellKnownCapability.fsRead;
+          throw new MachineDaemonProtocolError({
+            reason: "capability_not_offered",
+            capability,
+            message: `${capability} was not offered by this machine`,
+          });
+        }
+        const request = Machine.FsRequest.parse(params);
+        if (!offeredExports.has(request.export)) {
+          respond({
+            status: "refused",
+            reason: "export_not_available",
+            message: `export is not available: ${request.export}`,
+          } satisfies Machine.FsResult);
+          return;
+        }
+        respond(await fsOp(request));
+        return;
+      }
       if (method !== Machine.WireMethod.RunCell) {
         throw new Error(`unknown method: ${method}`);
       }
       // The host gate owns this refusal; a daemon that never offered the Python-kernel capability
       // still re-checks because the host is across a trust boundary.
       if (!offersKernel) {
-        throw new Error(`${Machine.WellKnownCapability.pythonKernel} was not offered by this machine`);
+        throw new Error(
+          `${Machine.WellKnownCapability.pythonKernel} was not offered by this machine`,
+        );
       }
       const request = Machine.CellRequest.parse(params);
       respond(
         await kernelFor(request.tenant).run(request, async (call) =>
           Machine.ToolCallResult.parse(
-            await typedCall(client, Machine.WireMethod.CallTool, call, request.timeoutMs),
+            await typedCall(requireClient(), Machine.WireMethod.CallTool, call, request.timeoutMs),
           ),
         ),
       );
     },
   });
   try {
+    const connected = await connecting;
+    client = connected;
     // typedCall types the wire result but does not validate it; the host is
     // across a trust boundary, so parse before believing it.
     const attachment = Machine.AttachResult.parse(
-      await typedCall(client, Machine.WireMethod.Attach, options.offer, options.attachTimeoutMs),
+      await typedCall(
+        connected,
+        Machine.WireMethod.Attach,
+        options.offer,
+        options.attachTimeoutMs,
+      ),
     );
     return {
       attachment,
       close() {
         closeKernels();
-        client.close();
+        fsOp.close();
+        connected.close();
       },
     };
   } catch (error) {
     closeKernels();
-    client.close();
+    fsOp.close();
+    // client stays unassigned when the connection itself failed; the transport
+    // owns its own cleanup in that case.
+    client?.close();
     throw error;
   }
 }

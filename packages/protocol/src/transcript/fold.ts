@@ -100,7 +100,7 @@ export function fold(state: Message.WithParts | undefined, fact: Schema.Fact): F
       parts[index] = advanced;
       return { applied: true, state: { info: state.info, parts } };
     }
-    case "message.finished": {
+    case "message.finished":
       if (state.info.role !== "assistant") {
         return reject("invalid_transition");
       }
@@ -124,7 +124,6 @@ export function fold(state: Message.WithParts | undefined, fact: Schema.Fact): F
           parts: [...state.parts],
         },
       };
-    }
   }
 }
 
@@ -223,7 +222,7 @@ function advanceToolPart(
         },
       };
     }
-    case "interrupted": {
+    case "interrupted":
       if (state.status !== "running" || transition.at < state.time.start) {
         return undefined;
       }
@@ -236,7 +235,6 @@ function advanceToolPart(
           time: { start: state.time.start, end: transition.at },
         },
       };
-    }
   }
 }
 

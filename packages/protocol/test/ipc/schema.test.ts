@@ -3,9 +3,9 @@ import { Ipc, Machine } from "../../src/index.js";
 
 describe("Ipc.Request", () => {
   test("rejects missing id", () => {
-    expect(
-      Ipc.Request.safeParse({ v: 2, type: "request", method: "machine.attach" }).success,
-    ).toBe(false);
+    expect(Ipc.Request.safeParse({ v: 2, type: "request", method: "machine.attach" }).success).toBe(
+      false,
+    );
   });
 
   test("rejects wrong version", () => {
@@ -91,8 +91,18 @@ describe("Ipc helpers", () => {
 describe("Ipc.Methods param schemas", () => {
   test("registers exactly the machine wire methods", () => {
     expect(Object.keys(Ipc.Methods).sort()).toEqual(
-      [Machine.WireMethod.Attach, Machine.WireMethod.RunCell, Machine.WireMethod.CallTool].sort(),
+      [
+        Machine.WireMethod.Attach,
+        Machine.WireMethod.RunCell,
+        Machine.WireMethod.CallTool,
+        Machine.WireMethod.FsOp,
+      ].sort(),
     );
+  });
+
+  test("machine.fs_op params/result are the Machine fs contracts", () => {
+    expect(Ipc.Methods[Machine.WireMethod.FsOp].params).toBe(Machine.FsRequest);
+    expect(Ipc.Methods[Machine.WireMethod.FsOp].result).toBe(Machine.FsResult);
   });
 
   test("machine.attach params/result are the Machine offer contracts", () => {

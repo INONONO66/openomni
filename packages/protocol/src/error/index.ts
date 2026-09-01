@@ -14,6 +14,11 @@ import { z } from "zod";
 const NAMED_ERROR_BRAND = Symbol.for("openomni.protocol.namedError");
 
 export abstract class NamedError extends Error {
+  protected constructor(message: string) {
+    super(message);
+    this.name = "NamedError";
+  }
+
   abstract schema(): z.ZodType;
   abstract toObject(): { name: string; data: unknown };
 

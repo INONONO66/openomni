@@ -73,6 +73,11 @@ describe("EngagementStore.open", () => {
     expect(Engagement.Events.Opened.visibility).toBe("user_audit");
   });
 
+  test("lists stored engagements without a filter", () => {
+    EngagementStore.open(buildCreate(), "trace-open", T0);
+    expect(EngagementStore.list().map(({ id }) => id)).toEqual(["eng-1"]);
+  });
+
   test("duplicate id is a typed duplicate and writes nothing", () => {
     EngagementStore.open(buildCreate(), "trace-open", T0);
     let error: unknown;
@@ -197,6 +202,28 @@ describe("EngagementStore expiry", () => {
     expect(EngagementStore.get("eng-1")?.state).toBe("expired");
   });
 
+  test("listActive treats a concurrent expiry winner as benign", () => {
+    EngagementStore.open(buildCreate({ terms: { deadline: T0 + 500 } }), "trace-open", T0);
+    const adapter = Storage.get().engagement;
+    if (!adapter) throw new Error("engagement sub-adapter missing");
+    adapter.compareAndSet = () => false;
+
+    expect(EngagementStore.listActive("ses-owner", "trace-race", T0 + 1_000)).toEqual([]);
+  });
+
+  test("listActive propagates non-conflict expiry failures", () => {
+    EngagementStore.open(buildCreate({ terms: { deadline: T0 + 500 } }), "trace-open", T0);
+    const adapter = Storage.get().engagement;
+    if (!adapter) throw new Error("engagement sub-adapter missing");
+    adapter.compareAndSet = () => {
+      throw new Error("projection unavailable");
+    };
+
+    expect(() => EngagementStore.listActive("ses-owner", "trace-failure", T0 + 1_000)).toThrow(
+      "projection unavailable",
+    );
+  });
+
   test("listActive scopes to the owner session", () => {
     EngagementStore.open(buildCreate(), "trace-open", T0);
     EngagementStore.open(
@@ -211,6 +238,19 @@ describe("EngagementStore expiry", () => {
 });
 
 describe("EngagementStore fail-closed floor", () => {
+  test("missing ledger append surface is a typed adapter_absent", () => {
+    const configured = Storage.get();
+    Object.defineProperty(configured, "ledger", { configurable: true, value: undefined });
+    let error: unknown;
+    try {
+      EngagementStore.open(buildCreate(), "trace-open", T0);
+    } catch (caught) {
+      error = caught;
+    }
+    expect(Engagement.StoreError.isInstance(error)).toBe(true);
+    expect((error as Engagement.StoreError).data.code).toBe("adapter_absent");
+  });
+
   test("missing sub-adapter is a typed adapter_absent", () => {
     Storage.reset();
     Storage.configure({

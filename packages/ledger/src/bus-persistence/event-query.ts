@@ -9,16 +9,11 @@ export function listErrors(sessionId: string): Promise<EventRecord[]> {
          WHERE session_id = ? AND event_type LIKE '%error%'
          ORDER BY time_created DESC`,
     )
-    .all(sessionId) as BusEventRow[];
+    .all(sessionId) as Array<BusEventRow & { session_id: string }>;
   return Promise.resolve(rows.map(toEventRecord));
 }
 
-function toEventRecord(row: BusEventRow): EventRecord {
-  if (row.session_id === null) {
-    // Impossible for the session-scoped query above (WHERE session_id = ?);
-    // sessionless chain rows must never be mapped into a session record.
-    throw new Error(`bus_event row ${row.id} has no session_id — not a session event`);
-  }
+function toEventRecord(row: BusEventRow & { session_id: string }): EventRecord {
   return {
     id: String(row.id),
     sessionId: row.session_id,

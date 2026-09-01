@@ -73,6 +73,26 @@ function criterion(id: string) {
   return { id, revision: 1, statement: "the criterion", required: true };
 }
 
+describe("completion source projection", () => {
+  test("projects fixed and qualified sources and preserves optional identity", () => {
+    expect(
+      WorkItem.projectCompletionOrigin({
+        source: "sdk",
+        identity: { kind: "resident", id: "resident-1" },
+      }),
+    ).toBe("resident");
+    expect(WorkItem.projectCompletionOrigin({ source: "replay" })).toBe("replay");
+    expect(WorkItem.projectCompletionOrigin({ source: "internal_worker" })).toBe("worker");
+    expect(WorkItem.projectCompletionSourceIdentity({ source: "recovery" })).toBeUndefined();
+    expect(
+      WorkItem.projectCompletionSourceIdentity({
+        source: "sdk",
+        identity: { kind: "external_actor", id: "actor-1" },
+      }),
+    ).toEqual({ source: "sdk", identity: { kind: "external_actor", id: "actor-1" } });
+  });
+});
+
 describe("CompletionRequest field map and refinements", () => {
   test("accepts the minimal request and every fact collection defaults to empty arrays", () => {
     const parsed = WorkItem.CompletionRequest.parse(baseRequest());
@@ -195,6 +215,25 @@ describe("ledger head adjacency is one rule spelled at every head-bearing site",
     ]);
   });
 
+  test("rejects incoherent reservation lease ownership", () => {
+    const invalid = [
+      { ...baseReservation(), ownerId: "owner-1" },
+      { ...baseReservation(), leaseExpiresAt: T0 + 1 },
+      { ...baseReservation(), ownerId: "owner-1", leaseExpiresAt: T0 + 1, fence: 0 },
+      { ...baseReservation(), fence: 1 },
+      {
+        ...baseReservation(),
+        ownerId: "owner-1",
+        leaseExpiresAt: T0 - 1,
+        fence: 1,
+      },
+    ];
+
+    for (const reservation of invalid) {
+      expect(WorkItem.CompletionRequestReservation.safeParse(reservation).success).toBe(false);
+    }
+  });
+
   test("the adjacent reservation parses and defaults fence to 0", () => {
     const parsed = WorkItem.CompletionRequestReservation.parse(baseReservation());
     expect(parsed.recordedHead).toBe(parsed.expectedHead + 1);
@@ -235,5 +274,20 @@ describe("ledger head adjacency is one rule spelled at every head-bearing site",
       path: "recordedHead",
       message: "recordedHead must immediately follow expectedHead",
     });
+
+    const mismatchedReport = issues(
+      WorkItem.CompletionAdmission.safeParse({
+        ...admission,
+        recordedHead: 4,
+        completionReportSnapshot: {
+          summary: "done",
+          claims: [{ statement: "done", evidenceIds: ["evidence-1"] }],
+          caveats: [],
+          followUps: [],
+        },
+        completionReportRef: "wrong-report-reference",
+      }),
+    );
+    expect(mismatchedReport.some(({ path }) => path === "completionReportRef")).toBe(true);
   });
 });

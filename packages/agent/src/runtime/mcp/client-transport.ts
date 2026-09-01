@@ -31,8 +31,12 @@ export function createTransport(config: McpConfig.ServerConfig): Transport {
         streamableHttpTransportOptions(config),
       );
     default:
-      throw new Error("Unknown transport");
+      return assertKnownTransport(config);
   }
+}
+
+function assertKnownTransport(_config: never): never {
+  throw new Error("Unknown transport");
 }
 
 function sseTransportOptions(

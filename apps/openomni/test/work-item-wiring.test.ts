@@ -9,7 +9,8 @@ import type { DelegationOrigin } from "../src/delegation/admission";
 import { createDelegationKernel, type DriverOutcome } from "../src/delegation/kernel";
 import { createWorkItemLinkage } from "../src/delegation/work-item-linkage";
 import { catalogEntries } from "../src/tools/catalog";
-import { createCompletionPort } from "../src/work-item/completion";
+import { completeWorkToolExecutor, workItemsToolExecutor } from "../src/tools/work-items";
+import { createCompletionPort, type CompletionPort } from "../src/work-item/completion";
 import { validateCompletionTerminalLinkage } from "../src/work-item/terminal-linkage";
 
 const directories: string[] = [];
@@ -89,6 +90,27 @@ function attemptClosed(workItemId: string): Promise<void> {
   });
 }
 
+test("a refused attempt allocation rolls back its pending WorkItem", async () => {
+  bootLedger();
+  const linkage = wiringLinkage();
+  const original = WorkItemStore.allocateAttempt;
+  WorkItemStore.allocateAttempt = (() => undefined) as never;
+  try {
+    await expect(
+      linkage.openAssign({
+        delegationId: "d-refused-attempt",
+        transport: "process",
+        instruction: "work",
+        acceptanceCriteria: ["done"],
+        sessionId: "session",
+      }),
+    ).rejects.toThrow();
+    expect(WorkItemStore.list()[0]?.timestamps.cancelled).toBeDefined();
+  } finally {
+    WorkItemStore.allocateAttempt = original;
+  }
+});
+
 test("assign admission commissions a WorkItem with an allocated attempt", async () => {
   bootLedger();
   const { driver } = deferredDriver();
@@ -139,6 +161,19 @@ test("settlement demotes worker output to Evidence and closes the attempt withou
   expect(item?.attemptTerminal?.usage?.seconds).toBeGreaterThanOrEqual(0);
 });
 
+test("a cancelled settlement records its reason as evidence", async () => {
+  bootLedger();
+  const { driver, settle } = deferredDriver();
+  const kernel = bootKernel(driver);
+  await delegateAssign(kernel);
+  const workItemId = DelegationStore.get("dg-wiring-1")?.workItemId ?? "";
+  const closed = attemptClosed(workItemId);
+  settle({ status: "cancelled", reason: "owner cancelled" });
+  await kernel.awaitDelegation("dg-wiring-1", 5_000);
+  await closed;
+  expect((await WorkItemStore.get(workItemId))?.evidence[0]?.detail).toBe("owner cancelled");
+});
+
 test("a failed settlement fails the WorkItem with failing evidence", async () => {
   bootLedger();
   const { driver, settle } = deferredDriver();
@@ -155,6 +190,8 @@ test("a failed settlement fails the WorkItem with failing evidence", async () =>
   expect(item?.attemptTerminal?.outcome).toBe("failed");
   expect(item?.evidence[0]?.passed).toBe(false);
   expect(WorkItem.deriveStatus(item as WorkItem.Info)).toBe("failed");
+  const completion = createCompletionPort({ writer: () => true, now: () => Date.now() });
+  expect((await completion.complete({ workItemId, judgments: [] })).admitted).toBe(false);
 });
 
 async function settledAssign(): Promise<{
@@ -173,6 +210,97 @@ async function settledAssign(): Promise<{
   const completion = createCompletionPort({ writer, now: () => Date.now() });
   return { workItemId, completion };
 }
+
+test("completion inspection summarizes durable criteria, evidence, and attempt outcome", async () => {
+  const { workItemId, completion } = await settledAssign();
+  expect(completion.list()).toHaveLength(1);
+  expect(completion.inspect(workItemId)).toMatchObject({ workItemId, attemptOutcome: "succeeded" });
+  expect(completion.inspect("missing")).toBeUndefined();
+});
+
+test("completion refuses unknown, duplicate, and ungrounded judgments", async () => {
+  const { workItemId, completion } = await settledAssign();
+  const item = WorkItemStore.get(workItemId);
+  const criterionId = item?.completionFacts.criteria[0]?.id ?? "criterion";
+  const evidenceId = item?.evidence[0]?.id ?? "evidence";
+  expect((await completion.complete({ workItemId: "missing", judgments: [] })).admitted).toBe(
+    false,
+  );
+  expect(
+    (
+      await completion.complete({
+        workItemId,
+        judgments: [{ criterionId: "missing", value: "asserted" }],
+      })
+    ).admitted,
+  ).toBe(false);
+  expect(
+    (
+      await completion.complete({
+        workItemId,
+        judgments: [
+          { criterionId, value: "asserted" },
+          { criterionId, value: "asserted" },
+        ],
+      })
+    ).admitted,
+  ).toBe(false);
+  expect(
+    (
+      await completion.complete({
+        workItemId,
+        judgments: [
+          { criterionId, value: "verified", checkedPredicate: "checked", evidenceIds: [] },
+        ],
+      })
+    ).admitted,
+  ).toBe(false);
+  expect(
+    (
+      await completion.complete({
+        workItemId,
+        judgments: [
+          { criterionId, value: "verified", checkedPredicate: "checked", evidenceIds: ["missing"] },
+        ],
+      })
+    ).admitted,
+  ).toBe(false);
+  expect(evidenceId).not.toBe("");
+});
+
+test("completion reports a vanished item during verification", async () => {
+  const { workItemId, completion } = await settledAssign();
+  const item = WorkItemStore.get(workItemId);
+  const criterionId = item?.completionFacts.criteria[0]?.id ?? "criterion";
+  const evidenceId = item?.evidence[0]?.id ?? "evidence";
+  const original = WorkItemStore.addEvidence;
+  WorkItemStore.addEvidence = (() => undefined) as never;
+  try {
+    const outcome = await completion.complete({
+      workItemId,
+      judgments: [
+        { criterionId, value: "verified", checkedPredicate: "checked", evidenceIds: [evidenceId] },
+      ],
+    });
+    expect(outcome.admitted).toBe(false);
+  } finally {
+    WorkItemStore.addEvidence = original;
+  }
+});
+
+test("completion reports repeated admission-head races", async () => {
+  const { workItemId } = await settledAssign();
+  const item = WorkItemStore.get(workItemId);
+  const port = createCompletionPort({ writer: () => false, now: () => Date.now() });
+  const outcome = await port.complete({
+    workItemId,
+    judgments: (item?.completionFacts.criteria ?? []).map((criterion) => ({
+      criterionId: criterion.id,
+      value: "asserted" as const,
+    })),
+  });
+  expect(outcome.admitted).toBe(false);
+});
 
 test("completion admission refuses asserted-only judgments durably", async () => {
   const { workItemId, completion } = await settledAssign();
@@ -232,6 +360,40 @@ test("completion admission admits verified judgments and writes the terminal rec
   expect(WorkItem.deriveStatus(after as WorkItem.Info)).toBe("completed");
   expect(after?.completionTerminalReceipt).toBeDefined();
   expect(validateCompletionTerminalLinkage(after as WorkItem.Info).success).toBe(true);
+  const repeated = await completion.complete({ workItemId, judgments: [] });
+  expect(repeated.admitted).toBe(false);
+});
+
+test("completion accepts a valid receipt that wins after its initial state read", async () => {
+  const { workItemId, completion } = await settledAssign();
+  const before = WorkItemStore.get(workItemId);
+  const evidenceId = before?.evidence[0]?.id ?? "";
+  const admitted = await completion.complete({
+    workItemId,
+    judgments: (before?.completionFacts.criteria ?? []).map((criterion) => ({
+      criterionId: criterion.id,
+      value: "verified" as const,
+      checkedPredicate: "checked",
+      evidenceIds: [evidenceId],
+    })),
+  });
+  expect(admitted.admitted).toBe(true);
+  const completed = WorkItemStore.get(workItemId);
+  const original = WorkItemStore.get;
+  let reads = 0;
+  WorkItemStore.get = (() => (reads++ === 0 ? before : completed)) as never;
+  try {
+    const raced = await completion.complete({
+      workItemId,
+      judgments: (before?.completionFacts.criteria ?? []).map((criterion) => ({
+        criterionId: criterion.id,
+        value: "asserted" as const,
+      })),
+    });
+    expect(raced.admitted).toBe(true);
+  } finally {
+    WorkItemStore.get = original;
+  }
 });
 
 test("the admission write guard refuses a malformed real-port candidate before its writer", async () => {
@@ -392,6 +554,8 @@ test("protocol parsing is structural while app admission rejects broken terminal
         ...completed.completionFacts,
         admissions: completed.completionFacts.admissions.map((admission) => ({
           ...admission,
+          effectiveResultIds: [],
+          unresolvedCriterionIds: completed.completionFacts.criteria.map(({ id }) => id),
           decision: "owner_override" as const,
           ownerOverrideReceiptRef: "owner-override:test",
         })),
@@ -405,6 +569,41 @@ test("protocol parsing is structural while app admission rejects broken terminal
     if (!parsed.success) continue;
     expect(validateCompletionTerminalLinkage(parsed.data).success).toBe(false);
   }
+});
+
+test("work item tool adapters cover validation, list, inspect, and both completion outcomes", async () => {
+  const calls: unknown[] = [];
+  const summary = {
+    workItemId: "wi-1",
+    name: "work",
+    status: "running",
+    criteria: [],
+    evidence: [],
+  } as const;
+  const port: CompletionPort = {
+    list: () => [summary],
+    inspect: (id) => (id === "wi-1" ? summary : undefined),
+    complete: (input) => {
+      calls.push(input);
+      return Promise.resolve(
+        input.workItemId === "wi-1"
+          ? { admitted: true as const, workItemId: input.workItemId }
+          : { admitted: false as const, reason: "blocked" },
+      );
+    },
+  };
+  const inspect = workItemsToolExecutor(port);
+  expect(await inspect({ extra: true })).toBeString();
+  expect(JSON.parse(await inspect(undefined))).toHaveLength(1);
+  expect(await inspect({ workItemId: "missing" })).toBeString();
+  expect(JSON.parse(await inspect({ workItemId: "wi-1" }))).toMatchObject({ workItemId: "wi-1" });
+
+  const complete = completeWorkToolExecutor(port);
+  expect(await complete({})).toBeString();
+  const judgments = [{ criterionId: "criterion", value: "asserted" as const }];
+  expect(await complete({ workItemId: "wi-1", judgments })).toBeString();
+  expect(await complete({ workItemId: "wi-2", judgments })).toBeString();
+  expect(calls).toHaveLength(2);
 });
 
 test("work_items and complete_work are a Resident-only catalog surface", () => {

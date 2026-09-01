@@ -39,7 +39,10 @@ const strangerEvent = {
   meta: { actor: { role: "user" } },
 } satisfies Gateway.DeliveredEvent;
 
-function makeRouter(routes: ReadonlyMap<string, ChannelDeliveryRoute> = deliveryRoutes()): GatewayRouter {
+function makeRouter(
+  routes: ReadonlyMap<string, ChannelDeliveryRoute> = deliveryRoutes(),
+  maxLiveInstances = 5,
+): GatewayRouter {
   return makeFixtureRouter({
     messaging: {
       deliveryRoutes: routes,
@@ -53,7 +56,7 @@ function makeRouter(routes: ReadonlyMap<string, ChannelDeliveryRoute> = delivery
           channel: "market",
           operations: ["awaited"],
           instanceTtlMs: 86_400_000,
-          maxLiveInstances: 5,
+          maxLiveInstances,
           createdBy: "owner",
         },
       ],
@@ -105,6 +108,19 @@ describe("messaging-composed gateway router (#708)", () => {
     });
     expect(receipt.kind).toBe("denied");
     if (receipt.kind === "denied") expect(receipt.code).toBe("ungranted");
+  });
+
+  test("constructs without a ledger sub-adapter and replays no authority", () => {
+    const adapter = Storage.get();
+    Storage.configure({
+      ...adapter,
+      transaction: adapter.transaction.bind(adapter),
+      ledger: undefined,
+    });
+
+    const router = makeRouter();
+
+    expect(router.messaging).toBeDefined();
   });
 
   test("a routed registered actor on a rule-covered channel materializes a reply-scoped grant, enabling the persona reply", async () => {
@@ -169,25 +185,52 @@ describe("messaging-composed gateway router (#708)", () => {
     ).rejects.toThrow("no registered channel surface delivers discord");
   });
 
-  test("replays a pre-0025 legacy route fact into a reply grant and skips corrupt rows", async () => {
+  test("replays the lexical winner of equal-time route facts and skips corrupt rows", async () => {
     // Given — capture the modern routed fact this inbound records today.
     await makeRouter().ingest(strangerEvent);
     const streamId = Ingress.routeStreamId(strangerEvent);
     const modern = Storage.get().ledger?.headFact(streamId);
     expect(modern?.data).toMatchObject({ outcome: "route" });
 
-    // And — a fresh ledger seeded with the LEGACY shape of that fact (the
-    // dead runId/pendingInteractionId fields the strict write schema rejects)
-    // plus one corrupt route.decided row no era can parse.
+    // And — a fresh ledger seeded in the opposite order from the required
+    // lexical tie-break. Both rows have the captured decision's exact time,
+    // but the second row's stream id sorts first and carries the LEGACY shape
+    // (dead fields that the strict write schema rejects).
     resetRouterState();
     seedMarketState();
     delivered.length = 0;
+    const modernData = modern?.data as { factsUsed: string[] } & Record<string, unknown>;
     Storage.get().ledger?.append(
       {
-        streamId,
+        streamId: "route:discord:shop-ws:market:A-storage-first",
+        type: "route.decided",
+        data: modernData,
+      },
+      0,
+    );
+    ActorRegistry.registerIdentity({
+      id: "actor-lexical-winner",
+      kind: "human",
+      trustTier: "collaborator",
+    });
+    ActorRegistry.registerEndpoint({
+      id: "ep-lexical-winner",
+      actorId: "actor-lexical-winner",
+      channel: "discord",
+      externalId: "lexical-winner-external",
+      workspace: "shop-ws",
+    });
+    Storage.get().ledger?.append(
+      {
+        streamId: "route:discord:shop-ws:market:a-locale-winner",
         type: "route.decided",
         data: {
-          ...(modern?.data as Record<string, unknown>),
+          ...modernData,
+          inboundId: "a-locale-winner",
+          actorId: "actor-lexical-winner",
+          factsUsed: modernData.factsUsed.map((fact) =>
+            fact.replace("buyer-external", "lexical-winner-external"),
+          ),
           runId: "run-legacy",
           pendingInteractionId: "ask_legacy",
         },
@@ -218,7 +261,6 @@ describe("messaging-composed gateway router (#708)", () => {
       externalId: "mallory-external",
       workspace: "shop-ws",
     });
-    const modernData = modern?.data as { factsUsed: string[] } & Record<string, unknown>;
     Storage.get().ledger?.append(
       {
         streamId: Ingress.routeStreamId({ ...strangerEvent, id: "inbound-mallory" }),
@@ -236,19 +278,54 @@ describe("messaging-composed gateway router (#708)", () => {
       0,
     );
 
-    // When — a new router is composed: replay must not crash on the corrupt
-    // row and must materialize the grant from the legacy fact alone.
-    const restarted = makeRouter();
-    const receipt = await restarted.messaging.send({
-      messageId: "m-legacy",
-      traceId: "t-legacy",
+    // When — replay has capacity for exactly one instance, so the equal-time
+    // sort directly determines which admission receives authority.
+    const restarted = makeRouter(deliveryRoutes(), 1);
+    const winnerReceipt = await restarted.messaging.send({
+      messageId: "m-legacy-winner",
+      traceId: "t-legacy-winner",
+      senderId: "persona-owner",
+      target: { actorId: "actor-lexical-winner", endpointId: "ep-lexical-winner" },
+      operation: "awaited",
+      body: "legacy lexical winner",
+      at: Date.now(),
+      waitSpec: {
+        waitId: "w-legacy-winner",
+        ownerRef: { kind: "session", id: "s-1" },
+        allowedActions: ["report_result"],
+        expectedResponders: ["actor-lexical-winner"],
+        resolutionPolicy: "first_reply",
+        expiresAt: Date.now() + 60_000,
+        followUpWindow: 0,
+      },
+    });
+
+    // Then — localeCompare selects "...:a-locale-winner" over
+    // SQLite's earlier "...:A-storage-first". The receipt exposes the exact
+    // source stream embedded in the one materialized grant's deterministic id.
+    expect(winnerReceipt.kind).toBe("sent");
+    if (winnerReceipt.kind === "sent") {
+      expect(winnerReceipt.grantId).toBe(
+        "reply-grant:rule-market:route%3Adiscord%3Ashop-ws%3Amarket%3Aa-locale-winner",
+      );
+    }
+    expect(delivered).toEqual([
+      {
+        externalId: "lexical-winner-external",
+        body: "legacy lexical winner",
+        idempotencyKey: "m-legacy-winner",
+      },
+    ]);
+    const insertionFirstReceipt = await restarted.messaging.send({
+      messageId: "m-insertion-first",
+      traceId: "t-insertion-first",
       senderId: "persona-owner",
       target: { actorId: "actor-buyer", endpointId: "ep-buyer" },
       operation: "awaited",
-      body: "legacy replay reaches you",
+      body: "must lose equal-time tie-break",
       at: Date.now(),
       waitSpec: {
-        waitId: "w-legacy",
+        waitId: "w-insertion-first",
         ownerRef: { kind: "session", id: "s-1" },
         allowedActions: ["report_result"],
         expectedResponders: ["actor-buyer"],
@@ -257,16 +334,10 @@ describe("messaging-composed gateway router (#708)", () => {
         followUpWindow: 0,
       },
     });
-
-    // Then — the reply grant admitted from the pre-0025 fact covers the send.
-    expect(receipt.kind).toBe("sent");
-    expect(delivered).toEqual([
-      {
-        externalId: "buyer-external",
-        body: "legacy replay reaches you",
-        idempotencyKey: "m-legacy",
-      },
-    ]);
+    expect(insertionFirstReceipt.kind).toBe("denied");
+    if (insertionFirstReceipt.kind === "denied") {
+      expect(insertionFirstReceipt.code).toBe("ungranted");
+    }
 
     // And — the wrong-typed fact granted nothing: the send to mallory denies.
     const malloryReceipt = await restarted.messaging.send({

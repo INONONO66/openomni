@@ -1,15 +1,15 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import {
   type ChannelDeliveryRoute,
   type ProviderDeliveryRoute,
   resolveChannelGrant,
 } from "@openomni/channels";
-import { Storage } from "@openomni/ledger";
+import { LeaseStore, Storage } from "@openomni/ledger";
 import type { Channel } from "@openomni/protocol";
 import type { BuiltChannel, ChannelComponent } from "../src/channels";
 import { createComposer } from "../src/composition/composer";
 import { registerTrustedChannelGrant } from "../src/gateway";
-import { createMachinesPort, replyText } from "../src/index";
+import { createLeaseLinkage, createMachinesPort, replyText } from "../src/index";
 import {
   type ChannelSupervisor,
   createChannelSupervisor,
@@ -24,6 +24,31 @@ describe("replyText", () => {
   });
 });
 
+describe("createLeaseLinkage", () => {
+  test("projects the live store row onto admission's narrow lease facts", () => {
+    const list = spyOn(LeaseStore, "listLiveByHolder").mockReturnValue([
+      {
+        id: "lease-1",
+        conversationId: "conversation-1",
+        holderDelegationId: "delegation-1",
+        contactId: "actor-1",
+      } as never,
+    ]);
+    try {
+      expect(createLeaseLinkage().listLiveByHolder("delegation-1", 1)).toEqual([
+        {
+          id: "lease-1",
+          conversationId: "conversation-1",
+          holderDelegationId: "delegation-1",
+          contactId: "actor-1",
+        },
+      ]);
+    } finally {
+      list.mockRestore();
+    }
+  });
+});
+
 describe("createMachinesPort", () => {
   const enrolled = [
     { name: "a", machineId: "machine:a", allowedCapabilities: ["shell"], enrolledAt: 1 },
@@ -33,19 +58,60 @@ describe("createMachinesPort", () => {
 
   test("is absent without a host or enrollment", () => {
     expect(createMachinesPort(undefined, machines)).toBeUndefined();
-    expect(createMachinesPort({ attached: () => undefined }, undefined)).toBeUndefined();
+    expect(
+      createMachinesPort(
+        { attached: () => undefined, attachedExports: () => undefined },
+        undefined,
+      ),
+    ).toBeUndefined();
   });
 
   test("folds enrollment against live attachment per read", () => {
     const port = createMachinesPort(
-      { attached: (machineId) => (machineId === "machine:a" ? ["shell"] : undefined) },
+      {
+        attached: (machineId) => (machineId === "machine:a" ? ["shell"] : undefined),
+        attachedExports: () => [],
+      },
       machines,
     );
     if (port === undefined) throw new Error("expected a machines port");
 
     expect(port()).toEqual([
-      { machineId: "machine:a", attached: true, capabilities: ["shell"] },
-      { machineId: "machine:b", attached: false, capabilities: [] },
+      { machineId: "machine:a", attached: true, capabilities: ["shell"], effectiveExports: [] },
+      { machineId: "machine:b", attached: false, capabilities: [], effectiveExports: [] },
+    ]);
+  });
+
+  test("reports the live effective export set, not the enrollment's wish", () => {
+    const port = createMachinesPort(
+      {
+        attached: (machineId) => (machineId === "machine:a" ? ["fs.read"] : undefined),
+        // The host answers with enrollment∩offer, so an export the Owner
+        // allowed but the daemon never offered is simply not here.
+        attachedExports: (machineId) => (machineId === "machine:a" ? ["notes"] : undefined),
+      },
+      {
+        socketPath: "/tmp/unused.sock",
+        enrolled: [
+          {
+            name: "a",
+            machineId: "machine:a",
+            allowedCapabilities: ["fs.read"],
+            allowedExports: ["notes", "src"],
+            enrolledAt: 1,
+          },
+        ],
+      },
+    );
+    if (port === undefined) throw new Error("expected a machines port");
+
+    expect(port()).toEqual([
+      {
+        machineId: "machine:a",
+        attached: true,
+        capabilities: ["fs.read"],
+        effectiveExports: ["notes"],
+      },
     ]);
   });
 });
@@ -98,9 +164,7 @@ describe("channel supervisor", () => {
             ...(options.deliveryRoute === undefined
               ? {}
               : { deliveryRoute: options.deliveryRoute }),
-            ...(options.webhook === true
-              ? { webhookHandler: async () => new Response("ok") }
-              : {}),
+            ...(options.webhook === true ? { webhookHandler: async () => new Response("ok") } : {}),
           };
         },
       },
@@ -283,7 +347,12 @@ describe("supervisor status passthrough", () => {
         source: "declared",
         rows: [],
         statuses: [
-          { id: "channel:discord:main", provider: "discord", state: "vault_locked", detail: "no KEK" },
+          {
+            id: "channel:discord:main",
+            provider: "discord",
+            state: "vault_locked",
+            detail: "no KEK",
+          },
           { id: "channel:slack:main", provider: "slack", state: "disabled" },
         ],
       }),

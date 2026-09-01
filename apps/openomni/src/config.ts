@@ -60,6 +60,14 @@ export interface OpenOmniConfig {
   };
   /** Owner-declared allowances for cold proactive sends; absent denies all. */
   readonly socialBudgets?: readonly Gateway.SocialBudget[];
+  /**
+   * Per-surface sender allowlists for the trusted-channel grant (external
+   * ids on that surface, e.g. Telegram user ids). A surface listed here
+   * serves only the listed senders; everyone else finds no grant and the
+   * perimeter blocks fail-closed. A surface absent from the map keeps the
+   * open posture — acceptable only for loopback-bound surfaces like ws.
+   */
+  readonly channelAllowedSenders?: Readonly<Record<string, readonly string[]>>;
 }
 
 export interface RegisteredActor {
@@ -216,6 +224,12 @@ function actorsFromEnv(): OpenOmniConfig["actors"] {
   return parseEnvJson("OPENOMNI_ACTORS", Actors);
 }
 
+const ChannelAllowedSenders = z.record(z.string(), z.array(z.string().min(1)).min(1));
+
+function channelAllowedSendersFromEnv(): OpenOmniConfig["channelAllowedSenders"] {
+  return parseEnvJson("OPENOMNI_CHANNEL_ALLOWED_SENDERS", ChannelAllowedSenders);
+}
+
 function channelsFromEnv(): OpenOmniConfig["channels"] {
   const discordToken = process.env.DISCORD_BOT_TOKEN?.trim();
   const telegramToken = process.env.TELEGRAM_BOT_TOKEN?.trim();
@@ -228,12 +242,12 @@ function channelsFromEnv(): OpenOmniConfig["channels"] {
     ...(telegramToken ? { telegram: { token: telegramToken } } : {}),
     ...(githubSecret
       ? {
-          github: {
-            secret: githubSecret,
-            ...(githubToken ? { token: githubToken } : {}),
-            ...(githubBotUsername ? { botUsername: githubBotUsername } : {}),
-          },
-        }
+        github: {
+          secret: githubSecret,
+          ...(githubToken ? { token: githubToken } : {}),
+          ...(githubBotUsername ? { botUsername: githubBotUsername } : {}),
+        },
+      }
       : {}),
   };
 }
@@ -278,6 +292,7 @@ export function loadConfig(): OpenOmniConfig {
   const actors = actorsFromEnv();
   const channels = channelsFromEnv();
   const socialBudgets = socialBudgetsFromEnv();
+  const channelAllowedSenders = channelAllowedSendersFromEnv();
   return {
     dbPath: process.env.OPENOMNI_DB_PATH?.trim() || join(homedir(), ".openomni", "storage.db"),
     memoryPath:
@@ -290,5 +305,6 @@ export function loadConfig(): OpenOmniConfig {
     ...(actors === undefined ? {} : { actors }),
     ...(channels === undefined ? {} : { channels }),
     ...(socialBudgets === undefined ? {} : { socialBudgets }),
+    ...(channelAllowedSenders === undefined ? {} : { channelAllowedSenders }),
   };
 }

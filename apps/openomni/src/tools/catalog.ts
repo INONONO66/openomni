@@ -36,6 +36,15 @@ import {
   endpointMergeToolSpec,
 } from "./approval";
 import type { CatalogEntry } from "./dispatch";
+import type { MachineVfs } from "../machines/vfs";
+import {
+  fsListToolExecutor,
+  fsListToolSpec,
+  fsReadToolExecutor,
+  fsReadToolSpec,
+  fsStatToolExecutor,
+  fsStatToolSpec,
+} from "./machine-fs";
 import type { LeasePort } from "./lease";
 import { leaseOpenToolExecutor, leaseOpenToolSpec } from "./lease";
 import type { LlmPort } from "./llm";
@@ -79,6 +88,13 @@ export interface CatalogPorts {
   readonly approvals?: ApprovalPort;
   readonly cells?: CellPorts;
   readonly machines?: MachinesPort;
+  /**
+   * The read-only machine filesystem as one flat namespace. Separate from
+   * `machines` because the two answer different questions — which machines
+   * exist, versus what one of them holds — and a host wired without an fs
+   * door must offer no fs tool rather than one that always refuses.
+   */
+  readonly machineFs?: MachineVfs;
   readonly memory?: CuratedMemory;
   readonly workItems?: CompletionPort;
   readonly llm?: LlmPort;
@@ -235,6 +251,23 @@ const CATALOG_TOOLS: readonly CatalogTool[] = [
     spec: machinesToolSpec,
     wire: (ports) =>
       ports.machines === undefined ? undefined : machinesToolExecutor(ports.machines),
+  },
+  {
+    // Host-placed on purpose: the BRAIN forwards the request, so a cell keeps
+    // the surface too (see machine-fs.ts for why `requires` is not declared).
+    spec: fsReadToolSpec,
+    wire: (ports) =>
+      ports.machineFs === undefined ? undefined : fsReadToolExecutor(ports.machineFs),
+  },
+  {
+    spec: fsListToolSpec,
+    wire: (ports) =>
+      ports.machineFs === undefined ? undefined : fsListToolExecutor(ports.machineFs),
+  },
+  {
+    spec: fsStatToolSpec,
+    wire: (ports) =>
+      ports.machineFs === undefined ? undefined : fsStatToolExecutor(ports.machineFs),
   },
   {
     // Memory is owner-scoped (kernel-contract §5): the Resident curates it,
