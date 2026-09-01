@@ -39,6 +39,53 @@ The daemon itself is the driver-band `packages/machines` package
 ({protocol, ipc} deps only, reverse-connection over the ipc transport);
 enrollment storage is a ledger record; attach admission is kernel judgment.
 
+### 2.1 The machine filesystem (read-only)
+
+Attached machines appear as ONE flat namespace,
+`/machines/<machineId>/<export>/<path inside it>`, carrying a read-only slice:
+`read`, `list`, `stat`, and no mutation verb anywhere in the vocabulary.
+
+- **One capability gates the whole surface.** `Machine.WellKnownCapability.fsRead`
+  (`fs.read`) grants read|list|stat together. A per-op split would let an Owner
+  grant `list` while believing they withheld `read`, when a listing already
+  leaks the names it enumerates.
+- **Exports are the unit of reach, and they fold like capabilities.**
+  `Enrollment.allowedExports?` (what the Owner published) ∩ `Offer.exports?`
+  (what the daemon serves) = `Machine.effectiveExports(...)`. Both sides are
+  additive-optional and BOTH default to empty, so a pre-VFS peer on either end
+  grants zero reach. `Machine.ExportName` owns the flat lowercase grammar so
+  the Owner's spelling and the daemon's offer cannot drift.
+- **The offer carries names only.** The daemon-local directory behind an export
+  never crosses the wire; the host cannot address — or leak — a filesystem
+  layout it has no business knowing.
+- **Enforcement is layered on purpose** (the same shape as the `kernel.py`
+  gate). The HOST checks attachment, `fs.read`, and the effective export set
+  before the wire. The DAEMON re-checks its own offer across the trust
+  boundary and OWNS path confinement: it canonicalizes each export root once,
+  then canonicalizes and re-checks every request target — which is what makes
+  a symlink pointing out of the export a `path_escapes_export` refusal rather
+  than a read.
+- `Machine.FsRequest` paths are RELATIVE to the export root (`""` is the root).
+  The schema refuses a leading `/`, any `..` segment, and an embedded NUL as a
+  cheap first gate — not as the confinement boundary.
+- `Machine.FsResult` refuses with a typed reason
+  (`export_not_available`, `path_escapes_export`, `not_found`, `wrong_kind`,
+  `io_error`), never a transport error: the attachment survives and the caller
+  learns WHICH boundary held. `FS_READ_MAX_BYTES` / `FS_LIST_MAX_ENTRIES` are
+  named in the protocol and enforced by the daemon; a bitten ceiling reports
+  `truncated` rather than silently presenting a prefix as the whole thing.
+
+The app surface is three host-placed tools — `fs_read`, `fs_list`, `fs_stat` —
+over a router that parses the namespace path
+(`apps/openomni/src/machines/vfs.ts`). Host placement is deliberate twice over:
+the BRAIN forwards the request, and a machine-placed tool would be folded out
+of a cell's catalog — precisely where reading a machine's files pays. The
+tools declare no `requires`: placement resolves requirements against one
+target's effective set, and a host-placed tool resolves against the host,
+which holds no machine capabilities; the grant is per-MACHINE and the machine
+is named inside the path, which placement cannot see. The host's `fsOp`
+therefore owns that gate.
+
 ## 3. Delegation contracts (`protocol/src/delegation/`)
 
 - `Delegation.WorkerAddress` — `core` (internal loop; scope `inline` =
