@@ -20,6 +20,16 @@ const ENV_KEYS = [
 
 let saved: Record<string, string | undefined>;
 
+/** Runs `act`, returning its thrown value and failing if it returns. */
+function thrownBy(act: () => unknown): unknown {
+  try {
+    act();
+  } catch (error) {
+    return error;
+  }
+  throw new Error("expected an enrollment refusal, got a value");
+}
+
 beforeEach(() => {
   saved = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
   for (const key of ENV_KEYS) delete process.env[key];
@@ -187,7 +197,9 @@ describe("ws exposure enforcement", () => {
         enrolledAt: 0,
       },
     ]);
-    expect(() => loadConfig()).toThrow(
+    const duplicate = thrownBy(loadConfig);
+    expect(duplicate).toBeInstanceOf(Error);
+    expect((duplicate as Error).message).toBe(
       "OPENOMNI_MACHINES_ENROLLED is invalid: export names must be unique",
     );
 
@@ -200,7 +212,9 @@ describe("ws exposure enforcement", () => {
         enrolledAt: 0,
       },
     ]);
-    expect(() => loadConfig()).toThrow(
+    const invalidName = thrownBy(loadConfig);
+    expect(invalidName).toBeInstanceOf(Error);
+    expect((invalidName as Error).message).toBe(
       "OPENOMNI_MACHINES_ENROLLED is invalid: export name must be lowercase alphanumeric with - or _ (e.g. notes)",
     );
   });
