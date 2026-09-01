@@ -66,6 +66,7 @@ import { createDriverRegistry } from "./composition/driver-registry";
 import { openCuratedMemory } from "./memory/store";
 import { buildInboundEvent } from "./inbound";
 import { createResident } from "./resident";
+import { createMachineVfs, type MachineVfs } from "./machines/vfs";
 import { catalogEntries } from "./tools/catalog";
 import { HOST_TARGET } from "./tools/dispatch";
 import { createCellRegistry } from "./tools/cell-registry";
@@ -126,7 +127,7 @@ function registerActors(actors: readonly RegisteredActor[]): void {
  * attachment table holds.
  */
 export function createMachinesPort(
-  host: Pick<MachineHost, "attached"> | undefined,
+  host: Pick<MachineHost, "attached" | "attachedExports"> | undefined,
   machines: OpenOmniConfig["machines"],
 ): MachinesPort | undefined {
   if (host === undefined || machines === undefined) return undefined;
@@ -134,11 +135,20 @@ export function createMachinesPort(
     machines.enrolled.map((enrollment) => {
       const capabilities = host.attached(enrollment.machineId);
       return capabilities === undefined
-        ? { machineId: enrollment.machineId, attached: false, capabilities: [] }
+        ? {
+            machineId: enrollment.machineId,
+            attached: false,
+            capabilities: [],
+            effectiveExports: [],
+          }
         : {
             machineId: enrollment.machineId,
             attached: true,
             capabilities: [...capabilities],
+            // The host's fold, never the enrollment's wish: an export the
+            // Owner allowed but the daemon never offered reaches nothing, so
+            // reporting it would invite a read that can only refuse.
+            effectiveExports: [...(host.attachedExports(enrollment.machineId) ?? [])],
           };
     });
 }
@@ -415,6 +425,19 @@ export async function startOpenOmni(options: StartOptions = {}) {
 
     const machineHost = host;
     const machinesPort = createMachinesPort(machineHost, machines);
+    // The read-only machine filesystem as one flat namespace, wired only when
+    // the Owner has published at least one export to reach. Fail-closed on
+    // CONFIG rather than on live attachment: an enrollment naming no export
+    // can never yield a readable path, so the tools stay out of the catalog
+    // entirely instead of being offered and always refusing. Which machine is
+    // readable right now stays a per-call answer — the host owns that.
+    const machineFs: MachineVfs | undefined =
+      machineHost === undefined ||
+      !(machines?.enrolled ?? []).some(
+        (enrollment) => (enrollment.allowedExports ?? []).length > 0,
+      )
+        ? undefined
+        : createMachineVfs((machineId, request) => machineHost.fsOp(machineId, request));
 
     const completionPort = createCompletionPort({
       writer: completionWriter,
@@ -437,6 +460,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
                   delegation: delegationKernel,
                   cells,
                   ...(machinesPort === undefined ? {} : { machines: machinesPort }),
+                  ...(machineFs === undefined ? {} : { machineFs }),
                   memory,
                   workItems: completionPort,
                   llm: llmPort,
@@ -477,6 +501,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
         delegation: delegationKernel,
         ...(cells === undefined ? {} : { cells }),
         ...(machinesPort === undefined ? {} : { machines: machinesPort }),
+        ...(machineFs === undefined ? {} : { machineFs }),
         memory,
         workItems: completionPort,
         llm: llmPort,

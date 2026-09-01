@@ -1,3 +1,4 @@
+import type { FsOpOutcome } from "@openomni/machines";
 import { Machine, NamedError } from "@openomni/protocol";
 import { z } from "zod";
 
@@ -24,13 +25,12 @@ export const MachineVfsError = NamedError.create("MachineVfsError", MachineVfsEr
 export type MachineVfsFailure = InstanceType<typeof MachineVfsError>;
 
 /**
- * The one refusal shape a machine-fs call can produce, whether the host never
- * reached the machine or the daemon answered `refused`. Mirrors the contract
- * the machines host publishes for `fsOp`.
+ * The one outcome a machine-fs call can produce, re-exported from the host
+ * that owns it: the app states this contract in exactly one place, so a new
+ * refusal arm on the host side is a type error here rather than a silent
+ * fallthrough to "the daemon refused".
  */
-export type FsOpOutcome =
-  | Machine.FsResult
-  | { readonly status: "refused"; readonly reason: "machine_not_attached" | "fs_not_available" };
+export type { FsOpOutcome };
 
 /**
  * The host's fs door as the app holds it: one machine, one request, one
