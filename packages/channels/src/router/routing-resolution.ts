@@ -310,6 +310,7 @@ function resolveKernelRoute<Event extends Gateway.DeliveredEvent>(
     surface: event.surface,
     workspace: event.workspace,
     channel: event.channel,
+    ...(event.userId === undefined ? {} : { sender: event.userId }),
   });
   const channel = channelState(channelResolution, event.meta?.inboundTreatment === "evidence_only");
   const actor = actorState(event);
