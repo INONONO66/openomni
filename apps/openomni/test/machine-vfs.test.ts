@@ -5,6 +5,7 @@ import {
   type MachineFsPort,
   createMachineVfs,
   parseVfsPath,
+  scopeMachineVfs,
 } from "../src/machines/vfs";
 
 /** A port that records what the router asked and answers with a fixed outcome. */
@@ -15,6 +16,43 @@ function recordingPort(outcome: Awaited<ReturnType<MachineFsPort>>) {
     return outcome;
   };
   return { calls, port };
+}
+
+type Reason = InstanceType<typeof MachineVfsError>["data"]["reason"];
+
+/**
+ * The exact typed signal, never a substring: the class the caller can catch,
+ * the reason it can branch on, and the whole sentence the model reads. A
+ * `toThrow("...")` matcher passes on a message that merely CONTAINS the text,
+ * so a refusal that silently grew a leading path or a different reason would
+ * still be green.
+ */
+function expectRefusal(thrown: unknown, reason: Reason, message: string): void {
+  expect(MachineVfsError.isInstance(thrown)).toBe(true);
+  const error = thrown as InstanceType<typeof MachineVfsError>;
+  expect(error.data.reason).toBe(reason);
+  expect(error.data.message).toBe(message);
+  expect(error.message).toBe(message);
+}
+
+/** Runs `act`, returning what it threw — failing loudly if it threw nothing. */
+function thrownBy(act: () => unknown): unknown {
+  try {
+    act();
+  } catch (error) {
+    return error;
+  }
+  throw new Error("expected a refusal, got a value");
+}
+
+/** The async spelling of {@link thrownBy}. */
+async function rejectedBy(act: () => Promise<unknown>): Promise<unknown> {
+  return await act().then(
+    () => {
+      throw new Error("expected a refusal, got a value");
+    },
+    (error: unknown) => error,
+  );
 }
 
 describe("parseVfsPath", () => {
@@ -40,49 +78,53 @@ describe("parseVfsPath", () => {
   });
 
   it("refuses a path that is not under /machines", () => {
-    expect(() => parseVfsPath("/etc/passwd")).toThrow(
+    expectRefusal(
+      thrownBy(() => parseVfsPath("/etc/passwd")),
+      "bad_path",
       'path must start with /machines/<machineId>/<export>: "/etc/passwd"',
     );
-    expect(() => parseVfsPath("machines/alpha/notes")).toThrow(
+    expectRefusal(
+      thrownBy(() => parseVfsPath("machines/alpha/notes")),
+      "bad_path",
       'path must start with /machines/<machineId>/<export>: "machines/alpha/notes"',
     );
   });
 
   it("refuses a path that names a machine but no export", () => {
-    expect(() => parseVfsPath("/machines/alpha")).toThrow(
+    expectRefusal(
+      thrownBy(() => parseVfsPath("/machines/alpha")),
+      "bad_path",
       'path must name an export: "/machines/alpha"',
     );
-    expect(() => parseVfsPath("/machines/alpha/")).toThrow(
+    expectRefusal(
+      thrownBy(() => parseVfsPath("/machines/alpha/")),
+      "bad_path",
       'path must name an export: "/machines/alpha/"',
     );
   });
 
   it("refuses an export name outside the grammar rather than passing it to the daemon", () => {
-    expect(() => parseVfsPath("/machines/alpha/Notes/x")).toThrow(
+    expectRefusal(
+      thrownBy(() => parseVfsPath("/machines/alpha/Notes/x")),
+      "bad_path",
       "export name must be lowercase alphanumeric with - or _ (e.g. notes)",
     );
   });
 
   it("refuses a .. segment at the parse boundary, before any port is reached", () => {
-    expect(() => parseVfsPath("/machines/alpha/notes/../../etc/passwd")).toThrow(
+    expectRefusal(
+      thrownBy(() => parseVfsPath("/machines/alpha/notes/../../etc/passwd")),
+      "bad_path",
       "path must be relative to the export root, with no .. segment or NUL",
     );
   });
 
   it("refuses an embedded NUL", () => {
-    expect(() => parseVfsPath("/machines/alpha/notes/a\u0000b")).toThrow(
+    expectRefusal(
+      thrownBy(() => parseVfsPath("/machines/alpha/notes/a\u0000b")),
+      "bad_path",
       "path must be relative to the export root, with no .. segment or NUL",
     );
-  });
-
-  it("throws MachineVfsError, so a caller can tell a refusal from a crash", () => {
-    try {
-      parseVfsPath("/etc/passwd");
-      throw new Error("expected a refusal");
-    } catch (error) {
-      expect(MachineVfsError.isInstance(error)).toBe(true);
-      expect((error as InstanceType<typeof MachineVfsError>).data.reason).toBe("bad_path");
-    }
   });
 });
 
@@ -155,16 +197,11 @@ describe("the machine vfs router", () => {
     });
     const vfs = createMachineVfs(port);
 
-    const failure = await vfs.read({ path: "/machines/alpha/notes/link" }).then(
-      () => undefined,
-      (error: unknown) => error,
-    );
+    const failure = await rejectedBy(() => vfs.read({ path: "/machines/alpha/notes/link" }));
 
-    expect(MachineVfsError.isInstance(failure)).toBe(true);
-    expect((failure as InstanceType<typeof MachineVfsError>).data.reason).toBe(
+    expectRefusal(
+      failure,
       "path_escapes_export",
-    );
-    expect((failure as Error).message).toBe(
       "/machines/alpha/notes/link refused: the resolved path is outside the export root",
     );
   });
@@ -173,28 +210,18 @@ describe("the machine vfs router", () => {
     const { port } = recordingPort({ status: "refused", reason: "machine_not_attached" });
     const vfs = createMachineVfs(port);
 
-    const failure = await vfs.list({ path: "/machines/ghost/notes" }).then(
-      () => undefined,
-      (error: unknown) => error,
-    );
+    const failure = await rejectedBy(() => vfs.list({ path: "/machines/ghost/notes" }));
 
-    expect(MachineVfsError.isInstance(failure)).toBe(true);
-    expect((failure as InstanceType<typeof MachineVfsError>).data.reason).toBe(
-      "machine_not_attached",
-    );
-    expect((failure as Error).message).toBe("machine ghost is not attached right now");
+    expectRefusal(failure, "machine_not_attached", "machine ghost is not attached right now");
   });
 
   it("throws when the machine holds no fs.read reach", async () => {
     const { port } = recordingPort({ status: "refused", reason: "fs_not_available" });
     const vfs = createMachineVfs(port);
 
-    const failure = await vfs.stat({ path: "/machines/alpha/notes/a.txt" }).then(
-      () => undefined,
-      (error: unknown) => error,
-    );
+    const failure = await rejectedBy(() => vfs.stat({ path: "/machines/alpha/notes/a.txt" }));
 
-    expect((failure as Error).message).toBe("machine alpha may not be read from");
+    expectRefusal(failure, "fs_not_available", "machine alpha may not be read from");
   });
 
   it("refuses a bad path before the port is reached at all", async () => {
@@ -204,7 +231,11 @@ describe("the machine vfs router", () => {
     });
     const vfs = createMachineVfs(port);
 
-    await expect(vfs.stat({ path: "/machines/alpha/notes/../x" })).rejects.toThrow(
+    const failure = await rejectedBy(() => vfs.stat({ path: "/machines/alpha/notes/../x" }));
+
+    expectRefusal(
+      failure,
+      "bad_path",
       "path must be relative to the export root, with no .. segment or NUL",
     );
     expect(calls).toEqual([]);
@@ -217,12 +248,89 @@ describe("the machine vfs router", () => {
     });
     const vfs = createMachineVfs(port);
 
-    const failure = await vfs.read({ path: "/machines/alpha/notes/a.txt" }).then(
-      () => undefined,
-      (error: unknown) => error,
-    );
+    const failure = await rejectedBy(() => vfs.read({ path: "/machines/alpha/notes/a.txt" }));
 
-    expect(MachineVfsError.isInstance(failure)).toBe(true);
-    expect((failure as Error).message).toBe("machine alpha answered a read with a list");
+    expectRefusal(failure, "wrong_answer", "machine alpha answered a read with a list");
+  });
+});
+
+/**
+ * A cell's authority is the machine it runs on. The composition root binds
+ * that machine into the cell's catalog (`index.ts`, `toolsFor(origin,
+ * machineId)`); these pin the narrowing itself.
+ */
+describe("the cell-scoped vfs", () => {
+  it("refuses every op that names another machine, before the port is reached", async () => {
+    const { calls, port } = recordingPort({
+      status: "completed",
+      value: { op: "read", data: "secret", bytesRead: 6, size: 6, truncated: false },
+    });
+    const scoped = scopeMachineVfs(createMachineVfs(port), "alpha");
+
+    expectRefusal(
+      await rejectedBy(() => scoped.read({ path: "/machines/beta/docs/secret.txt" })),
+      "cross_machine_denied",
+      "/machines/beta/docs/secret.txt is not reachable from a cell on machine alpha",
+    );
+    expectRefusal(
+      await rejectedBy(() => scoped.list({ path: "/machines/beta/docs" })),
+      "cross_machine_denied",
+      "/machines/beta/docs is not reachable from a cell on machine alpha",
+    );
+    expectRefusal(
+      await rejectedBy(() => scoped.stat({ path: "/machines/beta/docs/secret.txt" })),
+      "cross_machine_denied",
+      "/machines/beta/docs/secret.txt is not reachable from a cell on machine alpha",
+    );
+    // Nothing was asked of the host: the question was not the cell's to ask.
+    expect(calls).toEqual([]);
+  });
+
+  it("passes the executing machine's own paths through untouched", async () => {
+    const { calls, port } = recordingPort({
+      status: "completed",
+      value: { op: "read", data: "hello", bytesRead: 5, size: 5, truncated: false },
+    });
+    const scoped = scopeMachineVfs(createMachineVfs(port), "alpha");
+
+    const value = await scoped.read({ path: "/machines/alpha/notes/greeting.txt", limit: 5 });
+
+    expect(value.data).toBe("hello");
+    expect(calls).toEqual([
+      {
+        machineId: "alpha",
+        request: { op: "read", export: "notes", path: "greeting.txt", limit: 5 },
+      },
+    ]);
+  });
+
+  it("refuses a malformed path as bad_path, not as a crossing", async () => {
+    const { calls, port } = recordingPort({
+      status: "completed",
+      value: { op: "stat", kind: "file", size: 0, mtimeMs: 0 },
+    });
+    const scoped = scopeMachineVfs(createMachineVfs(port), "alpha");
+
+    expectRefusal(
+      await rejectedBy(() => scoped.stat({ path: "/etc/passwd" })),
+      "bad_path",
+      'path must start with /machines/<machineId>/<export>: "/etc/passwd"',
+    );
+    expect(calls).toEqual([]);
+  });
+
+  it("is not fooled by a machine id that merely prefixes the executing one", async () => {
+    const { calls, port } = recordingPort({
+      status: "completed",
+      value: { op: "list", entries: [], truncated: false },
+    });
+    const scoped = scopeMachineVfs(createMachineVfs(port), "alpha");
+
+    expectRefusal(
+      await rejectedBy(() => scoped.list({ path: "/machines/alpha-evil/notes" })),
+      "cross_machine_denied",
+      "/machines/alpha-evil/notes is not reachable from a cell on machine alpha",
+    );
+    expect(calls).toEqual([]);
   });
 });

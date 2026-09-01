@@ -11,11 +11,15 @@ import { nextMessage, openSocket } from "./helpers/ws";
 
 const WS_TOKEN = "machine-fs-e2e-token";
 const MACHINE_ID = "alpha";
+const OTHER_MACHINE_ID = "beta";
 
 let daemon: MachineDaemon | undefined;
+let otherDaemon: MachineDaemon | undefined;
 const suite = residentSuite(() => {
   daemon?.close();
   daemon = undefined;
+  otherDaemon?.close();
+  otherDaemon = undefined;
 });
 
 const enrollment: Machine.Enrollment = {
@@ -287,4 +291,155 @@ test("no allowed export means no fs tools in the catalog", async () => {
   expect(app.offered()).not.toContain("fs_list");
   expect(app.offered()).not.toContain("fs_stat");
   expect(answer).toContain("<<unknown tool: fs_read>>");
+}, 60_000);
+
+/**
+ * Two enrolled machines, each with its own export directory: A runs cells,
+ * B holds the secret. The composition is the app's own — one host, one
+ * catalog, one cell registry.
+ */
+async function bootTwoMachines(prefix: string) {
+  const socketPath = testSocketPath();
+  const directory = suite.tempDir(prefix);
+  const rootA = exportRoot(directory);
+  const directoryB = suite.tempDir(`${prefix}b-`);
+  const rootB = join(directoryB, "docs");
+  mkdirSync(rootB, { recursive: true });
+  writeFileSync(join(rootB, "secret.txt"), "B-ONLY-SECRET");
+
+  let calls: { tool: string; input: Record<string, unknown> }[] = [];
+
+  const app = await suite.boot({
+    config: suite.config(prefix, {
+      wsToken: WS_TOKEN,
+      model: { provider: "fake", id: "machine-fs-test", apiKey: "test-key" },
+      machines: {
+        socketPath,
+        enrolled: [
+          enrollment,
+          {
+            machineId: OTHER_MACHINE_ID,
+            name: "the other laptop",
+            allowedCapabilities: ["fs.read"],
+            allowedExports: ["docs"],
+            enrolledAt: 0,
+          },
+        ],
+      },
+    }),
+    llm: {
+      resolveProviderModel: fakeProviderModel,
+      run: async (input: RunInput, sink: Sink) => {
+        const outputs: string[] = [];
+        for (const [index, call] of calls.entries()) {
+          const result = await input.toolExecutor?.({
+            id: `call-${index}`,
+            tool: call.tool,
+            input: call.input,
+          });
+          outputs.push(`<<${result?.output ?? "nothing"}>>`);
+        }
+        sink.onMessage(assistantMessage(input, { text: outputs.join("\n") }));
+        return { type: "stop" };
+      },
+    },
+  });
+
+  daemon = await attachMachineDaemon({
+    socketPath,
+    offer: {
+      machineId: MACHINE_ID,
+      offeredCapabilities: ["fs.read", "kernel.py"],
+      exports: [{ name: "notes" }],
+      daemonVersion: "test",
+      platform: "test",
+      offeredAt: 0,
+    },
+    fsExports: new Map([["notes", rootA]]),
+  });
+  expect(daemon.attachment.status).toBe("attached");
+
+  otherDaemon = await attachMachineDaemon({
+    socketPath,
+    offer: {
+      machineId: OTHER_MACHINE_ID,
+      offeredCapabilities: ["fs.read"],
+      exports: [{ name: "docs" }],
+      daemonVersion: "test",
+      platform: "test",
+      offeredAt: 0,
+    },
+    fsExports: new Map([["docs", rootB]]),
+  });
+  expect(otherDaemon.attachment.status).toBe("attached");
+
+  return {
+    async answer(toolCalls: { tool: string; input: Record<string, unknown> }[]) {
+      calls = toolCalls;
+      const ws = await openSocket(`ws://127.0.0.1:${app.port}/ws?token=${WS_TOKEN}`);
+      const reply = nextMessage(ws, 30_000);
+      ws.send(JSON.stringify({ type: "message", text: "read the machines" }));
+      const text = (JSON.parse(String((await reply).data)) as { text: string }).text;
+      ws.close();
+      return text;
+    },
+  };
+}
+
+/**
+ * The authority crossing: a cell dispatched to machine A holds A's authority,
+ * not the Owner's global namespace. Reaching B's effective export from inside
+ * an A cell must refuse — the guard lives where the composition root binds the
+ * cell catalog, so no fixture can be arranged to bypass it.
+ */
+test("a cell on one machine cannot read another machine's export", async () => {
+  const app = await bootTwoMachines("openomni-fs-cross-");
+
+  const answer = await app.answer([
+    {
+      tool: "run_code",
+      input: {
+        machineId: MACHINE_ID,
+        code: [
+          "try:",
+          `    outcome = 'returned: ' + tool.fs_read(path='/machines/${OTHER_MACHINE_ID}/docs/secret.txt')`,
+          "except ToolError as error:",
+          "    outcome = 'raised: ' + str(error)",
+          "outcome",
+        ].join("\n"),
+        timeoutMs: 20_000,
+      },
+    },
+  ]);
+
+  expect(answer).toContain(
+    `raised: /machines/${OTHER_MACHINE_ID}/docs/secret.txt is not reachable from a cell on machine ${MACHINE_ID}`,
+  );
+  expect(answer).not.toContain("B-ONLY-SECRET");
+  expect(answer).not.toContain("returned: ");
+}, 60_000);
+
+/**
+ * The scope is a CELL-door property, not a namespace amputation: the Owner's
+ * own door keeps the whole flat namespace, and a cell keeps its own machine.
+ */
+test("the model door still reads both machines, and a cell still reads its own", async () => {
+  const app = await bootTwoMachines("openomni-fs-cross-ok-");
+
+  const answer = await app.answer([
+    { tool: "fs_read", input: { path: `/machines/${OTHER_MACHINE_ID}/docs/secret.txt` } },
+    {
+      tool: "run_code",
+      input: {
+        machineId: MACHINE_ID,
+        code: `'own: ' + tool.fs_read(path='/machines/${MACHINE_ID}/notes/greeting.txt')`,
+        timeoutMs: 20_000,
+      },
+    },
+  ]);
+
+  // The model door returns the file verbatim; a cell's last expression comes
+  // back as the kernel's repr of it.
+  expect(answer).toContain("<<B-ONLY-SECRET>>");
+  expect(answer).toContain("<<'own: hello from the machine'>>");
 }, 60_000);

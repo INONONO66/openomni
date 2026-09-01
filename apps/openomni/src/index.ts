@@ -66,7 +66,7 @@ import { createDriverRegistry } from "./composition/driver-registry";
 import { openCuratedMemory } from "./memory/store";
 import { buildInboundEvent } from "./inbound";
 import { createResident } from "./resident";
-import { createMachineVfs, type MachineVfs } from "./machines/vfs";
+import { createMachineVfs, scopeMachineVfs, type MachineVfs } from "./machines/vfs";
 import { catalogEntries } from "./tools/catalog";
 import { HOST_TARGET } from "./tools/dispatch";
 import { createCellRegistry } from "./tools/cell-registry";
@@ -454,13 +454,18 @@ export async function startOpenOmni(options: StartOptions = {}) {
         : {
             registry,
             runCell: (machineId, request) => machineHost.runCell(machineId, request),
-            toolsFor: (origin) =>
+            // The cell door's fs reach is the EXECUTING machine's, not the
+            // Owner's whole namespace: `run_code` knows which machine it is
+            // dispatching to, so the catalog that cell will call back into is
+            // built against a vfs scoped to exactly that machine. The Resident
+            // catalog below keeps the unscoped port — that door is the Owner's.
+            toolsFor: (origin, machineId) =>
               catalogEntries(
                 {
                   delegation: delegationKernel,
                   cells,
                   ...(machinesPort === undefined ? {} : { machines: machinesPort }),
-                  ...(machineFs === undefined ? {} : { machineFs }),
+                  ...(machineFs === undefined ? {} : { machineFs: scopeMachineVfs(machineFs, machineId) }),
                   memory,
                   workItems: completionPort,
                   llm: llmPort,

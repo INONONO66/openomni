@@ -6,9 +6,10 @@ import { z } from "zod";
  * Why a machine-fs call did not produce a value. Two of these are the app's
  * own reading of the attachment table (`machine_not_attached`, `fs_not_available`
  * — the host's refusal arms), one is the router's parse (`bad_path`), one is a
- * peer that answered a question it was not asked (`wrong_answer`), and the rest
- * are the daemon's own typed refusals passed through unflattened, so the model
- * learns WHICH boundary held.
+ * peer that answered a question it was not asked (`wrong_answer`), one is the
+ * app's own authority gate on a cell-originated call (`cross_machine_denied`),
+ * and the rest are the daemon's own typed refusals passed through unflattened,
+ * so the model learns WHICH boundary held.
  */
 const MachineVfsErrorData = z.object({
   reason: z.union([
@@ -16,6 +17,7 @@ const MachineVfsErrorData = z.object({
     z.literal("machine_not_attached"),
     z.literal("fs_not_available"),
     z.literal("wrong_answer"),
+    z.literal("cross_machine_denied"),
     Machine.FsResult.options[1].shape.reason,
   ]),
   message: z.string().min(1),
@@ -161,5 +163,46 @@ export function createMachineVfs(fsOp: MachineFsPort): MachineVfs {
     read: (args) => run("read", args),
     list: (args) => run("list", args),
     stat: (args) => run("stat", args),
+  };
+}
+
+/**
+ * The same namespace, narrowed to ONE machine's slice of it.
+ *
+ * The flat namespace is the OWNER's view: the model door addresses every
+ * attached machine because the Owner's authority spans them all. A CELL is
+ * not the Owner — it is code the Owner dispatched to one specific machine,
+ * and a machine that can name a path can name any path. Without this, a cell
+ * on A calls `fs_read("/machines/B/...")`, the host sees only a live cellId,
+ * and B's own gates correctly permit a read A was never granted.
+ *
+ * So the executing machine — the `machineId` `run_code` dispatched to — is
+ * bound into the cell's catalog here, and a path naming any other machine is
+ * refused BEFORE the host is reached. The refusal is the app's own
+ * (`cross_machine_denied`): no daemon and no host was asked, because the
+ * question was not the cell's to ask.
+ */
+export function scopeMachineVfs(vfs: MachineVfs, machineId: Machine.MachineId): MachineVfs {
+  // `async` on purpose: the unscoped router reports every refusal as a
+  // rejected promise, and a wrapper that threw synchronously instead would
+  // make the two ports catchable in different ways.
+  async function within<Args extends { readonly path: string }, Value>(
+    args: Args,
+    call: (args: Args) => Promise<Value>,
+  ): Promise<Value> {
+    const location = parseVfsPath(args.path);
+    if (location.machineId !== machineId) {
+      refuse(
+        "cross_machine_denied",
+        `${args.path} is not reachable from a cell on machine ${machineId}`,
+      );
+    }
+    return await call(args);
+  }
+
+  return {
+    read: (args) => within(args, (checked) => vfs.read(checked)),
+    list: (args) => within(args, (checked) => vfs.list(checked)),
+    stat: (args) => within(args, (checked) => vfs.stat(checked)),
   };
 }
