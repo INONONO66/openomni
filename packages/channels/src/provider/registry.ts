@@ -1,5 +1,6 @@
 import { DiscordProvider } from "../discord/provider.js";
 import { GitHubProvider } from "../github/provider.js";
+import { SlackProvider } from "../slack/provider.js";
 import { TelegramProvider } from "../telegram/provider.js";
 
 /**
@@ -15,4 +16,5 @@ export const ChannelProviders = {
   telegram: TelegramProvider,
   discord: DiscordProvider,
   github: GitHubProvider,
+  slack: SlackProvider,
 } as const;

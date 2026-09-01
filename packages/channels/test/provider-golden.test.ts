@@ -3,6 +3,8 @@ import { DiscordNormalizer } from "../src/discord/normalizer";
 import type { DiscordMessage } from "../src/discord/types";
 import { GitHubNormalizer } from "../src/github/normalizer";
 import type { GitHubEventContent } from "../src/github/types";
+import { SlackNormalizer } from "../src/slack/normalizer";
+import type { SlackMessageEvent } from "../src/slack/types";
 import { TelegramNormalizer } from "../src/telegram/normalizer";
 import type { TelegramMessage } from "../src/telegram/types";
 
@@ -85,6 +87,54 @@ describe("provider golden fixtures", () => {
       surfaceKey: "discord:bot-1:dm:owner-1",
       text: "status?",
       sender: { id: "owner-1", name: "Owner" },
+      raw,
+    });
+  });
+
+  test("slack: threaded channel mention strips the bot tag and normalizes exactly", () => {
+    const raw: SlackMessageEvent = {
+      type: "message",
+      channel: "C123",
+      channel_type: "channel",
+      user: "U77",
+      text: "<@UBOT> tracking number",
+      ts: "1710.0002",
+      thread_ts: "1710.0001",
+    };
+    const normalizer = new SlackNormalizer({
+      botUserId: "UBOT",
+      team: "T9",
+      triggers: [{ type: "mention" }],
+    });
+
+    expect(normalizer.normalize(raw, "trace-sl")).toEqual({
+      id: "1710.0002",
+      traceId: "trace-sl",
+      surfaceKey: "slack:T9:channel:C123:thread:1710.0001",
+      text: "tracking number",
+      sender: { id: "T9:U77" },
+      threadId: "1710.0001",
+      raw,
+    });
+  });
+
+  test("slack: DM keys the surface by user and carries the workspace-mandatory sender id", () => {
+    const raw: SlackMessageEvent = {
+      type: "message",
+      channel: "D42",
+      channel_type: "im",
+      user: "U5",
+      text: "status?",
+      ts: "1710.0009",
+    };
+    const normalizer = new SlackNormalizer({ botUserId: "UBOT", team: "T9", triggers: [] });
+
+    expect(normalizer.normalize(raw, "trace-sl-dm")).toEqual({
+      id: "1710.0009",
+      traceId: "trace-sl-dm",
+      surfaceKey: "slack:T9:dm:U5",
+      text: "status?",
+      sender: { id: "T9:U5" },
       raw,
     });
   });
