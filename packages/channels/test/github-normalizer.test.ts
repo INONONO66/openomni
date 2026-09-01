@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { GitHubNormalizer } from "../src/github/normalizer";
+import { GitHubNormalizer } from "../src/provider/github/normalizer";
 
 describe("GitHubNormalizer", () => {
   const normalizer = new GitHubNormalizer({ triggers: [], botUsername: "bot" });

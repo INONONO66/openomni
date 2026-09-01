@@ -1,6 +1,6 @@
 import { Operational } from "@openomni/protocol";
-import { fetchWithRetry } from "../support/fetch-retry";
-import type { ChannelClient, PublishPort } from "../types";
+import { fetchWithRetry } from "../../support/fetch-retry";
+import type { ChannelClient, PublishPort } from "../../types";
 import { DiscordApiError, DiscordGatewayFetchError } from "./error";
 
 const BASE_URL = "https://discord.com/api/v10";

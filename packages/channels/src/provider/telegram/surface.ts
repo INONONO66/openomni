@@ -1,16 +1,15 @@
-import { newTraceId } from "../support/trace";
+import { newTraceId } from "../../support/trace";
 import { type Channel, Operational, PolicyDecision } from "@openomni/protocol";
-import { Dedupe, DedupeWindow } from "../support/dedupe";
-import { chunkMarkdown } from "../support/format/chunk";
-import { renderTelegramMarkdown } from "../support/format/telegram";
+import { Dedupe, DedupeWindow } from "../../support/dedupe";
+import { chunkMarkdown } from "../../support/format/chunk";
+import { TELEGRAM_RENDER } from "./format";
 import { TelegramClient } from "./client";
 import { TelegramNormalizer } from "./normalizer";
 import { TelegramPoller } from "./poller";
 import type { TelegramMessage } from "./types";
-import type { PublishPort } from "../types";
-import { ChannelAuthnMiddleware, type ChannelAuthnDecisionObserver } from "../channel-authn";
+import type { PublishPort } from "../../types";
+import { ChannelAuthnMiddleware, type ChannelAuthnDecisionObserver } from "../../channel-authn";
 
-const TELEGRAM_MESSAGE_LIMIT = 4096;
 
 export interface TelegramAuthOptions {
   readonly onDecision?: ChannelAuthnDecisionObserver;
@@ -203,8 +202,8 @@ export class TelegramAdapter implements Channel.Surface {
   ): Promise<string | undefined> {
     if (!message.text) return undefined;
     let lastMessageId: string | undefined;
-    const rendered = renderTelegramMarkdown(message.text);
-    for (const chunk of chunkMarkdown(rendered, TELEGRAM_MESSAGE_LIMIT)) {
+    const rendered = TELEGRAM_RENDER.renderMarkdown(message.text);
+    for (const chunk of chunkMarkdown(rendered, TELEGRAM_RENDER.messageLimit)) {
       lastMessageId = (await this.client.sendMarkdown(chatId, chunk, traceId)) ?? lastMessageId;
     }
     return lastMessageId;

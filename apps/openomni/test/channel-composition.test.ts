@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import type {
-  ChannelProvider,
-  ChannelProviders,
-  DiscordCredentials,
-  GitHubCredentials,
-  SlackCredentials,
-  TelegramCredentials,
+import {
+  type ChannelProvider,
+  ChannelProviders as RealProviders,
+  type DiscordCredentials,
+  type GitHubCredentials,
+  type SlackCredentials,
+  type TelegramCredentials,
 } from "@openomni/channels";
 import type { Channel } from "@openomni/protocol";
 import { type BuiltChannel, channelProfile } from "../src/channels";
@@ -58,7 +58,7 @@ class FakeSurface implements Channel.Surface {
 
 interface FakeBuild {
   surfaces: FakeSurface[];
-  providers: typeof ChannelProviders;
+  providers: typeof RealProviders;
   delivered: { externalId: string; body: string }[];
   webhookCalls: Request[];
 }
@@ -74,9 +74,7 @@ function fakeProviders(): FakeBuild {
   const delivered: { externalId: string; body: string }[] = [];
   const webhookCalls: Request[] = [];
   const telegram: ChannelProvider<TelegramCredentials, "telegram"> = {
-    id: "telegram",
-    ingest: "poll",
-    capabilities: { deliver: true, webhook: false },
+    ...RealProviders.telegram,
     create(credentials, config) {
       const surface = new FakeSurface("telegram", config, credentials);
       surfaces.push(surface);
@@ -90,9 +88,7 @@ function fakeProviders(): FakeBuild {
     },
   };
   const discord: ChannelProvider<DiscordCredentials, "discord"> = {
-    id: "discord",
-    ingest: "socket",
-    capabilities: { deliver: true, webhook: false },
+    ...RealProviders.discord,
     create(credentials, config) {
       const surface = new FakeSurface("discord", config, credentials);
       surfaces.push(surface);
@@ -106,9 +102,7 @@ function fakeProviders(): FakeBuild {
     },
   };
   const github: ChannelProvider<GitHubCredentials, "github"> = {
-    id: "github",
-    ingest: "webhook",
-    capabilities: { deliver: false, webhook: true },
+    ...RealProviders.github,
     create(credentials, config) {
       const surface = new FakeSurface("github", config, credentials);
       surfaces.push(surface);
@@ -122,9 +116,7 @@ function fakeProviders(): FakeBuild {
     },
   };
   const slack: ChannelProvider<SlackCredentials, "slack"> = {
-    id: "slack",
-    ingest: "socket",
-    capabilities: { deliver: true, webhook: false },
+    ...RealProviders.slack,
     create(credentials, config) {
       const surface = new FakeSurface("slack", config, credentials);
       surfaces.push(surface);

@@ -285,6 +285,31 @@ describe("channel administration ends in reconcile (§5, §8.7)", () => {
     expect(supervisor.calls).toEqual([]);
   });
 
+  test("channel_declare refuses an unregistered provider before anything lands", async () => {
+    const { port, supervisor } = portWith();
+    const result = await channelDeclareToolExecutor(port, () => NOW)({
+      id: "channel:matrix:main",
+      provider: "matrix",
+      credential: { token: "x" },
+    });
+    expect(result).toContain("unknown provider matrix");
+    expect(ChannelInstanceStore.get("channel:matrix:main")).toBeUndefined();
+    expect(supervisor.calls).toEqual([]);
+  });
+
+  test("§4 channel_declare refuses unknown settings knobs — never accepted-and-ignored", async () => {
+    const { port, supervisor } = portWith();
+    const result = await channelDeclareToolExecutor(port, () => NOW)({
+      id: "channel:telegram:main",
+      provider: "telegram",
+      credential: { token: "tg-token" },
+      settings: { knob: "x" },
+    });
+    expect(result).toContain("channel_declare refused:");
+    expect(ChannelInstanceStore.get("channel:telegram:main")).toBeUndefined();
+    expect(supervisor.calls).toEqual([]);
+  });
+
   test("a valid declaration seals the credential, lands the row, and reconciles", async () => {
     const { port, supervisor } = portWith();
     supervisor.statuses = [{ id: "channel:telegram:main", surface: "telegram", state: "mounted" }];
@@ -416,6 +441,17 @@ describe("channel administration ends in reconcile (§5, §8.7)", () => {
     expect(result).toContain("channel source: declared");
     expect(result).toContain("vault open");
     expect(result).toContain("channel:telegram:main [telegram] → paused_by_breaker");
+    // §4: the provider's operator checklist is reported verbatim for mounted surfaces.
+    expect(result).not.toContain("precondition:");
+
+    const slackPort = portWith();
+    slackPort.supervisor.statuses = [
+      { id: "channel:slack:hq", surface: "slack", state: "mounted" },
+    ];
+    const slackStatus = await provisionStatusToolExecutor(slackPort.port)({});
+    expect(slackStatus).toContain(
+      "slack precondition: Socket Mode enabled with an app-level token granted connections:write",
+    );
 
     const locked = portWith({ kek: { kind: "locked", reason: "no OPENOMNI_VAULT_KEY" } });
     expect(await provisionStatusToolExecutor(locked.port)({})).toContain(

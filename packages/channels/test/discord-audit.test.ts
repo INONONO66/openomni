@@ -1,14 +1,14 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import type { Channel } from "@openomni/protocol";
-import { DiscordClient } from "../src/discord/client";
+import { DiscordClient } from "../src/provider/discord/client";
 import {
   DiscordApiError,
   DiscordGatewayFetchError,
   DiscordHandlerMissingError,
-} from "../src/discord/error";
-import { DiscordNormalizer } from "../src/discord/normalizer";
-import { DiscordAdapter } from "../src/discord/surface";
-import type { DiscordMessage } from "../src/discord/types";
+} from "../src/provider/discord/error";
+import { DiscordNormalizer } from "../src/provider/discord/normalizer";
+import { DiscordAdapter } from "../src/provider/discord/surface";
+import type { DiscordMessage } from "../src/provider/discord/types";
 import type { ChannelClient } from "../src/types";
 
 type DiscordAdapterHarness = {
