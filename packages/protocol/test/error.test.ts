@@ -61,7 +61,7 @@ describe("NamedError.create", () => {
   test.each([null, false, 0, ""])("retains an explicitly provided falsy cause: %p", (cause) => {
     const error = new MyError({ message: "boom", detail: 1 }, { cause });
 
-    expect(Object.hasOwn(error, "cause")).toBe(true);
+    expect(Object.getOwnPropertyDescriptor(error, "cause") !== undefined).toBe(true);
     expect(Reflect.get(error, "cause")).toBe(cause);
   });
 
@@ -69,8 +69,8 @@ describe("NamedError.create", () => {
     const omitted = new MyError({ message: "omitted", detail: 1 });
     const explicit = new MyError({ message: "explicit", detail: 1 }, { cause: undefined });
 
-    expect(Object.hasOwn(omitted, "cause")).toBe(false);
-    expect(Object.hasOwn(explicit, "cause")).toBe(true);
+    expect(Object.getOwnPropertyDescriptor(omitted, "cause") !== undefined).toBe(false);
+    expect(Object.getOwnPropertyDescriptor(explicit, "cause") !== undefined).toBe(true);
     expect(Reflect.get(explicit, "cause")).toBeUndefined();
   });
 
