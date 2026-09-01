@@ -218,6 +218,9 @@ const MessageDenialCodeSchema = z.enum([
   // a conversation-pinned send the window refuses — closed, expired, cap
   // reached, or inside quiet hours. The reason string names which.
   "conversation_denied",
+  // #P2 lease send right (§3.5): a lease-pinned send the lease refuses —
+  // dead, lapsed, or its carved allocation spent.
+  "lease_denied",
 ]);
 
 /**
@@ -331,6 +334,14 @@ const SendInputBase = z
      */
     conversationId: z.string().min(1).optional(),
     /**
+     * #P2 lease send right (§3.5): pins this send to a live Lease. Present →
+     * the lease IS the authority (grants and the egress budget are bypassed;
+     * the debit lands atomically on the lease's carved allocation AND the
+     * scoped conversation's outbound cap). When both pins are present they
+     * must name the same conversation — the kernel refuses a mismatch.
+     */
+    leaseId: z.string().min(1).optional(),
+    /**
      * #219 policy-intent axis, additive-optional for backward compat. Absent →
      * defaults from `operation` (notify for fire_and_forget, converse for
      * awaited). Present → must stay coherent with `operation` (refined below).
@@ -378,6 +389,13 @@ const SendInputSchema = SendInputBase.superRefine((input, ctx) => {
       code: "custom",
       message: 'a conversation-pinned send cannot be class "notify"',
       path: ["conversationId"],
+    });
+  }
+  if (input.leaseId !== undefined && input.class === "notify") {
+    ctx.addIssue({
+      code: "custom",
+      message: 'a lease-pinned send cannot be class "notify"',
+      path: ["leaseId"],
     });
   }
 });

@@ -1,4 +1,4 @@
-import type { ConversationStore } from "@openomni/ledger";
+import type { ConversationStore, LeaseStore } from "@openomni/ledger";
 import { newTraceId, type Tool } from "@openomni/protocol";
 import { z } from "zod";
 import type { DelegationOrigin } from "../delegation/admission";
@@ -15,6 +15,8 @@ export interface ConversePort {
   readonly open: typeof ConversationStore.open;
   readonly get: typeof ConversationStore.get;
   readonly close: typeof ConversationStore.close;
+  /** The spatial inverse (§3.5): settling a window kills its live leases. */
+  readonly closeLeases: typeof LeaseStore.closeByConversation;
 }
 
 const OPEN_INPUT = z
@@ -138,11 +140,17 @@ export function converseCloseToolExecutor(port: ConversePort) {
     }
     const conversationId = parsed.data.conversationId;
     try {
-      const outcome = port.close(conversationId, "owner", newTraceId());
+      const traceId = newTraceId();
+      const outcome = port.close(conversationId, "owner", traceId);
+      // Idempotent on both sides: closing leases of an already-closed window
+      // heals a missed inverse instead of assuming it ran.
+      const revoked = port.closeLeases(conversationId, "conversation_revoked", traceId);
       if (outcome.kind === "unchanged") {
         return `conversation ${conversationId} was already closed (${outcome.record.closedBy ?? "unknown"})`;
       }
-      return `conversation ${conversationId} closed`;
+      return revoked === 0
+        ? `conversation ${conversationId} closed`
+        : `conversation ${conversationId} closed (${revoked} live lease${revoked === 1 ? "" : "s"} revoked)`;
     } catch (error) {
       return `converse_close refused: ${error instanceof Error ? error.message : String(error)}`;
     }
