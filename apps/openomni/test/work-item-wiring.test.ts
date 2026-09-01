@@ -234,6 +234,79 @@ test("completion admission admits verified judgments and writes the terminal rec
   expect(validateCompletionTerminalLinkage(after as WorkItem.Info).success).toBe(true);
 });
 
+test("the admission write guard refuses a malformed real-port candidate before its writer", async () => {
+  const { workItemId } = await settledAssign();
+  const originalGet = WorkItemStore.get;
+  let writerCalls = 0;
+  WorkItemStore.get = (id) => {
+    const item = originalGet(id);
+    const firstEvidence = item?.evidence[0];
+    return item === undefined || firstEvidence === undefined
+      ? item
+      : { ...item, evidence: [...item.evidence, { ...firstEvidence }] };
+  };
+  try {
+    const item = originalGet(workItemId);
+    const evidenceId = item?.evidence[0]?.id ?? "";
+    const completion = createCompletionPort({
+      writer: () => {
+        writerCalls += 1;
+        return true;
+      },
+      now: () => Date.now(),
+    });
+    const outcome = await completion.complete({
+      workItemId,
+      judgments: (item?.completionFacts.criteria ?? []).map((criterion) => ({
+        criterionId: criterion.id,
+        value: "verified" as const,
+        checkedPredicate: `checked: ${criterion.statement}`,
+        evidenceIds: [evidenceId],
+      })),
+    });
+
+    expect(outcome.admitted).toBe(false);
+    expect(writerCalls).toBe(0);
+  } finally {
+    WorkItemStore.get = originalGet;
+  }
+});
+
+test("the terminal write guard revalidates a candidate mutated after admission", async () => {
+  const { workItemId } = await settledAssign();
+  const item = WorkItemStore.get(workItemId);
+  const evidenceId = item?.evidence[0]?.id ?? "";
+  let writerCalls = 0;
+  const completion = createCompletionPort({
+    writer: (_id, _expectedHead, next) => {
+      writerCalls += 1;
+      if (next.completionTerminalReceipt === undefined) {
+        const admission = next.completionFacts.admissions.at(-1);
+        if (admission === undefined) throw new Error("admission candidate is missing");
+        Object.assign(admission, {
+          decision: "owner_override",
+          ownerOverrideReceiptRef: "owner-override:interposed",
+        });
+      }
+      return true;
+    },
+    now: () => Date.now(),
+  });
+
+  const outcome = await completion.complete({
+    workItemId,
+    judgments: (item?.completionFacts.criteria ?? []).map((criterion) => ({
+      criterionId: criterion.id,
+      value: "verified" as const,
+      checkedPredicate: `checked: ${criterion.statement}`,
+      evidenceIds: [evidenceId],
+    })),
+  });
+
+  expect(outcome.admitted).toBe(false);
+  expect(writerCalls).toBe(1);
+});
+
 test("protocol parsing is structural while app admission rejects broken terminal linkage", async () => {
   const { workItemId, completion } = await settledAssign();
   const item = await WorkItemStore.get(workItemId);

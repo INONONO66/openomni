@@ -148,7 +148,10 @@ function makeWorkItem(overrides: Partial<WorkItem.Info> = {}): WorkItem.Info {
   };
 }
 
-function persistCompletedFixture(adapter: SqliteStorageAdapter, item: WorkItem.Info): void {
+function completionStages(item: WorkItem.Info): {
+  baseline: WorkItem.Info;
+  admitted: WorkItem.Info;
+} {
   const { completed: _completed, ...nonterminalTimestamps } = item.timestamps;
   const admission = item.completionFacts.admissions[0];
   if (!admission) throw new Error("missing completed fixture admission");
@@ -175,6 +178,11 @@ function persistCompletedFixture(adapter: SqliteStorageAdapter, item: WorkItem.I
     },
     timestamps: nonterminalTimestamps,
   });
+  return { baseline, admitted };
+}
+
+function persistCompletedFixture(adapter: SqliteStorageAdapter, item: WorkItem.Info): void {
+  const { baseline, admitted } = completionStages(item);
   const completionWriter = Storage.configure(adapter);
   expect(adapter.workItem?.create(item.workItemId, baseline)).toBe(true);
   expect(completionWriter(item.workItemId, baseline.revision, admitted)).toBe(true);
@@ -217,6 +225,63 @@ describe("SqliteStorageAdapter workItem", () => {
     expect(adapter.workItem?.list()).toEqual([parsed]);
     expect(adapter.workItem?.remove(item.workItemId)).toBe(true);
     expect(adapter.workItem?.get(item.workItemId)).toBeUndefined();
+  });
+
+  test("refuses an interposed writer that corrupts terminal linkage", () => {
+    const item = makeWorkItem({
+      workItemId: "wi_interposed_terminal",
+      timestamps: { created: 1, updated: 10, completed: 10 },
+    });
+    const { baseline, admitted } = completionStages(item);
+    const completionWriter = Storage.configure(adapter);
+    expect(adapter.workItem?.create(item.workItemId, baseline)).toBe(true);
+    expect(completionWriter(item.workItemId, baseline.revision, admitted)).toBe(true);
+
+    const interposedWriter: Storage.WorkItemCompletionWriter = (hash, expectedHead, candidate) =>
+      completionWriter(hash, expectedHead, {
+        ...candidate,
+        completionTerminalReceipt:
+          candidate.completionTerminalReceipt === undefined
+            ? undefined
+            : { ...candidate.completionTerminalReceipt, hash: "wi_foreign" },
+      });
+
+    expect(() => interposedWriter(item.workItemId, admitted.revision, item)).toThrow(
+      "WorkItem terminal linkage mismatch",
+    );
+    expect(adapter.workItem?.get(item.workItemId)?.completionTerminalReceipt).toBeUndefined();
+  });
+
+  test("refuses corrupted terminal linkage on read", () => {
+    const item = makeWorkItem({
+      workItemId: "wi_corrupt_terminal_read",
+      timestamps: { created: 1, updated: 10, completed: 10 },
+    });
+    persistCompletedFixture(adapter, item);
+    const raw = new Database(dbPath);
+    try {
+      const row = raw
+        .query("SELECT data FROM work_item WHERE hash = ?")
+        .get(item.workItemId) as Readonly<{ data: string }> | null;
+      if (row === null) throw new Error("completed fixture row is missing");
+      const corrupted = JSON.parse(row.data) as {
+        completionTerminalReceipt?: { hash: string };
+      };
+      if (corrupted.completionTerminalReceipt === undefined) {
+        throw new Error("completed fixture receipt is missing");
+      }
+      corrupted.completionTerminalReceipt.hash = "wi_foreign";
+      raw
+        .query("UPDATE work_item SET data = ? WHERE hash = ?")
+        .run(JSON.stringify(corrupted), item.workItemId);
+    } finally {
+      raw.close();
+    }
+
+    expect(() => adapter.workItem?.get(item.workItemId)).toThrow(
+      "WorkItem terminal linkage mismatch",
+    );
+    expect(() => adapter.workItem?.list()).toThrow("WorkItem terminal linkage mismatch");
   });
 
   test("#498 K2: a persisted pre-rename row (hash/parentHash/childHashes data blob) reads back upcast", () => {
