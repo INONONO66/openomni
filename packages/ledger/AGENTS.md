@@ -28,6 +28,7 @@ src/
 │   ├── sqlite-storage.ts # SqliteStorageAdapter facade (Bun SQLite persistence)
 │   ├── sqlite-*-adapter.ts # SQLite sub-adapters by storage seam
 │   ├── sqlite-schema-lifecycle.ts # PRAGMAs, migrations, and clear ordering
+│   ├── commit-coordinator.ts # SOLE owner of decision-class commit MECHANICS: append at expectedHead → adopt an empty pre-cutover stream → caller's projection CAS, with SQLITE_BUSY mapped to the caller's typed error. A refused projection is ATOMIC via a nested transaction (savepoint), so head never outruns revision even when the caller reports the refusal by RETURNING (completion-writer) rather than throwing. Domains keep their folds, fact payloads, adoption genesis, and conflict taxonomy
 │   ├── migration-runner.ts / sqlite-busy.ts / sqlite-json-data.ts / timestamped-store.ts # shared SQLite helpers (requireSubAdapter lives in timestamped-store)
 │   └── initialize.ts     # initialize({ dbPath }) — bootstraps the default SQLite adapter
 ├── ledger-core/          # Ledger append core (#510 A): serialized CAS append, adoptStream, headFact/factsByType, verifyTail over the hash-chained ledger_event table (schema.ts = drizzle DDL source)
@@ -38,8 +39,8 @@ src/
 ├── artifact/             # Artifact.store / get; reads normalize legacy invalid metadata into the current schema
 ├── app-connector/        # Installed-app lifecycle; installation and connector actor identity/endpoint change transactionally
 ├── surface-key/          # SurfaceKey — N:1 mapping from external surface keys to session IDs
-├── engagement/           # EngagementStore — durable delegation machine (#709, gateway-design §5): fact-before-projection appends on engagement:<id> streams, typed Engagement.StoreError fail-closed, lazy deadline expiry at hydration (listActive). Brain-domain surface: the brain is its sole writer
-├── wait/                 # WaitStore — durable Wait contract (#215/#510 B): fact-before-projection appends on wait:<id> streams, typed Wait.StoreError fail-closed, lazy pre-cutover adoption (identity-only genesis)
+├── engagement/           # EngagementStore — durable delegation machine (#709, gateway-design §5): fact-before-projection appends on engagement:<id> streams via the shared commit coordinator (no adoption path — the stream class was born with the table), typed Engagement.StoreError fail-closed, lazy deadline expiry at hydration (listActive). Brain-domain surface: the brain is its sole writer
+├── wait/                 # WaitStore — durable Wait contract (#215/#510 B): fact-before-projection appends on wait:<id> streams via the shared commit coordinator, typed Wait.StoreError fail-closed, lazy pre-cutover adoption (identity-only genesis)
 ├── egress/               # EgressBudgetStore — durable perimeter social-budget debit records
 ├── work-item/            # WorkItemStore — universal work state engine
 │   ├── index.ts          # WorkItemStore namespace barrel: public WorkItemStore.* API
@@ -47,7 +48,7 @@ src/
 │   ├── crud.ts           # get/list/remove/update plus relation cleanup
 │   ├── lifecycle.ts      # start/fail/cancel plus typed raw-completion refusal, blockers, evidence
 │   ├── mutation.ts       # mutation persistence, transition validation, Updated/StatusChanged events
-│   ├── facts.ts          # #510 C1 decision-class fact appends on work:<hash>: head==revision CAS, lazy adoption (full-snapshot genesis — recorded #606 divergence), typed revision/duplicate/unavailable errors
+│   ├── facts.ts          # #510 C1 decision-class fact appends on work:<hash> via the shared commit coordinator: head==revision CAS, lazy adoption (full-snapshot genesis — recorded #606 divergence), typed revision/duplicate/unavailable errors
 │   ├── completion-writer.ts # authorized completion-authority writer: admission fact append before the projection CAS, one transaction (#510 C1)
 │   ├── attempt-run.ts    # WorkItemAttemptRun — run lifecycle over attempt facts + deterministic upcast of frozen worker_run_state rows (#510 D2b)
 │   ├── dependency.ts     # dependency readiness + cycle detection

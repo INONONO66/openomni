@@ -114,14 +114,24 @@ describe("WebSocketHandler authentication", () => {
       message = inbound;
       return { text: "ok" };
     }, noopPublish);
+    // `handler.ws.message` fires `void handleMessage(...)`
+    // (src/websocket.ts:72) and returns nothing to await. The reply frame is
+    // the LAST step of that path (src/websocket.ts:171), so resolving from
+    // inside `send` is the exact completion signal for the whole path -
+    // strictly stronger than a macrotask guess, which cannot distinguish
+    // "finished" from "not started yet".
+    const replied = Promise.withResolvers<void>();
     const sent: string[] = [];
     const ws = {
       data: { surfaceKey: "ws:test", authenticated: true },
-      send: (msg: string) => sent.push(msg),
+      send: (msg: string) => {
+        sent.push(msg);
+        replied.resolve();
+      },
     };
 
     handler.ws.message(ws, JSON.stringify({ text: "show open tasks" }));
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await replied.promise;
 
     expect(message?.raw).toEqual({ websocket: { authenticated: true } });
     expect(sent).toEqual([JSON.stringify({ type: "response", text: "ok" })]);
@@ -157,9 +167,21 @@ describe("WebSocketHandler authentication", () => {
 describe("WebSocketHandler actor connections", () => {
   function wsConnection(data: Record<string, unknown>) {
     const sent: string[] = [];
+    // Resolves on the first frame the handler writes back. `ws.send` is the
+    // final step of the inbound path (src/websocket.ts:171), so awaiting it is
+    // the exact completion signal for a `handler.ws.message` call, which is
+    // fire-and-forget (src/websocket.ts:72).
+    const framed = Promise.withResolvers<void>();
     return {
       sent,
-      ws: { data: data as never, send: (msg: string) => sent.push(msg) },
+      framed: framed.promise,
+      ws: {
+        data: data as never,
+        send: (msg: string) => {
+          sent.push(msg);
+          framed.resolve();
+        },
+      },
     };
   }
 
@@ -238,16 +260,19 @@ describe("WebSocketHandler actor connections", () => {
       noopPublish,
       { token: "secret-token" },
     );
-    const { ws } = wsConnection({
+    const { ws, framed, sent } = wsConnection({
       surfaceKey: "ws::dm:c1",
       authenticated: true,
       externalId: "alice",
     });
 
     handler.ws.message(ws, JSON.stringify({ text: "done", replyToId: "frame-7" }));
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await framed;
 
     expect(inbound?.sender).toEqual({ id: "alice", name: "alice" });
     expect(inbound?.replyToId).toBe("frame-7");
+    // The frame the wait resolved on is the handler's reply, not an error
+    // frame from the catch arm (src/websocket.ts:173-180).
+    expect(sent).toEqual([JSON.stringify({ type: "response", text: "ok" })]);
   });
 });

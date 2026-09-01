@@ -1,5 +1,6 @@
-import { Ledger, type Storage as ProtocolStorage, type WorkItem } from "@openomni/protocol";
-import { isSqliteBusyError, StorageUnavailableError } from "../storage/sqlite-busy.js";
+import type { Storage as ProtocolStorage, WorkItem } from "@openomni/protocol";
+import { commitFact, runCommitTransaction } from "../storage/commit-coordinator.js";
+import { StorageUnavailableError } from "../storage/sqlite-busy.js";
 
 /**
  * #510 C1 — every WorkItem lifecycle write is a decision-class fact on the
@@ -32,7 +33,8 @@ export class WorkItemRevisionError extends Error {
   }
 }
 
-export class WorkItemDuplicateError extends Error {
+/** Duplicate work item id u2014 raised by `appendCreatedFact` for either refusal. */
+class WorkItemDuplicateError extends Error {
   readonly name = "WorkItemDuplicateError";
   readonly code = "duplicate";
 
@@ -53,14 +55,11 @@ export function runWorkItemTransaction<T>(
   hash: string,
   write: () => T,
 ): T {
-  try {
-    return storage.transaction(write);
-  } catch (error) {
-    if (isSqliteBusyError(error)) {
-      throw new StorageUnavailableError("work-item", hash, error);
-    }
-    throw error;
-  }
+  return runCommitTransaction(
+    storage,
+    write,
+    (cause) => new StorageUnavailableError("work-item", hash, cause),
+  );
 }
 
 function workItemStreamId(hash: string): string {
@@ -92,57 +91,85 @@ export function appendCreatedFact(
   ledger: ProtocolStorage.LedgerSubAdapter,
   item: WorkItem.Info,
   data: Record<string, unknown>,
+  /**
+   * The projection INSERT, run by the coordinator AFTER the birth fact is
+   * durably appended. Returning false means the row already existed, which is
+   * the same duplicate the append conflict reports — so both refusals raise
+   * one error and neither leaves an orphan fact behind.
+   */
+  project: () => boolean,
 ): void {
-  const appended = ledger.append(
+  // Birth has no adoption path — expectedHead 0 IS the empty-stream
+  // expectation.
+  const outcome = commitFact(
+    ledger,
     {
       streamId: workItemStreamId(item.workItemId),
-      type: "work_item.created",
-      data: { ...data, revision: item.revision },
+      expectedHead: 0,
+      fact: {
+        type: "work_item.created",
+        data: { ...data, revision: item.revision },
+      },
     },
-    0,
+    () => project() || false,
   );
-  if (appended.kind === "cas_conflict") throw new WorkItemDuplicateError(item.workItemId);
+  if (outcome.kind !== "committed") throw new WorkItemDuplicateError(item.workItemId);
 }
 
 /**
- * Appends one transition fact at expectedHead = the pre-transition revision
- * and injects the resulting revision into the fact data. Returns false on a
- * stale head (nothing written — the transaction can commit as a no-op);
- * MUST run inside the same storage transaction as the projection CAS.
+ * Commits one transition: appends the fact at expectedHead = the
+ * pre-transition revision, then lands the caller's projection compare-and-set
+ * in the SAME coordinator commit. Returns false when either half refused, in
+ * which case nothing is written — not even the fact, so a caller that reports
+ * the refusal by RETURNING (rather than throwing, which would roll the
+ * transaction back) still cannot leave an orphan fact at the stream head.
+ * MUST run inside a storage transaction.
  */
 export function appendTransitionFactReceipt(
   ledger: ProtocolStorage.LedgerSubAdapter,
   existing: WorkItem.Info,
   fact: WorkItemFact,
+  /** The projection CAS against `existing.revision`; false means it lost. */
+  project: () => boolean,
+  /**
+   * Nested-transaction factory, so a refused projection unwinds the append on
+   * the non-throwing refusal path (the completion writer returns false).
+   */
+  nest?: <R>(unit: () => R) => R,
 ): boolean {
-  const event = {
-    streamId: workItemStreamId(existing.workItemId),
-    type: fact.type,
-    data: { ...fact.data, revision: existing.revision + 1 },
-  };
-  const appended = ledger.append(event, existing.revision);
-  if (appended.kind !== "cas_conflict") return true;
-  if (appended.currentHead !== 0 || existing.revision < 1) return false;
   // Lazy adoption: a pre-cutover row sits at revision >= 1 (0014 shifts old
-  // json revisions by +1) with an empty stream. Adopt the stream at the
-  // observed revision — the genesis fact records the observed state at
-  // seq === revision — then the transition fact lands at revision + 1. A
-  // concurrent adopter loses as the same stale-head receipt (false).
-  try {
-    // Recorded divergence (#606): this adopted genesis bakes the FULL
-    // WorkItem.Info snapshot (including user content) into the immutable
-    // hash-chained ledger, while the wait family (wait/index.ts wait.adopted)
-    // deliberately carries identity fields only, for erasability. Persisted
-    // fact shapes are ledger baselines; converging them is an Owner decision.
-    ledger.adoptStream(workItemStreamId(existing.workItemId), existing.revision, {
-      type: "work_item.adopted",
-      data: { snapshot: existing, revision: existing.revision },
-    });
-  } catch (error) {
-    if (Ledger.AdoptError.isInstance(error)) return false;
-    throw error;
-  }
-  return ledger.append(event, existing.revision).kind !== "cas_conflict";
+  // json revisions by +1) with an empty stream. The coordinator adopts at the
+  // observed revision and retries the append at the same head; a concurrent
+  // adopter loses as the same stale-head receipt (false).
+  //
+  // Recorded divergence (#606): this adopted genesis bakes the FULL
+  // WorkItem.Info snapshot (including user content) into the immutable
+  // hash-chained ledger, while the wait family (wait/index.ts wait.adopted)
+  // deliberately carries identity fields only, for erasability. Persisted
+  // fact shapes are ledger baselines owned by their domain, which is why the
+  // genesis stays here and not in the coordinator; converging the two is an
+  // Owner decision.
+  //
+  const outcome = commitFact(
+    ledger,
+    {
+      streamId: workItemStreamId(existing.workItemId),
+      expectedHead: existing.revision,
+      fact: {
+        type: fact.type,
+        data: { ...fact.data, revision: existing.revision + 1 },
+      },
+      adoption: {
+        genesis: {
+          type: "work_item.adopted",
+          data: { snapshot: existing, revision: existing.revision },
+        },
+      },
+    },
+    () => project() || false,
+    nest,
+  );
+  return outcome.kind === "committed";
 }
 
 /**
@@ -169,8 +196,9 @@ export function appendTransitionFact(
   ledger: ProtocolStorage.LedgerSubAdapter,
   existing: WorkItem.Info,
   fact: WorkItemFact,
+  project: () => boolean,
 ): void {
-  if (!appendTransitionFactReceipt(ledger, existing, fact)) {
+  if (!appendTransitionFactReceipt(ledger, existing, fact, project)) {
     throw new WorkItemRevisionError(existing.workItemId);
   }
 }

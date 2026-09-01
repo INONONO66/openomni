@@ -34,19 +34,23 @@ function rows(): BusEventRow[] {
   return db().query("SELECT * FROM bus_event ORDER BY id ASC").all() as BusEventRow[];
 }
 
-async function flushPersistence(): Promise<void> {
-  await new Promise((resolve) => queueMicrotask(resolve));
-  await new Promise((resolve) => queueMicrotask(resolve));
-  await new Promise((resolve) => setTimeout(resolve, 0));
-}
-
-async function waitForRows(expectedCount: number): Promise<BusEventRow[]> {
-  for (let attempt = 0; attempt < 10; attempt += 1) {
-    const current = rows();
-    if (current.length >= expectedCount) return current;
-    await flushPersistence();
+/**
+ * `BusPersistence.flush()` is the exact quiescence barrier: it returns only on
+ * a turn that commits nothing with no writes in flight
+ * (`src/bus-persistence/runtime-state.ts:128-143`), which
+ * `flush-barrier.test.ts:50-57` pins. A shortfall after it is a real
+ * persistence defect, so this throws with the observed count instead of
+ * handing back a short array for a downstream assertion to misreport.
+ */
+async function persistedRows(expectedCount: number): Promise<BusEventRow[]> {
+  await BusPersistence.flush();
+  const current = rows();
+  if (current.length < expectedCount) {
+    throw new Error(
+      `persistence barrier resolved with ${current.length} rows, expected at least ${expectedCount}`,
+    );
   }
-  return rows();
+  return current;
 }
 
 function createSession(): ReturnType<typeof Session.create> {
@@ -95,7 +99,7 @@ describe("BusPersistence", () => {
       label: "ok",
     });
 
-    const persisted = await waitForRows(1);
+    const persisted = await persistedRows(1);
     expect(persisted).toHaveLength(1);
     expect(persisted[0]).toMatchObject({
       session_id: session.id,
@@ -134,7 +138,7 @@ describe("BusPersistence", () => {
     Bus.publish(untraceable, { sessionId: session.id, time: Date.now() });
     Bus.publish(traced, { sessionId: session.id, traceId: "trace-verbatim", time: Date.now() });
 
-    const persisted = await waitForRows(2);
+    const persisted = await persistedRows(2);
     expect(persisted).toHaveLength(2);
     // Queryable absence: the sentinel is greppable in the ledger, and no
     // random mint launders the untraceable event into a plausible trace.
@@ -164,7 +168,7 @@ describe("BusPersistence", () => {
     BusPersistence.start();
     Bus.publish(event, {});
 
-    const persisted = await waitForRows(1);
+    const persisted = await persistedRows(1);
     expect(persisted[0]).toMatchObject({
       session_id: session.id,
       trace_id: "trace-from-schema",
@@ -203,7 +207,7 @@ describe("BusPersistence", () => {
     BusPersistence.start();
     Bus.publish(event, rawPayload);
 
-    const persisted = await waitForRows(1);
+    const persisted = await persistedRows(1);
     const firstRaw = persisted[0];
     if (firstRaw === undefined) throw new Error("shape");
     expect(firstRaw).toMatchObject({
@@ -235,7 +239,7 @@ describe("BusPersistence", () => {
     BusPersistence.start();
     Bus.publish(event, rawPayload);
 
-    const persisted = await waitForRows(1);
+    const persisted = await persistedRows(1);
     const firstRaw = persisted[0];
     if (firstRaw === undefined) throw new Error("shape");
     expect(firstRaw).toMatchObject({
@@ -256,7 +260,7 @@ describe("BusPersistence", () => {
 
     BusPersistence.start();
     Bus.publish(event, { sessionId: session.id, traceId: "trace-ephemeral", time: Date.now() });
-    await flushPersistence();
+    await BusPersistence.flush();
 
     expect(rows()).toEqual([]);
   });
@@ -278,7 +282,7 @@ describe("BusPersistence", () => {
       });
     }
 
-    const persisted = await waitForRows(5);
+    const persisted = await persistedRows(5);
     expect(persisted).toHaveLength(5);
     expect(persisted.map((row) => JSON.parse(row.data).index)).toEqual([0, 1, 2, 3, 4]);
     expect(persisted.map((row) => row.id)).toEqual([1, 2, 3, 4, 5]);
@@ -354,7 +358,7 @@ describe("BusPersistence", () => {
       time: Number.POSITIVE_INFINITY,
     });
 
-    const persisted = await waitForRows(1);
+    const persisted = await persistedRows(1);
     expect(persisted[0]).toMatchObject({
       session_id: session.id,
       trace_id: "trace-non-finite",
@@ -372,7 +376,7 @@ describe("BusPersistence", () => {
 
     BusPersistence.start();
     Bus.publish(event, { sessionID: session.id, marker: "m1" });
-    const persisted = await waitForRows(1);
+    const persisted = await persistedRows(1);
 
     expect(persisted.map((row) => row.event_type)).toEqual(["legacy.session_id.recorded"]);
     for (const row of persisted) {
@@ -427,7 +431,7 @@ describe("BusPersistence", () => {
       time: 2,
     });
 
-    const persisted = await waitForRows(2);
+    const persisted = await persistedRows(2);
     expect(persisted.map((row) => row.session_id)).toEqual([session.id, session.id]);
     expect(persisted.map((row) => row.event_type)).toEqual([
       "legacy_probe.opened",
@@ -476,7 +480,7 @@ describe("BusPersistence", () => {
       time: 3,
     });
 
-    const persisted = await waitForRows(1);
+    const persisted = await persistedRows(1);
     const runRow = persisted.find((row) => row.event_type === "worker_run.evaluated");
     expect(runRow?.session_id).toBe(workSession.id);
   });
@@ -499,7 +503,7 @@ describe("BusPersistence", () => {
       time: Date.UTC(2026, 4, 10, 1, 2, 9),
     });
 
-    const persisted = await waitForRows(1);
+    const persisted = await persistedRows(1);
     expect(persisted[0]).toMatchObject({
       session_id: null,
       trace_id: "trace-worker-lookup-error",
@@ -526,7 +530,7 @@ describe("BusPersistence", () => {
           time: Date.now(),
         });
       }).not.toThrow();
-      await flushPersistence();
+      await BusPersistence.flush();
 
       expect(rows()).toEqual([]);
       expect(warning).toBeDefined();
@@ -544,11 +548,11 @@ describe("BusPersistence", () => {
 
     BusPersistence.start();
     Bus.publish(event, { sessionId: session.id, traceId: "trace-before", time: Date.now() });
-    expect(await waitForRows(1)).toHaveLength(1);
+    expect(await persistedRows(1)).toHaveLength(1);
 
     BusPersistence.stop();
     Bus.publish(event, { sessionId: session.id, traceId: "trace-after", time: Date.now() });
-    await flushPersistence();
+    await BusPersistence.flush();
 
     expect(rows()).toHaveLength(1);
   });
@@ -583,9 +587,7 @@ describe("BusPersistence", () => {
         generatedAt: new Date("2026-05-16T00:00:00.000Z"),
       },
     });
-    await BusPersistence.flush();
-
-    const redactRows = await waitForRows(1);
+    const redactRows = await persistedRows(1);
     const redactRow = redactRows[0];
     if (redactRow === undefined) throw new Error("shape");
     const data = JSON.parse(redactRow.data) as {
@@ -637,7 +639,7 @@ describe("BusPersistence", () => {
       context,
     });
 
-    const cycleRows = await waitForRows(1);
+    const cycleRows = await persistedRows(1);
     const cycleRow = cycleRows[0];
     if (cycleRow === undefined) throw new Error("shape");
     const data = JSON.parse(cycleRow.data) as {
@@ -684,7 +686,7 @@ describe("BusPersistence", () => {
       writeSpy.mockRestore();
     }
 
-    const msgRows = await waitForRows(1);
+    const msgRows = await persistedRows(1);
     const msgRow = msgRows[0];
     if (msgRow === undefined) throw new Error("shape");
     const data = JSON.parse(msgRow.data) as {

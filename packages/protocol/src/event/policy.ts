@@ -39,14 +39,32 @@ const PolicyAuditContext = z.object({
 
 const EffectiveVerdict = z.enum(["allow", "deny", "pending"]);
 
+// Single owner of the subject a policy decision is ABOUT. All four decision
+// events name the same triple; only the identity slot (actionId / policyId /
+// none) and the audit context differ, so those stay per-descriptor below.
+// This is a local base+extend inside ONE event family, which the audit's
+// do-not-touch ledger permits — it is deliberately NOT a universal BaseEvent,
+// because correlation requirements differ across families.
+const PolicySubject = {
+  actor: z.record(z.string(), z.unknown()),
+  action: z.string(),
+  resource: z.string(),
+} as const;
+
+// Single owner of the decision itself. `EffectiveVerdict` is the same three
+// literals every verdict-bearing event admits; reason is free-form prose.
+const PolicyDecision = {
+  ...PolicySubject,
+  verdict: EffectiveVerdict,
+  reason: z.string(),
+} as const;
+
 export const Events = {
   ActionRequested: BusEvent.define(
     "policy.action.requested",
     PolicyBase.extend({
       actionId: z.string(),
-      actor: z.record(z.string(), z.unknown()),
-      action: z.string(),
-      resource: z.string(),
+      ...PolicySubject,
       context: z.record(z.string(), z.unknown()).optional(),
     }),
     { visibility: "ephemeral" },
@@ -55,36 +73,23 @@ export const Events = {
     "policy.evaluated",
     PolicyBase.extend({
       policyId: z.string(),
-      actor: z.record(z.string(), z.unknown()),
-      action: z.string(),
-      resource: z.string(),
-      verdict: z.enum(["allow", "deny", "pending"]),
-      reason: z.string(),
+      ...PolicyDecision,
       beforeSideEffect: z.record(z.string(), z.unknown()).optional(),
     }).merge(PolicyAuditContext),
     { visibility: "llm_reason" },
   ),
   DecisionComposed: BusEvent.define(
     "policy.decision.composed",
-    PolicyBase.extend({
-      actor: z.record(z.string(), z.unknown()),
-      action: z.string(),
-      resource: z.string(),
-      verdict: EffectiveVerdict,
-      reason: z.string(),
-    }).merge(PolicyAuditContext),
+    // No per-action or per-policy id: this event reports the COMPOSED verdict
+    // for a point, not one policy's evaluation.
+    PolicyBase.extend(PolicyDecision).merge(PolicyAuditContext),
     { visibility: "llm_reason" },
   ),
   ActionBlocked: BusEvent.define(
     "policy.action.blocked",
-    PolicyBase.extend({
-      actionId: z.string(),
-      actor: z.record(z.string(), z.unknown()),
-      action: z.string(),
-      resource: z.string(),
-      verdict: z.enum(["allow", "deny", "pending"]),
-      reason: z.string(),
-    }),
+    // Deliberately NOT merged with PolicyAuditContext: the block record is the
+    // perimeter refusal, not the audit trail that produced it.
+    PolicyBase.extend({ actionId: z.string(), ...PolicyDecision }),
     { visibility: "llm_reason" },
   ),
 };

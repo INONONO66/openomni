@@ -303,6 +303,65 @@ function requireUniqueFactIds(
   }
 }
 
+/**
+ * Single owner of the proposable fact collections. A completion request
+ * PROPOSES these; the facts snapshot ACCUMULATES them plus criteria,
+ * reservations, and admissions, which a request can never carry. Both
+ * spellings must stay identical or a proposal could name a collection the
+ * snapshot cannot hold.
+ */
+const proposableFactCollections = {
+  claims: z.array(Claim),
+  observations: z.array(Observation),
+  results: z.array(CriterionResult),
+  invalidations: z.array(ResultInvalidation),
+  verificationErrors: z.array(VerificationErrorFact),
+  effects: z.array(EffectRecord),
+} as const;
+
+/**
+ * The unique-id check list for the collections above, in schema order. Issue
+ * paths are `[collection, index, "id"]`, so the ORDER of this list is part of
+ * the observable contract (see the shapes characterization test).
+ */
+function proposableFactEntries(
+  source: Readonly<{
+    claims: readonly { id: string }[];
+    observations: readonly { id: string }[];
+    results: readonly { id: string }[];
+    invalidations: readonly { id: string }[];
+    verificationErrors: readonly { id: string }[];
+    effects: readonly { id: string }[];
+  }>,
+): [string, readonly { id: string }[]][] {
+  return [
+    ["claims", source.claims],
+    ["observations", source.observations],
+    ["results", source.results],
+    ["invalidations", source.invalidations],
+    ["verificationErrors", source.verificationErrors],
+    ["effects", source.effects],
+  ];
+}
+
+/**
+ * Single owner of the ledger head-adjacency rule: a recorded head immediately
+ * follows the head the writer expected. Spelled once and applied at every
+ * head-bearing site (admission, request reservation) so the two cannot drift.
+ */
+function requireAdjacentHead(
+  ctx: z.RefinementCtx,
+  heads: Readonly<{ expectedHead: number; recordedHead: number }>,
+): void {
+  if (heads.recordedHead !== heads.expectedHead + 1) {
+    ctx.addIssue({
+      code: "custom",
+      message: "recordedHead must immediately follow expectedHead",
+      path: ["recordedHead"],
+    });
+  }
+}
+
 const CompletionRequestShape = z
   .object({
     version: CurrentVersion,
@@ -314,23 +373,11 @@ const CompletionRequestShape = z
     basisRef: Reference,
     expectedHead: z.number().int().nonnegative(),
     ownerOverrideReceiptRef: Reference.optional(),
-    claims: z.array(Claim),
-    observations: z.array(Observation),
-    results: z.array(CriterionResult),
-    invalidations: z.array(ResultInvalidation),
-    verificationErrors: z.array(VerificationErrorFact),
-    effects: z.array(EffectRecord),
+    ...proposableFactCollections,
   })
   .strict()
   .superRefine((request, ctx) => {
-    requireUniqueFactIds(ctx, [
-      ["claims", request.claims],
-      ["observations", request.observations],
-      ["results", request.results],
-      ["invalidations", request.invalidations],
-      ["verificationErrors", request.verificationErrors],
-      ["effects", request.effects],
-    ]);
+    requireUniqueFactIds(ctx, proposableFactEntries(request));
     validateSourceIdentityOrigin(request.origin, request.sourceIdentity, ctx);
   });
 
@@ -398,13 +445,7 @@ export const CompletionAdmission = CompletionAdmissionShape.superRefine((admissi
       path: ["completionReportRef"],
     });
   }
-  if (admission.recordedHead !== admission.expectedHead + 1) {
-    ctx.addIssue({
-      code: "custom",
-      message: "recordedHead must immediately follow expectedHead",
-      path: ["recordedHead"],
-    });
-  }
+  requireAdjacentHead(ctx, admission);
   if (admission.decision === "admit" && admission.unresolvedCriterionIds.length > 0) {
     ctx.addIssue({
       code: "custom",
@@ -447,13 +488,7 @@ export const CompletionRequestReservation = z
   })
   .strict()
   .superRefine((reservation, ctx) => {
-    if (reservation.recordedHead !== reservation.expectedHead + 1) {
-      ctx.addIssue({
-        code: "custom",
-        message: "recordedHead must immediately follow expectedHead",
-        path: ["recordedHead"],
-      });
-    }
+    requireAdjacentHead(ctx, reservation);
     const held = reservation.ownerId !== undefined;
     if (held !== (reservation.leaseExpiresAt !== undefined)) {
       ctx.addIssue({
@@ -494,25 +529,17 @@ const CompletionFactsShape = z
     version: CurrentVersion,
     revision: z.number().int().nonnegative(),
     criteria: z.array(Criterion),
-    claims: z.array(Claim),
-    observations: z.array(Observation),
-    results: z.array(CriterionResult),
-    invalidations: z.array(ResultInvalidation),
-    verificationErrors: z.array(VerificationErrorFact),
-    effects: z.array(EffectRecord),
+    ...proposableFactCollections,
     requestReservations: z.array(CompletionRequestReservation),
     admissions: z.array(CompletionAdmission),
   })
   .strict()
   .superRefine((facts, ctx) => {
+    // `criteria` leads and the durable-only collections trail: a request can
+    // propose neither, so they are not part of the shared proposable map.
     requireUniqueFactIds(ctx, [
       ["criteria", facts.criteria],
-      ["claims", facts.claims],
-      ["observations", facts.observations],
-      ["results", facts.results],
-      ["invalidations", facts.invalidations],
-      ["verificationErrors", facts.verificationErrors],
-      ["effects", facts.effects],
+      ...proposableFactEntries(facts),
       ["requestReservations", facts.requestReservations],
       ["admissions", facts.admissions],
     ]);

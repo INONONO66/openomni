@@ -7,9 +7,17 @@ import { Bus } from "@openomni/telemetry";
 import { Storage } from "../src/storage/storage";
 import "../src/storage/initialize";
 
-/** Bus delivery is microtask-queued; flush before asserting on received events. */
+/**
+ * `Bus.publish` queues every subscriber in exactly one `queueMicrotask`
+ * (`packages/telemetry/src/bus.ts:55-64`), and the queue drains completely
+ * before an awaiting continuation resumes. Every call under test here returns
+ * synchronously, so anything it published is already queued when this runs:
+ * one hop is the exact signal in both directions - it proves a delivery
+ * arrived, and for the negative cases it proves the queue was drained past the
+ * point where an unwanted delivery would have landed.
+ */
 function flushBus(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0));
+  return new Promise((resolve) => queueMicrotask(resolve));
 }
 
 describe("Session TTL", () => {
