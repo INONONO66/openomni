@@ -81,7 +81,10 @@ export interface AdmissionContext {
   readonly delegationId: string;
   readonly rootDelegationId: string;
   readonly workerRunId?: string;
-  readonly parent?: Pick<Delegation.Record, "delegationId" | "rootDelegationId" | "deadline" | "status">;
+  readonly parent?: Pick<
+    Delegation.Record,
+    "delegationId" | "rootDelegationId" | "deadline" | "status"
+  >;
   readonly parentMissing?: boolean;
   readonly openFanout: number;
   /** Live leases held by the requesting worker's own delegation, if any. */
@@ -108,13 +111,13 @@ function transportFor(address: Delegation.WorkerAddress): Delegation.Transport {
  * Every fact it judges is an argument, making this fold deterministic and
  * straightforward to replay in tests or during a later admission audit.
  */
-export function admit(
-  candidate: unknown,
-  origin: DelegationOrigin,
-  now: number,
-  limits: AdmissionLimits,
-  context?: AdmissionContext,
-): Admitted | Refused {
+interface ParsedAdmission {
+  readonly ok: true;
+  readonly request: Delegation.Request;
+  readonly origin: DelegationOrigin;
+}
+
+function parseAdmission(candidate: unknown, origin: DelegationOrigin): ParsedAdmission | Refused {
   const parsed = Delegation.Request.safeParse(candidate);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
@@ -126,23 +129,27 @@ export function admit(
     const issue = parsedOrigin.error.issues[0];
     return refusal("invalid_origin", `invalid delegation origin: ${issue?.message ?? "unknown"}`);
   }
-  const trustedOrigin = parsedOrigin.data;
-  const request = parsed.data;
+  return { ok: true, request: parsed.data, origin: parsedOrigin.data };
+}
 
+function validateParent(origin: DelegationOrigin, context?: AdmissionContext): Refused | undefined {
   if (
     context?.parentMissing === true ||
     (context !== undefined &&
-      trustedOrigin.parentDelegationId !== undefined &&
+      origin.parentDelegationId !== undefined &&
       context.parent === undefined)
   ) {
-    return refusal("parent_missing", `parent delegation ${trustedOrigin.parentDelegationId} does not exist`);
+    return refusal(
+      "parent_missing",
+      `parent delegation ${origin.parentDelegationId} does not exist`,
+    );
   }
   if (
     context?.parent !== undefined &&
-    (trustedOrigin.parentDelegationId !== context.parent.delegationId ||
+    (origin.parentDelegationId !== context.parent.delegationId ||
       context.parent.rootDelegationId !== context.rootDelegationId ||
-      (trustedOrigin.rootDelegationId !== undefined &&
-        trustedOrigin.rootDelegationId !== context.rootDelegationId))
+      (origin.rootDelegationId !== undefined &&
+        origin.rootDelegationId !== context.rootDelegationId))
   ) {
     return refusal("parent_lineage", "delegation lineage does not match the durable parent");
   }
@@ -152,21 +159,31 @@ export function admit(
       `parent delegation ${context.parent.delegationId} is already settled`,
     );
   }
+  return undefined;
+}
 
+function effectiveDeadline(
+  request: Delegation.Request,
+  now: number,
+  context?: AdmissionContext,
+): number | Refused {
   // The schema proves the requested deadline is a positive instant. Holding a
   // clock here is what lets the fold reject an already-expired request.
   if (Deadline.isExpired(now, request.deadline)) {
     return refusal("deadline_passed", "deadline has already passed");
   }
 
-  const effectiveDeadline = Deadline.clampToParent(
+  const effective = Deadline.clampToParent(
     request.deadline,
     context?.parent?.deadline ?? request.deadline,
   );
-  if (Deadline.isExpired(now, effectiveDeadline)) {
+  if (Deadline.isExpired(now, effective)) {
     return refusal("deadline_passed", "parent deadline has already passed");
   }
+  return effective;
+}
 
+function validateFanout(limits: AdmissionLimits, context?: AdmissionContext): Refused | undefined {
   const maxFanout = limits.maxFanout ?? 8;
   if (context !== undefined && context.openFanout >= maxFanout) {
     return refusal(
@@ -174,54 +191,66 @@ export function admit(
       `delegation fanout is capped at ${maxFanout} open records for root ${context.rootDelegationId}`,
     );
   }
+  return undefined;
+}
 
-  const transport = transportFor(request.address);
-  let admittedLease: AdmissionLease | undefined;
-  if (trustedOrigin.role === "worker") {
-    // §3.5 lease relaxation: a worker whose OWN delegation holds a live
-    // lease pinned to exactly this contact may reach the channel. The match
-    // is against parentDelegationId — the id of the delegation this worker
-    // executes — so an inline grandchild (whose parent is the inline child,
-    // not the lease holder) is refused by construction (§8.5).
-    const address = request.address;
-    admittedLease =
-      transport === "channel" && address.kind === "actor"
-        ? context?.leases?.find(
-            (lease) =>
-              lease.holderDelegationId === trustedOrigin.parentDelegationId &&
-              lease.contactId === address.actorId,
-          )
-        : undefined;
-    if (transport !== "inline" && admittedLease === undefined) {
-      return refusal(
-        "worker_transport",
-        "a worker may only delegate to a same-domain inline child; ask the Resident for independent work",
-      );
-    }
-    if (transport === "inline" && trustedOrigin.depth >= limits.maxInlineDepth) {
-      return refusal("inline_depth", `inline delegation is capped at depth ${limits.maxInlineDepth}`);
-    }
+interface WorkerTransportAdmission {
+  readonly lease?: AdmissionLease;
+}
+
+function admitWorkerTransport(
+  origin: DelegationOrigin,
+  request: Delegation.Request,
+  transport: Delegation.Transport,
+  limits: AdmissionLimits,
+  context?: AdmissionContext,
+): WorkerTransportAdmission | Refused {
+  // §3.5 lease relaxation: a worker whose OWN delegation holds a live lease
+  // pinned to exactly this contact may reach the channel. The match is against
+  // parentDelegationId, so an inline grandchild is refused by construction.
+  const address = request.address;
+  const lease =
+    transport === "channel" && address.kind === "actor"
+      ? context?.leases?.find(
+          (candidate) =>
+            candidate.holderDelegationId === origin.parentDelegationId &&
+            candidate.contactId === address.actorId,
+        )
+      : undefined;
+  if (transport !== "inline" && lease === undefined) {
+    return refusal(
+      "worker_transport",
+      "a worker may only delegate to a same-domain inline child; ask the Resident for independent work",
+    );
   }
+  if (transport === "inline" && origin.depth >= limits.maxInlineDepth) {
+    return refusal("inline_depth", `inline delegation is capped at depth ${limits.maxInlineDepth}`);
+  }
+  return lease === undefined ? {} : { lease };
+}
 
+function admittedResult(
+  request: Delegation.Request,
+  origin: DelegationOrigin,
+  transport: Delegation.Transport,
+  deadline: number,
+  context: AdmissionContext | undefined,
+  lease: AdmissionLease | undefined,
+): Admitted {
   const delegationId = context?.delegationId ?? "delegation";
   // A root is always stamped from the newly admitted id. A child inherits the
   // durable parent's root through context; an origin cannot choose a tree to
   // evade the fanout cap.
   const rootDelegationId =
     context?.rootDelegationId ??
-    (trustedOrigin.parentDelegationId === undefined
+    (origin.parentDelegationId === undefined
       ? delegationId
-      : (trustedOrigin.rootDelegationId ?? delegationId));
+      : (origin.rootDelegationId ?? delegationId));
   const childOrigin: DelegationOrigin = {
     role: "worker",
-    depth: trustedOrigin.depth + 1,
-    sessionId: trustedOrigin.sessionId,
-    ...(context === undefined
-      ? {}
-      : {
-          parentDelegationId: delegationId,
-          rootDelegationId,
-        }),
+    depth: origin.depth + 1,
+    sessionId: origin.sessionId,
+    ...(context === undefined ? {} : { parentDelegationId: delegationId, rootDelegationId }),
   };
 
   return {
@@ -230,12 +259,48 @@ export function admit(
     ...(context?.workerRunId === undefined ? {} : { workerRunId: context.workerRunId }),
     request,
     transport,
-    effectiveDeadline,
-    ...(trustedOrigin.parentDelegationId === undefined
+    effectiveDeadline: deadline,
+    ...(origin.parentDelegationId === undefined
       ? {}
-      : { parentDelegationId: trustedOrigin.parentDelegationId }),
+      : { parentDelegationId: origin.parentDelegationId }),
     rootDelegationId,
     childOrigin,
-    ...(admittedLease === undefined ? {} : { lease: admittedLease }),
+    ...(lease === undefined ? {} : { lease }),
   };
+}
+
+export function admit(
+  candidate: unknown,
+  origin: DelegationOrigin,
+  now: number,
+  limits: AdmissionLimits,
+  context?: AdmissionContext,
+): Admitted | Refused {
+  const parsed = parseAdmission(candidate, origin);
+  if (!parsed.ok) return parsed;
+
+  const parentRefusal = validateParent(parsed.origin, context);
+  if (parentRefusal !== undefined) return parentRefusal;
+
+  const deadline = effectiveDeadline(parsed.request, now, context);
+  if (typeof deadline !== "number") return deadline;
+
+  const fanoutRefusal = validateFanout(limits, context);
+  if (fanoutRefusal !== undefined) return fanoutRefusal;
+
+  const transport = transportFor(parsed.request.address);
+  const workerAdmission =
+    parsed.origin.role === "worker"
+      ? admitWorkerTransport(parsed.origin, parsed.request, transport, limits, context)
+      : {};
+  if ("ok" in workerAdmission) return workerAdmission;
+
+  return admittedResult(
+    parsed.request,
+    parsed.origin,
+    transport,
+    deadline,
+    context,
+    workerAdmission.lease,
+  );
 }

@@ -1,6 +1,6 @@
 import { Channel } from "@openomni/protocol";
-import { normalizeContent } from "../support/trigger";
-import type { InboundNormalizer } from "../types";
+import { strippedMentionContent } from "../../support/trigger";
+import type { InboundNormalizer } from "../../types";
 import type { DiscordMessage } from "./types";
 
 export interface DiscordNormalizerContext {
@@ -18,11 +18,12 @@ export class DiscordNormalizer implements InboundNormalizer<DiscordMessage> {
     const isDM = !message.guild_id;
     const mentioned = message.mentions?.some((u) => u.id === this.ctx.botId) ?? false;
 
-    let content = message.content;
-    if (mentioned && !isDM) {
-      content = content.replace(new RegExp(`<@!?${this.ctx.botId}>\\s*`, "g"), "").trim();
-    }
-    content = normalizeContent(content, this.ctx.triggers);
+    const content = strippedMentionContent(
+      message.content,
+      new RegExp(`<@!?${this.ctx.botId}>\\s*`, "g"),
+      mentioned && !isDM,
+      this.ctx.triggers,
+    );
     if (!content) return null;
 
     const surfaceKey = Channel.SurfaceKey.fromChannel({

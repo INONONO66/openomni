@@ -1,0 +1,43 @@
+import { z } from "zod";
+
+/**
+ * Slack wire shapes this driver consumes — Socket Mode envelopes and the
+ * message event inside `events_api` payloads. Only the fields the driver
+ * reads are declared; the full raw payload rides `InboundMessage.raw`.
+ */
+const SlackMessageEventSchema = z.object({
+  type: z.string(),
+  /** Present on edits, joins, bot posts, etc. — the driver only handles plain user messages. */
+  subtype: z.string().optional(),
+  channel: z.string(),
+  /** `im` marks a DM; everything else keys as a channel. */
+  channel_type: z.string().optional(),
+  user: z.string().optional(),
+  /** Set when a bot (including this one) authored the message. */
+  bot_id: z.string().optional(),
+  text: z.string().optional(),
+  ts: z.string(),
+  thread_ts: z.string().optional(),
+});
+
+export type SlackMessageEvent = z.infer<typeof SlackMessageEventSchema>;
+
+/**
+ * One Socket Mode frame: `hello`, `events_api` (must be acked), or
+ * `disconnect`. `event` is tolerant by design (`catch(undefined)`): a
+ * subscribed event type this driver does not consume must still parse as an
+ * envelope so its ack is sent — Slack redelivers unacked envelopes forever.
+ */
+export const SocketEnvelopeSchema = z.object({
+  type: z.string(),
+  envelope_id: z.string().optional(),
+  payload: z
+    .object({
+      team_id: z.string().optional(),
+      event: SlackMessageEventSchema.optional().catch(undefined),
+    })
+    .optional(),
+  reason: z.string().optional(),
+});
+
+export type SocketEnvelope = z.infer<typeof SocketEnvelopeSchema>;

@@ -1,13 +1,27 @@
-import { newTraceId } from "../support/trace";
+import { newTraceId } from "../../support/trace";
 import { Operational } from "@openomni/protocol";
-import { sleep } from "../support/fetch-retry";
-import { calculateBackoff } from "../support/reconnect-backoff";
-import type { PublishPort } from "../types";
-import { GatewayOp, Intents, type DiscordUser, type GatewayPayload } from "./types";
+import { sleep } from "../../support/fetch-retry";
+import { SocketReconnectShell, type SocketSettle } from "../../support/socket-shell";
+import type { PublishPort } from "../../types";
+import {
+  type GatewayFrame,
+  GatewayFrameSchema,
+  GatewayOp,
+  HelloDataSchema,
+  Intents,
+  ReadyDataSchema,
+} from "./types";
+
+const DISCORD_SHELL_MESSAGES = {
+  urlFetchFailed: "discord gateway url fetch failed, retrying",
+  closed: "discord connection closed, reconnecting",
+  reconnectFailed: "discord reconnect failed",
+  socketError: "discord websocket error",
+} as const;
 
 export interface GatewayCallbacks {
   /** `traceId` is minted per dispatch — the first frame of an inbound gateway event (D11 origin). */
-  onDispatch: (event: string, data: unknown, traceId: string) => void;
+  onDispatch: (event: string, data: object, traceId: string) => void;
   onReady: (info: { botId: string; botUsername: string }) => void;
 }
 
@@ -43,8 +57,6 @@ function validResumeUrl(raw: string, trustedOrigin: string | null): string | nul
  * Discord answers INVALID_SESSION and every resume degraded to re-identify).
  */
 export class DiscordGateway {
-  private ws: WebSocket | null = null;
-  private running = false;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private heartbeatAckReceived = true;
   private sequence: number | null = null;
@@ -52,18 +64,22 @@ export class DiscordGateway {
   private resumeUrl: string | null = null;
   /** Origin of the last trusted (fetched, not payload-provided) gateway URL. */
   private gatewayOrigin: string | null = null;
-  private reconnectAttempt = 0;
+  private readonly shell: SocketReconnectShell;
 
   constructor(
     private readonly token: string,
     private readonly fetchGatewayUrl: () => Promise<string>,
     private readonly callbacks: GatewayCallbacks,
     private readonly publish: PublishPort,
-    private readonly delay: (ms: number) => Promise<void> = sleep,
-  ) {}
+    delay: (ms: number) => Promise<void> = sleep,
+  ) {
+    this.shell = new SocketReconnectShell(publish, DISCORD_SHELL_MESSAGES, delay, (url) =>
+      this.openSocket(url),
+    );
+  }
 
   async start(): Promise<void> {
-    this.running = true;
+    this.shell.begin();
     await this.openSocket(await this.fetchTrustedGatewayUrl());
   }
 
@@ -79,146 +95,78 @@ export class DiscordGateway {
   }
 
   stop(): void {
-    this.running = false;
     this.stopHeartbeat();
-    this.ws?.close(1000);
-    this.ws = null;
+    this.shell.stop();
   }
 
-  private async reconnect(traceId: string): Promise<void> {
-    // A cold reconnect (no resumable session) needs a fresh gateway URL from
-    // Discord's REST API. That call rejects during exactly the transient
-    // outages that cluster reconnects — and a single rejection here used to
-    // terminate the chain in the close handler's `.catch` with running===true,
-    // leaving the bot silently offline until a process restart (#540). Retry
-    // the fetch under the SHARED backoff schedule, bounded by `running` so an
-    // intentional stop ends the loop cleanly (no leak, no infinite spin).
-    // openSocket stays OUTSIDE this catch: socket-level failures already
-    // re-enter through the close handler, and retrying them here too would
-    // overlap that reconnect chain.
-    let url = this.resumeUrl && this.sessionId ? this.resumeUrl : undefined;
-    while (url === undefined && this.running) {
-      try {
-        url = await this.fetchTrustedGatewayUrl();
-      } catch (err) {
-        this.reconnectAttempt++;
-        const backoffMs = calculateBackoff(this.reconnectAttempt);
-        // Inherits the close-handler's trace: every retry of THIS reconnect is
-        // one causal chain (same id per reconnect() call, not per attempt).
-        this.publish(Operational.Events.Error, {
-          traceId,
-          time: Date.now(),
-          component: "server",
-          msg: "discord gateway url fetch failed, retrying",
-          context: { err: String(err), backoffMs: Math.round(backoffMs) },
-        });
-        await this.delay(backoffMs);
-      }
-    }
-    // Stopped during the fetch-retry loop → end cleanly, no socket, no schedule.
-    if (url === undefined) return;
-    await this.openSocket(url);
+  private reconnect(traceId: string): Promise<void> {
+    // A resumable session reconnects straight to its pinned resume URL. A
+    // cold reconnect needs a fresh gateway URL from Discord's REST API —
+    // fetched under the shell's shared backoff (#540). openSocket stays
+    // OUTSIDE that retry: socket-level failures already re-enter through the
+    // close handler, and retrying them here too would overlap that chain.
+    return this.resumeUrl && this.sessionId
+      ? this.openSocket(this.resumeUrl)
+      : this.shell.reconnectVia(() => this.fetchTrustedGatewayUrl(), traceId);
   }
 
   private openSocket(url: string): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
-      const ws = new WebSocket(url);
-      this.ws = ws;
-      let resolved = false;
+    return this.shell.openWebSocket(url, (ws, settle) => this.wireSocket(ws, settle));
+  }
 
-      ws.addEventListener("message", (event) => {
-        let payload: GatewayPayload;
-        try {
-          payload = JSON.parse(String(event.data)) as GatewayPayload;
-        } catch {
-          // One malformed frame must not become an uncaught listener throw;
-          // drop it — the gateway's own heartbeat/close handling recovers.
-          this.publish(Operational.Events.Warn, {
-            traceId: newTraceId(),
-            time: Date.now(),
-            component: "server",
-            msg: "discord gateway frame was not valid JSON; dropped",
-          });
-          return;
-        }
-        const ready = this.handlePayload(payload);
-        if (ready && !resolved) {
-          resolved = true;
-          resolve();
-        }
-      });
+  private wireSocket(ws: WebSocket, settle: SocketSettle): void {
+    ws.addEventListener("message", (event) => {
+      let raw: object;
+      try {
+        raw = JSON.parse(String(event.data)) as object;
+      } catch {
+        // One malformed frame must not become an uncaught listener throw;
+        // drop it — the gateway's own heartbeat/close handling recovers.
+        this.shell.warnDrop("discord gateway frame was not valid JSON; dropped");
+        return;
+      }
+      const frame = GatewayFrameSchema.safeParse(raw);
+      if (!frame.success) {
+        this.shell.warnDrop("discord gateway frame had no op envelope; dropped");
+        return;
+      }
+      if (this.handlePayload(frame.data, raw)) settle.resolveOnce();
+    });
 
-      ws.addEventListener("close", async (event) => {
-        this.stopHeartbeat();
-        if (!resolved) {
-          resolved = true;
-          reject(new Error(`WebSocket closed before ready: ${event.code}`));
-        }
-        if (FATAL_CLOSE_CODES.has(event.code)) {
-          this.running = false;
-          this.publish(Operational.Events.Error, {
-            traceId: newTraceId(),
-            time: Date.now(),
-            component: "server",
-            msg: "discord gateway fatal close code",
-            context: { code: event.code },
-          });
-          return;
-        }
-        if (this.running) {
-          this.reconnectAttempt++;
-          const backoffMs = calculateBackoff(this.reconnectAttempt);
-          // ONE trace for the whole close→backoff→reconnect chain: the close
-          // notice, every url-fetch retry inside reconnect(), and a terminal
-          // reconnect failure all read back as a single causal sequence.
-          const traceId = newTraceId();
-          this.publish(Operational.Events.Warn, {
-            traceId,
-            time: Date.now(),
-            component: "server",
-            msg: "discord connection closed, reconnecting",
-            context: {
-              code: event.code,
-              backoffMs: Math.round(backoffMs),
-            },
-          });
-          await this.delay(backoffMs);
-          if (this.running)
-            this.reconnect(traceId).catch((err) =>
-              this.publish(Operational.Events.Error, {
-                traceId,
-                time: Date.now(),
-                component: "server",
-                msg: "discord reconnect failed",
-                context: { err: String(err) },
-              }),
-            );
-        }
-      });
-
-      ws.addEventListener("error", (err) =>
+    ws.addEventListener("close", async (event) => {
+      this.stopHeartbeat();
+      settle.rejectOnce(new Error(`WebSocket closed before ready: ${event.code}`));
+      if (FATAL_CLOSE_CODES.has(event.code)) {
+        this.shell.end();
         this.publish(Operational.Events.Error, {
           traceId: newTraceId(),
           time: Date.now(),
           component: "server",
-          msg: "discord websocket error",
-          context: { err: String(err) },
-        }),
-      );
+          msg: "discord gateway fatal close code",
+          context: { code: event.code },
     });
+          return;
+        }
+        if (this.shell.running) {
+          await this.shell.scheduleReconnect(event.code, (traceId) => this.reconnect(traceId));
+        }
+      });
   }
 
   /** Routes one gateway payload; returns true when the connection is ready. */
-  private handlePayload(payload: GatewayPayload): boolean {
+  private handlePayload(frame: GatewayFrame, raw: object): boolean {
     // typeof guard, not `!== null`: a MISSING s would otherwise assign
     // undefined, and `seq: undefined` in RESUME gets dropped by
     // JSON.stringify — the same serialization class as the #520 token bug.
-    if (typeof payload.s === "number") this.sequence = payload.s;
+    if (typeof frame.s === "number") this.sequence = frame.s;
+    const d = Reflect.get(raw, "d");
 
-    switch (payload.op) {
+    switch (frame.op) {
       case GatewayOp.HELLO: {
-        const d = payload.d as { heartbeat_interval: number };
-        this.startHeartbeat(d.heartbeat_interval);
+        const hello = HelloDataSchema.safeParse(d);
+        // A malformed interval falls to the clamp's floor rather than dropping
+        // the frame — HELLO must always answer with IDENTIFY/RESUME.
+        this.startHeartbeat(hello.success ? hello.data.heartbeat_interval : Number.NaN);
         if (this.sessionId && this.sequence !== null) {
           // #520 fix 2: the REAL token — `token: undefined` was dropped by
           // JSON.stringify and Discord answered INVALID_SESSION on every
@@ -254,10 +202,10 @@ export class DiscordGateway {
           component: "server",
           msg: "discord server requested reconnect",
         });
-        this.ws?.close(4000);
+        this.shell.closeSocket(4000);
         return false;
       case GatewayOp.INVALID_SESSION: {
-        const resumable = payload.d as boolean;
+        const resumable = d === true;
         this.publish(Operational.Events.Warn, {
           traceId: newTraceId(),
           time: Date.now(),
@@ -269,30 +217,41 @@ export class DiscordGateway {
           this.sessionId = null;
           this.sequence = null;
         }
-        this.ws?.close(4000);
+        this.shell.closeSocket(4000);
         return false;
       }
       case GatewayOp.DISPATCH:
-        return payload.t ? this.handleDispatch(payload.t, payload.d) : false;
+        return frame.t != null && typeof d === "object" && d !== null
+          ? this.handleDispatch(frame.t, d)
+          : false;
       default:
         return false;
     }
   }
 
-  private handleDispatch(event: string, data: unknown): boolean {
+  private handleDispatch(event: string, data: object): boolean {
     if (event === "READY") {
-      const d = data as { session_id: string; resume_gateway_url: string; user: DiscordUser };
-      this.sessionId = d.session_id;
+      const ready = ReadyDataSchema.safeParse(data);
+      if (!ready.success) {
+        this.publish(Operational.Events.Warn, {
+          traceId: newTraceId(),
+          time: Date.now(),
+          component: "server",
+          msg: "discord READY payload malformed; dropped",
+        });
+        return false;
+      }
+      this.sessionId = ready.data.session_id;
       // The resume URL arrives in a server payload; pin it to Discord's
       // gateway origin before it can ever become a socket target, so a
       // spoofed READY cannot redirect the resume connection elsewhere.
-      this.resumeUrl = validResumeUrl(d.resume_gateway_url, this.gatewayOrigin);
-      this.reconnectAttempt = 0;
-      this.callbacks.onReady({ botId: d.user.id, botUsername: d.user.username });
+      this.resumeUrl = validResumeUrl(ready.data.resume_gateway_url, this.gatewayOrigin);
+      this.shell.reset();
+      this.callbacks.onReady({ botId: ready.data.user.id, botUsername: ready.data.user.username });
       return true;
     }
     if (event === "RESUMED") {
-      this.reconnectAttempt = 0;
+      this.shell.reset();
       this.publish(Operational.Events.Info, {
         traceId: newTraceId(),
         time: Date.now(),
@@ -342,7 +301,7 @@ export class DiscordGateway {
         // Missed ack: zombied connection. Close with a non-1000 code so the
         // session stays resumable (Discord treats 1000/1001 as a clean
         // goodbye and invalidates the session).
-        this.ws?.close(4000);
+        this.shell.closeSocket(4000);
         return;
       }
       this.sendGateway({ op: GatewayOp.HEARTBEAT, d: this.sequence });
@@ -372,8 +331,8 @@ export class DiscordGateway {
     });
   }
 
-  private sendGateway(payload: Record<string, unknown>): void {
-    if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(payload));
+  private sendGateway(payload: object): void {
+    this.shell.sendJson(payload);
   }
 }
 

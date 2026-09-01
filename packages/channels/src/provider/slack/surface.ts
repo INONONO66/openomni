@@ -1,9 +1,14 @@
 import { type Channel, Operational, PolicyDecision } from "@openomni/protocol";
-import { ChannelAuthnMiddleware, type ChannelAuthnDecisionObserver } from "../channel-authn";
-import { Dedupe, DedupeWindow } from "../support/dedupe";
-import { chunkMarkdown } from "../support/format/chunk";
-import { newTraceId } from "../support/trace";
-import type { ChannelClient, PublishPort } from "../types";
+import {
+  ChannelAuthnMiddleware,
+  type ChannelAuthnDecisionObserver,
+  decisionOption,
+} from "../../channel-authn";
+import { Dedupe, DedupeWindow } from "../../support/dedupe";
+import { type DeliveryReceipt, deliverKeyed } from "../../support/deliver";
+import { chunkMarkdown } from "../../support/format/chunk";
+import { SLACK_RENDER } from "./format";
+import type { ChannelClient, PublishPort } from "../../types";
 import { SlackClient } from "./client";
 import { SlackEndpointKeyError, SlackHandlerMissingError } from "./error";
 import { SlackNormalizer } from "./normalizer";
@@ -20,7 +25,7 @@ export class SlackAdapter implements Channel.Surface {
   private readonly client: SlackClient;
   private readonly socket: SlackSocket;
   private readonly dedupe = new Dedupe();
-  private readonly outboundDedupe = new DedupeWindow<{ externalMessageId?: string }>();
+  private readonly outboundDedupe = new DedupeWindow<DeliveryReceipt>();
   private normalizer: SlackNormalizer | null = null;
   private botUserId: string | null = null;
   private handler: Channel.MessageHandler | null = null;
@@ -83,31 +88,17 @@ export class SlackAdapter implements Channel.Surface {
    * workspace-mandatory `TEAM:USER` pair (docs/provisioning-and-providers.md)
    * — a bare user id is refused, never guessed at.
    */
-  async deliver(
-    externalId: string,
-    body: string,
-    idempotencyKey?: string,
-  ): Promise<{ externalMessageId?: string }> {
-    const send = async (): Promise<{ externalMessageId?: string }> => {
+  deliver(externalId: string, body: string, idempotencyKey?: string): Promise<DeliveryReceipt> {
+    return deliverKeyed(this.outboundDedupe, idempotencyKey, async (traceId) => {
       const [team, user] = externalId.split(":");
       if (!(team && user)) {
         throw new SlackEndpointKeyError({
           message: `slack endpoint externalId must be "TEAM:USER", got "${externalId}"`,
         });
       }
-      // Origin: the messaging kernel's deliver seam does not thread the
-      // sender's trace yet (#215) — this delivery is its own causal chain.
-      const traceId = newTraceId();
       const channelId = await this.client.openDm(user, traceId);
-      const externalMessageId = await sendSlackMessage(
-        this.client,
-        channelId,
-        { text: body },
-        traceId,
-      );
-      return externalMessageId === undefined ? {} : { externalMessageId };
-    };
-    return idempotencyKey === undefined ? send() : this.outboundDedupe.run(idempotencyKey, send);
+      return await sendSlackMessage(this.client, channelId, { text: body }, traceId);
+    });
   }
 
   private handleEnvelope(envelope: SocketEnvelope, traceId: string): void {
@@ -139,9 +130,7 @@ export class SlackAdapter implements Channel.Surface {
         isDM: event.channel_type === "im",
         text: event.text ?? "",
       },
-      ...(this.authOptions.onDecision !== undefined
-        ? { onDecision: this.authOptions.onDecision }
-        : {}),
+      ...decisionOption(this.authOptions.onDecision),
     });
     if (PolicyDecision.isBlocking(auth.verdict)) return;
 
@@ -172,7 +161,6 @@ export class SlackAdapter implements Channel.Surface {
   }
 }
 
-const SLACK_MESSAGE_LIMIT = 4000;
 
 async function sendSlackMessage(
   client: ChannelClient & Pick<SlackClient, "sendInThread">,
@@ -183,7 +171,7 @@ async function sendSlackMessage(
 ): Promise<string | undefined> {
   if (!message.text) return undefined;
   let lastMessageId: string | undefined;
-  for (const chunk of chunkMarkdown(message.text, SLACK_MESSAGE_LIMIT)) {
+  for (const chunk of chunkMarkdown(SLACK_RENDER.renderMarkdown(message.text), SLACK_RENDER.messageLimit)) {
     const ts =
       threadTs === undefined
         ? await client.send(channelId, chunk, traceId)

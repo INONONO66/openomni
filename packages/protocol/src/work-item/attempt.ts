@@ -132,11 +132,14 @@ export const EnvironmentFingerprintInputs = z
   .strict();
 export type EnvironmentFingerprintInputs = z.infer<typeof EnvironmentFingerprintInputs>;
 
-function fingerprintOf<Inputs extends z.ZodTypeAny>(inputs: Inputs) {
+function fingerprintOf<Inputs extends z.ZodType>(inputs: Inputs) {
   return z
     .object({ inputs, digest: Digest })
     .strict()
-    .superRefine((fingerprint, ctx) => {
+    .superRefine((value, ctx) => {
+      // The generic `Inputs` keeps TS from resolving the mapped output shape;
+      // both fields are structurally guaranteed by the object schema above.
+      const fingerprint = value as { inputs: unknown; digest: string };
       if (fingerprint.digest !== canonicalDigest(fingerprint.inputs)) {
         ctx.addIssue({
           code: "custom",

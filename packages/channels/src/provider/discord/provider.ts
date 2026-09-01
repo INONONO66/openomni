@@ -1,4 +1,6 @@
-import type { ChannelProvider } from "../provider/contract.js";
+import { z } from "zod";
+import type { ChannelProvider } from "../contract.js";
+import { DISCORD_RENDER } from "./format.js";
 import { DiscordAdapter } from "./surface.js";
 
 export interface DiscordCredentials {
@@ -15,7 +17,13 @@ export interface DiscordCredentials {
 export const DiscordProvider: ChannelProvider<DiscordCredentials, "discord"> = {
   id: "discord",
   ingest: "socket",
-  capabilities: { deliver: true, webhook: false },
+  capabilities: { deliver: true, webhook: false, render: DISCORD_RENDER },
+  credentials: z.object({ token: z.string().min(1) }).strict(),
+  settings: z.record(z.string(), z.never()),
+  preconditions: [
+    "MESSAGE CONTENT gateway intent enabled in the developer portal",
+    "bot invited to the target guild with read/send permissions",
+  ],
   create(credentials, config, publish) {
     const surface = new DiscordAdapter(credentials.token, config, publish);
     return {

@@ -10,13 +10,13 @@ export namespace BusEvent {
 
   export interface Descriptor<T> {
     readonly name: string;
-    readonly schema: z.ZodSchema<T>;
+    readonly schema: z.ZodType<T, T>;
     readonly visibility?: Visibility;
   }
 
   export function define<T>(
     name: string,
-    schema: z.ZodSchema<T>,
+    schema: z.ZodType<T, T>,
     options: Options = {},
   ): Descriptor<T> {
     return options.visibility === undefined

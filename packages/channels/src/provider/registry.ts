@@ -1,7 +1,7 @@
-import { DiscordProvider } from "../discord/provider.js";
-import { GitHubProvider } from "../github/provider.js";
-import { SlackProvider } from "../slack/provider.js";
-import { TelegramProvider } from "../telegram/provider.js";
+import { DiscordProvider } from "./discord/provider.js";
+import { GitHubProvider } from "./github/provider.js";
+import { SlackProvider } from "./slack/provider.js";
+import { TelegramProvider } from "./telegram/provider.js";
 
 /**
  * The shipped provider set — pure data, no I/O. Composition roots read this

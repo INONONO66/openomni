@@ -1,4 +1,6 @@
-import type { ChannelProvider } from "../provider/contract.js";
+import { z } from "zod";
+import type { ChannelProvider } from "../contract.js";
+import { SLACK_RENDER } from "./format.js";
 import { SlackAdapter } from "./surface.js";
 
 export interface SlackCredentials {
@@ -20,7 +22,20 @@ export interface SlackCredentials {
 export const SlackProvider: ChannelProvider<SlackCredentials, "slack"> = {
   id: "slack",
   ingest: "socket",
-  capabilities: { deliver: true, webhook: false },
+  capabilities: { deliver: true, webhook: false, render: SLACK_RENDER },
+  credentials: z
+    .object({
+      botToken: z.string().startsWith("xoxb-"),
+      appToken: z.string().startsWith("xapp-"),
+    })
+    .strict(),
+  settings: z.record(z.string(), z.never()),
+  preconditions: [
+    "Socket Mode enabled with an app-level token granted connections:write",
+    "event subscriptions: message.channels and message.im",
+    "bot scopes: chat:write, im:write, app_mentions:read",
+    "bot invited to the target channels",
+  ],
   create(credentials, config, publish) {
     const surface = new SlackAdapter(credentials, config, publish);
     return {

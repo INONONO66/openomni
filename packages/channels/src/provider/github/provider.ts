@@ -1,4 +1,5 @@
-import type { ChannelProvider } from "../provider/contract.js";
+import { z } from "zod";
+import type { ChannelProvider } from "../contract.js";
 import { GitHubAdapter } from "./surface.js";
 
 export interface GitHubCredentials {
@@ -14,7 +15,23 @@ export interface GitHubCredentials {
 export const GitHubProvider: ChannelProvider<GitHubCredentials, "github"> = {
   id: "github",
   ingest: "webhook",
-  capabilities: { deliver: false, webhook: true },
+  capabilities: {
+    deliver: false,
+    webhook: true,
+    // GitHub renders markdown natively and comments carry no driver-enforced limit.
+    render: { renderMarkdown: (markdown: string) => markdown, messageLimit: null },
+  },
+  credentials: z
+    .object({
+      secret: z.string().min(1),
+      token: z.string().min(1).optional(),
+      botUsername: z.string().min(1).optional(),
+    })
+    .strict(),
+  settings: z.record(z.string(), z.never()),
+  preconditions: [
+    "repository webhook posts issues/issue_comment events to the public endpoint with the shared secret",
+  ],
   create(credentials, config, publish) {
     const surface = new GitHubAdapter(
       credentials.secret,

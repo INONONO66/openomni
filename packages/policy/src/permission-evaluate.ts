@@ -57,13 +57,10 @@ function verdict(
     : { action, decision, reason, policyId: POLICY_ID, matchedPattern };
 }
 
-export function evaluatePermission(
-  permission: Policy.Permission | undefined,
+function evaluateInputRules(
+  permission: Policy.Permission,
   request: Policy.EvaluationRequest,
-): Policy.EvaluationResult {
-  if (!permission) return verdict("deny", `default_deny:${request.action}`);
-  if (permission.action !== request.action) return verdict("deny", "action_mismatch");
-
+): Policy.EvaluationResult | undefined {
   const inputRules = [...(permission.inputRules ?? [])].sort(
     (a, b) => (b.priority ?? 0) - (a.priority ?? 0),
   );
@@ -80,6 +77,13 @@ export function evaluatePermission(
     }
   }
 
+  return undefined;
+}
+
+function evaluateResourceRestrictions(
+  permission: Policy.Permission,
+  request: Policy.EvaluationRequest,
+): Policy.EvaluationResult | undefined {
   const deniedBy = permission.denylist?.find((pattern) =>
     matchesPattern(request.resource, pattern),
   );
@@ -103,6 +107,13 @@ export function evaluatePermission(
     return verdict("require_approval", "require_approval_label", requiresApprovalByLabel);
   }
 
+  return undefined;
+}
+
+function evaluateAllowConstraints(
+  permission: Policy.Permission,
+  request: Policy.EvaluationRequest,
+): Policy.EvaluationResult | undefined {
   if (permission.allowlist !== undefined) {
     const allowedBy = permission.allowlist.find((pattern) =>
       matchesPattern(request.resource, pattern),
@@ -124,6 +135,25 @@ export function evaluatePermission(
       permission.allowLabels.length === 0 ? "allow_labels_empty" : "allow_labels_miss",
     );
   }
+
+  return undefined;
+}
+
+export function evaluatePermission(
+  permission: Policy.Permission | undefined,
+  request: Policy.EvaluationRequest,
+): Policy.EvaluationResult {
+  if (!permission) return verdict("deny", `default_deny:${request.action}`);
+  if (permission.action !== request.action) return verdict("deny", "action_mismatch");
+
+  const inputRuleResult = evaluateInputRules(permission, request);
+  if (inputRuleResult) return inputRuleResult;
+
+  const restrictionResult = evaluateResourceRestrictions(permission, request);
+  if (restrictionResult) return restrictionResult;
+
+  const allowResult = evaluateAllowConstraints(permission, request);
+  if (allowResult) return allowResult;
 
   return verdict("deny", `default_deny:${request.action}`);
 }

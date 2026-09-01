@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, test } from "bun:test";
 import type { Channel } from "@openomni/protocol";
-import { DiscordAdapter } from "../src/discord/surface";
-import { TelegramAdapter } from "../src/telegram/surface";
+import { DiscordAdapter } from "../src/provider/discord/surface";
+import { TelegramAdapter } from "../src/provider/telegram/surface";
 import { Dedupe, DedupeWindow } from "../src/support/dedupe";
 
 /**
@@ -24,7 +24,8 @@ function tgMessage(messageId: number, chatId: number, text: string): Record<stri
   return {
     message_id: messageId,
     chat: { id: chatId, type: "private" },
-    from: { id: chatId, username: `u${chatId}` },
+    from: { id: chatId, is_bot: false, first_name: `u${chatId}`, username: `u${chatId}` },
+    date: 1_700_000_000,
     text,
   };
 }
@@ -39,7 +40,7 @@ describe("TelegramAdapter dedupe (D1)", () => {
     globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith("/getMe")) {
-        return jsonResponse({ id: 42, username: "bot", first_name: "Bot" });
+        return jsonResponse({ id: 42, is_bot: true, username: "bot", first_name: "Bot" });
       }
       if (url.endsWith("/getUpdates")) {
         getUpdatesCall += 1;

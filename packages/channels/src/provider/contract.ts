@@ -1,4 +1,5 @@
 import type { Channel } from "@openomni/protocol";
+import type { z } from "zod";
 import type { PublishPort } from "../types.js";
 
 /**
@@ -32,6 +33,26 @@ export type ProviderDeliveryRoute = (
 export type IngestMode = "poll" | "socket" | "webhook" | "bridge";
 
 /**
+ * Outbound text policy the provider's surface applies before sending: the
+ * markdown dialect mapping and the hard per-message length it chunks to.
+ * Declared here and consumed by the surface itself (each driver's
+ * `format.ts` is the single source), so composition and docs read the
+ * policy instead of reverse-engineering the send path.
+ */
+export interface RenderPolicy {
+  /**
+   * Maps Resident markdown to the platform dialect; identity where the
+   * platform accepts the text as-is (slack mrkdwn, github comments).
+   */
+  readonly renderMarkdown: (markdown: string) => string;
+  /**
+   * Hard per-message length the surface chunks outbound text to. `null`
+   * where the driver enforces no limit (github comments).
+   */
+  readonly messageLimit: number | null;
+}
+
+/**
  * What a provider's runtime exposes, declared statically so composition and
  * conformance tests can check the runtime against the declaration instead of
  * duck-typing the constructed object (the `DeliveringSurface` casts this
@@ -42,6 +63,8 @@ export interface ProviderCapabilities {
   readonly deliver: boolean;
   /** The runtime exposes `webhookHandler` — ingress arrives over HTTP. */
   readonly webhook: boolean;
+  /** Outbound text policy the surface applies (dialect + chunk limit). */
+  readonly render: RenderPolicy;
 }
 
 /**
@@ -70,6 +93,27 @@ export interface ChannelProvider<TCredentials, TId extends string = string> {
   readonly id: TId;
   readonly ingest: IngestMode;
   readonly capabilities: ProviderCapabilities;
+  /**
+   * THE schema for this provider's secret payload — the app's credential
+   * gates (boot declared rows, `channel_declare`/`secret_rotate`) validate
+   * against this declaration instead of owning a parallel table. Shapes are
+   * genuinely heterogeneous by platform (telegram: one token; slack: two).
+   */
+  readonly credentials: z.ZodType<TCredentials, TCredentials>;
+  /**
+   * Non-secret instance knobs. No shipped provider carries knobs yet, so
+   * every schema is the empty record (`z.record(z.never())`) — the seam
+   * exists so `ChannelInstance.settings` is validated where it enters
+   * (`channel_declare`) instead of accepted-and-ignored.
+   */
+  readonly settings: z.ZodType<Record<string, never>, Record<string, never>>;
+  /**
+   * Operator checklist the credential cannot carry and the runner cannot
+   * verify — portal-side switches (Discord gateway intents, Slack app
+   * scopes). `provision_status` reports these verbatim; nothing enforces
+   * them (they fail loudly at the platform, not here).
+   */
+  readonly preconditions: readonly string[];
   /**
    * Constructs the surface and seams. Pure construction — no I/O until
    * `surface.start()`. `TCredentials` is this provider's typed secret

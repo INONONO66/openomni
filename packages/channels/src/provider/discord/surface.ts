@@ -1,13 +1,19 @@
-import { newTraceId } from "../support/trace";
+import { newTraceId } from "../../support/trace";
 import { type Channel, Operational, PolicyDecision } from "@openomni/protocol";
-import { Dedupe, DedupeWindow } from "../support/dedupe";
+import { Dedupe, DedupeWindow } from "../../support/dedupe";
+import { type DeliveryReceipt, deliverKeyed } from "../../support/deliver";
+import { respondUnderTyping } from "../../support/handler-frame";
 import { DiscordClient } from "./client";
 import { DiscordHandlerMissingError } from "./error";
 import { DiscordGateway } from "./gateway";
 import { DiscordNormalizer } from "./normalizer";
-import type { DiscordMessage } from "./types";
-import type { PublishPort } from "../types";
-import { ChannelAuthnMiddleware, type ChannelAuthnDecisionObserver } from "../channel-authn";
+import { type DiscordMessage, DiscordMessageSchema } from "./types";
+import type { PublishPort } from "../../types";
+import {
+  ChannelAuthnMiddleware,
+  type ChannelAuthnDecisionObserver,
+  decisionOption,
+} from "../../channel-authn";
 
 export interface DiscordAuthOptions {
   readonly onDecision?: ChannelAuthnDecisionObserver;
@@ -19,7 +25,7 @@ export class DiscordAdapter implements Channel.Surface {
   private readonly client: DiscordClient;
   private readonly gateway: DiscordGateway;
   private readonly dedupe = new Dedupe();
-  private readonly outboundDedupe = new DedupeWindow<{ externalMessageId?: string }>();
+  private readonly outboundDedupe = new DedupeWindow<DeliveryReceipt>();
   private normalizer: DiscordNormalizer | null = null;
   private botId: string | null = null;
   private handler: Channel.MessageHandler | null = null;
@@ -53,7 +59,17 @@ export class DiscordAdapter implements Channel.Surface {
         },
         onDispatch: (event, data, traceId) => {
           if (event !== "MESSAGE_CREATE") return;
-          this.handleMessageCreate(data as DiscordMessage, traceId);
+          const message = DiscordMessageSchema.safeParse(data);
+          if (!message.success) {
+            this.publish(Operational.Events.Warn, {
+              traceId,
+              time: Date.now(),
+              component: "server",
+              msg: "discord MESSAGE_CREATE payload malformed; dropped",
+            });
+            return;
+          }
+          this.handleMessageCreate(message.data, traceId);
         },
       },
       publish,
@@ -88,27 +104,11 @@ export class DiscordAdapter implements Channel.Surface {
    * Discord user id — deliver by DM and report the platform message id of
    * the final chunk (the message a reply would reference).
    */
-  async deliver(
-    externalId: string,
-    body: string,
-    idempotencyKey?: string,
-  ): Promise<{ externalMessageId?: string }> {
-    const send = async (): Promise<{ externalMessageId?: string }> => {
-      // Origin: the messaging kernel's deliver seam does not thread the
-      // sender's trace yet (#215) — this delivery is its own causal chain.
-      const traceId = newTraceId();
+  deliver(externalId: string, body: string, idempotencyKey?: string): Promise<DeliveryReceipt> {
+    return deliverKeyed(this.outboundDedupe, idempotencyKey, async (traceId) => {
       const channelId = await this.client.createDmChannel(externalId, traceId);
-      const externalMessageId = await sendDiscordMessage(
-        this.client,
-        channelId,
-        { text: body },
-        traceId,
-      );
-      return externalMessageId === undefined ? {} : { externalMessageId };
-    };
-    // Additive capability only: the current server composition calls this
-    // seam without a key, which intentionally retains at-least-once behavior.
-    return idempotencyKey === undefined ? send() : this.outboundDedupe.run(idempotencyKey, send);
+      return await sendDiscordMessage(this.client, channelId, { text: body }, traceId);
+    });
   }
 
   private handleMessageCreate(message: DiscordMessage, traceId: string): void {
@@ -124,21 +124,7 @@ export class DiscordAdapter implements Channel.Surface {
     if (!botId) return;
 
     const mentioned = message.mentions?.some((u) => u.id === botId) ?? false;
-    const auth = ChannelAuthnMiddleware.authenticateDiscordTriggers({
-      triggers: this.config.triggers,
-      ctx: {
-        event: "message",
-        mentioned,
-        channelId: message.channel_id,
-        senderId: message.author.id,
-        isDM,
-        text: message.content,
-      },
-      ...(this.authOptions.onDecision !== undefined
-        ? { onDecision: this.authOptions.onDecision }
-        : {}),
-    });
-    if (PolicyDecision.isBlocking(auth.verdict)) return;
+    if (this.triggerBlocks(message, isDM, mentioned)) return;
 
     const inbound = this.normalizer.normalize(message, traceId);
     if (!inbound) return;
@@ -153,6 +139,22 @@ export class DiscordAdapter implements Channel.Surface {
         context: { err: String(err) },
       });
     });
+  }
+
+  private triggerBlocks(message: DiscordMessage, isDM: boolean, mentioned: boolean): boolean {
+    const auth = ChannelAuthnMiddleware.authenticateDiscordTriggers({
+      triggers: this.config.triggers,
+      ctx: {
+        event: "message",
+        mentioned,
+        channelId: message.channel_id,
+        senderId: message.author.id,
+        isDM,
+        text: message.content,
+      },
+      ...decisionOption(this.authOptions.onDecision),
+    });
+    return PolicyDecision.isBlocking(auth.verdict);
   }
 
   private async handleIncoming(
@@ -171,40 +173,28 @@ export class DiscordAdapter implements Channel.Surface {
     const handler = this.handler;
     if (!handler) return;
 
-    this.client.sendTyping(channelId, traceId);
-    const typingInterval = setInterval(() => {
-      this.client.sendTyping(channelId, traceId);
-    }, 8000);
-
-    try {
-      const outbound = await handler(inbound);
-      if (outbound) await sendDiscordMessage(this.client, channelId, outbound, traceId);
-    } catch (err) {
-      this.publish(Operational.Events.Error, {
-        traceId,
-        time: Date.now(),
-        component: "server",
-        msg: "discord message handler error",
-        context: { channelId, err: String(err) },
-      });
-      await sendDiscordMessage(
-        this.client,
-        channelId,
-        { text: "Sorry, an error occurred." },
-        traceId,
-      );
-    } finally {
-      clearInterval(typingInterval);
-    }
+    await respondUnderTyping({
+      typing: () => this.client.sendTyping(channelId, traceId),
+      typingIntervalMs: 8000,
+      run: () => handler(inbound),
+      send: (message) => sendDiscordMessage(this.client, channelId, message, traceId),
+      onError: (err) =>
+        this.publish(Operational.Events.Error, {
+          traceId,
+          time: Date.now(),
+          component: "server",
+          msg: "discord message handler error",
+          context: { channelId, err },
+        }),
+    });
   }
 }
 
 // merged from formatter.ts (#453 hygiene: sub-30-LOC single-importer)
-import { chunkMarkdown } from "../support/format/chunk";
-import { renderDiscordMarkdown } from "../support/format/discord";
-import type { ChannelClient } from "../types";
+import { chunkMarkdown } from "../../support/format/chunk";
+import { DISCORD_RENDER } from "./format";
+import type { ChannelClient } from "../../types";
 
-const DISCORD_MESSAGE_LIMIT = 2000;
 
 async function sendDiscordMessage(
   client: ChannelClient,
@@ -214,8 +204,8 @@ async function sendDiscordMessage(
 ): Promise<string | undefined> {
   if (!message.text) return undefined;
   let lastMessageId: string | undefined;
-  const rendered = renderDiscordMarkdown(message.text);
-  for (const chunk of chunkMarkdown(rendered, DISCORD_MESSAGE_LIMIT)) {
+  const rendered = DISCORD_RENDER.renderMarkdown(message.text);
+  for (const chunk of chunkMarkdown(rendered, DISCORD_RENDER.messageLimit)) {
     lastMessageId = (await client.send(channelId, chunk, traceId)) ?? lastMessageId;
   }
   return lastMessageId;
