@@ -7,6 +7,7 @@ import { Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { loadConfig } from "../config";
 import { installShutdownHandlers, startOpenOmni } from "../index";
+import { runProvisioningInit } from "../provisioning/init";
 import { runCli } from "./commands";
 import type { DaemonIo, DaemonTarget, ExecResult } from "./daemon";
 import { daemonActive, unitPath } from "./daemon";
@@ -148,6 +149,12 @@ export function main(argv: readonly string[] = process.argv.slice(2)): Promise<n
     io,
     envPath,
     startApp,
+    runInit: () => {
+      applyEnvFile(envPath, process.env);
+      return Promise.resolve(
+        runProvisioningInit({ config: loadConfig(), env: process.env, home, now: Date.now }),
+      );
+    },
     ask,
     writeEnv: (entries) => writeEnvFile(envPath, entries),
     doctorPorts,

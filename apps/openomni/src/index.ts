@@ -28,7 +28,8 @@ import {
   type Machine,
 } from "@openomni/protocol";
 import { Bus, newTraceId } from "@openomni/telemetry";
-import { type BuiltChannel, channelProfile } from "./channels";
+import type { BuiltChannel } from "./channels";
+import { materializePersons, selectChannelProfile } from "./provisioning/declared";
 import {
   assertWsExposure,
   loadConfig,
@@ -265,6 +266,9 @@ export async function startOpenOmni(options: StartOptions = {}) {
     });
     const actors: readonly RegisteredActor[] = config.actors ?? [];
     registerActors(actors);
+    // Declared Person manifests materialize alongside env actors — both are
+    // idempotent identity upserts; the provisioning store is the durable one.
+    materializePersons();
 
     // A worker loop holds the same delegate tool the Resident does, so the
     // runner needs the kernel that the kernel needs the runner to build. The
@@ -519,8 +523,10 @@ export async function startOpenOmni(options: StartOptions = {}) {
       return result.kind === "dropped" ? null : { text: result.result.output };
     };
     // The profile is the declarative row list of external channels; each row
-    // becomes its own composition stage below.
-    const builtChannels = channelProfile(config).map((row) => row.build(routingHandler));
+    // becomes its own composition stage below. Any declared ChannelInstance
+    // shadows env channel config entirely (env ghost law, §8.1).
+    const channelSelection = selectChannelProfile(config);
+    const builtChannels = channelSelection.rows.map((row) => row.build(routingHandler));
     const githubWebhookHandler = builtChannels.find(
       (built) => built.webhookHandler !== undefined,
     )?.webhookHandler;
@@ -589,6 +595,9 @@ export async function startOpenOmni(options: StartOptions = {}) {
     });
     return {
       port: boundPort,
+      // The boot's honest channel record: where config came from and why each
+      // declared row did or did not mount (provision_status reads this later).
+      channels: { source: channelSelection.source, statuses: channelSelection.statuses },
       // Shutdown is the same reverse-order release boot rollback uses: the
       // composer owns the sequence, so a new stage cannot leak by forgetting
       // a line here.

@@ -136,6 +136,11 @@ export namespace Storage {
     blacklist?: ProtocolStorage.BlacklistSubAdapter;
     channelGrant?: ProtocolStorage.ChannelGrantSubAdapter;
     appConnectorInstallation?: ProtocolStorage.AppConnectorInstallationSubAdapter;
+    // Provisioning declarations + vault rows (docs/provisioning-and-providers.md
+    // §3). Optional for test fakes only — provisioning stores fail closed
+    // (typed adapter_absent) when it is missing; production adapters wire it
+    // as required (SqliteStorageAdapter).
+    provisioning?: ProtocolStorage.ProvisioningSubAdapter;
   }
 }
 
@@ -168,6 +173,7 @@ export namespace Storage {
     "blacklist",
     "channelGrant",
     "appConnectorInstallation",
+    "provisioning",
   ] as const satisfies readonly (keyof Adapter)[];
 
   export type ProductionCapability = (typeof requiredProductionCapabilities)[number];

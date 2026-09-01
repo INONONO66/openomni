@@ -14,8 +14,9 @@
 
 import type { ChannelProvider, ProviderDeliveryRoute } from "@openomni/channels";
 import { ChannelProviders } from "@openomni/channels";
-import type { Channel } from "@openomni/protocol";
+import type { Channel, Provisioning } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
+import { z } from "zod";
 import type { OpenOmniConfig } from "./config";
 
 export interface BuiltChannel {
@@ -26,7 +27,7 @@ export interface BuiltChannel {
   readonly webhookHandler?: (request: Request) => Promise<Response>;
 }
 
-interface ChannelComponent {
+export interface ChannelComponent {
   readonly id: keyof typeof ChannelProviders;
   /** Constructs the surface and binds the Resident handler. Called once per boot. */
   build(handler: Channel.MessageHandler): BuiltChannel;
@@ -101,4 +102,143 @@ export function channelProfile(
   }
 
   return rows;
+}
+
+/**
+ * Vault plaintexts are JSON credential payloads. This is THE validation
+ * layer for DB-sourced credentials — the trust boundary where ciphertext
+ * from the provisioning store becomes a provider's typed credential.
+ */
+const CredentialSchemas = {
+  telegram: z.object({ token: z.string().min(1) }).strict(),
+  discord: z.object({ token: z.string().min(1) }).strict(),
+  github: z
+    .object({
+      secret: z.string().min(1),
+      token: z.string().min(1).optional(),
+      botUsername: z.string().min(1).optional(),
+    })
+    .strict(),
+} as const;
+
+/**
+ * Trigger policy per provider — identical to the env-config path above by
+ * design (PR-B changes where credentials live, not how channels behave).
+ * Per-instance trigger settings arrive with the runtime-administration PR.
+ */
+const DECLARED_TRIGGERS: Record<keyof typeof ChannelProviders, Channel.Config["triggers"]> = {
+  telegram: [],
+  github: [{ type: "event", events: ["issue_comment.created", "issues.opened"] }],
+  discord: [{ type: "mention" }],
+};
+
+type DeclaredChannelState =
+  | "ready"
+  | "disabled"
+  | "vault_locked"
+  | "unknown_provider"
+  | "missing_credential"
+  | "credential_invalid";
+
+/** Per-declaration reconcile verdict — the honest boot record of why a row did or did not mount. */
+export interface DeclaredChannelStatus {
+  readonly id: string;
+  readonly provider: string;
+  readonly state: DeclaredChannelState;
+  readonly detail?: string;
+}
+
+/** Vault read seam: `locked` covers both a missing/unusable KEK and a missing/unopenable row. */
+export type CredentialReader = (
+  ref: string,
+) => { kind: "ok"; plaintext: Uint8Array } | { kind: "locked"; reason: string };
+
+function credentialRow<TCredentials, TId extends keyof typeof ChannelProviders>(
+  provider: ChannelProvider<TCredentials, TId>,
+  schema: z.ZodType<TCredentials>,
+  plaintext: Uint8Array,
+): ChannelComponent | { readonly invalid: string } {
+  let parsed: z.SafeParseReturnType<TCredentials, TCredentials>;
+  try {
+    parsed = schema.safeParse(JSON.parse(new TextDecoder().decode(plaintext)));
+  } catch (error) {
+    return { invalid: `credential payload is not JSON (${String(error)})` };
+  }
+  if (!parsed.success) return { invalid: parsed.error.message };
+  return providerRow(provider, parsed.data, { triggers: DECLARED_TRIGGERS[provider.id] });
+}
+
+function declaredRow(
+  key: keyof typeof ChannelProviders,
+  plaintext: Uint8Array,
+  providers: typeof ChannelProviders,
+): ChannelComponent | { readonly invalid: string } {
+  if (key === "telegram") {
+    return credentialRow(providers.telegram, CredentialSchemas.telegram, plaintext);
+  }
+  if (key === "discord") {
+    return credentialRow(providers.discord, CredentialSchemas.discord, plaintext);
+  }
+  return credentialRow(providers.github, CredentialSchemas.github, plaintext);
+}
+
+function isRegisteredProvider(provider: string): provider is keyof typeof ChannelProviders {
+  return provider in ChannelProviders;
+}
+
+/**
+ * The declared path (docs/provisioning-and-providers.md §8.1): one row per
+ * ChannelInstance declaration, credentials opened through the vault seam.
+ * Fail-closed per row — a declaration that cannot mount is a status, never a
+ * half-wired driver, and never a reason to stop the rest of the boot (§8.4:
+ * the credential-less loopback surface must survive a locked vault).
+ */
+export function declaredChannelProfile(
+  instances: readonly Provisioning.ChannelInstance[],
+  readCredential: CredentialReader,
+  providers: typeof ChannelProviders = ChannelProviders,
+): { rows: ChannelComponent[]; statuses: DeclaredChannelStatus[] } {
+  const rows: ChannelComponent[] = [];
+  const statuses: DeclaredChannelStatus[] = [];
+  const record = (
+    instance: Provisioning.ChannelInstance,
+    state: DeclaredChannelState,
+    detail?: string,
+  ) => {
+    statuses.push({
+      id: instance.id,
+      provider: instance.provider,
+      state,
+      ...(detail === undefined ? {} : { detail }),
+    });
+  };
+
+  for (const instance of instances) {
+    if (!instance.enabled) {
+      record(instance, "disabled");
+      continue;
+    }
+    if (!isRegisteredProvider(instance.provider)) {
+      record(instance, "unknown_provider");
+      continue;
+    }
+    if (instance.credentialRef === undefined) {
+      record(instance, "missing_credential");
+      continue;
+    }
+    const credential = readCredential(instance.credentialRef);
+    if (credential.kind === "locked") {
+      record(instance, "vault_locked", credential.reason);
+      continue;
+    }
+    const row = declaredRow(instance.provider, credential.plaintext, providers);
+    if ("invalid" in row) {
+      record(instance, "credential_invalid", row.invalid);
+      continue;
+    }
+    record(instance, "ready");
+    rows.push(row);
+  }
+
+  return { rows, statuses };
 }

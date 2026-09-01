@@ -5,6 +5,7 @@ import { createSqliteActorRegistryAdapter } from "./sqlite-actor-registry-adapte
 import { createSqliteAppConnectorInstallationAdapter } from "./sqlite-app-connector-installation-adapter";
 import { createSqliteBlacklistAdapter } from "./sqlite-blacklist-adapter";
 import { createSqliteChannelGrantAdapter } from "./sqlite-channel-grant-adapter";
+import { createSqliteProvisioningAdapter } from "./sqlite-provisioning-adapter";
 import { createSqliteArtifactAdapter } from "./sqlite-artifact-adapter";
 import { createSqliteEgressBudgetAdapter } from "./sqlite-egress-budget-adapter";
 import { createSqliteDelegationAdapter } from "./sqlite-delegation-adapter";
@@ -62,6 +63,7 @@ export class SqliteStorageAdapter implements Storage.Adapter {
   readonly blacklist: NonNullable<Storage.Adapter["blacklist"]>;
   readonly channelGrant: NonNullable<Storage.Adapter["channelGrant"]>;
   readonly appConnectorInstallation: NonNullable<Storage.Adapter["appConnectorInstallation"]>;
+  readonly provisioning: NonNullable<Storage.Adapter["provisioning"]>;
 
   constructor(dbPath: string) {
     this.db = new Database(dbPath);
@@ -116,6 +118,7 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     this.blacklist = createSqliteBlacklistAdapter(this.db);
     this.channelGrant = createSqliteChannelGrantAdapter(this.db);
     this.appConnectorInstallation = createSqliteAppConnectorInstallationAdapter(this.db);
+    this.provisioning = createSqliteProvisioningAdapter(this.db);
 
     // Non-enumerable so object-spread test fakes stay narrow and are not
     // mistaken for the concrete production adapter during Storage.configure.
