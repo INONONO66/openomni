@@ -67,6 +67,25 @@ interface CompactionResult {
   blocked?: "no_user_boundary";
 }
 
+type FinishCompaction = (
+  result: CompactionResult,
+  outcome: "cut" | "reduced" | "nothing_reclaimed" | "no_user_boundary",
+  elidedChars: number,
+  anchored?: boolean,
+  summarizerError?: Error,
+) => CompactionResult;
+
+interface ReducedHistory {
+  readonly working: Message.WithParts[];
+  readonly elidedChars: number;
+  readonly completed?: CompactionResult;
+}
+
+interface AnchoredCutAttempt {
+  readonly cut?: CompactionResult;
+  readonly summarizerError?: Error;
+}
+
 /**
  * One ratio, two readers: the compaction trigger's default threshold, and the
  * loop's step-boundary yield — they must agree, or the loop yields at a level
@@ -156,6 +175,182 @@ function stampTimeMarker(message: Message.WithParts): Message.WithParts {
     info: message.info,
     parts: [marker, ...message.parts.filter((part) => !isTimeCarriageMarkerPart(part))],
   };
+}
+
+function reduceHistoryBeforeCut(
+  messages: Message.WithParts[],
+  options: ResolvedCompactionOptions,
+  protectRecent: number,
+  measuredContextTokens: number | undefined,
+  finish: FinishCompaction,
+): ReducedHistory {
+  if (options.elideToolOutputs === undefined) return { working: messages, elidedChars: 0 };
+
+  const reduction = elideToolOutputs(messages, protectRecent, options.elideToolOutputs);
+  if (reduction.elidedChars === 0) return { working: messages, elidedChars: 0 };
+
+  const overageTokens =
+    measuredContextTokens === undefined
+      ? undefined
+      : measuredContextTokens - resolveThresholdTokens(options);
+  const estimatedReclaimTokens = reduction.elidedChars / ESTIMATED_CHARS_PER_TOKEN;
+  if (overageTokens !== undefined && estimatedReclaimTokens < overageTokens) {
+    return { working: reduction.messages, elidedChars: reduction.elidedChars };
+  }
+  return {
+    working: reduction.messages,
+    elidedChars: reduction.elidedChars,
+    completed: finish(
+      { messages: reduction.messages, compacted: true, removedCount: 0 },
+      "reduced",
+      reduction.elidedChars,
+    ),
+  };
+}
+
+function replacementRecord(
+  stampedUsers: readonly Message.WithParts[],
+  keepSpan: readonly Message.WithParts[],
+): Array<{
+  role: "user" | "assistant";
+  text: string;
+  time: number;
+  policyInjected?: true;
+}> {
+  return [...stampedUsers, ...keepSpan].flatMap((message) =>
+    message.parts
+      .filter(
+        (part): part is Message.TextPart =>
+          part.type === "text" && !isTimeCarriageMarkerPart(part),
+      )
+      .map((part) => ({
+        role: message.info.role,
+        text: part.text,
+        time: message.info.time.created,
+        ...(part.metadata?.policyInjected === true ? { policyInjected: true as const } : {}),
+      })),
+  );
+}
+
+async function attemptAnchoredCut(
+  cutSpan: Message.WithParts[],
+  keepSpan: Message.WithParts[],
+  precomputed: string | undefined,
+  working: Message.WithParts[],
+  firstRemoved: Message.WithParts,
+  preserveBudget: number,
+  onSummarize: NonNullable<CompactionOptions["onSummarize"]>,
+): Promise<AnchoredCutAttempt> {
+  const previousAnchor = latestAnchorBody(cutSpan);
+  const summarizerInput = cutSpan.filter(
+    (message) => message.info.role !== "user" && !isAnchorMessage(message),
+  );
+  let anchorText = precomputed ?? previousAnchor;
+  let summarizerError: Error | undefined;
+  if (precomputed === undefined && summarizerInput.length > 0) {
+    try {
+      const merged = await onSummarize(summarizerInput, previousAnchor);
+      anchorText = merged.trim().length > 0 ? merged : previousAnchor;
+    } catch (error) {
+      summarizerError = error instanceof Error ? error : new Error(String(error));
+      anchorText = previousAnchor;
+    }
+  }
+
+  const preservedUsers = selectPreservedUsers(cutSpan, preserveBudget);
+  if (anchorText === undefined && preservedUsers.length === 0) return { summarizerError };
+  const stampedUsers = preservedUsers.map((message) =>
+    carriesUserSpeech(message) ? stampTimeMarker(message) : message,
+  );
+  const keptWindow = replacementRecord(stampedUsers, keepSpan);
+  const stampedAny = stampedUsers.some((message) =>
+    message.parts.some(isTimeCarriageMarkerPart),
+  );
+  const anchorMessages =
+    anchorText === undefined
+      ? []
+      : [
+          buildAnchorMessage(
+            anchorText,
+            firstRemoved.info.sessionID,
+            firstRemoved.info.agent,
+            keptWindow,
+            stampedAny,
+          ),
+        ];
+  const compacted = [...anchorMessages, ...stampedUsers, ...keepSpan];
+  if (estimateContentChars(compacted) >= estimateContentChars(working)) {
+    return { summarizerError };
+  }
+  return {
+    cut: {
+      messages: compacted,
+      compacted: true,
+      removedCount: cutSpan.length - preservedUsers.length,
+    },
+    summarizerError,
+  };
+}
+
+function finishUnavailableCut(
+  cutoff: number | undefined,
+  working: Message.WithParts[],
+  elidedChars: number,
+  finish: FinishCompaction,
+): CompactionResult | undefined {
+  if (cutoff === undefined) {
+    return elidedChars > 0
+      ? finish({ messages: working, compacted: true, removedCount: 0 }, "reduced", elidedChars)
+      : finish(
+          { messages: working, compacted: false, removedCount: 0, blocked: "no_user_boundary" },
+          "no_user_boundary",
+          0,
+        );
+  }
+  if (cutoff !== 0) return undefined;
+  return elidedChars > 0
+    ? finish({ messages: working, compacted: true, removedCount: 0 }, "reduced", elidedChars)
+    : finish({ messages: working, compacted: false, removedCount: 0 }, "nothing_reclaimed", 0);
+}
+
+function finishAnchoredCut(
+  attempt: AnchoredCutAttempt,
+  candidateOutcome: "promoted" | "discarded" | undefined,
+  messages: Message.WithParts[],
+  working: Message.WithParts[],
+  elidedChars: number,
+  finish: FinishCompaction,
+): CompactionResult {
+  const withOutcome = (result: CompactionResult): CompactionResult =>
+    candidateOutcome === undefined ? result : { ...result, candidate: candidateOutcome };
+  const withFailure = (result: CompactionResult): CompactionResult =>
+    attempt.summarizerError === undefined ? result : { ...result, summarizerFailed: true };
+
+  if (attempt.cut === undefined) {
+    return elidedChars > 0
+      ? finish(
+          withOutcome(withFailure({ messages: working, compacted: true, removedCount: 0 })),
+          "reduced",
+          elidedChars,
+          undefined,
+          attempt.summarizerError,
+        )
+      : finish(
+          withOutcome(withFailure({ messages, compacted: false, removedCount: 0 })),
+          "nothing_reclaimed",
+          0,
+          undefined,
+          attempt.summarizerError,
+        );
+  }
+
+  return finish(
+    withOutcome(withFailure(attempt.cut)),
+    "cut",
+    elidedChars,
+    attempt.cut.messages[0] !== undefined && isAnchorMessage(attempt.cut.messages[0]),
+    attempt.summarizerError,
+  );
 }
 
 export namespace Compaction {
@@ -285,27 +480,15 @@ export namespace Compaction {
     // estimate (chars/4) only decides the cut's eagerness — the next call
     // measures ground truth, and a wrong estimate costs one earlier or one
     // extra round, never convergence.
-    let working = messages;
-    let elidedChars = 0;
-    if (options.elideToolOutputs !== undefined) {
-      const reduction = elideToolOutputs(messages, protectRecent, options.elideToolOutputs);
-      if (reduction.elidedChars > 0) {
-        working = reduction.messages;
-        elidedChars = reduction.elidedChars;
-        const overageTokens =
-          measuredContextTokens === undefined
-            ? undefined
-            : measuredContextTokens - resolveThresholdTokens(options);
-        const estimatedReclaimTokens = elidedChars / ESTIMATED_CHARS_PER_TOKEN;
-        if (overageTokens === undefined || estimatedReclaimTokens >= overageTokens) {
-          return finish(
-            { messages: working, compacted: true, removedCount: 0 },
-            "reduced",
-            elidedChars,
-          );
-        }
-      }
-    }
+    const reduction = reduceHistoryBeforeCut(
+      messages,
+      options,
+      protectRecent,
+      measuredContextTokens,
+      finish,
+    );
+    if (reduction.completed !== undefined) return reduction.completed;
+    const { working, elidedChars } = reduction;
 
     // Commit boundary invariant (#531, representable since #557/#560).
     //
@@ -330,24 +513,8 @@ export namespace Compaction {
       options.onSummarize === undefined
         ? snapToUserBoundary(working, naturalCutoff)
         : naturalCutoff;
-    if (cutoff === undefined) {
-      // No provider-valid kept window exists (assistant-first history, no
-      // summary anchor). Adversarial review of the live wiring showed this
-      // reachable from resumed worker hydration — a throw here would turn a
-      // fail-closed run.completion.pre into a mid-conversation kill.
-      return elidedChars > 0
-        ? finish({ messages: working, compacted: true, removedCount: 0 }, "reduced", elidedChars)
-        : finish(
-            { messages: working, compacted: false, removedCount: 0, blocked: "no_user_boundary" },
-            "no_user_boundary",
-            0,
-          );
-    }
-    if (cutoff === 0) {
-      return elidedChars > 0
-        ? finish({ messages: working, compacted: true, removedCount: 0 }, "reduced", elidedChars)
-        : finish({ messages: working, compacted: false, removedCount: 0 }, "nothing_reclaimed", 0);
-    }
+    const unavailable = finishUnavailableCut(cutoff, working, elidedChars, finish);
+    if (unavailable !== undefined) return unavailable;
 
     const toRemove = working.slice(0, cutoff);
     const toKeep = working.slice(cutoff);
@@ -363,169 +530,47 @@ export namespace Compaction {
     //   3. an empty merge input costs no model call — the previous anchor
     //      carries forward unchanged.
     const firstRemoved = toRemove[0];
-    if (options.onSummarize && firstRemoved !== undefined) {
-      const onSummarize = options.onSummarize;
+    if (options.onSummarize !== undefined && firstRemoved !== undefined) {
       const preserveBudget = options.preserveUserMessageChars ?? DEFAULT_PRESERVE_USER_CHARS;
-
-      // One cut attempt over a chosen span. `precomputed` set = promote path
-      // (zero model calls); unset = synchronous merge. Returns undefined when
-      // the attempt cannot commit (no user-roled window head, or the rebuild
-      // is not strictly smaller — the #721 M1 progress guard).
-      const attemptCut = async (
-        cutSpan: Message.WithParts[],
-        keepSpan: Message.WithParts[],
-        precomputed: string | undefined,
-      ): Promise<CompactionResult | undefined> => {
-        const previousAnchor = latestAnchorBody(cutSpan);
-        const summarizerInput = cutSpan.filter(
-          (message) => message.info.role !== "user" && !isAnchorMessage(message),
-        );
-        let anchorText = precomputed ?? previousAnchor;
-        if (precomputed === undefined && summarizerInput.length > 0) {
-          // A summarizer failure is HOUSEKEEPING failing, not the run
-          // failing (#734 review F1): before summarization was on by
-          // default this throw had no production reachers; letting it
-          // propagate turns a fail-closed seam deny into a dead run that
-          // the worker boundary reports as success. Degrade to "no anchor
-          // from this merge": the previous anchor carries if present,
-          // otherwise the attempt refuses and the seam records the skip —
-          // the run keeps its headroom and a later overflow ends honestly.
-          try {
-            const merged = await onSummarize(summarizerInput, previousAnchor);
-            anchorText = merged.trim().length > 0 ? merged : previousAnchor;
-          } catch (error) {
-            summarizerError = error instanceof Error ? error : new Error(String(error));
-            anchorText = previousAnchor;
-          }
-        }
-        const preservedUsers = selectPreservedUsers(cutSpan, preserveBudget);
-        if (anchorText === undefined && preservedUsers.length === 0) return undefined;
-        // #737: every preserved user message carries its recorded date into
-        // the window. Nudges and other wholly-injected user-roled messages
-        // are not dated — their time is injection bookkeeping, not speech.
-        const stampedUsers = preservedUsers.map((message) =>
-          carriesUserSpeech(message) ? stampTimeMarker(message) : message,
-        );
-        // The replacement record rides ON the anchor (compaction-design L3,
-        // #702): the ordered CONTENT kept after the anchor, not ids — message
-        // ids do not survive the hydration seam (resume flattens to
-        // role/content strings and the run re-mints ids; #722 review finding
-        // 1 proved an id record resolves to nothing on every production
-        // path). Size expectation: one copy of the preserve budget (default
-        // 80k chars) plus the protected tail per cut, in an append-only store
-        // — linear per record, and the newest-user unconditional rule means
-        // one oversized user message can ride into every subsequent record by
-        // design (user tokens are irreplaceable).
-        const keptWindow = [...stampedUsers, ...keepSpan].flatMap((message) =>
-          message.parts
-            // Markers never enter the record (#737): they are derived render,
-            // regenerated from the structured `time` below — recording them
-            // as content would replay them as pseudo-speech after resume and
-            // stack one copy per compact-resume cycle (the #722 class).
-            .filter(
-              (part): part is Message.TextPart =>
-                part.type === "text" && !isTimeCarriageMarkerPart(part),
-            )
-            .map((part) => ({
-              role: message.info.role,
-              text: part.text,
-              // #737: recorded creation time, structured — hydration threads
-              // it back into `info.time.created` so the next epoch's cut can
-              // re-derive the marker instead of stamping hydration time onto
-              // yesterday's words.
-              time: message.info.time.created,
-              // Provenance survives resume (#727 review): a policy-injected
-              // nudge replayed from the record must not become "the user's
-              // goal" in a later epoch's decoration.
-              ...(part.metadata?.policyInjected === true ? { policyInjected: true } : {}),
-            })),
-        );
-        const stampedAny = stampedUsers.some((message) =>
-          message.parts.some(isTimeCarriageMarkerPart),
-        );
-        const anchorMessages =
-          anchorText === undefined
-            ? []
-            : [
-                buildAnchorMessage(
-                  anchorText,
-                  firstRemoved.info.sessionID,
-                  firstRemoved.info.agent,
-                  keptWindow,
-                  stampedAny,
-                ),
-              ];
-        const compacted = [...anchorMessages, ...stampedUsers, ...keepSpan];
-        // Progress guard (review #721 M1): the rebuilt window must be strictly
-        // smaller than what the seam received, or committing it would count as
-        // progress toward the #651 disarm while reclaiming nothing.
-        if (estimateContentChars(compacted) >= estimateContentChars(working)) return undefined;
-        return {
-          messages: compacted,
-          compacted: true,
-          removedCount: cutSpan.length - preservedUsers.length,
-        };
-      };
-
-      // Promote-or-merge (L4, #724 review M1): a fresh candidate's span is a
-      // live id-prefix — cut exactly that span with the precomputed anchor,
-      // zero model calls. But a promote that cannot commit (progress guard,
-      // window-head refusal) is a DISCARD, not a promotion: the seam falls
-      // back to the synchronous merge over the natural span, exactly what a
-      // speculation-free seam would have done. Speculation may only ever add
-      // a fast path, never take a cut away.
-      let summarizerError: Error | undefined;
       let candidateOutcome: "promoted" | "discarded" | undefined;
-      let cut: CompactionResult | undefined;
+      let attempt: AnchoredCutAttempt = {};
+
       if (candidate !== undefined) {
         const live =
           candidate.spanIds.length > 0 &&
           candidate.spanIds.length <= working.length &&
           candidate.spanIds.every((id, index) => working[index]?.info.id === id);
         if (live) {
-          cut = await attemptCut(
+          attempt = await attemptAnchoredCut(
             working.slice(0, candidate.spanIds.length),
             working.slice(candidate.spanIds.length),
             candidate.anchorBody,
+            working,
+            firstRemoved,
+            preserveBudget,
+            options.onSummarize,
           );
         }
-        candidateOutcome = cut === undefined ? "discarded" : "promoted";
+        candidateOutcome = attempt.cut === undefined ? "discarded" : "promoted";
       }
-      if (cut === undefined) {
-        cut = await attemptCut(toRemove, toKeep, undefined);
+      if (attempt.cut === undefined) {
+        attempt = await attemptAnchoredCut(
+          toRemove,
+          toKeep,
+          undefined,
+          working,
+          firstRemoved,
+          preserveBudget,
+          options.onSummarize,
+        );
       }
-      const withOutcome = (result: CompactionResult): CompactionResult =>
-        candidateOutcome === undefined ? result : { ...result, candidate: candidateOutcome };
-      if (cut === undefined) {
-        // Neither span can commit: nothing user-roled can head the kept
-        // window, no rebuild is strictly smaller, or the summarizer failed
-        // with no previous anchor to carry. Same refusal values as the
-        // no-summarizer path; the elision result (if any) is kept, and a
-        // summarizer failure is named on the record.
-        const mark = (result: CompactionResult): CompactionResult =>
-          summarizerError === undefined ? result : { ...result, summarizerFailed: true };
-        return elidedChars > 0
-          ? finish(
-              withOutcome(mark({ messages: working, compacted: true, removedCount: 0 })),
-              "reduced",
-              elidedChars,
-              undefined,
-              summarizerError,
-            )
-          : finish(
-              withOutcome(mark({ messages, compacted: false, removedCount: 0 })),
-              "nothing_reclaimed",
-              0,
-              undefined,
-              summarizerError,
-            );
-      }
-      return finish(
-        withOutcome(summarizerError === undefined ? cut : { ...cut, summarizerFailed: true }),
-        "cut",
+      return finishAnchoredCut(
+        attempt,
+        candidateOutcome,
+        messages,
+        working,
         elidedChars,
-        cut.messages[0] !== undefined && isAnchorMessage(cut.messages[0]),
-        summarizerError,
+        finish,
       );
     }
 
