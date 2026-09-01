@@ -492,6 +492,33 @@ describe("SqliteStorageAdapter workItem", () => {
     expect(adapter.workItem?.get(current.workItemId)).toEqual(current);
   });
 
+  test("authorized completion writes cannot regress a completed item to pending", () => {
+    const completed = makeWorkItem({
+      workItemId: "wi_terminal_regression",
+      timestamps: { created: 1, updated: 3, completed: 3 },
+    });
+    persistCompletedFixture(adapter, completed);
+    const current = adapter.workItem.get(completed.workItemId);
+    if (!current) throw new Error("missing completed fixture");
+    const { completed: _completed, ...pendingTimestamps } = current.timestamps;
+    const regressed = WorkItem.Info.parse({
+      ...current,
+      revision: current.revision + 1,
+      timestamps: { ...pendingTimestamps, updated: current.timestamps.updated + 1 },
+      completionReport: undefined,
+      completionTerminalReceipt: undefined,
+    });
+    const completionWriter = Storage.configure(adapter);
+
+    expect(() => completionWriter(current.workItemId, current.revision, regressed)).toThrow(
+      "completion report is immutable",
+    );
+    const persisted = adapter.workItem.get(current.workItemId);
+    expect(persisted).toEqual(current);
+    if (!persisted) throw new Error("completed fixture was removed");
+    expect(WorkItem.deriveStatus(persisted)).toBe("completed");
+  });
+
   test("authorized completion writes cannot remove request reservations", () => {
     const item = makeWorkItem({ workItemId: "wi_append_only_reservation" });
     const reservation = WorkItem.CompletionRequestReservation.parse({

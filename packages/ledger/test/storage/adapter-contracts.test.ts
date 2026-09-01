@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { Engagement, Wait } from "@openomni/protocol";
 import { DelegationStore } from "../../src/delegation/index.js";
 import { EngagementStore } from "../../src/engagement/index.js";
+import { SessionInfo } from "../../src/session/info.js";
 import { Migration } from "../../src/storage/migration-runner.js";
 import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage.js";
 import { Storage } from "../../src/storage/storage.js";
@@ -41,6 +42,19 @@ describe("SQLite adapter contract guards", () => {
       .run(JSON.stringify({ ...record, delegationId: "delegation-foreign" }), record.delegationId);
 
     expect(() => DelegationStore.get(record.delegationId)).toThrow("Delegation id mismatch");
+  });
+
+  test("delegation claims fail closed when the wait id is already stored", () => {
+    DelegationStore.create(buildDelegationRecord({ delegationId: "delegation-a", waitId: "wait-shared" }));
+    const conflicting = buildDelegationRecord({
+      delegationId: "delegation-b",
+      waitId: "wait-shared",
+    });
+
+    expect(() => DelegationStore.claimOpenWithinRoot(conflicting, 8)).toThrow(
+      "Delegation already exists",
+    );
+    expect(DelegationStore.get(conflicting.delegationId)).toBeUndefined();
   });
 
   test("engagement compare-and-set enforces key and one-step revision", () => {
@@ -84,18 +98,27 @@ describe("SQLite adapter contract guards", () => {
   });
 
   test("session parse cache evicts its oldest normalized snapshot at capacity", () => {
-    for (let index = 0; index <= 4096; index += 1) {
-      const id = `session-cache-${index}`;
-      adapter.session.set(id, {
-        id,
-        title: id,
-        model: { providerID: "test", modelID: "test" },
-        time: { created: index, updated: index },
-        spawnDepth: 0,
-      });
-      expect(adapter.session.get(id)?.id).toBe(id);
+    const parse = mock(SessionInfo.parse.bind(SessionInfo));
+    Object.defineProperty(SessionInfo, "parse", { configurable: true, value: parse });
+    try {
+      for (let index = 0; index <= 4096; index += 1) {
+        const id = `session-cache-${index}`;
+        adapter.session.set(id, {
+          id,
+          title: id,
+          model: { providerID: "test", modelID: "test" },
+          time: { created: index, updated: index },
+          spawnDepth: 0,
+        });
+        expect(adapter.session.get(id)?.id).toBe(id);
+      }
+      parse.mockClear();
+
+      expect(adapter.session.get("session-cache-0")?.id).toBe("session-cache-0");
+      expect(parse).toHaveBeenCalledTimes(1);
+    } finally {
+      delete (SessionInfo as unknown as { parse?: unknown }).parse;
     }
-    expect(adapter.session.get("session-cache-0")?.id).toBe("session-cache-0");
   });
 });
 

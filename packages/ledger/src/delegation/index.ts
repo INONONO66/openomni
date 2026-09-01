@@ -66,11 +66,10 @@ export namespace DelegationStore {
         }
         return openFanout < maxFanout;
       },
-      // `alreadyClaimed` and `append` execute in one synchronous storage
-      // transaction. Once the former observes no row, no competing writer can
-      // make this insert lose before the latter runs.
       append: () => {
-        adapter.create(parsed);
+        if (!adapter.create(parsed)) {
+          throw new Error(`Delegation already exists: ${parsed.delegationId}`);
+        }
       },
     });
     return result === "claimed"

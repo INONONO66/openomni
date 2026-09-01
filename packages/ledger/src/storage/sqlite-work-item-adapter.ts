@@ -148,10 +148,19 @@ function assertCompletionLedgerExtension(current: WorkItem.Info, next: WorkItem.
   if (next.completionFacts.revision < current.completionFacts.revision) {
     throw new Error("completion facts revision cannot move backward");
   }
-  // `assertCompletionTerminalLinkage` runs before this extension check and
-  // binds the report and receipt to their append-only admission. Separate
-  // report/receipt equality guards would therefore duplicate an earlier
-  // invariant and cannot be reached by a valid candidate.
+  if (
+    current.completionReport !== undefined &&
+    JSON.stringify(current.completionReport) !== JSON.stringify(next.completionReport)
+  ) {
+    throw new Error("completion report is immutable");
+  }
+  if (
+    current.completionTerminalReceipt !== undefined &&
+    JSON.stringify(current.completionTerminalReceipt) !==
+      JSON.stringify(next.completionTerminalReceipt)
+  ) {
+    throw new Error("completion terminal receipt is immutable");
+  }
 }
 
 function assertAppendOnly(
