@@ -61,10 +61,22 @@ Attached machines appear as ONE flat namespace,
 - **Enforcement is layered on purpose** (the same shape as the `kernel.py`
   gate). The HOST checks attachment, `fs.read`, and the effective export set
   before the wire. The DAEMON re-checks its own offer across the trust
-  boundary and OWNS path confinement: it canonicalizes each export root once,
-  then canonicalizes and re-checks every request target — which is what makes
-  a symlink pointing out of the export a `path_escapes_export` refusal rather
-  than a read.
+  boundary and OWNS path confinement.
+- **Confinement is descriptor-anchored, not pathname-checked.** The daemon
+  opens the export root once and walks each request's components RELATIVE TO
+  THAT DESCRIPTOR, refusing to follow a link at any component. A
+  resolve-then-use design — canonicalize a pathname, then `stat`/`open` the
+  same pathname — is check-then-use: a component swapped for a symlink between
+  the two resolutions is followed, and swapping an ancestor directory races
+  every operation the same way. The fd-relative no-follow walk makes check and
+  use ONE decision, so there is no window to win.
+- **Outside-root refusals are uniform, deliberately.** ANY resolution landing
+  outside the export root refuses as `path_escapes_export`, regardless of
+  whether the outside target exists. Classifying an escaping link before its
+  target's existence is consulted is what keeps the refusal from working as an
+  existence oracle: a dangling link out and a live link out must be
+  indistinguishable, or the coarse reason set has been defeated by its own
+  error path.
 - `Machine.FsRequest` paths are RELATIVE to the export root (`""` is the root).
   The schema refuses a leading `/`, any `..` segment, and an embedded NUL as a
   cheap first gate — not as the confinement boundary.
@@ -74,6 +86,16 @@ Attached machines appear as ONE flat namespace,
   learns WHICH boundary held. `FS_READ_MAX_BYTES` / `FS_LIST_MAX_ENTRIES` are
   named in the protocol and enforced by the daemon; a bitten ceiling reports
   `truncated` rather than silently presenting a prefix as the whole thing.
+- **The typed-refusal contract covers requests the host was ENTITLED to make.**
+  A daemon asked for `fs.read` when it never offered `fs.read`, or for an
+  export name absent from its own `Offer.exports`, is not looking at a refusable
+  request — it is looking at a host violating the attachment it negotiated. That
+  is a transport-level protocol error, not an `FsResult` refusal, and it is
+  correct that it is: `FsResult` reasons are answers the ASKER is meant to read
+  and act on, and there is no honest thing for a compromised host to learn from
+  "you may not do what you already agreed you could not do". The distinction is
+  the trust boundary itself — refusals speak to callers inside the contract,
+  protocol errors to peers who broke it.
 
 The app surface is three host-placed tools — `fs_read`, `fs_list`, `fs_stat` —
 over a router that parses the namespace path
@@ -85,6 +107,19 @@ target's effective set, and a host-placed tool resolves against the host,
 which holds no machine capabilities; the grant is per-MACHINE and the machine
 is named inside the path, which placement cannot see. The host's `fsOp`
 therefore owns that gate.
+
+**The two doors do NOT see the same namespace, and that asymmetry is the
+point.** The flat namespace is the OWNER's view: the model door addresses every
+attached machine, because the Resident acts on the Owner's authority and that
+authority spans them all. A CELL is not the Owner — it is code the Owner
+dispatched to ONE machine, and code that can spell a path can spell any path.
+So the executing `machineId` (the one `run_code` dispatched to) is bound into
+the cell's catalog at the composition root, and a cell-originated `fs_*` call
+naming any OTHER machine refuses as `cross_machine_denied` before the host is
+reached — an app-level refusal, because no daemon and no host was asked: the
+question was not the cell's to ask. Without that binding, a compromised daemon
+on A reads B's effective exports through any A cell in flight, and B's own
+gates correctly permit it, because the missing check was never B's to make.
 
 ## 3. Delegation contracts (`protocol/src/delegation/`)
 
