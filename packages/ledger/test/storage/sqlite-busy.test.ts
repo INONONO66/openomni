@@ -60,6 +60,15 @@ describe("isSqliteBusyError", () => {
   });
 });
 
+describe("StorageUnavailableError", () => {
+  test.each([0, "", undefined])("retains an explicitly provided storage cause: %p", (cause) => {
+    const error = new StorageUnavailableError("work-item", "wi-falsy", cause);
+
+    expect(Object.prototype.hasOwnProperty.call(error, "cause")).toBe(true);
+    expect(Reflect.get(error, "cause")).toBe(cause);
+  });
+});
+
 describe("runWorkItemTransaction", () => {
   test("maps SQLITE_BUSY to the shared typed storage error; other errors pass through", () => {
     const busyStorage = {

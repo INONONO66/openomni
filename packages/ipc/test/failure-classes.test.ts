@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import net from "node:net";
 import { Ipc } from "@openomni/protocol";
 import { connectIpcClient } from "../src/client";
-import { IpcConnectionError, IpcRemoteError } from "../src/errors";
+import { IpcConnectionError, IpcProtocolError, IpcRemoteError } from "../src/errors";
 import { LineDecoder, encode } from "../src/framing";
 import { createIpcServer } from "../src/server";
 import { deferred, within } from "./helpers/signal";
@@ -30,6 +30,23 @@ describe("failure classes stay honest (#606 re-audit)", () => {
     expect(IpcRemoteError.isInstance(remote)).toBe(true);
     expect(remote.code).toBe(4000);
     expect(remote.message).toBe("IPC error 4000: bad request");
+  });
+
+  test("IPC constructors retain defined falsy causes but omit undefined", () => {
+    const nullCause = new IpcConnectionError("closed", null);
+    const falseCause = new IpcProtocolError("bad frame", false);
+    const emptyCause = new IpcConnectionError("empty", "");
+    const undefinedCause = new IpcProtocolError("absent", undefined);
+
+    for (const [error, cause] of [
+      [nullCause, null],
+      [falseCause, false],
+      [emptyCause, ""],
+    ] as const) {
+      expect(Object.prototype.hasOwnProperty.call(error, "cause")).toBe(true);
+      expect(Reflect.get(error, "cause")).toBe(cause);
+    }
+    expect(Object.prototype.hasOwnProperty.call(undefinedCause, "cause")).toBe(false);
   });
 
   test("a dying connection fails ITS in-flight calls as connection loss, not timeout", async () => {
