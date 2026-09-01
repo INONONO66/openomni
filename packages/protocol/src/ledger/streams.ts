@@ -50,6 +50,14 @@ export const StreamRegistry = {
     ],
     status: "shipped",
   },
+  // SHIPPED — ledger LeaseStore publishes; SQLite ledger append/projection consumes.
+  lease: {
+    stream: "lease:<leaseId>",
+    heads: "revision-bound (expectedHead = revision before the transition)",
+    conflictMeans: "duplicate create (id reuse impossible) or stale revision — typed store error",
+    factTypes: ["lease.issued", "lease.debited", "lease.closed"],
+    status: "shipped",
+  },
   // SHIPPED — ledger WorkItem fact writers publish; SQLite ledger append/projection consumes.
   work: {
     stream: "work:<workItemId>",

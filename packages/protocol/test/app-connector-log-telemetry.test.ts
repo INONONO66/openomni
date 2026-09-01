@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { AppConnector } from "./index.js";
+import { AppConnector } from "../src/index.js";
 
 describe("AppConnector log telemetry fields", () => {
   test("spawn can declare a liveness stall timeout", () => {

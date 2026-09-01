@@ -25,6 +25,8 @@ import {
   writeArtifactToolSpec,
 } from "./artifacts";
 import type { CatalogEntry } from "./dispatch";
+import type { LeasePort } from "./lease";
+import { leaseOpenToolExecutor, leaseOpenToolSpec } from "./lease";
 import type { LlmPort } from "./llm";
 import { llmToolExecutor, llmToolSpec } from "./llm";
 import { memoryToolExecutor, memoryToolSpec } from "./memory";
@@ -43,6 +45,7 @@ import {
 export interface CatalogPorts {
   readonly delegation?: DelegationKernel;
   readonly conversations?: ConversePort;
+  readonly leases?: LeasePort;
   readonly cells?: CellPorts;
   readonly machines?: MachinesPort;
   readonly memory?: CuratedMemory;
@@ -99,6 +102,15 @@ const CATALOG_TOOLS: readonly CatalogTool[] = [
       ports.conversations === undefined || origin.role !== "resident"
         ? undefined
         : converseCloseToolExecutor(ports.conversations),
+  },
+  {
+    // Lease issuance is the Resident's judgment alone (§3.5): a worker
+    // never widens its own authority.
+    spec: leaseOpenToolSpec,
+    wire: (ports, origin) =>
+      ports.leases === undefined || origin.role !== "resident"
+        ? undefined
+        : leaseOpenToolExecutor(ports.leases),
   },
   {
     spec: runCodeToolSpec,

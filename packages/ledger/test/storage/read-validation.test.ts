@@ -1,29 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { unlinkSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import type { Message } from "@openomni/protocol";
 import { Database } from "bun:sqlite";
 import { Session, Storage } from "../../src/index";
 import { Bus } from "@openomni/telemetry";
+import { removeSqliteFiles, tempDbPath } from "../helpers/sqlite";
 
 // A corrupt persisted row must fail closed on READ — parse-don't-cast, matching
 // the wait/blacklist precedent. message/part are the same class (blind
 // `JSON.parse(...) as T`), fixed in #584/#585.
-
-function tempDbPath(): string {
-  return join(tmpdir(), `read-validation-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
-}
-
-function removeSqliteFiles(path: string): void {
-  for (const suffix of ["", "-wal", "-shm"]) {
-    try {
-      unlinkSync(`${path}${suffix}`);
-    } catch (_err) {
-      void _err;
-    }
-  }
-}
 
 /** Overwrite a row's JSON `data` column through a second connection. */
 function corruptRow(dbPath: string, table: string, id: string, data: string): void {
@@ -53,7 +37,7 @@ describe("sqlite adapters fail closed on corrupt rows", () => {
   beforeEach(() => {
     Bus.reset();
     Storage.reset();
-    dbPath = tempDbPath();
+    dbPath = tempDbPath("read-validation");
     Storage.initialize({ dbPath });
   });
 
