@@ -227,6 +227,27 @@ describe("speculative prepare/promote (L4)", () => {
     expect(texts.some((t) => t.includes("late-q"))).toBe(true);
   });
 
+  it("replaces a stale candidate during the next background prepare", async () => {
+    let calls = 0;
+    const registration = build(async () => {
+      calls += 1;
+      return `anchor-${calls}`;
+    });
+    const original = history();
+    await registration.fn(turnPostCtx(original, 70));
+    await settle(registration);
+
+    const replaced = history();
+    await registration.fn(turnPostCtx(replaced, 70));
+    await settle(registration);
+    expect(calls).toBe(2);
+
+    const decision = await registration.fn(seamCtx(replaced, 85));
+    expect((decision as { reasonCodes?: string[] }).reasonCodes).toContain(
+      "compaction_candidate_promoted",
+    );
+  });
+
   it("discards a stale candidate visibly and falls back to the synchronous merge", async () => {
     let calls = 0;
     const registration = build(async () => {

@@ -287,6 +287,66 @@ describe("Processor fold-based emission (#545 T2)", () => {
     expect(texts).toEqual(["once"]);
   });
 
+  test("closes an open text block before a second start", async () => {
+    const cap = capture();
+    const processor = createProcessor(cap, {
+      createStream: streamOf([
+        { type: "text-start", providerMetadata: {} },
+        { type: "text-delta", text: "first" },
+        { type: "text-start", providerMetadata: {} },
+        { type: "text-delta", text: "second" },
+        { type: "text-end", providerMetadata: {} },
+        { type: "finish" },
+      ]),
+    });
+
+    await processor.process({ system: "" });
+
+    const texts = (cap.messages.at(-1)?.parts ?? [])
+      .filter((part): part is Message.TextPart => part.type === "text")
+      .map((part) => part.text);
+    expect(texts).toEqual(["first", "second"]);
+  });
+
+  test("opens and settles reasoning for an orphan delta", async () => {
+    const cap = capture();
+    const processor = createProcessor(cap, {
+      createStream: streamOf([
+        { type: "reasoning-delta", id: "orphan", text: "inferred start" },
+        { type: "finish" },
+      ]),
+    });
+
+    await processor.process({ system: "" });
+
+    const reasoning = cap.messages
+      .at(-1)
+      ?.parts.find((part): part is Message.ReasoningPart => part.type === "reasoning");
+    expect(reasoning?.text).toBe("inferred start");
+    expect(reasoning?.time.end).toBeNumber();
+  });
+
+  test("ignores a duplicate reasoning end", async () => {
+    const cap = capture();
+    const processor = createProcessor(cap, {
+      createStream: streamOf([
+        { type: "reasoning-start", id: "r1" },
+        { type: "reasoning-delta", id: "r1", text: "once" },
+        { type: "reasoning-end", id: "r1" },
+        { type: "reasoning-end", id: "r1" },
+        { type: "finish" },
+      ]),
+    });
+
+    await processor.process({ system: "" });
+
+    const reasoning = (cap.messages.at(-1)?.parts ?? []).filter(
+      (part): part is Message.ReasoningPart => part.type === "reasoning",
+    );
+    expect(reasoning).toHaveLength(1);
+    expect(reasoning[0]?.text).toBe("once");
+  });
+
   test("captures the provider reasoning signature on the completed part", async () => {
     const cap = capture();
     const processor = createProcessor(cap, {

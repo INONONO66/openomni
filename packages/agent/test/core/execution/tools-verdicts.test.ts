@@ -432,6 +432,37 @@ describe("createToolExecutor effect application", () => {
     expect(result.isError).toBe(true);
   });
 
+  it("preserves non-MCP source labels on native resource descriptors", async () => {
+    const capturedSources: Array<string | undefined> = [];
+    const engine = engineWithRegistrations([
+      {
+        kind: "point",
+        name: "capture-system-source",
+        pointIds: ["tool.native.pre"],
+        effectCapabilities: { "tool.native.pre": [] },
+        priority: 0,
+        fn: (ctx) => {
+          const resourceDescriptor = ctx as {
+            resourceDescriptor?: { source?: { type?: string } };
+          };
+          capturedSources.push(resourceDescriptor.resourceDescriptor?.source?.type);
+          return PolicyDecision.allow({ policyId: "capture-system-source" });
+        },
+      },
+    ]);
+    const executor = createToolExecutor({
+      events: Bus,
+      traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
+      engine,
+      getToolLabels: () => ["source:system"],
+      toolExecutor: async (call) => ({ id: "result-system", toolCallId: call.id, output: "ok" }),
+    });
+
+    await executor({ id: "system-call", tool: "builtin_read", input: {} });
+
+    expect(capturedSources).toEqual(["system"]);
+  });
+
   it("classifies source:mcp labelled tools as MCP resources", async () => {
     const capturedSources: Array<string | undefined> = [];
     const engine = engineWithRegistrations([

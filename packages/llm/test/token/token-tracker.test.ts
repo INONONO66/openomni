@@ -42,6 +42,13 @@ const usageCases: Array<{
     expected: [200, 80, 9, 0, 0],
   },
   {
+    name: "extracts reasoning tokens from raw OpenAI completion details",
+    response: {
+      usage: { raw: { completion_tokens_details: { reasoning_tokens: 17 } } },
+    },
+    expected: [0, 0, 17, 0, 0],
+  },
+  {
     name: "keeps a legitimate zero instead of falling through to lower-priority aliases",
     response: {
       usage: {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Auth } from "../../src/auth";
@@ -129,6 +129,33 @@ describe("Auth Storage", () => {
       );
       const all = await Auth.all();
       expect(all.legacy).toBeUndefined();
+    });
+  });
+
+  it("creates a missing nested credential directory", async () => {
+    await withTestAuthFile(async (_filepath, dir) => {
+      const nested = join(dir, "nested", "auth.json");
+      process.env.OPENOMNI_AUTH_FILE = nested;
+
+      await Auth.set("anthropic", { type: "api", key: "sk-ant" });
+
+      expect(await Bun.file(nested).json()).toEqual({
+        anthropic: { type: "api", key: "sk-ant" },
+      });
+    });
+  });
+
+  it("removes the plaintext temp file when the atomic rename fails", async () => {
+    await withTestAuthFile(async (filepath, dir) => {
+      // A directory cannot be replaced by the credential temp file, forcing
+      // the rename failure after the temp file has been written.
+      mkdirSync(filepath);
+      await Bun.write(join(filepath, "sentinel"), "keep");
+
+      await expect(Auth.set("anthropic", { type: "api", key: "sk-ant" })).rejects.toThrow();
+
+      expect(readdirSync(dir).filter((entry) => entry.endsWith(".tmp"))).toEqual([]);
+      expect(await Bun.file(join(filepath, "sentinel")).text()).toBe("keep");
     });
   });
 

@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import type { Provider } from "../../src/provider/index";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { Auth } from "../../src/auth";
+import { ModelsDev } from "../../src/model";
+import { Provider } from "../../src/provider/index";
 import {
   enrichWithCatalog,
   fetchProxyModels,
@@ -18,9 +23,11 @@ function stubFetch(
 describe("proxy-models", () => {
   beforeEach(() => {
     globalThis.fetch = originalFetch;
+    ModelsDev.Data.reset();
   });
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    ModelsDev.Data.reset();
   });
 
   describe("fetchProxyModels", () => {
@@ -105,6 +112,67 @@ describe("proxy-models", () => {
     ])("$name", async ({ port, response, message }) => {
       stubFetch(response);
       await expect(fetchProxyModels(`http://localhost:${port}/v1`)).rejects.toThrow(message);
+    });
+  });
+
+  describe("Provider.listModels proxy discovery", () => {
+    it("returns only models advertised by the configured proxy", async () => {
+      const directory = mkdtempSync(join(tmpdir(), "openomni-proxy-registry-"));
+      const previousAuthFile = process.env.OPENOMNI_AUTH_FILE;
+      const previousModelsPath = process.env.OPENOMNI_MODELS_PATH;
+      const previousModelsUrl = process.env.OPENOMNI_MODELS_URL;
+      const previousDisableFetch = process.env.OPENOMNI_DISABLE_MODELS_FETCH;
+      process.env.OPENOMNI_AUTH_FILE = join(directory, "auth.json");
+      process.env.OPENOMNI_MODELS_PATH = join(directory, "models.json");
+      process.env.OPENOMNI_MODELS_URL = "https://models.dev";
+      delete process.env.OPENOMNI_DISABLE_MODELS_FETCH;
+      stubFetch((input) => {
+        const url = String(input);
+        if (url === "https://models.dev/api.json") {
+          return new Response(
+            JSON.stringify({
+              openai: {
+                id: "openai",
+                name: "OpenAI",
+                env: ["OPENAI_API_KEY"],
+                npm: "@ai-sdk/openai",
+                models: {},
+              },
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        if (url === "http://localhost:3199/v1/models") {
+          return new Response(JSON.stringify({ data: [{ id: "proxy-only-model" }] }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        throw new Error(`unexpected fetch: ${url}`);
+      });
+
+      try {
+        ModelsDev.Data.reset();
+        await ModelsDev.Data();
+        await Auth.set("openai", {
+          type: "proxy",
+          baseURL: "http://localhost:3199/v1",
+          apiKey: "proxy-key",
+        });
+        const models = await Provider.listModels("openai", "proxy");
+
+        expect(models.map((model) => model.id)).toEqual(["proxy-only-model"]);
+      } finally {
+        if (previousAuthFile === undefined) delete process.env.OPENOMNI_AUTH_FILE;
+        else process.env.OPENOMNI_AUTH_FILE = previousAuthFile;
+        if (previousModelsPath === undefined) delete process.env.OPENOMNI_MODELS_PATH;
+        else process.env.OPENOMNI_MODELS_PATH = previousModelsPath;
+        if (previousModelsUrl === undefined) delete process.env.OPENOMNI_MODELS_URL;
+        else process.env.OPENOMNI_MODELS_URL = previousModelsUrl;
+        if (previousDisableFetch === undefined) delete process.env.OPENOMNI_DISABLE_MODELS_FETCH;
+        else process.env.OPENOMNI_DISABLE_MODELS_FETCH = previousDisableFetch;
+        rmSync(directory, { recursive: true, force: true });
+      }
     });
   });
 

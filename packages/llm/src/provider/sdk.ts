@@ -182,9 +182,9 @@ function getCached<T>(cache: Map<string, T>, key: string): T | undefined {
 }
 
 function setCached<T>(cache: Map<string, T>, key: string, value: T, maxEntries: number): void {
-  if (cache.has(key)) {
-    cache.delete(key);
-  }
+  // Every caller first runs getCached: a hit returns immediately after moving
+  // the entry to the LRU tail, while only a miss reaches this writer. The key
+  // therefore cannot already exist here.
   cache.set(key, value);
 
   while (cache.size > maxEntries) {

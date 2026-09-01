@@ -512,6 +512,15 @@ describe("Compaction", () => {
         { trigger: "threshold" },
       );
       expect(calls[0]?.previous).toBeUndefined();
+      const priorAnchor = first.messages[0];
+      if (priorAnchor === undefined) throw new Error("expected prior anchor");
+      priorAnchor.parts.unshift({
+        id: nextId("anchor-prefix"),
+        sessionID: priorAnchor.info.sessionID,
+        messageID: priorAnchor.info.id,
+        type: "text",
+        text: "unmarked prefix",
+      });
 
       // Grow the compacted history and cut again: the anchor render from cut
       // one sits in the new cut span.
@@ -693,15 +702,33 @@ describe("Compaction", () => {
       expect(anchorPart.metadata?.anchorBody).toBe("anchor-v1");
     });
 
-    it("keeps the newest user message even when it alone exceeds the budget", async () => {
-      const huge = "h".repeat(500);
-      // protect 2 → the cut span is [old-user, a1, huge, a2]; both user
-      // messages face the budget, only the newest survives it.
+    it("counts completed tool output when selecting preserved user messages", async () => {
+      const newestText = "h".repeat(50);
+      const newestUser = makeUserMessage(newestText);
+      newestUser.parts.push({
+        id: nextId("user-tool-part"),
+        sessionID: "test",
+        messageID: newestUser.info.id,
+        type: "tool",
+        callID: "user-tool-call",
+        tool: "read_file",
+        state: {
+          status: "completed",
+          input: {},
+          output: "o".repeat(60),
+          title: "read_file",
+          metadata: {},
+          time: { start: 1, end: 2 },
+        },
+      });
+      // The newest text alone fits the 100-char budget, but its completed
+      // 60-char tool output takes the message to 110. It is retained as the
+      // newest user, while accounting for the output excludes the older user.
       const result = await Compaction.compact(
         [
           makeUserMessage("old-user"),
           makeAssistantMessage("a1"),
-          makeUserMessage(huge),
+          newestUser,
           makeAssistantMessage("a2"),
           makeUserMessage("tail-u"),
           makeAssistantMessage("tail-a"),
@@ -718,8 +745,7 @@ describe("Compaction", () => {
       const texts = result.messages.flatMap((m) =>
         m.parts.filter((p): p is Message.TextPart => p.type === "text").map((p) => p.text),
       );
-      // Budget 100 < 500: newest kept anyway; the older user no longer fits.
-      expect(texts).toContain(huge);
+      expect(texts).toContain(newestText);
       expect(texts).not.toContain("old-user");
     });
 
