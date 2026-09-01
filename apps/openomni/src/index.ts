@@ -25,12 +25,7 @@ import {
 
 import { createMachineHost, type MachineHost } from "@openomni/machines";
 import type { Placement } from "@openomni/placement";
-import {
-  type Channel,
-  Gateway,
-  type Ingress,
-  type Machine,
-} from "@openomni/protocol";
+import { type Channel, Gateway, type Ingress, type Machine } from "@openomni/protocol";
 import { Bus, newTraceId } from "@openomni/telemetry";
 import { desiredChannels, materializePersons } from "./provisioning/declared";
 import { type ChannelSupervisor, createChannelSupervisor } from "./provisioning/supervisor";
@@ -52,6 +47,7 @@ import {
   createDelegationKernel,
   type DelegationKernel,
   type DelegationWake,
+  type LeaseLinkage,
 } from "./delegation/kernel";
 import { delegationTraceId } from "./delegation/trace";
 import { createWakeDeliveryQueue } from "./delegation/wake-delivery";
@@ -126,6 +122,19 @@ function registerActors(actors: readonly RegisteredActor[]): void {
  * reduced to the effective (enrollment∩offer) capability fold the host
  * attachment table holds.
  */
+export function createLeaseLinkage(): LeaseLinkage {
+  return {
+    listLiveByHolder: (holderDelegationId, now) =>
+      LeaseStore.listLiveByHolder(holderDelegationId, now).map((lease) => ({
+        id: lease.id,
+        conversationId: lease.conversationId,
+        holderDelegationId: lease.holderDelegationId,
+        contactId: lease.contactId,
+      })),
+    closeByHolder: LeaseStore.closeByHolder,
+  };
+}
+
 export function createMachinesPort(
   host: Pick<MachineHost, "attached" | "attachedExports"> | undefined,
   machines: OpenOmniConfig["machines"],
@@ -371,16 +380,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       events: Bus,
       // §3.5 lease linkage: live-lease facts admit a worker's channel
       // delegation, and every settlement durably closes the holder's leases.
-      leases: {
-        listLiveByHolder: (holderDelegationId, now) =>
-          LeaseStore.listLiveByHolder(holderDelegationId, now).map((lease) => ({
-            id: lease.id,
-            conversationId: lease.conversationId,
-            holderDelegationId: lease.holderDelegationId,
-            contactId: lease.contactId,
-          })),
-        closeByHolder: LeaseStore.closeByHolder,
-      },
+      leases: createLeaseLinkage(),
       workItems: createWorkItemLinkage({
         model: { provider: config.model.provider, id: config.model.id },
         now: () => Date.now(),
@@ -406,12 +406,12 @@ export async function startOpenOmni(options: StartOptions = {}) {
       machines === undefined
         ? undefined
         : await createMachineHost({
-            socketPath: machines.socketPath,
-            enrollment: (machineId) => machines.enrolled.find((e) => e.machineId === machineId),
-            events: Bus,
-            now: () => Date.now(),
-            callTool: registry.callTool,
-          });
+          socketPath: machines.socketPath,
+          enrollment: (machineId) => machines.enrolled.find((e) => e.machineId === machineId),
+          events: Bus,
+          now: () => Date.now(),
+          callTool: registry.callTool,
+        });
     if (host !== undefined) {
       const attachedHost = host;
       await composer.mount("machines", (ctx) => ctx.effect(() => attachedHost.close()));
@@ -433,9 +433,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
     // readable right now stays a per-call answer — the host owns that.
     const machineFs: MachineVfs | undefined =
       machineHost === undefined ||
-      !(machines?.enrolled ?? []).some(
-        (enrollment) => (enrollment.allowedExports ?? []).length > 0,
-      )
+      !(machines?.enrolled ?? []).some((enrollment) => (enrollment.allowedExports ?? []).length > 0)
         ? undefined
         : createMachineVfs((machineId, request) => machineHost.fsOp(machineId, request));
 
@@ -465,7 +463,9 @@ export async function startOpenOmni(options: StartOptions = {}) {
                   delegation: delegationKernel,
                   cells,
                   ...(machinesPort === undefined ? {} : { machines: machinesPort }),
-                  ...(machineFs === undefined ? {} : { machineFs: scopeMachineVfs(machineFs, machineId) }),
+                  ...(machineFs === undefined
+                    ? {}
+                    : { machineFs: scopeMachineVfs(machineFs, machineId) }),
                   memory,
                   workItems: completionPort,
                   llm: llmPort,
@@ -573,7 +573,10 @@ export async function startOpenOmni(options: StartOptions = {}) {
     const supervisor = createChannelSupervisor({
       desired: () => desiredChannels(config),
       build: (component) => component.build(routingHandler),
-      grant: registerTrustedChannelGrant,
+      // The env allowlist pins each mounted surface's grant to its listed
+      // senders; unlisted surfaces keep the open posture (loopback-ws right).
+      grant: (surfaceId) =>
+        registerTrustedChannelGrant(surfaceId, config.channelAllowedSenders?.[surfaceId]),
       deliveryRoutes,
       webhookHandlers,
       traceId: newTraceId,
@@ -584,16 +587,16 @@ export async function startOpenOmni(options: StartOptions = {}) {
       actors.length === 0
         ? undefined
         : {
-            deliveryRoutes,
-            grants: () =>
-              actors.map((actor) => ({
-                id: `resident->${actor.actorId}`,
-                senderId: "resident",
-                targetActorId: actor.actorId,
-                operations: ["awaited" as const, "fire_and_forget" as const],
-              })),
-            budgets: () => config.socialBudgets ?? [],
-          },
+          deliveryRoutes,
+          grants: () =>
+            actors.map((actor) => ({
+              id: `resident->${actor.actorId}`,
+              senderId: "resident",
+              targetActorId: actor.actorId,
+              operations: ["awaited" as const, "fire_and_forget" as const],
+            })),
+          budgets: () => config.socialBudgets ?? [],
+        },
     );
     // Recovery is deliberately after the Resident and gateway exist: boot
     // settlements must be able to deliver their one owner-session wake.

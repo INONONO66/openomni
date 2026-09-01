@@ -14,7 +14,7 @@ import {
   selectPriorityEffect,
 } from "./accumulators";
 import { appendMergedEffects } from "./output";
-import { assertNever, deepMergeRecords } from "../records";
+import { deepMergeRecords } from "../records";
 
 type PolicyEffect = Policy.PolicyEffect;
 type EffectFamily<Prefix extends string> = Extract<
@@ -123,8 +123,6 @@ function mergeEntry(state: MergeAccumulators, entry: EffectEntry): void {
     case "audit":
       appendImmediate(state, entry);
       return;
-    default:
-      assertNever(family);
   }
 }
 

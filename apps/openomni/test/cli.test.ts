@@ -4,6 +4,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -11,7 +12,7 @@ import {
 } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { afterEach } from "bun:test";
 import type { CliDeps } from "../src/cli/commands";
 import { runCli } from "../src/cli/commands";
@@ -19,6 +20,8 @@ import type { DaemonIo, DaemonTarget, ExecResult } from "../src/cli/daemon";
 import {
   daemonActive,
   daemonInstall,
+  daemonRestart,
+  daemonStart,
   daemonStatus,
   daemonStop,
   daemonUninstall,
@@ -100,6 +103,14 @@ describe("env file", () => {
     expect(readFileSync(path, "utf-8")).toBe("OPENOMNI_MODEL_ID=two\n");
   });
 
+  test("failed replacement removes its temporary file", () => {
+    const path = tempDir();
+    expect(() => writeEnvFile(path, [{ key: "OPENOMNI_MODEL_ID", value: "m" }])).toThrow();
+    expect(
+      readdirSync(dirname(path)).filter((name) => name.startsWith(`${basename(path)}.`)),
+    ).toEqual([]);
+  });
+
   test("apply fills only unset keys; process env wins; missing file is a no-op", () => {
     const path = join(tempDir(), "env");
     writeEnvFile(path, [
@@ -176,7 +187,9 @@ describe("daemon units", () => {
       entryPath: "/pkg/100%/back\\slash/main.js",
     };
     const unit = renderSystemdUnit(hostile);
-    expect(unit).toContain('ExecStart="/opt/we\\"ird/bun" "/pkg/100%%/back\\\\slash/main.js" start');
+    expect(unit).toContain(
+      'ExecStart="/opt/we\\"ird/bun" "/pkg/100%%/back\\\\slash/main.js" start',
+    );
     // `$` must never reach systemd unescaped: ExecStart environment-expands it.
     const curly = "{X}";
     const dollar = renderSystemdUnit({ ...linuxTarget, entryPath: `/pkg/$VER/$${curly}/main.js` });
@@ -333,6 +346,20 @@ describe("daemon units", () => {
     expect(() => daemonStop(darwinTarget, io)).toThrow("No such process");
   });
 
+  test("start, stop, and restart dispatch both platform service commands", () => {
+    for (const [target, expected] of [
+      [darwinTarget, ["launchctl", "kickstart", "-k", "gui/501/ai.openomni.resident"]],
+      [linuxTarget, ["systemctl", "--user", "restart", "openomni"]],
+    ] as const) {
+      const io = fakeIo(() => ok);
+      io.files.set(unitPath(target), "unit");
+      expect(daemonStart(target, io)).toBe("started");
+      expect(daemonStop(target, io)).toBe("stopped");
+      expect(daemonRestart(target, io)).toBe("restarted");
+      expect(io.commands.at(-1)).toEqual([...expected]);
+    }
+  });
+
   test("status and activity read launchctl print state", () => {
     const running = fakeIo((argv) =>
       argv[1] === "print" ? { code: 0, stdout: "state = running", stderr: "" } : ok,
@@ -342,8 +369,18 @@ describe("daemon units", () => {
     const stopped = fakeIo(() => ({ code: 113, stdout: "", stderr: "" }));
     stopped.files.set(unitPath(darwinTarget), "plist");
     expect(daemonStatus(darwinTarget, stopped)).toBe("inactive");
-    expect(daemonActive(linuxTarget, fakeIo(() => ({ code: 3, stdout: "inactive\n", stderr: "" })))).toBe(false);
-    expect(daemonActive(linuxTarget, fakeIo(() => ({ code: 0, stdout: "active\n", stderr: "" })))).toBe(true);
+    expect(
+      daemonActive(
+        linuxTarget,
+        fakeIo(() => ({ code: 3, stdout: "inactive\n", stderr: "" })),
+      ),
+    ).toBe(false);
+    expect(
+      daemonActive(
+        linuxTarget,
+        fakeIo(() => ({ code: 0, stdout: "active\n", stderr: "" })),
+      ),
+    ).toBe(true);
   });
 });
 
@@ -594,6 +631,50 @@ describe("cli dispatch", () => {
     const { deps: cli, err } = deps();
     expect(await runCli(["daemon", "start"], cli)).toBe(1);
     expect(err[0]).toContain("not installed");
+  });
+
+  test("dispatches start and both platform log followers", async () => {
+    let started = 0;
+    const followed: string[][] = [];
+    const { deps: darwin } = deps({
+      startApp: () => {
+        started += 1;
+        return Promise.resolve();
+      },
+      follow: (argv) => {
+        followed.push([...argv]);
+        return Promise.resolve(7);
+      },
+    });
+    expect(await runCli(["start"], darwin)).toBe(0);
+    expect(await runCli(["logs"], darwin)).toBe(7);
+
+    const { deps: linux } = deps({
+      target: linuxTarget,
+      follow: (argv) => {
+        followed.push([...argv]);
+        return Promise.resolve(8);
+      },
+    });
+    expect(await runCli(["logs"], linux)).toBe(8);
+    expect(started).toBe(1);
+    expect(followed).toEqual([
+      ["tail", "-n", "50", "-F", "/Users/owner/.openomni/logs/openomni.log"],
+      ["journalctl", "--user", "-u", "openomni", "-f"],
+    ]);
+  });
+
+  test("onboard writes collected answers and confirms an overwrite", async () => {
+    const writes: unknown[] = [];
+    const answers = ["y", "", "model", "key", "", "", "", ""];
+    const { deps: cli } = deps({
+      ask: () => Promise.resolve(answers.shift() ?? ""),
+      writeEnv: (entries) => writes.push(entries),
+    });
+    cli.io.writeFile(cli.envPath, "existing");
+
+    expect(await runCli(["onboard"], cli)).toBe(0);
+    expect(writes).toHaveLength(1);
   });
 
   test("onboard declines to overwrite an existing env file without consent", async () => {

@@ -229,6 +229,61 @@ describe("GatewayRouter durable routing resolution", () => {
     expect(routingDecisions()).toHaveLength(0);
   });
 
+  test("fails closed when the scoped ledger append port is absent", async () => {
+    registerOwnerDm();
+    createMappedOwnerSession();
+    const adapter = Storage.get();
+    Storage.configure({
+      ...adapter,
+      transaction: adapter.transaction.bind(adapter),
+      ledger: undefined,
+    });
+
+    await expect(makeRouter().ingest(ownerEvent)).rejects.toMatchObject({
+      code: "route_record_failed",
+    });
+    expect(deliveries).toEqual([]);
+    expect(routingDecisions()).toEqual([]);
+  });
+
+  test.each(["missing", "corrupt"] as const)(
+    "fails closed when a route append conflicts with a %s recorded fact",
+    async (recorded) => {
+      registerOwnerDm();
+      createMappedOwnerSession();
+      const adapter = Storage.get();
+      const ledger = adapter.ledger;
+      if (ledger === undefined) throw new Error("ledger sub-adapter missing");
+      Storage.configure({
+        ...adapter,
+        transaction: adapter.transaction.bind(adapter),
+        ledger: {
+          ...ledger,
+          append: () => ({ kind: "cas_conflict", currentHead: 1 }),
+          headFact: () =>
+            recorded === "missing"
+              ? undefined
+              : ({
+                  streamId: streamId(),
+                  seq: 1,
+                  type: Ingress.ROUTE_DECIDED_FACT_TYPE,
+                  data: { invalid: true },
+                } as never),
+        },
+      });
+
+      await expect(makeRouter().ingest(ownerEvent)).rejects.toMatchObject({
+        code: "route_record_failed",
+      });
+      expect(deliveries).toEqual([]);
+      expect(routingDecisions()).toEqual([]);
+    },
+  );
+
+  test("keeps the unconfigured messaging port fail-closed", () => {
+    expect(() => makeRouter().messaging).toThrow();
+  });
+
   test("forged telemetry cannot authorize; the fresh owner fact controls delivery", async () => {
     registerOwnerDm();
     const mapped = createMappedOwnerSession();

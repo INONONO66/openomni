@@ -4,6 +4,7 @@ import { Storage } from "../../src/storage/storage";
 import "../../src/storage/initialize";
 import { WorkItemAttemptRun } from "../../src/work-item/attempt-run";
 import { WorkItemStore } from "../../src/work-item/index";
+import { mutate } from "../../src/work-item/mutation";
 
 /**
  * #510 D2b — the attempt-run surface over WorkItem attempt facts: the run
@@ -189,6 +190,40 @@ describe("WorkItemAttemptRun", () => {
       }),
     ).resolves.toBe(false);
     expect(WorkItemAttemptRun.find("sess-finish", "run-finish")?.status).toBe("succeeded");
+  });
+
+  test("waiting-input attempt blockers are reported and resolved on finish", async () => {
+    const hash = await seedRun("sess-waiting", "run-waiting");
+    const current = WorkItemStore.get(hash);
+    if (!current?.currentAttemptId) throw new Error("allocated attempt missing");
+    const blockerId = "blocker-attempt-wait";
+    await mutate(hash, "trace-waiting", (existing, now) => ({
+      changedFields: ["blockers"],
+      fact: { type: "work_item.waiting_input", data: { blockerId } },
+      updated: {
+        ...existing,
+        blockers: [
+          ...existing.blockers,
+          {
+            id: blockerId,
+            kind: "waiting_input",
+            description: `attempt-wait:${existing.currentAttemptId}`,
+            createdAt: now,
+          },
+        ],
+      },
+    }));
+
+    expect(WorkItemAttemptRun.find("sess-waiting", "run-waiting")?.status).toBe("waiting_input");
+    expect(
+      await WorkItemAttemptRun.finish(
+        "sess-waiting",
+        "run-waiting",
+        "succeeded",
+        "trace-waiting",
+      ),
+    ).toBe(true);
+    expect(WorkItemStore.get(hash)?.blockers[0]?.resolvedAt).toBeDefined();
   });
 
   test("failed/interrupted outcomes fold the work item to failed with the reason", async () => {

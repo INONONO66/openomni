@@ -80,6 +80,17 @@ describe("session write discipline", () => {
     }
   });
 
+  test("remove() cascades every part and its owning message", () => {
+    const session = createSession("successful-remove");
+    Session.addMessage(session.id, userMessage(session.id, "msg-success"));
+    Session.addPart("msg-success", textPart(session.id, "msg-success", "part-success"));
+
+    expect(Session.remove(session.id, "trace-write-discipline")).toBe(true);
+    expect(Session.get(session.id)).toBeUndefined();
+    expect(Storage.get().message.get(session.id, "msg-success")).toBeUndefined();
+    expect(Storage.get().part.get("msg-success", "part-success")).toBeUndefined();
+  });
+
   test("remove() is atomic: a failure mid-cascade leaves the session intact", () => {
     const session = createSession("atomic-remove");
     Session.addMessage(session.id, userMessage(session.id, "msg-1"));

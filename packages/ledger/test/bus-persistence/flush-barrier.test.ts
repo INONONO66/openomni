@@ -111,6 +111,38 @@ describe("BusPersistence.flush as a pre-exit barrier", () => {
     }
   });
 
+  test("a pathological cascade yields at the bounded quiescence limit", async () => {
+    BusPersistence.start();
+    const depth = 256;
+    const chain = Array.from({ length: depth + 1 }, (_, index) =>
+      BusEvent.define(
+        `test.flush.bounded.${index}`,
+        z.object({ traceId: z.string(), time: z.number() }),
+      ),
+    );
+    const unsubscribes = chain.slice(0, depth).map((event, index) =>
+      Bus.subscribe(event as BusEvent.Descriptor<{ traceId: string; time: number }>, () => {
+        Bus.publish(chain[index + 1] as BusEvent.Descriptor<{ traceId: string; time: number }>, {
+          traceId: `trace-bounded-${index + 1}`,
+          time: Date.now(),
+        });
+      }),
+    );
+
+    Bus.publish(chain[0] as BusEvent.Descriptor<{ traceId: string; time: number }>, {
+      traceId: "trace-bounded-0",
+      time: Date.now(),
+    });
+    await BusPersistence.flush();
+    const committedAtBound = rowCount();
+    for (const unsubscribe of unsubscribes) unsubscribe();
+    await BusPersistence.flush();
+
+    expect(committedAtBound).toBeGreaterThan(0);
+    expect(committedAtBound).toBeLessThan(depth + 1);
+    expect(rowCount()).toBeGreaterThanOrEqual(committedAtBound);
+  });
+
   test("flush() before start and after stop resolves without touching storage", async () => {
     await BusPersistence.flush();
 

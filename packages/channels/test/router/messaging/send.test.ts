@@ -430,6 +430,94 @@ describe("durable send admission faults", () => {
     }
   });
 
+  test("fails closed when the ledger disappears before admission lookup", async () => {
+    const detached = Storage.get();
+    const withoutLedger = createExistingAgentMessaging({
+      deliver: (message) => {
+        deliveries.push(message);
+      },
+      grants: () => {
+        Storage.configure({
+          ...detached,
+          transaction: detached.transaction.bind(detached),
+          ledger: undefined,
+        });
+        return grants;
+      },
+      publish: Bus.publish,
+    });
+
+    try {
+      await expect(withoutLedger.send(buildSendInput())).rejects.toThrow();
+      expect(deliveries).toEqual([]);
+    } finally {
+      Storage.configure(detached);
+    }
+  });
+
+  test("fails closed when admission loses an append race without a recorded winner", async () => {
+    const adapter = Storage.get();
+    const ledger = adapter.ledger;
+    if (ledger === undefined) throw new Error("ledger sub-adapter missing");
+    Storage.configure({
+      ...adapter,
+      transaction: adapter.transaction.bind(adapter),
+      ledger: {
+        ...ledger,
+        append: (fact, expectedHead) =>
+          fact.type === "gateway.send.admitted"
+            ? { kind: "cas_conflict", currentHead: 0 }
+            : ledger.append(fact, expectedHead),
+      },
+    });
+
+    await expect(messaging().send(buildSendInput())).rejects.toThrow();
+    expect(deliveries).toEqual([]);
+  });
+
+  test("uses the matching admission that won a concurrent append race", async () => {
+    const adapter = Storage.get();
+    const ledger = adapter.ledger;
+    if (ledger === undefined) throw new Error("ledger sub-adapter missing");
+    Storage.configure({
+      ...adapter,
+      transaction: adapter.transaction.bind(adapter),
+      ledger: {
+        ...ledger,
+        append: (fact, expectedHead) => {
+          if (fact.type !== "gateway.send.admitted") return ledger.append(fact, expectedHead);
+          const result = ledger.append(fact, expectedHead);
+          expect(result.kind).toBe("appended");
+          return { kind: "cas_conflict", currentHead: 1 };
+        },
+      },
+    });
+
+    const receipt = await messaging().send(buildSendInput());
+
+    expect(receipt.kind).toBe("sent");
+    expect(deliveries).toHaveLength(1);
+  });
+
+  test("propagates an unexpected wait-store failure before delivery", async () => {
+    const adapter = Storage.get();
+    const wait = adapter.wait;
+    if (wait === undefined) throw new Error("wait sub-adapter missing");
+    Storage.configure({
+      ...adapter,
+      transaction: adapter.transaction.bind(adapter),
+      wait: {
+        ...wait,
+        create: () => {
+          throw new Error("wait store unavailable");
+        },
+      },
+    });
+
+    await expect(messaging().send(buildAwaitedSendInput())).rejects.toThrow();
+    expect(deliveries).toEqual([]);
+  });
+
   test("reusing a fire-and-forget message id with different bytes throws before delivery", async () => {
     const first = buildSendInput({ messageId: "message:immutable" });
     expect((await messaging().send(first)).kind).toBe("sent");

@@ -60,18 +60,14 @@ function snapshotEffectCapabilityStrings(
 function snapshotPointIds(value: unknown, fail: SnapshotFailure): readonly PolicyPointId[] {
   const captured = captureFrozenArray(value);
   if (!captured.success) fail("invalid_canonical_registration");
-  const pointIds: string[] = [];
+  const pointIds: PolicyPointId[] = [];
   for (const pointId of captured.value) {
     if (typeof pointId !== "string") fail("invalid_canonical_registration");
+    if (!isPolicyPointId(pointId)) fail("unknown_point_id", { pointId });
     pointIds.push(pointId);
   }
   if (pointIds.length === 0) fail("empty_point_ids");
   if (new Set(pointIds).size !== pointIds.length) fail("duplicate_point_id");
-
-  if (!pointIds.every(isPolicyPointId)) {
-    const pointId = pointIds.find((value) => !isPolicyPointId(value));
-    fail("unknown_point_id", pointId === undefined ? {} : { pointId });
-  }
   return Object.freeze(pointIds);
 }
 
@@ -98,20 +94,20 @@ function snapshotEffectCapabilities(
       fail("duplicate_effect_capability", { pointId });
     }
 
-    if (!rawEffects.every(isPolicyEffectType)) {
-      const effectType = rawEffects.find((value) => !isPolicyEffectType(value));
-      fail(
-        "disallowed_effect_capability",
-        effectType === undefined ? { pointId } : { pointId, effectType },
-      );
+    const effects: Policy.PolicyEffectType[] = [];
+    for (const effectType of rawEffects) {
+      if (!isPolicyEffectType(effectType)) {
+        fail("disallowed_effect_capability", { pointId, effectType });
+      }
+      effects.push(effectType);
     }
-    const effectType = rawEffects.find(
+    const effectType = effects.find(
       (value) => !Policy.PolicyPoint.Registry[pointId].allowedEffects.includes(value),
     );
     if (effectType !== undefined) {
       fail("disallowed_effect_capability", { pointId, effectType });
     }
-    capabilities[pointId] = rawEffects;
+    capabilities[pointId] = Object.freeze(effects);
   }
   return Object.freeze(capabilities);
 }

@@ -48,6 +48,15 @@ describe("Wait fold — quorum resolution (threshold-of-expected)", () => {
     expect(outcome.threshold).toBe(1);
   });
 
+  test("quorum policy rejects an exported record that lacks quorum bounds", () => {
+    const { quorum: _quorum, resolutionPolicy: _resolutionPolicy, ...base } = buildWaitRecord();
+    const record: Wait.Record = { ...base, resolutionPolicy: "quorum" };
+
+    expect(() => Wait.attachReply(record, buildReplyInput())).toThrow(
+      "Wait resolutionPolicy=quorum without quorum bounds — schema layer regressed",
+    );
+  });
+
   test("all policy resolves only when every expected responder replied", () => {
     let record = buildWaitRecord({ resolutionPolicy: "all", quorum: undefined });
     const responders = ["actor-a", "actor-b", "actor-c"];
