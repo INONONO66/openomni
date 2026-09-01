@@ -177,34 +177,29 @@ type QualifiedCompletionSource = Exclude<CompletionSource, FixedCompletionSource
 /** Command-surface input: fixed worker/replay/recovery sources arrive without
  *  identity (it is synthesized from the execution result, so a caller-supplied
  *  identity is rejected as forgery); qualified sources must carry
- *  caller-authenticated identity. The type-predicate refinement narrows the
- *  inferred type to the conditional union below so `{ source: "api" }` and
- *  `{ source: "internal_worker", identity }` are rejected at compile time as
- *  well as by parse. */
-export const CompletionSourceOrigin = CompletionSourceShape.superRefine(
-  (origin, ctx): origin is CompletionSourceOrigin => {
-    if (isFixedCompletionSource(origin.source)) {
-      if (origin.identity !== undefined) {
-        ctx.addIssue({
-          code: "custom",
-          message: "fixed completion sources reject caller-supplied identity",
-          path: ["identity"],
-        });
-        return false;
-      }
-      return true;
-    }
-    if (origin.identity === undefined) {
+ *  caller-authenticated identity. Zod 4 dropped type-predicate refinements,
+ *  so the schema is cast to the conditional union below: `{ source: "api" }`
+ *  and `{ source: "internal_worker", identity }` stay rejected at compile
+ *  time as well as by parse. */
+export const CompletionSourceOrigin = CompletionSourceShape.superRefine((origin, ctx) => {
+  if (isFixedCompletionSource(origin.source)) {
+    if (origin.identity !== undefined) {
       ctx.addIssue({
         code: "custom",
-        message: "qualified completion sources require identity",
+        message: "fixed completion sources reject caller-supplied identity",
         path: ["identity"],
       });
-      return false;
     }
-    return true;
-  },
-);
+    return;
+  }
+  if (origin.identity === undefined) {
+    ctx.addIssue({
+      code: "custom",
+      message: "qualified completion sources require identity",
+      path: ["identity"],
+    });
+  }
+}) as unknown as z.ZodType<CompletionSourceOrigin, z.input<typeof CompletionSourceShape>>;
 export type CompletionSourceOrigin =
   | { source: FixedCompletionSourceValue; identity?: never }
   | { source: QualifiedCompletionSource; identity: CompletionIdentity };

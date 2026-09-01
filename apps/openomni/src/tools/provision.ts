@@ -103,9 +103,8 @@ const CHANNEL_DECLARE_INPUT = z
     id: z.string().min(1).describe("Instance id, channel:<provider>:<slug>."),
     provider: z.string().min(1),
     enabled: z.boolean().default(true),
-    settings: z.record(z.union([z.string(), z.number(), z.boolean()])).default({}),
-    credential: z
-      .record(z.string())
+    settings: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).default({}),
+    credential: z.record(z.string(), z.string())
       .optional()
       .describe("Plaintext credential payload; sealed into the vault, never stored bare."),
   })
@@ -116,7 +115,7 @@ const INSTANCE_INPUT = z.object({ instanceId: z.string().min(1) }).strict();
 const SECRET_ROTATE_INPUT = z
   .object({
     secretId: z.string().min(1),
-    credential: z.record(z.string()).describe("Replacement plaintext payload."),
+    credential: z.record(z.string(), z.string()).describe("Replacement plaintext payload."),
   })
   .strict();
 

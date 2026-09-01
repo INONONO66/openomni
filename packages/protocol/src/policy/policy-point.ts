@@ -383,7 +383,7 @@ function validator<Schema extends z.ZodTypeAny>(
   schema: Schema,
 ): {
   readonly parse: (input: unknown) => z.infer<Schema>;
-  readonly safeParse: (input: unknown) => z.SafeParseReturnType<unknown, z.infer<Schema>>;
+  readonly safeParse: (input: unknown) => z.ZodSafeParseResult<z.infer<Schema>>;
 } {
   return Object.freeze({
     parse: (input: unknown) => schema.parse(input),

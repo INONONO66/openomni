@@ -17,7 +17,7 @@
     "@openomni/protocol": "workspace:*",
     "@openomni/telemetry": "workspace:*",
     "drizzle-orm": "0.45.2",
-    "zod": "^3.22.4"
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@types/bun": "latest",
