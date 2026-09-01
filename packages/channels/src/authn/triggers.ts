@@ -78,6 +78,20 @@ export function authenticateTelegramTriggers(
   });
 }
 
+export function authenticateSlackTriggers(
+  input: ChannelTriggerAuthInput,
+): ChannelTriggerAuthResult {
+  return evaluateChannelTriggers({
+    name: "channel-authn:slack-triggers",
+    policyId: "channel.authn.slack-triggers",
+    surface: "slack",
+    resource: "slack.message",
+    rules: input.triggers,
+    ctx: input.ctx,
+    ...(input.onDecision !== undefined ? { onDecision: input.onDecision } : {}),
+  });
+}
+
 export function authenticateGitHubTriggers(
   input: ChannelTriggerAuthInput,
 ): ChannelTriggerAuthResult {

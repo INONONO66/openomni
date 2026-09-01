@@ -42,6 +42,15 @@ const cases: readonly ConformanceCase[] = [
         publish,
       ),
   },
+  {
+    provider: ChannelProviders.slack,
+    build: (publish) =>
+      ChannelProviders.slack.create(
+        { botToken: "xoxb-test", appToken: "xapp-test" },
+        { triggers: [] },
+        publish,
+      ),
+  },
 ];
 
 describe("provider conformance", () => {
