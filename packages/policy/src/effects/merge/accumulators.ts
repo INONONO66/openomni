@@ -45,10 +45,6 @@ export function appendPriorityReason(
   order: number,
   priority: number,
 ): PriorityApprovalAccumulator {
-  if (accumulator && accumulator.priority > priority) {
-    return { ...accumulator, order: Math.min(accumulator.order, order) };
-  }
-
   if (accumulator && accumulator.priority === priority) {
     return {
       order: Math.min(accumulator.order, order),

@@ -40,7 +40,3 @@ export function stableKey(value: PlainValue): string {
 function isRecord(value: PlainValue | undefined): value is PlainObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-
-export function assertNever(value: never): never {
-  throw new Error(`Unhandled policy effect: ${canonicalKey(value)}`);
-}

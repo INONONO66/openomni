@@ -1,11 +1,9 @@
-import { Policy, PolicyDecision } from "@openomni/protocol";
+import { Policy } from "@openomni/protocol";
 import { composeEffects } from "../effects/compose";
 import { allowedEffectTypesAtPoint } from "./points";
 import type { PolicyPointId } from "./types";
 
 export const COMPOSED_POLICY_ID = "agent.policy.composed";
-
-const EFFECT_VALIDATION_REASON = "policy.effect_not_allowed";
 
 type EffectMembership = {
   readonly has: (effectType: Policy.PolicyEffectType) => boolean;
@@ -13,27 +11,6 @@ type EffectMembership = {
 
 function totalDurationMs(decisions: readonly Policy.PolicyDecision[]): number {
   return decisions.reduce((total, decision) => total + (decision.durationMs ?? 0), 0);
-}
-
-function validationFailure(
-  effects: readonly Policy.PolicyEffect[],
-  allowed: EffectMembership,
-  boundary: string,
-): Policy.PolicyDecision | undefined {
-  const invalid = effects.find((effect) => !allowed.has(effect.type));
-  if (!invalid) return undefined;
-
-  return PolicyDecision.deny({
-    policyId: COMPOSED_POLICY_ID,
-    effects: [
-      {
-        type: "audit.annotate",
-        annotation: `${EFFECT_VALIDATION_REASON}: ${invalid.type} is not allowed at ${boundary}`,
-        severity: "error",
-      },
-    ],
-    reasonCodes: [EFFECT_VALIDATION_REASON],
-  });
 }
 
 /**
@@ -92,8 +69,6 @@ export function composeFinalPointDecision(
   const contract = Policy.PolicyPoint.Registry[pointId];
   const allowed = allowedEffectTypesAtPoint(pointId);
   const effective = composeEffects([...decisions]);
-  const decision =
-    validationFailure(effective.mergedEffects, allowed, pointId) ??
-    composedDecision(effective, decisions);
+  const decision = composedDecision(effective, decisions);
   return enforceDenyAbort(decision, allowed, contract.sideEffectBoundary);
 }
