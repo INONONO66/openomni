@@ -158,36 +158,10 @@ export interface TraceScopeInput {
  */
 export function requireTraceScope(input: TraceScopeInput): TraceScope {
   const problems: string[] = [];
-  if (!isTraceId(input.traceId)) problems.push("traceId must be 32 lowercase hex characters");
-  if (input.spanId !== undefined && !isSpanId(input.spanId)) {
-    problems.push("spanId must be 16 lowercase hex characters");
-  }
-  if (input.parentSpanId !== undefined && !isSpanId(input.parentSpanId)) {
-    problems.push("parentSpanId must be 16 lowercase hex characters");
-  }
-  if (nonEmpty(input.sessionId) === undefined) problems.push("sessionId is required");
-  if (nonEmpty(input.runId) === undefined) problems.push("runId is required");
-  if (input.componentId !== undefined && nonEmpty(input.componentId) === undefined) {
-    problems.push("componentId must be non-empty");
-  }
-  if (
-    input.componentGeneration !== undefined &&
-    (!Number.isInteger(input.componentGeneration) || input.componentGeneration < 0)
-  ) {
-    problems.push("componentGeneration must be a non-negative integer");
-  }
-  if (input.pluginName !== undefined && nonEmpty(input.pluginName) === undefined) {
-    problems.push("pluginName must be non-empty");
-  }
-  if (input.pluginVersion !== undefined && nonEmpty(input.pluginVersion) === undefined) {
-    problems.push("pluginVersion must be non-empty");
-  }
-  if (
-    input.configRevision !== undefined &&
-    (!Number.isInteger(input.configRevision) || input.configRevision < 0)
-  ) {
-    problems.push("configRevision must be a non-negative integer");
-  }
+  collectIdentityProblems(input, problems);
+  collectCorrelationProblems(input, problems);
+  collectComponentProblems(input, problems);
+  collectPluginProblems(input, problems);
   if (problems.length > 0) throw new InvalidTraceScopeError(problems);
 
   return {
@@ -204,14 +178,54 @@ export function requireTraceScope(input: TraceScopeInput): TraceScope {
     ...(input.componentGeneration === undefined
       ? {}
       : { componentGeneration: input.componentGeneration }),
-    ...(nonEmpty(input.pluginName) === undefined
-      ? {}
-      : { pluginName: input.pluginName as string }),
+    ...(nonEmpty(input.pluginName) === undefined ? {} : { pluginName: input.pluginName as string }),
     ...(nonEmpty(input.pluginVersion) === undefined
       ? {}
       : { pluginVersion: input.pluginVersion as string }),
     ...(input.configRevision === undefined ? {} : { configRevision: input.configRevision }),
   };
+}
+
+function collectIdentityProblems(input: TraceScopeInput, problems: string[]): void {
+  if (!isTraceId(input.traceId)) problems.push("traceId must be 32 lowercase hex characters");
+  if (input.spanId !== undefined && !isSpanId(input.spanId)) {
+    problems.push("spanId must be 16 lowercase hex characters");
+  }
+  if (input.parentSpanId !== undefined && !isSpanId(input.parentSpanId)) {
+    problems.push("parentSpanId must be 16 lowercase hex characters");
+  }
+}
+
+function collectCorrelationProblems(input: TraceScopeInput, problems: string[]): void {
+  if (nonEmpty(input.sessionId) === undefined) problems.push("sessionId is required");
+  if (nonEmpty(input.runId) === undefined) problems.push("runId is required");
+}
+
+function collectComponentProblems(input: TraceScopeInput, problems: string[]): void {
+  if (input.componentId !== undefined && nonEmpty(input.componentId) === undefined) {
+    problems.push("componentId must be non-empty");
+  }
+  if (
+    input.componentGeneration !== undefined &&
+    (!Number.isInteger(input.componentGeneration) || input.componentGeneration < 0)
+  ) {
+    problems.push("componentGeneration must be a non-negative integer");
+  }
+}
+
+function collectPluginProblems(input: TraceScopeInput, problems: string[]): void {
+  if (input.pluginName !== undefined && nonEmpty(input.pluginName) === undefined) {
+    problems.push("pluginName must be non-empty");
+  }
+  if (input.pluginVersion !== undefined && nonEmpty(input.pluginVersion) === undefined) {
+    problems.push("pluginVersion must be non-empty");
+  }
+  if (
+    input.configRevision !== undefined &&
+    (!Number.isInteger(input.configRevision) || input.configRevision < 0)
+  ) {
+    problems.push("configRevision must be a non-negative integer");
+  }
 }
 
 /**
