@@ -1,11 +1,11 @@
-import { newTraceId } from "../support/trace";
+import { newTraceId } from "../../support/trace";
 import { type Channel, Operational, PolicyDecision } from "@openomni/protocol";
-import { Dedupe } from "../support/dedupe";
+import { Dedupe } from "../../support/dedupe";
 import { GitHubClient } from "./client";
 import { GitHubNormalizer } from "./normalizer";
 import type { GitHubEventContent, GitHubIssueCommentPayload, GitHubIssuesPayload } from "./types";
-import type { PublishPort } from "../types";
-import { ChannelAuthnMiddleware, type ChannelAuthnDecisionObserver } from "../channel-authn";
+import type { PublishPort } from "../../types";
+import { ChannelAuthnMiddleware, type ChannelAuthnDecisionObserver } from "../../channel-authn";
 
 export interface GitHubAuthOptions {
   readonly onDecision?: ChannelAuthnDecisionObserver;

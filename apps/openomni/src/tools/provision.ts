@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { ChannelProviders } from "@openomni/channels";
 import type {
   ApprovalStore,
   ChannelInstanceStore,
@@ -9,7 +10,11 @@ import { Vault } from "@openomni/ledger";
 import type { Actor, Approval, Provisioning, Tool } from "@openomni/protocol";
 import { newTraceId } from "@openomni/telemetry";
 import { z } from "zod";
-import { validateProviderCredential } from "../channels";
+import {
+  isRegisteredProvider,
+  validateProviderCredential,
+  validateProviderSettings,
+} from "../channels";
 import type { ChannelSupervisor } from "../provisioning/supervisor";
 import type { KekResolution } from "../provisioning/vault-key";
 
@@ -446,6 +451,9 @@ export function channelDeclareToolExecutor(port: ProvisionPort, now: () => numbe
       return refusal("channel_declare", parsed.error.issues[0]?.message ?? "invalid input");
     }
     const input = parsed.data;
+    // §4: knobs must parse under the provider's settings declaration before the row lands.
+    const badSettings = validateProviderSettings(input.provider, input.settings);
+    if (badSettings !== undefined) return refusal("channel_declare", badSettings);
     const existing = port.instances.get(input.id);
     let credentialRef = existing?.credentialRef;
     if (input.credential !== undefined) {
@@ -542,16 +550,24 @@ export function provisionStatusToolExecutor(port: ProvisionPort) {
       return refusal("provision_status", "provision_status takes no arguments");
     }
     const vault = port.kek.kind === "locked" ? `vault_locked (${port.kek.reason})` : "vault open";
-    const lines = port.supervisor
-      .status()
-      .map(
-        (status) =>
-          `${status.id} [${status.surface}] → ${status.state}${status.detail === undefined ? "" : ` (${status.detail})`}`,
+    const statuses = port.supervisor.status();
+    const lines = statuses.map(
+      (status) =>
+        `${status.id} [${status.surface}] → ${status.state}${status.detail === undefined ? "" : ` (${status.detail})`}`,
+    );
+    // §4: portal-side switches the credential cannot carry — reported verbatim, never verified here.
+    const preconditionLines = [...new Set(statuses.map((status) => status.surface))]
+      .filter(isRegisteredProvider)
+      .flatMap((surface) =>
+        ChannelProviders[surface].preconditions.map(
+          (precondition) => `${surface} precondition: ${precondition}`,
+        ),
       );
     return [
       `channel source: ${port.supervisor.source()}`,
       vault,
       ...(lines.length === 0 ? ["no channels declared or configured"] : lines),
+      ...preconditionLines,
     ].join("\n");
   };
 }
