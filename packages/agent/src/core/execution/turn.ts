@@ -184,6 +184,90 @@ function resolvePolicyToolName(
   return canonical ? canonical.slice(5) : toolName;
 }
 
+function applyPreTurnEffects(
+  state: RunState,
+  config: ChatAgentConfig,
+  agentBase: AgentRunBase,
+  decision: Policy.PolicyDecision,
+): void {
+  PolicyEffectApplier.applyPromptMessageEffects(state, decision);
+
+  if (decision.reasonCodes.includes(RunReasonCode.BudgetReassurance)) {
+    emitBudgetReassurance(
+      config.events,
+      agentBase,
+      describeBudgetRemaining(state.budgetState, config.budget),
+      effectiveBudgetThresholds(config.budget).reassuranceThreshold,
+    );
+  }
+  if (decision.reasonCodes.includes(RunReasonCode.BudgetWarning)) {
+    emitBudgetWarning(
+      config.events,
+      agentBase,
+      describeBudgetRemaining(state.budgetState, config.budget),
+      effectiveBudgetThresholds(config.budget).warningThreshold,
+    );
+  }
+}
+
+interface PreparedTurnTools {
+  readonly allTools: Tool.Spec[];
+  readonly hookedExecutor: ReturnType<typeof createToolExecutor> | undefined;
+  readonly metadata: Map<string, ToolPolicyMetadata>;
+  readonly policyDecisions: TurnArtifacts["toolPolicyDecisions"];
+}
+
+function prepareTurnTools(
+  state: RunState,
+  config: ChatAgentConfig,
+  engine: PolicyEngineInstance,
+  trace: RunTrace,
+): PreparedTurnTools {
+  const toolTargets = config.toolTargets ?? [{ kind: "host", capabilities: [] } as const];
+  const placement = Placement.resolveTools(config.tools ?? [], toolTargets);
+  const allTools = placement.filter((decision) => decision.offerable).map((decision) => decision.tool);
+  const placedExecutor = config.toolExecutor
+    ? placementGatedExecutor(placement, config.toolExecutor)
+    : undefined;
+  const policyDecisions: TurnArtifacts["toolPolicyDecisions"] = [];
+  const metadata = buildToolMetadataMap(allTools);
+  const hookedExecutor = placedExecutor
+    ? createToolExecutor({
+        events: config.events,
+        toolExecutor: placedExecutor,
+        engine,
+        getPolicyToolName: (toolName) => resolvePolicyToolName(toolName, metadata),
+        getToolLabels: (toolName) => metadata.get(toolName)?.labels,
+        getToolDescriptor: (toolName) => metadata.get(toolName)?.descriptor,
+        onToolComplete: (durationMs) => {
+          recordRunToolCall(state, durationMs);
+        },
+        getContext: () => ({
+          steps: state.steps,
+          turnCount: state.budgetState.turns,
+          elapsedMs: Date.now() - state.startTime,
+          usage: state.totalUsage,
+        }),
+        onDecision: (_timing, decision) => {
+          policyDecisions.push({ decision });
+        },
+        traceContext: trace,
+        signal: config.signal,
+      })
+    : undefined;
+  return { allTools, hookedExecutor, metadata, policyDecisions };
+}
+
+function catalogLabels(metadata: Map<string, ToolPolicyMetadata>): Policy.LabelEntry[] {
+  const labels: Policy.LabelEntry[] = [];
+  for (const [name, toolMetadata] of metadata) {
+    for (const label of toolMetadata.labels ?? []) {
+      labels.push({ value: `${name}:${label}`, source: "tool_metadata" });
+    }
+  }
+  return labels;
+}
+
 export async function buildTurn(
   state: RunState,
   config: ChatAgentConfig,
@@ -210,87 +294,33 @@ export async function buildTurn(
     };
   }
 
-  PolicyEffectApplier.applyPromptMessageEffects(state, preTurnDecision);
-
-  if (preTurnDecision.reasonCodes.includes(RunReasonCode.BudgetReassurance)) {
-    const remaining = describeBudgetRemaining(state.budgetState, config.budget);
-    emitBudgetReassurance(
-      config.events,
-      agentBase,
-      remaining,
-      effectiveBudgetThresholds(config.budget).reassuranceThreshold,
-    );
-  }
-  if (preTurnDecision.reasonCodes.includes(RunReasonCode.BudgetWarning)) {
-    const remaining = describeBudgetRemaining(state.budgetState, config.budget);
-    emitBudgetWarning(
-      config.events,
-      agentBase,
-      remaining,
-      effectiveBudgetThresholds(config.budget).warningThreshold,
-    );
-  }
+  applyPreTurnEffects(state, config, agentBase, preTurnDecision);
 
   recordRunTurn(state);
   if (config.signal?.aborted) throw Retry.abortError();
 
-  const toolTargets = config.toolTargets ?? [{ kind: "host", capabilities: [] } as const];
-  const placement = Placement.resolveTools(config.tools ?? [], toolTargets);
-  const allTools = placement.filter((decision) => decision.offerable).map((decision) => decision.tool);
-  const placedExecutor = config.toolExecutor
-    ? placementGatedExecutor(placement, config.toolExecutor)
-    : undefined;
-  const toolPolicyDecisions: TurnArtifacts["toolPolicyDecisions"] = [];
-  const toolMetadata = buildToolMetadataMap(allTools);
-  const hookedExecutor = placedExecutor
-    ? createToolExecutor({
-        events: config.events,
-        toolExecutor: placedExecutor,
-        engine,
-        getPolicyToolName: (toolName) => resolvePolicyToolName(toolName, toolMetadata),
-        getToolLabels: (toolName) => toolMetadata.get(toolName)?.labels,
-        getToolDescriptor: (toolName) => toolMetadata.get(toolName)?.descriptor,
-        onToolComplete: (durationMs) => {
-          recordRunToolCall(state, durationMs);
-        },
-        getContext: () => ({
-          steps: state.steps,
-          turnCount: state.budgetState.turns,
-          elapsedMs: Date.now() - state.startTime,
-          usage: state.totalUsage,
-        }),
-        onDecision: (_timing, decision) => {
-          toolPolicyDecisions.push({ decision });
-        },
-        traceContext: trace,
-        signal: config.signal,
-      })
-    : undefined;
-
-  const systemResult = await buildTurnSystemPrompt(state, config, engine, agentBase, allTools);
+  const tools = prepareTurnTools(state, config, engine, trace);
+  const systemResult = await buildTurnSystemPrompt(state, config, engine, agentBase, tools.allTools);
   if (systemResult.blocked) {
     return { type: "complete", result: guardAbortedResult(state) };
   }
   const system = systemResult.system;
 
-  const catalogLabels: Policy.LabelEntry[] = [];
-  for (const [name, metadata] of toolMetadata) {
-    for (const label of metadata.labels ?? []) {
-      catalogLabels.push({ value: `${name}:${label}`, source: "tool_metadata" });
-    }
-  }
   const toolSelectionDecision = await engine.dispatchPoint(
     "tool.catalog.pre",
     buildLifecyclePolicyContext(state, config, agentBase, {
-      labels: catalogLabels,
-      availableTools: allTools,
+      labels: catalogLabels(tools.metadata),
+      availableTools: tools.allTools,
     }),
   );
 
   if (PolicyDecision.isBlocking(toolSelectionDecision)) {
     return { type: "complete", result: guardAbortedResult(state) };
   }
-  const selectedTools = PolicyEffectApplier.applyToolFilterEffects(allTools, toolSelectionDecision);
+  const selectedTools = PolicyEffectApplier.applyToolFilterEffects(
+    tools.allTools,
+    toolSelectionDecision,
+  );
 
   const turnUsage: TokenUsage = {
     inputTokens: 0,
@@ -342,7 +372,7 @@ export async function buildTurn(
         auth: providerModel.providerID === config.model.provider ? config.auth : undefined,
         ...(config.transport === undefined ? {} : { transport: config.transport }),
         allowAuthFallback: config.allowAuthFallback,
-        toolExecutor: hookedExecutor,
+        toolExecutor: tools.hookedExecutor,
         toolChoice: configuredToolChoice,
         maxSteps: stepCap,
         // Agent owns retry attempts, their backoff, and fallback selection.
@@ -372,7 +402,7 @@ export async function buildTurn(
       stepCap,
       windowYieldArmed: yieldAtInputTokens !== undefined,
       steering,
-      toolPolicyDecisions,
+      toolPolicyDecisions: tools.policyDecisions,
     },
   };
 }

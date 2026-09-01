@@ -4,13 +4,20 @@ import type { AgentStep, TokenUsage } from "../types";
 import type { PolicyEngineInstance } from "../policy";
 import type { PolicyContext } from "../policy/types";
 import { effectOf, effectsOf, matchesToolPattern } from "./effects";
-import { nonEmptyString, requireTrace } from "./state";
+import { nonEmptyString, requireTrace, type RunTrace } from "./state";
 
 type BlockedResultMetadata = {
   verdict: Policy.PolicyDecision["verdict"];
   reason: string;
   policyId?: string;
 };
+
+type ToolEventBase = Readonly<{
+  traceId: string;
+  sessionId: string;
+  runId?: string;
+  actor?: Record<string, unknown>;
+}>;
 
 export type BlockedToolResult = Tool.Result & { metadata?: BlockedResultMetadata };
 
@@ -86,12 +93,7 @@ export function createToolExecutor(
   }
 
   function publishBlocked(
-    eventBase: Readonly<{
-      traceId: string;
-      sessionId: string;
-      runId?: string;
-      actor?: Record<string, unknown>;
-    }>,
+    eventBase: ToolEventBase,
     call: Tool.Call,
     toolName: string,
     reason: string,
@@ -121,29 +123,31 @@ export function createToolExecutor(
     return result;
   }
 
-  return async (call: Tool.Call, context?: Tool.ExecutionContext): Promise<Tool.Result> => {
+  function resolveInvocationTrace(context?: Tool.ExecutionContext): RunTrace {
     const callTraceContext = context?.traceContext;
-    const activeTraceContext = {
+    return {
       ...traceContext,
       ...callTraceContext,
       traceId: nonEmptyString(callTraceContext?.traceId) ?? configured.traceId,
       sessionId: nonEmptyString(callTraceContext?.sessionId) ?? configured.sessionId,
       runId: nonEmptyString(callTraceContext?.runId) ?? configured.runId,
       agentName: nonEmptyString(traceContext?.agentName),
-    } satisfies TraceContext.Type;
-    const agentName = activeTraceContext.agentName;
-    const eventBase = {
-      traceId: activeTraceContext.traceId,
-      sessionId: activeTraceContext.sessionId,
-      runId: activeTraceContext.runId,
-      ...(agentName !== undefined && { actor: { agentName } }),
     };
-    const ctx = getContext?.();
-    const policyToolName = getPolicyToolName?.(call.tool) ?? call.tool;
-    const usage = ctx?.usage ?? { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
-    const toolLabels = getToolLabels?.(call.tool) ?? getToolLabels?.(policyToolName);
-    const toolDescriptor = getToolDescriptor?.(call.tool) ?? getToolDescriptor?.(policyToolName);
-    const policyContext = {
+  }
+
+  function resolveInvocationPolicyMetadata(call: Tool.Call, policyToolName: string) {
+    return {
+      toolLabels: getToolLabels?.(call.tool) ?? getToolLabels?.(policyToolName),
+      toolDescriptor: getToolDescriptor?.(call.tool) ?? getToolDescriptor?.(policyToolName),
+    };
+  }
+
+  function invocationPolicyContext(
+    activeTraceContext: RunTrace,
+    ctx: ReturnType<NonNullable<ToolExecutorOptions["getContext"]>> | undefined,
+    usage: TokenUsage,
+  ): ToolPolicyRunContext {
+    return {
       sessionId: activeTraceContext.sessionId,
       runId: activeTraceContext.runId,
       traceContext: activeTraceContext,
@@ -152,108 +156,154 @@ export function createToolExecutor(
       elapsedMs: ctx?.elapsedMs ?? 0,
       usage,
     };
-    const preDecision = await dispatchToolPre(
-      engine,
-      policyContext,
+  }
+
+  function prepareInvocation(call: Tool.Call, context?: Tool.ExecutionContext) {
+    const activeTraceContext = resolveInvocationTrace(context);
+    const agentName = activeTraceContext.agentName;
+    const eventBase: ToolEventBase = {
+      traceId: activeTraceContext.traceId,
+      sessionId: activeTraceContext.sessionId,
+      runId: activeTraceContext.runId,
+      ...(agentName !== undefined && { actor: { agentName } }),
+    };
+    const ctx = getContext?.();
+    const policyToolName = getPolicyToolName?.(call.tool) ?? call.tool;
+    const usage = ctx?.usage ?? { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+    const metadata = resolveInvocationPolicyMetadata(call, policyToolName);
+    return {
+      activeTraceContext,
+      eventBase,
       policyToolName,
-      call,
-      toolLabels,
-      toolDescriptor,
-    );
+      ...metadata,
+      policyContext: invocationPolicyContext(activeTraceContext, ctx, usage),
+    };
+  }
 
-    recordDecision(activeTraceContext, "invoke.prepare", preDecision);
-
-    if (PolicyDecision.isBlocking(preDecision)) {
-      const reason = PolicyDecision.reason(preDecision, "middleware");
-      // RESERVED OBLIGATION SURFACE (#audit M5): `tool.require_approval` is
-      // protocol vocabulary for an approval flow that is not wired anywhere —
-      // no wait/resume exists in this runtime. Until one does, the only safe
-      // honoring of the verdict is a fail-closed denial, and the result must
-      // say that instead of implying an approval was requested and refused.
-      const approvalRequired = effectOf(preDecision, "tool.require_approval") !== undefined;
+  function applyPreDecision(
+    call: Tool.Call,
+    policyToolName: string,
+    eventBase: ToolEventBase,
+    decision: Policy.PolicyDecision,
+  ): Tool.Result | undefined {
+    if (PolicyDecision.isBlocking(decision)) {
+      const reason = PolicyDecision.reason(decision, "middleware");
+      // RESERVED OBLIGATION SURFACE (#audit M5): approval has no wait/resume
+      // flow, so the only safe interpretation is a fail-closed denial.
+      const approvalRequired = effectOf(decision, "tool.require_approval") !== undefined;
       const output = approvalRequired
         ? `[Denied: ${reason} — approval required, but no approval flow is wired; denied fail-closed]`
         : `[Denied: ${reason}]`;
       publishBlocked(eventBase, call, policyToolName, reason);
       return blockedResult(call, output, {
-        verdict: preDecision.verdict,
+        verdict: decision.verdict,
         reason,
-        policyId: preDecision.policyId,
+        policyId: decision.policyId,
       });
     }
 
-    const matchingFilter = effectsOf(preDecision, "tool.filter").find((effect) =>
+    const matchingFilter = effectsOf(decision, "tool.filter").find((effect) =>
       matchesToolPattern(policyToolName, effect.toolPattern),
     );
-    if (matchingFilter) {
-      const reason = PolicyDecision.reason(preDecision, `filtered: ${matchingFilter.toolPattern}`);
+    if (matchingFilter !== undefined) {
+      const reason = PolicyDecision.reason(decision, `filtered: ${matchingFilter.toolPattern}`);
       publishBlocked(eventBase, call, policyToolName, reason);
       return blockedResult(call, `[Denied: ${reason}]`, {
-        verdict: preDecision.verdict,
+        verdict: decision.verdict,
         reason,
-        policyId: preDecision.policyId,
+        policyId: decision.policyId,
       });
     }
 
-    const skip = effectOf(preDecision, "tool.skip_invocation");
-    if (skip) {
-      return {
-        id: crypto.randomUUID(),
-        toolCallId: call.id,
-        toolName: call.tool,
-        output: `[Skipped: ${skip.reason ?? PolicyDecision.reason(preDecision, "middleware")}]`,
-        isError: false,
-      };
+    const skip = effectOf(decision, "tool.skip_invocation");
+    if (skip === undefined) return undefined;
+    return {
+      id: crypto.randomUUID(),
+      toolCallId: call.id,
+      toolName: call.tool,
+      output: `[Skipped: ${skip.reason ?? PolicyDecision.reason(decision, "middleware")}]`,
+      isError: false,
+    };
+  }
+
+  function applyPostDecision(
+    call: Tool.Call,
+    policyToolName: string,
+    eventBase: ToolEventBase,
+    result: Tool.Result,
+    decision: Policy.PolicyDecision,
+  ): Tool.Result {
+    // Post is post-hoc: only run.abort withholds an already-produced result.
+    const postAbort = effectOf(decision, "run.abort");
+    if (PolicyDecision.isBlocking(decision) && postAbort !== undefined) {
+      const reason = postAbort.reason ?? PolicyDecision.reason(decision, "middleware");
+      publishBlocked(eventBase, call, policyToolName, reason);
+      return blockedResult(call, `[Denied: ${reason}]`, {
+        verdict: decision.verdict,
+        reason,
+        policyId: decision.policyId,
+      });
     }
 
+    const rewriteOutput = effectOf(decision, "tool.rewrite_output");
+    return rewriteOutput === undefined ? result : { ...result, output: rewriteOutput.output };
+  }
+
+  return async (call: Tool.Call, context?: Tool.ExecutionContext): Promise<Tool.Result> => {
+    const prepared = prepareInvocation(call, context);
+    const preDecision = await dispatchToolPre(
+      engine,
+      prepared.policyContext,
+      prepared.policyToolName,
+      call,
+      prepared.toolLabels,
+      prepared.toolDescriptor,
+    );
+    recordDecision(prepared.activeTraceContext, "invoke.prepare", preDecision);
+
+    const preResult = applyPreDecision(
+      call,
+      prepared.policyToolName,
+      prepared.eventBase,
+      preDecision,
+    );
+    if (preResult !== undefined) return preResult;
+
     const rewriteInput = effectOf(preDecision, "tool.rewrite_input");
-    const effectiveCall = rewriteInput ? { ...call, input: rewriteInput.input } : call;
+    const effectiveCall = rewriteInput === undefined ? call : { ...call, input: rewriteInput.input };
 
     // #522 defect 2: execution telemetry belongs to the injected executor;
-    // this layer keeps policy dispatch, decision recording, and effect
-    // application only.
+    // this layer keeps policy dispatch, decision recording, and effects only.
     const startMs = Date.now();
     let result: Tool.Result;
     try {
       result = await toolExecutor(effectiveCall, {
         signal: context?.signal ?? signal,
-        traceContext: activeTraceContext,
+        traceContext: prepared.activeTraceContext,
       });
     } catch (err) {
       onToolComplete?.(Date.now() - startMs);
       throw err;
     }
-
     onToolComplete?.(Date.now() - startMs);
 
     const postDecision = await dispatchToolPost(
       engine,
-      policyContext,
-      policyToolName,
+      prepared.policyContext,
+      prepared.policyToolName,
       call,
       result,
-      toolLabels,
-      toolDescriptor,
+      prepared.toolLabels,
+      prepared.toolDescriptor,
     );
-
-    recordDecision(activeTraceContext, "invoke.result", postDecision);
-    // Post is a post-hoc point: the tool already ran, so a blocking verdict
-    // alone cannot un-run it. Only the explicit run.abort effect withholds the
-    // result; a bare blocking post-verdict is recorded (recordDecision above)
-    // and the result flows on — the authorization gate was the pre point.
-    const postAbort = effectOf(postDecision, "run.abort");
-    if (PolicyDecision.isBlocking(postDecision) && postAbort) {
-      const reason = postAbort.reason ?? PolicyDecision.reason(postDecision, "middleware");
-      publishBlocked(eventBase, call, policyToolName, reason);
-      return blockedResult(call, `[Denied: ${reason}]`, {
-        verdict: postDecision.verdict,
-        reason,
-        policyId: postDecision.policyId,
-      });
-    }
-
-    const rewriteOutput = effectOf(postDecision, "tool.rewrite_output");
-    return rewriteOutput ? { ...result, output: rewriteOutput.output } : result;
+    recordDecision(prepared.activeTraceContext, "invoke.result", postDecision);
+    return applyPostDecision(
+      call,
+      prepared.policyToolName,
+      prepared.eventBase,
+      result,
+      postDecision,
+    );
   };
 }
 
