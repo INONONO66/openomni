@@ -13,7 +13,7 @@ afterEach(() => {
 
 describe("GitHubAdapter lifecycle", () => {
   it("refuses to start without a message handler", async () => {
-    const adapter = new GitHubAdapter("secret", config, () => {});
+    const adapter = new GitHubAdapter("secret", config, () => undefined);
     await expect(adapter.start("trace-gh-1")).rejects.toThrow(
       "[github] No message handler registered. Call onMessage() before start().",
     );
@@ -56,13 +56,13 @@ describe("TelegramClient send result normalization", () => {
   it("returns the message id when Telegram provides one", async () => {
     globalThis.fetch = (() =>
       Promise.resolve(jsonResponse({ message_id: 42 }))) as unknown as typeof fetch;
-    const client = new TelegramClient("token", () => {});
+    const client = new TelegramClient("token", () => undefined);
     expect(await client.send("chat-1", "hi", "trace-1")).toBe("42");
   });
 
   it("returns undefined when Telegram omits the message id", async () => {
     globalThis.fetch = (() => Promise.resolve(jsonResponse({}))) as unknown as typeof fetch;
-    const client = new TelegramClient("token", () => {});
+    const client = new TelegramClient("token", () => undefined);
     expect(await client.send("chat-1", "hi", "trace-1")).toBeUndefined();
   });
 
