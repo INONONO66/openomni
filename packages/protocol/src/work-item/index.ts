@@ -4,7 +4,10 @@ import { criterionId as createCriterionId, generateHash as createHash } from "./
 import * as Schema from "./schemas.js";
 import { deriveStatus as resolveStatus } from "./status.js";
 import * as Completion from "./completion-admission.js";
-import { hasContiguousReservationBridge as hasReservationBridge } from "./terminal-linkage.js";
+import {
+  hasContiguousReservationBridge as hasReservationBridge,
+  validateCompletionTerminalLinkage as validateTerminalLinkage,
+} from "./terminal-linkage.js";
 
 export namespace WorkItem {
   export const Status = Schema.Status;
@@ -99,6 +102,7 @@ export namespace WorkItem {
   export type CompletionFacts = Completion.CompletionFacts;
   export const emptyCompletionFacts = Completion.emptyCompletionFacts;
   export const hasContiguousReservationBridge = hasReservationBridge;
+  export const validateCompletionTerminalLinkage = validateTerminalLinkage;
 
   export const Info = Schema.Info;
   export type Info = Schema.Info;

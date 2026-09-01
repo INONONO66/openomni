@@ -49,6 +49,22 @@ describe("direct-lane runtime async refusal", () => {
         registrationName: "smuggled-async",
       }),
     );
+    try {
+      engine.register({
+        kind: "point",
+        name: "second-smuggled-async",
+        pointIds: ["dispatch.action.pre"],
+        effectCapabilities: { "dispatch.action.pre": [] },
+        priority: 0,
+        fn: (async () => PolicyDecision.deny({ policyId: "second" })) as never,
+      });
+    } catch (error) {
+      expect(PolicyRegistrationError.isInstance(error)).toBe(true);
+      expect((error as PolicyRegistrationError).toObject()).toMatchObject({
+        name: "PolicyRegistrationError",
+        data: { code: "async_policy_callback", registrationName: "second-smuggled-async" },
+      });
+    }
   });
 
   test("a sync callback returning a thenable is thrown, never awaited", async () => {

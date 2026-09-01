@@ -7,6 +7,7 @@ export function createSqliteWorkItemAdapter(db: Database): ProtocolStorage.WorkI
     create: (hash: string, item: WorkItem.Info): boolean => {
       const parsed = WorkItem.Info.parse(item);
       assertMatchingHash(hash, parsed.workItemId);
+      assertCompletionTerminalLinkage(parsed);
       assertPendingCompletionBaseline(parsed);
       const result = db
         .query(
@@ -39,6 +40,7 @@ export function createSqliteWorkItemAdapter(db: Database): ProtocolStorage.WorkI
     compareAndSet: (hash: string, expectedHead: number, item: WorkItem.Info): boolean => {
       const parsed = WorkItem.Info.parse(item);
       assertMatchingHash(hash, parsed.workItemId);
+      assertCompletionTerminalLinkage(parsed);
       if (parsed.revision !== expectedHead + 1) {
         throw new Error(
           `WorkItem revision must advance once: expected=${expectedHead} payload=${parsed.revision}`,
@@ -204,7 +206,16 @@ function changesCompletionAuthority(current: WorkItem.Info, next: WorkItem.Info)
 }
 
 function decodeWorkItem(data: string): WorkItem.Info {
-  return WorkItem.Info.parse(JSON.parse(data));
+  const item = WorkItem.Info.parse(JSON.parse(data));
+  assertCompletionTerminalLinkage(item);
+  return item;
+}
+
+function assertCompletionTerminalLinkage(item: WorkItem.Info): void {
+  const linkage = WorkItem.validateCompletionTerminalLinkage(item);
+  if (linkage.success) return;
+  const path = linkage.error.issues[0]?.path.join(".") || "terminal";
+  throw new Error(`WorkItem terminal linkage mismatch at ${path}`);
 }
 
 type WorkItemRow = Readonly<{ hash: string; data: string }>;

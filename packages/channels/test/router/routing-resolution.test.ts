@@ -16,7 +16,13 @@ import {
 const streamId = () => Ingress.routeStreamId(ownerEvent);
 
 function thrownCode(error: unknown): string | undefined {
-  return error instanceof IngressRoutingError ? error.code : undefined;
+  if (!IngressRoutingError.isInstance(error)) return undefined;
+  const routed = error as IngressRoutingError;
+  expect(routed.toObject()).toMatchObject({
+    name: "IngressRoutingError",
+    data: { code: routed.code },
+  });
+  return routed.code;
 }
 
 describe("GatewayRouter durable routing resolution", () => {

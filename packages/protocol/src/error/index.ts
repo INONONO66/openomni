@@ -39,7 +39,7 @@ export abstract class NamedError extends Error {
             ? data.message
             : name;
         super(message);
-        if (options?.cause) {
+        if (options !== undefined && "cause" in options) {
           Object.defineProperty(this, "cause", {
             value: options.cause,
             configurable: true,
