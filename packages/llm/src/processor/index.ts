@@ -242,6 +242,7 @@ export namespace Processor {
             abort.aborted || (e instanceof DOMException && e.name === "AbortError");
           settleAttempt(eventState, eventContext, { aborted });
           finishAttempt(aborted ? "aborted" : "error");
+          synchronousTerminalFailure = true;
           throw e;
         }
         const retryReason = decision.reason;
@@ -346,7 +347,6 @@ export namespace Processor {
               await runStreamAttempt(streamInput, eventState, eventContext, finishAttempt);
               return;
             } catch (e: unknown) {
-              synchronousTerminalFailure = true;
               const retryState = await handleAttemptFailure(
                 e,
                 eventState,
