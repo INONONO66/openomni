@@ -19,14 +19,9 @@ function recordRouteNotDelivered(
   decision: Ingress.RoutingDecisionPayload,
   reason: string,
 ): void {
-  const ledger = LedgerAppend.port();
-  if (!ledger) {
-    throw new IngressRoutingError(
-      "route_record_failed",
-      "Storage adapter does not implement ledger append — the route not-delivered correction fails closed",
-      decision,
-    );
-  }
+  // resolveAndRecordRoute has just appended through this same synchronous
+  // adapter; no user code or await can replace it before correction.
+  const ledger = LedgerAppend.port() as LedgerAppend.Port;
   const streamId = Ingress.routeCorrectionStreamId(event);
   const correction: Ledger.RouteNotDelivered = { inboundId: event.id, reason };
   let appended: ReturnType<typeof ledger.append>;
@@ -69,9 +64,8 @@ function terminalMessage(decision: Ingress.RoutingDecisionPayload): string {
     if (decision.factsUsed.includes("channel:missing")) return "channel_grant.missing";
     const kind = factValue(decision, "channel.kind:");
     const treatment = factValue(decision, "channel.treatment:");
-    if (kind !== undefined && treatment !== undefined) {
+    if (kind !== undefined && treatment !== undefined)
       return `channel_grant.${kind}.${treatment}`;
-    }
   }
   if (decision.stage === "actor_identity") {
     return "actor is not authorized to create top-level inbound work";
@@ -132,97 +126,72 @@ export async function executeWaitRoute<Event extends Gateway.DeliveredEvent>(
     };
   }
   const wait = resolution.waitExecution;
-  switch (wait.kind) {
-    case "none":
-      return { kind: "continue", event: resolution.event, authority: "required" };
-    case "conversation":
-      // Conversation tier (§3.4): the window routes the reply to its owner's
-      // session; the delivery still settles the delegation the window was
-      // opened for, via the WaitContext waitContextOf derives from the
-      // deterministic `conv:<waitId>` id. The wait row itself is settled by
-      // the brain's settleFromReply — the router never writes it here.
-      if (decision.stage !== "conversation") {
-        throw new IngressRoutingError(
-          "dispatch_route_invalid",
-          "conversation route is incomplete",
-          decision,
-        );
-      }
-      // The window is the authority (§3.4) — the routed pre-run's trust-tier
-      // ladder must not re-judge a delivery the window already admitted, the
-      // same precedence a wait-correlated reply enjoys.
-      return { kind: "continue", event: resolution.event, authority: "wait_precedence" };
-    case "wait": {
-      if (decision.stage !== "wait_correlation") {
-        throw new IngressRoutingError(
-          "dispatch_route_invalid",
-          "wait route is incomplete",
-          decision,
-        );
-      }
-      // The matcher only returns candidates; the protocol fold decides
-      // (duplicate / late / unknown / ambiguous / attach / resolve) and the
-      // store persists the outcome before the owner session sees the reply.
-      const at = Date.now();
-      const outcome = WaitService.attachReply(
-        wait.record.id,
-        {
-          replyKey: resolution.event.id,
-          responderCandidates: Wait.responderCandidates(
-            targetsOfWait(wait.record),
-            Wait.ingressEvidence(resolution.event, wait.correlation),
-          ),
-          messageId: resolution.event.id,
-          at,
-        },
-        trace.traceId,
-      );
-      if (outcome.kind === "rejected") {
-        if (outcome.code === "deadline_passed") {
-          // Lazy expiry: this late reply is the first observer of the passed
-          // deadline — fold the wait to expired (recording partial progress)
-          // before rejecting, so the ledger never keeps a dead open wait that
-          // the boot sweep alone would have to find. A concurrent ingest may
-          // have already folded the wait terminal (revision CAS conflict);
-          // the expiry is an optimization, so it must never replace the typed
-          // rejection below.
-          try {
-            WaitService.expire(wait.record.id, trace.traceId, at);
-          } catch {
-            // Already folded by a concurrent transition — the typed rejection
-            // below is still the correct outcome for this reply.
-          }
-        }
-        // Fix the ledger lie (batch ② commit 4): route.decided already recorded
-        // outcome:route for this correlated reply, but the wait fold rejects it
-        // fail-closed (a non-responder must not resume a wait — gateway-design
-        // §2a-1) and the message is dropped. Append the correcting
-        // route.not_delivered fact BEFORE returning the rejection so the ledger
-        // never claims a delivery that never happened.
-        const reason = `wait reply rejected: ${outcome.code}`;
-        recordRouteNotDelivered(resolution.event, decision, reason);
-        throw new IngressRoutingError("wait_reply_rejected", reason, decision);
-      }
-      // "already_resolved" (channel redelivery of the resolving reply) falls
-      // through on purpose: the owner delivery repeats idempotently with the
-      // recorded resolution — no state change, no revision bump.
-      // resolve-route routed this decision, so the owner is a session
-      // (workItem owners fail closed at the wait_correlation stage).
-      return {
-        kind: "continue",
-        event: projectWaitOwnerEvent(resolution.event, wait.record.ownerRef.id),
-        authority: "wait_precedence",
-      };
-    }
-    case "ambiguous":
-      throw new IngressRoutingError(
-        "dispatch_route_invalid",
-        "ambiguous wait cannot accompany a routed decision",
-        decision,
-      );
-    default: {
-      const unreachable: never = wait;
-      throw new TypeError(`Unreachable wait execution: ${String(unreachable)}`);
-    }
+  if (wait.kind === "none") {
+    return { kind: "continue", event: resolution.event, authority: "required" };
   }
+  if (wait.kind === "conversation") {
+    // Conversation tier (§3.4): the window routes the reply to its owner's
+    // session; the delivery still settles the delegation the window was
+    // opened for, via the WaitContext waitContextOf derives from the
+    // deterministic `conv:<waitId>` id. The wait row itself is settled by
+    // the brain's settleFromReply — the router never writes it here.
+    // The window is the authority (§3.4) — the routed pre-run's trust-tier
+    // ladder must not re-judge a delivery the window already admitted, the
+    // same precedence a wait-correlated reply enjoys.
+    return { kind: "continue", event: resolution.event, authority: "wait_precedence" };
+  }
+
+  // The matcher only returns candidates; the protocol fold decides
+  // (duplicate / late / unknown / ambiguous / attach / resolve) and the
+  // store persists the outcome before the owner session sees the reply.
+  const at = Date.now();
+  const outcome = WaitService.attachReply(
+    wait.record.id,
+    {
+      replyKey: resolution.event.id,
+      responderCandidates: Wait.responderCandidates(
+        targetsOfWait(wait.record),
+        Wait.ingressEvidence(resolution.event, wait.correlation),
+      ),
+      messageId: resolution.event.id,
+      at,
+    },
+    trace.traceId,
+  );
+  if (outcome.kind === "rejected") {
+    if (outcome.code === "deadline_passed") {
+      // Lazy expiry: this late reply is the first observer of the passed
+      // deadline — fold the wait to expired (recording partial progress)
+      // before rejecting, so the ledger never keeps a dead open wait that
+      // the boot sweep alone would have to find. A concurrent ingest may
+      // have already folded the wait terminal (revision CAS conflict);
+      // the expiry is an optimization, so it must never replace the typed
+      // rejection below.
+      try {
+        WaitService.expire(wait.record.id, trace.traceId, at);
+      } catch {
+        // Already folded by a concurrent transition — the typed rejection
+        // below is still the correct outcome for this reply.
+      }
+    }
+    // Fix the ledger lie (batch ② commit 4): route.decided already recorded
+    // outcome:route for this correlated reply, but the wait fold rejects it
+    // fail-closed (a non-responder must not resume a wait — gateway-design
+    // §2a-1) and the message is dropped. Append the correcting
+    // route.not_delivered fact BEFORE returning the rejection so the ledger
+    // never claims a delivery that never happened.
+    const reason = `wait reply rejected: ${outcome.code}`;
+    recordRouteNotDelivered(resolution.event, decision, reason);
+    throw new IngressRoutingError("wait_reply_rejected", reason, decision);
+  }
+  // "already_resolved" (channel redelivery of the resolving reply) falls
+  // through on purpose: the owner delivery repeats idempotently with the
+  // recorded resolution — no state change, no revision bump.
+  // resolve-route routed this decision, so the owner is a session
+  // (workItem owners fail closed at the wait_correlation stage).
+  return {
+    kind: "continue",
+    event: projectWaitOwnerEvent(resolution.event, wait.record.ownerRef.id),
+    authority: "wait_precedence",
+  };
 }

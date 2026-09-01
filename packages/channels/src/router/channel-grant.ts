@@ -68,9 +68,7 @@ function effectiveTreatment(grant: Actor.ChannelGrant): Actor.InboundTreatment {
 }
 
 function compareStableText(a: string, b: string): number {
-  if (a < b) return -1;
-  if (a > b) return 1;
-  return 0;
+  return a === b ? 0 : a < b ? -1 : 1;
 }
 
 /**

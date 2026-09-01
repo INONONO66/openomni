@@ -141,6 +141,7 @@ describe("the machine fs tools in the catalog", () => {
               { name: "plans", kind: "dir" },
               { name: "readme.md", kind: "file", size: 12 },
               { name: "elsewhere", kind: "symlink" },
+              { name: "socket", kind: "other" },
             ],
             truncated: false,
           },
@@ -155,7 +156,7 @@ describe("the machine fs tools in the catalog", () => {
     });
 
     expect(result.output).toBe(
-      ["dir   plans", "file  readme.md  12 bytes", "link  elsewhere"].join("\n"),
+      ["dir   plans", "file  readme.md  12 bytes", "link  elsewhere", "other socket"].join("\n"),
     );
   });
 
@@ -272,6 +273,16 @@ describe("what the fs tools refuse", () => {
       "path must be relative to the export root, with no .. segment or NUL",
     );
     expect(reached).toBe(false);
+  });
+
+  it("refuses a path with no machine identity", async () => {
+    const catalog = fsCatalog(fakeMachine({}));
+    const result = await catalog.execute({
+      id: "x-machine",
+      tool: FS_STAT_TOOL_NAME,
+      input: { path: "/machines//notes" },
+    });
+    expect(result.isError).toBe(true);
   });
 
   it("refuses a path outside the /machines namespace", async () => {

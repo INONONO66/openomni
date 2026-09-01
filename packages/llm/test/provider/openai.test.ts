@@ -44,4 +44,15 @@ describe("getSDK (OpenAI)", () => {
     expect(lm.modelId).toBe("gpt-5.4");
     expect((lm as OpenAIModelRef).config?.provider).toBe("openai.chat");
   });
+
+  test("rejects an OpenAI model wired to an SDK without Responses support", () => {
+    const malformed = makeModel({
+      id: "gpt-malformed-provider",
+      api: { npm: "@ai-sdk/anthropic" },
+    });
+
+    expect(() => getLanguage(malformed, { type: "api", key: "test-api-key" })).toThrow(
+      "OpenAI responses model loader requires responses support",
+    );
+  });
 });

@@ -72,6 +72,41 @@ describe("existing-agent-message-driver", () => {
     expect(first.stdout).toBe(second.stdout);
   });
 
+  test("help exits successfully without running a scenario", async () => {
+    const result = await runExistingAgentMessageDriver(["--help"]);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.length).toBeGreaterThan(0);
+  });
+
+  test.each([
+    [new Error("serialization fault"), "Error"],
+    ["serialization fault", "NonError"],
+  ] as const)("converts an unexpected %s into the driver error receipt", async (fault, errorType) => {
+    const stringify = JSON.stringify;
+    let firstCall = true;
+    JSON.stringify = ((value: unknown) => {
+      if (firstCall) {
+        firstCall = false;
+        throw fault;
+      }
+      return stringify(value);
+    }) as typeof JSON.stringify;
+
+    try {
+      const result = await runExistingAgentMessageDriver(["invalid"]);
+
+      expect(result.exitCode).toBe(1);
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        mode: "driver_error",
+        resultCode: "driver_threw",
+        errorType,
+      });
+    } finally {
+      JSON.stringify = stringify;
+    }
+  });
+
   test("invalid arguments exit nonzero with the typed invalid_arguments result", async () => {
     const result = await runExistingAgentMessageDriver(["--scenario", "unknown", "--json"]);
 

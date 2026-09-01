@@ -94,6 +94,18 @@ describe("checkBudget 4-state", () => {
     expect(checkBudget(s, { maxTurns: 24 })).toBe("exceeded");
   });
 
+  it("returns exceeded when tool runtime reaches its limit", () => {
+    const s = { ...createBudgetState(), toolRuntimeMs: 500 };
+    expect(
+      checkBudget(s, {
+        maxTurns: -1,
+        maxToolCalls: -1,
+        maxWallTimeMs: -1,
+        maxToolRuntimeMs: 500,
+      }),
+    ).toBe("exceeded");
+  });
+
   it("maxTurns -1 allows unlimited turns", () => {
     const s = { ...createBudgetState(), turns: 1000 };
     expect(checkBudget(s, { maxTurns: -1 })).toBe("ok");

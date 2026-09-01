@@ -662,19 +662,23 @@ function isAnchorMessage(message: Message.WithParts): boolean {
 
 function latestAnchorBody(span: readonly Message.WithParts[]): string | undefined {
   for (let index = span.length - 1; index >= 0; index -= 1) {
-    const message = span[index];
-    if (message === undefined) continue;
+    // The parameter is a dense Message.WithParts[] assembled by slice/spread;
+    // an in-bounds element is therefore present.
+    const message = span[index] as Message.WithParts;
     // One identity, one definition (review #721 M3): only what
     // isAnchorMessage accepts may thread its body — an assistant-role part
     // wearing the metadata is content, never state.
     if (!isAnchorMessage(message)) continue;
-    for (const part of message.parts) {
-      if (part.type !== "text" || part.metadata?.compactionAnchor !== true) continue;
-      const body = part.metadata?.anchorBody;
-      // A marked part without a string body is a foreign or corrupt render:
-      // fall back to the visible text rather than dropping the anchor.
-      return typeof body === "string" ? body : part.text;
-    }
+    // isAnchorMessage just proved this element exists; repeat the predicate
+    // only to retrieve it, not as a second impossible fallback branch.
+    const part = message.parts.find(
+      (candidate): candidate is Message.TextPart =>
+        candidate.type === "text" && candidate.metadata?.compactionAnchor === true,
+    ) as Message.TextPart;
+    const body = part.metadata?.anchorBody;
+    // A marked part without a string body is a foreign or corrupt render:
+    // fall back to the visible text rather than dropping the anchor.
+    return typeof body === "string" ? body : part.text;
   }
   return undefined;
 }

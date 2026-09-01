@@ -3,7 +3,7 @@ import { RunEvents } from "../../../src/core/execution/events";
 import { Bus } from "@openomni/telemetry";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { PolicyContext } from "../../../src/core/policy/types";
-import { registerAt, abortRun, allow } from "../../helpers/policy-decision";
+import { registerAt, abortRun, allow, deny } from "../../helpers/policy-decision";
 import { handleError } from "../../../src/core/execution/turn";
 import { makeAgentBase, makeConfig, makeState } from "./lifecycle-dispatch-fixture";
 import { captureBusEvents } from "../../helpers/bus-event";
@@ -46,6 +46,23 @@ describe("handleError (error)", () => {
     expect(decision.action).toBe("complete");
     if (decision.action !== "complete") throw new Error("expected a settled result");
     expect(decision.result.guardAborted).toBe(true);
+  });
+
+  it("plain error denial is diagnostic-only and still follows retry policy", async () => {
+    const engine = PolicyEngine.create({ clock: Date.now });
+    registerAt(engine, "run.error.error", "test-on-error-deny", 100, () => deny());
+
+    const decision = await handleError(
+      makeState(),
+      engine,
+      makeConfig(),
+      makeAgentBase(),
+      new Error("timeout while waiting"),
+      1,
+      { maxAttempts: 3, backoffMs: { initial: 0, multiplier: 1, max: 0 } },
+    );
+
+    expect(decision.action).toBe("retry");
   });
 
   it("error continue verdict allows retry when retry policy permits", async () => {

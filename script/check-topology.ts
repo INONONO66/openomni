@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   ciTestSteps,
-  coverageWorkspaces,
+  coverageLanes,
   knipWorkspaces,
   TOPOLOGY,
   topologyInventoryDrift,
@@ -177,7 +177,7 @@ function checkCoverageInventory(
   problems: TopologyProblems,
 ): void {
   const baseline = json(join(root, "script/conformance/coverage-baseline.json"));
-  const expected = coverageWorkspaces(topology).map((workspace) => workspace.dir).sort();
+  const expected = coverageLanes(topology).map((lane) => lane.dir).sort();
   const actual = Object.keys(baseline).sort();
   if (actual.join("\n") !== expected.join("\n")) {
     problems["coverage-ratchet"].push(

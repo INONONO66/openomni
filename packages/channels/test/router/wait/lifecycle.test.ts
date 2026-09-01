@@ -30,6 +30,15 @@ describe("WaitService", () => {
     expect(duplicate.data.code).toBe("duplicate");
   });
 
+  test("cancel folds an open wait to its durable terminal state", () => {
+    WaitService.open(buildWaitCreate("wait-cancel"), "trace-test");
+
+    const outcome = WaitService.cancel("wait-cancel", "trace-test", 2_000);
+
+    expect(outcome.kind).toBe("cancelled");
+    expect(WaitStore.get("wait-cancel")).toMatchObject({ status: "cancelled", updatedAt: 2_000 });
+  });
+
   test("attachReply applies the fold outcome and resolves the owner-correct wait", () => {
     WaitService.open(
       buildWaitCreate("wait-reply", {

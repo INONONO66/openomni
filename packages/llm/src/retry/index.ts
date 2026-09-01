@@ -221,15 +221,15 @@ export namespace Retry {
     // parse as a year.
     const duration = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+(?:\.\d+)?)s)?(?:(\d+)ms)?$/.exec(value.trim());
     if (duration && duration[0] !== "") {
+      // A non-empty match necessarily populated at least one capture: every
+      // accepted character belongs to one of h/m/s/ms.
       const [, h, m, s, ms] = duration;
-      if (h !== undefined || m !== undefined || s !== undefined || ms !== undefined) {
-        return (
-          Number(h ?? 0) * 3_600_000 +
-          Number(m ?? 0) * 60_000 +
-          Math.ceil(Number(s ?? 0) * 1000) +
-          Number(ms ?? 0)
-        );
-      }
+      return (
+        Number(h ?? 0) * 3_600_000 +
+        Number(m ?? 0) * 60_000 +
+        Math.ceil(Number(s ?? 0) * 1000) +
+        Number(ms ?? 0)
+      );
     }
     if (!/[-T:]/.test(value)) return undefined; // timestamps only — never bare numbers
     const asDate = Date.parse(value);
