@@ -643,6 +643,7 @@ describe("createToolExecutor effect application", () => {
         const [prepareWarning, resultWarning] = await warnings.done;
 
         expect(result.output).toBe("ok");
+        expect(warnings.events).toHaveLength(2);
         expect(prepareWarning).toMatchObject({
           component: "agent.tool-executor",
           msg: "onDecision observer error",

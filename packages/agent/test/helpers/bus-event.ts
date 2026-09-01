@@ -3,7 +3,7 @@ import { Bus } from "@openomni/telemetry";
 
 const EVENT_TIMEOUT_MS = 1_000;
 
-/** Subscribe before the trigger and resolve only after the expected events arrive. */
+/** Resolve after the expected events arrive; stay subscribed so callers can assert exact counts. */
 export function captureBusEvents<T>(
   event: BusEvent.Descriptor<T>,
   count = 1,
@@ -15,14 +15,17 @@ export function captureBusEvents<T>(
   const done = new Promise<readonly T[]>((resolve, reject) => {
     timer = setTimeout(() => {
       unsubscribe();
-      reject(new Error(`Timed out waiting for ${count} ${event.name} event(s); received ${events.length}`));
+      reject(
+        new Error(
+          `Timed out waiting for ${count} ${event.name} event(s); received ${events.length}`,
+        ),
+      );
     }, EVENT_TIMEOUT_MS);
     unsubscribe = Bus.subscribe(event, (payload) => {
       events.push(payload);
       onEvent?.(payload);
       if (events.length !== count) return;
       if (timer !== undefined) clearTimeout(timer);
-      unsubscribe();
       resolve(events);
     });
   });

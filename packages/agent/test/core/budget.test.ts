@@ -15,13 +15,49 @@ import {
 /** The run whose budget is being reported; the reporter never mints one. */
 const TEST_RUN = { traceId: "trace-budget-test", sessionId: "session-budget-test" };
 
-function countOperationalEmits(run: (events: ReturnType<typeof collector>) => void): number {
+function countCollectedOperationalEmits(
+  run: (events: ReturnType<typeof collector>) => void,
+): number {
   const events = collector();
   run(events);
   return (
     events.named(Operational.Events.Warn.name).length +
     events.named(Operational.Events.Info.name).length
   );
+}
+
+async function countGlobalOperationalEmits(run: () => void): Promise<number> {
+  const seen: unknown[] = [];
+  const sentinel = {
+    traceId: "trace-budget-test-barrier",
+    time: 0,
+    component: "agent.test",
+    msg: "budget telemetry barrier",
+  };
+  let resolveBarrier: () => void = () => undefined;
+  let barrierTimer: ReturnType<typeof setTimeout> | undefined;
+  const barrier = new Promise<void>((resolve, reject) => {
+    resolveBarrier = resolve;
+    barrierTimer = setTimeout(() => reject(new Error("timed out waiting for Bus barrier")), 1_000);
+  });
+  const unsubWarn = Bus.subscribe(Operational.Events.Warn, (event) => seen.push(event));
+  const unsubInfo = Bus.subscribe(Operational.Events.Info, (event) => {
+    if (event === sentinel) resolveBarrier();
+    else seen.push(event);
+  });
+
+  try {
+    run();
+    // Bus handlers are FIFO microtasks. Observing this subscribed sentinel
+    // proves every operational event published by run() has been delivered.
+    Bus.publish(Operational.Events.Info, sentinel);
+    await barrier;
+    return seen.length;
+  } finally {
+    if (barrierTimer !== undefined) clearTimeout(barrierTimer);
+    unsubWarn();
+    unsubInfo();
+  }
 }
 
 describe("effectiveBudgetThresholds", () => {
@@ -95,7 +131,7 @@ describe("checkBudget 4-state", () => {
 describe("checkBudget is a pure query (query/command split)", () => {
   it("emits no telemetry even called twice at the warning threshold", async () => {
     const s = { ...createBudgetState(), turns: 20 };
-    const emits = countOperationalEmits(() => {
+    const emits = await countGlobalOperationalEmits(() => {
       checkBudget(s, { maxTurns: 24 });
       checkBudget(s, { maxTurns: 24 });
     });
@@ -104,7 +140,7 @@ describe("checkBudget is a pure query (query/command split)", () => {
 
   it("emits no telemetry at the exceeded threshold", async () => {
     const s = { ...createBudgetState(), turns: 24 };
-    const emits = countOperationalEmits(() => {
+    const emits = await countGlobalOperationalEmits(() => {
       checkBudget(s, { maxTurns: 24 });
     });
     expect(emits).toBe(0);
@@ -133,7 +169,7 @@ describe("publishBudgetTelemetry is the command (emits once, returns status)", (
   it("emits exactly one event per call at the warning threshold", async () => {
     const s = { ...createBudgetState(), turns: 20 };
     let status: string | undefined;
-    const emits = countOperationalEmits((events) => {
+    const emits = countCollectedOperationalEmits((events) => {
       status = publishBudgetTelemetry(s, TEST_RUN, events, { maxTurns: 24 });
     });
     expect(status).toBe("warning");
@@ -143,7 +179,7 @@ describe("publishBudgetTelemetry is the command (emits once, returns status)", (
   it("emits nothing below the reassurance threshold", async () => {
     const s = { ...createBudgetState(), turns: 5 };
     let status: string | undefined;
-    const emits = countOperationalEmits((events) => {
+    const emits = countCollectedOperationalEmits((events) => {
       status = publishBudgetTelemetry(s, TEST_RUN, events, { maxTurns: 24 });
     });
     expect(status).toBe("ok");
