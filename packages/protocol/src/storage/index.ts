@@ -6,6 +6,8 @@ import type { Ledger } from "../ledger/index.js";
 import type { Delegation } from "../delegation/index.js";
 import type { Engagement } from "../engagement/index.js";
 import type { Conversation } from "../conversation/index.js";
+import type { Approval } from "../approval/index.js";
+import type { Lease } from "../lease/index.js";
 import type { Wait } from "../wait/index.js";
 import type { WorkItem } from "../work-item/index.js";
 import type { Gateway } from "../gateway/index.js";
@@ -25,6 +27,11 @@ export namespace Storage {
     ): Actor.Endpoint | undefined;
     listEndpoints(actorId?: string, workspace?: string): Actor.Endpoint[];
     removeEndpoint(id: string): boolean;
+    /**
+     * #P3 mint-volume bound (§8.12): provisional identities whose endpoint
+     * sits on this channel(+workspace) minted at or after `since`.
+     */
+    countProvisionalSince(channel: string, workspace: string | undefined, since: number): number;
   }
 
   export interface BlacklistSubAdapter {
@@ -178,6 +185,30 @@ export namespace Storage {
     findOpenByEndpoint(endpointId: string): Conversation.Record[];
     /** Revision compare-and-set (UPDATE ... WHERE id AND revision): changes===1 receipt. */
     compareAndSet(id: string, expectedRevision: number, record: Conversation.Record): boolean;
+  }
+
+  export interface ApprovalSubAdapter {
+    /** INSERT receipt: false when the id already exists. */
+    create(record: Approval.Record): boolean;
+    get(id: string): Approval.Record | undefined;
+    list(state?: Approval.State[]): Approval.Record[];
+    /** Pending requests created at or after `since` — the §8.13 volume-bound read. */
+    countPendingSince(since: number): number;
+    /** Revision compare-and-set (UPDATE ... WHERE id AND revision): changes===1 receipt. */
+    compareAndSet(id: string, expectedRevision: number, record: Approval.Record): boolean;
+  }
+
+  export interface LeaseSubAdapter {
+    /** INSERT receipt: false when the id already exists. */
+    create(record: Lease.Record): boolean;
+    get(id: string): Lease.Record | undefined;
+    list(state?: Lease.State[]): Lease.Record[];
+    /** Live leases scoped to one conversation — the carve-sum and revocation reads. */
+    listLiveByConversation(conversationId: string, now: number): Lease.Record[];
+    /** Live leases held by one delegation — the admission-relaxation read. */
+    listLiveByHolder(holderDelegationId: string, now: number): Lease.Record[];
+    /** Revision compare-and-set (UPDATE ... WHERE id AND revision): changes===1 receipt. */
+    compareAndSet(id: string, expectedRevision: number, record: Lease.Record): boolean;
   }
 
   /**

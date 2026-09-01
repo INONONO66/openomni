@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { Sink } from "@openomni/llm";
-import type { Message } from "@openomni/protocol";
+import { Policy, type Message } from "@openomni/protocol";
 import type { Provider } from "@openomni/llm";
 import { toModelMessages } from "@openomni/llm/src/message";
 import { ChatAgent } from "../../../src/core/chat-agent";
@@ -369,9 +369,9 @@ describe("tool-bearing history regressions (#546 fix-first)", () => {
             // A history-rewriting policy that keeps everything it can see.
             // The dispatch context must already contain the just-finished
             // assistant message, or this "no-op" rewrite silently deletes it.
-            const messages = (ctx as unknown as { messages: Message.WithParts[] }).messages;
+            const messages = ctx.messages ?? [];
             return allow("test.replace-keep", "replace", [
-              { type: "run.replace_messages", messages: [...messages] },
+              Policy.PolicyEffect.parse({ type: "run.replace_messages", messages: [...messages] }),
               { type: "run.continue_with_prompt", prompt: "go on" },
             ]);
           },

@@ -1,3 +1,6 @@
+import { NamedError } from "@openomni/protocol";
+import { z } from "zod";
+
 /**
  * SQLITE_BUSY detection for decision-class store transaction entries (#510
  * review fix minor). bun:sqlite surfaces a busy database as a `SQLiteError`
@@ -21,20 +24,38 @@ export function isSqliteBusyError(error: unknown): boolean {
 }
 
 /** A retriable store transaction failure caused by SQLite write contention. */
-export class StorageUnavailableError extends Error {
-  readonly name = "StorageUnavailableError";
-  readonly code = "unavailable";
+const StorageUnavailableErrorBase = NamedError.create(
+  "StorageUnavailableError",
+  z.object({
+    message: z.string(),
+    code: z.literal("unavailable"),
+    store: z.string(),
+    resourceId: z.string(),
+  }),
+);
 
-  constructor(
-    readonly store: string,
-    readonly resourceId: string,
-    cause: unknown,
-  ) {
+export class StorageUnavailableError extends StorageUnavailableErrorBase {
+  constructor(store: string, resourceId: string, cause: unknown) {
     super(
-      `${store} storage busy: ${resourceId} — ${
-        cause instanceof Error ? cause.message : String(cause)
-      }`,
+      {
+        message: `${store} storage busy: ${resourceId} — ${
+          cause instanceof Error ? cause.message : String(cause)
+        }`,
+        code: "unavailable",
+        store,
+        resourceId,
+      },
       { cause },
     );
+  }
+
+  get code(): "unavailable" {
+    return this.data.code;
+  }
+  get store(): string {
+    return this.data.store;
+  }
+  get resourceId(): string {
+    return this.data.resourceId;
   }
 }

@@ -24,7 +24,20 @@ import {
   writeArtifactToolExecutor,
   writeArtifactToolSpec,
 } from "./artifacts";
+import type { ApprovalPort } from "./approval";
+import {
+  approvalDecideToolExecutor,
+  approvalDecideToolSpec,
+  approvalRequestToolExecutor,
+  approvalRequestToolSpec,
+  contactPromoteToolExecutor,
+  contactPromoteToolSpec,
+  endpointMergeToolExecutor,
+  endpointMergeToolSpec,
+} from "./approval";
 import type { CatalogEntry } from "./dispatch";
+import type { LeasePort } from "./lease";
+import { leaseOpenToolExecutor, leaseOpenToolSpec } from "./lease";
 import type { LlmPort } from "./llm";
 import { llmToolExecutor, llmToolSpec } from "./llm";
 import { memoryToolExecutor, memoryToolSpec } from "./memory";
@@ -43,6 +56,8 @@ import {
 export interface CatalogPorts {
   readonly delegation?: DelegationKernel;
   readonly conversations?: ConversePort;
+  readonly leases?: LeasePort;
+  readonly approvals?: ApprovalPort;
   readonly cells?: CellPorts;
   readonly machines?: MachinesPort;
   readonly memory?: CuratedMemory;
@@ -99,6 +114,45 @@ const CATALOG_TOOLS: readonly CatalogTool[] = [
       ports.conversations === undefined || origin.role !== "resident"
         ? undefined
         : converseCloseToolExecutor(ports.conversations),
+  },
+  {
+    // Lease issuance is the Resident's judgment alone (§3.5): a worker
+    // never widens its own authority.
+    spec: leaseOpenToolSpec,
+    wire: (ports, origin) =>
+      ports.leases === undefined || origin.role !== "resident"
+        ? undefined
+        : leaseOpenToolExecutor(ports.leases),
+  },
+  {
+    // The approval lane is the Resident's surface (§6): a worker never
+    // requests, records, or consumes Owner consent.
+    spec: approvalRequestToolSpec,
+    wire: (ports, origin) =>
+      ports.approvals === undefined || origin.role !== "resident"
+        ? undefined
+        : approvalRequestToolExecutor(ports.approvals),
+  },
+  {
+    spec: approvalDecideToolSpec,
+    wire: (ports, origin) =>
+      ports.approvals === undefined || origin.role !== "resident"
+        ? undefined
+        : approvalDecideToolExecutor(ports.approvals),
+  },
+  {
+    spec: contactPromoteToolSpec,
+    wire: (ports, origin) =>
+      ports.approvals === undefined || origin.role !== "resident"
+        ? undefined
+        : contactPromoteToolExecutor(ports.approvals),
+  },
+  {
+    spec: endpointMergeToolSpec,
+    wire: (ports, origin) =>
+      ports.approvals === undefined || origin.role !== "resident"
+        ? undefined
+        : endpointMergeToolExecutor(ports.approvals),
   },
   {
     spec: runCodeToolSpec,

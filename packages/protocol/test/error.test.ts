@@ -58,6 +58,22 @@ describe("NamedError.create", () => {
     expect((error as Error & { cause?: unknown }).cause).toBe(cause);
   });
 
+  test.each([null, false, 0, ""])("retains an explicitly provided falsy cause: %p", (cause) => {
+    const error = new MyError({ message: "boom", detail: 1 }, { cause });
+
+    expect(Object.getOwnPropertyDescriptor(error, "cause") !== undefined).toBe(true);
+    expect(Reflect.get(error, "cause")).toBe(cause);
+  });
+
+  test("distinguishes omitted cause from an explicitly present undefined cause", () => {
+    const omitted = new MyError({ message: "omitted", detail: 1 });
+    const explicit = new MyError({ message: "explicit", detail: 1 }, { cause: undefined });
+
+    expect(Object.getOwnPropertyDescriptor(omitted, "cause") !== undefined).toBe(false);
+    expect(Object.getOwnPropertyDescriptor(explicit, "cause") !== undefined).toBe(true);
+    expect(Reflect.get(explicit, "cause")).toBeUndefined();
+  });
+
   test("isInstance matches real instances", () => {
     expect(MyError.isInstance(new MyError({ message: "ok", detail: 1 }))).toBe(true);
   });

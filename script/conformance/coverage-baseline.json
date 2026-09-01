@@ -5,9 +5,9 @@
     "pct": 98.2
   },
   "packages/channels": {
-    "linesFound": 3266,
-    "linesHit": 3128,
-    "pct": 95.77
+    "linesFound": 3622,
+    "linesHit": 3484,
+    "pct": 96.19
   },
   "packages/ipc": {
     "linesFound": 480,
@@ -15,9 +15,9 @@
     "pct": 92.5
   },
   "packages/ledger": {
-    "linesFound": 4860,
-    "linesHit": 4679,
-    "pct": 96.28
+    "linesFound": 5341,
+    "linesHit": 5169,
+    "pct": 96.78
   },
   "packages/llm": {
     "linesFound": 2022,
@@ -35,9 +35,9 @@
     "pct": 96.85
   },
   "packages/protocol": {
-    "linesFound": 6446,
-    "linesHit": 6297,
-    "pct": 97.69
+    "linesFound": 6222,
+    "linesHit": 6062,
+    "pct": 97.43
   },
   "packages/telemetry": {
     "linesFound": 225,

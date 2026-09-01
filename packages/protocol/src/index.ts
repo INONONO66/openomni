@@ -1,4 +1,6 @@
 export * from "./error/index.js";
+export { canonicalKey, isPlainValue, PlainValueSchema } from "./json.js";
+export type { PlainObject, PlainValue } from "./json.js";
 export * from "./tool/index.js";
 export * from "./token/index.js";
 export * from "./message/index.js";
@@ -20,6 +22,8 @@ export * from "./work-item/index.js";
 export * from "./deadline/index.js";
 export * from "./wait/index.js";
 export * from "./conversation/index.js";
+export * from "./approval/index.js";
+export * from "./lease/index.js";
 export * from "./machine/index.js";
 export * from "./delegation/index.js";
 export * from "./engagement/index.js";

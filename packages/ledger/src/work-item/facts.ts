@@ -1,4 +1,5 @@
-import type { Storage as ProtocolStorage, WorkItem } from "@openomni/protocol";
+import { NamedError, type Storage as ProtocolStorage, type WorkItem } from "@openomni/protocol";
+import { z } from "zod";
 import { commitFact, runCommitTransaction } from "../storage/commit-coordinator.js";
 import { StorageUnavailableError } from "../storage/sqlite-busy.js";
 
@@ -24,12 +25,25 @@ import { StorageUnavailableError } from "../storage/sqlite-busy.js";
  */
 export type WorkItemFact = Readonly<{ type: string; data: Record<string, unknown> }>;
 
-export class WorkItemRevisionError extends Error {
-  readonly name = "WorkItemRevisionError";
-  readonly code = "stale_revision";
+const WorkItemRevisionErrorBase = NamedError.create(
+  "WorkItemRevisionError",
+  z.object({
+    message: z.string(),
+    code: z.literal("stale_revision"),
+    hash: z.string(),
+  }),
+);
 
-  constructor(readonly hash: string) {
-    super(`stale WorkItem revision: ${hash}`);
+export class WorkItemRevisionError extends WorkItemRevisionErrorBase {
+  constructor(hash: string) {
+    super({ message: `stale WorkItem revision: ${hash}`, code: "stale_revision", hash });
+  }
+
+  get code(): "stale_revision" {
+    return this.data.code;
+  }
+  get hash(): string {
+    return this.data.hash;
   }
 }
 

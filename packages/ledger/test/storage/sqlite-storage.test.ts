@@ -1,11 +1,11 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
-import { readFileSync, unlinkSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
 import type { Message } from "@openomni/protocol";
 import type { SessionInfo } from "../../src/session/info";
 import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage";
+import { removeSqliteFiles, tempDbPath } from "../helpers/sqlite";
 
 type TextPart = Extract<Message.Part, { type: "text" }>;
 
@@ -115,20 +115,6 @@ function makeToolPart(
   throw new Error(`Unsupported tool status: ${status}`);
 }
 
-function tempDbPath(): string {
-  return join(tmpdir(), `test-sqlite-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
-}
-
-function removeSqliteFiles(path: string): void {
-  for (const suffix of ["", "-wal", "-shm"]) {
-    try {
-      unlinkSync(`${path}${suffix}`);
-    } catch (_err) {
-      void _err;
-    }
-  }
-}
-
 function storageDb(adapter: SqliteStorageAdapter): Database {
   return (adapter as unknown as { db: Database }).db;
 }
@@ -150,7 +136,7 @@ describe("SqliteStorageAdapter", () => {
   let adapter: SqliteStorageAdapter;
 
   beforeEach(() => {
-    dbPath = tempDbPath();
+    dbPath = tempDbPath("test-sqlite");
     adapter = new SqliteStorageAdapter(dbPath);
   });
 

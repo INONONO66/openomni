@@ -8,10 +8,13 @@ import {
 } from "@openomni/channels";
 import {
   ActorRegistry,
+  ApprovalStore,
   Artifact,
   BusPersistence,
   ConversationStore,
+  DelegationStore,
   initialize,
+  LeaseStore,
   Session,
   Storage,
 } from "@openomni/ledger";
@@ -313,8 +316,44 @@ export async function startOpenOmni(options: StartOptions = {}) {
         ctx.effect(() => registration.dispose());
       }
     });
+    // The catalog's Conversation surface: window lifecycle plus the §3.5
+    // spatial inverse (settling a window revokes its live leases).
+    const conversePort = {
+      open: ConversationStore.open,
+      get: ConversationStore.get,
+      close: ConversationStore.close,
+      closeLeases: LeaseStore.closeByConversation,
+    };
+    const leasePort = {
+      issue: LeaseStore.issue,
+      getDelegation: (delegationId: string) => DelegationStore.get(delegationId),
+    };
+    // The catalog's approval lane (§6): Owner-consent requests plus the two
+    // acts they authorize — promotion and cross-channel endpoint merge.
+    const approvalPort = {
+      request: ApprovalStore.request,
+      get: ApprovalStore.get,
+      decide: ApprovalStore.decide,
+      decision: ApprovalStore.decision,
+      getIdentity: ActorRegistry.getIdentity,
+      getEndpoint: ActorRegistry.getEndpoint,
+      promote: ActorRegistry.promote,
+      mergeEndpoint: ActorRegistry.mergeEndpoint,
+    };
     kernel = createDelegationKernel({
       events: Bus,
+      // §3.5 lease linkage: live-lease facts admit a worker's channel
+      // delegation, and every settlement durably closes the holder's leases.
+      leases: {
+        listLiveByHolder: (holderDelegationId, now) =>
+          LeaseStore.listLiveByHolder(holderDelegationId, now).map((lease) => ({
+            id: lease.id,
+            conversationId: lease.conversationId,
+            holderDelegationId: lease.holderDelegationId,
+            contactId: lease.contactId,
+          })),
+        closeByHolder: LeaseStore.closeByHolder,
+      },
       workItems: createWorkItemLinkage({
         model: { provider: config.model.provider, id: config.model.id },
         now: () => Date.now(),
@@ -382,7 +421,9 @@ export async function startOpenOmni(options: StartOptions = {}) {
                   workItems: completionPort,
                   llm: llmPort,
                   artifacts: artifactsPort,
-                  conversations: ConversationStore,
+                  conversations: conversePort,
+                  leases: leasePort,
+                  approvals: approvalPort,
                 },
                 origin,
               ),
@@ -417,7 +458,9 @@ export async function startOpenOmni(options: StartOptions = {}) {
         workItems: completionPort,
         llm: llmPort,
         artifacts: artifactsPort,
-        conversations: ConversationStore,
+        conversations: conversePort,
+        leases: leasePort,
+        approvals: approvalPort,
       },
       targets: () => attachedTargets(host, machines?.enrolled ?? []),
       ...(options.llm === undefined ? {} : { llm: options.llm }),

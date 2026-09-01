@@ -1,4 +1,4 @@
-import type { Policy } from "@openomni/protocol";
+import type { PlainObject, PlainValue, Policy } from "@openomni/protocol";
 import { FAIL_CLOSED_CONFLICT, type Conflict, type EffectEntry, type FieldOwner } from "./types";
 import { flattenRecord, pathsOverlap, stableKey } from "./records";
 
@@ -73,7 +73,7 @@ function highestPriorityOwner(
 function recordForEffect(
   effect: Policy.PolicyEffect,
   effectType: "tool.rewrite_input" | "delegation.set_constraints",
-): Record<string, unknown> | undefined {
+): PlainObject | undefined {
   if (effectType === "tool.rewrite_input" && effect.type === "tool.rewrite_input") {
     return effect.input;
   }
@@ -129,7 +129,7 @@ function singleValueForEffect(
     | "run.replace_messages"
     | "writeback.rewrite"
     | "model.override",
-): unknown {
+): PlainValue | undefined {
   if (effectType === "prompt.replace" && effect.type === "prompt.replace") return effect.prompt;
   if (effectType === "tool.rewrite_output" && effect.type === "tool.rewrite_output") {
     return effect.output;

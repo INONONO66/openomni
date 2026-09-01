@@ -1,14 +1,14 @@
 import { z } from "zod";
-import { isPlainValue } from "../json.js";
+import { isPlainValue, type PlainObject, type PlainValue } from "../json.js";
 
 export namespace PolicyEffects {
-  const JsonPlainObject = z.custom<Record<string, unknown>>(
-    (value): value is Record<string, unknown> =>
+  const JsonPlainObject = z.custom<PlainObject>(
+    (value): value is PlainObject =>
       typeof value === "object" && value !== null && !Array.isArray(value) && isPlainValue(value),
     { message: "Expected a JSON-plain object" },
   );
-  const JsonPlainArray = z.custom<unknown[]>(
-    (value): value is unknown[] => Array.isArray(value) && isPlainValue(value),
+  const JsonPlainArray = z.custom<PlainValue[]>(
+    (value): value is PlainValue[] => Array.isArray(value) && isPlainValue(value),
     { message: "Expected a JSON-plain array" },
   );
 

@@ -19,6 +19,20 @@ export interface Admitted {
   readonly rootDelegationId: string;
   /** The origin an inline child of this delegation will present. */
   readonly childOrigin: DelegationOrigin;
+  /**
+   * The live lease that admitted a worker's channel delegation (§3.5). The
+   * driver pins every send to this lease and its conversation; an admission
+   * without one never reaches a channel from a worker origin.
+   */
+  readonly lease?: AdmissionLease;
+}
+
+/** The durable lease fact the kernel supplies; admission performs no I/O. */
+export interface AdmissionLease {
+  readonly id: string;
+  readonly conversationId: string;
+  readonly holderDelegationId: string;
+  readonly contactId: string;
 }
 
 const RefusalCode = z.enum([
@@ -67,6 +81,8 @@ export interface AdmissionContext {
   readonly parent?: Pick<Delegation.Record, "delegationId" | "rootDelegationId" | "deadline" | "status">;
   readonly parentMissing?: boolean;
   readonly openFanout: number;
+  /** Live leases held by the requesting worker's own delegation, if any. */
+  readonly leases?: readonly AdmissionLease[];
 }
 
 function refusal(code: RefusalCode, message: string): Refused {
@@ -157,14 +173,29 @@ export function admit(
   }
 
   const transport = transportFor(request.address);
+  let admittedLease: AdmissionLease | undefined;
   if (trustedOrigin.role === "worker") {
-    if (transport !== "inline") {
+    // §3.5 lease relaxation: a worker whose OWN delegation holds a live
+    // lease pinned to exactly this contact may reach the channel. The match
+    // is against parentDelegationId — the id of the delegation this worker
+    // executes — so an inline grandchild (whose parent is the inline child,
+    // not the lease holder) is refused by construction (§8.5).
+    const address = request.address;
+    admittedLease =
+      transport === "channel" && address.kind === "actor"
+        ? context?.leases?.find(
+            (lease) =>
+              lease.holderDelegationId === trustedOrigin.parentDelegationId &&
+              lease.contactId === address.actorId,
+          )
+        : undefined;
+    if (transport !== "inline" && admittedLease === undefined) {
       return refusal(
         "worker_transport",
         "a worker may only delegate to a same-domain inline child; ask the Resident for independent work",
       );
     }
-    if (trustedOrigin.depth >= limits.maxInlineDepth) {
+    if (transport === "inline" && trustedOrigin.depth >= limits.maxInlineDepth) {
       return refusal("inline_depth", `inline delegation is capped at depth ${limits.maxInlineDepth}`);
     }
   }
@@ -201,5 +232,6 @@ export function admit(
       : { parentDelegationId: trustedOrigin.parentDelegationId }),
     rootDelegationId,
     childOrigin,
+    ...(admittedLease === undefined ? {} : { lease: admittedLease }),
   };
 }
