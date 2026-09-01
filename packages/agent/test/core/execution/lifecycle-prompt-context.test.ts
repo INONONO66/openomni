@@ -3,7 +3,13 @@ import { testProviderModel } from "../../helpers/provider-model";
 import { Bus } from "@openomni/telemetry";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { CanonicalPolicyRegistration } from "../../../src/core/policy/types";
-import { registerAt, appendContext, replacePrompt } from "../../helpers/policy-decision";
+import {
+  appendContext,
+  deny,
+  inject,
+  registerAt,
+  replacePrompt,
+} from "../../helpers/policy-decision";
 import { buildTurn } from "../../../src/core/execution/turn";
 import { makeAgentBase, makeConfig, makeState, makeTrace } from "./lifecycle-dispatch-fixture";
 
@@ -38,6 +44,51 @@ describe("buildTurn (prompt.context.pre)", () => {
     expect(fn).toHaveBeenCalledTimes(1);
     if (result.type === "ready") {
       expect(result.turn.runInput.system).toContain("extra-context");
+    }
+  });
+
+  it("prompt.context.pre deny stops the turn before model execution", async () => {
+    const engine = PolicyEngine.create({ clock: Date.now });
+    registerAt(engine, "prompt.context.pre", "test-deny-context", 100, () => deny());
+
+    const result = await buildTurn(
+      makeState(),
+      makeConfig({ systemPrompt: "base prompt" }),
+      engine,
+      testProviderModel,
+      undefined,
+      makeTrace(),
+      makeAgentBase(),
+    );
+
+    expect(result.type).toBe("complete");
+    if (result.type === "complete") expect(result.result.guardAborted).toBe(true);
+  });
+
+  it("prompt.context.pre inject appends to an existing system prompt", async () => {
+    const engine = PolicyEngine.create({ clock: Date.now });
+    registerAt(
+      engine,
+      "prompt.context.pre",
+      "test-inject-context",
+      100,
+      () => inject("injected context"),
+      ["prompt.inject_message"],
+    );
+
+    const result = await buildTurn(
+      makeState(),
+      makeConfig({ systemPrompt: "base prompt" }),
+      engine,
+      testProviderModel,
+      undefined,
+      makeTrace(),
+      makeAgentBase(),
+    );
+
+    expect(result.type).toBe("ready");
+    if (result.type === "ready") {
+      expect(result.turn.runInput.system).toBe("base prompt\n\ninjected context");
     }
   });
 

@@ -6,6 +6,7 @@ import {
   registerAt,
   abortRun,
   allow,
+  deny,
   inject,
   replaceMessages,
 } from "../../helpers/policy-decision";
@@ -70,6 +71,31 @@ describe("handleStop (turn.finish + run.finish)", () => {
     expect(outcome).toBe("continue");
     expect(state.messages.length).toBeGreaterThan(1);
     expect(state.continuationCount).toBe(1);
+  });
+
+  it("completion.prepare denial stops a requested continuation", async () => {
+    const engine = PolicyEngine.create({ clock: Date.now });
+    registerAt(
+      engine,
+      "run.turn.post",
+      "test-post-turn-inject-before-deny",
+      100,
+      () => inject("continue working"),
+      ["prompt.inject_message"],
+    );
+    registerAt(engine, "run.completion.pre", "test-deny-compaction", 100, () => deny());
+    const state = makeState();
+
+    const outcome = await handleStop(
+      state,
+      makeConfig(),
+      engine,
+      makeAgentBase(),
+      makeTurnArtifacts(),
+    );
+
+    if (outcome === "continue") throw new Error("expected completion denial to stop the run");
+    expect(outcome.guardAborted).toBe(true);
   });
 
   it("turn.finish replace_messages effect mutates state before completion", async () => {
@@ -142,6 +168,21 @@ describe("handleStop (turn.finish + run.finish)", () => {
     const outcome = await handleStop(state, config, engine, makeAgentBase(), turn);
     if (outcome === "continue") throw new Error("expected the run to end");
     expect(outcome.finishReason).toBe("stalled");
+    expect(outcome.guardAborted).toBeFalsy();
+  });
+
+  it("keeps the completed result when run.finish denies without abort", async () => {
+    const engine = PolicyEngine.create({ clock: Date.now });
+    registerAt(engine, "run.lifecycle.post", "test-post-run-deny", 100, () => deny());
+    const state = makeState();
+    const turn = makeTurnArtifacts({
+      turnAssistant: { message: createAssistantMessage("completed", "", state.sessionId) },
+    });
+
+    const outcome = await handleStop(state, makeConfig(), engine, makeAgentBase(), turn);
+
+    if (outcome === "continue") throw new Error("expected the run to end");
+    expect(outcome.text).toBe("completed");
     expect(outcome.guardAborted).toBeFalsy();
   });
 

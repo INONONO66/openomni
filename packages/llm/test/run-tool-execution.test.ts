@@ -136,6 +136,36 @@ describe("run() tool execution ownership", () => {
     expect(capturedToolResults).toEqual([]);
   });
 
+  test("refuses SDK execution without a correlating toolCallId", async () => {
+    const toolExecutor = mock(async (call: Tool.Call): Promise<Tool.Result> => ({
+      id: "result-1",
+      toolCallId: call.id,
+      output: "never",
+    }));
+
+    await run(
+      {
+        trace: TEST_TRACE,
+        events: Bus,
+        messages: [],
+        tools: [{ name: "test_tool", inputSchema: { type: "object" } }],
+        model: testModel,
+        auth: { type: "api", key: "test-key-missing-call-id" },
+        toolExecutor,
+      },
+      mockSink,
+    );
+
+    const tools = aiCapture.__openomniAiStreamArgs?.tools as Record<
+      string,
+      { execute?: (args: Record<string, unknown>) => Promise<unknown> }
+    >;
+    await expect(tools.test_tool?.execute?.({ query: "value" })).rejects.toThrow(
+      "tool execute called without toolCallId",
+    );
+    expect(toolExecutor).not.toHaveBeenCalled();
+  });
+
   test("SDK invoking the sanitized wire key routes the dotted internal name to the executor", async () => {
     const toolExecutor = mock(async (call: Tool.Call): Promise<Tool.Result> => {
       return { id: "result-1", toolCallId: call.id, output: "sent" };

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import type { Message } from "@openomni/protocol";
+import type { BusEvent, Message } from "@openomni/protocol";
 import { RunEvents } from "../../src/core/execution/events";
-import { Bus } from "@openomni/telemetry";
+import { Bus, collector } from "@openomni/telemetry";
 import { Compaction } from "../../src/compaction/compact";
 import { captureBusEvents } from "../helpers/bus-event";
 
@@ -165,6 +165,38 @@ describe("Compaction bracket", () => {
     } finally {
       capture.unsubscribe();
     }
+  });
+
+  it("records a failed terminal when publishing the normal completion throws", async () => {
+    const events = collector();
+    const publishError = new Error("completion append failed");
+    const sink: BusEvent.Sink = {
+      publish(descriptor, data) {
+        if (
+          descriptor === RunEvents.CompactionCompleted &&
+          (data as { outcome?: string }).outcome !== "failed"
+        ) {
+          throw publishError;
+        }
+        events.publish(descriptor, data);
+      },
+    };
+
+    await expect(
+      Compaction.compact(
+        Array.from({ length: 12 }, (_unused, index) => makeUserMessage(`message ${index}`)),
+        { contextWindowTokens: 1000, protectRecentMessages: 2 },
+        IDENTITY,
+        sink,
+        { trigger: "threshold" },
+      ),
+    ).rejects.toBe(publishError);
+
+    expect(events.named(RunEvents.CompactionCompleted.name)).toHaveLength(1);
+    expect(events.named(RunEvents.CompactionCompleted.name)[0]).toMatchObject({
+      outcome: "failed",
+      error: "completion append failed",
+    });
   });
 
   it("a summarizer throw degrades to a recorded skip — the run lives (#734 F1)", async () => {

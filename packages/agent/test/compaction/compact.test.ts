@@ -512,6 +512,15 @@ describe("Compaction", () => {
         { trigger: "threshold" },
       );
       expect(calls[0]?.previous).toBeUndefined();
+      const priorAnchor = first.messages[0];
+      if (priorAnchor === undefined) throw new Error("expected prior anchor");
+      priorAnchor.parts.unshift({
+        id: nextId("anchor-prefix"),
+        sessionID: priorAnchor.info.sessionID,
+        messageID: priorAnchor.info.id,
+        type: "text",
+        text: "unmarked prefix",
+      });
 
       // Grow the compacted history and cut again: the anchor render from cut
       // one sits in the new cut span.
@@ -695,13 +704,31 @@ describe("Compaction", () => {
 
     it("keeps the newest user message even when it alone exceeds the budget", async () => {
       const huge = "h".repeat(500);
+      const hugeUser = makeUserMessage(huge);
+      hugeUser.parts.push({
+        id: nextId("user-tool-part"),
+        sessionID: "test",
+        messageID: hugeUser.info.id,
+        type: "tool",
+        callID: "user-tool-call",
+        tool: "read_file",
+        state: {
+          status: "completed",
+          input: {},
+          output: "tool-output".repeat(50),
+          title: "read_file",
+          metadata: {},
+          time: { start: 1, end: 2 },
+        },
+      });
       // protect 2 → the cut span is [old-user, a1, huge, a2]; both user
-      // messages face the budget, only the newest survives it.
+      // messages face the budget, including the completed tool output carried
+      // by the newest user message, so only that newest message survives it.
       const result = await Compaction.compact(
         [
           makeUserMessage("old-user"),
           makeAssistantMessage("a1"),
-          makeUserMessage(huge),
+          hugeUser,
           makeAssistantMessage("a2"),
           makeUserMessage("tail-u"),
           makeAssistantMessage("tail-a"),

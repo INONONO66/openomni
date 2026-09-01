@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, jest, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, jest, spyOn, test } from "bun:test";
 import { LlmCall, Operational, type Message, type Tool } from "@openomni/protocol";
 import type { Sink } from "../../src/sink";
 import { collector } from "@openomni/telemetry";
@@ -162,6 +162,27 @@ describe("Processor", () => {
   });
 
   describe("Processor.process(streamInput)", () => {
+    test("fails loudly when generated part identities collide", async () => {
+      const uuid = spyOn(crypto, "randomUUID").mockReturnValue(
+        "00000000-0000-4000-8000-000000000000",
+      );
+      try {
+        const processor = createProcessor({
+          createStream: streamOf([
+            { type: "step-start" },
+            { type: "step-start" },
+            { type: "finish" },
+          ]),
+        });
+
+        await expect(processor.process({ system: "" })).rejects.toThrow(
+          "transcript recording defect",
+        );
+      } finally {
+        uuid.mockRestore();
+      }
+    });
+
     test("projects text events into a completed TextPart", async () => {
       const capture = capturingSink();
       const processor = createProcessor({

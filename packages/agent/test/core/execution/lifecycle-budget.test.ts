@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { registerAt } from "../../helpers/policy-decision";
+import { deny, registerAt } from "../../helpers/policy-decision";
 import { Operational, PolicyDecision } from "@openomni/protocol";
 import { Bus, collector } from "@openomni/telemetry";
 import { dispatchBudgetCheck } from "../../../src/core/execution/lifecycle-dispatch";
@@ -95,6 +95,22 @@ describe("dispatchBudgetCheck (budget exhaustion)", () => {
       msg: "budget exceeded: wall time",
       context: { type: "exceeded" },
     });
+  });
+
+  it("still returns max-steps when the post-run observer denies", async () => {
+    const engine = PolicyEngine.create({ clock: Date.now });
+    registerAt(engine, "run.lifecycle.post", "test:deny-post-budget", 0, () => deny());
+    const state = makeState();
+    state.budgetState.turns = 1;
+
+    const result = await dispatchBudgetCheck(
+      state,
+      engine,
+      makeConfig({ budget: { maxTurns: 1 } }),
+      makeAgentBase(),
+    );
+
+    expect(result?.finishReason).toBe("max-steps");
   });
 
   it("returns null when budget is not exceeded", async () => {

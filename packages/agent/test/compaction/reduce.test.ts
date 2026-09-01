@@ -215,6 +215,40 @@ describe("Compaction.compact with elision configured", () => {
     expect(result.messages.length).toBeLessThan(messages.length);
   });
 
+  it("keeps successful elision when the subsequent summarizer fails", async () => {
+    const sink = collector();
+    const messages = [
+      toolMessage("x".repeat(500)),
+      toolMessage("small-old"),
+      toolMessage("tail-1"),
+      toolMessage("tail-2"),
+    ];
+
+    const result = await Compaction.compact(
+      messages,
+      {
+        contextWindowTokens: 100,
+        protectRecentMessages: 2,
+        elideToolOutputs: options,
+        onSummarize: async () => {
+          throw new Error("summary unavailable");
+        },
+      },
+      trace,
+      sink,
+      { trigger: "threshold", measuredTokens: 10_000 },
+    );
+
+    expect(result.compacted).toBe(true);
+    expect(result.removedCount).toBe(0);
+    expect(result.summarizerFailed).toBe(true);
+    const elided = result.messages[0]?.parts[0];
+    if (elided?.type !== "tool" || elided.state.status !== "completed") {
+      throw new Error("expected an elided tool result");
+    }
+    expect(elided.state.output.length).toBeLessThan(500);
+  });
+
   it("keeps the round to elision alone when the estimated reclaim covers the overage", async () => {
     const sink = collector();
     const messages = [

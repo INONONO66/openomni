@@ -370,6 +370,9 @@ describe("Processor abort settlement grace (#532 candidate 2)", () => {
             input: { path: "/tmp/x" },
           };
           abortController.abort();
+          // The grace drain must skip unrelated buffered events and keep
+          // pulling until the exact pending tool settles.
+          yield { type: "text-delta", id: "buffered-text", text: "ignored during abort" };
           yield {
             type: "tool-result",
             toolCallId: "call-grace",

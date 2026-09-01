@@ -1,5 +1,5 @@
-import { beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
-import type { Run, Sink } from "@openomni/llm";
+import { beforeAll, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
+import { Provider, type Run, type Sink } from "@openomni/llm";
 import type { Message, Tool } from "@openomni/protocol";
 import { RunEvents } from "../src/core/execution/events";
 import type { AgentStep, ChatAgentConfig } from "../src/core/types";
@@ -380,6 +380,20 @@ it("handles toolExecutor errors by setting isError: true", async () => {
   expect(result.finishReason).toBe("stop");
 });
 
+it("normalizes a structured error outcome without a message", async () => {
+  mockRunFn = async () => ({ type: "error", error: { code: "provider_failed" } }) as never;
+  const agent = ChatAgent.create({
+    events: Bus,
+    model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+    llm: mockLlm,
+    middleware: [noBackoffMiddleware],
+  });
+
+  await expect(
+    agent.run(runInput([{ role: "user", content: "structured error" }])),
+  ).rejects.toThrow("[object Object]");
+});
+
 it("records an unknown object outcome as a terminal failure", async () => {
   mockRunFn = async () => ({}) as never;
 
@@ -421,6 +435,25 @@ it("fails with a terminal record when the default provider is missing", async ()
       }).run(runInput([{ role: "user", content: "lookup" }])),
     ).rejects.toThrow("Provider not found: missing-provider");
   } finally {
+    delete process.env.OPENOMNI_DISABLE_MODELS_FETCH;
+  }
+});
+
+it("reports a non-Error proxy listing failure during model lookup", async () => {
+  process.env.OPENOMNI_DISABLE_MODELS_FETCH = "1";
+  const listing = spyOn(Provider, "listModels").mockRejectedValue("proxy offline");
+  try {
+    await expect(
+      ChatAgent.create({
+        events: Bus,
+        model: { provider: "anthropic", id: "missing-proxy-model" },
+        middleware: [noBackoffMiddleware],
+      }).run(runInput([{ role: "user", content: "lookup" }])),
+    ).rejects.toThrow(
+      "Model lookup failed for missing-proxy-model (provider anthropic): proxy model listing failed: proxy offline",
+    );
+  } finally {
+    listing.mockRestore();
     delete process.env.OPENOMNI_DISABLE_MODELS_FETCH;
   }
 });

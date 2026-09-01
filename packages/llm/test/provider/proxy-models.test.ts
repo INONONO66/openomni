@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import type { Provider } from "../../src/provider/index";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { Auth } from "../../src/auth";
+import { Provider } from "../../src/provider/index";
 import {
   enrichWithCatalog,
   fetchProxyModels,
@@ -105,6 +109,35 @@ describe("proxy-models", () => {
     ])("$name", async ({ port, response, message }) => {
       stubFetch(response);
       await expect(fetchProxyModels(`http://localhost:${port}/v1`)).rejects.toThrow(message);
+    });
+  });
+
+  describe("Provider.listModels proxy discovery", () => {
+    it("returns only models advertised by the configured proxy", async () => {
+      const directory = mkdtempSync(join(tmpdir(), "openomni-proxy-registry-"));
+      const previousAuthFile = process.env.OPENOMNI_AUTH_FILE;
+      process.env.OPENOMNI_AUTH_FILE = join(directory, "auth.json");
+      stubFetch(() =>
+        new Response(JSON.stringify({ data: [{ id: "proxy-only-model" }] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+
+      try {
+        await Auth.set("openai", {
+          type: "proxy",
+          baseURL: "http://localhost:3199/v1",
+          apiKey: "proxy-key",
+        });
+        const models = await Provider.listModels("openai", "proxy");
+
+        expect(models.map((model) => model.id)).toEqual(["proxy-only-model"]);
+      } finally {
+        if (previousAuthFile === undefined) delete process.env.OPENOMNI_AUTH_FILE;
+        else process.env.OPENOMNI_AUTH_FILE = previousAuthFile;
+        rmSync(directory, { recursive: true, force: true });
+      }
     });
   });
 

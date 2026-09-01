@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Message } from "@openomni/protocol";
-import { toModelMessages } from "../../src/message";
+import { stringifyToolOutput, toModelMessages } from "../../src/message";
 import type { Provider } from "../../src/provider";
 
 const anthropicModel: Provider.Model = {
@@ -48,6 +48,15 @@ function assistantMessage(
     parts,
   };
 }
+
+describe("stringifyToolOutput", () => {
+  test("falls back to String for circular values", () => {
+    const circular: { self?: unknown } = {};
+    circular.self = circular;
+
+    expect(stringifyToolOutput(circular)).toBe("[object Object]");
+  });
+});
 
 describe("toModelMessages", () => {
   test("converts empty array", () => {
@@ -244,6 +253,26 @@ describe("toModelMessages tool-name wire sanitization (all providers)", () => {
     // The dotted internal name must not leak into the re-serialized history.
     expect((toolCall as { toolName?: string }).toolName).toBe("message_send");
     expect((toolResult as { toolName?: string }).toolName).toBe("message_send");
+  });
+
+  test("serializes failed tool history as an error result", () => {
+    const message = assistantWithDottedToolCall();
+    const tool = message.parts.find((part): part is Message.ToolPart => part.type === "tool");
+    if (tool === undefined) throw new Error("expected tool part");
+    tool.state = {
+      status: "error",
+      input: tool.state.input,
+      error: "permission denied",
+      time: { start: 1100, end: 1150 },
+    };
+
+    const result = toModelMessages([message], openaiModel);
+    const toolMessage = result.find((item) => item.role === "tool");
+    if (!toolMessage || !Array.isArray(toolMessage.content)) throw new Error("expected tool result");
+    expect(toolMessage.content[0]).toMatchObject({
+      type: "tool-result",
+      output: { type: "text", value: "Error: permission denied" },
+    });
   });
 });
 

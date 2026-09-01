@@ -7,6 +7,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { McpClient, type McpClientHandle } from "../../../src/runtime/mcp/client";
+import { cleanupFailedConnection } from "../../../src/runtime/mcp/client-connection";
 
 const TRACE_ID = "trace-mcp-lifecycle";
 const stdio = (name = "filesystem") => ({
@@ -383,6 +384,17 @@ describe("McpClient request options", () => {
 });
 
 describe("McpClient connection cleanup", () => {
+  test("returns a direct transport cleanup failure", async () => {
+    const cleanupError = new Error("transport cleanup failed");
+    const client = stubClient();
+    const transport = transportStub();
+    transport.close = async () => {
+      throw cleanupError;
+    };
+
+    expect(await cleanupFailedConnection(client, transport)).toBe(cleanupError);
+  });
+
   test.each([
     ["closes the MCP transport when client.connect fails", "connect", true, true],
     ["closes the MCP transport when initial tool discovery fails", "list", true, true],

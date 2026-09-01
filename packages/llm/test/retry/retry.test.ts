@@ -196,6 +196,12 @@ describe("Retry", () => {
         assert: (delay: number) => expect(delay).toBe(10000),
       },
       {
+        name: "falls through an invalid Retry-After-Ms to Retry-After",
+        attempt: 1,
+        headers: { "retry-after-ms": "invalid", "retry-after": "3" },
+        assert: (delay: number) => expect(delay).toBe(3000),
+      },
+      {
         name: "falls back to exponential backoff if Retry-After is invalid",
         attempt: 2,
         headers: { "retry-after": "invalid" },
@@ -265,6 +271,11 @@ describe("Retry", () => {
         name: "falls back to status classification when message is not JSON",
         input: { message: "Server error", statusCode: 500, isRetryable: true },
         expected: "server_error",
+      },
+      {
+        name: "classifies 429 by status when payload is primitive JSON",
+        input: { message: "null", statusCode: 429, isRetryable: true },
+        expected: "rate_limit",
       },
       {
         name: "classifies 429 by status when payload is opaque",
@@ -373,6 +384,40 @@ describe("Retry", () => {
 describe("Retry.decide ratelimit-reset parsing (#532 candidate 3)", () => {
   test("x-ratelimit-reset-requests duration is used when retry-after is absent", () => {
     expect(delayOf(1, rateLimitError({ "x-ratelimit-reset-requests": "3s" }))).toBe(3000);
+  });
+
+  test("selects the earliest reset across rate-limit buckets", () => {
+    expect(
+      decideWithoutJitter(
+        1,
+        rateLimitError({
+          "x-ratelimit-reset-requests": "9s",
+          "x-ratelimit-reset-tokens": "2s",
+        }),
+      ),
+    ).toEqual({ retry: true, reason: "rate_limit", delayMs: 2000 });
+  });
+
+  test("ignores an expired reset timestamp", () => {
+    const now = Date.parse("2030-01-01T00:00:00.000Z");
+    const expired = new Date(now - 1000).toISOString();
+    expect(
+      withNow(now, () =>
+        decideWithoutJitter(
+          1,
+          rateLimitError({ "anthropic-ratelimit-requests-reset": expired }),
+        ),
+      ),
+    ).toEqual({ retry: true, reason: "rate_limit", delayMs: 2000 });
+  });
+
+  test("ignores a malformed reset timestamp", () => {
+    expect(
+      decideWithoutJitter(
+        1,
+        rateLimitError({ "anthropic-ratelimit-requests-reset": "not-a-date" }),
+      ),
+    ).toEqual({ retry: true, reason: "rate_limit", delayMs: 2000 });
   });
 
   test("x-ratelimit-reset duration with compound units parses", () => {
