@@ -1,4 +1,5 @@
 import { Machine, NamedError } from "@openomni/protocol";
+import { z } from "zod";
 
 const MachineCellErrorData = Machine.CellRequest.pick({ cellId: true }).extend({
   code: Machine.CellRequest.shape.cellId.refine(
@@ -11,3 +12,16 @@ const MachineCellErrorData = Machine.CellRequest.pick({ cellId: true }).extend({
 export const MachineCellError = NamedError.create("MachineCellError", MachineCellErrorData);
 
 export type MachineCellFailure = InstanceType<typeof MachineCellError>;
+
+const MachineDaemonProtocolErrorData = z.object({
+  reason: z.literal("capability_not_offered"),
+  capability: z.string(),
+  message: z.string(),
+});
+
+export const MachineDaemonProtocolError = NamedError.create(
+  "MachineDaemonProtocolError",
+  MachineDaemonProtocolErrorData,
+);
+
+export type MachineDaemonProtocolFailure = InstanceType<typeof MachineDaemonProtocolError>;
