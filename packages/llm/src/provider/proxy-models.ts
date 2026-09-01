@@ -103,7 +103,6 @@ export function enrichWithCatalog(
           id,
           providerID,
           name: id,
-          status: "active",
         },
   );
 }

@@ -10,13 +10,18 @@ export namespace ModelsDev {
   export const ModelStatus = ProtocolModel.Status;
   export type ModelStatus = z.infer<typeof ModelStatus>;
 
+  /**
+   * The subset of a models.dev model record this package consumes. The
+   * upstream payload carries more (cost, modalities, capabilities,
+   * `status`, `release_date`); declaring a field here that no code reads
+   * only advertises support that does not exist — add one back together
+   * with its reader.
+   */
   export interface Model {
     id: string;
     name: string;
     family?: string;
-    release_date?: string;
     limit?: { context: number };
-    status?: ModelStatus;
     provider?: { npm: string };
   }
 

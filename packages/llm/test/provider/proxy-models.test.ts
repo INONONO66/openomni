@@ -115,7 +115,6 @@ describe("proxy-models", () => {
           id: "gpt-5.4",
           providerID: "openai",
           name: "GPT 5.4",
-          status: "active",
         },
       };
       const result = enrichWithCatalog(["gpt-5.4", "gpt-5.5"], catalog, "openai");

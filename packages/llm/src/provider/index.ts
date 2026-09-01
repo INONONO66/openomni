@@ -1,11 +1,16 @@
 import { z } from "zod";
-import { Model as ProtocolModel } from "@openomni/protocol";
 import { ProviderError } from "../error";
 import { ModelsDev } from "../model";
 import { Auth } from "../auth/storage";
 import { enrichWithCatalog, fetchProxyModels } from "./proxy-models";
 
 export namespace Provider {
+  /**
+   * Only consumed catalog metadata lives here. `status` and `release_date`
+   * were stored by the mapping below and read by nothing (#PR-2 slop pass) —
+   * a field with no reader is a claim the code cannot keep, so it is gone
+   * from the schema too: a re-add without a reader fails the mapping test.
+   */
   export const Model = z.object({
     id: z.string(),
     providerID: z.string(),
@@ -23,8 +28,6 @@ export namespace Provider {
         context: z.number(),
       })
       .optional(),
-    status: ProtocolModel.Status.optional(),
-    release_date: z.string().optional(),
   });
   export type Model = z.infer<typeof Model>;
 
@@ -39,11 +42,9 @@ export namespace Provider {
         url: provider.api,
         npm: model.provider?.npm ?? provider.npm ?? "@ai-sdk/openai",
       },
-      status: model.status ?? "active",
       limit: {
         context: model.limit?.context ?? 0,
       },
-      release_date: model.release_date ?? "",
     };
   }
 

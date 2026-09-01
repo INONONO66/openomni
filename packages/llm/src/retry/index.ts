@@ -1,4 +1,4 @@
-import { APIError } from "../error";
+import { APIError, coerceApiError } from "../error";
 
 export namespace Retry {
   export const RETRY_INITIAL_DELAY = 2000;
@@ -70,8 +70,12 @@ export namespace Retry {
     | "overloaded"
     | "server_error"
     | "billing"
+    | "content_policy"
     | "non_retryable";
-  export type RetryableReason = Exclude<Reason, "non_retryable" | "billing">;
+  export type RetryableReason = Exclude<
+    Reason,
+    "non_retryable" | "billing" | "content_policy"
+  >;
 
   export type Decision =
     | {
@@ -100,6 +104,17 @@ export namespace Retry {
         reason,
         detail:
           "the account's quota or billing balance is exhausted — retrying cannot restore it; top up or raise the limit",
+      };
+    }
+    // A moderation verdict is a judgment about THIS request, not a capacity
+    // condition: the identical prompt earns the identical refusal, so it is
+    // terminal before any delay too.
+    if (reason === "content_policy") {
+      return {
+        retry: false,
+        reason,
+        detail:
+          "the provider refused this request on content policy grounds — the same prompt will be refused again; change what is being asked",
       };
     }
     if (instantFailureStreak >= INSTANT_FAILURE_STREAK_LIMIT) {
@@ -225,6 +240,35 @@ export namespace Retry {
     return undefined;
   }
 
+  /**
+   * How deep a cause chain is walked before giving up. A wrapper layer per
+   * package is the realistic shape (`llm` failure inside an app-level error);
+   * the bound also makes a self-referential `cause` terminate.
+   */
+  const MAX_CAUSE_DEPTH = 8;
+
+  /**
+   * The classification entry point for callers OUTSIDE the retry loop: hosts
+   * deciding what to tell a user when a run died. Unlike {@link decide} it
+   * takes any thrown value — the typed APIError, a raw AI SDK provider error
+   * (coerced), or either of those wrapped as the `cause` of a higher layer's
+   * failure — and answers with the same closed vocabulary the retry loop
+   * branches on. Hosts get the class here instead of re-matching provider
+   * prose, which is exactly the drift this vocabulary exists to prevent.
+   */
+  export function classifyFailure(error: unknown): Reason {
+    let current: unknown = error;
+    for (let depth = 0; depth < MAX_CAUSE_DEPTH; depth += 1) {
+      const apiError = coerceApiError(current);
+      if (apiError !== undefined) return classify(apiError);
+      if (typeof current !== "object" || current === null || !("cause" in current)) break;
+      const cause = (current as { cause?: unknown }).cause;
+      if (cause === current || cause === undefined) break;
+      current = cause;
+    }
+    return "non_retryable";
+  }
+
   function classify(error: unknown): Reason {
     if (!APIError.isInstance(error)) {
       return "non_retryable";
@@ -238,6 +282,15 @@ export namespace Retry {
       isBillingExhaustion(error.data.responseBody)
     ) {
       return "billing";
+    }
+
+    // Moderation outranks the retryable flag for the same reason billing
+    // does: the verdict is about the request, and no wait changes it.
+    if (
+      isContentPolicyRefusal(error.data.statusCode, error.data.message) ||
+      isContentPolicyRefusal(error.data.statusCode, error.data.responseBody)
+    ) {
+      return "content_policy";
     }
 
     if (!error.data.isRetryable) {
@@ -286,6 +339,27 @@ export namespace Retry {
     // name an account limit. Do not accept bare "quota exceeded": it can name
     // a short-lived per-minute limit.
     return /exceeded\s+your\s+(?:current|monthly)\s+(?:usage\s+)?quota/.test(haystack);
+  }
+
+  /**
+   * Moderation verdicts, as the providers name them. Scoped to 4xx: a 5xx
+   * merely MENTIONING a content policy (a docs service outage, a moderation
+   * backend that fell over) is a server fault and must keep its retries.
+   */
+  const CONTENT_POLICY_PATTERNS = [
+    "content_policy_violation",
+    "content_filter",
+    "content policy",
+    "safety filter",
+    "flagged by our moderation",
+    "moderation_blocked",
+  ] as const;
+
+  function isContentPolicyRefusal(statusCode: number | undefined, payload: string | undefined): boolean {
+    if (payload === undefined || statusCode === undefined) return false;
+    if (statusCode < 400 || statusCode >= 500) return false;
+    const haystack = payload.toLowerCase();
+    return CONTENT_POLICY_PATTERNS.some((pattern) => haystack.includes(pattern));
   }
 
   function classifyErrorPayload(payload: string | undefined): RetryableReason | undefined {
