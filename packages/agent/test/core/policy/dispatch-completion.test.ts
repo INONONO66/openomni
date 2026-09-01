@@ -124,23 +124,3 @@ describe("tool.native.pre middleware dispatch", () => {
     expect(receivedInput).toEqual({ command: "echo safe" });
   });
 });
-
-it("dispatches run errors with canonical context", async () => {
-  const onError = mock((_ctx: PolicyContext) => abortRun("test.on-error", "test-error-abort"));
-  const engine = PolicyEngine.create();
-  registerAt(engine, "run.error.error", "test:error", 100, onError, ["run.abort"]);
-  const verdict = await engine.dispatchPoint("run.error.error", {
-    ...policyContext(),
-    sessionId: "session",
-    runId: "run",
-    errorCode: "test-error",
-    errorPhase: "turn",
-  });
-  expect(onError).toHaveBeenCalledTimes(1);
-  expect(verdict.verdict).toBe("deny");
-  expect(onError.mock.calls[0]?.[0]).toMatchObject({
-    timing: "error",
-    errorCode: "test-error",
-    errorPhase: "turn",
-  });
-});

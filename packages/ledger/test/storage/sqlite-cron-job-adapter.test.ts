@@ -1,23 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { unlinkSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import type { CronJob } from "@openomni/protocol";
 import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage";
-
-function tempDbPath(): string {
-  return join(tmpdir(), `test-sqlite-cron-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
-}
-
-function removeSqliteFiles(path: string): void {
-  for (const suffix of ["", "-wal", "-shm"]) {
-    try {
-      unlinkSync(`${path}${suffix}`);
-    } catch (_err) {
-      void _err;
-    }
-  }
-}
+import { removeSqliteFiles, tempDbPath } from "../helpers/sqlite";
 
 function makeCronJob(id: string, createdAt = Date.now()): CronJob.Info {
   return {
@@ -36,7 +20,7 @@ describe("SqliteStorageAdapter cronJob", () => {
   let adapter: SqliteStorageAdapter;
 
   beforeEach(() => {
-    dbPath = tempDbPath();
+    dbPath = tempDbPath("test-sqlite-cron");
     adapter = new SqliteStorageAdapter(dbPath);
   });
 

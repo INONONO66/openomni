@@ -2,17 +2,11 @@ import { describe, expect, it } from "bun:test";
 import { Bus } from "@openomni/telemetry";
 import { PolicyEngine } from "../../../src/core/policy";
 import { buildTurn } from "../../../src/core/execution/turn";
-import {
-  createRunState,
-  type AgentRunBase,
-  type RunTrace,
-} from "../../../src/core/execution/state";
 import type { PolicyRegistration } from "../../../src/core/policy/types";
 import type { Tool } from "@openomni/protocol";
-import type { ChatAgentConfig } from "../../../src/core/types";
 import { registerAt, abortRun, allow, filterTools } from "../../helpers/policy-decision";
-import { runInput } from "../../helpers/run-input";
 import { testProviderModel } from "../../helpers/provider-model";
+import { makeAgentBase, makeConfig, makeState, makeTrace } from "./lifecycle-dispatch-fixture";
 
 function makeTools(...names: string[]): Tool.Spec[] {
   return names.map((name) => ({
@@ -29,27 +23,6 @@ function makeLabeledTool(name: string, labels: string[]): Tool.Spec {
     inputSchema: { type: "object", properties: {} },
     labels,
   };
-}
-
-function makeConfig(tools: Tool.Spec[]): ChatAgentConfig {
-  return {
-    events: Bus,
-    model: { provider: "test", id: "test-model" },
-    tools,
-    systemPrompt: "test system prompt",
-  };
-}
-
-function makeTrace(): RunTrace {
-  return { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" };
-}
-
-function makeAgentBase(): AgentRunBase {
-  return { traceId: "trace-1", sessionId: "sess-1", runId: "run-1", actorId: "actor-1" };
-}
-
-function makeState() {
-  return createRunState(runInput([{ role: "user", content: "hello" }]));
 }
 
 function filterPolicy(filteredTools: string[]): PolicyRegistration {
@@ -80,7 +53,7 @@ describe("resources.prepare dispatch", () => {
     const engine = PolicyEngine.create();
     const tools = makeTools("bash", "read", "write");
     const state = makeState();
-    const config = makeConfig(tools);
+    const config = makeConfig({ tools, systemPrompt: "test system prompt" });
 
     const result = await buildTurn(
       state,
@@ -105,7 +78,7 @@ describe("resources.prepare dispatch", () => {
 
     const tools = makeTools("bash", "read", "write");
     const state = makeState();
-    const config = makeConfig(tools);
+    const config = makeConfig({ tools, systemPrompt: "test system prompt" });
 
     const result = await buildTurn(
       state,
@@ -130,7 +103,7 @@ describe("resources.prepare dispatch", () => {
 
     const tools = makeTools("dangerous.exec", "safe.read", "dangerous.write");
     const state = makeState();
-    const config = makeConfig(tools);
+    const config = makeConfig({ tools, systemPrompt: "test system prompt" });
 
     const result = await buildTurn(
       state,
@@ -154,7 +127,7 @@ describe("resources.prepare dispatch", () => {
 
     const tools = makeTools("bash", "read");
     const state = makeState();
-    const config = makeConfig(tools);
+    const config = makeConfig({ tools, systemPrompt: "test system prompt" });
 
     const result = await buildTurn(
       state,
@@ -187,7 +160,7 @@ describe("resources.prepare dispatch", () => {
       makeLabeledTool("read", ["tool:read", "capability.read"]),
     ];
     const state = makeState();
-    const config = makeConfig(tools);
+    const config = makeConfig({ tools, systemPrompt: "test system prompt" });
 
     await buildTurn(
       state,
@@ -210,13 +183,11 @@ describe("resources.prepare dispatch", () => {
   it("keeps all tools when transform verdict has no tools property", async () => {
     Bus.reset();
     const engine = PolicyEngine.create();
-    registerAt(engine, "tool.catalog.pre", "transform-no-tools", 0, () =>
-      allow("test", "test"),
-    );
+    registerAt(engine, "tool.catalog.pre", "transform-no-tools", 0, () => allow("test", "test"));
 
     const tools = makeTools("bash", "read", "write");
     const state = makeState();
-    const config = makeConfig(tools);
+    const config = makeConfig({ tools, systemPrompt: "test system prompt" });
 
     const result = await buildTurn(
       state,

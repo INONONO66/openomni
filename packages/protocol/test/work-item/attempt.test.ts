@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { WorkItem } from "./index.js";
+import { WorkItem } from "../../src/index.js";
 
 function contentInputs(): Parameters<typeof WorkItem.contentFingerprintOf>[0] {
   return {
