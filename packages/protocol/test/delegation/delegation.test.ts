@@ -128,9 +128,9 @@ describe("Delegation.Request operation/address matrix", () => {
     expect(result.success).toBe(false);
     if (!result.success) {
       const unrecognized = result.error.issues.find((issue) => issue.code === "unrecognized_keys");
-      expect(unrecognized?.message).toBe("Unrecognized key(s) in object: 'mode'");
+      expect(unrecognized?.message).toBe("Unrecognized key: \"mode\"");
       const missing = result.error.issues.find((issue) => issue.path.join(".") === "operation");
-      expect(missing?.message).toBe("Required");
+      expect(missing?.message).toBe('Invalid option: expected one of "notify"|"ask"|"assign"');
     }
   });
 
@@ -140,10 +140,10 @@ describe("Delegation.Request operation/address matrix", () => {
     expect(missing.success).toBe(false);
     if (!missing.success) {
       const issue = missing.error.issues.find((candidate) => candidate.path.join(".") === "deadline");
-      expect(issue?.message).toBe("Required");
+      expect(issue?.message).toBe("Invalid input: expected number, received undefined");
     }
     expect(requestIssueAt({ ...askCoreInline, deadline: 0 }, "deadline")).toBe(
-      "Number must be greater than 0",
+      "Too small: expected number to be >0",
     );
   });
 
@@ -152,7 +152,7 @@ describe("Delegation.Request operation/address matrix", () => {
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.error.issues[0]?.code).toBe("unrecognized_keys");
-      expect(result.error.issues[0]?.message).toBe("Unrecognized key(s) in object: 'transport'");
+      expect(result.error.issues[0]?.message).toBe("Unrecognized key: \"transport\"");
       expect(result.error.issues[0]?.path).toEqual([]);
     }
   });
@@ -187,7 +187,7 @@ describe("Delegation.Settled terminal vocabulary", () => {
     expect(crossed.success).toBe(false);
     if (!crossed.success) {
       expect(crossed.error.issues[0]?.code).toBe("unrecognized_keys");
-      expect(crossed.error.issues[0]?.message).toBe("Unrecognized key(s) in object: 'deadline'");
+      expect(crossed.error.issues[0]?.message).toBe("Unrecognized key: \"deadline\"");
       expect(crossed.error.issues[0]?.path).toEqual([]);
     }
   });
@@ -227,7 +227,7 @@ describe("Delegation.Settled terminal vocabulary", () => {
         const issue = result.error.issues.find(
           (candidate) => candidate.path.join(".") === evidenceField,
         );
-        expect(issue?.message).toBe("Required");
+        expect(issue?.message).toBe("Invalid input: expected string, received undefined");
       }
     }
   });
@@ -250,13 +250,18 @@ describe("Delegation.Handle returned at admission", () => {
   });
 
   test("operation, deadline, and rootDelegationId are required — a handle names its tree", () => {
+    const missingMessage = {
+      operation: 'Invalid option: expected one of "notify"|"ask"|"assign"',
+      deadline: "Invalid input: expected number, received undefined",
+      rootDelegationId: "Invalid input: expected string, received undefined",
+    } as const;
     for (const field of ["operation", "deadline", "rootDelegationId"] as const) {
       const { [field]: _omitted, ...without } = handle;
       const result = Delegation.Handle.safeParse(without);
       expect(result.success).toBe(false);
       if (!result.success) {
         const issue = result.error.issues.find((candidate) => candidate.path.join(".") === field);
-        expect(issue?.message).toBe("Required");
+        expect(issue?.message).toBe(missingMessage[field]);
       }
     }
   });
@@ -267,7 +272,7 @@ describe("Delegation.Handle returned at admission", () => {
     if (!bogus.success) {
       expect(bogus.error.issues[0]?.path.join(".")).toBe("transport");
       expect(bogus.error.issues[0]?.message).toBe(
-        "Invalid enum value. Expected 'inline' | 'process' | 'channel', received 'carrier-pigeon'",
+        'Invalid option: expected one of "inline"|"process"|"channel"',
       );
     }
   });

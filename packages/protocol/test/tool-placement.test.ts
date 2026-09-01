@@ -9,7 +9,7 @@ describe("Tool.Placement", () => {
     const bogus = Tool.Placement.safeParse("remote");
     expect(bogus.success).toBe(false);
     if (!bogus.success) {
-      expect(bogus.error.issues[0]?.code).toBe("invalid_enum_value");
+      expect(bogus.error.issues[0]?.code).toBe("invalid_value");
       expect(bogus.error.issues[0]?.path).toEqual([]);
     }
   });

@@ -104,6 +104,7 @@ export namespace Processor {
     const sink = createProjectedSink(events, configuredSink, sessionID, trace.traceId);
 
     let folded: Message.WithParts | undefined;
+    let terminalFailureStatusPublished = false;
 
     // Billed usage across attempts. Each attempt folds from scratch, so the
     // final fold's tokens omit what retried attempts consumed; this counter
@@ -135,6 +136,164 @@ export namespace Processor {
       publishInfo(events, sessionID, trace.traceId, msg, data);
     }
 
+    function handleAttemptFailure(
+      error: unknown,
+      eventState: ReturnType<typeof createStreamEventState>,
+      eventContext: StreamEventContext,
+      attemptStartedAt: number,
+      attempt: number,
+      instantFailureStreak: number,
+      finishAttempt: (finish: Transcript.FinishReason) => void,
+    ): { attempt: number; instantFailureStreak: number; delayMs: number } {
+      const apiError = coerceApiError(error);
+      const nextInstantFailureStreak = Retry.isInstantTransportFailure(
+        apiError ?? error,
+        Date.now() - attemptStartedAt,
+      )
+        ? instantFailureStreak + 1
+        : 0;
+      const decision = Retry.decide(attempt + 1, apiError ?? error, nextInstantFailureStreak);
+      const nextAttempt = attempt + 1;
+
+      if (!decision.retry || nextAttempt > retryAttemptLimit) {
+        publishRetryDecline(decision, retryAttemptLimit, events, trace);
+        // Abort classification reads the signal, not the error shape: a
+        // custom abort reason may be a plain Error.
+        const aborted =
+          abort.aborted || (error instanceof DOMException && error.name === "AbortError");
+        settleAttempt(eventState, eventContext, { aborted });
+        finishAttempt(aborted ? "aborted" : "error");
+        terminalFailureStatusPublished = true;
+        publishStatus(events, sessionID, trace.traceId, "idle");
+        throw error;
+      }
+
+      publishRetryOverCapWarning(decision, events, trace);
+      // The failed attempt closes before the next one starts: its tools can
+      // never receive results from the next stream.
+      settleAttempt(eventState, eventContext, { aborted: false });
+      finishAttempt("error");
+      publishRetryDecision(decision, nextAttempt, retryAttemptLimit, events, trace, model);
+      publishStatus(events, sessionID, trace.traceId, "retry");
+
+      return {
+        attempt: nextAttempt,
+        instantFailureStreak: nextInstantFailureStreak,
+        delayMs: decision.delayMs,
+      };
+    }
+
+    async function runAttempts(streamInput: StreamInput): Promise<void> {
+      publishStatus(events, sessionID, trace.traceId, "busy");
+      let attempt = 0;
+      let attemptSeq = 0;
+      // Consecutive instant transport failures (no HTTP status, dead under
+      // the window). Reset by any attempt that reaches the endpoint or
+      // fails slowly — only an unbroken streak declines the retry.
+      let instantFailureStreak = 0;
+
+      try {
+        while (true) {
+          // No natural attempt id exists at run() callsites, so attempt
+          // identity is derived here: messageID (unique per run) + a local
+          // attempt counter.
+          attemptSeq += 1;
+          const attemptId = `${assistantMessage.id}#${attemptSeq}`;
+          folded = undefined;
+          record({ type: "message.created", attemptId, message: { ...assistantMessage } });
+
+          const eventState = createStreamEventState();
+          const eventContext: StreamEventContext = {
+            sessionID,
+            messageID: assistantMessage.id,
+            attemptId,
+            sink,
+            record,
+            note: debugNote,
+            ...(toolNames !== undefined && { toolNames }),
+          };
+
+          function finishAttempt(finish: Transcript.FinishReason): void {
+            usageTotals.input += eventState.usage.input;
+            usageTotals.output += eventState.usage.output;
+            usageTotals.reasoning += eventState.usage.reasoning;
+            usageTotals.cache.read += eventState.usage.cache.read;
+            usageTotals.cache.write += eventState.usage.cache.write;
+            record({
+              type: "message.finished",
+              attemptId,
+              messageId: assistantMessage.id,
+              at: Date.now(),
+              finish,
+              usage: eventState.usage,
+            });
+          }
+
+          const attemptStartedAt = Date.now();
+          try {
+            const stream = await createStream(streamInput);
+
+            const iterator = stream.fullStream[Symbol.asyncIterator]();
+            try {
+              while (true) {
+                const next = await iterator.next();
+                if (next.done) break;
+                if (abort.aborted) {
+                  // Settle tools the SDK already executed before surfacing
+                  // the abort (bounded grace) — see drainToolSettlements.
+                  await drainToolSettlements(iterator, next.value, eventState, eventContext);
+                  abort.throwIfAborted();
+                }
+                handleStreamEvent(next.value, eventState, eventContext);
+              }
+            } finally {
+              // for-await's IteratorClose equivalent: finalize the stream on
+              // every exit path (abort, event-handler throw, retryable
+              // stream error). Bounded — a generator suspended on a dead
+              // await never settles its return(), and close failures never
+              // outrank the in-flight outcome.
+              const closing = iterator.return?.();
+              if (closing !== undefined) {
+                await Promise.race([
+                  Promise.resolve(closing).then(
+                    () => undefined,
+                    () => undefined,
+                  ),
+                  new Promise<void>((resolve) => {
+                    setTimeout(resolve, STREAM_CLOSE_GRACE_MS);
+                  }),
+                ]);
+              }
+            }
+
+            // Clean stream end: the AI SDK can stop (stepCountIs) after
+            // emitting tool-call events whose results will never arrive —
+            // settle them, then close the attempt.
+            settleAttempt(eventState, eventContext, { aborted: false });
+            finishAttempt(mapFinishReason(eventState.finishReason));
+            return;
+          } catch (e: unknown) {
+            const retryState = handleAttemptFailure(
+              e,
+              eventState,
+              eventContext,
+              attemptStartedAt,
+              attempt,
+              instantFailureStreak,
+              finishAttempt,
+            );
+            attempt = retryState.attempt;
+            instantFailureStreak = retryState.instantFailureStreak;
+            await Retry.sleep(retryState.delayMs, abort);
+          }
+        }
+      } finally {
+        if (!terminalFailureStatusPublished) {
+          publishStatus(events, sessionID, trace.traceId, "idle");
+        }
+      }
+    }
+
     return {
       get message() {
         return (folded?.info ?? assistantMessage) as Message.AssistantMessage;
@@ -144,199 +303,78 @@ export namespace Processor {
         return { ...usageTotals, cache: { ...usageTotals.cache } };
       },
 
-      async process(streamInput: StreamInput): Promise<void> {
-        publishStatus(events, sessionID, trace.traceId, "busy");
-        let attempt = 0;
-        let attemptSeq = 0;
-        // Consecutive instant transport failures (no HTTP status, dead under
-        // the window). Reset by any attempt that reaches the endpoint or
-        // fails slowly — only an unbroken streak declines the retry.
-        let instantFailureStreak = 0;
-
-        try {
-          while (true) {
-            // No natural attempt id exists at run() callsites, so attempt
-            // identity is derived here: messageID (unique per run) + a local
-            // attempt counter.
-            attemptSeq += 1;
-            const attemptId = `${assistantMessage.id}#${attemptSeq}`;
-            folded = undefined;
-            record({ type: "message.created", attemptId, message: { ...assistantMessage } });
-
-            const eventState = createStreamEventState();
-            const eventContext: StreamEventContext = {
-              sessionID,
-              messageID: assistantMessage.id,
-              attemptId,
-              sink,
-              record,
-              note: debugNote,
-              ...(toolNames !== undefined && { toolNames }),
-            };
-
-            function finishAttempt(finish: Transcript.FinishReason): void {
-              usageTotals.input += eventState.usage.input;
-              usageTotals.output += eventState.usage.output;
-              usageTotals.reasoning += eventState.usage.reasoning;
-              usageTotals.cache.read += eventState.usage.cache.read;
-              usageTotals.cache.write += eventState.usage.cache.write;
-              record({
-                type: "message.finished",
-                attemptId,
-                messageId: assistantMessage.id,
-                at: Date.now(),
-                finish,
-                usage: eventState.usage,
-              });
-            }
-
-            const attemptStartedAt = Date.now();
-            try {
-              const stream = await createStream(streamInput);
-
-              const iterator = stream.fullStream[Symbol.asyncIterator]();
-              try {
-                while (true) {
-                  const next = await iterator.next();
-                  if (next.done) break;
-                  if (abort.aborted) {
-                    // Settle tools the SDK already executed before surfacing
-                    // the abort (bounded grace) — see drainToolSettlements.
-                    await drainToolSettlements(iterator, next.value, eventState, eventContext);
-                    abort.throwIfAborted();
-                  }
-                  handleStreamEvent(next.value, eventState, eventContext);
-                }
-              } finally {
-                // for-await's IteratorClose equivalent: finalize the stream on
-                // every exit path (abort, event-handler throw, retryable
-                // stream error). Bounded — a generator suspended on a dead
-                // await never settles its return(), and close failures never
-                // outrank the in-flight outcome.
-                const closing = iterator.return?.();
-                if (closing !== undefined) {
-                  await Promise.race([
-                    Promise.resolve(closing).then(
-                      () => undefined,
-                      () => undefined,
-                    ),
-                    new Promise<void>((resolve) => {
-                      setTimeout(resolve, STREAM_CLOSE_GRACE_MS);
-                    }),
-                  ]);
-                }
-              }
-
-              // Clean stream end: the AI SDK can stop (stepCountIs) after
-              // emitting tool-call events whose results will never arrive —
-              // settle them, then close the attempt.
-              settleAttempt(eventState, eventContext, { aborted: false });
-              finishAttempt(mapFinishReason(eventState.finishReason));
-              return;
-            } catch (e: unknown) {
-              const apiError = coerceApiError(e);
-              instantFailureStreak = Retry.isInstantTransportFailure(
-                apiError ?? e,
-                Date.now() - attemptStartedAt,
-              )
-                ? instantFailureStreak + 1
-                : 0;
-              const decision = Retry.decide(attempt + 1, apiError ?? e, instantFailureStreak);
-
-              if (!decision.retry || ++attempt > retryAttemptLimit) {
-                if (!decision.retry && decision.reason !== "non_retryable") {
-                  // A retryable error declined for another reason (e.g. the
-                  // server-directed wait exceeded the cap) must say why.
-                  events.publish(Operational.Events.Error, {
-                    traceId: trace.traceId,
-                    time: Date.now(),
-                    sessionId: trace.sessionId,
-                    component: "llm.retry",
-                    msg: "retry declined",
-                    error:
-                      decision.detail === undefined
-                        ? decision.reason
-                        : `${decision.reason}: ${decision.detail}`,
-                  });
-                } else if (decision.retry) {
-                  // Cap exhaustion is a decline too: the terminal error alone
-                  // does not say the retry budget ran out (#606 audit).
-                  events.publish(Operational.Events.Error, {
-                    traceId: trace.traceId,
-                    time: Date.now(),
-                    sessionId: trace.sessionId,
-                    component: "llm.retry",
-                    msg: "retry attempts exhausted",
-                    error: `${decision.reason}: attempt cap ${retryAttemptLimit} exceeded`,
-                  });
-                }
-                // Abort classification reads the signal, not the error shape:
-                // a caller may abort with a custom reason (a plain Error), so
-                // throwIfAborted() throws a plain Error that the
-                // DOMException check alone misclassifies as "error" — hiding
-                // the turn from replay and marking in-flight tools as failed
-                // instead of interrupted.
-                const aborted =
-                  abort.aborted || (e instanceof DOMException && e.name === "AbortError");
-                settleAttempt(eventState, eventContext, { aborted });
-                finishAttempt(aborted ? "aborted" : "error");
-                throw e;
-              }
-              const retryReason = decision.reason;
-
-              if (decision.retryAfterOverCap === true) {
-                // An inferred ratelimit reset exceeded the header-delay cap
-                // and was demoted to backoff — say so instead of silently
-                // shortening the server's ask (#audit: flag had no consumer).
-                events.publish(Operational.Events.Warn, {
-                  traceId: trace.traceId,
-                  time: Date.now(),
-                  sessionId: trace.sessionId,
-                  component: "llm.retry",
-                  msg: "ratelimit reset above cap; demoted to backoff",
-                  context: { backoffMs: decision.delayMs },
-                });
-              }
-
-              // The failed attempt closes before the next one starts: tool
-              // calls from it will never receive a result from the next
-              // attempt's stream, and its parts must not re-emit.
-              settleAttempt(eventState, eventContext, { aborted: false });
-              finishAttempt("error");
-
-              const delayMs = decision.delayMs;
-              events.publish(LlmCall.Events.RetryDecided, {
-                traceId: trace.traceId,
-                sessionId: trace.sessionId,
-                ...(trace.runId !== undefined && { runId: trace.runId }),
-                attempt,
-                maxAttempts: retryAttemptLimit,
-                reason: retryReason,
-                backoffMs: delayMs,
-                time: Date.now(),
-              });
-
-              if (publishesRateLimited(retryReason)) {
-                events.publish(LlmCall.Events.RateLimited, {
-                  traceId: trace.traceId,
-                  sessionId: trace.sessionId,
-                  ...(trace.runId !== undefined && { runId: trace.runId }),
-                  provider: trace.provider ?? model.providerID,
-                  retryAfterMs: delayMs,
-                  time: Date.now(),
-                });
-              }
-
-              publishStatus(events, sessionID, trace.traceId, "retry");
-
-              await Retry.sleep(delayMs, abort);
-            }
-          }
-        } finally {
-          publishStatus(events, sessionID, trace.traceId, "idle");
-        }
+      process(streamInput: StreamInput): Promise<void> {
+        terminalFailureStatusPublished = false;
+        return runAttempts(streamInput);
       },
     };
+  }
+
+  function publishRetryDecline(
+    decision: Retry.Decision,
+    retryAttemptLimit: number,
+    events: BusEvent.Sink,
+    trace: ProcessorOptions["trace"],
+  ): void {
+    if (!decision.retry && decision.reason === "non_retryable") return;
+    const exhausted = decision.retry;
+    events.publish(Operational.Events.Error, {
+      traceId: trace.traceId,
+      time: Date.now(),
+      sessionId: trace.sessionId,
+      component: "llm.retry",
+      msg: exhausted ? "retry attempts exhausted" : "retry declined",
+      error: exhausted
+        ? `${decision.reason}: attempt cap ${retryAttemptLimit} exceeded`
+        : decision.detail === undefined
+          ? decision.reason
+          : `${decision.reason}: ${decision.detail}`,
+    });
+  }
+
+  function publishRetryOverCapWarning(
+    decision: Extract<Retry.Decision, { retry: true }>,
+    events: BusEvent.Sink,
+    trace: ProcessorOptions["trace"],
+  ): void {
+    if (decision.retryAfterOverCap !== true) return;
+    events.publish(Operational.Events.Warn, {
+      traceId: trace.traceId,
+      time: Date.now(),
+      sessionId: trace.sessionId,
+      component: "llm.retry",
+      msg: "ratelimit reset above cap; demoted to backoff",
+      context: { backoffMs: decision.delayMs },
+    });
+  }
+
+  function publishRetryDecision(
+    decision: Extract<Retry.Decision, { retry: true }>,
+    attempt: number,
+    retryAttemptLimit: number,
+    events: BusEvent.Sink,
+    trace: ProcessorOptions["trace"],
+    model: Provider.Model,
+  ): void {
+    events.publish(LlmCall.Events.RetryDecided, {
+      traceId: trace.traceId,
+      sessionId: trace.sessionId,
+      ...(trace.runId !== undefined && { runId: trace.runId }),
+      attempt,
+      maxAttempts: retryAttemptLimit,
+      reason: decision.reason,
+      backoffMs: decision.delayMs,
+      time: Date.now(),
+    });
+    if (!publishesRateLimited(decision.reason)) return;
+    events.publish(LlmCall.Events.RateLimited, {
+      traceId: trace.traceId,
+      sessionId: trace.sessionId,
+      ...(trace.runId !== undefined && { runId: trace.runId }),
+      provider: trace.provider ?? model.providerID,
+      retryAfterMs: decision.delayMs,
+      time: Date.now(),
+    });
   }
 
   /**

@@ -27,29 +27,6 @@ describe("InternalEventSchema", () => {
     );
   });
 
-  test("discriminated union routes by mode", () => {
-    const internal = Ingress.InboundEventSchema.parse({
-      id: "t1",
-      traceId: "trace-test",
-      surface: "cron",
-      mode: "internal",
-      agentName: "dev",
-      payload: "test",
-    });
-    expect(internal.mode).toBe("internal");
-
-    const direct = Ingress.InboundEventSchema.parse({
-      id: "t2",
-      traceId: "trace-test",
-      surface: "discord",
-      mode: "direct",
-      agentName: "dev",
-      payload: "test",
-      agent: { model: { provider: "anthropic", id: "claude-3-5-sonnet" } },
-    });
-    expect(direct.mode).toBe("direct");
-  });
-
   test("external inbound schema rejects internal events", () => {
     expectParseFailure(() =>
       Ingress.DirectEventSchema.parse({

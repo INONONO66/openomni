@@ -25,7 +25,7 @@ import { Policy } from "../src/policy/index.js";
 const base = { traceId: "trace-1", sessionId: "ses-1", time: 1_700_000_000_000 };
 const actor = { userId: "user-1", role: "admin" };
 
-function issues(result: z.SafeParseReturnType<unknown, unknown>) {
+function issues(result: z.ZodSafeParseResult<unknown>) {
   if (result.success) throw new Error("expected a parse failure, but parsing succeeded");
   return result.error.issues.map((issue) => ({
     path: issue.path.join("."),

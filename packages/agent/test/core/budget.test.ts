@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { Operational } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
+import { Bus, collector } from "@openomni/telemetry";
+import { captureBusEvents } from "../helpers/bus-event";
 import {
   BUDGET_DEFAULTS,
   checkBudget,
@@ -14,21 +15,49 @@ import {
 /** The run whose budget is being reported; the reporter never mints one. */
 const TEST_RUN = { traceId: "trace-budget-test", sessionId: "session-budget-test" };
 
-async function countOperationalEmits(run: () => void): Promise<number> {
-  Bus.reset();
-  let count = 0;
-  const unsubWarn = Bus.subscribe(Operational.Events.Warn, () => {
-    count += 1;
+function countCollectedOperationalEmits(
+  run: (events: ReturnType<typeof collector>) => void,
+): number {
+  const events = collector();
+  run(events);
+  return (
+    events.named(Operational.Events.Warn.name).length +
+    events.named(Operational.Events.Info.name).length
+  );
+}
+
+async function countGlobalOperationalEmits(run: () => void): Promise<number> {
+  const seen: unknown[] = [];
+  const sentinel = {
+    traceId: "trace-budget-test-barrier",
+    time: 0,
+    component: "agent.test",
+    msg: "budget telemetry barrier",
+  };
+  let resolveBarrier: () => void = () => undefined;
+  let barrierTimer: ReturnType<typeof setTimeout> | undefined;
+  const barrier = new Promise<void>((resolve, reject) => {
+    resolveBarrier = resolve;
+    barrierTimer = setTimeout(() => reject(new Error("timed out waiting for Bus barrier")), 1_000);
   });
-  const unsubInfo = Bus.subscribe(Operational.Events.Info, () => {
-    count += 1;
+  const unsubWarn = Bus.subscribe(Operational.Events.Warn, (event) => seen.push(event));
+  const unsubInfo = Bus.subscribe(Operational.Events.Info, (event) => {
+    if (event === sentinel) resolveBarrier();
+    else seen.push(event);
   });
-  run();
-  // Bus delivers on a microtask; a macrotask turn flushes all pending handlers.
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  unsubWarn();
-  unsubInfo();
-  return count;
+
+  try {
+    run();
+    // Bus handlers are FIFO microtasks. Observing this subscribed sentinel
+    // proves every operational event published by run() has been delivered.
+    Bus.publish(Operational.Events.Info, sentinel);
+    await barrier;
+    return seen.length;
+  } finally {
+    if (barrierTimer !== undefined) clearTimeout(barrierTimer);
+    unsubWarn();
+    unsubInfo();
+  }
 }
 
 describe("effectiveBudgetThresholds", () => {
@@ -102,7 +131,7 @@ describe("checkBudget 4-state", () => {
 describe("checkBudget is a pure query (query/command split)", () => {
   it("emits no telemetry even called twice at the warning threshold", async () => {
     const s = { ...createBudgetState(), turns: 20 };
-    const emits = await countOperationalEmits(() => {
+    const emits = await countGlobalOperationalEmits(() => {
       checkBudget(s, { maxTurns: 24 });
       checkBudget(s, { maxTurns: 24 });
     });
@@ -111,7 +140,7 @@ describe("checkBudget is a pure query (query/command split)", () => {
 
   it("emits no telemetry at the exceeded threshold", async () => {
     const s = { ...createBudgetState(), turns: 24 };
-    const emits = await countOperationalEmits(() => {
+    const emits = await countGlobalOperationalEmits(() => {
       checkBudget(s, { maxTurns: 24 });
     });
     expect(emits).toBe(0);
@@ -119,77 +148,30 @@ describe("checkBudget is a pure query (query/command split)", () => {
 });
 
 describe("publishBudgetTelemetry is the command (emits once, returns status)", () => {
-  /**
-   * Budget reporting is not a trace origin: it happens because a run is
-   * running. Re-minting here left the whole suite green until this existed.
-   */
-  it("files the budget event under the run's trace", async () => {
-    const seen: Array<{ traceId: string; sessionId?: string }> = [];
-    const unsubscribe = Bus.subscribe(Operational.Events.Warn, (event) => {
-      seen.push(event as unknown as { traceId: string; sessionId?: string });
-    });
-
+  /** Budget reporting files every non-ok state under the run that caused it. */
+  it.each([
+    { name: "warning", turns: 20, event: Operational.Events.Warn, status: "warning" },
+    { name: "reassurance", turns: 15, event: Operational.Events.Info, status: "reassurance" },
+    { name: "exceeded", turns: 30, event: Operational.Events.Warn, status: "exceeded" },
+  ] as const)("files the $name event under the run's trace", async ({ turns, event, status }) => {
+    const capture = captureBusEvents(event);
     try {
-      publishBudgetTelemetry({ ...createBudgetState(), turns: 20 }, TEST_RUN, Bus, {
-        maxTurns: 24,
-      });
-      await Bun.sleep(0);
+      expect(
+        publishBudgetTelemetry({ ...createBudgetState(), turns }, TEST_RUN, Bus, { maxTurns: 24 }),
+      ).toBe(status);
+      const [seen] = await capture.done;
+      expect(capture.events).toHaveLength(1);
+      expect(seen).toMatchObject({ traceId: TEST_RUN.traceId, sessionId: TEST_RUN.sessionId });
     } finally {
-      unsubscribe();
+      capture.unsubscribe();
     }
-
-    expect(seen).toHaveLength(1);
-    expect(seen[0]).toMatchObject({ traceId: TEST_RUN.traceId, sessionId: TEST_RUN.sessionId });
-  });
-
-  /** The only branch that emits `Info` rather than `Warn`. */
-  it("files the reassurance event under the run's trace", async () => {
-    const seen: Array<{ traceId: string; sessionId?: string }> = [];
-    const unsubscribe = Bus.subscribe(Operational.Events.Info, (event) => {
-      seen.push(event as unknown as { traceId: string; sessionId?: string });
-    });
-
-    try {
-      // 15/24 sits between the reassurance threshold and the warning one.
-      const status = publishBudgetTelemetry({ ...createBudgetState(), turns: 15 }, TEST_RUN, Bus, {
-        maxTurns: 24,
-      });
-      expect(status).toBe("reassurance");
-      await Bun.sleep(0);
-    } finally {
-      unsubscribe();
-    }
-
-    expect(seen).toHaveLength(1);
-    expect(seen[0]).toMatchObject({ traceId: TEST_RUN.traceId, sessionId: TEST_RUN.sessionId });
-  });
-
-  /** The branch `dispatchBudgetCheck` acts on to end the run. */
-  it("files the exceeded event under the run's trace", async () => {
-    const seen: Array<{ traceId: string; sessionId?: string }> = [];
-    const unsubscribe = Bus.subscribe(Operational.Events.Warn, (event) => {
-      seen.push(event as unknown as { traceId: string; sessionId?: string });
-    });
-
-    try {
-      const status = publishBudgetTelemetry({ ...createBudgetState(), turns: 30 }, TEST_RUN, Bus, {
-        maxTurns: 24,
-      });
-      expect(status).toBe("exceeded");
-      await Bun.sleep(0);
-    } finally {
-      unsubscribe();
-    }
-
-    expect(seen).toHaveLength(1);
-    expect(seen[0]).toMatchObject({ traceId: TEST_RUN.traceId, sessionId: TEST_RUN.sessionId });
   });
 
   it("emits exactly one event per call at the warning threshold", async () => {
     const s = { ...createBudgetState(), turns: 20 };
     let status: string | undefined;
-    const emits = await countOperationalEmits(() => {
-      status = publishBudgetTelemetry(s, TEST_RUN, Bus, { maxTurns: 24 });
+    const emits = countCollectedOperationalEmits((events) => {
+      status = publishBudgetTelemetry(s, TEST_RUN, events, { maxTurns: 24 });
     });
     expect(status).toBe("warning");
     expect(emits).toBe(1);
@@ -198,8 +180,8 @@ describe("publishBudgetTelemetry is the command (emits once, returns status)", (
   it("emits nothing below the reassurance threshold", async () => {
     const s = { ...createBudgetState(), turns: 5 };
     let status: string | undefined;
-    const emits = await countOperationalEmits(() => {
-      status = publishBudgetTelemetry(s, TEST_RUN, Bus, { maxTurns: 24 });
+    const emits = countCollectedOperationalEmits((events) => {
+      status = publishBudgetTelemetry(s, TEST_RUN, events, { maxTurns: 24 });
     });
     expect(status).toBe("ok");
     expect(emits).toBe(0);

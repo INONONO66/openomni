@@ -125,12 +125,17 @@ describe("Observability Pipeline Integration", () => {
 
       await BusPersistence.flush();
 
-      const stats = await BusQuery.getStats(sessionId);
-      expect(stats.totalEvents).toBe(4);
-      expect(stats.byCategory.agent).toBe(1);
-      expect(stats.byCategory.llm).toBe(1);
-      expect(stats.byCategory.tool).toBe(1);
-      expect(stats.byCategory.session).toBe(1);
+      const categoryCounts = db()
+        .query<{ category: string; count: number }, [string]>(
+          "SELECT category, COUNT(*) AS count FROM bus_event WHERE session_id = ? GROUP BY category",
+        )
+        .all(sessionId);
+      expect(Object.fromEntries(categoryCounts.map((row) => [row.category, row.count]))).toEqual({
+        agent: 1,
+        llm: 1,
+        session: 1,
+        tool: 1,
+      });
 
       const runEvents = db()
         .query<{ event_type: string }, [string]>(
@@ -266,11 +271,16 @@ describe("Observability Pipeline Integration", () => {
 
       await BusPersistence.flush();
 
-      const statsA = await BusQuery.getStats(sessionA.id);
-      expect(statsA.totalEvents).toBe(2);
-
-      const statsB = await BusQuery.getStats(sessionB.id);
-      expect(statsB.totalEvents).toBe(2);
+      const eventCount = (sessionId: string): number => {
+        const row = db()
+          .query<{ count: number }, [string]>(
+            "SELECT COUNT(*) AS count FROM bus_event WHERE session_id = ?",
+          )
+          .get(sessionId);
+        return row?.count ?? 0;
+      };
+      expect(eventCount(sessionA.id)).toBe(2);
+      expect(eventCount(sessionB.id)).toBe(2);
     });
   });
 });

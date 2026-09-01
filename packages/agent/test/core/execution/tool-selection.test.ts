@@ -48,15 +48,36 @@ function abortSelectionPolicy(reason: string): PolicyRegistration {
 }
 
 describe("resources.prepare dispatch", () => {
-  it("passes all tools through when no policy is registered", async () => {
+  it.each([
+    {
+      name: "passes all tools through when no policy is registered",
+      toolNames: ["bash", "read", "write"],
+      filtered: undefined,
+      expected: ["bash", "read", "write"],
+    },
+    {
+      name: "filters out tools when policy returns tool.filter patterns",
+      toolNames: ["bash", "read", "write"],
+      filtered: ["read"],
+      expected: ["bash", "write"],
+    },
+    {
+      name: "filters out wildcard-prefixed tool patterns",
+      toolNames: ["dangerous.exec", "safe.read", "dangerous.write"],
+      filtered: ["dangerous.*"],
+      expected: ["safe.read"],
+    },
+  ] as const)("$name", async ({ toolNames, filtered, expected }) => {
     Bus.reset();
     const engine = PolicyEngine.create({ clock: Date.now });
-    const tools = makeTools("bash", "read", "write");
-    const state = makeState();
-    const config = makeConfig({ tools, systemPrompt: "test system prompt" });
+    if (filtered !== undefined) engine.register(filterPolicy([...filtered]));
+    const config = makeConfig({
+      tools: makeTools(...toolNames),
+      systemPrompt: "test system prompt",
+    });
 
     const result = await buildTurn(
-      state,
+      makeState(),
       config,
       engine,
       testProviderModel,
@@ -67,57 +88,8 @@ describe("resources.prepare dispatch", () => {
 
     expect(result.type).toBe("ready");
     if (result.type !== "ready") return;
-    expect(result.turn.runInput.tools).toHaveLength(3);
-    expect(result.turn.runInput.tools.map((t) => t.name)).toEqual(["bash", "read", "write"]);
-  });
-
-  it("filters out tools when policy returns tool.filter patterns", async () => {
-    Bus.reset();
-    const engine = PolicyEngine.create({ clock: Date.now });
-    engine.register(filterPolicy(["read"]));
-
-    const tools = makeTools("bash", "read", "write");
-    const state = makeState();
-    const config = makeConfig({ tools, systemPrompt: "test system prompt" });
-
-    const result = await buildTurn(
-      state,
-      config,
-      engine,
-      testProviderModel,
-      undefined,
-      makeTrace(),
-      makeAgentBase(),
-    );
-
-    expect(result.type).toBe("ready");
-    if (result.type !== "ready") return;
-    expect(result.turn.runInput.tools).toHaveLength(2);
-    expect(result.turn.runInput.tools.map((t) => t.name)).toEqual(["bash", "write"]);
-  });
-
-  it("filters out wildcard-prefixed tool patterns", async () => {
-    Bus.reset();
-    const engine = PolicyEngine.create({ clock: Date.now });
-    engine.register(filterPolicy(["dangerous.*"]));
-
-    const tools = makeTools("dangerous.exec", "safe.read", "dangerous.write");
-    const state = makeState();
-    const config = makeConfig({ tools, systemPrompt: "test system prompt" });
-
-    const result = await buildTurn(
-      state,
-      config,
-      engine,
-      testProviderModel,
-      undefined,
-      makeTrace(),
-      makeAgentBase(),
-    );
-
-    expect(result.type).toBe("ready");
-    if (result.type !== "ready") return;
-    expect(result.turn.runInput.tools.map((t) => t.name)).toEqual(["safe.read"]);
+    expect(result.turn.runInput.tools).toHaveLength(expected.length);
+    expect(result.turn.runInput.tools.map((tool) => tool.name)).toEqual([...expected]);
   });
 
   it("returns complete result when abort verdict is returned", async () => {

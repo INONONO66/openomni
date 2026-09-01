@@ -15,18 +15,6 @@ export interface BusEventRow {
   readonly time_created: number;
 }
 
-export interface CountRow {
-  readonly count: number;
-}
-
-export interface CategoryCountRow extends CountRow {
-  readonly category: string;
-}
-
-export interface TypeCountRow extends CountRow {
-  readonly event_type: string;
-}
-
 export interface WorkerRunRow {
   readonly run_id: string;
   readonly status: string;

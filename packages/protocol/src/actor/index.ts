@@ -44,7 +44,7 @@ export namespace Actor {
   ]);
   export type TrustTier = z.infer<typeof TrustTier>;
 
-  const Metadata = z.record(z.unknown());
+  const Metadata = z.record(z.string(), z.unknown());
 
   // #498 A1 — `relationship` retired: zero value-branching readers ever
   // existed. Old persisted identity blobs still carry the key; this
