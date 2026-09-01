@@ -59,10 +59,9 @@ function rememberParsedSessionInfo(
   normalized: string,
 ): void {
   if (cache.size >= maxSessionParseCacheEntries) {
-    const oldest = cache.keys().next().value;
-    if (oldest !== undefined) {
-      cache.delete(oldest);
-    }
+    // A map at the positive capacity cannot have an empty iterator.
+    const oldest = cache.keys().next().value as string;
+    cache.delete(oldest);
   }
   cache.set(data, normalized);
 }

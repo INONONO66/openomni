@@ -26,7 +26,7 @@ export type CreateWorkItemInput = {
 
 export type WorkItemListFilter = ProtocolStorage.WorkItemListFilter;
 
-export type WorkItemTransitionTarget = "started" | "completed" | "failed" | "cancelled";
+export type WorkItemTransitionTarget = "started" | "failed" | "cancelled";
 
 export type WorkItemMutation = {
   updated: WorkItem.Info;

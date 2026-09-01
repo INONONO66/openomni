@@ -227,6 +227,21 @@ describe("SqliteStorageAdapter workItem", () => {
     expect(adapter.workItem?.get(item.workItemId)).toBeUndefined();
   });
 
+  test("refuses a terminal receipt combined with its admission in one revision", () => {
+    const completed = makeWorkItem({
+      workItemId: "wi_combined_terminal",
+      timestamps: { created: 1, updated: 10, completed: 10 },
+    });
+    const { baseline } = completionStages(completed);
+    const writer = Storage.configure(adapter);
+    expect(adapter.workItem.create(completed.workItemId, baseline)).toBe(true);
+
+    expect(() => writer(completed.workItemId, baseline.revision, completed)).toThrow(
+      "terminal receipt cannot commit with an admission/reservation",
+    );
+    expect(adapter.workItem.get(completed.workItemId)).toEqual(baseline);
+  });
+
   test("refuses an interposed writer that corrupts terminal linkage", () => {
     const item = makeWorkItem({
       workItemId: "wi_interposed_terminal",
@@ -477,6 +492,33 @@ describe("SqliteStorageAdapter workItem", () => {
     expect(adapter.workItem?.get(current.workItemId)).toEqual(current);
   });
 
+  test("authorized completion writes cannot regress a completed item to pending", () => {
+    const completed = makeWorkItem({
+      workItemId: "wi_terminal_regression",
+      timestamps: { created: 1, updated: 3, completed: 3 },
+    });
+    persistCompletedFixture(adapter, completed);
+    const current = adapter.workItem.get(completed.workItemId);
+    if (!current) throw new Error("missing completed fixture");
+    const { completed: _completed, ...pendingTimestamps } = current.timestamps;
+    const regressed = WorkItem.Info.parse({
+      ...current,
+      revision: current.revision + 1,
+      timestamps: { ...pendingTimestamps, updated: current.timestamps.updated + 1 },
+      completionReport: undefined,
+      completionTerminalReceipt: undefined,
+    });
+    const completionWriter = Storage.configure(adapter);
+
+    expect(() => completionWriter(current.workItemId, current.revision, regressed)).toThrow(
+      "completion report is immutable",
+    );
+    const persisted = adapter.workItem.get(current.workItemId);
+    expect(persisted).toEqual(current);
+    if (!persisted) throw new Error("completed fixture was removed");
+    expect(WorkItem.deriveStatus(persisted)).toBe("completed");
+  });
+
   test("authorized completion writes cannot remove request reservations", () => {
     const item = makeWorkItem({ workItemId: "wi_append_only_reservation" });
     const reservation = WorkItem.CompletionRequestReservation.parse({
@@ -569,6 +611,49 @@ describe("SqliteStorageAdapter workItem", () => {
       "completion request reservations are append-only",
     );
     expect(adapter.workItem?.get(item.workItemId)).toEqual(reserved);
+  });
+
+  test("compareAndSet enforces revision and completion-writer authority", () => {
+    const item = makeWorkItem({ workItemId: "wi_adapter_guards" });
+    expect(adapter.workItem.create(item.workItemId, item)).toBe(true);
+
+    expect(() =>
+      adapter.workItem.compareAndSet(item.workItemId, item.revision, {
+        ...item,
+        revision: item.revision + 2,
+      }),
+    ).toThrow("WorkItem revision must advance once");
+
+    expect(() =>
+      adapter.workItem.compareAndSet(item.workItemId, item.revision, {
+        ...item,
+        revision: item.revision + 1,
+        completionFacts: { ...item.completionFacts, revision: 1 },
+      }),
+    ).toThrow("completion fact writes are restricted");
+  });
+
+  test("completion facts revision cannot move backward", () => {
+    const item = makeWorkItem({ workItemId: "wi_facts_revision_guard" });
+    const advanced = WorkItem.Info.parse({
+      ...item,
+      revision: 1,
+      completionFacts: { ...item.completionFacts, revision: 1 },
+      timestamps: { ...item.timestamps, updated: 2 },
+    });
+    const rewound = WorkItem.Info.parse({
+      ...advanced,
+      revision: 2,
+      completionFacts: { ...advanced.completionFacts, revision: 0 },
+      timestamps: { ...advanced.timestamps, updated: 3 },
+    });
+    const writer = Storage.configure(adapter);
+    expect(adapter.workItem.create(item.workItemId, item)).toBe(true);
+    expect(writer(item.workItemId, item.revision, advanced)).toBe(true);
+
+    expect(() => writer(item.workItemId, advanced.revision, rewound)).toThrow(
+      "completion facts revision cannot move backward",
+    );
   });
 
   test("list filters by status and sessionId", () => {
