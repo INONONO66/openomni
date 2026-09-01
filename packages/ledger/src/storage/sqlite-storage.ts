@@ -21,6 +21,7 @@ import { createSqliteSurfaceKeyAdapter } from "./sqlite-surface-key-adapter";
 import { createSqliteTranscriptFactAdapter } from "./sqlite-transcript-fact-adapter";
 import { createSqliteEngagementAdapter } from "./sqlite-engagement-adapter";
 import { createSqliteConversationAdapter } from "./sqlite-conversation-adapter";
+import { createSqliteApprovalAdapter } from "./sqlite-approval-adapter";
 import { createSqliteLeaseAdapter } from "./sqlite-lease-adapter";
 import { createSqliteWaitAdapter } from "./sqlite-wait-adapter";
 import { createSqliteWorkItemAdapter } from "./sqlite-work-item-adapter";
@@ -53,6 +54,7 @@ export class SqliteStorageAdapter implements Storage.Adapter {
   readonly wait: NonNullable<Storage.Adapter["wait"]>;
   readonly conversation: NonNullable<Storage.Adapter["conversation"]>;
   readonly lease: NonNullable<Storage.Adapter["lease"]>;
+  readonly approval: NonNullable<Storage.Adapter["approval"]>;
   readonly engagement: NonNullable<Storage.Adapter["engagement"]>;
   readonly delegation: NonNullable<Storage.Adapter["delegation"]>;
   readonly ledger: NonNullable<Storage.Adapter["ledger"]>;
@@ -98,6 +100,7 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     this.wait = createSqliteWaitAdapter(this.db);
     this.conversation = createSqliteConversationAdapter(this.db);
     this.lease = createSqliteLeaseAdapter(this.db);
+    this.approval = createSqliteApprovalAdapter(this.db);
     this.engagement = createSqliteEngagementAdapter(this.db);
     this.delegation = createSqliteDelegationAdapter(this.db);
     // Decision-class append rides the adapter's own connection so append +

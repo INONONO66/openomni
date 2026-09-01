@@ -8,6 +8,7 @@ import {
 } from "@openomni/channels";
 import {
   ActorRegistry,
+  ApprovalStore,
   Artifact,
   BusPersistence,
   ConversationStore,
@@ -327,6 +328,18 @@ export async function startOpenOmni(options: StartOptions = {}) {
       issue: LeaseStore.issue,
       getDelegation: (delegationId: string) => DelegationStore.get(delegationId),
     };
+    // The catalog's approval lane (§6): Owner-consent requests plus the two
+    // acts they authorize — promotion and cross-channel endpoint merge.
+    const approvalPort = {
+      request: ApprovalStore.request,
+      get: ApprovalStore.get,
+      decide: ApprovalStore.decide,
+      decision: ApprovalStore.decision,
+      getIdentity: ActorRegistry.getIdentity,
+      getEndpoint: ActorRegistry.getEndpoint,
+      promote: ActorRegistry.promote,
+      mergeEndpoint: ActorRegistry.mergeEndpoint,
+    };
     kernel = createDelegationKernel({
       events: Bus,
       // §3.5 lease linkage: live-lease facts admit a worker's channel
@@ -410,6 +423,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
                   artifacts: artifactsPort,
                   conversations: conversePort,
                   leases: leasePort,
+                  approvals: approvalPort,
                 },
                 origin,
               ),
@@ -446,6 +460,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
         artifacts: artifactsPort,
         conversations: conversePort,
         leases: leasePort,
+        approvals: approvalPort,
       },
       targets: () => attachedTargets(host, machines?.enrolled ?? []),
       ...(options.llm === undefined ? {} : { llm: options.llm }),
