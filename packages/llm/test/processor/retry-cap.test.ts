@@ -65,6 +65,44 @@ describe("Processor retry cap", () => {
     }
   });
 
+  test("records rejected createStream promises in the first rejection continuation", async () => {
+    const failure = new Error("rejected createStream promise");
+    const facts: Transcript.Fact[] = [];
+    const publish = spyOn(Bus, "publish");
+    const processor = Processor.create({
+      assistantMessage: buildAssistantMessage("msg-rejected", "session-rejected", "parent"),
+      sessionID: "session-rejected",
+      model,
+      abort: new AbortController().signal,
+      maxRetryAttempts: 0,
+      events: Bus,
+      sink: {
+        onMessage: () => undefined,
+        onFact: (fact) => facts.push(fact),
+        onToolCall: () => undefined,
+        onToolResult: () => undefined,
+      },
+      createStream: () => Promise.reject(failure),
+      trace: { traceId: "trace-rejected", sessionId: "session-rejected" },
+    });
+
+    try {
+      const processing = processor.process({ system: "" });
+      const rejection = processing.catch((error) => error);
+      await Promise.resolve();
+      expect(facts.map((fact) => fact.type)).toEqual(["message.created", "message.finished"]);
+      expect(
+        publish.mock.calls
+          .filter((call) => call[0] === Operational.Events.Info)
+          .map((call) => (call[1] as { context?: { stateType?: string } }).context?.stateType)
+          .filter((state): state is string => state !== undefined),
+      ).toEqual(["busy", "idle"]);
+      expect(await rejection).toBe(failure);
+    } finally {
+      publish.mockRestore();
+    }
+  });
+
   test("publishes idle only after a synchronous retryable failure settles", async () => {
     let attemptCount = 0;
     let markSecondAttemptStarted!: () => void;
