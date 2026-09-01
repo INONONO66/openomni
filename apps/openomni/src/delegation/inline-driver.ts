@@ -1,6 +1,7 @@
 import type { Delegation } from "@openomni/protocol";
 import type { Admitted, DelegationOrigin } from "./admission";
 import type { DelegationDriver, DriverOutcome, DriverReport } from "./kernel";
+import { WorkerRunError } from "./worker-loop";
 
 /** Runs one isolated in-process worker turn. */
 export type InlineWorkerRunner = (
@@ -31,7 +32,9 @@ export function createInlineDriver(run: InlineWorkerRunner): DelegationDriver {
     ): Promise<DriverOutcome> {
       if (signal.aborted) return { status: "cancelled", reason: "delegation stopped" };
       report?.delivered();
-      const output = await run({
+      let output: Awaited<ReturnType<InlineWorkerRunner>>;
+      try {
+        output = await run({
         delegationId: handle.delegationId,
         ...(admitted.workerRunId === undefined ? {} : { workerRunId: admitted.workerRunId }),
         operation: admitted.request.operation,
@@ -39,7 +42,11 @@ export function createInlineDriver(run: InlineWorkerRunner): DelegationDriver {
         acceptanceCriteria: admitted.request.acceptanceCriteria ?? [],
         origin: admitted.childOrigin,
         signal,
-      });
+        });
+      } catch (error) {
+        if (error instanceof WorkerRunError) return { status: "failed", error: error.message, workerRunId: error.runId };
+        throw error;
+      }
 
       // A completion racing after cancellation/deadline cannot replace the
       // kernel's terminal CAS. Reporting cancelled also avoids presenting it

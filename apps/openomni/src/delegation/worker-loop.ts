@@ -11,6 +11,16 @@ import { renderInstruction } from "./instruction";
 import type { DelegationKernel } from "./kernel";
 import type { InlineWorkerRunner } from "./inline-driver";
 
+export class WorkerRunError extends Error {
+  constructor(
+    message: string,
+    readonly runId: string,
+  ) {
+    super(message);
+    this.name = "WorkerRunError";
+  }
+}
+
 export interface WorkerLoopOptions {
   readonly model: Model.Ref;
   readonly apiKey: string;
@@ -75,12 +85,17 @@ export function createInlineWorkerRunner(options: WorkerLoopOptions): InlineWork
         signal: input.signal,
         ...(options.llm === undefined ? {} : { llm: options.llm }),
       });
-      const result = await observation.run(() =>
-        agent.run({
-          messages,
-          traceContext: { traceId, sessionId, runId, agentName: "worker" },
-        }),
-      );
+      let result: Awaited<ReturnType<typeof agent.run>>;
+      try {
+        result = await observation.run(() =>
+          agent.run({
+            messages,
+            traceContext: { traceId, sessionId, runId, agentName: "worker" },
+          }),
+        );
+      } catch (error) {
+        throw new WorkerRunError(error instanceof Error ? error.message : String(error), runId);
+      }
       tokens += result.usage.totalTokens;
       if (input.operation !== "assign") return { text: result.text, tokens, runId };
       const decision = decideDrive(state, {

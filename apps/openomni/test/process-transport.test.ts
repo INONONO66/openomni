@@ -319,6 +319,9 @@ const tokens = { input: 4, output: 5, reasoning: 0, cache: { read: 0, write: 0 }
 const llm = {
   resolveProviderModel: async (model) => ({ id: model.id, name: model.id, providerID: model.provider }),
   run: async (input, sink) => {
+    if (input.messages.length > 1 && JSON.stringify(input.messages).includes("throw-second")) {
+      throw new Error("second run failed");
+    }
     const id = "fake-" + input.messages.length;
     const sessionID = input.trace.sessionId;
     sink.onMessage({
@@ -417,6 +420,32 @@ test("an assign rides the real wire: parent driver, spawned child, drive loop, u
   expect(settled.settlement.workerRunId).toBeDefined();
   expect(settled.settlement.workerRunId).not.toBe(commissioned?.workerRunId);
   expect(item?.workSessionId).toBe(`delegation-d-wire-drive`);
+  kernel.stop();
+}, 20_000);
+
+test("a second-run exception settles with the second worker run identity", async () => {
+  const entry = fakeEntry(CHILD_DRIVE_ENTRY);
+  const kernel = createDelegationKernel({
+    drivers: { process: createProcessDriver({ command: [process.execPath, entry], worker: WORKER }) },
+    now: () => Date.now(),
+    newDelegationId: () => "d-wire-throw-second",
+    wake: () => undefined,
+    workItems: createWorkItemLinkage({ model: WORKER.model, now: () => Date.now() }),
+  });
+  const result = await kernel.delegate({
+    operation: "assign",
+    address: { kind: "core", scope: "independent" },
+    payload: { text: "throw-second" },
+    acceptanceCriteria: ["done"],
+    deadline: Date.now() + 20_000,
+  }, RESIDENT);
+  if ("refused" in result) throw new Error(result.refused);
+  const record = DelegationStore.get("d-wire-throw-second");
+  const commissioned = await WorkItemStore.get(record?.workItemId ?? "");
+  const settled = await kernel.awaitDelegation("d-wire-throw-second", 20_000);
+  if (settled.kind !== "settled" || settled.settlement.status !== "failed") throw new Error("not failed");
+  expect(settled.settlement.workerRunId).toBeDefined();
+  expect(settled.settlement.workerRunId).not.toBe(commissioned?.workerRunId);
   kernel.stop();
 }, 20_000);
 

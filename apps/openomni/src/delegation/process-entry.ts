@@ -3,7 +3,7 @@ import { Delegation, Model } from "@openomni/protocol";
 import { z } from "zod";
 import { createDelegationKernel, type DelegationKernel } from "./kernel";
 import { createInlineDriver, type InlineWorkerRunner } from "./inline-driver";
-import { createInlineWorkerRunner } from "./worker-loop";
+import { createInlineWorkerRunner, WorkerRunError } from "./worker-loop";
 
 /** Child-process wire: parse, acknowledge delivery, then report one outcome. */
 export const ProcessWorkerRequest = z
@@ -91,7 +91,7 @@ export async function serveProcessWorker(
     result = {
       status: "failed",
       error: error instanceof Error ? error.message : String(error),
-      workerRunId: request.workerRunId,
+      workerRunId: error instanceof WorkerRunError ? error.runId : request.workerRunId,
     };
   }
   writeLine(JSON.stringify(result));

@@ -3,7 +3,7 @@ import type { RunInput, Sink } from "@openomni/llm";
 import type { Message } from "@openomni/protocol";
 import type { DelegationKernel } from "../src/delegation/kernel";
 import { createChildKernel } from "../src/delegation/process-entry";
-import { createInlineWorkerRunner } from "../src/delegation/worker-loop";
+import { createInlineWorkerRunner, WorkerRunError } from "../src/delegation/worker-loop";
 
 const ORIGIN = { role: "worker", depth: 1, sessionId: "session-drive" } as const;
 
@@ -89,6 +89,28 @@ test("an ask run is answered once, never driven — even when the answer says BL
   expect(runs).toBe(1);
   expect(output.text).toBe("BLOCKED: cannot answer");
   expect(output.tokens).toBe(9);
+});
+
+test("a later worker-run failure carries the active run id", async () => {
+  const runIds: string[] = [];
+  const { runner, stop } = bootRunner(async (input, sink) => {
+    runIds.push(input.trace.runId);
+    if (runIds.length === 2) throw new WorkerRunError("second run failed", input.trace.runId);
+    sink.onMessage(reply(input, "BLOCKED: retry me"));
+    return { type: "stop" };
+  });
+  const output = await runner({
+    delegationId: "d-drive-failure",
+    operation: "assign",
+    instruction: "retry the task",
+    acceptanceCriteria: ["task complete"],
+    origin: ORIGIN,
+    signal: new AbortController().signal,
+  });
+  stop();
+  expect(runIds.length).toBeGreaterThan(1);
+  expect(output.runId).toBe(runIds.at(-1));
+  expect(output.runId).not.toBe(runIds[0]);
 });
 
 test("an assigned worker that finishes naturally is not nannied", async () => {
