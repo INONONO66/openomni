@@ -121,22 +121,22 @@ function assembleAssistantMessages(
 ): SDKMessage[] {
   if (toolCalls.length > 0) {
     const content: Array<AssistantTextBlock | AssistantReasoningBlock | AssistantToolCallBlock> = [...reasoningBlocks];
-    if (textContent.length > 0) content.push({ type: "text", text: textContent.join("\\n") });
+    if (textContent.length > 0) content.push({ type: "text", text: textContent.join("\n") });
     content.push(...toolCalls);
     return [{ role: "assistant", content }, ...toolResults];
   }
   if (reasoningBlocks.length > 0) {
     const content: Array<AssistantTextBlock | AssistantReasoningBlock> = [...reasoningBlocks];
-    if (textContent.length > 0) content.push({ type: "text", text: textContent.join("\\n") });
+    if (textContent.length > 0) content.push({ type: "text", text: textContent.join("\n") });
     return [{ role: "assistant", content }];
   }
-  return textContent.length > 0 ? [{ role: "assistant", content: textContent.join("\\n") }] : [];
+  return textContent.length > 0 ? [{ role: "assistant", content: textContent.join("\n") }] : [];
 }
 
 function messageToSDK(msg: Message.WithParts, model: Provider.Model): SDKMessage[] {
   if (msg.parts.length === 0) return [];
   if (msg.info.role === "user") {
-    const content = msg.parts.filter((p): p is Message.TextPart => p.type === "text").map((p) => p.text).join("\\n");
+    const content = msg.parts.filter((p): p is Message.TextPart => p.type === "text").map((p) => p.text).join("\n");
     return content.length > 0 ? [{ role: "user", content }] : [];
   }
   if (isAssistantMessage(msg)) return buildAssistantMessage(msg, model);

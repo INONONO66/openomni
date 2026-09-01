@@ -3,7 +3,7 @@ import {
   anthropicModel as model,
   assistantMessage as buildAssistantMessage,
 } from "../helpers/fixtures";
-import { LlmCall, Operational } from "@openomni/protocol";
+import { LlmCall, Operational, type Transcript } from "@openomni/protocol";
 import { Bus, collector } from "@openomni/telemetry";
 import { APIError } from "../../src/error";
 import { Processor } from "../../src/processor";
@@ -23,6 +23,43 @@ function rateLimitError() {
 describe("Processor retry cap", () => {
   afterEach(() => {
     Bus.reset();
+  });
+
+  test("records synchronous stream failure before process promise settlement", async () => {
+    const failure = new Error("synchronous stream failure");
+    const facts: Transcript.Fact[] = [];
+    const publish = spyOn(Bus, "publish");
+    const processor = Processor.create({
+      assistantMessage: buildAssistantMessage("msg-sync", "session-sync", "parent-sync"),
+      sessionID: "session-sync",
+      model,
+      abort: new AbortController().signal,
+      maxRetryAttempts: 0,
+      events: Bus,
+      sink: {
+        onMessage: () => undefined,
+        onFact: (fact) => facts.push(fact),
+        onToolCall: () => undefined,
+        onToolResult: () => undefined,
+      },
+      createStream: () => {
+        throw failure;
+      },
+      trace: { traceId: "trace-sync", sessionId: "session-sync" },
+    });
+
+    const processing = processor.process({ system: "" });
+    const rejection = processing.catch((error) => error);
+    expect(facts.map((fact) => fact.type)).toEqual(["message.created", "message.finished"]);
+    expect(facts[1]).toMatchObject({ type: "message.finished", finish: "error" });
+    expect(
+      publish.mock.calls
+        .filter((call) => call[0] === Operational.Events.Info)
+        .map((call) => (call[1] as { context?: { stateType?: string } }).context?.stateType)
+        .filter((state): state is string => state !== undefined),
+    ).toEqual(["busy", "idle"]);
+    expect(await rejection).toBe(failure);
+    publish.mockRestore();
   });
 
   test("stops retrying after configured retry cap", async () => {

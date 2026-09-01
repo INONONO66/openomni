@@ -104,6 +104,7 @@ export namespace Processor {
     const sink = createProjectedSink(events, configuredSink, sessionID, trace.traceId);
 
     let folded: Message.WithParts | undefined;
+    let synchronousTerminalFailure = false;
 
     // Billed usage across attempts. Each attempt folds from scratch, so the
     // final fold's tokens omit what retried attempts consumed; this counter
@@ -135,14 +136,13 @@ export namespace Processor {
       publishInfo(events, sessionID, trace.traceId, msg, data);
     }
 
-    async function runStreamAttempt(
+    function runStreamAttempt(
       streamInput: StreamInput,
       eventState: ReturnType<typeof createStreamEventState>,
       eventContext: StreamEventContext,
       finishAttempt: (finish: Transcript.FinishReason) => void,
     ): Promise<void> {
-      const stream = await createStream(streamInput);
-
+      return createStream(streamInput).then(async (stream) => {
       const iterator = stream.fullStream[Symbol.asyncIterator]();
       try {
         while (true) {
@@ -182,9 +182,10 @@ export namespace Processor {
       settleAttempt(eventState, eventContext, { aborted: false });
       finishAttempt(mapFinishReason(eventState.finishReason));
       return;
+      });
     }
 
-    async function handleAttemptFailure(
+    function handleAttemptFailure(
       e: unknown,
       eventState: ReturnType<typeof createStreamEventState>,
       eventContext: StreamEventContext,
@@ -290,8 +291,10 @@ export namespace Processor {
 
         publishStatus(events, sessionID, trace.traceId, "retry");
 
-        await Retry.sleep(delayMs, abort);
-      return { attempt: nextAttempt, instantFailureStreak: nextInstantFailureStreak };
+        return Retry.sleep(delayMs, abort).then(() => ({
+          attempt: nextAttempt,
+          instantFailureStreak: nextInstantFailureStreak,
+        }));
     }
 
     async function runAttempts(streamInput: StreamInput): Promise<void> {
@@ -343,6 +346,7 @@ export namespace Processor {
               await runStreamAttempt(streamInput, eventState, eventContext, finishAttempt);
               return;
             } catch (e: unknown) {
+              synchronousTerminalFailure = true;
               const retryState = await handleAttemptFailure(
                 e,
                 eventState,
@@ -367,13 +371,17 @@ export namespace Processor {
         return { ...usageTotals, cache: { ...usageTotals.cache } };
       },
 
-      async process(streamInput: StreamInput): Promise<void> {
+      process(streamInput: StreamInput): Promise<void> {
+        synchronousTerminalFailure = false;
         publishStatus(events, sessionID, trace.traceId, "busy");
-        try {
-          await runAttempts(streamInput);
-        } finally {
+        const processing = runAttempts(streamInput);
+        if (synchronousTerminalFailure) {
           publishStatus(events, sessionID, trace.traceId, "idle");
+          return processing;
         }
+        return processing.finally(() => {
+          publishStatus(events, sessionID, trace.traceId, "idle");
+        });
       },
     };
   }
