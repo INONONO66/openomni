@@ -2,6 +2,7 @@ import { createAnthropic, type AnthropicProvider } from "@ai-sdk/anthropic";
 import { createOpenAI, type OpenAIProvider } from "@ai-sdk/openai";
 import type { LanguageModel } from "ai";
 import type { Auth } from "../auth/storage";
+import { clientIdentity } from "./identity";
 import type { Provider } from "./index";
 
 type SdkOptions = {
@@ -89,8 +90,16 @@ export function getSDK(model: Provider.Model, auth: Auth.Info): ProviderSDK {
   const customLoader = CUSTOM_LOADERS.get(providerID);
   const custom = customLoader ? customLoader() : undefined;
 
+  // Default first, provider-specific last: the client identity is the value
+  // every instantiation starts from, and anything a caller supplies overrides
+  // it rather than being silently dropped.
+  const customOptions = custom?.options ?? {};
   const sdkOptions: SdkOptions = {
-    ...(custom?.options ?? {}),
+    ...customOptions,
+    headers: {
+      "user-agent": clientIdentity(),
+      ...(customOptions.headers as Record<string, string> | undefined),
+    },
   };
   // Honored for every provider, openai included: the old `!== "openai"` gate
   // silently ignored model.api.url for openai models and was carried in
@@ -117,6 +126,7 @@ export function getSDK(model: Provider.Model, auth: Auth.Info): ProviderSDK {
       name: providerID,
       baseURL,
       apiKey: sdkOptions.apiKey,
+      headers: sdkOptions.headers,
     });
     setCached(SDK_CACHE, cacheKey, sdk, PROVIDER_SDK_CACHE_MAX_ENTRIES);
     return sdk;
