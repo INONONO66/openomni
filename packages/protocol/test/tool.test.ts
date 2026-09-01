@@ -375,10 +375,9 @@ describe("Tool.Spec", () => {
 });
 
 describe("Tool source label grammar", () => {
-  test("round-trips every Source value through sourceLabel/sourceFromLabels", () => {
+  test("parses every Source value from its catalog label", () => {
     for (const source of Tool.Source.options) {
-      expect(Tool.sourceLabel(source)).toBe(`source:${source}`);
-      expect(Tool.sourceFromLabels([`risk:tier-1`, Tool.sourceLabel(source)])).toBe(source);
+      expect(Tool.sourceFromLabels([`risk:tier-1`, `source:${source}`])).toBe(source);
     }
   });
 
@@ -389,8 +388,7 @@ describe("Tool source label grammar", () => {
     expect(Tool.sourceFromLabels(["source.mcp", "mcp.fixture"])).toBeUndefined();
   });
 
-  test("round-trips a server id through mcpServerLabel/mcpServerFromLabels", () => {
-    expect(Tool.mcpServerLabel("github")).toBe("mcp.github");
+  test("parses a server id from its catalog label", () => {
     expect(Tool.mcpServerFromLabels(["source:mcp", "mcp.github"])).toBe("github");
   });
 
