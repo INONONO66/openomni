@@ -139,9 +139,9 @@ describe("DirectEvent", () => {
   });
 });
 
-describe("InboundEvent", () => {
+describe("DirectEvent validation", () => {
   test("should parse direct event", () => {
-    const event = Ingress.InboundEventSchema.parse({
+    const event = Ingress.DirectEventSchema.parse({
       id: "event-1",
       traceId: "trace-test",
       surface: "cli",
@@ -159,7 +159,7 @@ describe("InboundEvent", () => {
 
   test("should reject invalid mode value", () => {
     expectParseFailure(() =>
-      Ingress.InboundEventSchema.parse({
+      Ingress.DirectEventSchema.parse({
         id: "event-1",
         surface: "cli",
         mode: "auto",
@@ -175,7 +175,7 @@ describe("InboundEvent", () => {
   });
 
   test("parses ADR-008 target aliases and actor metadata", () => {
-    const resident = Ingress.InboundEventSchema.parse({
+    const resident = Ingress.DirectEventSchema.parse({
       id: "event-resident-1",
       traceId: "trace-test",
       surface: "cli",
@@ -188,7 +188,7 @@ describe("InboundEvent", () => {
     expect(resident.target).toEqual({ kind: "resident" });
     expect(resident.meta?.actor?.role).toBe("user");
 
-    const worker = Ingress.InboundEventSchema.parse({
+    const worker = Ingress.DirectEventSchema.parse({
       id: "event-worker-1",
       traceId: "trace-test",
       surface: "cli",
@@ -202,7 +202,7 @@ describe("InboundEvent", () => {
   });
 
   test("parses worker target without workerId or sessionId", () => {
-    const event = Ingress.InboundEventSchema.parse({
+    const event = Ingress.DirectEventSchema.parse({
       id: "event-worker-new",
       traceId: "trace-test",
       surface: "cli",
@@ -217,7 +217,7 @@ describe("InboundEvent", () => {
 
   test("should reject missing id", () => {
     expectParseFailure(() =>
-      Ingress.InboundEventSchema.parse({
+      Ingress.DirectEventSchema.parse({
         surface: "cli",
         mode: "direct",
         payload: { goal: "Build API" },

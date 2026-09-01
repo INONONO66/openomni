@@ -385,34 +385,6 @@
     "userId",
     "workspace"
   ],
-  "Ingress.InboundEventSchema#direct": [
-    "activation",
-    "agent",
-    "channel",
-    "id",
-    "meta",
-    "mode",
-    "payload",
-    "surface",
-    "target",
-    "traceId",
-    "userId",
-    "workspace"
-  ],
-  "Ingress.InboundEventSchema#internal": [
-    "activation",
-    "agentName",
-    "channel",
-    "id",
-    "meta",
-    "mode",
-    "payload",
-    "surface",
-    "target",
-    "traceId",
-    "userId",
-    "workspace"
-  ],
   "Ingress.InternalEventSchema": [
     "activation",
     "agentName",
