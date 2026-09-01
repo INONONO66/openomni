@@ -5,6 +5,7 @@ import { Bus, collector } from "@openomni/telemetry";
 import { dispatchBudgetCheck } from "../../../src/core/execution/lifecycle-dispatch";
 import { PolicyEngine, type PolicyContext } from "../../../src/core/policy";
 import { makeAgentBase, makeConfig, makeState } from "./lifecycle-dispatch-fixture";
+import { captureBusEvents } from "../../helpers/bus-event";
 
 describe("dispatchBudgetCheck (budget exhaustion)", () => {
   /**
@@ -13,10 +14,7 @@ describe("dispatchBudgetCheck (budget exhaustion)", () => {
    * frame below where the trace enters leaves the wiring free to be wrong.
    */
   it("files the budget event under the run's trace, from the dispatch frame", async () => {
-    const seen: Array<{ traceId: string; sessionId?: string }> = [];
-    const unsubscribe = Bus.subscribe(Operational.Events.Warn, (event) => {
-      seen.push(event as unknown as { traceId: string; sessionId?: string });
-    });
+    const warning = captureBusEvents(Operational.Events.Warn);
     const agentBase = makeAgentBase();
     const state = makeState();
     state.budgetState.turns = 20;
@@ -28,16 +26,14 @@ describe("dispatchBudgetCheck (budget exhaustion)", () => {
         makeConfig({ budget: { maxTurns: 24 } }),
         agentBase,
       );
-      await Bun.sleep(0);
+      const [seen] = await warning.done;
+      expect(seen).toMatchObject({
+        traceId: agentBase.traceId,
+        sessionId: agentBase.sessionId,
+      });
     } finally {
-      unsubscribe();
+      warning.unsubscribe();
     }
-
-    expect(seen).toHaveLength(1);
-    expect(seen[0]).toMatchObject({
-      traceId: agentBase.traceId,
-      sessionId: agentBase.sessionId,
-    });
   });
   it("dispatches a truthful max-steps lifecycle outcome when budget is exceeded", async () => {
     const observedOutcomes: unknown[] = [];
@@ -83,8 +79,12 @@ describe("dispatchBudgetCheck (budget exhaustion)", () => {
     state.budgetState = { ...state.budgetState, startTime: Date.now() - 10_000 };
     const config = makeConfig({ events: collected, budget: { maxWallTimeMs: 1000 } });
 
-    const result = await dispatchBudgetCheck(state, PolicyEngine.create({ clock: Date.now }), config, makeAgentBase());
-    await Bun.sleep(0);
+    const result = await dispatchBudgetCheck(
+      state,
+      PolicyEngine.create({ clock: Date.now }),
+      config,
+      makeAgentBase(),
+    );
 
     expect(result).not.toBeNull();
     expect(result?.finishReason).toBe("max-steps");
@@ -125,7 +125,6 @@ describe("dispatchBudgetCheck (budget exhaustion)", () => {
         makeConfig({ events: collected, budget: { maxTurns: 24 } }),
         agentBase,
       );
-      await Bun.sleep(0);
     } finally {
       unsubscribe();
     }

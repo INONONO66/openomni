@@ -4,6 +4,7 @@ import { Bus } from "@openomni/telemetry";
 import { matchesToolPattern } from "../../../src/core/execution/effects";
 import { createToolExecutor, type BlockedToolResult } from "../../../src/core/execution/tools";
 import { PolicyEngine, type PolicyRegistration } from "../../../src/core/policy";
+import { captureBusEvents } from "../../helpers/bus-event";
 
 function makeCall(id = "call-1"): Tool.Call {
   return { id, tool: "bash", input: { command: "bun test" } };
@@ -34,10 +35,6 @@ function engineWithRegistrations(registrations: PolicyRegistration[]) {
   return engine;
 }
 
-async function flushBus(): Promise<void> {
-  await Promise.resolve();
-}
-
 describe("createToolExecutor invoke.prepare verdict handling", () => {
   it("blocks tool execution when policy returns deny", async () => {
     Bus.reset();
@@ -65,7 +62,6 @@ describe("createToolExecutor invoke.prepare verdict handling", () => {
     });
 
     const result = await executor(makeCall("call-deny"));
-    await flushBus();
 
     expect(calls).toBe(0);
     expect(result.isError).toBe(true);
@@ -493,12 +489,32 @@ describe("createToolExecutor effect application", () => {
   });
 
   describe("invoke.result run.abort propagation", () => {
-    it("invoke.result deny with run.abort returns blocked result", async () => {
+    it.each([
+      {
+        name: "with run.abort returns blocked result",
+        capability: "run.abort",
+        effect: { type: "run.abort", reason: "post-deny" },
+        expectedError: true,
+        expectedOutput: "[Denied: post-deny]",
+      },
+      {
+        name: "without run.abort still returns tool result",
+        capability: "audit.annotate",
+        effect: { type: "audit.annotate", annotation: "post-deny" },
+        expectedError: undefined,
+        expectedOutput: "original",
+      },
+    ] as const)("invoke.result deny $name", async ({
+      capability,
+      effect,
+      expectedError,
+      expectedOutput,
+    }) => {
       let calls = 0;
       const decision = PolicyDecision.deny({
         policyId: "post",
         reasonCodes: ["post-deny"],
-        effects: [{ type: "run.abort", reason: "post-deny" }],
+        effects: [effect],
       });
       const engine = engineWithRegistrations([
         {
@@ -513,7 +529,7 @@ describe("createToolExecutor effect application", () => {
           kind: "point",
           name: "post",
           pointIds: ["tool.native.post"],
-          effectCapabilities: { "tool.native.post": ["run.abort"] },
+          effectCapabilities: { "tool.native.post": [capability] },
           priority: 0,
           fn: () => decision,
         },
@@ -524,65 +540,15 @@ describe("createToolExecutor effect application", () => {
         engine,
         toolExecutor: async (call) => {
           calls += 1;
-          return {
-            id: "result-post-abort",
-            toolCallId: call.id,
-            output: "original",
-          };
+          return { id: "result-post-deny", toolCallId: call.id, output: "original" };
         },
       });
 
-      const result = await executor(makeCall("call-post-abort"));
+      const result = await executor(makeCall("call-post-deny"));
 
       expect(calls).toBeGreaterThan(0);
-      expect(result.isError).toBe(true);
-      expect(result.output).toBe("[Denied: post-deny]");
-    });
-
-    it("invoke.result deny without run.abort still returns tool result", async () => {
-      let calls = 0;
-      const engine = engineWithRegistrations([
-        {
-          kind: "point",
-          name: "pre",
-          pointIds: ["tool.native.pre"],
-          effectCapabilities: { "tool.native.pre": [] },
-          priority: 0,
-          fn: () => PolicyDecision.allow({ policyId: "pre" }),
-        },
-        {
-          kind: "point",
-          name: "post",
-          pointIds: ["tool.native.post"],
-          effectCapabilities: { "tool.native.post": ["audit.annotate"] },
-          priority: 0,
-          fn: () =>
-            PolicyDecision.deny({
-              policyId: "post",
-              reasonCodes: ["post-deny"],
-              effects: [{ type: "audit.annotate", annotation: "post-deny" }],
-            }),
-        },
-      ]);
-      const executor = createToolExecutor({
-        events: Bus,
-        traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
-        engine,
-        toolExecutor: async (call) => {
-          calls += 1;
-          return {
-            id: "result-post-audit",
-            toolCallId: call.id,
-            output: "original",
-          };
-        },
-      });
-
-      const result = await executor(makeCall("call-post-audit"));
-
-      expect(calls).toBeGreaterThan(0);
-      expect(result.isError).toBeUndefined();
-      expect(result.output).toBe("original");
+      expect(result.isError).toBe(expectedError);
+      expect(result.output).toBe(expectedOutput);
     });
 
     it("onDecision callback receives invoke.result decisions", async () => {
@@ -632,10 +598,24 @@ describe("createToolExecutor effect application", () => {
       expect(invokeResultDecision?.[1].reasonCodes).toContain("post-deny");
     });
 
-    it("isolates onDecision callback errors from tool execution", async () => {
+    it.each([
+      {
+        name: "callback errors",
+        error: "observer failed",
+        onDecision: () => {
+          throw new Error("observer failed");
+        },
+      },
+      {
+        name: "async callback rejections",
+        error: "async observer failed",
+        onDecision: async () => {
+          throw new Error("async observer failed");
+        },
+      },
+    ] as const)("isolates onDecision $name from tool execution", async ({ error, onDecision }) => {
       Bus.reset();
-      const warnings: unknown[] = [];
-      const unsubscribe = Bus.subscribe(Operational.Events.Warn, (data) => warnings.push(data));
+      const warnings = captureBusEvents(Operational.Events.Warn, 2);
       const engine = engineWithRegistrations([
         {
           kind: "point",
@@ -650,9 +630,7 @@ describe("createToolExecutor effect application", () => {
         events: Bus,
         traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
         engine,
-        onDecision: () => {
-          throw new Error("observer failed");
-        },
+        onDecision,
         toolExecutor: async (call) => ({
           id: "result-on-decision-error",
           toolCallId: call.id,
@@ -662,88 +640,29 @@ describe("createToolExecutor effect application", () => {
 
       try {
         const result = await executor(makeCall("call-on-decision-error"));
-        await new Promise((resolve) => queueMicrotask(resolve));
+        const [prepareWarning, resultWarning] = await warnings.done;
 
         expect(result.output).toBe("ok");
-        expect(warnings).toHaveLength(2);
-        expect(warnings[0]).toMatchObject({
+        expect(prepareWarning).toMatchObject({
           component: "agent.tool-executor",
           msg: "onDecision observer error",
           context: {
             timing: "invoke.prepare",
             policyId: "agent.policy.composed",
-            error: "Error: observer failed",
+            error: `Error: ${error}`,
           },
         });
-        expect(warnings[1]).toMatchObject({
+        expect(resultWarning).toMatchObject({
           component: "agent.tool-executor",
           msg: "onDecision observer error",
           context: {
             timing: "invoke.result",
             policyId: "agent.policy.composed",
-            error: "Error: observer failed",
+            error: `Error: ${error}`,
           },
         });
       } finally {
-        unsubscribe();
-        Bus.reset();
-      }
-    });
-
-    it("isolates async onDecision callback rejections from tool execution", async () => {
-      Bus.reset();
-      const warnings: unknown[] = [];
-      const unsubscribe = Bus.subscribe(Operational.Events.Warn, (data) => warnings.push(data));
-      const engine = engineWithRegistrations([
-        {
-          kind: "point",
-          name: "pre",
-          pointIds: ["tool.native.pre"],
-          effectCapabilities: { "tool.native.pre": [] },
-          priority: 0,
-          fn: () => PolicyDecision.allow({ policyId: "pre" }),
-        },
-      ]);
-      const executor = createToolExecutor({
-        events: Bus,
-        traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
-        engine,
-        onDecision: async () => {
-          throw new Error("async observer failed");
-        },
-        toolExecutor: async (call) => ({
-          id: "result-async-on-decision-error",
-          toolCallId: call.id,
-          output: "ok",
-        }),
-      });
-
-      try {
-        const result = await executor(makeCall("call-async-on-decision-error"));
-        await new Promise((resolve) => setTimeout(resolve, 0));
-
-        expect(result.output).toBe("ok");
-        expect(warnings).toHaveLength(2);
-        expect(warnings[0]).toMatchObject({
-          component: "agent.tool-executor",
-          msg: "onDecision observer error",
-          context: {
-            timing: "invoke.prepare",
-            policyId: "agent.policy.composed",
-            error: "Error: async observer failed",
-          },
-        });
-        expect(warnings[1]).toMatchObject({
-          component: "agent.tool-executor",
-          msg: "onDecision observer error",
-          context: {
-            timing: "invoke.result",
-            policyId: "agent.policy.composed",
-            error: "Error: async observer failed",
-          },
-        });
-      } finally {
-        unsubscribe();
+        warnings.unsubscribe();
         Bus.reset();
       }
     });

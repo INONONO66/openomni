@@ -4,6 +4,7 @@ import { Bus } from "@openomni/telemetry";
 import type { z } from "zod";
 import { PolicyEngine } from "../../../src/core/policy";
 import { atPoint, deny, policyContext } from "../../helpers/policy-decision";
+import { captureBusEvents } from "../../helpers/bus-event";
 
 type PolicyEvaluatedEvent = z.infer<typeof Policy.Events.Evaluated.schema>;
 type PolicyDecisionComposedEvent = z.infer<typeof Policy.Events.DecisionComposed.schema>;
@@ -19,17 +20,10 @@ function nativeToolDescriptor(name: string): Policy.Resource.Descriptor {
   };
 }
 
-async function flushBus(): Promise<void> {
-  await Promise.resolve();
-}
-
 describe("PolicyEngine audit emission", () => {
   it("emits policy.evaluated with canonical audit context for blocking dispatch", async () => {
     const descriptor = nativeToolDescriptor("shell");
-    const evaluated: PolicyEvaluatedEvent[] = [];
-    const unsub = Bus.subscribe(Policy.Events.Evaluated, (event) => {
-      evaluated.push(event);
-    });
+    const evaluated = captureBusEvents(Policy.Events.Evaluated);
 
     try {
       const engine = PolicyEngine.create({
@@ -68,10 +62,9 @@ describe("PolicyEngine audit emission", () => {
       };
 
       await engine.dispatchPoint("tool.native.pre", ctx);
-      await flushBus();
+      const [event] = (await evaluated.done) as readonly PolicyEvaluatedEvent[];
 
-      expect(evaluated).toHaveLength(1);
-      expect(evaluated[0]).toMatchObject({
+      expect(event).toMatchObject({
         traceId: "trace-request",
         sessionId: "sess-request",
         runId: "run-request",
@@ -89,23 +82,17 @@ describe("PolicyEngine audit emission", () => {
         pointVersion: 1,
         resourceDescriptor: descriptor,
       });
-      expect(typeof evaluated[0]?.durationMs).toBe("number");
+      expect(typeof event?.durationMs).toBe("number");
     } finally {
-      unsub();
+      evaluated.unsubscribe();
       Bus.reset();
     }
   });
 
   it("emits policy.decision.composed for blocking dispatch", async () => {
     const descriptor = nativeToolDescriptor("shell");
-    const evaluated: PolicyEvaluatedEvent[] = [];
-    const composed: PolicyDecisionComposedEvent[] = [];
-    const unsubEvaluated = Bus.subscribe(Policy.Events.Evaluated, (event) => {
-      evaluated.push(event);
-    });
-    const unsubComposed = Bus.subscribe(Policy.Events.DecisionComposed, (event) => {
-      composed.push(event);
-    });
+    const evaluated = captureBusEvents(Policy.Events.Evaluated);
+    const composed = captureBusEvents(Policy.Events.DecisionComposed);
 
     try {
       const engine = PolicyEngine.create({ clock: Date.now, auditEmit: Bus.publish });
@@ -133,15 +120,16 @@ describe("PolicyEngine audit emission", () => {
           agentName: "audit-agent",
         },
       });
-      await flushBus();
 
+      const evaluatedEvents = (await evaluated.done) as readonly PolicyEvaluatedEvent[];
+      const composedEvents = (await composed.done) as readonly PolicyDecisionComposedEvent[];
       expect(decision.effects).toEqual([
         { type: "run.abort", reason: "blocked-shell" },
         { type: "audit.annotate", annotation: "blocked-shell", severity: "error" },
       ]);
-      expect(evaluated).toHaveLength(1);
-      expect(composed).toHaveLength(1);
-      expect(composed[0]).toMatchObject({
+      expect(evaluatedEvents).toHaveLength(1);
+      expect(composedEvents).toHaveLength(1);
+      expect(composedEvents[0]).toMatchObject({
         traceId: "trace-v2",
         sessionId: "sess-v2",
         runId: "run-v2",
@@ -159,10 +147,10 @@ describe("PolicyEngine audit emission", () => {
         pointVersion: 1,
         resourceDescriptor: descriptor,
       });
-      expect(typeof composed[0]?.durationMs).toBe("number");
+      expect(typeof composedEvents[0]?.durationMs).toBe("number");
     } finally {
-      unsubEvaluated();
-      unsubComposed();
+      evaluated.unsubscribe();
+      composed.unsubscribe();
       Bus.reset();
     }
   });

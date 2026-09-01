@@ -3,6 +3,7 @@ import type { Message } from "@openomni/protocol";
 import { RunEvents } from "../../src/core/execution/events";
 import { Bus } from "@openomni/telemetry";
 import { Compaction } from "../../src/compaction/compact";
+import { captureBusEvents } from "../helpers/bus-event";
 
 /**
  * The lock bracket: every compact() call publishes exactly one
@@ -100,26 +101,22 @@ function captureBracket(): {
   started: StartedEvent[];
   completed: CompletedEvent[];
   order: string[];
+  done: Promise<void>;
   unsubscribe: () => void;
 } {
-  const started: StartedEvent[] = [];
-  const completed: CompletedEvent[] = [];
   const order: string[] = [];
-  const unsubStarted = Bus.subscribe(RunEvents.CompactionStarted, (event) => {
-    started.push(event as unknown as StartedEvent);
-    order.push("started");
-  });
-  const unsubCompleted = Bus.subscribe(RunEvents.CompactionCompleted, (event) => {
-    completed.push(event as unknown as CompletedEvent);
-    order.push("completed");
-  });
+  const started = captureBusEvents(RunEvents.CompactionStarted, 1, () => order.push("started"));
+  const completed = captureBusEvents(RunEvents.CompactionCompleted, 1, () =>
+    order.push("completed"),
+  );
   return {
-    started,
-    completed,
+    started: started.events as StartedEvent[],
+    completed: completed.events as CompletedEvent[],
     order,
+    done: Promise.all([started.done, completed.done]).then(() => undefined),
     unsubscribe: () => {
-      unsubStarted();
-      unsubCompleted();
+      started.unsubscribe();
+      completed.unsubscribe();
     },
   };
 }
@@ -139,7 +136,7 @@ describe("Compaction bracket", () => {
         Bus,
         { trigger: "threshold" },
       );
-      await Bun.sleep(0);
+      await capture.done;
 
       expect(result.compacted).toBe(true);
       expect(capture.started).toHaveLength(1);
@@ -188,7 +185,7 @@ describe("Compaction bracket", () => {
         Bus,
         { trigger: "threshold" },
       );
-      await Bun.sleep(0);
+      await capture.done;
 
       // Housekeeping failed; the run did not: no throw, the cut degraded
       // (users still head the window, no anchor), and the record names it.
@@ -212,7 +209,7 @@ describe("Compaction bracket", () => {
         Bus,
         { trigger: "yield" },
       );
-      await Bun.sleep(0);
+      await capture.done;
 
       expect(result.compacted).toBe(false);
       expect(result.blocked).toBe("no_user_boundary");
@@ -235,7 +232,7 @@ describe("Compaction bracket", () => {
         Bus,
         { trigger: "threshold" },
       );
-      await Bun.sleep(0);
+      await capture.done;
 
       expect(result.compacted).toBe(false);
       expect(capture.started).toHaveLength(1);

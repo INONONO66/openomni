@@ -3,6 +3,7 @@ import type { Message } from "@openomni/protocol";
 import { RunEvents } from "../../src/core/execution/events";
 import { Bus } from "@openomni/telemetry";
 import { Compaction } from "../../src/compaction/compact";
+import { captureBusEvents } from "../helpers/bus-event";
 
 /** Compaction rewrites a run's history; the record carries that run's trace. */
 const TEST_TRACE_ID = "trace-compaction-test";
@@ -92,13 +93,8 @@ describe("Compaction", () => {
    * readable against the run it changed. Re-minting here left the suite green.
    */
   it("files the compaction record under the run's trace", async () => {
-    const seen: Array<{ traceId: string }> = [];
-    const unsubStarted = Bus.subscribe(RunEvents.CompactionStarted, (event) => {
-      seen.push(event as unknown as { traceId: string });
-    });
-    const unsubCompleted = Bus.subscribe(RunEvents.CompactionCompleted, (event) => {
-      seen.push(event as unknown as { traceId: string });
-    });
+    const started = captureBusEvents(RunEvents.CompactionStarted);
+    const completed = captureBusEvents(RunEvents.CompactionCompleted);
 
     try {
       await Compaction.compact(
@@ -108,14 +104,13 @@ describe("Compaction", () => {
         Bus,
         { trigger: "threshold" },
       );
-      await Bun.sleep(0);
+      const seen = [...(await started.done), ...(await completed.done)];
+      // The bracket: started + completed, both filed under the run's trace.
+      expect(seen.filter((event) => event.traceId === TEST_TRACE_ID)).toHaveLength(2);
     } finally {
-      unsubStarted();
-      unsubCompleted();
+      started.unsubscribe();
+      completed.unsubscribe();
     }
-
-    // The bracket: started + completed, both filed under the run's trace.
-    expect(seen.filter((event) => event.traceId === TEST_TRACE_ID)).toHaveLength(2);
   });
 
   describe("shouldCompact", () => {
@@ -758,15 +753,16 @@ describe("Compaction", () => {
       expect(result.messages).toHaveLength(6);
     });
 
-    it("records anchored=false when a cut commits without an anchor render", async () => {
-      const completed: Array<{ outcome: string; anchored?: boolean }> = [];
-      const unsubscribe = Bus.subscribe(RunEvents.CompactionCompleted, (event) => {
-        completed.push(event as unknown as { outcome: string; anchored?: boolean });
-      });
+    it.each([
+      { name: "without an anchor render", summary: "   ", anchored: false },
+      {
+        name: "when the anchor render heads the kept window",
+        summary: "anchor body",
+        anchored: true,
+      },
+    ] as const)("records anchored=$anchored $name", async ({ summary, anchored }) => {
+      const completed = captureBusEvents(RunEvents.CompactionCompleted);
       try {
-        // Whitespace merge + no prior anchor: the assistant span is dropped
-        // with only preserved users heading the window — a different loss
-        // class than an anchored cut, and the record must say so.
         const result = await Compaction.compact(
           [
             makeUserMessage("u0"),
@@ -775,44 +771,16 @@ describe("Compaction", () => {
             makeUserMessage("tail-u"),
             makeAssistantMessage("tail-a"),
           ],
-          { ...opts, onSummarize: async () => "   " },
+          { ...opts, onSummarize: async () => summary },
           trace,
           Bus,
           { trigger: "threshold" },
         );
-        await Bun.sleep(0);
         expect(result.compacted).toBe(true);
-        const cut = completed.find((event) => event.outcome === "cut");
-        expect(cut?.anchored).toBe(false);
+        const cut = (await completed.done).find((event) => event.outcome === "cut");
+        expect(cut?.anchored).toBe(anchored);
       } finally {
-        unsubscribe();
-      }
-    });
-
-    it("records anchored=true when the anchor render heads the kept window", async () => {
-      const completed: Array<{ outcome: string; anchored?: boolean }> = [];
-      const unsubscribe = Bus.subscribe(RunEvents.CompactionCompleted, (event) => {
-        completed.push(event as unknown as { outcome: string; anchored?: boolean });
-      });
-      try {
-        await Compaction.compact(
-          [
-            makeUserMessage("u0"),
-            makeAssistantMessage("a1"),
-            makeAssistantMessage("a2"),
-            makeUserMessage("tail-u"),
-            makeAssistantMessage("tail-a"),
-          ],
-          { ...opts, onSummarize: async () => "anchor body" },
-          trace,
-          Bus,
-          { trigger: "threshold" },
-        );
-        await Bun.sleep(0);
-        const cut = completed.find((event) => event.outcome === "cut");
-        expect(cut?.anchored).toBe(true);
-      } finally {
-        unsubscribe();
+        completed.unsubscribe();
       }
     });
   });

@@ -28,6 +28,15 @@ const providerModel = {
 
 const TOKENS_TURN_1 = { input: 100, output: 50 };
 
+function createAgent(run: MockLlmFn, middleware: PolicyRegistration[]) {
+  return ChatAgent.create({
+    events: Bus,
+    model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+    llm: { run, resolveProviderModel: async () => providerModel },
+    middleware,
+  });
+}
+
 function assistantInfo(id: string, sessionID: string, parentID: string): Message.AssistantMessage {
   return {
     id,
@@ -160,12 +169,7 @@ describe("tool-bearing history (#546)", () => {
       return createStopOutcome();
     };
 
-    const agent = ChatAgent.create({
-      events: Bus,
-      model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-      llm: { run, resolveProviderModel: async () => providerModel },
-      middleware: [injectOnceMiddleware()],
-    });
+    const agent = createAgent(run, [injectOnceMiddleware()]);
 
     const result = await agent.run(runInput([{ role: "user", content: "what is the answer?" }]));
 
@@ -215,26 +219,21 @@ describe("tool-bearing history (#546)", () => {
       return createStopOutcome();
     };
 
-    const agent = ChatAgent.create({
-      events: Bus,
-      model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-      llm: { run, resolveProviderModel: async () => providerModel },
-      middleware: [
-        {
-          kind: "point",
-          name: "test:capture-final-history",
-          pointIds: ["run.lifecycle.post"],
-          effectCapabilities: { "run.lifecycle.post": [] },
-          priority: 100,
-          fn: (ctx) => {
-            finalMessages = [
-              ...((ctx as unknown as { messages: Message.WithParts[] }).messages ?? []),
-            ];
-            return allow();
-          },
+    const agent = createAgent(run, [
+      {
+        kind: "point",
+        name: "test:capture-final-history",
+        pointIds: ["run.lifecycle.post"],
+        effectCapabilities: { "run.lifecycle.post": [] },
+        priority: 100,
+        fn: (ctx) => {
+          finalMessages = [
+            ...((ctx as unknown as { messages: Message.WithParts[] }).messages ?? []),
+          ];
+          return allow();
         },
-      ],
-    });
+      },
+    ]);
 
     const result = await agent.run(runInput([{ role: "user", content: "hello" }]));
 
@@ -272,41 +271,36 @@ describe("tool-bearing history (#546)", () => {
       return createStopOutcome();
     };
 
-    const agent = ChatAgent.create({
-      events: Bus,
-      model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-      llm: { run, resolveProviderModel: async () => providerModel },
-      middleware: [
-        injectOnceMiddleware(),
-        {
-          kind: "point",
-          name: "test:capture-pre-turn",
-          pointIds: ["run.turn.pre"],
-          effectCapabilities: { "run.turn.pre": [] },
-          priority: 100,
-          fn: (ctx) => {
-            const context = ctx as unknown as {
-              turnCount: number;
-              usage: { inputTokens: number; outputTokens: number };
-            };
-            preTurnSnapshots.push({
-              turnCount: context.turnCount,
-              inputTokens: context.usage.inputTokens,
-              outputTokens: context.usage.outputTokens,
-            });
-            return allow();
-          },
+    const agent = createAgent(run, [
+      injectOnceMiddleware(),
+      {
+        kind: "point",
+        name: "test:capture-pre-turn",
+        pointIds: ["run.turn.pre"],
+        effectCapabilities: { "run.turn.pre": [] },
+        priority: 100,
+        fn: (ctx) => {
+          const context = ctx as unknown as {
+            turnCount: number;
+            usage: { inputTokens: number; outputTokens: number };
+          };
+          preTurnSnapshots.push({
+            turnCount: context.turnCount,
+            inputTokens: context.usage.inputTokens,
+            outputTokens: context.usage.outputTokens,
+          });
+          return allow();
         },
-        {
-          kind: "point",
-          name: "test:fast-retry",
-          pointIds: ["run.error.error"],
-          effectCapabilities: { "run.error.error": ["run.retry_after"] },
-          priority: 100,
-          fn: () => allow("test.fast-retry", "retry", [{ type: "run.retry_after", delayMs: 1 }]),
-        },
-      ],
-    });
+      },
+      {
+        kind: "point",
+        name: "test:fast-retry",
+        pointIds: ["run.error.error"],
+        effectCapabilities: { "run.error.error": ["run.retry_after"] },
+        priority: 100,
+        fn: () => allow("test.fast-retry", "retry", [{ type: "run.retry_after", delayMs: 1 }]),
+      },
+    ]);
 
     const result = await agent.run(runInput([{ role: "user", content: "hello" }]));
 
@@ -350,34 +344,29 @@ describe("tool-bearing history regressions (#546 fix-first)", () => {
       return createStopOutcome();
     };
 
-    const agent = ChatAgent.create({
-      events: Bus,
-      model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-      llm: { run, resolveProviderModel: async () => providerModel },
-      middleware: [
-        {
-          kind: "point",
-          name: "test:replace-keep-all",
-          pointIds: ["run.turn.post"],
-          effectCapabilities: {
-            "run.turn.post": ["run.replace_messages", "run.continue_with_prompt"],
-          },
-          priority: 100,
-          fn: (ctx) => {
-            if (replaced) return allow();
-            replaced = true;
-            // A history-rewriting policy that keeps everything it can see.
-            // The dispatch context must already contain the just-finished
-            // assistant message, or this "no-op" rewrite silently deletes it.
-            const messages = ctx.messages ?? [];
-            return allow("test.replace-keep", "replace", [
-              Policy.PolicyEffect.parse({ type: "run.replace_messages", messages: [...messages] }),
-              { type: "run.continue_with_prompt", prompt: "go on" },
-            ]);
-          },
+    const agent = createAgent(run, [
+      {
+        kind: "point",
+        name: "test:replace-keep-all",
+        pointIds: ["run.turn.post"],
+        effectCapabilities: {
+          "run.turn.post": ["run.replace_messages", "run.continue_with_prompt"],
         },
-      ],
-    });
+        priority: 100,
+        fn: (ctx) => {
+          if (replaced) return allow();
+          replaced = true;
+          // A history-rewriting policy that keeps everything it can see.
+          // The dispatch context must already contain the just-finished
+          // assistant message, or this "no-op" rewrite silently deletes it.
+          const messages = ctx.messages ?? [];
+          return allow("test.replace-keep", "replace", [
+            Policy.PolicyEffect.parse({ type: "run.replace_messages", messages: [...messages] }),
+            { type: "run.continue_with_prompt", prompt: "go on" },
+          ]);
+        },
+      },
+    ]);
 
     const result = await agent.run(runInput([{ role: "user", content: "what is the answer?" }]));
 
@@ -402,32 +391,27 @@ describe("tool-bearing history regressions (#546 fix-first)", () => {
       return createStopOutcome();
     };
 
-    const agent = ChatAgent.create({
-      events: Bus,
-      model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-      llm: { run, resolveProviderModel: async () => providerModel },
-      middleware: [
-        {
-          kind: "point",
-          name: "test:run-start-inject",
-          pointIds: ["run.lifecycle.pre"],
-          effectCapabilities: { "run.lifecycle.pre": ["prompt.inject_message"] },
-          priority: 100,
-          fn: () =>
-            allow("test.pre-run", "inject", [
-              { type: "prompt.inject_message", message: "system context" },
-            ]),
-        },
-        {
-          kind: "point",
-          name: "test:fast-retry",
-          pointIds: ["run.error.error"],
-          effectCapabilities: { "run.error.error": ["run.retry_after"] },
-          priority: 100,
-          fn: () => allow("test.fast-retry", "retry", [{ type: "run.retry_after", delayMs: 1 }]),
-        },
-      ],
-    });
+    const agent = createAgent(run, [
+      {
+        kind: "point",
+        name: "test:run-start-inject",
+        pointIds: ["run.lifecycle.pre"],
+        effectCapabilities: { "run.lifecycle.pre": ["prompt.inject_message"] },
+        priority: 100,
+        fn: () =>
+          allow("test.pre-run", "inject", [
+            { type: "prompt.inject_message", message: "system context" },
+          ]),
+      },
+      {
+        kind: "point",
+        name: "test:fast-retry",
+        pointIds: ["run.error.error"],
+        effectCapabilities: { "run.error.error": ["run.retry_after"] },
+        priority: 100,
+        fn: () => allow("test.fast-retry", "retry", [{ type: "run.retry_after", delayMs: 1 }]),
+      },
+    ]);
 
     const result = await agent.run(runInput([{ role: "user", content: "hello" }]));
 
@@ -456,27 +440,22 @@ describe("tool-bearing history regressions (#546 fix-first)", () => {
       return createStopOutcome();
     };
 
-    const agent = ChatAgent.create({
-      events: Bus,
-      model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-      llm: { run, resolveProviderModel: async () => providerModel },
-      middleware: [
-        injectOnceMiddleware(),
-        {
-          kind: "point",
-          name: "test:capture-final-history",
-          pointIds: ["run.lifecycle.post"],
-          effectCapabilities: { "run.lifecycle.post": [] },
-          priority: 100,
-          fn: (ctx) => {
-            finalMessages = [
-              ...((ctx as unknown as { messages: Message.WithParts[] }).messages ?? []),
-            ];
-            return allow();
-          },
+    const agent = createAgent(run, [
+      injectOnceMiddleware(),
+      {
+        kind: "point",
+        name: "test:capture-final-history",
+        pointIds: ["run.lifecycle.post"],
+        effectCapabilities: { "run.lifecycle.post": [] },
+        priority: 100,
+        fn: (ctx) => {
+          finalMessages = [
+            ...((ctx as unknown as { messages: Message.WithParts[] }).messages ?? []),
+          ];
+          return allow();
         },
-      ],
-    });
+      },
+    ]);
 
     const result = await agent.run(runInput([{ role: "user", content: "hello" }]));
 
@@ -525,27 +504,22 @@ describe("tool-bearing history regressions (#546 fix-first)", () => {
       return createStopOutcome();
     };
 
-    const agent = ChatAgent.create({
-      events: Bus,
-      model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-      llm: { run, resolveProviderModel: async () => providerModel },
-      middleware: [
-        injectOnceMiddleware(),
-        {
-          kind: "point",
-          name: "test:capture-turn-result-text",
-          pointIds: ["run.turn.post"],
-          effectCapabilities: { "run.turn.post": [] },
-          priority: 100,
-          fn: (ctx) => {
-            postTurnTexts.push(
-              (ctx as unknown as { turnResult?: { text?: string } }).turnResult?.text,
-            );
-            return allow();
-          },
+    const agent = createAgent(run, [
+      injectOnceMiddleware(),
+      {
+        kind: "point",
+        name: "test:capture-turn-result-text",
+        pointIds: ["run.turn.post"],
+        effectCapabilities: { "run.turn.post": [] },
+        priority: 100,
+        fn: (ctx) => {
+          postTurnTexts.push(
+            (ctx as unknown as { turnResult?: { text?: string } }).turnResult?.text,
+          );
+          return allow();
         },
-      ],
-    });
+      },
+    ]);
 
     const result = await agent.run(runInput([{ role: "user", content: "hello" }]));
 

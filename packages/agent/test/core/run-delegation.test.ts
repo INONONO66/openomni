@@ -33,11 +33,14 @@ const defaultConfig = {
 };
 
 const defaultInput = runInput([{ role: "user" as const, content: "hello" }]);
+let messageSequence = 0;
 
 function makeAssistantMessage(text: string, inputTokens = 0, outputTokens = 0) {
+  messageSequence += 1;
+  const messageId = `msg-${messageSequence}`;
   return {
     info: {
-      id: `msg-${Math.random().toString(16).slice(2)}`,
+      id: messageId,
       sessionID: "test",
       role: "assistant" as const,
       time: { created: Date.now() },
@@ -56,9 +59,9 @@ function makeAssistantMessage(text: string, inputTokens = 0, outputTokens = 0) {
     },
     parts: [
       {
-        id: `part-${Math.random().toString(16).slice(2)}`,
+        id: `part-${messageSequence}`,
         sessionID: "test",
-        messageID: "msg",
+        messageID: messageId,
         type: "text" as const,
         text,
       },

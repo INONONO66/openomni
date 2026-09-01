@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { Mcp } from "@openomni/protocol";
 import type { BusEvent } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
+import { Bus, collector } from "@openomni/telemetry";
+import { captureBusEvents } from "../../helpers/bus-event";
 import { McpClient, type McpClientHandle } from "../../../src/runtime/mcp/client";
 
 /** An MCP server's lifecycle belongs to whatever brought it up — the boot. */
@@ -27,11 +28,9 @@ function createClient(callTool: McpClientHandle["callTool"]): McpClient {
 }
 
 function nextEvent<T>(event: BusEvent.Descriptor<T>): Promise<T> {
-  return new Promise<T>((resolve) => {
-    const unsubscribe = Bus.subscribe(event, (data) => {
-      unsubscribe();
-      resolve(data);
-    });
+  return captureBusEvents(event).done.then(([data]) => {
+    if (data === undefined) throw new Error(`Expected ${event.name}`);
+    return data;
   });
 }
 
@@ -168,10 +167,9 @@ describe("McpClient call audit trace", () => {
 
   test.each([undefined, ""])("publishes no lifecycle record for traceId %j", async (traceId) => {
     Bus.reset();
-    const seen: string[] = [];
-    const unsubscribe = Bus.observe((descriptor) => seen.push(descriptor.name));
+    const events = collector();
     const client = new McpClient(config, {
-      events: Bus,
+      events,
       ...(traceId === undefined ? {} : { traceId }),
       client: {
         connect: async () => undefined,
@@ -181,16 +179,11 @@ describe("McpClient call audit trace", () => {
       },
     });
 
-    try {
-      await client.connect();
-      await client.disconnect();
-      await Bun.sleep(0);
-    } finally {
-      unsubscribe();
-    }
+    await client.connect();
+    await client.disconnect();
 
-    // Not filtered to `mcp.*`: a re-minted `operational.error` on the failure
-    // branch is the same defect and should fail this too.
-    expect(seen).toEqual([]);
+    // Not filtered to `mcp.*`: an operational error on the failure branch is
+    // the same defect and should fail this too.
+    expect(events.events).toEqual([]);
   });
 });
