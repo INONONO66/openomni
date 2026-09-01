@@ -62,14 +62,15 @@ Attached machines appear as ONE flat namespace,
   gate). The HOST checks attachment, `fs.read`, and the effective export set
   before the wire. The DAEMON re-checks its own offer across the trust
   boundary and OWNS path confinement.
-- **Confinement is descriptor-anchored, not pathname-checked.** The daemon
-  opens the export root once and walks each request's components RELATIVE TO
-  THAT DESCRIPTOR, refusing to follow a link at any component. A
-  resolve-then-use design — canonicalize a pathname, then `stat`/`open` the
-  same pathname — is check-then-use: a component swapped for a symlink between
-  the two resolutions is followed, and swapping an ancestor directory races
-  every operation the same way. The fd-relative no-follow walk makes check and
-  use ONE decision, so there is no window to win.
+- **Confinement is a descriptor-anchored no-follow walk, not a pathname
+  check.** Root acquisition walks the configured root from a descriptor for
+  `/`, opening each component without following it, and records the canonical
+  root string from that walk. Each request then walks components RELATIVE TO
+  THAT ROOT DESCRIPTOR. The kernel is never asked to follow a request symlink:
+  an in-root link is expanded lexically and re-walked under the root fd; a link
+  resolving outside refuses. Thus every root-acquisition and request component
+  is opened by the decision that pins it, rather than checked by one pathname
+  resolution and used by another.
 - **Outside-root refusals are uniform, deliberately.** ANY resolution landing
   outside the export root refuses as `path_escapes_export`, regardless of
   whether the outside target exists. Classifying an escaping link before its
@@ -86,6 +87,9 @@ Attached machines appear as ONE flat namespace,
   learns WHICH boundary held. `FS_READ_MAX_BYTES` / `FS_LIST_MAX_ENTRIES` are
   named in the protocol and enforced by the daemon; a bitten ceiling reports
   `truncated` rather than silently presenting a prefix as the whole thing.
+  Final-target inspection uses `O_NONBLOCK` and listing obtains no-follow
+  entry metadata with `fstatat`, so FIFOs, sockets, and devices report as kind
+  `other`; `read` refuses each with `wrong_kind` rather than blocking.
 - **The typed-refusal contract covers requests the host was ENTITLED to make.**
   A daemon asked for `fs.read` when it never offered `fs.read` is not looking at
   a refusable request — it is looking at a host violating the attachment it
