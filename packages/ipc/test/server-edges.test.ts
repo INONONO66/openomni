@@ -69,9 +69,7 @@ describe("server edge branches", () => {
     await expect(srv.call("machine.run_cell", {}, 30)).rejects.toThrow(IpcTimeoutError);
 
     const client = await connectIpcClient(srv.socketPath);
-    await expect(client.call("machine.attach", {}, 30)).rejects.toBeInstanceOf(
-      IpcTimeoutError,
-    );
+    await expect(client.call("machine.attach", {}, 30)).rejects.toBeInstanceOf(IpcTimeoutError);
     client.close();
   });
 
@@ -119,6 +117,32 @@ describe("server edge branches", () => {
     expect(socket.destroyed).toBe(false);
   });
 
+  test("a data-callback error removes the connection and reports its exact id", async () => {
+    const disconnected = deferred<string>();
+    const callbackError = new Error("request callback failed");
+    Object.defineProperty(callbackError, "message", {
+      get() {
+        throw new Error("callback exploded");
+      },
+    });
+    const srv = await createIpcServer(
+      socketPathForTest("callback-error"),
+      () => {
+        throw callbackError;
+      },
+      { onDisconnect: (id) => disconnected.resolve(id) },
+    );
+    servers.push(srv);
+    const socket = await connect(srv.socketPath);
+    rawSockets.push(socket);
+
+    socket.write(`${JSON.stringify(Ipc.createRequest("callback-error", "explode", {}))}\n`);
+    await expect(
+      within(disconnected.promise, "disconnect after data callback error"),
+    ).resolves.toBe("conn-1");
+    await expect(srv.call("machine.run_cell", {})).rejects.toThrow("no connected client");
+  });
+
   test("a client that errors mid-connection is removed and the server keeps serving", async () => {
     const disconnected = deferred();
     const srv = await createIpcServer(
@@ -146,7 +170,9 @@ describe("server edge branches", () => {
     const reply = new Promise<string>((resolve) => {
       second.once("data", (chunk) => resolve(String(chunk)));
     });
-    second.write(`${JSON.stringify(Ipc.createRequest("request-run-cell", "machine.run_cell", {}))}\n`);
+    second.write(
+      `${JSON.stringify(Ipc.createRequest("request-run-cell", "machine.run_cell", {}))}\n`,
+    );
     const frame = JSON.parse(await reply);
     expect(frame.type).toBe("response");
     expect(frame.result).toEqual({ ok: true });

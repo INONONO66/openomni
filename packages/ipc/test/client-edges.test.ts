@@ -31,22 +31,37 @@ describe("IPC client transport edges", () => {
   });
 
   test("the configured connection deadline destroys a socket that never settles", async () => {
-    const destroy = spyOn(net.Socket.prototype, "destroy").mockImplementation(function (this: net.Socket) {
+    let connectingSocket!: net.Socket;
+    let destroyedSocket!: net.Socket;
+    const connect = spyOn(net.Socket.prototype, "connect").mockImplementation(function (
+      this: net.Socket,
+    ) {
+      connectingSocket = this;
+      return this;
+    });
+    const destroy = spyOn(net.Socket.prototype, "destroy").mockImplementation(function (
+      this: net.Socket,
+    ) {
+      destroyedSocket = this;
       return this;
     });
     try {
-      await expect(connectIpcClient("ignored", { connectTimeoutMs: 1 })).rejects.toBeInstanceOf(
-        IpcConnectionError,
-      );
-      expect(destroy).toHaveBeenCalled();
+      const connection = connectIpcClient("ignored", { connectTimeoutMs: 1 });
+      await expect(connection).rejects.toBeInstanceOf(IpcConnectionError);
+      await expect(connection).rejects.toThrow("connect timeout: ignored");
+      expect(destroyedSocket).toBe(connectingSocket);
+      expect(destroy).toHaveBeenCalledTimes(1);
     } finally {
+      connect.mockRestore();
       destroy.mockRestore();
     }
   });
 
   test("an error after connect marks the client disconnected", async () => {
     let connectedSocket!: net.Socket;
-    const connect = spyOn(net.Socket.prototype, "connect").mockImplementation(function (this: net.Socket) {
+    const connect = spyOn(net.Socket.prototype, "connect").mockImplementation(function (
+      this: net.Socket,
+    ) {
       connectedSocket = this;
       return this;
     });
