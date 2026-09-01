@@ -11,6 +11,7 @@ import type { Lease } from "../lease/index.js";
 import type { Wait } from "../wait/index.js";
 import type { WorkItem } from "../work-item/index.js";
 import type { Gateway } from "../gateway/index.js";
+import type { Provisioning } from "../provisioning/index.js";
 
 export namespace Storage {
   export interface ActorRegistrySubAdapter {
@@ -45,6 +46,26 @@ export namespace Storage {
     set(grant: Actor.ChannelGrant): void;
     list(): Actor.ChannelGrant[];
     remove(id: string): boolean;
+  }
+
+  /**
+   * Provisioning declarations (docs/provisioning-and-providers.md §3):
+   * Person manifests, ChannelInstance declarations, and vault Secret rows.
+   * Sole-owner and vault laws live in the ledger stores, not here.
+   */
+  export interface ProvisioningSubAdapter {
+    getPerson(id: string): Provisioning.Person | undefined;
+    setPerson(person: Provisioning.Person): void;
+    listPersons(): Provisioning.Person[];
+    removePerson(id: string): boolean;
+    getChannelInstance(id: string): Provisioning.ChannelInstance | undefined;
+    setChannelInstance(instance: Provisioning.ChannelInstance): void;
+    listChannelInstances(): Provisioning.ChannelInstance[];
+    removeChannelInstance(id: string): boolean;
+    getSecret(id: string): Provisioning.Secret | undefined;
+    setSecret(secret: Provisioning.Secret): void;
+    listSecrets(): Provisioning.Secret[];
+    removeSecret(id: string): boolean;
   }
 
   export interface AppConnectorInstallationSubAdapter {

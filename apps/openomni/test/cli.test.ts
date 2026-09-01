@@ -536,6 +536,7 @@ describe("cli dispatch", () => {
         io,
         envPath: "/Users/owner/.openomni/env",
         startApp: () => Promise.resolve(),
+        runInit: () => Promise.resolve(["imported"]),
         ask: () => Promise.resolve(""),
         writeEnv: () => undefined,
         doctorPorts: () =>
@@ -553,6 +554,22 @@ describe("cli dispatch", () => {
       },
     };
   }
+
+  test("init prints each report line and exits 0", async () => {
+    const { deps: cli, out } = deps({
+      runInit: () => Promise.resolve(["minted vault key", "channel:telegram:main: imported"]),
+    });
+    expect(await runCli(["init"], cli)).toBe(0);
+    expect(out).toEqual(["minted vault key", "channel:telegram:main: imported"]);
+  });
+
+  test("init surfaces a locked vault as stderr and exit 1", async () => {
+    const { deps: cli, err } = deps({
+      runInit: () => Promise.reject(new Error("vault is locked, cannot import credentials")),
+    });
+    expect(await runCli(["init"], cli)).toBe(1);
+    expect(err).toEqual(["vault is locked, cannot import credentials"]);
+  });
 
   test("unknown command prints usage and exits 1", async () => {
     const { deps: cli, err } = deps();

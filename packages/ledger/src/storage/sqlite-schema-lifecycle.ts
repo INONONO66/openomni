@@ -33,9 +33,13 @@ const ORDERED_MIGRATIONS: Migration.Definition[] = [
   { name: "0026_conversation/migration.sql" },
   { name: "0027_lease/migration.sql" },
   { name: "0028_approval/migration.sql" },
+  { name: "0029_provisioning/migration.sql" },
 ];
 
 const CLEAR_ORDER = [
+  "secret",
+  "channel_instance",
+  "person",
   "ledger_event",
   "ledger_head",
   "event_chain",

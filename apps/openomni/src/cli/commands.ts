@@ -26,6 +26,8 @@ export interface CliDeps {
   readonly io: DaemonIo;
   readonly envPath: string;
   readonly startApp: () => Promise<void>;
+  /** `openomni init`: vault key + env-to-store credential import; returns report lines. */
+  readonly runInit: () => Promise<readonly string[]>;
   readonly ask: Ask;
   readonly writeEnv: (entries: readonly EnvEntry[]) => void;
   readonly doctorPorts: () => Promise<DoctorPorts>;
@@ -38,6 +40,7 @@ const USAGE = `openomni — Single-Owner Agent OS
 Usage:
   openomni start                 run the Resident in the foreground
   openomni onboard               interactive setup → ~/.openomni/env
+  openomni init                  import env channel credentials into the provisioning store
   openomni daemon <verb>         install | uninstall | status | start | stop | restart
   openomni doctor                read-only diagnostics
   openomni logs                  follow the daemon logs
@@ -63,6 +66,8 @@ export async function runCli(args: readonly string[], deps: CliDeps): Promise<nu
       return 0;
     case "onboard":
       return await onboard(deps);
+    case "init":
+      return await init(deps);
     case "daemon":
       return daemon(args[1], deps);
     case "doctor":
@@ -78,6 +83,18 @@ export async function runCli(args: readonly string[], deps: CliDeps): Promise<nu
       deps.stderr(`unknown command: ${command}`);
       deps.stderr(USAGE);
       return 1;
+  }
+}
+
+async function init(deps: CliDeps): Promise<number> {
+  try {
+    for (const line of await deps.runInit()) {
+      deps.stdout(line);
+    }
+    return 0;
+  } catch (error) {
+    deps.stderr(error instanceof Error ? error.message : String(error));
+    return 1;
   }
 }
 
