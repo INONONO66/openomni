@@ -67,20 +67,21 @@ describe("Bus.observe delivery (#606 audit M1)", () => {
   test("observers preserve every JavaScript primitive", async () => {
     const event = BusEvent.define("test.observe.primitives", z.unknown());
     const delivered = Promise.withResolvers<void>();
-    const seen: string[] = [];
+    const seen: Bus.Data[] = [];
     Bus.observe((_descriptor, data) => {
-      seen.push(typeof data);
+      seen.push(data);
       if (seen.length === 5) delivered.resolve();
     });
 
+    const symbol = Symbol.for("bus-test");
     Bus.publish(event, 1n);
     Bus.publish(event, true);
     Bus.publish(event, 1);
-    Bus.publish(event, Symbol.for("bus-test"));
+    Bus.publish(event, symbol);
     Bus.publish(event, undefined);
     await withinTimeout(delivered.promise);
 
-    expect(seen).toEqual(["bigint", "boolean", "number", "symbol", "undefined"]);
+    expect(seen).toEqual([1n, true, 1, symbol, undefined]);
   });
 
   test("a throwing observer never breaks delivery to the others", async () => {

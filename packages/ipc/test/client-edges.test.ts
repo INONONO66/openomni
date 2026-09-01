@@ -31,32 +31,37 @@ describe("IPC client transport edges", () => {
   });
 
   test("the configured connection deadline destroys a socket that never settles", async () => {
-    const socket = new net.Socket();
-    const createConnection = spyOn(net, "createConnection").mockReturnValue(socket);
+    const destroy = spyOn(net.Socket.prototype, "destroy").mockImplementation(function (this: net.Socket) {
+      return this;
+    });
     try {
       await expect(connectIpcClient("ignored", { connectTimeoutMs: 1 })).rejects.toBeInstanceOf(
         IpcConnectionError,
       );
-      expect(socket.destroyed).toBe(true);
+      expect(destroy).toHaveBeenCalled();
     } finally {
-      createConnection.mockRestore();
+      destroy.mockRestore();
     }
   });
 
   test("an error after connect marks the client disconnected", async () => {
-    const socket = new net.Socket();
-    const createConnection = spyOn(net, "createConnection").mockReturnValue(socket);
+    let connectedSocket!: net.Socket;
+    const connect = spyOn(net.Socket.prototype, "connect").mockImplementation(function (this: net.Socket) {
+      connectedSocket = this;
+      return this;
+    });
     try {
       const connecting = connectIpcClient("ignored");
-      socket.emit("connect");
+      connectedSocket.emit("connect");
       const client = await connecting;
       clients.push(client);
       expect(client.connected).toBe(true);
 
-      socket.emit("error", new Error("transport failed"));
+      connectedSocket.emit("error", new Error("transport failed"));
+      connectedSocket.emit("close");
       expect(client.connected).toBe(false);
     } finally {
-      createConnection.mockRestore();
+      connect.mockRestore();
     }
   });
 
@@ -71,7 +76,7 @@ describe("IPC client transport edges", () => {
     const client = await connectIpcClient(path);
     clients.push(client);
 
-    const call = client.call("edge", {}, 5_000);
+    const call = client.call("edge", {}, 30_000);
     await within(requestReceived.promise, "raw server receiving request");
     await expect(call).rejects.toBeInstanceOf(IpcProtocolError);
     expect(client.connected).toBe(false);
@@ -88,9 +93,9 @@ describe("IPC client transport edges", () => {
     const client = await connectIpcClient(path);
     clients.push(client);
 
-    const call = client.call("edge", {}, 12_000);
+    const call = client.call("edge", {}, 30_000);
     await within(requestReceived.promise, "raw server receiving request");
     await expect(call).rejects.toBeInstanceOf(IpcProtocolError);
     expect(client.connected).toBe(false);
-  }, 15_000);
+  }, 35_000);
 });

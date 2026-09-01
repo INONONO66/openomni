@@ -127,9 +127,12 @@ describe("cell settlement ownership", () => {
 });
 
 describe("code-mode kernel substrate", () => {
-  test("invalid driver output rejects the owning cell and discards the interpreter", async () => {
+  test("invalid driver output replaces the interpreter", async () => {
     const kernel = new PythonKernel();
     try {
+      await expect(
+        kernel.run({ cellId: "before-invalid-driver-output", code: "persisted = 42", timeoutMs: 1_000 }, noTools),
+      ).resolves.toMatchObject({ status: "completed" });
       await expect(
         kernel.run(
           {
@@ -140,6 +143,9 @@ describe("code-mode kernel substrate", () => {
           noTools,
         ),
       ).rejects.toBeInstanceOf(SyntaxError);
+      await expect(
+        kernel.run({ cellId: "after-invalid-driver-output", code: "persisted", timeoutMs: 1_000 }, noTools),
+      ).resolves.toMatchObject({ status: "raised" });
     } finally {
       kernel.close();
     }
