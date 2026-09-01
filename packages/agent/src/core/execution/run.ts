@@ -60,6 +60,9 @@ export async function runAgent(
       : Retry.DEFAULT_RETRY_POLICY;
   let attempt = 1;
   let thrownFailure: RunFailureFacts | undefined;
+  // Set only at the llm.run boundary. A later policy/configuration failure
+  // must not inherit public-facing provenance from an earlier model error.
+  let terminalLlmError: Error | undefined;
   // The decided reason of every finished attempt, oldest first — the input
   // to the placement fold below. Decided facts only (the retry decision's
   // own record), never re-derived from the thrown error (#752).
@@ -206,6 +209,7 @@ export async function runAgent(
             callRunInput = {
               ...restInput,
               model: callModel,
+              auth: callModel.providerID === config.model.provider ? config.auth : undefined,
               ...(yieldAt === undefined ? {} : { yieldAtInputTokens: yieldAt }),
             };
             // turnYield reads this to classify the stop — it must describe
@@ -239,8 +243,10 @@ export async function runAgent(
 
           if (outcome.type === "aborted") throw outcome.error ?? Retry.abortError();
           if (outcome.type === "error") {
-            if (outcome.error instanceof Error) throw outcome.error;
-            throw new Error(outcome.error.message);
+            const error =
+              outcome.error instanceof Error ? outcome.error : new Error(outcome.error.message);
+            terminalLlmError = error;
+            throw error;
           }
           const _exhaustive: never = outcome;
           throw new Error(`Unknown outcome type: ${unknownOutcomeType(_exhaustive)}`);
@@ -275,12 +281,20 @@ export async function runAgent(
     }
   } catch (error) {
     engine.endRun();
+    const facts = thrownFailure ?? undecidedFacts(error);
     emitRunFailed(
       config.events,
       agentBase,
       error instanceof Error ? error.message : String(error),
-      thrownFailure ?? undecidedFacts(error),
+      facts,
     );
+    // Only a failure raised by llm.run carries public-facing provenance. The
+    // same retry machinery also observes policy, catalog, host, and telemetry
+    // faults; stamping those would let a host misrepresent an internal defect
+    // as a provider terminal.
+    if (error instanceof Error && error === terminalLlmError) {
+      Retry.attachFailureFacts(error, { ...facts, llm: true });
+    }
     throw error;
   }
 }

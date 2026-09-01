@@ -46,6 +46,13 @@ export interface ChatAgentConfig {
   onStepFinish?: (step: AgentStep) => void | Promise<void>;
   toolExecutor?: (call: Tool.Call, context?: Tool.ExecutionContext) => Promise<Tool.Result>;
   signal?: AbortSignal;
+  /**
+   * Provider-SDK options, forwarded verbatim to the llm call. Untyped on
+   * purpose: the shape is the PROVIDER's, it differs per provider and per SDK
+   * version, and no Zod schema in this repo describes it. Validation is the
+   * host's — whoever reads the operator's config owns rejecting a bad value;
+   * neither this loop nor the llm package inspects it.
+   */
   providerOptions?: Record<string, unknown>;
   auth?: RunInput["auth"];
   /**
