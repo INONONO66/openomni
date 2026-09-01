@@ -8,7 +8,6 @@ import { MachineVfsError, type MachineVfs } from "../machines/vfs";
  * the router (`machines/vfs.ts`); these three tools own only the wording of
  * the question and the shape of the answer.
  */
-export type MachineFsPortForTools = MachineVfs;
 
 export const FS_READ_TOOL_NAME = "fs_read";
 export const FS_LIST_TOOL_NAME = "fs_list";

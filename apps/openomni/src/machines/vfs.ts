@@ -22,7 +22,6 @@ const MachineVfsErrorData = z.object({
 });
 
 export const MachineVfsError = NamedError.create("MachineVfsError", MachineVfsErrorData);
-export type MachineVfsFailure = InstanceType<typeof MachineVfsError>;
 
 /**
  * The one outcome a machine-fs call can produce, re-exported from the host
@@ -96,7 +95,7 @@ export function parseVfsPath(path: string): VfsLocation {
 }
 
 /** A read window into one file; both bounds are the protocol's to validate. */
-export interface VfsReadArgs {
+interface VfsReadArgs {
   readonly path: string;
   readonly offset?: number;
   readonly limit?: number;

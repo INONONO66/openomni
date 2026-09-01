@@ -60,7 +60,7 @@ export function uniqueCapabilities(capabilities: string[], ctx: z.RefinementCtx)
 }
 
 /** Shared by the enrollment allowlist, the offer, and the attach result. */
-export function uniqueExports(names: string[], ctx: z.RefinementCtx): void {
+function uniqueExports(names: string[], ctx: z.RefinementCtx): void {
   if (new Set(names).size !== names.length) {
     ctx.addIssue({ code: "custom", message: "export names must be unique" });
   }
