@@ -15,6 +15,18 @@ export const ProcessWorkerRequest = z
     origin: Delegation.Origin,
     model: Model.Ref,
     apiKey: z.string().min(1),
+    /**
+     * The host's operator transport config, carried across the process
+     * boundary: a child that fell back to the catalog endpoint would send the
+     * operator's credential somewhere the operator did not choose.
+     */
+    transport: z
+      .object({
+        baseUrl: z.string().min(1).optional(),
+        headers: z.record(z.string().min(1), z.string()).optional(),
+      })
+      .strict()
+      .optional(),
     /** Shared ledger path for durable child delegations. */
     dbPath: z.string().min(1).optional(),
   })
@@ -87,6 +99,7 @@ function processWorkerRun(
   const runner = createInlineWorkerRunner({
     model: request.model,
     apiKey: request.apiKey,
+    ...(request.transport === undefined ? {} : { transport: request.transport }),
     kernel: () => kernel,
   });
   kernel = createChildKernel(runner);

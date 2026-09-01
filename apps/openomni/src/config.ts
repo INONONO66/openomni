@@ -15,6 +15,17 @@ export interface OpenOmniConfig {
     readonly provider: string;
     readonly id: string;
     readonly apiKey: string;
+    /**
+     * Operator-chosen provider endpoint, replacing the models.dev catalog's.
+     * Absent keeps the catalog URL.
+     */
+    readonly baseUrl?: string;
+    /**
+     * Operator-chosen request headers for every model call (tenant routing,
+     * gateway auth, a fleet user-agent). Absent sends only this client's own
+     * identity, which any entry here overrides by name.
+     */
+    readonly headers?: Readonly<Record<string, string>>;
   };
   /**
    * Absent means this brain has no body: no socket is bound and machine-placed
@@ -56,6 +67,22 @@ export interface RegisteredActor {
   readonly displayName?: string;
 }
 
+/**
+ * The operator's transport config in the shape the agent and llm packages
+ * take, or absent when the operator configured neither. One owner for the
+ * translation, so every call site (Resident, worker loop, process worker, the
+ * llm tool) sends the same thing.
+ */
+export function modelTransport(
+  model: OpenOmniConfig["model"],
+): { baseUrl?: string; headers?: Record<string, string> } | undefined {
+  if (model.baseUrl === undefined && model.headers === undefined) return undefined;
+  return {
+    ...(model.baseUrl === undefined ? {} : { baseUrl: model.baseUrl }),
+    ...(model.headers === undefined ? {} : { headers: { ...model.headers } }),
+  };
+}
+
 function required(name: string): string {
   const value = process.env[name]?.trim();
   if (value === undefined || value.length === 0) {
@@ -85,6 +112,17 @@ export function assertWsExposure(config: Pick<OpenOmniConfig, "host" | "wsToken"
     throw new Error("OPENOMNI_WS_TOKEN is required when OPENOMNI_WS_HOST is not loopback");
   }
 }
+
+/**
+ * Header maps are the operator's, so they are validated as a shape rather
+ * than trusted: a non-object, a non-string value, or an unnamed header is a
+ * misconfiguration that must fail at boot, not produce a silently dropped
+ * header on every model call.
+ */
+const ModelHeaders = z.record(
+  z.string().regex(/^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/),
+  z.string().regex(/^[^\r\n]*$/),
+);
 
 const Enrollments = z.array(Machine.Enrollment).min(1);
 const SocialBudgets = z.array(Gateway.SocialBudget);
@@ -158,6 +196,18 @@ function socialBudgetsFromEnv(): OpenOmniConfig["socialBudgets"] {
   return parseEnvJson("OPENOMNI_SOCIAL_BUDGETS", SocialBudgets);
 }
 
+function modelFromEnv(): OpenOmniConfig["model"] {
+  const baseUrl = process.env.OPENOMNI_MODEL_BASE_URL?.trim();
+  const headers = parseEnvJson("OPENOMNI_MODEL_HEADERS", ModelHeaders);
+  return {
+    provider: required("OPENOMNI_MODEL_PROVIDER"),
+    id: required("OPENOMNI_MODEL_ID"),
+    apiKey: required("OPENOMNI_MODEL_API_KEY"),
+    ...(baseUrl === undefined || baseUrl.length === 0 ? {} : { baseUrl }),
+    ...(headers === undefined ? {} : { headers }),
+  };
+}
+
 /**
  * Enrollment is the Owner's admission decision, so it is read from config
  * rather than inferred from whoever connects. Ledger-backed enrollment is a
@@ -187,11 +237,7 @@ export function loadConfig(): OpenOmniConfig {
     host,
     wsPort: portFromEnv(),
     ...(wsToken === undefined || wsToken.length === 0 ? {} : { wsToken }),
-    model: {
-      provider: required("OPENOMNI_MODEL_PROVIDER"),
-      id: required("OPENOMNI_MODEL_ID"),
-      apiKey: required("OPENOMNI_MODEL_API_KEY"),
-    },
+    model: modelFromEnv(),
     ...(machines === undefined ? {} : { machines }),
     ...(actors === undefined ? {} : { actors }),
     ...(channels === undefined ? {} : { channels }),

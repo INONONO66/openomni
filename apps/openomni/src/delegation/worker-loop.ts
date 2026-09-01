@@ -13,6 +13,8 @@ import type { InlineWorkerRunner } from "./inline-driver";
 export interface WorkerLoopOptions {
   readonly model: Model.Ref;
   readonly apiKey: string;
+  /** Operator-configured provider endpoint and headers; absent uses the catalog's. */
+  readonly transport?: ChatAgentConfig["transport"];
   readonly llm?: ChatAgentConfig["llm"];
   /** Resolved late: the kernel needs the runner this factory produces. */
   readonly kernel: () => DelegationKernel;
@@ -65,6 +67,7 @@ export function createInlineWorkerRunner(options: WorkerLoopOptions): InlineWork
         toolExecutor: catalog.execute,
         model: options.model,
         auth: { type: "api", key: options.apiKey },
+        ...(options.transport === undefined ? {} : { transport: options.transport }),
         signal: input.signal,
         ...(options.llm === undefined ? {} : { llm: options.llm }),
       });

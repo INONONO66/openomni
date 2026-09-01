@@ -11,7 +11,12 @@ import {
 /** One delegation per child OS process; ack and result remain distinct facts. */
 export interface ProcessDriverOptions {
   readonly command: readonly string[];
-  readonly worker: { readonly model: Model.Ref; readonly apiKey: string };
+  readonly worker: {
+    readonly model: Model.Ref;
+    readonly apiKey: string;
+    /** Operator transport config forwarded to the child worker. */
+    readonly transport?: ProcessWorkerRequest["transport"];
+  };
   /** Shared durable ledger path used if the process opens inline children. */
   readonly dbPath?: string;
 }
@@ -69,6 +74,9 @@ export function createProcessDriver(options: ProcessDriverOptions): DelegationDr
           origin: admitted.childOrigin,
           model: options.worker.model,
           apiKey: options.worker.apiKey,
+          ...(options.worker.transport === undefined
+            ? {}
+            : { transport: options.worker.transport }),
           ...(options.dbPath === undefined ? {} : { dbPath: options.dbPath }),
         };
         child.stdin.write(`${JSON.stringify(request)}\n`);
