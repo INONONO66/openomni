@@ -353,16 +353,12 @@ async function handleModelOutcome(
     progress.terminalLlmError = error;
     throw error;
   }
-  throw new Error(`Unknown outcome type: ${unknownOutcomeType(outcome)}`);
+  return assertKnownOutcome(outcome);
 }
 
-function unknownOutcomeType(value: unknown): string {
-  if (typeof value !== "object" || value === null || !("type" in value)) {
-    return "unknown";
-  }
-
-  const type = value.type;
-  return typeof type === "string" ? type : "unknown";
+function assertKnownOutcome(value: never): never {
+  const type = Reflect.get(value as object, "type");
+  throw new Error(`Unknown outcome type: ${typeof type === "string" ? type : "unknown"}`);
 }
 
 async function resolveProviderModel(model: {

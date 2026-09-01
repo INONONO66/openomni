@@ -12,7 +12,7 @@ interface SideEffectRule {
   readonly filePath: string;
   readonly sideEffect: RegExp;
   readonly requiredBefore: readonly string[];
-  readonly requiredAfter?: readonly string[];
+  readonly requiredAfter: readonly string[];
   readonly scopeStart?: RegExp;
   readonly scopeEnd?: RegExp;
   readonly message: string;
@@ -33,6 +33,7 @@ const rules: readonly SideEffectRule[] = [
     requiredBefore: [
       "const sink = createProjectedSink(events, configuredSink, sessionID, trace.traceId);",
     ],
+    requiredAfter: [],
     message: "processor sink side effects must flow through createProjectedSink",
   },
   {
@@ -133,7 +134,7 @@ function validateRule(rule: SideEffectRule, source: string): SideEffectViolation
       sideEffect.index + sideEffect.text.length,
       scopeEnd === -1 ? source.length : scopeEnd,
     );
-    const missingAfter = (rule.requiredAfter || []).filter((snippet) => !suffix.includes(snippet));
+    const missingAfter = rule.requiredAfter.filter((snippet) => !suffix.includes(snippet));
 
     const missing = [...missingBefore, ...missingAfter];
 

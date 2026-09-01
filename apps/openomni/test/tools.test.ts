@@ -23,6 +23,7 @@ function recordingDelegation() {
   return {
     seen,
     kernel: {
+      now: () => 0,
       delegate: async (request: { payload: { text: string } }, origin: unknown) => {
         seen.push({ text: request.payload.text, origin });
         return { settled: { status: "completed", output: `did: ${request.payload.text}` } };
