@@ -25,6 +25,15 @@ describe("the curated memory store", () => {
     expect(second.render()).toContain(`- [${id}] prefers worktrees`);
   });
 
+  it("keeps the curated-memory persisted bytes unchanged", () => {
+    const path = join(directory, "memory.json");
+    const memory = openCuratedMemory(path, () => "12345678-aaaa-bbbb-cccc-dddddddddddd");
+    memory.add("system", "prefers worktrees");
+    expect(readFileSync(path, "utf8")).toBe(
+      '{\n  "system": [\n    {\n      "id": "12345678",\n      "content": "prefers worktrees"\n    }\n  ],\n  "owner": []\n}',
+    );
+  });
+
   it("renders both stores under one # Memory heading, empty stores omitted", () => {
     const memory = open();
     expect(memory.render()).toBe("");

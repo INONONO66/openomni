@@ -1,5 +1,6 @@
+import { newTraceId } from "@openomni/telemetry";
 import { WorkItemAttemptRun, WorkItemStore } from "@openomni/ledger";
-import { Delegation, WorkItem, newTraceId } from "@openomni/protocol";
+import { Delegation, WorkItem } from "@openomni/protocol";
 
 /**
  * The bridge between the delegation kernel and the WorkItem contract: every

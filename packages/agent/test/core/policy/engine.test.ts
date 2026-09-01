@@ -31,6 +31,7 @@ describe("agent policy Bus integration", () => {
     const warning = nextWarning();
     try {
       const engine = PolicyEngine.create({
+        clock: Date.now,
         onDecision: () => {
           throw new Error("observer failed");
         },
@@ -75,6 +76,7 @@ describe("agent policy Bus integration", () => {
     const warning = nextWarning();
     try {
       const engine = PolicyEngine.create({
+        clock: Date.now,
         traceContext: { traceId: "trace-async", sessionId: "session-async" },
         onDecision: async () => {
           throw new Error("async observer failed");
@@ -116,6 +118,7 @@ describe("agent policy Bus integration", () => {
     });
     try {
       const engine = PolicyEngine.create({
+        clock: Date.now,
         traceContext: {
           traceId: "trace-policy",
           sessionId: "sess-policy",

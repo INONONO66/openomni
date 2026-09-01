@@ -28,5 +28,5 @@ export type PolicyEngineInstance = PolicyEngineInstanceGeneric<PolicyContext>;
  * registration boundary rejects timing-based (legacy) shapes fail-closed.
  */
 export const PolicyEngine: {
-  readonly create: (options?: PolicyEngineConfig) => PolicyEngineInstance;
+  readonly create: (options: PolicyEngineConfig) => PolicyEngineInstance;
 } = GenericPolicyEngine;

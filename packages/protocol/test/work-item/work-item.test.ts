@@ -598,10 +598,10 @@ describe("WorkItem.deriveStatus", () => {
 });
 
 describe("WorkItem.generateHash", () => {
-  test("produces wi_ hashes with 12 base36 characters", () => {
-    for (let index = 0; index < 100; index += 1) {
-      expect(WorkItem.generateHash()).toMatch(/^wi_[0-9a-z]{12}$/);
-    }
+  test("encodes caller-supplied entropy into the unchanged wire grammar", () => {
+    expect(WorkItem.generateHash(Uint8Array.from([0, 1, 2, 3, 4, 5, 6, 7]))).toBe(
+      "wi_002sk3zitmo7",
+    );
   });
 });
 

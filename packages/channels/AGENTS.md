@@ -13,8 +13,10 @@ src/
 ├── authn/            # Perimeter judgment: policy-engine decisions, trigger/webhook/upgrade authn
 ├── router/           # Gateway router (#707): createGatewayRouter, resolve-route (external arms),
 │   │                 #   routing-resolution (route.decided record + replay gate), routing-execution
-│   │                 #   (wait resumption arms), authority (routed pre-run), actor-resolver
-│   ├── wait/         # findWaitCandidates, matcher wrapper, WaitService (sole wait-store writer)
+│   │                 #   (wait resumption arms), authority (routed pre-run), actor-resolver,
+│   │                 #   raw-fact blacklist matching and channel-grant ranking/default treatment
+│   ├── wait/         # sole Wait admission/control owner: raw-row visibility, candidate precedence,
+│   │                 # matcher composition, fold invocation, and WaitService (sole wait-store writer)
 │   └── messaging/    # #215 send kernel: createExistingAgentMessaging, grant evaluation (scope-less + scope-aware
 │                     #   arms), #708 reply-grant instance materialization (in-memory by ruling; durable store = #709),
 │                     #   #219 social-budget egress gate (pure fold + EgressBudgetStore debits), audit events

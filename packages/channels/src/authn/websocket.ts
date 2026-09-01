@@ -1,7 +1,7 @@
+import { newTraceId } from "../support/trace";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { Operational } from "@openomni/protocol";
 import type { Policy } from "@openomni/protocol";
-import { newTraceId } from "@openomni/protocol";
 import { evaluateChannelPermission, recordDecision } from "./decision";
 import type { ChannelAuthnDecisionObserver, WebSocketAuthResult } from "./types";
 import type { PublishPort } from "../types";

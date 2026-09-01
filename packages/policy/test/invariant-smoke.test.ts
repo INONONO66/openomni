@@ -43,7 +43,7 @@ describe("engine invariants hold under the package's own suite", () => {
   ] as const) {
     test(name, async () => {
       const calls: string[] = [];
-      const engine = PolicyEngine.create({ audit: false });
+      const engine = PolicyEngine.create({ clock: Date.now, audit: false });
       for (const [id, priority, result] of entries) engine.register(registration(id, priority, calls, result));
       const decision = await engine.dispatchPoint(POINT, context);
       expect(decision.verdict).toBe(verdict);
@@ -52,7 +52,7 @@ describe("engine invariants hold under the package's own suite", () => {
   }
 
   test("a deny at a side-effect boundary escalates to run.abort", async () => {
-    const engine = PolicyEngine.create({ audit: false });
+    const engine = PolicyEngine.create({ clock: Date.now, audit: false });
     engine.register({
       kind: "point", name: "denier-without-abort", pointIds: [POINT], effectCapabilities: { [POINT]: [] }, priority: 0,
       fn: () => PolicyDecision.deny({ policyId: "denier-without-abort", reasonCodes: ["invariant.deny_reason"] }),

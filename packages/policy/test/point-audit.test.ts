@@ -13,6 +13,7 @@ describe("PolicyEngine canonical point audit", () => {
     } as const;
     const events: Array<{ readonly name: string; readonly data: unknown }> = [];
     const engine = PolicyEngine.create({
+      clock: () => 1_234,
       traceContext,
       auditEmit: (event, data) => events.push({ name: event.name, data }),
     });
@@ -44,12 +45,25 @@ describe("PolicyEngine canonical point audit", () => {
     );
     const pointVersion = Policy.PolicyPoint.Registry[pointId].version;
 
-    expect(evaluated).toMatchObject({ ...traceContext, pointId, pointVersion });
-    expect(composed).toMatchObject({ ...traceContext, pointId, pointVersion });
+    expect(evaluated).toMatchObject({
+      ...traceContext,
+      pointId,
+      pointVersion,
+      time: 1_234,
+      durationMs: 0,
+    });
+    expect(composed).toMatchObject({
+      ...traceContext,
+      pointId,
+      pointVersion,
+      time: 1_234,
+      durationMs: 0,
+    });
   });
   test("warns under the trace instead of silently dropping audit records without a sessionId", async () => {
     const events: Array<{ readonly name: string; readonly data: unknown }> = [];
     const engine = PolicyEngine.create({
+      clock: Date.now,
       // A trace but no session: the audit record cannot be filed (an audit
       // row without its session names nothing queryable), but the drop must
       // be visible as an Operational.Events.Warn under the real trace.
@@ -99,6 +113,7 @@ describe("PolicyEngine canonical point audit", () => {
   test("preserves safe correlation when canonical context snapshot fails", async () => {
     const events: Array<{ readonly name: string; readonly data: unknown }> = [];
     const engine = PolicyEngine.create({
+      clock: Date.now,
       auditEmit: (event, data) => events.push({ name: event.name, data }),
     });
     // The snapshot exists to protect a policy from a mutable context, so it is

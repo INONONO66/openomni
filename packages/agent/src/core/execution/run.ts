@@ -350,6 +350,7 @@ export function buildPolicyEngine(
   agentBase: AgentRunBase,
 ): RunPolicyEngine {
   const engine = PolicyEngine.create({
+    clock: Date.now,
     traceContext: {
       traceId: agentBase.traceId,
       sessionId: agentBase.sessionId,

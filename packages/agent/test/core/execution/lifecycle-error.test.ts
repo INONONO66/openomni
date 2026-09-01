@@ -11,7 +11,7 @@ describe("handleError (error)", () => {
   it("dispatches error and respects abort verdict", async () => {
     Bus.reset();
     const fn = mock((_ctx: PolicyContext) => abortRun("test.error-abort", "error-abort"));
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(engine, "run.error.error", {
       name: "test-on-error",
       effects: ["run.abort"],
@@ -49,7 +49,7 @@ describe("handleError (error)", () => {
 
   it("error continue verdict allows retry when retry policy permits", async () => {
     Bus.reset();
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(engine, "run.error.error", "test-on-error-continue", 100, () => allow());
 
     const state = makeState();
@@ -79,7 +79,7 @@ describe("handleError (error)", () => {
    */
   it("reports the run.retry_after delay as the backoff", async () => {
     Bus.reset();
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(
       engine,
       "run.error.error",
@@ -114,7 +114,7 @@ describe("handleError (error)", () => {
 
   it("applies run.retry_after maxRetries as a stricter retry ceiling", async () => {
     Bus.reset();
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(
       engine,
       "run.error.error",
@@ -158,7 +158,7 @@ describe("handleError (error)", () => {
     const unsubscribe = Bus.subscribe(RunEvents.ErrorRetry, (event) => {
       retries.push(event as unknown as Record<string, unknown>);
     });
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     const agentBase = makeAgentBase();
 
     try {
@@ -200,7 +200,7 @@ describe("handleError (error)", () => {
    * throw always produces one, is `run-terminal-record.test.ts`.
    */
   it("reports the decision on the terminal failure, with the narrowed ceiling", async () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(
       engine,
       "run.error.error",
@@ -244,7 +244,7 @@ describe("handleError (error)", () => {
     const unsubscribe = Bus.subscribe(RunEvents.ErrorRetry, (event) => {
       retries.push(event as unknown as { maxAttempts: number });
     });
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(
       engine,
       "run.error.error",

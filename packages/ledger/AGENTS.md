@@ -29,18 +29,19 @@ src/
 │   ├── sqlite-*-adapter.ts # SQLite sub-adapters by storage seam
 │   ├── sqlite-schema-lifecycle.ts # PRAGMAs, migrations, and clear ordering
 │   ├── commit-coordinator.ts # SOLE owner of decision-class commit MECHANICS: append at expectedHead → adopt an empty pre-cutover stream → caller's projection CAS, with SQLITE_BUSY mapped to the caller's typed error. A refused projection is ATOMIC via a nested transaction (savepoint), so head never outruns revision even when the caller reports the refusal by RETURNING (completion-writer) rather than throwing. Domains keep their folds, fact payloads, adoption genesis, and conflict taxonomy
+│   ├── atomic-file.ts # sole temp-write/rename owner for durable file replacement (optional fsync durability)
 │   ├── migration-runner.ts / sqlite-busy.ts / sqlite-json-data.ts / timestamped-store.ts # shared SQLite helpers (requireSubAdapter lives in timestamped-store)
 │   └── initialize.ts     # initialize({ dbPath }) — bootstraps the default SQLite adapter
 ├── ledger-core/          # Ledger append core (#510 A): serialized CAS append, adoptStream, headFact/factsByType, verifyTail over the hash-chained ledger_event table (schema.ts = drizzle DDL source)
 ├── bus-persistence/      # Observational hash-chained bus journal + BusQuery; payload status/diagnostic preserves invalid raw values
 ├── actor/                # ActorIdentity / ActorEndpoint registry stores
-├── blacklist/            # Blacklist entry store (absolute deny gate data)
-├── channel-grant/        # ChannelGrant store (surface/workspace/channel ceilings)
+├── blacklist/            # Raw Blacklist entry CRUD; channels owns active/pattern matching
+├── channel-grant/        # Raw ChannelGrant CRUD; channels owns ranking/default treatment
 ├── artifact/             # Artifact.store / get; reads normalize legacy invalid metadata into the current schema
 ├── app-connector/        # Installed-app lifecycle; installation and connector actor identity/endpoint change transactionally
 ├── surface-key/          # SurfaceKey — N:1 mapping from external surface keys to session IDs
 ├── engagement/           # EngagementStore — durable delegation machine (#709, gateway-design §5): fact-before-projection appends on engagement:<id> streams via the shared commit coordinator (no adoption path — the stream class was born with the table), typed Engagement.StoreError fail-closed, lazy deadline expiry at hydration (listActive). Brain-domain surface: the brain is its sole writer
-├── wait/                 # WaitStore — durable Wait contract (#215/#510 B): fact-before-projection appends on wait:<id> streams via the shared commit coordinator, typed Wait.StoreError fail-closed, lazy pre-cutover adoption (identity-only genesis)
+├── wait/                 # WaitStore — raw correlation reads plus durable channels-produced Wait outcomes (#215/#510 B): fact-before-projection CAS via the shared commit coordinator, typed Wait.StoreError fail-closed, lazy pre-cutover adoption
 ├── egress/               # EgressBudgetStore — durable perimeter social-budget debit records
 ├── work-item/            # WorkItemStore — universal work state engine
 │   ├── index.ts          # WorkItemStore namespace barrel: public WorkItemStore.* API
@@ -78,8 +79,9 @@ src/
 
 Stores may provide CRUD and indexed queries:
 
-- `WaitStore.findByCorrelation(...)` may return candidate records.
-- `ChannelGrantStore` / `BlacklistStore` may persist and retrieve records.
+- `WaitStore.findByCorrelation(...)` returns raw indexed candidate records; it does not filter follow-up eligibility.
+- `WaitStore.commit(...)` persists a channels-produced outcome under revision CAS; it does not invoke a domain fold.
+- `ChannelGrantStore` / `BlacklistStore` persist and retrieve raw records only.
 
 Stores must not own kernel decisions:
 

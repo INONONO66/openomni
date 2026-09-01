@@ -50,7 +50,7 @@ function abortSelectionPolicy(reason: string): PolicyRegistration {
 describe("resources.prepare dispatch", () => {
   it("passes all tools through when no policy is registered", async () => {
     Bus.reset();
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     const tools = makeTools("bash", "read", "write");
     const state = makeState();
     const config = makeConfig({ tools, systemPrompt: "test system prompt" });
@@ -73,7 +73,7 @@ describe("resources.prepare dispatch", () => {
 
   it("filters out tools when policy returns tool.filter patterns", async () => {
     Bus.reset();
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     engine.register(filterPolicy(["read"]));
 
     const tools = makeTools("bash", "read", "write");
@@ -98,7 +98,7 @@ describe("resources.prepare dispatch", () => {
 
   it("filters out wildcard-prefixed tool patterns", async () => {
     Bus.reset();
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     engine.register(filterPolicy(["dangerous.*"]));
 
     const tools = makeTools("dangerous.exec", "safe.read", "dangerous.write");
@@ -122,7 +122,7 @@ describe("resources.prepare dispatch", () => {
 
   it("returns complete result when abort verdict is returned", async () => {
     Bus.reset();
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     engine.register(abortSelectionPolicy("tools-restricted"));
 
     const tools = makeTools("bash", "read");
@@ -149,7 +149,7 @@ describe("resources.prepare dispatch", () => {
   it("dispatches with tool catalog labels in context", async () => {
     Bus.reset();
     let capturedCtx: Record<string, unknown> | undefined;
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(engine, "tool.catalog.pre", "capture-ctx", 0, (ctx) => {
       capturedCtx = ctx as unknown as Record<string, unknown>;
       return allow();
@@ -182,7 +182,7 @@ describe("resources.prepare dispatch", () => {
 
   it("keeps all tools when transform verdict has no tools property", async () => {
     Bus.reset();
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(engine, "tool.catalog.pre", "transform-no-tools", 0, () => allow("test", "test"));
 
     const tools = makeTools("bash", "read", "write");

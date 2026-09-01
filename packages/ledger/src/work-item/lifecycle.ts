@@ -1,4 +1,5 @@
 import { WorkItem } from "@openomni/protocol";
+import { newAttemptId } from "./identity.js";
 import { Bus } from "@openomni/telemetry";
 import { Storage } from "../storage/storage.js";
 import { attemptAllocatedFact } from "./facts.js";
@@ -120,7 +121,7 @@ export async function allocateWorkItemAttempt(
       throw new Error(`Cannot allocate an attempt on a ${status} work item`);
     }
     const attempt = WorkItem.Attempt.parse({
-      attemptId: WorkItem.generateAttemptId(),
+      attemptId: newAttemptId(),
       attemptSeq: existing.lastAttemptSeq + 1,
       retryOf: existing.currentAttemptId ?? null,
       contentFingerprint: identity.contentFingerprint,

@@ -19,6 +19,17 @@ export type WaitResolution =
   | Readonly<{ kind: "match"; candidate: WaitCandidate }>
   | Readonly<{ kind: "ambiguous"; candidates: readonly WaitCandidate[] }>;
 
+function stillCorrelatable(record: Wait.Record, now: number): boolean {
+  // Open rows remain visible past the deadline so admission can return the
+  // typed deadline_passed rejection instead of leaking into surface routing.
+  if (record.status === "open") return true;
+  return (
+    record.status === "resolved" &&
+    record.resolvedAt !== undefined &&
+    now <= record.resolvedAt + record.followUpWindow
+  );
+}
+
 function resolveLevel(rawCandidates: readonly WaitCandidate[]): WaitResolution | undefined {
   const candidates = [
     ...new Map(rawCandidates.map((candidate) => [candidate.key, candidate])).values(),
@@ -29,11 +40,15 @@ function resolveLevel(rawCandidates: readonly WaitCandidate[]): WaitResolution |
   return { kind: "ambiguous", candidates };
 }
 
-export function findWaitCandidates(correlation: Wait.Correlation | undefined): WaitResolution {
+export function findWaitCandidates(
+  correlation: Wait.Correlation | undefined,
+  now = Date.now(),
+): WaitResolution {
   if (correlation === undefined) return { kind: "none" };
   for (const query of Wait.waitTierLevels(correlation)) {
     const resolution = resolveLevel(
       WaitStore.findByCorrelation(query)
+        .filter((record) => stillCorrelatable(record, now))
         .filter((record) => Wait.waitPinsAllowClaim(record, correlation))
         .map((record) => ({ key: `wait:${record.id}`, wait: record }) as const),
     );

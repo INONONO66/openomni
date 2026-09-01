@@ -18,7 +18,7 @@ describe("dispatchPreRun (run.start)", () => {
   it("dispatches run.start and allows continuation on continue verdict", async () => {
     Bus.reset();
     const fn = mock((_ctx: PolicyContext) => allow());
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(engine, "run.lifecycle.pre", {
       name: "test-pre-run",
       priority: 100,
@@ -36,7 +36,7 @@ describe("dispatchPreRun (run.start)", () => {
 
   it("returns abort event when run.start policy returns abort", async () => {
     Bus.reset();
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(
       engine,
       "run.lifecycle.pre",
@@ -56,7 +56,7 @@ describe("dispatchPreRun (run.start)", () => {
 
   it("injects user message when run.start policy returns inject", async () => {
     Bus.reset();
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(
       engine,
       "run.lifecycle.pre",
@@ -85,7 +85,7 @@ describe("dispatchPreRun (run.start)", () => {
 
 it("appends run.start context as a user message", async () => {
   Bus.reset();
-  const engine = PolicyEngine.create();
+  const engine = PolicyEngine.create({ clock: Date.now });
   engine.register(
     atPoint("run.lifecycle.pre", {
       name: "test-pre-run-context",

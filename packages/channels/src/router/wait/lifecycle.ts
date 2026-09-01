@@ -1,4 +1,4 @@
-import { Deadline, Operational, type Wait, type BusEvent } from "@openomni/protocol";
+import { Deadline, Operational, Wait, type BusEvent } from "@openomni/protocol";
 import { WaitStore } from "@openomni/ledger";
 
 /**
@@ -11,6 +11,12 @@ import { WaitStore } from "@openomni/ledger";
  * and never write (the sync-ask audit itself is brain machinery and stayed
  * brain-side at the seam flip).
  */
+function requireWait(id: string): Wait.Record {
+  const record = WaitStore.get(id);
+  if (record !== undefined) return record;
+  throw new Wait.StoreError({ message: `Wait not found: ${id}`, code: "not_found", waitId: id });
+}
+
 export namespace WaitService {
   /** Opens the one durable Wait for an awaited delivery. Fails closed on a missing adapter or duplicate origin message. */
   export function open(input: Wait.Create, traceId: string): Wait.Record {
@@ -23,7 +29,9 @@ export namespace WaitService {
    * outcome under a revision compare-and-set.
    */
   export function attachReply(id: string, input: Wait.ReplyInput, traceId: string): Wait.Outcome {
-    return WaitStore.attachReply(id, input, traceId);
+    const parsed = Wait.ReplyInput.parse(input);
+    const outcome = Wait.attachReply(requireWait(id), parsed);
+    return WaitStore.commit(outcome, traceId, parsed.replyKey);
   }
 
   /**
@@ -37,7 +45,8 @@ export namespace WaitService {
     input: Wait.DeliveryReceiptInput,
     traceId: string,
   ): Wait.Outcome {
-    return WaitStore.recordDeliveryReceipt(id, input, traceId);
+    const parsed = Wait.DeliveryReceiptInput.parse(input);
+    return WaitStore.commit(Wait.recordDeliveryReceipt(requireWait(id), parsed), traceId);
   }
 
   /**
@@ -46,7 +55,7 @@ export namespace WaitService {
    * attached) before returning the typed rejection.
    */
   export function expire(id: string, traceId: string, at = Date.now()): Wait.Outcome {
-    return WaitStore.expire(id, traceId, at);
+    return WaitStore.commit(Wait.expire(requireWait(id), { at }), traceId);
   }
 
   /**
@@ -62,6 +71,10 @@ export namespace WaitService {
    * the sweep is mid-flow, not a trace origin — ONE id covers the whole
    * sweep, including every per-corrupt-wait error it records.
    */
+  export function cancel(id: string, traceId: string, at = Date.now()): Wait.Outcome {
+    return WaitStore.commit(Wait.cancel(requireWait(id), { at }), traceId);
+  }
+
   export function sweepExpired(
     traceId: string,
     publish: BusEvent.Sink["publish"],

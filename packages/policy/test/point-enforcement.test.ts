@@ -33,7 +33,7 @@ void assertPolicyRegistrationRejectsAsync;
 
 describe("direct-lane runtime async refusal", () => {
   test("an async function smuggled past the type surface is refused at registration", () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     expect(() =>
       engine.register({
         kind: "point",
@@ -68,7 +68,7 @@ describe("direct-lane runtime async refusal", () => {
   });
 
   test("a sync callback returning a thenable is thrown, never awaited", async () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     engine.register({
       kind: "point",
       name: "thenable-smuggler",
@@ -108,7 +108,7 @@ const workCompletionContext = {
 
 describe("PolicyEngine dispatchPoint", () => {
   test("rejects an invalid policy point ID with PolicyPointTimingError", async () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
 
     await expect(
       Reflect.apply(engine.dispatchPoint, engine, ["unknown.point.pre", {}]),
@@ -119,7 +119,7 @@ describe("PolicyEngine dispatchPoint", () => {
   });
 
   test("denies missing pre-boundary context before middleware runs", async () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     let invoked = false;
     engine.register({
       kind: "point",
@@ -145,7 +145,7 @@ describe("PolicyEngine dispatchPoint", () => {
   });
 
   test("allows malformed post-boundary context with audit evidence before middleware runs", async () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     let invoked = false;
     engine.register({
       kind: "point",
@@ -183,7 +183,7 @@ describe("PolicyEngine dispatchPoint", () => {
   });
 
   test("rejects effects not declared by the canonical registration", async () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     engine.register({
       kind: "point",
       name: "undeclared-rewrite",
@@ -210,7 +210,7 @@ describe("PolicyEngine dispatchPoint", () => {
   });
 
   test("parses middleware decisions once before enforcing declared effects", async () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     let effectReads = 0;
     const middlewareDecision = {
       policyId: "single-parse-policy",
@@ -256,7 +256,7 @@ describe("PolicyEngine dispatchPoint", () => {
         reason: "policy.middleware_failed.fail_open:throwing-policy",
       },
     ] as const) {
-      const engine = PolicyEngine.create();
+      const engine = PolicyEngine.create({ clock: Date.now });
       let invocationCount = 0;
       engine.register({
         kind: "point",
@@ -280,7 +280,7 @@ describe("PolicyEngine dispatchPoint", () => {
   });
 
   test("records a fail-open middleware crash in the composed allow without auditEmit", async () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     engine.register({
       kind: "point",
       name: "crashing-guard",
@@ -323,7 +323,7 @@ describe("PolicyEngine dispatchPoint", () => {
   });
 
   test("applies the contract default fail-open to a post-boundary middleware crash", async () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     engine.register({
       kind: "point",
       name: "post-crasher",
@@ -377,6 +377,7 @@ describe("PolicyEngine dispatchPoint", () => {
   test("re-attributes a spoofed middleware policyId to the invoked registration", async () => {
     const recorded: Policy.PolicyDecision[] = [];
     const engine = PolicyEngine.create({
+      clock: Date.now,
       onDecision: (decision) => {
         recorded.push(decision);
       },
@@ -399,7 +400,7 @@ describe("PolicyEngine dispatchPoint", () => {
   });
 
   test("keeps same-priority divergent writes fail-closed when one policy spoofs the other's id", async () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     engine.register({
       kind: "point",
       name: "spoofer",
@@ -450,7 +451,7 @@ describe("PolicyEngine dispatchPoint", () => {
       type: "work.allow_asserted",
       criterionIds: ["criterion:publish"],
     } satisfies Policy.PolicyEffect;
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     const evaluated: string[] = [];
     engine.register({
       kind: "point",
@@ -490,7 +491,7 @@ describe("PolicyEngine dispatchPoint", () => {
   });
 
   test("denies invalid canonical middleware decisions deterministically", async () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     Reflect.apply(engine.register, engine, [
       {
         kind: "point",
@@ -511,7 +512,7 @@ describe("PolicyEngine dispatchPoint", () => {
   });
 
   test("normalizes decision parser exceptions to invalid-decision denial", async () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     const throwingDecision = Object.defineProperty({}, "verdict", {
       enumerable: true,
       get() {

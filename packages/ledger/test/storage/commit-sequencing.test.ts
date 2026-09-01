@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Engagement, Wait, WorkItem } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { EngagementStore, Storage, WaitStore, WorkItemStore } from "../../src/index";
-import { buildWaitCreate } from "../helpers/wait";
+import { buildWaitCreate, commitCancel, commitReply } from "../helpers/wait";
 
 /**
  * Characterization of the ONE durable write-ordering contract every
@@ -69,7 +69,7 @@ describe("decision-class commit sequencing (shared contract)", () => {
     const wait = WaitStore.create(buildWaitCreate(), "trace-w");
     expect(wait.revision).toBe(1);
 
-    const outcome = WaitStore.attachReply(
+    const outcome = commitReply(
       wait.id,
       { replyKey: "rk-1", responderCandidates: ["actor-a"], messageId: "in-1", at: 1_000 },
       "trace-attach",
@@ -110,7 +110,7 @@ describe("decision-class commit sequencing (shared contract)", () => {
 
     let thrown: unknown;
     try {
-      WaitStore.cancel(wait.id, "trace-cancel");
+      commitCancel(wait.id, "trace-cancel");
     } catch (error) {
       thrown = error;
     }
@@ -215,12 +215,12 @@ describe("decision-class commit sequencing (shared contract)", () => {
 
   test("a rejected fold writes no fact and leaves head at the projected revision", () => {
     const wait = WaitStore.create(buildWaitCreate(), "trace-w");
-    WaitStore.cancel(wait.id, "trace-cancel");
+    commitCancel(wait.id, "trace-cancel");
     const headAfterCancel = ledger().headFact(`wait:${wait.id}`);
     expect(headAfterCancel?.type).toBe("wait.cancelled");
 
     // Cancelling a cancelled wait is a rejected fold: no fact, no revision bump.
-    const rejected = WaitStore.cancel(wait.id, "trace-cancel-2");
+    const rejected = commitCancel(wait.id, "trace-cancel-2");
     expect(rejected.kind).toBe("rejected");
     expect(ledger().headFact(`wait:${wait.id}`)?.seq).toBe(headAfterCancel?.seq);
     expect(WaitStore.get(wait.id)?.revision).toBe(headAfterCancel?.seq);

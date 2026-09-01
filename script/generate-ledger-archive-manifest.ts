@@ -27,10 +27,9 @@
 //   bun run script/generate-ledger-archive-manifest.ts [--db <path>] [--out <path>]
 
 import { Database } from "bun:sqlite";
-import { randomUUID } from "node:crypto";
-import { open, rename, unlink } from "node:fs/promises";
 import { homedir } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { dirname, join } from "node:path";
+import { replaceFileAtomically } from "../packages/ledger/src/index";
 import { WorkItem } from "../packages/protocol/src/index";
 
 /** Frozen legacy tables enumerated by the manifest (grows as writers freeze). */
@@ -100,45 +99,19 @@ export function buildLedgerArchiveManifest(db: Database): LedgerArchiveManifest 
   };
 }
 
-type ReplaceFile = (temporaryPath: string, finalPath: string) => Promise<void>;
+type ReplaceFile = (temporaryPath: string, finalPath: string) => void;
 
 /** Replaces a durable manifest without exposing a partial final file. */
 export async function writeArchiveManifestAtomically(
   outPath: string,
   contents: string,
-  replaceFile: ReplaceFile = rename,
+  replace?: ReplaceFile,
 ): Promise<void> {
-  const directory = dirname(outPath);
-  const temporaryPath = join(
-    directory,
-    `.${basename(outPath)}.${process.pid}.${randomUUID()}.tmp`,
-  );
-  let temporaryExists = false;
-
-  try {
-    const temporary = await open(temporaryPath, "wx", 0o600);
-    temporaryExists = true;
-    try {
-      await temporary.writeFile(contents, "utf8");
-      await temporary.sync();
-    } finally {
-      await temporary.close();
-    }
-
-    await replaceFile(temporaryPath, outPath);
-    temporaryExists = false;
-
-    const directoryHandle = await open(directory, "r");
-    try {
-      await directoryHandle.sync();
-    } finally {
-      await directoryHandle.close();
-    }
-  } finally {
-    if (temporaryExists) {
-      await unlink(temporaryPath).catch(() => undefined);
-    }
-  }
+  replaceFileAtomically(outPath, contents, {
+    durable: true,
+    mode: 0o600,
+    ...(replace === undefined ? {} : { replace }),
+  });
 }
 
 function parseArgs(argv: readonly string[]): { dbPath: string; outPath: string } {

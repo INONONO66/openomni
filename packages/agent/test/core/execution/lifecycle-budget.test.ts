@@ -24,7 +24,7 @@ describe("dispatchBudgetCheck (budget exhaustion)", () => {
     try {
       await dispatchBudgetCheck(
         state,
-        PolicyEngine.create(),
+        PolicyEngine.create({ clock: Date.now }),
         makeConfig({ budget: { maxTurns: 24 } }),
         agentBase,
       );
@@ -42,7 +42,7 @@ describe("dispatchBudgetCheck (budget exhaustion)", () => {
   it("dispatches a truthful max-steps lifecycle outcome when budget is exceeded", async () => {
     const observedOutcomes: unknown[] = [];
     const state = makeState();
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(
       engine,
       "run.lifecycle.post",
@@ -83,7 +83,7 @@ describe("dispatchBudgetCheck (budget exhaustion)", () => {
     state.budgetState = { ...state.budgetState, startTime: Date.now() - 10_000 };
     const config = makeConfig({ events: collected, budget: { maxWallTimeMs: 1000 } });
 
-    const result = await dispatchBudgetCheck(state, PolicyEngine.create(), config, makeAgentBase());
+    const result = await dispatchBudgetCheck(state, PolicyEngine.create({ clock: Date.now }), config, makeAgentBase());
     await Bun.sleep(0);
 
     expect(result).not.toBeNull();
@@ -97,7 +97,7 @@ describe("dispatchBudgetCheck (budget exhaustion)", () => {
   });
 
   it("returns null when budget is not exceeded", async () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     const state = makeState();
     const config = makeConfig({ budget: { maxTurns: 100 } });
 
@@ -121,7 +121,7 @@ describe("dispatchBudgetCheck (budget exhaustion)", () => {
     try {
       await dispatchBudgetCheck(
         state,
-        PolicyEngine.create(),
+        PolicyEngine.create({ clock: Date.now }),
         makeConfig({ events: collected, budget: { maxTurns: 24 } }),
         agentBase,
       );

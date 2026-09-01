@@ -15,11 +15,14 @@ function requestFrom(frames: Frame[], index = 0): Ipc.Request {
 describe("PeerRequestTable", () => {
   test("call issues an id and correlates the matching response", async () => {
     const sent: Frame[] = [];
-    const table = new PeerRequestTable<string>({ send: (_peer, frame) => sent.push(frame) });
+    const table = new PeerRequestTable<string>({
+      send: (_peer, frame) => sent.push(frame),
+      idSource: () => "request-injected",
+    });
 
     const call = table.call("peer-a", "compute", { n: 21 }, 1_000);
     const request = requestFrom(sent);
-    expect(request.id.length).toBeGreaterThan(0);
+    expect(request.id).toBe("request-injected");
     expect(request.method).toBe("compute");
     expect(table.dispatch(Ipc.createResponse(request.id, { answer: 42 }), "peer-a")).toBe(true);
     expect(await call).toEqual({ answer: 42 });
@@ -95,7 +98,7 @@ describe("PeerRequestTable", () => {
       },
     });
 
-    expect(table.dispatch(Ipc.createRequest("echo", { value: 1 }), "peer-a")).toBe(true);
+    expect(table.dispatch(Ipc.createRequest("inbound-echo", "echo", { value: 1 }), "peer-a")).toBe(true);
     expect(sent).toHaveLength(2);
     expect(Ipc.Response.parse(sent[0]).result).toEqual({ method: "echo", params: { value: 1 } });
     expect(Ipc.Notification.parse(sent[1])).toMatchObject({
@@ -110,7 +113,7 @@ describe("PeerRequestTable", () => {
       send: (_peer, frame) => missingFrames.push(frame),
       missingRequestHandlerMessage: (method) => `missing ${method}`,
     });
-    missing.dispatch(Ipc.createRequest("none"), "peer-a");
+    missing.dispatch(Ipc.createRequest("inbound-none", "none"), "peer-a");
     expect(Ipc.Response.parse(missingFrames[0]).error).toEqual({
       code: 1000,
       message: "missing none",
@@ -123,7 +126,7 @@ describe("PeerRequestTable", () => {
         throw new TypeError("handler failed");
       },
     });
-    throwing.dispatch(Ipc.createRequest("boom"), "peer-a");
+    throwing.dispatch(Ipc.createRequest("inbound-boom", "boom"), "peer-a");
     expect(Ipc.Response.parse(failureFrames[0]).error).toEqual({
       code: 1000,
       message: "handler failed",

@@ -134,7 +134,7 @@ describe("server edge branches", () => {
     const reply = new Promise<string>((resolve) => {
       second.once("data", (chunk) => resolve(String(chunk)));
     });
-    second.write(`${JSON.stringify(Ipc.createRequest("machine.run_cell", {}))}\n`);
+    second.write(`${JSON.stringify(Ipc.createRequest("request-run-cell", "machine.run_cell", {}))}\n`);
     const frame = JSON.parse(await reply);
     expect(frame.type).toBe("response");
     expect(frame.result).toEqual({ ok: true });

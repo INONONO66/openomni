@@ -1,4 +1,4 @@
-import { newTraceId } from "@openomni/protocol";
+import { newTraceId } from "../support/trace";
 import { Operational } from "@openomni/protocol";
 import { sleep } from "../support/fetch-retry";
 import type { PublishPort } from "../types";

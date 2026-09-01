@@ -4,6 +4,7 @@ export { TelegramAdapter } from "./telegram/surface.js";
 export { GitHubAdapter } from "./github/surface.js";
 export { WebSocketHandler } from "./websocket.js";
 export { createGatewayRouter } from "./router/index.js";
+export { resolveChannelGrant } from "./router/channel-grant.js";
 export { WaitService } from "./router/wait/index.js";
 export type { ChannelDeliveryRoute, GatewayRouter } from "./router/index.js";
 export type { ExistingAgentMessaging } from "./router/messaging/send.js";

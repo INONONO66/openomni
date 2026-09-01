@@ -1,5 +1,7 @@
 import type { Actor, Gateway, Ingress } from "@openomni/protocol";
-import { ActorRegistry, BlacklistStore, ChannelGrantStore } from "@openomni/ledger";
+import { ActorRegistry } from "@openomni/ledger";
+import { matchBlacklist } from "./blacklist.js";
+import { resolveChannelGrant } from "./channel-grant.js";
 
 function legacyActorFields(actor: Ingress.Actor | undefined): Ingress.Actor | undefined {
   if (!actor) return undefined;
@@ -35,7 +37,7 @@ function mintProvisionalContact(
   externalId: string,
   now: number,
 ): Actor.ResolvedEndpoint | undefined {
-  const resolution = ChannelGrantStore.resolve({
+  const resolution = resolveChannelGrant({
     surface: event.surface,
     workspace: event.workspace,
     channel: event.channel,
@@ -44,7 +46,7 @@ function mintProvisionalContact(
   const policy = resolution.grant.provisionalMint;
   const tier = resolution.grant.defaultTier;
   if (policy === undefined || tier === undefined) return undefined;
-  const blacklisted = BlacklistStore.match({
+  const blacklisted = matchBlacklist({
     channel: event.surface,
     candidates: [
       event.surface,

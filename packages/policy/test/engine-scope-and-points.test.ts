@@ -74,7 +74,7 @@ describe("deny-wins point matrix", () => {
     ] as const;
 
     for (const { pointId, ctx } of pointCases) {
-      const engine = PolicyEngine.create();
+      const engine = PolicyEngine.create({ clock: Date.now });
       engine.register({
         kind: "point",
         name: "allow",
@@ -101,7 +101,7 @@ describe("deny-wins point matrix", () => {
 
 describe("scope filtering with 100 policies", () => {
   it("dispatches only policies matching specific agentType out of 100", async () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     const executed: string[] = [];
 
     const agentTypes = [
@@ -146,7 +146,7 @@ describe("scope filtering with 100 policies", () => {
   });
 
   it("unscoped policies always execute alongside scoped matches", async () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     const executed: string[] = [];
 
     for (let i = 0; i < 50; i++) {
@@ -188,7 +188,7 @@ describe("scope filtering with 100 policies", () => {
   });
 
   it("no agentType in context skips all scoped policies", async () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     const executed: string[] = [];
     let scopedInvocations = 0;
 
@@ -233,7 +233,7 @@ describe("scope filtering with 100 policies", () => {
   });
 
   it("scope filtering with multi-agent scope arrays", async () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     const executed: string[] = [];
 
     for (let i = 0; i < 100; i++) {

@@ -37,7 +37,7 @@ function engineRegistration(seen: Array<Record<string, unknown>>) {
 }
 
 function observingEngine(seen: Array<Record<string, unknown>>) {
-  const engine = PolicyEngine.create();
+  const engine = PolicyEngine.create({ clock: Date.now });
   engine.register(engineRegistration(seen));
   return engine;
 }

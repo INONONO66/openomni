@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import type { ChannelDeliveryRoute } from "@openomni/channels";
-import { ChannelGrantStore, Storage } from "@openomni/ledger";
+import { resolveChannelGrant, type ChannelDeliveryRoute } from "@openomni/channels";
+import { Storage } from "@openomni/ledger";
 import type { Channel } from "@openomni/protocol";
 import type { BuiltChannel } from "../src/channels";
 import { createComposer } from "../src/composition/composer";
@@ -88,17 +88,15 @@ describe("mountChannelStages", () => {
     expect(deliveryRoutes.get("telegram")).toBe(route);
     // Ingress-only channels register no outbound route.
     expect(deliveryRoutes.has("github")).toBe(false);
-    expect(ChannelGrantStore.resolve({ surface: "telegram" })?.grant.kind).toBe(
-      "trusted_channel",
-    );
-    expect(ChannelGrantStore.resolve({ surface: "github" })?.grant.kind).toBe("trusted_channel");
+    expect(resolveChannelGrant({ surface: "telegram" })?.grant.kind).toBe("trusted_channel");
+    expect(resolveChannelGrant({ surface: "github" })?.grant.kind).toBe("trusted_channel");
 
     await composer.dispose();
 
     expect(routed.calls).toEqual(["start", "stop"]);
     expect(ingressOnly.calls).toEqual(["start", "stop"]);
     expect(deliveryRoutes.has("telegram")).toBe(false);
-    expect(ChannelGrantStore.resolve({ surface: "telegram" })).toBeUndefined();
-    expect(ChannelGrantStore.resolve({ surface: "github" })).toBeUndefined();
+    expect(resolveChannelGrant({ surface: "telegram" })).toBeUndefined();
+    expect(resolveChannelGrant({ surface: "github" })).toBeUndefined();
   });
 });

@@ -19,7 +19,7 @@ describe("createToolExecutor execution context", () => {
     let capturedContext: Tool.ExecutionContext | undefined;
     const executor = createToolExecutor({
       events: Bus,
-      engine: PolicyEngine.create(),
+      engine: PolicyEngine.create({ clock: Date.now }),
       signal: fallbackController.signal,
       traceContext,
       toolExecutor: async (call, context) => {
@@ -53,7 +53,7 @@ describe("createToolExecutor execution context", () => {
     let capturedContext: Tool.ExecutionContext | undefined;
     const executor = createToolExecutor({
       events: Bus,
-      engine: PolicyEngine.create(),
+      engine: PolicyEngine.create({ clock: Date.now }),
       signal: fallbackController.signal,
       traceContext: fallbackTrace,
       toolExecutor: async (call, context) => {

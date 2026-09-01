@@ -13,7 +13,7 @@ import { PolicyEngine } from "../../../src/core/policy";
  */
 it("dispatches at the canonical native tool result point", async () => {
   let observed = 0;
-  const engine = PolicyEngine.create();
+  const engine = PolicyEngine.create({ clock: Date.now });
   engine.register(
     atPoint("tool.native.post", {
       name: "test:native-post-observer",

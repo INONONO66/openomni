@@ -42,7 +42,7 @@ describe("server write backpressure (Bun partial writes)", () => {
       if (frames.length > 0) frameReceived.resolve(frames[0]);
     });
     socket.pause();
-    const request = Ipc.createRequest("get-big", {});
+    const request = Ipc.createRequest("request-big-1", "get-big", {});
     socket.write(`${JSON.stringify(request)}\n`);
     await within(responseIssued.promise, "server issuing queued large response");
     socket.resume();
@@ -77,7 +77,7 @@ describe("server write backpressure (Bun partial writes)", () => {
       if (frames.length >= 2) bothFramesReceived.resolve();
     });
     socket.pause();
-    const request = Ipc.createRequest("get-big", {});
+    const request = Ipc.createRequest("request-big-2", "get-big", {});
     socket.write(`${JSON.stringify(request)}\n`);
     await within(responseIssued.promise, "server queuing first large frame");
 

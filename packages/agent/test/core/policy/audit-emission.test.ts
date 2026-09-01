@@ -33,6 +33,7 @@ describe("PolicyEngine audit emission", () => {
 
     try {
       const engine = PolicyEngine.create({
+        clock: Date.now,
         traceContext: {
           traceId: "trace-config",
           sessionId: "sess-config",
@@ -107,7 +108,7 @@ describe("PolicyEngine audit emission", () => {
     });
 
     try {
-      const engine = PolicyEngine.create({ auditEmit: Bus.publish });
+      const engine = PolicyEngine.create({ clock: Date.now, auditEmit: Bus.publish });
       engine.register(
         atPoint("tool.native.pre", {
           name: "deny-shell",

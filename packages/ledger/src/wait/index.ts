@@ -139,19 +139,6 @@ function eventBase(record: Wait.Record, time: number, traceId: string) {
   };
 }
 
-function stillCorrelatable(record: Wait.Record, now: number): boolean {
-  // Open rows surface even past their deadline: pre-filtering expired-open
-  // waits here would silently drop late replies into surface routing. The
-  // deadline rule is owned by the fold (deadline_passed) plus the kernel's
-  // lazy expiry; only resolved rows age out of correlation here (follow-up
-  // window), because a resolved wait has already been delivered.
-  if (record.status === "open") return true;
-  if (record.status === "resolved" && record.resolvedAt !== undefined) {
-    return now <= record.resolvedAt + record.followUpWindow;
-  }
-  return false;
-}
-
 // Bus stays observe-only for the wait decision class (#510): these publishes
 // are lossy projections of the appended facts and fire only AFTER the
 // append+projection transaction committed — a subscriber can never write the
@@ -257,10 +244,9 @@ export namespace WaitStore {
     return requireAdapter().list(status);
   }
 
-  export function findByCorrelation(query: Wait.CorrelationQuery, now = Date.now()): Wait.Record[] {
-    return requireAdapter()
-      .findByCorrelation(Wait.CorrelationQuery.parse(query))
-      .filter((record) => stillCorrelatable(record, now));
+  /** Raw indexed facts; channels owns correlation visibility and precedence. */
+  export function findByCorrelation(query: Wait.CorrelationQuery): Wait.Record[] {
+    return requireAdapter().findByCorrelation(Wait.CorrelationQuery.parse(query));
   }
 
   /**
@@ -273,13 +259,14 @@ export namespace WaitStore {
    * ledger head equal to the projected revision either way. Retrying from
    * the fresh head is the caller's decision.
    */
-  export function transition(
-    id: string,
-    step: (record: Wait.Record) => Wait.Outcome,
+  export function commit(
+    outcome: Wait.Outcome,
     traceId: string,
+    rejectionReplyKey?: string,
   ): Wait.Outcome {
     const adapter = requireAdapter();
     const ledger = requireLedger();
+    const id = outcome.record.id;
     const current = adapter.get(id);
     if (!current) {
       throw new Wait.StoreError({
@@ -288,11 +275,22 @@ export namespace WaitStore {
         waitId: id,
       });
     }
-    const outcome = step(current);
     // No-write outcomes: rejections never persist; already_resolved returns
     // the recorded resolution unchanged (redelivery short-circuit — no state
-    // change, no revision bump, no event).
-    if (outcome.kind === "rejected" || outcome.kind === "already_resolved") return outcome;
+    // change, no revision bump, no event). The optional reply key preserves
+    // the existing lossy rejection observation without asking storage to
+    // decide the rejection.
+    if (outcome.kind === "rejected") {
+      Bus.publish(Wait.Events.ReplyRejected, {
+        ...eventBase(outcome.record, outcome.at, traceId),
+        code: outcome.code,
+        ...(rejectionReplyKey === undefined ? {} : { replyKey: rejectionReplyKey }),
+      });
+      return outcome;
+    }
+    if (outcome.kind === "already_resolved") return outcome;
+    const expectedRevision = outcome.record.revision - 1;
+    if (current.revision !== expectedRevision) throw revisionConflict(id, expectedRevision);
     const fact = factOf(outcome);
     runWaitTransaction(id, () => {
       // Lazy adoption (#510 review fix F3): a pre-cutover wait row exists at
@@ -309,7 +307,7 @@ export namespace WaitStore {
         ledger,
         {
           streamId: waitStreamId(id),
-          expectedHead: current.revision,
+          expectedHead: expectedRevision,
           fact,
           adoption: {
             genesis: {
@@ -329,47 +327,12 @@ export namespace WaitStore {
         // guard the same head == revision); it stays as the explosive
         // backstop — the rollback discards the appended fact so head and
         // revision still agree.
-        () => adapter.compareAndSet(id, current.revision, outcome.record) || false,
+        () => adapter.compareAndSet(id, expectedRevision, outcome.record) || false,
       );
-      if (committed.kind !== "committed") throw revisionConflict(id, current.revision);
+      if (committed.kind !== "committed") throw revisionConflict(id, expectedRevision);
     });
     publishChange(outcome, traceId);
     return outcome;
   }
 
-  export function attachReply(id: string, input: Wait.ReplyInput, traceId: string): Wait.Outcome {
-    const parsed = Wait.ReplyInput.parse(input);
-    const outcome = transition(id, (record) => Wait.attachReply(record, parsed), traceId);
-    if (outcome.kind === "rejected") {
-      Bus.publish(Wait.Events.ReplyRejected, {
-        ...eventBase(outcome.record, outcome.at, traceId),
-        code: outcome.code,
-        replyKey: parsed.replyKey,
-      });
-    }
-    return outcome;
-  }
-
-  /**
-   * Records the platform message id of the awaited outbound delivery on an
-   * open wait (fold recordDeliveryReceipt): correlation.replyToMessageId
-   * re-keys to the platform id under the same revision CAS as every other
-   * transition.
-   */
-  export function recordDeliveryReceipt(
-    id: string,
-    input: Wait.DeliveryReceiptInput,
-    traceId: string,
-  ): Wait.Outcome {
-    const parsed = Wait.DeliveryReceiptInput.parse(input);
-    return transition(id, (record) => Wait.recordDeliveryReceipt(record, parsed), traceId);
-  }
-
-  export function expire(id: string, traceId: string, at = Date.now()): Wait.Outcome {
-    return transition(id, (record) => Wait.expire(record, { at }), traceId);
-  }
-
-  export function cancel(id: string, traceId: string, at = Date.now()): Wait.Outcome {
-    return transition(id, (record) => Wait.cancel(record, { at }), traceId);
-  }
 }

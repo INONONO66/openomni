@@ -78,7 +78,7 @@ describe("the run measures the final call", () => {
     const turn = await buildTurn(
       state,
       makeConfig(),
-      PolicyEngine.create(),
+      PolicyEngine.create({ clock: Date.now }),
       testProviderModel,
       undefined,
       makeTrace(),

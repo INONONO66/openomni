@@ -9,7 +9,7 @@ const allow = () => PolicyDecision.allow({ policyId: "canonical.boundary.test" }
 function registrationErrorFor(
   registration: Readonly<Record<string, unknown>>,
 ): PolicyRegistrationError {
-  const engine = PolicyEngine.create();
+  const engine = PolicyEngine.create({ clock: Date.now });
   try {
     Reflect.apply(engine.register, engine, [registration]);
   } catch (error) {
@@ -22,7 +22,7 @@ function registrationErrorFor(
 
 describe("PolicyEngine canonical registration boundary", () => {
   test("accepts complete canonical metadata", () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
 
     expect(() =>
       engine.register({
@@ -181,7 +181,7 @@ test("rejects a legacy-shaped proxy fail-closed without reclassifying its later 
       },
     },
   );
-  const engine = PolicyEngine.create();
+  const engine = PolicyEngine.create({ clock: Date.now });
 
   let rejection: unknown;
   try {

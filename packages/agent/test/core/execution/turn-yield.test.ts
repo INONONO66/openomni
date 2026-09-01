@@ -63,7 +63,7 @@ function userMessage(text: string): Message.WithParts {
 }
 
 function seamEngine(decision: () => ReturnType<typeof allow>) {
-  const engine = PolicyEngine.create();
+  const engine = PolicyEngine.create({ clock: Date.now });
   engine.register(
     atPoint("run.completion.pre", {
       name: "test-compaction-seam",
@@ -115,7 +115,7 @@ describe("window yield (#649 reachability fix)", () => {
   it("ends honestly at the step cap instead of pretending completion", async () => {
     const state = makeState();
     state.messages = [userMessage("u0")];
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     const turn = makeTurnArtifacts({
       windowYieldArmed: true,
       stepCap: 2,
@@ -132,7 +132,7 @@ describe("window yield (#649 reachability fix)", () => {
   it("treats a model's own stop exactly as before", async () => {
     const state = makeState();
     state.messages = [userMessage("u0")];
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     const turn = makeTurnArtifacts({
       windowYieldArmed: true,
       stepCap: 24,
@@ -151,7 +151,7 @@ describe("window yield (#649 reachability fix)", () => {
     // continuation application would eat a child's completion notification.
     const state = makeState();
     state.messages = [userMessage("u0")];
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(engine, "run.turn.post", "test-drain", 100, () => inject("child finished"), [
       "prompt.inject_message",
     ]);
@@ -191,7 +191,7 @@ describe("window yield (#649 reachability fix)", () => {
   it("continues on a steering yield with no drained continuation — never max-steps (#751)", async () => {
     const state = makeState();
     state.messages = [userMessage("u0")];
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     const turn = makeTurnArtifacts({
       windowYieldArmed: false,
       stepCap: 24,
@@ -210,7 +210,7 @@ describe("window yield (#649 reachability fix)", () => {
   it("routes a steering yield's drained injection through the continuation path (#751)", async () => {
     const state = makeState();
     state.messages = [userMessage("u0")];
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(engine, "run.turn.post", "test-steer-drain", 100, () => inject("steer me"), [
       "prompt.inject_message",
     ]);
@@ -233,7 +233,7 @@ describe("window yield (#649 reachability fix)", () => {
   it("keeps the step cap's honest terminal even when steering also fired (#751)", async () => {
     const state = makeState();
     state.messages = [userMessage("u0")];
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     const turn = makeTurnArtifacts({
       windowYieldArmed: false,
       stepCap: 2,
@@ -272,7 +272,7 @@ describe("window yield (#649 reachability fix)", () => {
     // keep terminating first — that precedence is the pin.
     const state = makeState();
     state.messages = [userMessage("u0")];
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(
       engine,
       "run.turn.post",
