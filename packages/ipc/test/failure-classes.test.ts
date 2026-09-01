@@ -43,10 +43,10 @@ describe("failure classes stay honest (#606 re-audit)", () => {
       [falseCause, false],
       [emptyCause, ""],
     ] as const) {
-      expect(Object.hasOwn(error, "cause")).toBe(true);
+      expect(Object.getOwnPropertyDescriptor(error, "cause") !== undefined).toBe(true);
       expect(Reflect.get(error, "cause")).toBe(cause);
     }
-    expect(Object.hasOwn(undefinedCause, "cause")).toBe(false);
+    expect(Object.getOwnPropertyDescriptor(undefinedCause, "cause") !== undefined).toBe(false);
   });
 
   test("a dying connection fails ITS in-flight calls as connection loss, not timeout", async () => {
