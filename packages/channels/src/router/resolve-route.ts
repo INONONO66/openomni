@@ -70,10 +70,6 @@ export type RouteState = {
   readonly surfaceSessionId?: string;
 };
 
-function unreachable(_value: never): never {
-  throw new TypeError("Unreachable routing state");
-}
-
 type RouteCommon = Readonly<{
   traceId: string;
   time: number;
@@ -147,78 +143,73 @@ function resolveConversation(
 }
 
 function resolveWait(inbound: RouteInbound, wait: RouteWait, common: RouteCommon): WaitResolution {
-  switch (wait.kind) {
-    case "none":
-      return { facts: ["wait:none"] };
-    case "ambiguous":
-      return {
-        decision: {
-          ...common,
-          stage: "wait_correlation",
-          outcome: "ambiguous",
-          candidateInteractionIds: [...wait.candidateInteractionIds],
-          reason: "Multiple pending waits matched the inbound message",
-          factsUsed: wait.candidateInteractionIds.map((id) => `wait.candidate:${id}`),
-        },
-      };
-    case "match": {
-      const action = inbound.requestedAction;
-      if (action === undefined || !wait.allowed.includes(action)) {
-        // Fail closed: a matched durable wait never falls through to
-        // surface routing — a disallowed action is a typed block, mirroring
-        // the owner gate below.
-        return {
-          decision: {
-            ...common,
-            stage: "wait_correlation",
-            outcome: "block",
-            reason: "Matched wait does not allow the requested action",
-            factsUsed: [
-              `wait:${wait.key}`,
-              `wait.action:${action ?? "missing"}`,
-              "wait.action:disallowed",
-            ],
-          },
-        };
-      }
-      if (wait.owner.kind !== "session") {
-        // Fail closed: a matched wait must never fall through to surface
-        // routing, and workItem-owned resumption has no ingress delivery
-        // path yet (#216/#217 wire it).
-        return {
-          decision: {
-            ...common,
-            stage: "wait_correlation",
-            outcome: "block",
-            reason: "Matched wait owner has no ingress delivery path",
-            factsUsed: [
-              `wait:${wait.key}`,
-              `wait.action:${action}`,
-              `wait.owner:${wait.owner.kind}:${wait.owner.id}`,
-              "wait.owner:unsupported_ingress_delivery",
-            ],
-          },
-        };
-      }
-      return {
-        decision: {
-          ...common,
-          stage: "wait_correlation",
-          outcome: "route",
-          target: "resident",
-          sessionId: wait.owner.id,
-          reason: "Inbound message matched an open wait",
-          factsUsed: [
-            `wait:${wait.key}`,
-            `wait.action:${action}`,
-            `wait.owner:session:${wait.owner.id}`,
-          ],
-        },
-      };
-    }
-    default:
-      return unreachable(wait);
+  if (wait.kind === "none") return { facts: ["wait:none"] };
+  if (wait.kind === "ambiguous") {
+    return {
+      decision: {
+        ...common,
+        stage: "wait_correlation",
+        outcome: "ambiguous",
+        candidateInteractionIds: [...wait.candidateInteractionIds],
+        reason: "Multiple pending waits matched the inbound message",
+        factsUsed: wait.candidateInteractionIds.map((id) => `wait.candidate:${id}`),
+      },
+    };
   }
+
+  const action = inbound.requestedAction;
+  if (action === undefined || !wait.allowed.includes(action)) {
+    // Fail closed: a matched durable wait never falls through to
+    // surface routing — a disallowed action is a typed block, mirroring
+    // the owner gate below.
+    return {
+      decision: {
+        ...common,
+        stage: "wait_correlation",
+        outcome: "block",
+        reason: "Matched wait does not allow the requested action",
+        factsUsed: [
+          `wait:${wait.key}`,
+          `wait.action:${action ?? "missing"}`,
+          "wait.action:disallowed",
+        ],
+      },
+    };
+  }
+  if (wait.owner.kind !== "session") {
+    // Fail closed: a matched wait must never fall through to surface
+    // routing, and workItem-owned resumption has no ingress delivery
+    // path yet (#216/#217 wire it).
+    return {
+      decision: {
+        ...common,
+        stage: "wait_correlation",
+        outcome: "block",
+        reason: "Matched wait owner has no ingress delivery path",
+        factsUsed: [
+          `wait:${wait.key}`,
+          `wait.action:${action}`,
+          `wait.owner:${wait.owner.kind}:${wait.owner.id}`,
+          "wait.owner:unsupported_ingress_delivery",
+        ],
+      },
+    };
+  }
+  return {
+    decision: {
+      ...common,
+      stage: "wait_correlation",
+      outcome: "route",
+      target: "resident",
+      sessionId: wait.owner.id,
+      reason: "Inbound message matched an open wait",
+      factsUsed: [
+        `wait:${wait.key}`,
+        `wait.action:${action}`,
+        `wait.owner:session:${wait.owner.id}`,
+      ],
+    },
+  };
 }
 
 function resolveChannelRoute(
@@ -256,8 +247,6 @@ function resolveChannelRoute(
     case "broadcast_channel":
     case "trusted_channel":
       break;
-    default:
-      return unreachable(channel);
   }
 
   const channelFacts = [

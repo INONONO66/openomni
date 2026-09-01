@@ -79,24 +79,23 @@ export class IngressRoutingError extends IngressRoutingErrorBase {
 type KernelWaitExecution =
   | Readonly<{ kind: "none" }>
   | Readonly<{
-    kind: "wait";
-    // Required: a wait match can only come from the wait tier, which
-    // refuses without a correlation envelope — optionality here would
-    // weaken the sender-match evidence below its real invariant.
-    correlation: ScopedCorrelation;
-    requestedAction: Wait.RequestedWaitAction;
-    record: Wait.Record;
-  }>
+      kind: "wait";
+      // Required: a wait match can only come from the wait tier, which
+      // refuses without a correlation envelope — optionality here would
+      // weaken the sender-match evidence below its real invariant.
+      correlation: ScopedCorrelation;
+      requestedAction: Wait.RequestedWaitAction;
+      record: Wait.Record;
+    }>
   | Readonly<{
-    // Conversation tier (#P1, §3.4): the reply rides the open window, but
-    // the window's deterministic `conv:<waitId>` id still names the wait
-    // the window was opened for — the delivery settles that delegation
-    // through the same WaitContext the wait tier carries.
-    kind: "conversation";
-    waitId: string;
-    conversationId: string;
-  }>
-  | Readonly<{ kind: "ambiguous" }>;
+      // Conversation tier (#P1, §3.4): the reply rides the open window, but
+      // the window's deterministic `conv:<waitId>` id still names the wait
+      // the window was opened for — the delivery settles that delegation
+      // through the same WaitContext the wait tier carries.
+      kind: "conversation";
+      waitId: string;
+      conversationId: string;
+    }>;
 
 export type KernelRouteResolution<Event extends Gateway.DeliveredEvent = Gateway.DeliveredEvent> =
   Readonly<{
@@ -153,16 +152,14 @@ function kernelWaitExecution(
   }
   switch (resolution.kind) {
     case "none":
-      return { kind: "none" };
     case "ambiguous":
-      return { kind: "ambiguous" };
+      // Ambiguity is carried by the decision and rejected before execution.
+      return { kind: "none" };
     case "match":
-      if (correlation === undefined) {
-        throw new TypeError("wait match requires correlation");
-      }
       return {
         kind: "wait",
-        correlation,
+        // findWaitCandidates can return a match only for a scoped correlation.
+        correlation: correlation as ScopedCorrelation,
         requestedAction,
         record: resolution.candidate.wait,
       };
@@ -171,7 +168,6 @@ function kernelWaitExecution(
 
 function selectedRouteTarget(
   decision: Ingress.RoutingDecisionPayload,
-  waitExecution: KernelWaitExecution,
   surfaceDefault: Ingress.Target,
 ): Ingress.Target {
   if (decision.outcome !== "route") {
@@ -180,13 +176,9 @@ function selectedRouteTarget(
   if (decision.stage === "conversation") {
     return { kind: "resident" };
   }
-  if (decision.stage !== "wait_correlation") {
-    return surfaceDefault;
-  }
-  if (waitExecution.kind === "wait") {
-    return { kind: "resident" };
-  }
-  throw new TypeError("wait-correlation route has no executable wait target");
+  if (decision.stage !== "wait_correlation") return surfaceDefault;
+  // A routed wait-correlation decision can only come from a matched wait.
+  return { kind: "resident" };
 }
 
 type ChannelResolution = ChannelGrantResolution | undefined;
@@ -351,7 +343,7 @@ function resolveKernelRoute<Event extends Gateway.DeliveredEvent>(
     decision,
     event: routedEvent(event, channelResolution, channel),
     waitExecution,
-    selectedTarget: selectedRouteTarget(decision, waitExecution, surfaceDefaultTarget),
+    selectedTarget: selectedRouteTarget(decision, surfaceDefaultTarget),
   };
 }
 
