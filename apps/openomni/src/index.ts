@@ -26,9 +26,8 @@ import {
   Gateway,
   type Ingress,
   type Machine,
-  newTraceId,
 } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
+import { Bus, newTraceId } from "@openomni/telemetry";
 import { type BuiltChannel, channelProfile } from "./channels";
 import {
   assertWsExposure,

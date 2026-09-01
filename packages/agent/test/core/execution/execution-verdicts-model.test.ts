@@ -18,7 +18,7 @@ describe("model execution deny verdicts", () => {
   it("fail-closes model.request deny before provider execution", async () => {
     Bus.reset();
     const fn = mock(() => deny("test.deny", "provider-blocked"));
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(engine, "connection.llm.pre", {
       name: "deny-model-request",
       effects: ["audit.annotate"],
@@ -66,7 +66,7 @@ describe("model execution deny verdicts", () => {
 });
 
 function responseDenyEngine(): ReturnType<typeof PolicyEngine.create> {
-  const engine = PolicyEngine.create();
+  const engine = PolicyEngine.create({ clock: Date.now });
   engine.register(
     atPoint("connection.llm.post", {
       name: "deny-model-response",

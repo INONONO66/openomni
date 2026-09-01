@@ -48,7 +48,7 @@ function resolveAuditPoint(ctx: Readonly<AuditDispatchContextGeneric<GenericPoli
 
 /**
  * Whether anything will read an audit context. Not every engine binds one:
- * the completion-admission engine is built as `PolicyEngine.create()` with no
+ * the completion-admission engine is built as `PolicyEngine.create({ clock: Date.now })` with no
  * options at product composition, so building a
  * correlation context for its dispatches is pure waste.
  */
@@ -115,7 +115,7 @@ function publishAuditRecord(
     if (traceId) {
       options.auditEmit?.(Operational.Events.Warn, {
         traceId,
-        time: Date.now(),
+        time: options.clock(),
         component: "agent.policy",
         msg: "audit record dropped: missing sessionId",
         context: {
@@ -133,7 +133,7 @@ function publishAuditRecord(
     traceId,
     sessionId,
     ...(traceContext?.runId !== undefined && { runId: traceContext.runId }),
-    time: Date.now(),
+    time: options.clock(),
     ...(record.policyId !== undefined && { policyId: record.policyId }),
     actor: buildActor(traceContext),
     action: record.action,
@@ -161,7 +161,7 @@ export function publishDecisionObserverError(
   if (traceId === undefined || traceId.length === 0) return;
   options.auditEmit?.(Operational.Events.Warn, {
     traceId,
-    time: Date.now(),
+    time: options.clock(),
     ...(traceContext?.sessionId !== undefined && { sessionId: traceContext.sessionId }),
     component: "agent.policy",
     msg: "onDecision observer error",

@@ -10,9 +10,8 @@ function stableToken(input: string): string {
   return (hash >>> 0).toString(36);
 }
 
-export function generateHash(): string {
-  const bytes = new Uint8Array(8);
-  crypto.getRandomValues(bytes);
+export function generateHash(bytes: Uint8Array): string {
+  if (bytes.byteLength !== 8) throw new RangeError("WorkItem ids require exactly 8 entropy bytes");
   let n = 0n;
   for (const b of bytes) n = (n << 8n) | BigInt(b);
   // Cap at 36^12 so toString(36) yields at most 12 chars; padStart below

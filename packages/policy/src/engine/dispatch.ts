@@ -24,7 +24,7 @@ import type {
 const CONTRACT_REGISTRATION = { name: "policy.point.contract" } as const;
 
 export function createPolicyEngine<TCtx extends GenericPolicyContext>(
-  options: PolicyEngineConfig = {},
+  options: PolicyEngineConfig,
 ): PolicyEngineInstanceGeneric<TCtx> {
   const registrations = createPolicyRegistrationStore<TCtx>();
 
@@ -126,13 +126,13 @@ export function createPolicyEngine<TCtx extends GenericPolicyContext>(
   ): Promise<Policy.PolicyDecision | undefined> {
     const contract = Policy.PolicyPoint.Registry[pointId];
     const timing = timingForPolicyPoint(pointId);
-    const startTime = Date.now();
+    const startTime = options.clock();
     let middlewareDecision: unknown;
     let engineDecision: Policy.PolicyDecision | undefined;
     try {
       middlewareDecision = await invoke();
     } catch (err) {
-      const durationMs = Date.now() - startTime;
+      const durationMs = options.clock() - startTime;
       const failPolicy = reg.failPolicy ?? contract.defaultFailPolicy;
       const error = err instanceof Error ? err : new Error(String(err));
       publishMiddlewareError(
@@ -153,7 +153,7 @@ export function createPolicyEngine<TCtx extends GenericPolicyContext>(
           : pointMiddlewareErrorDecision(reg, pointId, durationMs);
     }
 
-    const durationMs = Date.now() - startTime;
+    const durationMs = options.clock() - startTime;
     const normalized =
       engineDecision === undefined
         ? normalizePointDecision(middlewareDecision, reg, pointId, durationMs)

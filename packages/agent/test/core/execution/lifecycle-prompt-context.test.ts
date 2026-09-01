@@ -14,7 +14,7 @@ describe("buildTurn (prompt.context.pre)", () => {
       expect(ctx.pointId).toBe("prompt.context.pre");
       return appendContext("extra-context", "test.sp", "system-prompt-extend");
     });
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(engine, "prompt.context.pre", {
       name: "test-sp",
       effects: ["prompt.append_context"],
@@ -43,7 +43,7 @@ describe("buildTurn (prompt.context.pre)", () => {
 
   it("prompt.context.pre replace effect replaces an existing system prompt", async () => {
     Bus.reset();
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(
       engine,
       "prompt.context.pre",
@@ -71,7 +71,7 @@ describe("buildTurn (prompt.context.pre)", () => {
 
   it("prompt.context.pre replace effect creates a system prompt when none exists", async () => {
     Bus.reset();
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(
       engine,
       "prompt.context.pre",

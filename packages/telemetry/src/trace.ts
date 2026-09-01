@@ -40,8 +40,12 @@ const INVALID_SPAN_ID = "0".repeat(16);
 const TRACEPARENT_PATTERN = /^([0-9a-f]{2})-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})(-.*)?$/;
 const FORBIDDEN_TRACEPARENT_VERSION = "ff";
 
-import { newTraceId } from "@openomni/protocol";
-export { newTraceId };
+import { traceIdFromUuid } from "@openomni/protocol";
+
+/** Runtime trace-id owner; protocol only retains the pure format codec. */
+export function newTraceId(): TraceId {
+  return traceIdFromUuid(crypto.randomUUID());
+}
 
 export function newSpanId(): SpanId {
   for (;;) {

@@ -1,4 +1,5 @@
-import { Channel, newTraceId, Operational } from "@openomni/protocol";
+import { newTraceId } from "./support/trace";
+import { Channel, Operational } from "@openomni/protocol";
 import { ChannelAuthnMiddleware, type ChannelAuthnDecisionObserver } from "./channel-authn";
 import type { PublishPort } from "./types";
 

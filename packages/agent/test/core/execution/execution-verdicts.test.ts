@@ -48,7 +48,7 @@ describe("execution helper deny verdicts", () => {
   });
   it("fail-closes run.start deny before execution", async () => {
     Bus.reset();
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(
       engine,
       "run.lifecycle.pre",
@@ -68,7 +68,7 @@ describe("execution helper deny verdicts", () => {
 
   it("fail-closes turn.start deny before building a turn", async () => {
     Bus.reset();
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(engine, "run.turn.pre", "deny-turn-start", 100, () => deny("test.deny", "blocked"), [
       "audit.annotate",
     ]);
@@ -90,7 +90,7 @@ describe("execution helper deny verdicts", () => {
 
   it("fail-closes resources.prepare deny before exposing tools", async () => {
     Bus.reset();
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(
       engine,
       "tool.catalog.pre",
@@ -121,7 +121,7 @@ describe("execution helper deny verdicts", () => {
     const unsubscribe = Bus.observe((event, payload) => {
       if (event.name === Operational.Events.Info.name) diagnostics.push(payload);
     });
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(
       engine,
       "run.turn.post",

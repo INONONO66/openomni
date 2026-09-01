@@ -44,8 +44,8 @@ describe("per-engine registration factories", () => {
 
   test("each engine registering the same factory gets independent state", async () => {
     const shared = onceFactory();
-    const engineOne = PolicyEngine.create();
-    const engineTwo = PolicyEngine.create();
+    const engineOne = PolicyEngine.create({ clock: Date.now });
+    const engineTwo = PolicyEngine.create({ clock: Date.now });
     engineOne.register(shared);
     engineTwo.register(shared);
     expect(shared.instances()).toBe(2);
@@ -62,14 +62,14 @@ describe("per-engine registration factories", () => {
   });
 
   test("a factory whose create is not a function is rejected fail-closed", () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     expect(() =>
       Reflect.apply(engine.register, engine, [{ kind: "factory", name: "test:bad", create: 1 }]),
     ).toThrow(PolicyRegistrationError);
   });
 
   test("a factory producing a non-registration is rejected fail-closed", () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     expect(() =>
       Reflect.apply(engine.register, engine, [
         { kind: "factory", name: "test:bad-product", create: () => null },

@@ -159,10 +159,9 @@ describe("WorkItem.Attempt", () => {
     expect(WorkItem.Attempt.safeParse(attemptOf({ attemptSeq: 1.5 })).success).toBe(false);
   });
 
-  test("generateAttemptId mints distinct opaque ids", () => {
-    const first = WorkItem.generateAttemptId();
-    const second = WorkItem.generateAttemptId();
-    expect(first).not.toBe(second);
-    expect(WorkItem.AttemptId.safeParse(first).success).toBe(true);
+  test("generateAttemptId encodes caller-supplied entropy without changing its grammar", () => {
+    const id = WorkItem.generateAttemptId(Uint8Array.from({ length: 16 }, (_, index) => index));
+    expect(id).toBe("attempt_avh9he7dy896m08s18udxr");
+    expect(WorkItem.AttemptId.safeParse(id).success).toBe(true);
   });
 });

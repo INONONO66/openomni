@@ -1,10 +1,10 @@
+import { newTraceId } from "../support/trace";
 import {
   Gateway,
   Ingress,
   Operational,
   Wait,
   extractSurfaceKey,
-  newTraceId,
   type BusEvent,
   type Ledger,
   type Policy,

@@ -1,10 +1,11 @@
+import { newTraceId } from "@openomni/telemetry";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { RunInput } from "@openomni/llm";
 import { ActorRegistry, ChannelGrantStore, Session, Storage } from "@openomni/ledger";
-import { Gateway, type Message, newTraceId } from "@openomni/protocol";
+import { Gateway, type Message } from "@openomni/protocol";
 import { createResidentGateway, registerTrustedChannelGrant } from "../src/gateway";
 import { openCuratedMemory } from "../src/memory/store";
 import { createPolicyRegistry } from "../src/composition/policy-registry";

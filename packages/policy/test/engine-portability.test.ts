@@ -27,6 +27,7 @@ function createDispatchContext() {
 function createAuditedEngine() {
   const events: Array<{ name: string; data: unknown }> = [];
   const engine = PolicyEngine.create({
+    clock: Date.now,
     traceContext: { traceId: "trace-portability", sessionId: "session-portability" },
     auditEmit: (event, data) => {
       events.push({ name: event.name, data });
@@ -54,7 +55,7 @@ function capturedRegistrationError(register: () => void): PolicyRegistrationErro
 
 describe("PolicyEngine portability", () => {
   it("does not match a scoped canonical registration when agentType is empty", async () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     let invocationCount = 0;
 
     engine.register({
@@ -80,7 +81,7 @@ describe("PolicyEngine portability", () => {
   });
 
   it("rejects legacy timing registrations fail-closed at the trusted boundary", () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
 
     const error = capturedRegistrationError(() =>
       Reflect.apply(engine.register, engine, [

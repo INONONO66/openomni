@@ -1,6 +1,12 @@
 export { BusPersistence } from "./bus-persistence/index.js";
 export { BusQuery } from "./bus-persistence/query";
-export { Storage, SqliteStorageAdapter, initialize } from "./storage";
+export {
+  type AtomicFileOptions,
+  initialize,
+  replaceFileAtomically,
+  SqliteStorageAdapter,
+  Storage,
+} from "./storage";
 export { StorageUnavailableError } from "./storage/sqlite-busy.js";
 export { LedgerAppend } from "./storage/append-port";
 export { Session } from "./session";

@@ -44,17 +44,16 @@ describe("Ipc.Notification", () => {
 });
 
 describe("Ipc helpers", () => {
-  test("createRequest produces valid request", () => {
-    const req = Ipc.createRequest("machine.attach", { machineId: "m-1" });
+  test("createRequest preserves the caller-supplied id byte-exact", () => {
+    const req = Ipc.createRequest("request-0001", "machine.attach", { machineId: "m-1" });
     expect(Ipc.Request.safeParse(req).success).toBe(true);
-    expect(req.type).toBe("request");
-    expect(req.v).toBe(2);
-    expect(typeof req.id).toBe("string");
-    expect(req.method).toBe("machine.attach");
+    expect(JSON.stringify(req)).toBe(
+      '{"v":2,"type":"request","id":"request-0001","method":"machine.attach","params":{"machineId":"m-1"}}',
+    );
   });
 
   test("createRequest without params", () => {
-    const req = Ipc.createRequest("machine.run_cell");
+    const req = Ipc.createRequest("request-0002", "machine.run_cell");
     expect(Ipc.Request.safeParse(req).success).toBe(true);
     expect(req.params).toBe(undefined);
   });

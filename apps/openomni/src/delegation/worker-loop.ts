@@ -1,5 +1,6 @@
+import { newTraceId } from "@openomni/telemetry";
 import { ChatAgent, type ChatAgentConfig } from "@openomni/agent";
-import { newTraceId, type Model } from "@openomni/protocol";
+import type { Model } from "@openomni/protocol";
 import { observeComponent } from "../observation/component";
 import { buildAgentPrompt } from "../prompt/build";
 import { WORKER_PRESET } from "../prompt/roles";

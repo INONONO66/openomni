@@ -1,4 +1,4 @@
-import { Ipc } from "@openomni/protocol";
+import { Ipc, type IdSource } from "@openomni/protocol";
 
 import { IpcRemoteError, IpcTimeoutError } from "./errors";
 
@@ -27,6 +27,7 @@ type NotificationHandler<TPeer> = (
 
 type PeerRequestTableOptions<TPeer> = {
   readonly send: SendFrame<TPeer>;
+  readonly idSource?: IdSource;
   readonly onRequest?: RequestHandler<TPeer>;
   readonly onNotification?: NotificationHandler<TPeer>;
   readonly missingRequestHandlerMessage?: (method: string) => string;
@@ -52,7 +53,11 @@ export class PeerRequestTable<TPeer = undefined> {
     params: Record<string, unknown> | undefined,
     timeoutMs: number,
   ): Promise<unknown> {
-    const request = Ipc.createRequest(method, params);
+    const request = Ipc.createRequest(
+      (this.options.idSource ?? (() => crypto.randomUUID()))(),
+      method,
+      params,
+    );
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(request.id);

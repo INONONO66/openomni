@@ -117,7 +117,7 @@ function policySet(): PolicyRegistration[] {
 }
 
 function registerPolicies(registrations: PolicyRegistration[]) {
-  const engine = PolicyEngine.create();
+  const engine = PolicyEngine.create({ clock: Date.now });
   for (const registration of registrations) engine.register(registration);
   return engine;
 }

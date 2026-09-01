@@ -1,5 +1,5 @@
+import { newTraceId } from "../support/trace";
 import { Operational } from "@openomni/protocol";
-import { newTraceId } from "@openomni/protocol";
 import { sleep } from "../support/fetch-retry";
 import type { PublishPort } from "../types";
 import { GatewayOp, Intents, type DiscordUser, type GatewayPayload } from "./types";

@@ -33,7 +33,7 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
   it("dispatches turn.start and returns ready on continue", async () => {
     Bus.reset();
     const fn = mock((_ctx: PolicyContext) => allow());
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(engine, "run.turn.pre", {
       name: "test-pre-turn",
       priority: 100,
@@ -61,7 +61,7 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
   it("buildTurn publishes budget reassurance when the verdict carries that reason code", async () => {
     Bus.reset();
     const budget = collectBudgetNames();
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(
       engine,
       "run.turn.pre",
@@ -93,7 +93,7 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
   it("buildTurn publishes a budget warning when the verdict carries that reason code", async () => {
     Bus.reset();
     const budget = collectBudgetNames();
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(
       engine,
       "run.turn.pre",
@@ -125,7 +125,7 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
   it("buildTurn publishes no budget event for an unrelated inject message", async () => {
     Bus.reset();
     const budget = collectBudgetNames();
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(
       engine,
       "run.turn.pre",
@@ -159,7 +159,7 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
 
   it("returns complete when turn.start policy returns abort", async () => {
     Bus.reset();
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(
       engine,
       "run.turn.pre",
@@ -185,7 +185,7 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
 
   it("appends turn.start context as a user message", async () => {
     Bus.reset();
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(
       engine,
       "run.turn.pre",
@@ -215,7 +215,7 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
   it("dispatches skill-backed MCP tools with the descriptor server id", async () => {
     // Given
     const seen: Array<{ readonly pointId: string; readonly serverId: unknown }> = [];
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     engine.register({
       kind: "point",
       name: "skill-mcp-observer",
@@ -288,7 +288,7 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
     // live invariant — an mcp-labelled tool routes fail-closed by its dotted
     // name.
     const seen: string[] = [];
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     engine.register({
       kind: "point",
       name: "mcp-route-observer",

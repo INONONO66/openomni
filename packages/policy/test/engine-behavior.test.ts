@@ -37,6 +37,7 @@ function systemToolDescriptor(name: string): Policy.Resource.Descriptor {
 function auditedObserver(onDecision: (decision: Policy.PolicyDecision) => void | Promise<void>) {
   const events: Array<{ name: string; data: unknown }> = [];
   const engine = PolicyEngine.create({
+    clock: Date.now,
     traceContext: { traceId: "trace-observer", sessionId: "session-observer" },
     onDecision,
     auditEmit: (event, data) => events.push({ name: event.name, data }),
@@ -52,7 +53,7 @@ function auditedObserver(onDecision: (decision: Policy.PolicyDecision) => void |
 describe("PolicyEngine behavior", () => {
   it("dispatches one registration at every declared point", async () => {
     const fn = mock(() => allow("multi"));
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     engine.register({
       kind: "point",
       name: "multi",
@@ -74,7 +75,7 @@ describe("PolicyEngine behavior", () => {
   });
 
   it("merges and preserves prompt effects in policy order", async () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(engine, "prompt.context.pre", {
       name: "prompt-a",
       priority: 100,
@@ -114,7 +115,7 @@ describe("PolicyEngine behavior", () => {
   });
 
   it("allows deny decisions without reason codes", async () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(engine, "run.turn.pre", {
       name: "missing-reason",
       priority: 0,
@@ -148,6 +149,7 @@ describe("PolicyEngine behavior", () => {
       resolveWarning = resolve;
     });
     const engine = PolicyEngine.create({
+      clock: Date.now,
       traceContext: { traceId: "trace-async", sessionId: "session-async" },
       onDecision: async () => {
         throw new Error("async observer failed");
@@ -190,7 +192,7 @@ describe("PolicyEngine behavior", () => {
   });
 
   it("does not add run.abort to a post-boundary denial", async () => {
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(engine, "run.lifecycle.post", {
       name: "deny-finish",
       priority: 0,
@@ -215,7 +217,7 @@ describe("PolicyEngine behavior", () => {
   it("passes the exact resource descriptor snapshot to middleware", async () => {
     const descriptor = systemToolDescriptor("shell");
     let received: unknown;
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     registerAt(engine, "tool.native.pre", {
       name: "resource-observer",
       priority: 0,
@@ -242,7 +244,7 @@ describe("PolicyEngine behavior", () => {
 
   it("continues after an allow without middleware policy metadata", async () => {
     const after = mock(() => allow("after"));
-    const engine = PolicyEngine.create();
+    const engine = PolicyEngine.create({ clock: Date.now });
     engine.register(
       atPoint("tool.native.pre", {
         name: "missing-policy-id",
@@ -262,6 +264,7 @@ describe("PolicyEngine behavior", () => {
     const events: string[] = [];
     const after = mock(() => allow("after"));
     const engine = PolicyEngine.create({
+      clock: Date.now,
       traceContext: { traceId: "trace-deny", sessionId: "session-deny" },
       auditEmit: (event) => events.push(event.name),
     });

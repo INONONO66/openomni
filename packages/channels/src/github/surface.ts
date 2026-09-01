@@ -1,5 +1,5 @@
+import { newTraceId } from "../support/trace";
 import { type Channel, Operational, PolicyDecision } from "@openomni/protocol";
-import { newTraceId } from "@openomni/protocol";
 import { Dedupe } from "../support/dedupe";
 import { GitHubClient } from "./client";
 import { GitHubNormalizer } from "./normalizer";

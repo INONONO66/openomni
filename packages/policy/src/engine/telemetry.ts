@@ -57,7 +57,7 @@ export function publishMiddlewareError(
   if (traceId === undefined) return;
   options.auditEmit?.(Operational.Events.Warn, {
     traceId,
-    time: Date.now(),
+    time: options.clock(),
     component: "agent.policy",
     msg: "middleware error",
     context: { timing, name, error: String(err), failPolicy, durationMs },
@@ -76,7 +76,7 @@ export function publishMiddlewareDebug(
   if (traceId === undefined) return;
   options.auditEmit?.(Operational.Events.Debug, {
     traceId,
-    time: Date.now(),
+    time: options.clock(),
     component: "agent.policy",
     msg: "middleware dispatch",
     context: { timing, name, verdict, durationMs },
