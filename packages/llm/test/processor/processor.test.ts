@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test, beforeEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, jest, test } from "bun:test";
 import { LlmCall, Operational, type Message, type Tool } from "@openomni/protocol";
 import type { Sink } from "../../src/sink";
 import { collector } from "@openomni/telemetry";
@@ -449,6 +449,80 @@ describe("Processor", () => {
       await new Promise((resolve) => queueMicrotask(resolve));
 
       expect(statusStates(events)).toEqual(["busy", "idle"]);
+    });
+
+    test("publishes idle before a microtask queued by message.finished", async () => {
+      const order: string[] = [];
+      const orderedEvents = {
+        publish(event: { name: string }, data: unknown) {
+          const state = (data as { context?: { stateType?: string } }).context?.stateType;
+          if (event.name === Operational.Events.Info.name && state === "idle") {
+            order.push("idle");
+          }
+        },
+      };
+      const processor = createProcessor({
+        events: orderedEvents,
+        sink: {
+          onMessage(message) {
+            if ("completed" in message.info.time && message.info.time.completed !== undefined) {
+              order.push("finish");
+              queueMicrotask(() => order.push("queued"));
+            }
+          },
+          onToolCall: () => undefined,
+          onToolResult: () => undefined,
+        },
+      });
+
+      await processor.process({ system: "" });
+
+      expect(order).toEqual(["finish", "idle", "queued"]);
+    });
+
+    test("starts a zero-delay retry after one microtask hop", async () => {
+      jest.useFakeTimers();
+      try {
+        let attempts = 0;
+        let secondAttemptHop = -1;
+        const retryError = new APIError({
+          message: "retry",
+          isRetryable: true,
+          responseHeaders: { "retry-after-ms": "0" },
+        });
+        const processor = createProcessor({
+          maxRetryAttempts: 1,
+          createStream: () => {
+            attempts += 1;
+            if (attempts === 1) throw retryError;
+            return Promise.resolve({
+              fullStream: (async function* () {
+                yield { type: "finish" };
+              })(),
+            });
+          },
+        });
+
+        const processing = processor.process({ system: "" });
+        await Promise.resolve();
+        expect(attempts).toBe(1);
+        let hop = 0;
+        let ladder = Promise.resolve();
+        for (let i = 0; i < 4; i += 1) {
+          ladder = ladder.then(() => {
+            hop += 1;
+            if (attempts === 2 && secondAttemptHop === -1) secondAttemptHop = hop;
+          });
+        }
+        jest.runAllTimers();
+        await ladder;
+        await processing;
+        // The first createStream continuation and the timer continuation are
+        // included in this ladder; the retry itself adds exactly one hop.
+        expect(secondAttemptHop).toBe(3);
+      } finally {
+        jest.useRealTimers();
+      }
     });
 
     test("projects sink callbacks onto the events port", async () => {

@@ -107,72 +107,48 @@ function transportFingerprint(transport: Transport | undefined): string {
   return `${transport.baseUrl ?? ""}|${new Bun.CryptoHasher("sha256").update(canonicalHeaders).digest("hex")}`;
 }
 
-export function getSDK(
-  model: Provider.Model,
-  auth: Auth.Info,
-  transport?: Transport,
-): ProviderSDK {
-  const cacheKey = `${model.providerID}:${model.api?.npm ?? ""}:${model.api?.url ?? ""}:${authFingerprint(auth)}:${transportFingerprint(transport)}`;
+function sdkCacheKey(model: Provider.Model, auth: Auth.Info, transport: Transport | undefined): string {
+  return `${model.providerID}:${model.api?.npm ?? ""}:${model.api?.url ?? ""}:${authFingerprint(auth)}:${transportFingerprint(transport)}`;
+}
+
+function providerOptions(model: Provider.Model, auth: Auth.Info, transport: Transport | undefined, custom: CustomLoaderResult | undefined): SdkOptions {
+  const customOptions = custom?.options ?? {};
+  const options: SdkOptions = {
+    ...customOptions,
+    headers: { "user-agent": clientIdentity(), ...(customOptions.headers as Record<string, string> | undefined), ...transport?.headers },
+  };
+  if (model.api?.url) {
+    options.baseURL = model.api.url;
+    options.name = model.providerID;
+  }
+  if (transport?.baseUrl) {
+    options.baseURL = transport.baseUrl;
+    options.name = model.providerID;
+  }
+  if (auth.type === "api") options.apiKey = auth.key;
+  if (auth.type === "proxy") {
+    options.baseURL = auth.baseURL;
+    options.apiKey = auth.apiKey ?? "proxy";
+  }
+  return options;
+}
+
+function createUnbundledSDK(model: Provider.Model, npm: string, options: SdkOptions): ProviderSDK {
+  const baseURL = options.baseURL ?? model.api?.url;
+  if (!baseURL) throw new Error(`No bundled provider for npm package: ${npm} and no API URL available`);
+  return createOpenAI({ name: model.providerID, baseURL, apiKey: options.apiKey, headers: options.headers });
+}
+
+export function getSDK(model: Provider.Model, auth: Auth.Info, transport?: Transport): ProviderSDK {
+  const cacheKey = sdkCacheKey(model, auth, transport);
   const cached = getCached(SDK_CACHE, cacheKey);
   if (cached) return cached;
-
   const npm = model.api?.npm ?? "@ai-sdk/openai";
-  const factory = BUNDLED_PROVIDERS.get(npm);
-
-  const providerID = model.providerID;
-  const customLoader = CUSTOM_LOADERS.get(providerID);
+  const customLoader = CUSTOM_LOADERS.get(model.providerID);
   const custom = customLoader ? customLoader() : undefined;
-
-  // Default first, provider-specific last: the client identity is the value
-  // every instantiation starts from, and anything a caller supplies overrides
-  // it rather than being silently dropped.
-  const customOptions = custom?.options ?? {};
-  const sdkOptions: SdkOptions = {
-    ...customOptions,
-    headers: {
-      "user-agent": clientIdentity(),
-      ...(customOptions.headers as Record<string, string> | undefined),
-      ...transport?.headers,
-    },
-  };
-  // Honored for every provider, openai included: the old `!== "openai"` gate
-  // silently ignored model.api.url for openai models and was carried in
-  // without a recorded reason (#450). `name: "openai"` is the SDK default
-  // there, so setting it is identity. Proxy auth still overrides below.
-  if (model.api?.url) {
-    sdkOptions.baseURL = model.api.url;
-    sdkOptions.name = providerID;
-  }
-  // The operator's endpoint outranks the catalog's, and proxy auth outranks
-  // both (below): a proxied credential is minted for one endpoint.
-  if (transport?.baseUrl) {
-    sdkOptions.baseURL = transport.baseUrl;
-    sdkOptions.name = providerID;
-  }
-
-  if (auth.type === "api") {
-    sdkOptions.apiKey = auth.key;
-  } else if (auth.type === "proxy") {
-    sdkOptions.baseURL = auth.baseURL;
-    sdkOptions.apiKey = auth.apiKey ?? "proxy";
-  }
-
-  if (!factory) {
-    const baseURL = sdkOptions.baseURL ?? model.api?.url;
-    if (!baseURL) {
-      throw new Error(`No bundled provider for npm package: ${npm} and no API URL available`);
-    }
-    const sdk = createOpenAI({
-      name: providerID,
-      baseURL,
-      apiKey: sdkOptions.apiKey,
-      headers: sdkOptions.headers,
-    });
-    setCached(SDK_CACHE, cacheKey, sdk, PROVIDER_SDK_CACHE_MAX_ENTRIES);
-    return sdk;
-  }
-
-  const sdk = factory(sdkOptions);
+  const options = providerOptions(model, auth, transport, custom);
+  const factory = BUNDLED_PROVIDERS.get(npm);
+  const sdk = factory ? factory(options) : createUnbundledSDK(model, npm, options);
   setCached(SDK_CACHE, cacheKey, sdk, PROVIDER_SDK_CACHE_MAX_ENTRIES);
   return sdk;
 }
