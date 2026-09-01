@@ -1,5 +1,5 @@
 import { ModelsDev, Provider, run as llmRun, type RunInput, type Sink } from "@openomni/llm";
-import { type Message, type Model, type Tool } from "@openomni/protocol";
+import type { Message, Model, Tool } from "@openomni/protocol";
 import { Bus, newTraceId } from "@openomni/telemetry";
 import { z } from "zod";
 

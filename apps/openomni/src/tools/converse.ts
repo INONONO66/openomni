@@ -1,6 +1,6 @@
 import { newTraceId } from "@openomni/telemetry";
 import type { ConversationStore, LeaseStore } from "@openomni/ledger";
-import { type Tool } from "@openomni/protocol";
+import type { Tool } from "@openomni/protocol";
 import { z } from "zod";
 import type { DelegationOrigin } from "../delegation/admission";
 
