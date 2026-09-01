@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { z } from "zod";
 import { BusEvent } from "@openomni/protocol";
 import { Bus } from "../../src/index";
+import { withinTimeout } from "./delivery-signal";
 
 const TestEvent = BusEvent.define(
   "test.observe.delivery",
@@ -37,9 +38,13 @@ describe("Bus.observe delivery (#606 audit M1)", () => {
     ]);
 
     unsubscribe();
+    const dispatchCompleted = Promise.withResolvers<void>();
+    const unsubscribeSentinel = Bus.observe(() => {
+      dispatchCompleted.resolve();
+    });
     Bus.publish(TestEvent, { traceId: "trace-observe", n: 3 });
-    // One microtask turn is the Bus delivery boundary; no wall-clock delay is involved.
-    await Promise.resolve();
+    await withinTimeout(dispatchCompleted.promise);
+    unsubscribeSentinel();
     expect(seen).toHaveLength(2);
   });
 
