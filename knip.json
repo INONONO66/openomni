@@ -1,6 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip/schema.json",
-  "ignoreBinaries": ["lefthook", "tsc", "turbo"],
+  "ignoreBinaries": ["lefthook", "mkfifo", "tsc", "turbo"],
   "ignore": ["**/*.bench.ts"],
   "ignoreDependencies": [
     "@biomejs/biome",

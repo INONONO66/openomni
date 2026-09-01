@@ -133,6 +133,10 @@ export interface ToolSurface {
 
 const TOOL_NAME_PATTERN = /^[a-z][a-z0-9]*(?:[._][a-z][a-z0-9]*){0,2}$/;
 const MAX_PUBLIC_FIELDS = 5;
+// delegate carries an addressing XOR (scope | actorId) that must be advertised
+// as one flat object: Anthropic-wire providers reject a root-level oneOf
+// input_schema, so the pair costs one extra top-level field.
+const FIELD_ALLOWANCE: Readonly<Record<string, number>> = { delegate: 6 };
 
 function topLevelFieldCount(schema: Record<string, unknown>): number {
   const variants = Array.isArray(schema.oneOf)
@@ -162,10 +166,11 @@ export function lintToolSurface(tool: ToolSurface): ToolLintFailure[] {
   if (!tool.description || tool.description.trim().length === 0) {
     failures.push({ rule: "tool-description", message: "description is required" });
   }
-  if (topLevelFieldCount(tool.inputSchema) > MAX_PUBLIC_FIELDS) {
+  const maxFields = FIELD_ALLOWANCE[tool.name] ?? MAX_PUBLIC_FIELDS;
+  if (topLevelFieldCount(tool.inputSchema) > maxFields) {
     failures.push({
       rule: "tool-max-fields",
-      message: `public input schema exceeds ${MAX_PUBLIC_FIELDS} top-level fields`,
+      message: `public input schema exceeds ${maxFields} top-level fields`,
     });
   }
   // enum-over-free-string is not statically decidable from a JSON schema alone

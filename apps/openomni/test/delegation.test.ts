@@ -823,17 +823,16 @@ describe("delegation controls and tool surface", () => {
     });
     const spec = delegateToolSpec();
     expect(spec.name).toBe(DELEGATE_TOOL_NAME);
-    const variants = (
-      spec.inputSchema as { oneOf: readonly { properties: Record<string, unknown> }[] }
-    ).oneOf;
-    expect(
-      variants.map(
-        (variant) => (variant.properties.operation as { enum?: readonly string[] }).enum,
-      ),
-    ).toEqual([
-      ["notify", "ask", "assign"],
-      ["notify", "ask", "assign"],
-    ]);
+    const schema = spec.inputSchema as {
+      type: string;
+      required: readonly string[];
+      properties: Record<string, { enum?: readonly string[] }>;
+    };
+    expect(schema.type).toBe("object");
+    expect(schema.required).toEqual(["instruction", "operation", "timeoutMs"]);
+    expect(schema.properties.operation?.enum).toEqual(["notify", "ask", "assign"]);
+    expect(Object.keys(schema.properties)).toContain("scope");
+    expect(Object.keys(schema.properties)).toContain("actorId");
     const answer = await delegateToolExecutor(kernel, RESIDENT)({
       instruction: "send it",
       operation: "ask",
