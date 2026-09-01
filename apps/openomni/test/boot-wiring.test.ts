@@ -1,15 +1,15 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import {
   type ChannelDeliveryRoute,
   type ProviderDeliveryRoute,
   resolveChannelGrant,
 } from "@openomni/channels";
-import { Storage } from "@openomni/ledger";
+import { LeaseStore, Storage } from "@openomni/ledger";
 import type { Channel } from "@openomni/protocol";
 import type { BuiltChannel, ChannelComponent } from "../src/channels";
 import { createComposer } from "../src/composition/composer";
 import { registerTrustedChannelGrant } from "../src/gateway";
-import { createMachinesPort, replyText } from "../src/index";
+import { createLeaseLinkage, createMachinesPort, replyText } from "../src/index";
 import {
   type ChannelSupervisor,
   createChannelSupervisor,
@@ -21,6 +21,31 @@ describe("replyText", () => {
   test("hands a string payload back verbatim and serializes anything else", () => {
     expect(replyText("done")).toBe("done");
     expect(replyText({ status: "done", count: 2 })).toBe('{"status":"done","count":2}');
+  });
+});
+
+describe("createLeaseLinkage", () => {
+  test("projects the live store row onto admission's narrow lease facts", () => {
+    const list = spyOn(LeaseStore, "listLiveByHolder").mockReturnValue([
+      {
+        id: "lease-1",
+        conversationId: "conversation-1",
+        holderDelegationId: "delegation-1",
+        contactId: "actor-1",
+      } as never,
+    ]);
+    try {
+      expect(createLeaseLinkage().listLiveByHolder("delegation-1", 1)).toEqual([
+        {
+          id: "lease-1",
+          conversationId: "conversation-1",
+          holderDelegationId: "delegation-1",
+          contactId: "actor-1",
+        },
+      ]);
+    } finally {
+      list.mockRestore();
+    }
   });
 });
 
@@ -139,9 +164,7 @@ describe("channel supervisor", () => {
             ...(options.deliveryRoute === undefined
               ? {}
               : { deliveryRoute: options.deliveryRoute }),
-            ...(options.webhook === true
-              ? { webhookHandler: async () => new Response("ok") }
-              : {}),
+            ...(options.webhook === true ? { webhookHandler: async () => new Response("ok") } : {}),
           };
         },
       },
@@ -324,7 +347,12 @@ describe("supervisor status passthrough", () => {
         source: "declared",
         rows: [],
         statuses: [
-          { id: "channel:discord:main", provider: "discord", state: "vault_locked", detail: "no KEK" },
+          {
+            id: "channel:discord:main",
+            provider: "discord",
+            state: "vault_locked",
+            detail: "no KEK",
+          },
           { id: "channel:slack:main", provider: "slack", state: "disabled" },
         ],
       }),

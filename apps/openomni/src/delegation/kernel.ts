@@ -64,9 +64,7 @@ interface DelegationStorePort {
     | { readonly claimed: true; readonly record: Delegation.Record }
     | { readonly claimed: false; readonly reason: "fanout_cap" | "parent_settled" };
   get(delegationId: string): Delegation.Record | undefined;
-  /** Legacy test-port shape; production uses settleOnce for the CAS receipt. */
-  settle?(delegationId: string, settlement: Delegation.Settled): Delegation.Settled | undefined;
-  settleOnce?(
+  settleOnce(
     delegationId: string,
     settlement: Delegation.Settled,
   ): { readonly committed: boolean; readonly settlement?: Delegation.Settled };
@@ -162,10 +160,6 @@ interface SettlementWaiter {
   readonly stop: () => void;
 }
 const settlementWaiters = new Map<string, Set<SettlementWaiter>>();
-
-function settlementKey(settlement: Delegation.Settled): string {
-  return JSON.stringify(settlement);
-}
 
 function summaryOf(settlement: Delegation.Settled): string {
   switch (settlement.status) {
@@ -351,22 +345,15 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
     if (emittedSettlements.has(delegationId)) return store.get(delegationId)?.settled;
 
     const parsed = Delegation.Settled.parse({ ...candidate, delegationId });
-    const receipt =
-      store.settleOnce?.(delegationId, parsed) ??
-      (() => {
-        const recorded = store.settle?.(delegationId, parsed);
-        if (recorded === undefined) return { committed: false };
-        return {
-          committed: settlementKey(recorded) === settlementKey(parsed),
-          settlement: recorded,
-        };
-      })();
+    const receipt = store.settleOnce(delegationId, parsed);
     if (!receipt.committed) return receipt.settlement ?? store.get(delegationId)?.settled;
 
-    const persisted = store.get(delegationId);
-    if (persisted?.status !== "settled" || persisted.settled === undefined) {
-      return receipt.settlement;
-    }
+    // `committed: true` is the store's durable CAS receipt: the row is settled
+    // and carries this settlement before the call returns.
+    const persisted = store.get(delegationId) as Delegation.Record & {
+      readonly status: "settled";
+      readonly settled: Delegation.Settled;
+    };
     const winner = persisted.settled;
 
     emittedSettlements.add(delegationId);
@@ -669,7 +656,9 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
           instruction: decision.request.payload.text,
           acceptanceCriteria: decision.request.acceptanceCriteria ?? [],
           sessionId:
-            decision.transport === "process" ? `delegation-${handle.delegationId}` : origin.sessionId,
+            decision.transport === "process"
+              ? `delegation-${handle.delegationId}`
+              : origin.sessionId,
         })
         .then(
           (workItemId) => ({ workItemId }),

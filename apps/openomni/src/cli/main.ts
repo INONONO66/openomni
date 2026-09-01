@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { loadConfig } from "../config";
 import { installShutdownHandlers, startOpenOmni } from "../index";
 import { runProvisioningInit } from "../provisioning/init";
-import { runCli } from "./commands";
+import { type CliDeps, runCli } from "./commands";
 import type { DaemonIo, DaemonTarget, ExecResult } from "./daemon";
 import { daemonActive, unitPath } from "./daemon";
 import { applyEnvFile, parseEnvFile, writeEnvFile } from "./env-file";
@@ -141,8 +141,8 @@ function follow(argv: readonly string[]): Promise<number> {
   });
 }
 
-export function main(argv: readonly string[] = process.argv.slice(2)): Promise<number> {
-  return runCli(argv, {
+export function createCliDeps(): CliDeps {
+  return {
     stdout: (line) => console.log(line),
     stderr: (line) => console.error(line),
     target,
@@ -159,7 +159,11 @@ export function main(argv: readonly string[] = process.argv.slice(2)): Promise<n
     writeEnv: (entries) => writeEnvFile(envPath, entries),
     doctorPorts,
     follow,
-  });
+  };
+}
+
+export function main(argv: readonly string[] = process.argv.slice(2)): Promise<number> {
+  return runCli(argv, createCliDeps());
 }
 
 if (import.meta.main) {

@@ -33,6 +33,279 @@ function openChannelRecord(overrides: Partial<Delegation.Record> = {}): Delegati
 }
 
 describe("delegation kernel mutation invariants", () => {
+  test("control methods reject unknown durable identities", async () => {
+    const kernel = createDelegationKernel({
+      drivers: {},
+      now: () => 1,
+      newDelegationId: () => "unused",
+      wake: () => undefined,
+      bootSweep: false,
+    });
+    await expect(kernel.awaitDelegation("missing")).rejects.toBeDefined();
+    await expect(kernel.cancelDelegation("missing")).rejects.toBeDefined();
+    kernel.stop();
+  });
+
+  test("assign refuses when no WorkItem linkage is installed", async () => {
+    const kernel = createDelegationKernel({
+      drivers: {},
+      now: () => 1,
+      newDelegationId: () => "d-no-work-items",
+      wake: () => undefined,
+      bootSweep: false,
+    });
+    const result = await kernel.delegate(
+      {
+        address: { kind: "core", scope: "independent" },
+        operation: "assign",
+        payload: { text: "work" },
+        acceptanceCriteria: ["done"],
+        deadline: 100,
+      },
+      RESIDENT,
+    );
+    expect(result).toHaveProperty("refused");
+    kernel.stop();
+  });
+
+  test("transport preparation reports synchronous and asynchronous failures", async () => {
+    for (const prepare of [
+      () => {
+        throw new Error("sync");
+      },
+      () => Promise.reject(new Error("async")),
+    ]) {
+      const kernel = createDelegationKernel({
+        drivers: { channel: { prepare, run: () => Promise.resolve({ status: "sent" }) } },
+        now: () => 1,
+        newDelegationId: () => crypto.randomUUID(),
+        wake: () => undefined,
+        bootSweep: false,
+      });
+      const result = await kernel.delegate(channelRequest("ask", 100), RESIDENT);
+      expect(result).toHaveProperty("refused");
+      kernel.stop();
+    }
+  });
+
+  test("synchronous WorkItem commissioning failures are admission refusals", async () => {
+    const kernel = createDelegationKernel({
+      drivers: {},
+      now: () => 1,
+      newDelegationId: () => "d-work-item-throw",
+      wake: () => undefined,
+      bootSweep: false,
+      workItems: {
+        openAssign: (() => {
+          throw new Error("commission failed");
+        }) as never,
+        cancelAssign: () => Promise.resolve(),
+        closeAttempt: () => Promise.resolve(),
+        recoverAttempts: () => Promise.resolve(),
+      },
+    });
+    const result = await kernel.delegate(
+      {
+        address: { kind: "core", scope: "independent" },
+        operation: "assign",
+        payload: { text: "work" },
+        acceptanceCriteria: ["done"],
+        deadline: 100,
+      },
+      RESIDENT,
+    );
+    expect(result).toHaveProperty("refused");
+    kernel.stop();
+  });
+
+  test("publishes WorkItem recovery and closure failures as operational events", async () => {
+    const recoveryEvents = eventCollector();
+    const recovering = createDelegationKernel({
+      drivers: {},
+      now: () => 1,
+      newDelegationId: () => "unused",
+      wake: () => undefined,
+      events: recoveryEvents,
+      workItems: {
+        openAssign: () => Promise.resolve("wi"),
+        cancelAssign: () => Promise.resolve(),
+        closeAttempt: () => Promise.resolve(),
+        recoverAttempts: () => Promise.reject(new Error("recovery failed")),
+      },
+    });
+    await recoveryEvents.waitFor("operational.error");
+    recovering.stop();
+
+    const closeEvents = eventCollector();
+    const closing = createDelegationKernel({
+      drivers: { process: { run: () => Promise.resolve({ status: "completed", output: "done" }) } },
+      now: () => 1,
+      newDelegationId: () => "d-close-error",
+      wake: () => undefined,
+      events: closeEvents,
+      bootSweep: false,
+      workItems: {
+        openAssign: () => Promise.resolve("wi-close"),
+        cancelAssign: () => Promise.resolve(),
+        closeAttempt: () => Promise.reject("close failed"),
+        recoverAttempts: () => Promise.resolve(),
+      },
+    });
+    const result = await closing.delegate(
+      {
+        address: { kind: "core", scope: "independent" },
+        operation: "assign",
+        payload: { text: "work" },
+        acceptanceCriteria: ["done"],
+        deadline: 100,
+      },
+      RESIDENT,
+    );
+    if ("refused" in result) throw result.error;
+    await closing.awaitDelegation(result.handle.delegationId);
+    await closeEvents.waitFor("operational.error");
+    closing.stop();
+  });
+
+  test("reports a wake bookkeeping failure", () => {
+    const events = eventCollector();
+    const open = openChannelRecord({ delegationId: "d-mark-woken" });
+    const settled: Delegation.Record = {
+      ...open,
+      status: "settled",
+      settledAt: 2,
+      settled: { status: "completed", delegationId: open.delegationId, output: "done", at: 2 },
+    };
+    createDelegationKernel({
+      drivers: {},
+      now: () => 2,
+      newDelegationId: () => "unused",
+      wake: () => undefined,
+      events,
+      store: {
+        claimOpenWithinRoot: DelegationStore.claimOpenWithinRoot,
+        get: () => settled,
+        settleOnce: DelegationStore.settleOnce,
+        listOpen: () => [],
+        listSettledUnwoken: () => [settled],
+        markWoken: () => {
+          throw new Error("write failed");
+        },
+        countOpenByRoot: () => 0,
+        findByWaitId: () => undefined,
+      },
+    });
+    expect(events.events.some(({ name }) => name === "operational.error")).toBe(true);
+  });
+
+  test("reports a synchronous wake failure", async () => {
+    const events = eventCollector();
+    const kernel = createDelegationKernel({
+      drivers: { channel: { run: () => Promise.resolve({ status: "sent" }) } },
+      now: () => 1,
+      newDelegationId: () => "d-sync-wake-error",
+      wake: () => {
+        throw new Error("wake failed");
+      },
+      events,
+      bootSweep: false,
+    });
+    await kernel.delegate(channelRequest("notify", 100), RESIDENT);
+    expect(events.events.some(({ name }) => name === "operational.error")).toBe(true);
+    kernel.stop();
+  });
+
+  test("an already-expired open record settles during an immediate await", async () => {
+    DelegationStore.create(openChannelRecord({ delegationId: "d-expired-await" }));
+    const kernel = createDelegationKernel({
+      drivers: {},
+      now: () => 100,
+      newDelegationId: () => "unused",
+      wake: () => undefined,
+      bootSweep: false,
+    });
+    const result = await kernel.awaitDelegation("d-expired-await", 0);
+    expect(result).toMatchObject({ kind: "settled", settlement: { status: "no_response" } });
+    kernel.stop();
+  });
+
+  test("an explicit zero-length await times out before the durable deadline", async () => {
+    DelegationStore.create(openChannelRecord({ delegationId: "d-zero-await", deadline: 100 }));
+    const kernel = createDelegationKernel({
+      drivers: {},
+      now: () => 1,
+      newDelegationId: () => "unused",
+      wake: () => undefined,
+      bootSweep: false,
+    });
+    expect(await kernel.awaitDelegation("d-zero-await", 0)).toMatchObject({ kind: "timeout" });
+    kernel.stop();
+  });
+
+  test("closes the await registration race from a just-settled reread", async () => {
+    const open = openChannelRecord({ delegationId: "d-raced-await" });
+    const settled: Delegation.Record = {
+      ...open,
+      status: "settled",
+      settledAt: 2,
+      settled: { status: "completed", delegationId: open.delegationId, output: "done", at: 2 },
+    };
+    let reads = 0;
+    const store = {
+      claimOpenWithinRoot: DelegationStore.claimOpenWithinRoot,
+      get: () => (reads++ === 0 ? open : settled),
+      settleOnce: DelegationStore.settleOnce,
+      listOpen: () => [],
+      listSettledUnwoken: () => [],
+      markWoken: () => true,
+      countOpenByRoot: () => 0,
+      findByWaitId: () => undefined,
+    };
+    const kernel = createDelegationKernel({
+      drivers: {},
+      now: () => 1,
+      newDelegationId: () => "unused",
+      wake: () => undefined,
+      bootSweep: false,
+      store,
+    });
+    expect(await kernel.awaitDelegation(open.delegationId, 10)).toMatchObject({ kind: "settled" });
+    kernel.stop();
+  });
+
+  test("an await reports timeout when another owner removes the row before deadline settlement", async () => {
+    vi.useFakeTimers();
+    let now = 0;
+    const open = openChannelRecord({ delegationId: "d-lost-await" });
+    const store = {
+      claimOpenWithinRoot: DelegationStore.claimOpenWithinRoot,
+      get: () => open,
+      settleOnce: () => ({ committed: false as const }),
+      listOpen: () => [],
+      listSettledUnwoken: () => [],
+      markWoken: () => true,
+      countOpenByRoot: () => 0,
+      findByWaitId: () => undefined,
+    };
+    const kernel = createDelegationKernel({
+      drivers: {},
+      now: () => now,
+      newDelegationId: () => "unused",
+      wake: () => undefined,
+      bootSweep: false,
+      store,
+    });
+    try {
+      const waiting = kernel.awaitDelegation(open.delegationId);
+      now = open.deadline;
+      vi.advanceTimersByTime(open.deadline);
+      expect(await waiting).toMatchObject({ kind: "timeout" });
+    } finally {
+      kernel.stop();
+      vi.useRealTimers();
+    }
+  });
+
   test("publishes delivery at most once when a driver repeats its acceptance report", async () => {
     const events = eventCollector();
     const kernel = createDelegationKernel({
