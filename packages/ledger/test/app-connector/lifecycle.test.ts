@@ -1,85 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { AppConnector } from "@openomni/protocol";
-import { unlinkSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { ActorRegistry } from "../../src/actor/index";
 import { AppConnectorInstallationStore } from "../../src/app-connector/index";
 import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage";
 import { Storage } from "../../src/storage/storage";
-
-function tempDbPath(): string {
-  return join(
-    tmpdir(),
-    `test-sqlite-app-connector-lifecycle-${Date.now()}-${Math.random().toString(36).slice(2)}.db`,
-  );
-}
-
-function removeSqliteFiles(path: string): void {
-  for (const suffix of ["", "-wal", "-shm"]) {
-    try {
-      unlinkSync(`${path}${suffix}`);
-    } catch (error) {
-      if (!(error instanceof Error)) {
-        throw error;
-      }
-    }
-  }
-}
-
-function connectorDefinition(): AppConnector.Definition {
-  return {
-    id: "app.example-worker",
-    name: "Example Worker",
-    version: "1.0.0",
-    description: "Runs Example Worker as an installed connector endpoint",
-    detect: {
-      command: "codex",
-      args: ["--version"],
-      versionPattern: "^example-worker (?<version>\\d+\\.\\d+\\.\\d+)$",
-      testedVersions: ">=0.139.0 <0.140.0",
-    },
-    spawn: {
-      command: "codex",
-      promptArgument: "{{prompt}}",
-      cwd: "{{worktree}}",
-    },
-    questionBridge: { kind: "none" },
-    evidence: { emits: ["exit_code"] },
-    requires: {
-      capabilities: ["git"],
-      permissions: [{ action: "tool.call", allowlist: ["git.*"] }],
-    },
-    driver: {
-      provider: "codex",
-      install: { scopes: ["user", "workspace"], hooks: [], plugins: [] },
-      submit: { mode: "spawn", ack: "accepted" },
-      observedEvents: ["submitted", "accepted", "running", "completed"],
-      emits: ["exit_code"],
-    },
-    profile: {
-      kind: "connector_endpoint",
-      taskTypes: ["code.change"],
-      initialAutonomy: "approval_required",
-    },
-  };
-}
-
-function installation(id: string): AppConnector.Installation {
-  const definition = connectorDefinition();
-  return {
-    id,
-    connectorId: definition.id,
-    connectorVersion: definition.version,
-    endpointId: `endpoint:${id}`,
-    definition,
-    detectedVersion: "0.139.0",
-    status: "registered",
-    registeredBy: "act_owner",
-    createdAt: 100,
-    updatedAt: 100,
-  };
-}
+import { installation } from "./fixture";
+import { removeSqliteFiles, tempDbPath } from "../helpers/sqlite";
 
 function consentInstallation(id: string): AppConnector.Installation {
   const registered = AppConnectorInstallationStore.set(installation(id));
@@ -96,7 +22,7 @@ describe("AppConnectorInstallationStore lifecycle", () => {
   let adapter: SqliteStorageAdapter;
 
   beforeEach(() => {
-    dbPath = tempDbPath();
+    dbPath = tempDbPath("test-sqlite-app-connector-lifecycle");
     adapter = new SqliteStorageAdapter(dbPath);
     Storage.configure(adapter);
   });

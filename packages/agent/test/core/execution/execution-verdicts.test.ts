@@ -3,70 +3,18 @@ import { describe, expect, it } from "bun:test";
 import { Operational } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { PolicyEngine } from "../../../src/core/policy";
-import type { AgentResult, ChatAgentConfig } from "../../../src/core/types";
+import type { AgentResult } from "../../../src/core/types";
 import { runAgent } from "../../../src/core/execution/run";
-import {
-  createRunState,
-  type AgentRunBase,
-  type RunState,
-  type RunTrace,
-  type TurnArtifacts,
-} from "../../../src/core/execution/state";
 import { dispatchPreRun } from "../../../src/core/execution/lifecycle-dispatch";
 import { registerAt, deny } from "../../helpers/policy-decision";
-import { runInput } from "../../helpers/run-input";
-
-const providerModel = { id: "test-model", providerID: "test", name: "test-model" };
-
-function makeInput() {
-  return runInput([{ role: "user", content: "hello" }]);
-}
-
-function makeConfig(overrides?: Partial<ChatAgentConfig>): ChatAgentConfig {
-  return {
-    events: Bus,
-    model: { provider: "test", id: "test-model" },
-    systemPrompt: "test",
-    ...overrides,
-  };
-}
-
-function makeState(): RunState {
-  return createRunState(makeInput());
-}
-
-function makeAgentBase(): AgentRunBase {
-  return { traceId: "trace-1", sessionId: "sess-1", runId: "run-1", actorId: "actor-1" };
-}
-
-function makeTrace(): RunTrace {
-  return { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" };
-}
-
-function makeTurnArtifacts(overrides?: Partial<TurnArtifacts>): TurnArtifacts {
-  return {
-    runInput: {
-      events: Bus,
-      messages: [],
-      tools: [],
-      model: providerModel,
-      trace: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
-      maxSteps: 24,
-    },
-    trackingSink: {
-      onMessage: () => undefined,
-      onToolCall: () => undefined,
-      onToolResult: () => undefined,
-    },
-    turnAssistant: {},
-    turnUsage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-    toolPolicyDecisions: [],
-    stepCap: 24,
-    windowYieldArmed: false,
-    steering: { requested: false },
-    ...overrides,
-  };
-}
+import { testProviderModel } from "../../helpers/provider-model";
+import {
+  makeAgentBase,
+  makeConfig,
+  makeState,
+  makeTrace,
+  makeTurnArtifacts,
+} from "./lifecycle-dispatch-fixture";
 
 /** A dispatcher that ends the run returns its result; one that lets it run returns null. */
 function expectComplete(result: AgentResult | null): AgentResult {
@@ -129,7 +77,7 @@ describe("execution helper deny verdicts", () => {
       makeState(),
       makeConfig(),
       engine,
-      providerModel,
+      testProviderModel,
       undefined,
       makeTrace(),
       makeAgentBase(),
@@ -156,7 +104,7 @@ describe("execution helper deny verdicts", () => {
       makeState(),
       makeConfig(),
       engine,
-      providerModel,
+      testProviderModel,
       undefined,
       makeTrace(),
       makeAgentBase(),
