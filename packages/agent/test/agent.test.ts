@@ -399,8 +399,15 @@ it("records an unknown named outcome as a terminal failure", async () => {
 it("records a primitive outcome as a terminal failure", async () => {
   mockRunFn = async () => 0 as never;
 
+  const agent = ChatAgent.create({
+    events: Bus,
+    model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+    llm: mockLlm,
+    middleware: [noBackoffMiddleware],
+  });
+
   await expect(
-    createAgent().run(runInput([{ role: "user", content: "primitive outcome" }])),
+    agent.run(runInput([{ role: "user", content: "primitive outcome" }])),
   ).rejects.toThrow("Unknown outcome type: unknown");
 });
 
