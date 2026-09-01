@@ -8,7 +8,12 @@ import { attachMachineDaemon } from "../src/daemon";
 import { type MachineHost, createMachineHost } from "../src/host";
 import { socketPath } from "./helpers/socket-path";
 
-const silent: BusEvent.Sink = { publish() {} };
+// These tests assert the fs wire surface, not attach telemetry.
+const silent: BusEvent.Sink = {
+  publish() {
+    return;
+  },
+};
 
 function enrollment(overrides: Partial<Machine.Enrollment> = {}): Machine.Enrollment {
   return {
