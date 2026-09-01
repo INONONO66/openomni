@@ -11,6 +11,8 @@ export namespace Machine {
   export const CapabilityId = Schema.CapabilityId;
   export type CapabilityId = Schema.CapabilityId;
   export const WellKnownCapability = Schema.WellKnownCapability;
+  export const ExportName = Schema.ExportName;
+  export type ExportName = Schema.ExportName;
   export const MachineId = Schema.MachineId;
   export type MachineId = Schema.MachineId;
   export const WireMethod = Schema.WireMethod;
@@ -28,9 +30,18 @@ export namespace Machine {
   export type ToolCall = Schema.ToolCall;
   export const ToolCallResult = Schema.ToolCallResult;
   export type ToolCallResult = Schema.ToolCallResult;
+  export const FsRequest = Schema.FsRequest;
+  export type FsRequest = Schema.FsRequest;
+  export type FsValue = Schema.FsValue;
+  export const FsResult = Schema.FsResult;
+  export type FsResult = Schema.FsResult;
+  export const FS_READ_MAX_BYTES = Schema.FS_READ_MAX_BYTES;
+  export const FS_LIST_MAX_ENTRIES = Schema.FS_LIST_MAX_ENTRIES;
 
   export const effectiveCapabilities = Fold.effectiveCapabilities;
   export type EffectiveOutcome = Fold.EffectiveOutcome;
+  export const effectiveExports = Fold.effectiveExports;
+  export type EffectiveExportsOutcome = Fold.EffectiveExportsOutcome;
 
   export const Events = MachineEvents;
 }

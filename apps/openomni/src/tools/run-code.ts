@@ -19,11 +19,17 @@ export interface CellPorts {
     | { readonly status: "refused"; readonly reason: "machine_not_attached" | "kernel_not_available" }
   >;
   /**
-   * The whole catalog `origin` holds — machine-placed tools included. The
-   * brain-only fold that subtracts machine tools lives at the enforcement
-   * point: see {@link cellDoor}.
+   * The whole catalog `origin` holds when the cell runs on `machineId` —
+   * machine-placed tools included. The brain-only fold that subtracts machine
+   * tools lives at the enforcement point: see {@link cellDoor}.
+   *
+   * `machineId` is not decoration. A cell's authority is its machine's, so a
+   * surface that addresses machines BY NAME (the fs namespace) must be bound
+   * to the one the cell actually runs on before the catalog is built — the
+   * composition root does that binding, which is why the target is a
+   * parameter here rather than a fact the cell could state about itself.
    */
-  toolsFor(origin: DelegationOrigin): readonly CatalogEntry[];
+  toolsFor(origin: DelegationOrigin, machineId: Machine.MachineId): readonly CatalogEntry[];
   newCellId(): string;
 }
 
@@ -125,7 +131,7 @@ export function runCodeToolExecutor(ports: CellPorts, origin: DelegationOrigin) 
     const { machineId, code, timeoutMs } = parsed.data;
 
     const cellId = ports.newCellId();
-    ports.registry.bind(cellId, cellDoor(ports.toolsFor(origin)));
+    ports.registry.bind(cellId, cellDoor(ports.toolsFor(origin, machineId)));
     try {
       // The session is the tenant: the daemon runs each tenant's cells on its
       // own interpreter, so state — and anything a cell leaves running — can

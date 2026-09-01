@@ -1,4 +1,4 @@
-import type { CapabilityId, Enrollment, MachineId, Offer } from "./schema.js";
+import type { CapabilityId, Enrollment, ExportName, MachineId, Offer } from "./schema.js";
 
 export type EffectiveOutcome =
   | {
@@ -34,6 +34,46 @@ export function effectiveCapabilities(enrollment: Enrollment, offer: Offer): Eff
     machineId: enrollment.machineId,
     capabilities: [
       ...new Set(offer.offeredCapabilities.filter((id) => allowed.has(id))),
+    ].sort(),
+  };
+}
+
+export type EffectiveExportsOutcome =
+  | {
+      /** The export set the flat `/machines/<id>/<export>/…` namespace exposes. */
+      kind: "effective";
+      machineId: MachineId;
+      /** enrollment ∩ offer — deduped and sorted here, for stable comparison. */
+      exports: readonly ExportName[];
+    }
+  | {
+      kind: "machine_mismatch";
+      enrolled: MachineId;
+      offered: MachineId;
+    };
+
+/**
+ * effective = enrollment ∩ offer, the same fold as capabilities but over export
+ * names. Both sides are optional on the wire and BOTH default to empty: an
+ * enrollment that names no export publishes nothing, and a daemon that offers
+ * none serves nothing, so a pre-VFS peer on either end grants zero reach.
+ */
+export function effectiveExports(enrollment: Enrollment, offer: Offer): EffectiveExportsOutcome {
+  if (enrollment.machineId !== offer.machineId) {
+    return {
+      kind: "machine_mismatch",
+      enrolled: enrollment.machineId,
+      offered: offer.machineId,
+    };
+  }
+  const allowed = new Set(enrollment.allowedExports ?? []);
+  return {
+    kind: "effective",
+    machineId: enrollment.machineId,
+    exports: [
+      ...new Set(
+        (offer.exports ?? []).map((entry) => entry.name).filter((name) => allowed.has(name)),
+      ),
     ].sort(),
   };
 }

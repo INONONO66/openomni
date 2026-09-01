@@ -175,6 +175,38 @@ describe("evaluatePermission", () => {
     });
   });
 
+  it("uses the rule action when a matching input rule omits its reason", () => {
+    expect(
+      evaluatePermission(
+        {
+          action: "tool.call",
+          inputRules: [
+            {
+              toolPattern: "bash",
+              field: "command",
+              pattern: "^echo",
+              action: "allow",
+              priority: 0,
+            },
+          ],
+        },
+        request("bash", { command: "echo safe" }),
+      ),
+    ).toMatchObject({ action: "continue", decision: "allow", reason: "input_rule_allow" });
+  });
+
+  it("distinguishes empty and missing allow-label matches", () => {
+    expect(
+      evaluatePermission({ action: "tool.call", allowLabels: [] }, request("bash")),
+    ).toMatchObject({ action: "abort", reason: "allow_labels_empty" });
+    expect(
+      evaluatePermission(
+        { action: "tool.call", allowLabels: ["capability:read"] },
+        request("bash"),
+      ),
+    ).toMatchObject({ action: "abort", reason: "allow_labels_miss" });
+  });
+
   it("preserves require_approval decision when an input rule supplies a custom reason", () => {
     const result = evaluatePermission(
       {

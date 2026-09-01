@@ -5,6 +5,8 @@ export interface ChannelGrantMatchInput {
   readonly surface: string;
   readonly workspace?: string;
   readonly channel?: string;
+  /** The sender's external id on that surface — matched against grant allowlists. */
+  readonly sender?: string;
 }
 
 export interface ChannelGrantResolution {
@@ -22,6 +24,14 @@ function matches(grant: Actor.ChannelGrant, input: ChannelGrantMatchInput): bool
   if (grant.surface !== input.surface) return false;
   if (grant.workspace !== undefined && grant.workspace !== input.workspace) return false;
   if (grant.channel !== undefined && grant.channel !== input.channel) return false;
+  // An allowlisted grant does not exist for a stranger: resolution falls
+  // through to any less restricted grant or to none (fail-closed block).
+  if (
+    grant.allowedSenders !== undefined &&
+    (input.sender === undefined || !grant.allowedSenders.includes(input.sender))
+  ) {
+    return false;
+  }
   return true;
 }
 

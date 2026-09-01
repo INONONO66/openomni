@@ -453,6 +453,14 @@ describe("WaitStore", () => {
     expect(error.data.code).toBe("not_found");
   });
 
+  test("fails closed with a typed adapter_absent error when ledger append is missing", () => {
+    const configured = Storage.get();
+    Object.defineProperty(configured, "ledger", { configurable: true, value: undefined });
+
+    const error = captureStoreError(() => WaitStore.create(buildWaitCreate(), "trace-no-ledger"));
+    expect(error.data.code).toBe("adapter_absent");
+  });
+
   test("fails closed with a typed adapter_absent error when the wait sub-adapter is missing", () => {
     Storage.configure(bareStorageAdapter());
 

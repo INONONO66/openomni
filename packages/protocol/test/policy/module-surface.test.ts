@@ -92,6 +92,7 @@ describe("policy module public surface", () => {
     expect(typeof PolicyPermission.isSafeInputPattern).toBe("function");
     expect(PolicyPermission.MAX_INPUT_LENGTH).toBe(10_000);
     expect(PolicyPermission.isSafeInputPattern("^true$")).toBe(true);
+    expect(PolicyPermission.isSafeInputPattern("(")).toBe(false);
     // Deliberately-evil fixture proving the guard REJECTS exponential
     // backtracking. Assembled from parts so static scanners don't treat the
     // literal as a live regex source (the guard itself never executes it —

@@ -171,9 +171,15 @@ describe("WorkItemStore", () => {
     const events: string[] = [];
     Bus.observe((event) => events.push(event.name));
 
-    await expect(WorkItemStore.fail(item.workItemId, "trace-test", "loser")).rejects.toMatchObject({
-      code: "stale_revision",
-    });
+    const stale = WorkItemStore.fail(item.workItemId, "trace-test", "loser");
+    await expect(stale).rejects.toMatchObject({ code: "stale_revision" });
+    try {
+      await stale;
+    } catch (error) {
+      if (!(error instanceof Error) || !("code" in error) || !("hash" in error)) throw error;
+      expect(error.code).toBe("stale_revision");
+      expect(error.hash).toBe(item.workItemId);
+    }
     expect(originalGet(item.workItemId)).toMatchObject({ name: "winner", revision: 2 });
     expect(adapter.ledger.headFact(`work:${item.workItemId}`)).toMatchObject({
       seq: 2,
@@ -326,7 +332,32 @@ describe("WorkItemStore", () => {
     expect(updated?.completionFacts.revision).toBe(item.completionFacts.revision);
   });
 
-  test("rejects failing a completed item", async () => {
+  test("rejects creating a child for a missing parent", async () => {
+    configureSqlite();
+    await expect(createItem("orphan", { parentId: "wi_missing_parent" })).rejects.toThrow(
+      "Parent work item not found",
+    );
+  });
+
+  test("rejects conflicting reuse of an explicit evidence id", async () => {
+    configureSqlite();
+    const item = await createItem("evidence-identity");
+    await WorkItemStore.addEvidence(
+      item.workItemId,
+      { id: "evidence-stable", kind: "verification", description: "first", passed: true },
+      "trace-test",
+    );
+
+    await expect(
+      WorkItemStore.addEvidence(
+        item.workItemId,
+        { id: "evidence-stable", kind: "verification", description: "changed", passed: true },
+        "trace-test",
+      ),
+    ).rejects.toThrow("WorkItem evidence identity conflict");
+  });
+
+  test("rejects failing and cancelling terminal items", async () => {
     configureSqlite();
     const item = await createItem("complete-then-fail");
 
@@ -336,6 +367,17 @@ describe("WorkItemStore", () => {
     await expectRejectsWithMessage(
       WorkItemStore.fail(item.workItemId, "trace-test"),
       "Cannot fail a completed work item",
+    );
+    await expectRejectsWithMessage(
+      WorkItemStore.cancel(item.workItemId, "trace-test"),
+      "Cannot cancel a completed work item",
+    );
+
+    const cancelled = await createItem("cancelled-then-fail");
+    await WorkItemStore.cancel(cancelled.workItemId, "trace-test");
+    await expectRejectsWithMessage(
+      WorkItemStore.fail(cancelled.workItemId, "trace-test"),
+      "Cannot fail a cancelled work item",
     );
   });
 
