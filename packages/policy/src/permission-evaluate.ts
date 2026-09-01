@@ -72,9 +72,8 @@ function evaluateInputRules(
     if (inputMatch === "unsafe") {
       return verdict("deny", "unsafe_input_rule", rule.toolPattern);
     }
-    if (inputMatch === "match") {
+    if (inputMatch === "match")
       return verdict(rule.action, rule.reason ?? `input_rule_${rule.action}`, rule.toolPattern);
-    }
   }
 
   return undefined;
@@ -121,19 +120,15 @@ function evaluateAllowConstraints(
 
     if (allowedBy) return verdict("allow", "allowlist", allowedBy);
 
-    return verdict(
-      "deny",
-      permission.allowlist.length === 0 ? "allowlist_empty" : "allowlist_miss",
-    );
+    const reason = permission.allowlist.length === 0 ? "allowlist_empty" : "allowlist_miss";
+    return verdict("deny", reason);
   }
 
   if (permission.allowLabels !== undefined) {
     const allowedByLabel = findMatchingLabel(request.resourceLabels, permission.allowLabels);
     if (allowedByLabel) return verdict("allow", "allow_label", allowedByLabel);
-    return verdict(
-      "deny",
-      permission.allowLabels.length === 0 ? "allow_labels_empty" : "allow_labels_miss",
-    );
+    const reason = permission.allowLabels.length === 0 ? "allow_labels_empty" : "allow_labels_miss";
+    return verdict("deny", reason);
   }
 
   return undefined;

@@ -32,7 +32,7 @@ export function uniquePolicyIds(policyIds: string[]): string[] {
 
 export function collectEffectEntries(orderedDecisions: OrderedDecision[]): EffectEntry[] {
   const seenEffects = new Set<string>();
-  const entries: EffectEntry[] = [];
+  const entries: Omit<EffectEntry, "order">[] = [];
 
   for (const ordered of orderedDecisions) {
     ordered.decision.effects.forEach((effect, effectIndex) => {
@@ -46,7 +46,6 @@ export function collectEffectEntries(orderedDecisions: OrderedDecision[]): Effec
         priority: ordered.priority,
         decisionIndex: ordered.index,
         effectIndex,
-        order: ordered.index * 10_000 + effectIndex,
       });
     });
   }

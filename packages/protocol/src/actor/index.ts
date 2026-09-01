@@ -129,6 +129,11 @@ export namespace Actor {
     kind: ChannelGrantKind,
     defaultTier: TrustTier.optional(),
     inboundTreatment: InboundTreatment.optional(),
+    // Owner-scoped sender allowlist: when present, the grant exists only for
+    // senders whose external id is listed — for everyone else resolution
+    // finds no grant and the perimeter blocks fail-closed. Absent = the grant
+    // covers every sender on the surface (the loopback-ws posture).
+    allowedSenders: z.array(z.string().min(1)).optional(),
     provisionalMint: ProvisionalMintPolicy.optional(),
     createdBy: z.string().min(1),
     createdAt: EpochMs.optional(),

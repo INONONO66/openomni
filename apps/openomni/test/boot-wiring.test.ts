@@ -33,19 +33,60 @@ describe("createMachinesPort", () => {
 
   test("is absent without a host or enrollment", () => {
     expect(createMachinesPort(undefined, machines)).toBeUndefined();
-    expect(createMachinesPort({ attached: () => undefined }, undefined)).toBeUndefined();
+    expect(
+      createMachinesPort(
+        { attached: () => undefined, attachedExports: () => undefined },
+        undefined,
+      ),
+    ).toBeUndefined();
   });
 
   test("folds enrollment against live attachment per read", () => {
     const port = createMachinesPort(
-      { attached: (machineId) => (machineId === "machine:a" ? ["shell"] : undefined) },
+      {
+        attached: (machineId) => (machineId === "machine:a" ? ["shell"] : undefined),
+        attachedExports: () => [],
+      },
       machines,
     );
     if (port === undefined) throw new Error("expected a machines port");
 
     expect(port()).toEqual([
-      { machineId: "machine:a", attached: true, capabilities: ["shell"] },
-      { machineId: "machine:b", attached: false, capabilities: [] },
+      { machineId: "machine:a", attached: true, capabilities: ["shell"], effectiveExports: [] },
+      { machineId: "machine:b", attached: false, capabilities: [], effectiveExports: [] },
+    ]);
+  });
+
+  test("reports the live effective export set, not the enrollment's wish", () => {
+    const port = createMachinesPort(
+      {
+        attached: (machineId) => (machineId === "machine:a" ? ["fs.read"] : undefined),
+        // The host answers with enrollment∩offer, so an export the Owner
+        // allowed but the daemon never offered is simply not here.
+        attachedExports: (machineId) => (machineId === "machine:a" ? ["notes"] : undefined),
+      },
+      {
+        socketPath: "/tmp/unused.sock",
+        enrolled: [
+          {
+            name: "a",
+            machineId: "machine:a",
+            allowedCapabilities: ["fs.read"],
+            allowedExports: ["notes", "src"],
+            enrolledAt: 1,
+          },
+        ],
+      },
+    );
+    if (port === undefined) throw new Error("expected a machines port");
+
+    expect(port()).toEqual([
+      {
+        machineId: "machine:a",
+        attached: true,
+        capabilities: ["fs.read"],
+        effectiveExports: ["notes"],
+      },
     ]);
   });
 });

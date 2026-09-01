@@ -100,6 +100,44 @@ describe("deny-wins point matrix", () => {
 });
 
 describe("scope filtering with 100 policies", () => {
+  it("fails point validation when agentType is unreadable", async () => {
+    const engine = PolicyEngine.create({ clock: Date.now });
+    let unscopedRuns = 0;
+    let scopedRuns = 0;
+    engine.register(
+      atPoint("run.turn.pre", {
+        name: "unscoped",
+        priority: 0,
+        fn: () => {
+          unscopedRuns += 1;
+          return allow();
+        },
+      }),
+    );
+    engine.register(
+      atPoint("run.turn.pre", {
+        name: "scoped",
+        priority: 1,
+        scope: { agentType: ["resident"] },
+        fn: () => {
+          scopedRuns += 1;
+          return allow();
+        },
+      }),
+    );
+    const context = Object.defineProperty(turnPreContext(), "agentType", {
+      enumerable: true,
+      get: () => {
+        throw new Error("unreadable agent type");
+      },
+    });
+
+    const decision = await engine.dispatchPoint("run.turn.pre", context);
+
+    expect(decision.verdict).toBe("deny");
+    expect(unscopedRuns).toBe(0);
+    expect(scopedRuns).toBe(0);
+  });
   it("dispatches only policies matching specific agentType out of 100", async () => {
     const engine = PolicyEngine.create({ clock: Date.now });
     const executed: string[] = [];

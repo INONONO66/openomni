@@ -94,7 +94,7 @@ export function createSqliteWorkItemAdapter(db: Database): ProtocolStorage.WorkI
 
     list: (filter?: ProtocolStorage.WorkItemListFilter): WorkItem.Info[] => {
       const conditions: string[] = [];
-      const params: (string | null)[] = [];
+      const params: string[] = [];
 
       addNullableCondition(conditions, params, "assignee_id", filter?.assigneeId);
       addNullableCondition(conditions, params, "session_id", filter?.sessionId);
@@ -234,15 +234,11 @@ function assertMatchingHash(key: string, payload: string): void {
 
 function addNullableCondition(
   conditions: string[],
-  params: (string | null)[],
+  params: string[],
   column: string,
-  value: string | null | undefined,
+  value: string | undefined,
 ): void {
   if (value === undefined) return;
-  if (value === null) {
-    conditions.push(`${column} IS NULL`);
-    return;
-  }
   conditions.push(`${column} = ?`);
   params.push(value);
 }

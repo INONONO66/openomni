@@ -134,6 +134,63 @@ describe("completion terminal evidence linkage", () => {
     expect(stale.success).toBe(false);
   });
 
+  test("rejects broken effective-result and report references", () => {
+    const mutations: Array<(item: ReturnType<typeof terminalItem>) => void> = [
+      (item) => {
+        const terminalAdmission = item.completionFacts.admissions[0];
+        if (!terminalAdmission) throw new Error("missing admission fixture");
+        terminalAdmission.effectiveResultIds = ["result:missing"];
+      },
+      (item) => {
+        const effective = item.completionFacts.results[0];
+        if (!effective) throw new Error("missing result fixture");
+        effective.criterionId = "criterion:missing";
+      },
+      (item) => {
+        const effective = item.completionFacts.results[0];
+        if (!effective) throw new Error("missing result fixture");
+        effective.basisRef = "basis:other";
+      },
+      (item) => {
+        const effective = item.completionFacts.results[0];
+        if (!effective) throw new Error("missing result fixture");
+        effective.observationIds = ["observation:missing"];
+      },
+      (item) => {
+        const terminalAdmission = item.completionFacts.admissions[0];
+        if (!terminalAdmission) throw new Error("missing admission fixture");
+        terminalAdmission.completionReportRef = "report:other";
+      },
+    ];
+
+    for (const mutate of mutations) {
+      const item = terminalItem({ attempt: 2, passed: true });
+      mutate(item);
+      expect(WorkItem.validateCompletionTerminalLinkage(item).success).toBe(false);
+    }
+  });
+
+  test("rejects claims detached from their criteria or admitted observations", () => {
+    const mismatchedStatement = terminalItem({ attempt: 2, passed: true });
+    const durableClaim = mismatchedStatement.completionFacts.claims[0];
+    if (!durableClaim) throw new Error("missing claim fixture");
+    durableClaim.statement = "different statement";
+
+    const missingObservation = terminalItem({ attempt: 2, passed: true });
+    const detachedClaim = missingObservation.completionFacts.claims[0];
+    if (!detachedClaim) throw new Error("missing claim fixture");
+    detachedClaim.observationIds = ["observation:missing"];
+
+    const ineffectiveObservation = terminalItem({ attempt: 2, passed: true });
+    const effective = ineffectiveObservation.completionFacts.results[0];
+    if (!effective) throw new Error("missing result fixture");
+    effective.observationIds = [];
+
+    for (const item of [mismatchedStatement, missingObservation, ineffectiveObservation]) {
+      expect(WorkItem.validateCompletionTerminalLinkage(item).success).toBe(false);
+    }
+  });
+
   test("rejects evidence whose verification failed", () => {
     const passed = WorkItem.validateCompletionTerminalLinkage(
       terminalItem({ attempt: 2, passed: true }),

@@ -114,7 +114,7 @@ function processWorkerRun(
   kernel = createChildKernel(runner);
   return runner({
     delegationId: request.delegationId,
-    ...(request.workerRunId === undefined ? {} : { workerRunId: request.workerRunId }),
+    workerRunId: request.workerRunId,
     operation: request.operation,
     instruction: request.instruction,
     acceptanceCriteria: request.acceptanceCriteria,
