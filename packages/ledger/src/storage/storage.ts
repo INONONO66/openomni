@@ -112,6 +112,7 @@ export namespace Storage {
     // adapter_absent error) when it is missing; production adapters wire it
     // as required (SqliteStorageAdapter).
     lease?: ProtocolStorage.LeaseSubAdapter;
+    approval?: ProtocolStorage.ApprovalSubAdapter;
     // Optional here for test fakes only — EngagementStore fails closed (typed
     // adapter_absent error) when it is missing; production adapters wire it
     // as required (SqliteStorageAdapter). Brain-domain surface (#709): the
@@ -158,6 +159,7 @@ export namespace Storage {
     "wait",
     "conversation",
     "lease",
+    "approval",
     "engagement",
     "delegation",
     "ledger",

@@ -24,6 +24,17 @@ import {
   writeArtifactToolExecutor,
   writeArtifactToolSpec,
 } from "./artifacts";
+import type { ApprovalPort } from "./approval";
+import {
+  approvalDecideToolExecutor,
+  approvalDecideToolSpec,
+  approvalRequestToolExecutor,
+  approvalRequestToolSpec,
+  contactPromoteToolExecutor,
+  contactPromoteToolSpec,
+  endpointMergeToolExecutor,
+  endpointMergeToolSpec,
+} from "./approval";
 import type { CatalogEntry } from "./dispatch";
 import type { LeasePort } from "./lease";
 import { leaseOpenToolExecutor, leaseOpenToolSpec } from "./lease";
@@ -46,6 +57,7 @@ export interface CatalogPorts {
   readonly delegation?: DelegationKernel;
   readonly conversations?: ConversePort;
   readonly leases?: LeasePort;
+  readonly approvals?: ApprovalPort;
   readonly cells?: CellPorts;
   readonly machines?: MachinesPort;
   readonly memory?: CuratedMemory;
@@ -111,6 +123,36 @@ const CATALOG_TOOLS: readonly CatalogTool[] = [
       ports.leases === undefined || origin.role !== "resident"
         ? undefined
         : leaseOpenToolExecutor(ports.leases),
+  },
+  {
+    // The approval lane is the Resident's surface (§6): a worker never
+    // requests, records, or consumes Owner consent.
+    spec: approvalRequestToolSpec,
+    wire: (ports, origin) =>
+      ports.approvals === undefined || origin.role !== "resident"
+        ? undefined
+        : approvalRequestToolExecutor(ports.approvals),
+  },
+  {
+    spec: approvalDecideToolSpec,
+    wire: (ports, origin) =>
+      ports.approvals === undefined || origin.role !== "resident"
+        ? undefined
+        : approvalDecideToolExecutor(ports.approvals),
+  },
+  {
+    spec: contactPromoteToolSpec,
+    wire: (ports, origin) =>
+      ports.approvals === undefined || origin.role !== "resident"
+        ? undefined
+        : contactPromoteToolExecutor(ports.approvals),
+  },
+  {
+    spec: endpointMergeToolSpec,
+    wire: (ports, origin) =>
+      ports.approvals === undefined || origin.role !== "resident"
+        ? undefined
+        : endpointMergeToolExecutor(ports.approvals),
   },
   {
     spec: runCodeToolSpec,

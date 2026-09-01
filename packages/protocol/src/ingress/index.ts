@@ -28,6 +28,7 @@ const ActorSchemaImpl = z
     kind: z.string().optional(),
     type: z.string().optional(),
     trustTier: Actor.TrustTier.optional(),
+    standing: Actor.Standing.optional(),
     endpointId: z.string().optional(),
     endpoint: Actor.Endpoint.optional(),
     sessionId: z.string().optional(),

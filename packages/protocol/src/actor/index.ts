@@ -24,6 +24,16 @@ export namespace Actor {
   ]);
   export type Kind = z.infer<typeof Kind>;
 
+  /**
+   * #P3 (conversation-and-message-io.md §3.1): how the contact entered the
+   * registry. `provisional` rows are minted by the perimeter for unknown
+   * senders on trusted channels — they carry NO grants, their inbound is
+   * evidence_only, and only an Owner-approved promotion act registers them.
+   * Absent reads as `registered` (every pre-P3 row was an explicit act).
+   */
+  export const Standing = z.enum(["registered", "provisional"]);
+  export type Standing = z.infer<typeof Standing>;
+
   export const TrustTier = z.enum([
     "owner",
     "co_owner",
@@ -43,6 +53,7 @@ export namespace Actor {
     id: z.string().min(1),
     kind: Kind,
     trustTier: TrustTier,
+    standing: Standing.optional(),
     displayName: z.string().min(1).optional(),
     metadata: Metadata.optional(),
     createdAt: EpochMs.optional(),
@@ -95,6 +106,21 @@ export namespace Actor {
   export const InboundTreatment = z.enum(["full_access", "evidence_only", "drop"]);
   export type InboundTreatment = z.infer<typeof InboundTreatment>;
 
+  /**
+   * #P3 (§3.1/§8.12): the Owner's opt-in mint policy for a trusted channel.
+   * Absent means NO provisional contacts are minted on this channel —
+   * zero-default, fail-closed. `max` bounds mints inside each rolling
+   * `windowMs`, so a flood of unknown senders creates bounded sweepable
+   * rows and nothing else.
+   */
+  export const ProvisionalMintPolicy = z
+    .object({
+      windowMs: z.number().int().positive(),
+      max: z.number().int().positive(),
+    })
+    .strict();
+  export type ProvisionalMintPolicy = z.infer<typeof ProvisionalMintPolicy>;
+
   export const ChannelGrant = z.object({
     id: z.string().min(1),
     surface: z.string().min(1),
@@ -103,6 +129,7 @@ export namespace Actor {
     kind: ChannelGrantKind,
     defaultTier: TrustTier.optional(),
     inboundTreatment: InboundTreatment.optional(),
+    provisionalMint: ProvisionalMintPolicy.optional(),
     createdBy: z.string().min(1),
     createdAt: EpochMs.optional(),
     updatedAt: EpochMs.optional(),
