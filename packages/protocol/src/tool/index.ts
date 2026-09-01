@@ -15,17 +15,8 @@ export namespace Tool {
   export const Source = z.enum(["system", "mcp", "agent", "server"]);
   export type Source = z.infer<typeof Source>;
 
-  /**
-   * Tool source provenance as a catalog label: `source:<Source>`. Producers
-   * live in three packages and the consumer in a fourth, so the grammar is
-   * defined once, here, next to the vocabulary it speaks — the two ends had
-   * already drifted apart once (`source.mcp` vs `source:system`).
-   */
+  /** Tool source provenance reader for catalog labels shaped as `source:<Source>`. */
   const sourceLabelPrefix = "source:";
-
-  export function sourceLabel(source: Source): string {
-    return `${sourceLabelPrefix}${source}`;
-  }
 
   export function sourceFromLabels(labels: readonly string[] | undefined): Source | undefined {
     const label = labels?.find((candidate) => candidate.startsWith(sourceLabelPrefix));
@@ -34,16 +25,8 @@ export namespace Tool {
     return parsed.success ? parsed.data : undefined;
   }
 
-  /**
-   * MCP server provenance as a catalog label: `mcp.<serverId>`. Same
-   * cross-package shape as the source label — two producers, one consumer —
-   * so the same rule: the grammar is written once, here.
-   */
+  /** MCP server provenance reader for catalog labels shaped as `mcp.<serverId>`. */
   const mcpServerLabelPrefix = "mcp.";
-
-  export function mcpServerLabel(serverId: string): string {
-    return `${mcpServerLabelPrefix}${serverId}`;
-  }
 
   export function mcpServerFromLabels(labels: readonly string[] | undefined): string | undefined {
     const label = labels?.find((candidate) => candidate.startsWith(mcpServerLabelPrefix));

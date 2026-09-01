@@ -223,10 +223,6 @@ export namespace Ingress {
   });
   export type InternalEvent = z.infer<typeof InternalEventSchema>;
 
-  export const InboundEventSchema = z.discriminatedUnion("mode", [
-    DirectEventSchema,
-    InternalEventSchema,
-  ]);
   export type InboundEvent = DirectEvent | InternalEvent;
   export type ResolvedInboundEvent = DirectEvent | (InternalEvent & { agent: AgentDef });
 
