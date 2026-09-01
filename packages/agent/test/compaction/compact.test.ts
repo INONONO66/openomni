@@ -702,33 +702,33 @@ describe("Compaction", () => {
       expect(anchorPart.metadata?.anchorBody).toBe("anchor-v1");
     });
 
-    it("keeps the newest user message even when it alone exceeds the budget", async () => {
-      const huge = "h".repeat(500);
-      const hugeUser = makeUserMessage(huge);
-      hugeUser.parts.push({
+    it("counts completed tool output when selecting preserved user messages", async () => {
+      const newestText = "h".repeat(50);
+      const newestUser = makeUserMessage(newestText);
+      newestUser.parts.push({
         id: nextId("user-tool-part"),
         sessionID: "test",
-        messageID: hugeUser.info.id,
+        messageID: newestUser.info.id,
         type: "tool",
         callID: "user-tool-call",
         tool: "read_file",
         state: {
           status: "completed",
           input: {},
-          output: "tool-output".repeat(50),
+          output: "o".repeat(60),
           title: "read_file",
           metadata: {},
           time: { start: 1, end: 2 },
         },
       });
-      // protect 2 → the cut span is [old-user, a1, huge, a2]; both user
-      // messages face the budget, including the completed tool output carried
-      // by the newest user message, so only that newest message survives it.
+      // The newest text alone fits the 100-char budget, but its completed
+      // 60-char tool output takes the message to 110. It is retained as the
+      // newest user, while accounting for the output excludes the older user.
       const result = await Compaction.compact(
         [
           makeUserMessage("old-user"),
           makeAssistantMessage("a1"),
-          hugeUser,
+          newestUser,
           makeAssistantMessage("a2"),
           makeUserMessage("tail-u"),
           makeAssistantMessage("tail-a"),
@@ -745,8 +745,7 @@ describe("Compaction", () => {
       const texts = result.messages.flatMap((m) =>
         m.parts.filter((p): p is Message.TextPart => p.type === "text").map((p) => p.text),
       );
-      // Budget 100 < 500: newest kept anyway; the older user no longer fits.
-      expect(texts).toContain(huge);
+      expect(texts).toContain(newestText);
       expect(texts).not.toContain("old-user");
     });
 

@@ -138,31 +138,32 @@ async function runAttempts(
   retryPolicy: RetryPolicy,
   progress: RunProgress,
 ): Promise<AgentResult> {
-  try {
-    return await runAttempt(state, config, sink, engine, trace, agentBase, progress);
-  } catch (error) {
-    if (!(error instanceof Error)) throw error;
-    const decision = await handleError(
-      state,
-      engine,
-      config,
-      agentBase,
-      error,
-      progress.attempt,
-      retryPolicy,
-    );
-    if (decision.action === "complete") return decision.result;
-    if (decision.action === "throw") {
+  for (;;) {
+    try {
+      return await runAttempt(state, config, sink, engine, trace, agentBase, progress);
+    } catch (error) {
+      if (!(error instanceof Error)) throw error;
+      const decision = await handleError(
+        state,
+        engine,
+        config,
+        agentBase,
+        error,
+        progress.attempt,
+        retryPolicy,
+      );
+      if (decision.action === "complete") return decision.result;
+      if (decision.action === "throw") {
+        progress.thrownFailure = decision.failure;
+        throw decision.error;
+      }
+      // Preserve the decided failure across an abort raised by the backoff.
+      progress.failureReasons.push(decision.failure.reason);
       progress.thrownFailure = decision.failure;
-      throw decision.error;
+      await LlmRetry.sleep(decision.backoffMs, config.signal);
+      progress.thrownFailure = undefined;
+      progress.attempt += 1;
     }
-    // Preserve the decided failure across an abort raised by the backoff.
-    progress.failureReasons.push(decision.failure.reason);
-    progress.thrownFailure = decision.failure;
-    await LlmRetry.sleep(decision.backoffMs, config.signal);
-    progress.thrownFailure = undefined;
-    progress.attempt += 1;
-    return runAttempts(state, config, sink, engine, trace, agentBase, retryPolicy, progress);
   }
 }
 
@@ -222,42 +223,33 @@ async function runTurns(
   providerModel: Provider.Model,
   progress: RunProgress,
 ): Promise<AgentResult> {
-  const budgetResult = await dispatchBudgetCheck(state, engine, config, agentBase);
-  if (budgetResult) return budgetResult;
-  emitTurnStart(config.events, state, agentBase);
-  const turnResult = await buildTurn(
-    state,
-    config,
-    engine,
-    providerModel,
-    config.toolChoice,
-    trace,
-    agentBase,
-    sink,
-  );
-  if (turnResult.type === "complete") return turnResult.result;
-  const connectionResult = await runConnection(
-    state,
-    config,
-    engine,
-    agentBase,
-    attemptModel,
-    providerModel,
-    turnResult.turn,
-    progress,
-  );
-  if (connectionResult !== undefined) return connectionResult;
-  return runTurns(
-    state,
-    config,
-    sink,
-    engine,
-    trace,
-    agentBase,
-    attemptModel,
-    providerModel,
-    progress,
-  );
+  for (;;) {
+    const budgetResult = await dispatchBudgetCheck(state, engine, config, agentBase);
+    if (budgetResult) return budgetResult;
+    emitTurnStart(config.events, state, agentBase);
+    const turnResult = await buildTurn(
+      state,
+      config,
+      engine,
+      providerModel,
+      config.toolChoice,
+      trace,
+      agentBase,
+      sink,
+    );
+    if (turnResult.type === "complete") return turnResult.result;
+    const connectionResult = await runConnection(
+      state,
+      config,
+      engine,
+      agentBase,
+      attemptModel,
+      providerModel,
+      turnResult.turn,
+      progress,
+    );
+    if (connectionResult !== undefined) return connectionResult;
+  }
 }
 
 async function runConnection(

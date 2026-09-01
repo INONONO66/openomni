@@ -204,6 +204,7 @@ function applyStreamEvent(
     case "error": {
       throw event.error;
     }
+    default:
   }
 }
 

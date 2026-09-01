@@ -206,6 +206,22 @@ describe("Processor", () => {
       expect(processor.message.time.completed).toBeNumber();
     });
 
+    test("ignores fullStream events that do not project into transcript parts", async () => {
+      const capture = capturingSink();
+      const processor = createProcessor({
+        sink: capture.sink,
+        createStream: streamOf([
+          { type: "tool-input-start", id: "tool-input-1", toolName: "read" },
+          { type: "finish" },
+        ]),
+      });
+
+      await processor.process({ system: "" });
+
+      expect(capture.finalParts()).toEqual([]);
+      expect(processor.message.time.completed).toBeNumber();
+    });
+
     test("delivers the full text at part boundaries instead of per delta", async () => {
       const capture = capturingSink();
       const processor = createProcessor({
