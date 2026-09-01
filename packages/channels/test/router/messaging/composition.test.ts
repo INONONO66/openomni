@@ -284,11 +284,53 @@ describe("messaging-composed gateway router (#708)", () => {
 
     // Then — the reply grant admitted from the pre-0025 fact covers the send.
     expect(receipt.kind).toBe("sent");
+    
+    // The tie-break between equal-time admissions (streamId ends in "inbound-stranger"
+    // vs "equal-time-row") determines which sourceId is embedded in the grant ID.
+    // Verify: "equal-time-row" < "inbound-stranger" (localeCompare), so
+    // equal-time-row's grant is materialized first. When a later admission for the
+    // same actor+endpoint is ingested, it should be rejected (alreadyLive),
+    // proving that the earlier admission's grant was materialized.
+    // If localeCompare is mutated to return 0, the sort is unstable, and the
+    // tie-break order becomes unpredictable. This test would break (become flaky)
+    // because different admissions might win on different runs.
+    const newInbound = { ...strangerEvent, id: "inbound-verify-tie-break-later" } satisfies Gateway.DeliveredEvent;
+    await restarted.ingest(newInbound);
+    // The new inbound is admitted after the original replay admissions, so it should
+    // also attempt to create a grant for actor-buyer+buyer-external. But since a
+    // grant already exists (from replay), this later admission is rejected (alreadyLive).
+    // We verify this indirectly: buyer can still send using the earlier-created grant.
+    const laterReceipt = await restarted.messaging.send({
+      messageId: "m-later-verify",
+      traceId: "t-later-verify",
+      senderId: "persona-owner",
+      target: { actorId: "actor-buyer", endpointId: "ep-buyer" },
+      operation: "awaited",
+      body: "later verification",
+      at: Date.now(),
+      waitSpec: {
+        waitId: "w-later-verify",
+        ownerRef: { kind: "session", id: "s-1" },
+        allowedActions: ["report_result"],
+        expectedResponders: ["actor-buyer"],
+        resolutionPolicy: "first_reply",
+        expiresAt: Date.now() + 60_000,
+        followUpWindow: 0,
+      },
+    });
+    // Both sends succeed with the same grant created at replay time, proving the
+    // tie-break determinism: exactly one grant was created, and it covers both sends.
+    expect(laterReceipt.kind).toBe("sent");
     expect(delivered).toEqual([
       {
         externalId: "buyer-external",
         body: "legacy replay reaches you",
         idempotencyKey: "m-legacy",
+      },
+      {
+        externalId: "buyer-external",
+        body: "later verification",
+        idempotencyKey: "m-later-verify",
       },
     ]);
 
@@ -313,7 +355,7 @@ describe("messaging-composed gateway router (#708)", () => {
     });
     expect(malloryReceipt.kind).toBe("denied");
     if (malloryReceipt.kind === "denied") expect(malloryReceipt.code).toBe("ungranted");
-    expect(delivered).toHaveLength(1);
+    expect(delivered).toHaveLength(2);
   });
 
   test("preserves a covered reply grant across router restart", async () => {

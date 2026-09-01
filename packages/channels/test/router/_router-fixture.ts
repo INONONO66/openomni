@@ -144,3 +144,23 @@ export function routingDecisions(): readonly unknown[] {
     .filter((event) => event.name === "ingress.routing.decision")
     .map((event) => event.data);
 }
+
+export function allSinkEvents(): readonly Array<{ readonly name: string; readonly data: unknown }> {
+  return sinkEvents;
+}
+
+export function grantMatEvents(): readonly Array<{ readonly instanceId: string; readonly targetActorId: string }> {
+  return sinkEvents
+    .filter((event) => event.name === "operational.info")
+    .filter((event) => {
+      const data = event.data as { readonly msg?: string; readonly context?: unknown };
+      return data.msg === "reply-grant instance materialized";
+    })
+    .map((event) => {
+      const data = event.data as { readonly context?: { readonly instanceId?: string; readonly targetActorId?: string } };
+      return {
+        instanceId: data.context?.instanceId ?? "",
+        targetActorId: data.context?.targetActorId ?? "",
+      };
+    });
+}
