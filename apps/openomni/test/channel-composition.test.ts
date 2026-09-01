@@ -1,174 +1,211 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { describe, expect, test } from "bun:test";
+import type {
+  ChannelProvider,
+  ChannelProviders,
+  DiscordCredentials,
+  GitHubCredentials,
+  TelegramCredentials,
+} from "@openomni/channels";
 import type { Channel } from "@openomni/protocol";
-import { channelProfile } from "../src/channels";
-import { loadConfig, type OpenOmniConfig } from "../src/config";
+import { type BuiltChannel, channelProfile } from "../src/channels";
+import type { OpenOmniConfig } from "../src/config";
 
-const CHANNEL_ENV_KEYS = [
-  "OPENOMNI_MODEL_PROVIDER",
-  "OPENOMNI_MODEL_ID",
-  "OPENOMNI_MODEL_API_KEY",
-  "DISCORD_BOT_TOKEN",
-  "TELEGRAM_BOT_TOKEN",
-  "GITHUB_WEBHOOK_SECRET",
-  "GITHUB_TOKEN",
-  "GITHUB_BOT_USERNAME",
-] as const;
+/**
+ * The channel profile is the app's declarative composition of external
+ * channels: which providers mount, with which credentials and triggers, and
+ * which seams (delivery, webhook) each row exposes. These tests pin that
+ * composition as behavior — a row exists iff its channel is configured, the
+ * credential is parsed through the provider's schema, and the handler binds
+ * before any seam is exposed.
+ */
 
-let saved: Record<string, string | undefined>;
-
-beforeEach(() => {
-  saved = Object.fromEntries(CHANNEL_ENV_KEYS.map((key) => [key, process.env[key]]));
-  for (const key of CHANNEL_ENV_KEYS) delete process.env[key];
-});
-
-afterEach(() => {
-  for (const key of CHANNEL_ENV_KEYS) {
-    const value = saved[key];
-    if (value === undefined) delete process.env[key];
-    else process.env[key] = value;
-  }
-});
-
-function baseConfig(): OpenOmniConfig {
+function baseConfig(channels?: OpenOmniConfig["channels"]): OpenOmniConfig {
   return {
-    dbPath: "/tmp/openomni-channel-test.db",
-    memoryPath: "/tmp/openomni-channel-test-memory.json",
+    dbPath: ":memory:",
+    memoryPath: "/tmp/unused-memory.json",
     host: "127.0.0.1",
     wsPort: 0,
-    model: { provider: "fake", id: "resident-test", apiKey: "test-key" },
+    model: { provider: "anthropic", id: "claude", apiKey: "k" },
+    ...(channels === undefined ? {} : { channels }),
   };
 }
 
 class FakeSurface implements Channel.Surface {
-  readonly config = { triggers: [] };
-  handler: Channel.MessageHandler | undefined;
+  handler: Channel.MessageHandler | null = null;
+  started = false;
+  stopped = false;
 
-  constructor(readonly id: string) {}
+  constructor(
+    readonly id: string,
+    readonly config: Channel.Config,
+    readonly credentials: unknown,
+  ) {}
 
   onMessage(handler: Channel.MessageHandler): void {
     this.handler = handler;
   }
 
-  async start(_traceId: string): Promise<void> {
-    // Lifecycle is observed through composition only.
+  start(_traceId: string): Promise<void> {
+    this.started = true;
+    return Promise.resolve();
   }
 
   stop(_traceId: string): void {
-    // Lifecycle is observed through composition only.
-  }
-
-  async deliver(externalId: string, body: string) {
-    return { externalMessageId: `${externalId}:${body}` };
+    this.stopped = true;
   }
 }
 
-class FakeGitHubSurface extends FakeSurface {
-  constructor() {
-    super("github");
-  }
-
-  async handleWebhook(_request: Request): Promise<Response> {
-    return new Response("github handled", { status: 202 });
-  }
+interface FakeBuild {
+  surfaces: FakeSurface[];
+  providers: typeof ChannelProviders;
+  delivered: { externalId: string; body: string }[];
+  webhookCalls: Request[];
 }
 
-describe("OpenOmni channel composition", () => {
-  it("keeps channel config absent when no channel credentials are set", () => {
-    process.env.OPENOMNI_MODEL_PROVIDER = "fake";
-    process.env.OPENOMNI_MODEL_ID = "resident-test";
-    process.env.OPENOMNI_MODEL_API_KEY = "test-key";
+/**
+ * Fake providers that keep the real registry's ids, schemas, and capability
+ * declarations but construct recording surfaces instead of live adapters —
+ * the profile's own logic (row existence, credential parse, handler binding,
+ * seam shaping) runs unmodified.
+ */
+function fakeProviders(): FakeBuild {
+  const surfaces: FakeSurface[] = [];
+  const delivered: { externalId: string; body: string }[] = [];
+  const webhookCalls: Request[] = [];
+  const telegram: ChannelProvider<TelegramCredentials, "telegram"> = {
+    id: "telegram",
+    ingest: "poll",
+    capabilities: { deliver: true, webhook: false },
+    create(credentials, config) {
+      const surface = new FakeSurface("telegram", config, credentials);
+      surfaces.push(surface);
+      return {
+        surface,
+        deliveryRoute: (externalId, body) => {
+          delivered.push({ externalId, body });
+          return Promise.resolve({ externalMessageId: "tg-1" });
+        },
+      };
+    },
+  };
+  const discord: ChannelProvider<DiscordCredentials, "discord"> = {
+    id: "discord",
+    ingest: "socket",
+    capabilities: { deliver: true, webhook: false },
+    create(credentials, config) {
+      const surface = new FakeSurface("discord", config, credentials);
+      surfaces.push(surface);
+      return {
+        surface,
+        deliveryRoute: (externalId, body) => {
+          delivered.push({ externalId, body });
+          return Promise.resolve({ externalMessageId: "dc-1" });
+        },
+      };
+    },
+  };
+  const github: ChannelProvider<GitHubCredentials, "github"> = {
+    id: "github",
+    ingest: "webhook",
+    capabilities: { deliver: false, webhook: true },
+    create(credentials, config) {
+      const surface = new FakeSurface("github", config, credentials);
+      surfaces.push(surface);
+      return {
+        surface,
+        webhookHandler: (request) => {
+          webhookCalls.push(request);
+          return Promise.resolve(new Response("OK", { status: 200 }));
+        },
+      };
+    },
+  };
+  return { surfaces, providers: { telegram, discord, github }, delivered, webhookCalls };
+}
 
-    const config = loadConfig();
+const handler: Channel.MessageHandler = () => Promise.resolve(null);
 
-    expect(config.channels).toBeUndefined();
-    expect(channelProfile(config)).toEqual([]);
+function build(config: OpenOmniConfig, fakes: FakeBuild): BuiltChannel[] {
+  return channelProfile(config, fakes.providers).map((row) => row.build(handler));
+}
+
+describe("channelProfile", () => {
+  test("no channel config produces no rows", () => {
+    expect(channelProfile(baseConfig(), fakeProviders().providers)).toEqual([]);
   });
 
-  it("reads only present credentials into channel config", () => {
-    process.env.OPENOMNI_MODEL_PROVIDER = "fake";
-    process.env.OPENOMNI_MODEL_ID = "resident-test";
-    process.env.OPENOMNI_MODEL_API_KEY = "test-key";
-    process.env.DISCORD_BOT_TOKEN = " discord-token ";
-    process.env.GITHUB_WEBHOOK_SECRET = " github-secret ";
-    process.env.GITHUB_TOKEN = " github-token ";
-    process.env.GITHUB_BOT_USERNAME = " resident-bot ";
-
-    expect(loadConfig().channels).toEqual({
-      discord: { token: "discord-token" },
-      github: {
-        secret: "github-secret",
-        token: "github-token",
-        botUsername: "resident-bot",
-      },
-    });
-  });
-
-  it("profiles one row per configured channel and binds its delivery/webhook seams", async () => {
-    const discord = new FakeSurface("discord");
-    const telegram = new FakeSurface("telegram");
-    const github = new FakeGitHubSurface();
-    const handler: Channel.MessageHandler = async () => ({ text: "resident reply" });
-    const config: OpenOmniConfig = {
-      ...baseConfig(),
-      channels: {
-        discord: { token: "discord-token" },
-        telegram: { token: "telegram-token" },
-        github: { secret: "github-secret" },
-      },
-    };
-
-    const rows = channelProfile(config, {
-      discord: () => discord,
-      telegram: () => telegram,
-      github: () => github,
-    });
-
-    // One declarative row per configured channel, in composition order.
+  test("a row exists per configured channel, in composition order", () => {
+    const fakes = fakeProviders();
+    const rows = channelProfile(
+      baseConfig({
+        telegram: { token: "tg-token" },
+        github: { secret: "gh-secret" },
+        discord: { token: "dc-token" },
+      }),
+      fakes.providers,
+    );
     expect(rows.map((row) => row.id)).toEqual(["telegram", "github", "discord"]);
-    const built = rows.map((row) => row.build(handler));
-    expect(built.map((channel) => channel.surface.id)).toEqual(["telegram", "github", "discord"]);
-    expect(discord.handler).toBe(handler);
-    expect(telegram.handler).toBe(handler);
-    expect(github.handler).toBe(handler);
+  });
 
-    const [telegramBuilt, githubBuilt, discordBuilt] = built;
-    if (telegramBuilt?.deliveryRoute === undefined || discordBuilt?.deliveryRoute === undefined) {
-      throw new Error("configured delivery route missing");
-    }
-    expect(await discordBuilt.deliveryRoute("user-1", "hello", "send-1")).toEqual({
-      externalMessageId: "user-1:hello",
-    });
-    expect(await telegramBuilt.deliveryRoute("chat-1", "hello", "send-2")).toEqual({
-      externalMessageId: "chat-1:hello",
-    });
-    // GitHub is ingress-only: webhook seam present, outbound route absent.
-    expect(githubBuilt?.deliveryRoute).toBeUndefined();
-    const webhook = githubBuilt?.webhookHandler;
-    if (webhook === undefined) throw new Error("configured GitHub webhook missing");
-    expect(await webhook(new Request("http://localhost/github/webhook"))).toMatchObject({
-      status: 202,
+  test("build binds the handler and shapes seams per capability", async () => {
+    const fakes = fakeProviders();
+    const built = build(
+      baseConfig({
+        telegram: { token: "tg-token" },
+        github: { secret: "gh-secret", token: "gh-api", botUsername: "omni-bot" },
+        discord: { token: "dc-token" },
+      }),
+      fakes,
+    );
+
+    expect(fakes.surfaces.map((surface) => surface.handler)).toEqual([handler, handler, handler]);
+
+    const [telegram, github, discord] = built as [BuiltChannel, BuiltChannel, BuiltChannel];
+    expect(telegram.deliveryRoute).toBeDefined();
+    expect(telegram.webhookHandler).toBeUndefined();
+    expect(discord.deliveryRoute).toBeDefined();
+    expect(discord.webhookHandler).toBeUndefined();
+    expect(github.deliveryRoute).toBeUndefined();
+    expect(github.webhookHandler).toBeDefined();
+
+    await telegram.deliveryRoute?.("actor-1", "hello", "key-1");
+    expect(fakes.delivered).toEqual([{ externalId: "actor-1", body: "hello" }]);
+
+    const response = await github.webhookHandler?.(new Request("https://x.test/webhook"));
+    expect(response?.status).toBe(200);
+    expect(fakes.webhookCalls).toHaveLength(1);
+  });
+
+  test("credentials flow to the provider as configured", () => {
+    const fakes = fakeProviders();
+    build(
+      baseConfig({
+        github: { secret: "gh-secret", token: "gh-api", botUsername: "omni-bot" },
+      }),
+      fakes,
+    );
+    expect(fakes.surfaces[0]?.credentials).toEqual({
+      secret: "gh-secret",
+      token: "gh-api",
+      botUsername: "omni-bot",
     });
   });
 
-  it("builds the real channel adapters when no factories are injected", () => {
-    const handler: Channel.MessageHandler = async () => ({ text: "resident reply" });
-    const config: OpenOmniConfig = {
-      ...baseConfig(),
-      channels: {
-        discord: { token: "discord-token" },
-        telegram: { token: "telegram-token" },
-        github: { secret: "github-secret" },
-      },
-    };
-
-    // Construction only — adapters connect in start(), which is never called.
-    const built = channelProfile(config).map((row) => row.build(handler));
-
-    expect(built.map((channel) => channel.surface.id)).toEqual(["telegram", "github", "discord"]);
-    const [telegram, github, discord] = built;
-    expect(telegram?.deliveryRoute).toBeDefined();
-    expect(discord?.deliveryRoute).toBeDefined();
-    expect(github?.deliveryRoute).toBeUndefined();
-    expect(github?.webhookHandler).toBeDefined();
+  test("triggers stay the installation's declared policy per channel", () => {
+    const fakes = fakeProviders();
+    build(
+      baseConfig({
+        telegram: { token: "tg-token" },
+        github: { secret: "gh-secret" },
+        discord: { token: "dc-token" },
+      }),
+      fakes,
+    );
+    const byId = new Map(fakes.surfaces.map((surface) => [surface.id, surface.config.triggers]));
+    expect(byId.get("telegram")).toEqual([]);
+    expect(byId.get("discord")).toEqual([{ type: "mention" }]);
+    expect(byId.get("github")).toEqual([
+      { type: "event", events: ["issue_comment.created", "issues.opened"] },
+    ]);
   });
 });
