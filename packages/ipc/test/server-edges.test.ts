@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { mkdirSync, rmdirSync, statSync } from "node:fs";
 import net from "node:net";
 import { Ipc } from "@openomni/protocol";
 import { connectIpcClient } from "../src/client";
@@ -49,6 +50,17 @@ describe("server edge branches", () => {
       await expect(srv.call(method, {})).rejects.toThrow(IpcConnectionError);
     });
   }
+
+  test("refuses to unlink a non-socket path", async () => {
+    const path = socketPathForTest("directory");
+    mkdirSync(path);
+    try {
+      await expect(createIpcServer(path, () => undefined)).rejects.toBeInstanceOf(Error);
+      expect(statSync(path).isDirectory()).toBe(true);
+    } finally {
+      rmdirSync(path);
+    }
+  });
 
   test("calls in either direction that never get a response reject with IpcTimeoutError", async () => {
     const srv = await createIpcServer(socketPathForTest("timeout"), () => undefined);

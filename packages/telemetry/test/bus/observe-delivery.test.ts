@@ -48,6 +48,41 @@ describe("Bus.observe delivery (#606 audit M1)", () => {
     expect(seen).toHaveLength(2);
   });
 
+  test("observer descriptors retain their runtime parser", async () => {
+    const event = BusEvent.define("test.observe.schema", z.string());
+    const delivered = Promise.withResolvers<void>();
+    const results: boolean[] = [];
+    Bus.observe((descriptor, data) => {
+      results.push(descriptor.schema.safeParse(data).success);
+      results.push(descriptor.schema.safeParse(42).success);
+      delivered.resolve();
+    });
+
+    Bus.publish(event, "valid");
+    await withinTimeout(delivered.promise);
+
+    expect(results).toEqual([true, false]);
+  });
+
+  test("observers preserve every JavaScript primitive", async () => {
+    const event = BusEvent.define("test.observe.primitives", z.unknown());
+    const delivered = Promise.withResolvers<void>();
+    const seen: string[] = [];
+    Bus.observe((_descriptor, data) => {
+      seen.push(typeof data);
+      if (seen.length === 5) delivered.resolve();
+    });
+
+    Bus.publish(event, 1n);
+    Bus.publish(event, true);
+    Bus.publish(event, 1);
+    Bus.publish(event, Symbol.for("bus-test"));
+    Bus.publish(event, undefined);
+    await withinTimeout(delivered.promise);
+
+    expect(seen).toEqual(["bigint", "boolean", "number", "symbol", "undefined"]);
+  });
+
   test("a throwing observer never breaks delivery to the others", async () => {
     const survived: number[] = [];
     let delivered!: () => void;

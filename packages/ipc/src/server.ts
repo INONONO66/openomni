@@ -294,11 +294,6 @@ export async function createIpcServer(
         const id = connectionIdOf(socket);
         if (id !== undefined) removeConnection(id, "socket closed");
       },
-      error(socket: BunSocket, _err: Error) {
-        // The connection may error before `open` assigned socket.data.
-        const id = connectionIdOf(socket);
-        if (id !== undefined) removeConnection(id, "socket error");
-      },
     },
   });
 

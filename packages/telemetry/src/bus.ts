@@ -1,12 +1,42 @@
 import type { BusEvent } from "@openomni/protocol";
 import { AsyncLocalStorage } from "node:async_hooks";
 
-type Handler = (data: unknown) => void;
-type Observer = (event: Bus.PublishedDescriptor, data: unknown) => void;
+type BusData =
+  | bigint
+  | boolean
+  | null
+  | number
+  | object
+  | string
+  | symbol
+  | undefined;
+
+type ParseResult<T> = { readonly data: T; readonly success: true } | { readonly success: false };
+
+type Handler = <T>(event: BusEvent.Descriptor<T>, data: T) => void;
+type Observer = (event: Bus.PublishedDescriptor, data: BusData) => void;
+
+function toBusData<T>(value: T): BusData {
+  if (value === null) return null;
+  if (typeof value === "object" || typeof value === "function") return value;
+  if (typeof value === "bigint") return value;
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value;
+  if (typeof value === "string") return value;
+  if (typeof value === "symbol") return value;
+  return undefined;
+}
+
+function isEventData<T, U>(
+  expected: BusEvent.Descriptor<T>,
+  published: BusEvent.Descriptor<U>,
+  _data: U,
+): _data is U & T {
+  return expected.name === published.name;
+}
 
 interface Subscription {
   handler: Handler;
-  match?: Record<string, unknown>;
 }
 
 type BusState = {
@@ -26,9 +56,11 @@ function currentState(): BusState {
 }
 
 export namespace Bus {
+  export type Data = BusData;
+
   export interface PublishedDescriptor {
     readonly name: string;
-    readonly schema: unknown;
+    readonly schema: { readonly safeParse: (value: BusData) => ParseResult<BusData> };
     readonly visibility?: BusEvent.Visibility;
   }
 
@@ -36,11 +68,24 @@ export namespace Bus {
     const state = currentState();
     const subs = state.subscribers.get(event.name);
     if (state.observers.size > 0) {
+      const publishedEvent: PublishedDescriptor = {
+        name: event.name,
+        schema: {
+          safeParse: (value) => {
+            const parsed = event.schema.safeParse(value);
+            return parsed.success
+              ? { success: true, data: toBusData(parsed.data) }
+              : { success: false };
+          },
+        },
+        ...(event.visibility === undefined ? {} : { visibility: event.visibility }),
+      };
+      const publishedData = toBusData(data);
       const observerSnapshot = [...state.observers];
       for (const observer of observerSnapshot) {
         queueMicrotask(() => {
           try {
-            observer(event, data);
+            observer(publishedEvent, publishedData);
           } catch (err) {
             console.warn("Bus observer error", { event: event.name, error: String(err) });
           }
@@ -55,8 +100,7 @@ export namespace Bus {
     for (const sub of snapshot) {
       queueMicrotask(() => {
         try {
-          if (sub.match && !matches(data, sub.match)) return;
-          sub.handler(data);
+          sub.handler(event, data);
         } catch (err) {
           console.warn("Bus handler error", { event: event.name, error: String(err) });
         }
@@ -76,8 +120,11 @@ export namespace Bus {
       state.subscribers.set(event.name, subs);
     }
     const subscription: Subscription = {
-      handler: handler as Handler,
-      match: options?.match as Record<string, unknown> | undefined,
+      handler: (publishedEvent, data) => {
+        if (!isEventData(event, publishedEvent, data)) return;
+        if (options?.match && !matches(data, options.match)) return;
+        handler(data);
+      },
     };
     subs.add(subscription);
     const captured = subs;
@@ -127,11 +174,11 @@ export namespace Bus {
     return busScope.run(createState(), operation);
   }
 
-  function matches(data: unknown, match: Record<string, unknown>): boolean {
+  function matches<T>(data: T, match: Partial<T>): boolean {
     if (data === null || typeof data !== "object") return false;
-    const obj = data as Record<string, unknown>;
-    for (const [key, expected] of Object.entries(match)) {
-      if (obj[key] !== expected) return false;
+    if (match === null || typeof match !== "object") return true;
+    for (const key of Object.keys(match)) {
+      if (Reflect.get(data, key) !== Reflect.get(match, key)) return false;
     }
     return true;
   }
