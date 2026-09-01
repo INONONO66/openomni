@@ -41,6 +41,8 @@ function frameEvidenceOnlyText(text: string, origin: string): string {
 interface ResidentOptions {
   readonly model: Model.Ref;
   readonly apiKey: string;
+  /** Operator-configured provider endpoint and headers; absent uses the catalog's. */
+  readonly transport?: ChatAgentConfig["transport"];
   readonly llm?: ChatAgentConfig["llm"];
   /**
    * What this Resident can reach. An unwired port means the matching tool is
@@ -242,6 +244,7 @@ export function createResident(options: ResidentOptions) {
       middleware: options.policies.middlewareFor({ events: observation.events }),
       model: options.model,
       auth: { type: "api", key: options.apiKey },
+      ...(options.transport === undefined ? {} : { transport: options.transport }),
       ...(options.llm === undefined ? {} : { llm: options.llm }),
     });
 

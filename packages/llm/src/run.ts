@@ -7,7 +7,7 @@ import { Processor } from "./processor";
 import { toModelMessages } from "./message";
 import type { Provider } from "./provider";
 import { ProviderTransform } from "./provider/transform";
-import { getLanguage } from "./provider/sdk";
+import { getLanguage, type Transport } from "./provider/sdk";
 import { Auth } from "./auth/storage";
 import { coerceApiError, NamedError } from "./error";
 import { Retry } from "./retry";
@@ -25,6 +25,13 @@ export interface RunInput {
   signal?: AbortSignal;
   model: Provider.Model;
   auth?: Auth.Info;
+  /**
+   * Operator-supplied endpoint and headers for this call. Resolved by the
+   * host from its own config surface and handed down like `auth`, so this
+   * package reads no environment of its own. Absent keeps the catalog's URL
+   * and the default client identity.
+   */
+  transport?: Transport;
   allowAuthFallback?: boolean;
   toolExecutor?: (call: Tool.Call, context?: Tool.ExecutionContext) => Promise<Tool.Result>;
   toolChoice?: "auto" | "required" | "none";
@@ -213,7 +220,7 @@ export async function run(
       );
     }
 
-    const languageModel = getLanguage(model, auth);
+    const languageModel = getLanguage(model, auth, input.transport);
 
     const normalizedMessages = toModelMessages(messages, model);
 

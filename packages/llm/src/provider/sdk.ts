@@ -11,6 +11,21 @@ type SdkOptions = {
   headers?: Record<string, string>;
   [key: string]: unknown;
 };
+/**
+ * Operator-supplied transport config for one provider call. The package stays
+ * env-free: the host resolves these values (from its own config surface) and
+ * hands them down, exactly as it already hands down `Auth.Info`.
+ */
+export interface Transport {
+  /**
+   * Replaces the catalog's provider URL. Proxy auth still outranks it: a
+   * credential minted for a proxy must not be redirected elsewhere.
+   */
+  readonly baseUrl?: string;
+  /** Merged over the client identity default, so an operator value wins. */
+  readonly headers?: Record<string, string>;
+}
+
 type BundledProviderSDK = AnthropicProvider | OpenAIProvider;
 type ProviderSDK = BundledProviderSDK;
 
@@ -78,8 +93,26 @@ function authFingerprint(auth: Auth.Info): string {
   return new Bun.CryptoHasher("sha256").update(JSON.stringify(auth)).digest("hex");
 }
 
-export function getSDK(model: Provider.Model, auth: Auth.Info): ProviderSDK {
-  const cacheKey = `${model.providerID}:${model.api?.npm ?? ""}:${model.api?.url ?? ""}:${authFingerprint(auth)}`;
+/**
+ * Transport config participates in the cache key: two callers whose only
+ * difference is a tenant header must not share one SDK instance.
+ */
+function transportFingerprint(transport: Transport | undefined): string {
+  if (transport === undefined) return "";
+  const headers = transport.headers;
+  const canonicalHeaders =
+    headers === undefined
+      ? ""
+      : JSON.stringify(Object.entries(headers).sort(([a], [b]) => (a < b ? -1 : 1)));
+  return `${transport.baseUrl ?? ""}|${canonicalHeaders}`;
+}
+
+export function getSDK(
+  model: Provider.Model,
+  auth: Auth.Info,
+  transport?: Transport,
+): ProviderSDK {
+  const cacheKey = `${model.providerID}:${model.api?.npm ?? ""}:${model.api?.url ?? ""}:${authFingerprint(auth)}:${transportFingerprint(transport)}`;
   const cached = getCached(SDK_CACHE, cacheKey);
   if (cached) return cached;
 
@@ -99,6 +132,7 @@ export function getSDK(model: Provider.Model, auth: Auth.Info): ProviderSDK {
     headers: {
       "user-agent": clientIdentity(),
       ...(customOptions.headers as Record<string, string> | undefined),
+      ...transport?.headers,
     },
   };
   // Honored for every provider, openai included: the old `!== "openai"` gate
@@ -107,6 +141,12 @@ export function getSDK(model: Provider.Model, auth: Auth.Info): ProviderSDK {
   // there, so setting it is identity. Proxy auth still overrides below.
   if (model.api?.url) {
     sdkOptions.baseURL = model.api.url;
+    sdkOptions.name = providerID;
+  }
+  // The operator's endpoint outranks the catalog's, and proxy auth outranks
+  // both (below): a proxied credential is minted for one endpoint.
+  if (transport?.baseUrl) {
+    sdkOptions.baseURL = transport.baseUrl;
     sdkOptions.name = providerID;
   }
 
@@ -137,13 +177,17 @@ export function getSDK(model: Provider.Model, auth: Auth.Info): ProviderSDK {
   return sdk;
 }
 
-export function getLanguage(model: Provider.Model, auth: Auth.Info): ResolvedLanguageModel {
+export function getLanguage(
+  model: Provider.Model,
+  auth: Auth.Info,
+  transport?: Transport,
+): ResolvedLanguageModel {
   const modelID = model.api?.id ?? model.id;
-  const cacheKey = `${model.providerID}:${model.api?.npm ?? ""}:${model.api?.url ?? ""}:${modelID}:${authFingerprint(auth)}`;
+  const cacheKey = `${model.providerID}:${model.api?.npm ?? ""}:${model.api?.url ?? ""}:${modelID}:${authFingerprint(auth)}:${transportFingerprint(transport)}`;
   const cached = getCached(LANGUAGE_CACHE, cacheKey);
   if (cached) return cached;
 
-  const sdk = getSDK(model, auth);
+  const sdk = getSDK(model, auth, transport);
   const providerID = model.providerID;
   const customLoader = CUSTOM_LOADERS.get(providerID);
   const custom = customLoader ? customLoader() : undefined;

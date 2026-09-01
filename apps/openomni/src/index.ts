@@ -30,7 +30,13 @@ import {
 } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { type BuiltChannel, channelProfile } from "./channels";
-import { assertWsExposure, loadConfig, type OpenOmniConfig, type RegisteredActor } from "./config";
+import {
+  assertWsExposure,
+  loadConfig,
+  modelTransport,
+  type OpenOmniConfig,
+  type RegisteredActor,
+} from "./config";
 import type { ArtifactsPort } from "./tools/artifacts";
 import { createLlmToolPort } from "./tools/llm";
 import type { MachinesPort } from "./tools/machines";
@@ -237,6 +243,9 @@ function delegationWakeDelivery(wake: DelegationWake): Gateway.Deliver {
 export async function startOpenOmni(options: StartOptions = {}) {
   const config = options.config ?? loadConfig();
   assertWsExposure(config);
+  // One resolution of the operator's endpoint and headers, shared by every
+  // model caller this composition builds.
+  const transport = modelTransport(config.model);
   // Every stage whose teardown matters is mounted on the composer: boot
   // rollback and shutdown are the same reverse-order release, owned by the
   // stage that acquired the thing rather than restated by hand in two places.
@@ -270,6 +279,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
     const runner = createInlineWorkerRunner({
       model: config.model,
       apiKey: config.model.apiKey,
+      ...(transport === undefined ? {} : { transport }),
       kernel: () => {
         if (kernel === undefined)
           throw new Error("delegation kernel used before composition finished");
@@ -307,6 +317,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
             worker: {
               model: { provider: config.model.provider, id: config.model.id },
               apiKey: config.model.apiKey,
+              ...(transport === undefined ? {} : { transport }),
             },
             dbPath: config.dbPath,
           }),
@@ -403,7 +414,10 @@ export async function startOpenOmni(options: StartOptions = {}) {
       writer: completionWriter,
       now: () => Date.now(),
     });
-    const llmPort = createLlmToolPort(config.model, options.llm ?? {});
+    const llmPort = createLlmToolPort(
+      { ...config.model, ...(transport === undefined ? {} : { transport }) },
+      options.llm ?? {},
+    );
     const artifactsPort: ArtifactsPort = { store: Artifact.store, get: Artifact.get };
     const cells: CellPorts | undefined =
       machineHost === undefined
@@ -449,6 +463,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
     residentDeliver = createResident({
       model: config.model,
       apiKey: config.model.apiKey,
+      ...(transport === undefined ? {} : { transport }),
       policies: policyRegistry,
       tools: {
         delegation: delegationKernel,

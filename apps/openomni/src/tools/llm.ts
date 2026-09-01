@@ -1,4 +1,4 @@
-import { ModelsDev, Provider, run as llmRun, type Sink } from "@openomni/llm";
+import { ModelsDev, Provider, run as llmRun, type RunInput, type Sink } from "@openomni/llm";
 import { type Message, type Model, newTraceId, type Tool } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { z } from "zod";
@@ -97,7 +97,13 @@ export interface LlmIo {
  * and the worker loop authenticate.
  */
 export function createLlmToolPort(
-  model: { readonly provider: string; readonly id: string; readonly apiKey: string },
+  model: {
+    readonly provider: string;
+    readonly id: string;
+    readonly apiKey: string;
+    /** Operator transport config, resolved by the host (`modelTransport`). */
+    readonly transport?: RunInput["transport"];
+  },
   io: LlmIo = {},
 ): LlmPort {
   return async (prompt) => {
@@ -146,6 +152,7 @@ export function createLlmToolPort(
         maxSteps: 1,
         model: resolved,
         auth: { type: "api", key: model.apiKey },
+        ...(model.transport === undefined ? {} : { transport: model.transport }),
         trace: {
           traceId: newTraceId(),
           sessionId,

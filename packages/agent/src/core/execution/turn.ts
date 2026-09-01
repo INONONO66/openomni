@@ -337,6 +337,7 @@ export async function buildTurn(
         signal: config.signal,
         model: providerModel,
         auth: config.auth,
+        ...(config.transport === undefined ? {} : { transport: config.transport }),
         allowAuthFallback: config.allowAuthFallback,
         toolExecutor: hookedExecutor,
         toolChoice: configuredToolChoice,

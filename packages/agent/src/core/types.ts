@@ -48,6 +48,12 @@ export interface ChatAgentConfig {
   signal?: AbortSignal;
   providerOptions?: Record<string, unknown>;
   auth?: RunInput["auth"];
+  /**
+   * Operator-supplied provider endpoint and headers, resolved by the host and
+   * forwarded verbatim to every llm call this run makes. The loop never reads
+   * it — it only carries it, the same way it carries `auth`.
+   */
+  transport?: RunInput["transport"];
   allowAuthFallback?: RunInput["allowAuthFallback"];
   toolChoice?: "auto" | "required" | "none";
   /**
