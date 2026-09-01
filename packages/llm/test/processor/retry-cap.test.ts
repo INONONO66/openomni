@@ -203,10 +203,9 @@ describe("Processor instant transport-failure streak", () => {
       // attempts, and the two waits between them are probe delays, not the
       // 2s/4s exponential ladder.
       expect(attemptCount).toBe(3);
-      expect(sleep.mock.calls.map(([delay]) => delay)).toEqual([
-        Retry.INSTANT_FAILURE_PROBE_DELAY_MS,
-        Retry.INSTANT_FAILURE_PROBE_DELAY_MS,
-      ]);
+      // 250ms is the externally required short-probe contract. Keep the
+      // expectation independent of the production constant so drift is loud.
+      expect(sleep.mock.calls.map(([delay]) => delay)).toEqual([250, 250]);
 
       // Each decided delay is also published as `backoffMs` on RetryDecided
       // (src/processor/index.ts:308-317), pinning the externally visible
@@ -214,10 +213,7 @@ describe("Processor instant transport-failure streak", () => {
       const decided = events
         .named(LlmCall.Events.RetryDecided.name)
         .map((event) => (event as { backoffMs?: number }).backoffMs);
-      expect(decided).toEqual([
-        Retry.INSTANT_FAILURE_PROBE_DELAY_MS,
-        Retry.INSTANT_FAILURE_PROBE_DELAY_MS,
-      ]);
+      expect(decided).toEqual([250, 250]);
 
       // A retryable error declined for a non-"non_retryable" reason must say
       // why, through the port.
