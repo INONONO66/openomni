@@ -3,7 +3,7 @@ import { Operational } from "@openomni/protocol";
 import { sleep } from "../../support/fetch-retry";
 import type { PublishPort } from "../../types";
 import type { TelegramClient } from "./client";
-import type { TelegramMessage, TelegramUpdate } from "./types";
+import type { TelegramMessage } from "./types";
 
 export interface PollerCallbacks {
   onMessage: (message: TelegramMessage) => void | Promise<void>;
@@ -32,11 +32,11 @@ export class TelegramPoller {
 
   async pollOnce(pollTraceId: string): Promise<void> {
     this.pollController = new AbortController();
-    const updates = (await this.client.getUpdates(
+    const updates = await this.client.getUpdates(
       this.offset,
       pollTraceId,
       this.pollController.signal,
-    )) as TelegramUpdate[];
+    );
 
     // Telegram returns updates in update_id order. Process the batch in that
     // order and stop at the first failed handoff, leaving it and every later

@@ -84,15 +84,21 @@ describe("Run.Outcome vs the run.lifecycle.post policy input schema", () => {
   });
 
   test("the policy validator is isolated from mutation of the shared canonical schema", () => {
-    const optionsMap = Reflect.get(Run.Outcome, "optionsMap");
-    if (!(optionsMap instanceof Map)) throw new Error("Missing run outcome options map");
-    const stopOption = optionsMap.get("stop");
-    expect(Reflect.apply(Map.prototype.delete, optionsMap, ["stop"])).toBe(true);
+    // Zod 4 keeps discriminated-union members on the internal def; removing the
+    // "stop" arm from the canonical schema must not reach the policy validator.
+    const internals = Reflect.get(Run.Outcome, "_zod") as {
+      def: { options: Array<{ _zod: { def: { shape: { type: { value?: unknown } } } } }> };
+    };
+    const options = internals.def.options;
+    const stopIndex = options.findIndex((option) => option._zod.def.shape.type.value === "stop");
+    expect(stopIndex).toBeGreaterThanOrEqual(0);
+    const [removed] = options.splice(stopIndex, 1);
+    expect(removed).toBeDefined();
     let validStopAccepted = false;
     try {
       validStopAccepted = policy.safeParse(embed({ type: "stop" })).success;
     } finally {
-      Reflect.apply(Map.prototype.set, optionsMap, ["stop", stopOption]);
+      options.splice(stopIndex, 0, removed as (typeof options)[number]);
     }
     expect(validStopAccepted).toBe(true);
   });

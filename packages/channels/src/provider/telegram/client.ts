@@ -1,7 +1,20 @@
 import { Operational } from "@openomni/protocol";
+import { z } from "zod";
 import { fetchWithRetry } from "../../support/fetch-retry";
 import type { ChannelClient, PublishPort } from "../../types";
-import type { TelegramResponse, TelegramUser } from "./types";
+import { type TelegramUpdate, type TelegramUser, TelegramUpdateSchema, TelegramUserSchema } from "./types";
+
+/** Telegram error envelope carries the flood-wait hint the retry helper reads. */
+const RetryAfterSchema = z.object({
+  parameters: z.object({ retry_after: z.number().optional() }).optional(),
+});
+
+const EnvelopeSchema = z.object({ ok: z.boolean(), description: z.string().optional() });
+
+/** `sendMessage` result — Telegram sends a numeric id; absence means no id to report. */
+const SentMessageSchema = z.object({
+  message_id: z.union([z.number(), z.string()]).optional(),
+});
 
 export class TelegramClient implements ChannelClient {
   private readonly baseUrl: string;
@@ -22,7 +35,11 @@ export class TelegramClient implements ChannelClient {
    * a parse rejection must never lose the message, so Telegram's entity-parse
    * refusal downgrades this one send to plain text (recorded as a warning).
    */
-  async sendMarkdown(channelId: string, text: string, traceId: string): Promise<string | undefined> {
+  async sendMarkdown(
+    channelId: string,
+    text: string,
+    traceId: string,
+  ): Promise<string | undefined> {
     try {
       return await this.sendMessage(channelId, text, traceId, "MarkdownV2");
     } catch (error) {
@@ -44,18 +61,19 @@ export class TelegramClient implements ChannelClient {
     traceId: string,
     parseMode?: string,
   ): Promise<string | undefined> {
-    const message = await this.api<{ message_id?: unknown }>("sendMessage", traceId, {
+    const message = await this.api("sendMessage", traceId, SentMessageSchema, {
       chat_id: channelId,
       text,
       ...(parseMode === undefined ? {} : { parse_mode: parseMode }),
     });
-    return typeof message.message_id === "number" || typeof message.message_id === "string"
-      ? String(message.message_id)
-      : undefined;
+    return message.message_id === undefined ? undefined : String(message.message_id);
   }
 
   async sendTyping(channelId: string, traceId: string): Promise<void> {
-    await this.api("sendChatAction", traceId, { chat_id: channelId, action: "typing" }).catch((e) =>
+    await this.api("sendChatAction", traceId, z.boolean(), {
+      chat_id: channelId,
+      action: "typing",
+    }).catch((e) =>
       this.publish(Operational.Events.Warn, {
         traceId,
         time: Date.now(),
@@ -67,17 +85,18 @@ export class TelegramClient implements ChannelClient {
   }
 
   async getMe(traceId: string): Promise<TelegramUser> {
-    return this.api<TelegramUser>("getMe", traceId);
+    return this.api("getMe", traceId, TelegramUserSchema);
   }
 
   async getUpdates(
     offset: number,
     traceId: string,
     signal?: AbortSignal,
-  ): Promise<Array<{ update_id: number; message?: unknown }>> {
-    return this.api<Array<{ update_id: number; message?: unknown }>>(
+  ): Promise<TelegramUpdate[]> {
+    return this.api(
       "getUpdates",
       traceId,
+      z.array(TelegramUpdateSchema),
       { offset, timeout: 30, allowed_updates: ["message"] },
       signal,
     );
@@ -86,7 +105,8 @@ export class TelegramClient implements ChannelClient {
   private async api<T>(
     method: string,
     traceId: string,
-    params?: Record<string, unknown>,
+    schema: z.ZodType<T>,
+    params?: Record<string, string | number | string[]>,
     signal?: AbortSignal,
   ): Promise<T> {
     const url = `${this.baseUrl}/${method}`;
@@ -102,8 +122,8 @@ export class TelegramClient implements ChannelClient {
         traceId,
         publish: this.publish,
         parseRetryAfter: (body) => {
-          const r = body as { parameters?: { retry_after?: number } };
-          return r.parameters?.retry_after ?? 5;
+          const hint = RetryAfterSchema.safeParse(body);
+          return (hint.success ? hint.data.parameters?.retry_after : undefined) ?? 5;
         },
         label: `telegram/${method}`,
       },
@@ -114,11 +134,18 @@ export class TelegramClient implements ChannelClient {
       throw new Error(`Telegram API ${method} failed (${response.status}): ${body}`);
     }
 
-    const body = (await response.json()) as TelegramResponse<T>;
-    if (!body.ok) {
-      throw new Error(`Telegram API ${method}: ${body.description ?? "Unknown error"}`);
+    const raw = (await response.json()) as object;
+    const envelope = EnvelopeSchema.safeParse(raw);
+    if (!envelope.success) {
+      throw new Error(`Telegram API ${method} returned a malformed envelope`);
     }
-
-    return body.result;
+    if (!envelope.data.ok) {
+      throw new Error(`Telegram API ${method}: ${envelope.data.description ?? "Unknown error"}`);
+    }
+    const result = schema.safeParse(Reflect.get(raw, "result"));
+    if (!result.success) {
+      throw new Error(`Telegram API ${method} returned a malformed result`);
+    }
+    return result.data;
   }
 }

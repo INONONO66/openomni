@@ -137,7 +137,7 @@ export type ToolCall = z.infer<typeof ToolCall>;
  * so — the host's tool port owns that judgment, not this contract.
  */
 export const ToolCallResult = z.discriminatedUnion("status", [
-  z.object({ status: z.literal("completed"), value: z.unknown() }).strict(),
+  z.object({ status: z.literal("completed"), value: z.unknown().optional() }).strict(),
   z.object({ status: z.literal("failed"), error: z.string().min(1) }).strict(),
 ]);
 export type ToolCallResult = z.infer<typeof ToolCallResult>;

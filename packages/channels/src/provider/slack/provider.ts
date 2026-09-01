@@ -29,7 +29,7 @@ export const SlackProvider: ChannelProvider<SlackCredentials, "slack"> = {
       appToken: z.string().startsWith("xapp-"),
     })
     .strict(),
-  settings: z.record(z.never()),
+  settings: z.record(z.string(), z.never()),
   preconditions: [
     "Socket Mode enabled with an app-level token granted connections:write",
     "event subscriptions: message.channels and message.im",

@@ -20,12 +20,9 @@ export function vaultKeyPath(home: string): string {
 }
 
 function kekFromBase64(encoded: string, source: string): KekResolution {
-  let bytes: Uint8Array;
-  try {
-    bytes = new Uint8Array(Buffer.from(encoded, "base64"));
-  } catch (error) {
-    return { kind: "locked", reason: `${source}: not valid base64 (${String(error)})` };
-  }
+  // Buffer.from(_, "base64") never throws — bad characters shrink the output,
+  // and a wrong-length result is exactly what kekOf refuses below.
+  const bytes = new Uint8Array(Buffer.from(encoded, "base64"));
   try {
     return { kind: "ok", kek: Vault.kekOf(bytes) };
   } catch (error) {

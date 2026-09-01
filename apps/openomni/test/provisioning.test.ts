@@ -13,7 +13,7 @@ import {
   Vault,
 } from "@openomni/ledger";
 import type { Provisioning } from "@openomni/protocol";
-import { declaredChannelProfile } from "../src/channels";
+import { declaredChannelProfile, validateProviderCredential } from "../src/channels";
 import type { OpenOmniConfig } from "../src/config";
 import { desiredChannels, materializePersons, vaultCredentialReader } from "../src/provisioning/declared";
 import { runProvisioningInit } from "../src/provisioning/init";
@@ -318,6 +318,7 @@ describe("openomni init (§6)", () => {
         dbPath,
         channels: {
           telegram: { token: "tg-plain" },
+          discord: { token: "dc-plain" },
           github: { secret: "gh-webhook-secret", token: "gh-token" },
         },
       }),
@@ -340,14 +341,18 @@ describe("openomni init (§6)", () => {
   test("mints the key file, seals env credentials, and declares instances", async () => {
     const lines = runInit();
     expect(lines[0]).toContain("minted vault key file");
-    expect(lines).toHaveLength(3);
+    expect(lines).toHaveLength(4);
     expect(existsSync(vaultKeyPath(home))).toBe(true);
 
     const kekResolution = resolveKek({}, home);
     if (kekResolution.kind !== "ok") throw new Error("expected the minted key to resolve");
     withStore(() => {
       const declared = ChannelInstanceStore.list().map((row) => row.id);
-      expect(declared.sort()).toEqual(["channel:github:main", "channel:telegram:main"]);
+      expect(declared.sort()).toEqual([
+        "channel:discord:main",
+        "channel:github:main",
+        "channel:telegram:main",
+      ]);
       const secret = SecretStore.get("secret:channel-telegram-main");
       if (secret === undefined) throw new Error("expected a sealed telegram credential");
       expect(Vault.open(secret, kekResolution.kek).revealText()).toBe('{"token":"tg-plain"}');
@@ -360,9 +365,9 @@ describe("openomni init (§6)", () => {
   test("re-running init leaves existing declarations untouched", () => {
     runInit();
     const second = runInit();
-    expect(second.filter((line) => line.includes("left untouched"))).toHaveLength(2);
+    expect(second.filter((line) => line.includes("left untouched"))).toHaveLength(3);
     withStore(() => {
-      expect(SecretStore.list()).toHaveLength(2);
+      expect(SecretStore.list()).toHaveLength(3);
     });
   });
 
@@ -385,5 +390,59 @@ describe("openomni init (§6)", () => {
         now: () => NOW,
       }),
     ).toThrow(/vault is locked/);
+  });
+});
+
+describe("provider credential gate", () => {
+  test("an unregistered provider is refused before any schema runs", () => {
+    expect(validateProviderCredential("smoke", { token: "t" })).toBe("unknown provider smoke");
+  });
+});
+
+describe("github declared row", () => {
+  test("a github declaration mounts through the provider credential schema", () => {
+    const { rows, statuses } = declaredChannelProfile(
+      [
+        {
+          id: "channel:github:main",
+          provider: "github",
+          enabled: true,
+          settings: {},
+          credentialRef: "secret:channel-github-main",
+          revision: 0,
+          createdBy: "test",
+          updatedAt: 1,
+        },
+      ],
+      () => ({
+        kind: "ok",
+        plaintext: new TextEncoder().encode('{"secret":"hook-secret"}'),
+      }),
+    );
+    expect(statuses).toEqual([{ id: "channel:github:main", provider: "github", state: "ready" }]);
+    expect(rows[0]?.component.id).toBe("github");
+  });
+
+  test("a slack declaration mounts through the provider credential schema", () => {
+    const { rows, statuses } = declaredChannelProfile(
+      [
+        {
+          id: "channel:slack:main",
+          provider: "slack",
+          enabled: true,
+          settings: {},
+          credentialRef: "secret:channel-slack-main",
+          revision: 0,
+          createdBy: "test",
+          updatedAt: 1,
+        },
+      ],
+      () => ({
+        kind: "ok",
+        plaintext: new TextEncoder().encode('{"botToken":"xoxb-1","appToken":"xapp-1"}'),
+      }),
+    );
+    expect(statuses).toEqual([{ id: "channel:slack:main", provider: "slack", state: "ready" }]);
+    expect(rows[0]?.component.id).toBe("slack");
   });
 });

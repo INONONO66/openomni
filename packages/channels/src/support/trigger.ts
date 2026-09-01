@@ -55,6 +55,25 @@ function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/**
+ * Shared mention-aware normalization for chat surfaces: strip the bot
+ * mention when the message addressed the bot in a shared channel, then apply
+ * trigger normalization. Null when nothing remains — a bare mention carries
+ * no content to handle.
+ */
+export function strippedMentionContent(
+  text: string,
+  mentionPattern: RegExp,
+  stripMention: boolean,
+  rules: Channel.TriggerRule[],
+): string | null {
+  const content = normalizeContent(
+    stripMention ? text.replace(mentionPattern, "").trim() : text,
+    rules,
+  );
+  return content ? content : null;
+}
+
 export function normalizeContent(
   text: string,
   rules: Channel.TriggerRule[],

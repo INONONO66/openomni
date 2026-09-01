@@ -20,7 +20,7 @@ import { WorkItem } from "../../src/work-item/index.js";
 
 const T0 = 1_700_000_000_000;
 
-function issues(result: z.SafeParseReturnType<unknown, unknown>) {
+function issues(result: z.ZodSafeParseResult<unknown>) {
   if (result.success) throw new Error("expected a parse failure, but parsing succeeded");
   return result.error.issues.map((issue) => ({
     path: issue.path.join("."),
