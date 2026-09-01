@@ -255,6 +255,11 @@ export namespace LeaseStore {
         return;
       }
       const debited = leaseOutcome.record;
+      // Two sequential commit units (lease, then conversation) replace the
+      // pre-coordinator interleaved order (append both, then project both).
+      // The refusal contract is unchanged: a stale head on EITHER stream
+      // throws revisionConflict, and the enclosing transaction rolls back
+      // both units, so nothing commits unless both commit.
       const leaseCommitted = commitFact(
         ledger,
         {
