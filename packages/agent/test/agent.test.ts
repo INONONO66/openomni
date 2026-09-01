@@ -396,6 +396,14 @@ it("records an unknown named outcome as a terminal failure", async () => {
   ).rejects.toThrow("Unknown outcome type: unexpected");
 });
 
+it("records a primitive outcome as a terminal failure", async () => {
+  mockRunFn = async () => 0 as never;
+
+  await expect(
+    createAgent().run(runInput([{ role: "user", content: "primitive outcome" }])),
+  ).rejects.toThrow("Unknown outcome type: unknown");
+});
+
 it("fails with a terminal record when the default provider is missing", async () => {
   process.env.OPENOMNI_DISABLE_MODELS_FETCH = "1";
   try {

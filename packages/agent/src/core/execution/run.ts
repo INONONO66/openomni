@@ -357,6 +357,10 @@ async function handleModelOutcome(
 }
 
 function assertKnownOutcome(value: never): never {
+  // Handle primitives (like injected llm.run returning 0) by inspecting as unknown
+  if (typeof value !== "object" || value === null) {
+    throw new Error(`Unknown outcome type: unknown`);
+  }
   const type = Reflect.get(value as object, "type");
   throw new Error(`Unknown outcome type: ${typeof type === "string" ? type : "unknown"}`);
 }
