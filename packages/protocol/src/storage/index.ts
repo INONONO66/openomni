@@ -11,7 +11,6 @@ import type { Lease } from "../lease/index.js";
 import type { Wait } from "../wait/index.js";
 import type { WorkItem } from "../work-item/index.js";
 import type { Gateway } from "../gateway/index.js";
-import type { CronJob } from "../cron/index.js";
 
 export namespace Storage {
   export interface ActorRegistrySubAdapter {
@@ -88,14 +87,6 @@ export namespace Storage {
      * through {@link headFact} on the owner stream.
      */
     factsByType(type: string): Ledger.RecordedFact[];
-    /**
-     * Boot chain tail verification (#510 D1): walks the newest events of
-     * every stream and RETURNS chain-break facts — it never throws on a
-     * broken chain and never refuses boot. Recording the breaks (Operational
-     * event, Governor incident later) is the boot caller's job. Full-chain
-     * verification stays the #226 offline restore drill.
-     */
-    verifyTail(): Ledger.ChainBreak[];
   }
 
   export interface WorkItemListFilter {
@@ -241,10 +232,4 @@ export namespace Storage {
     ): "claimed" | "refused";
   }
 
-  export interface CronJobSubAdapter {
-    get(id: string): CronJob.Info | undefined;
-    set(job: CronJob.Info): void;
-    list(): CronJob.Info[];
-    remove(id: string): boolean;
-  }
 }

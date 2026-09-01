@@ -6,7 +6,6 @@ import { createSqliteAppConnectorInstallationAdapter } from "./sqlite-app-connec
 import { createSqliteBlacklistAdapter } from "./sqlite-blacklist-adapter";
 import { createSqliteChannelGrantAdapter } from "./sqlite-channel-grant-adapter";
 import { createSqliteArtifactAdapter } from "./sqlite-artifact-adapter";
-import { createSqliteCronJobAdapter } from "./sqlite-cron-job-adapter";
 import { createSqliteEgressBudgetAdapter } from "./sqlite-egress-budget-adapter";
 import { createSqliteDelegationAdapter } from "./sqlite-delegation-adapter";
 import { createSqliteMessageAdapter } from "./sqlite-message-adapter";
@@ -58,7 +57,6 @@ export class SqliteStorageAdapter implements Storage.Adapter {
   readonly engagement: NonNullable<Storage.Adapter["engagement"]>;
   readonly delegation: NonNullable<Storage.Adapter["delegation"]>;
   readonly ledger: NonNullable<Storage.Adapter["ledger"]>;
-  readonly cronJob: NonNullable<Storage.Adapter["cronJob"]>;
   readonly egressBudget: NonNullable<Storage.Adapter["egressBudget"]>;
   readonly actorRegistry: NonNullable<Storage.Adapter["actorRegistry"]>;
   readonly blacklist: NonNullable<Storage.Adapter["blacklist"]>;
@@ -112,9 +110,7 @@ export class SqliteStorageAdapter implements Storage.Adapter {
         Ledger.adoptStream(this.db, streamId, headRevision, genesis),
       headFact: (streamId) => Ledger.headFact(this.db, streamId),
       factsByType: (type) => Ledger.factsByType(this.db, type),
-      verifyTail: () => Ledger.verifyTail(this.db),
     };
-    this.cronJob = createSqliteCronJobAdapter(this.db);
     this.egressBudget = createSqliteEgressBudgetAdapter(this.db);
     this.actorRegistry = createSqliteActorRegistryAdapter(this.db);
     this.blacklist = createSqliteBlacklistAdapter(this.db);

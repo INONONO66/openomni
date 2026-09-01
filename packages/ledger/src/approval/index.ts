@@ -1,6 +1,6 @@
 import { Approval, type Storage as ProtocolStorage } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
-import { isSqliteBusyError } from "../storage/sqlite-busy";
+import { commitFact, runCommitTransaction } from "../storage/commit-coordinator";
 import { Storage } from "../storage/storage";
 
 // Durable Approval writes fail closed: a missing sub-adapter is a typed
@@ -53,20 +53,18 @@ function revisionConflict(
   });
 }
 
-/** SQLITE_BUSY at the transaction entry means nothing committed — typed `unavailable`. */
+/** SQLITE_BUSY means nothing committed — map it to Approval's typed taxonomy. */
 function runApprovalTransaction<T>(approvalId: string, write: () => T): T {
-  try {
-    return Storage.get().transaction(write);
-  } catch (error) {
-    if (isSqliteBusyError(error)) {
-      throw new Approval.StoreError({
-        message: `Approval storage busy: ${approvalId} — ${error instanceof Error ? error.message : String(error)}`,
+  return runCommitTransaction(
+    Storage.get(),
+    write,
+    (cause) =>
+      new Approval.StoreError({
+        message: `Approval storage busy: ${approvalId} — ${cause instanceof Error ? cause.message : String(cause)}`,
         code: "unavailable",
         approvalId,
-      });
-    }
-    throw error;
-  }
+      }),
+  );
 }
 
 // Every approval event inherits its caller's trace — no mint in the store (D11).
@@ -117,20 +115,23 @@ export namespace ApprovalStore {
           code: "duplicate",
           approvalId: record.id,
         });
-      const appended = ledger.append(
+      const committed = commitFact(
+        ledger,
         {
           streamId: streamId(record.id),
-          type: "approval.requested",
-          data: {
-            subject: record.subject,
-            deadline: record.deadline,
-            revision: record.revision,
+          expectedHead: 0,
+          fact: {
+            type: "approval.requested",
+            data: {
+              subject: record.subject,
+              deadline: record.deadline,
+              revision: record.revision,
+            },
           },
         },
-        0,
+        () => adapter.create(record) || false,
       );
-      if (appended.kind === "cas_conflict") throw duplicate();
-      if (!adapter.create(record)) throw duplicate();
+      if (committed.kind !== "committed") throw duplicate();
     });
     Bus.publish(Approval.Events.Requested, {
       ...eventBase(record, traceId, record.createdAt),
@@ -171,22 +172,23 @@ export namespace ApprovalStore {
     const outcome = Approval.decide(current, answer, at);
     if (outcome.kind === "unchanged") return outcome;
     runApprovalTransaction(id, () => {
-      const appended = ledger.append(
+      const committed = commitFact(
+        ledger,
         {
           streamId: streamId(id),
-          type: "approval.decided",
-          data: {
-            state: outcome.record.state,
-            decidedBy: outcome.record.decidedBy,
-            revision: outcome.record.revision,
+          expectedHead: current.revision,
+          fact: {
+            type: "approval.decided",
+            data: {
+              state: outcome.record.state,
+              decidedBy: outcome.record.decidedBy,
+              revision: outcome.record.revision,
+            },
           },
         },
-        current.revision,
+        () => adapter.compareAndSet(id, current.revision, outcome.record) || false,
       );
-      if (appended.kind === "cas_conflict") throw revisionConflict(id, current.revision);
-      if (!adapter.compareAndSet(id, current.revision, outcome.record)) {
-        throw revisionConflict(id, current.revision);
-      }
+      if (committed.kind !== "committed") throw revisionConflict(id, current.revision);
     });
     const decidedBy = outcome.record.decidedBy;
     const state = outcome.record.state;

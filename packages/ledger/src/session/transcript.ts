@@ -12,8 +12,8 @@ import { Storage } from "../storage/storage";
  * they never authorize an action, so "no record, no action" does not bind
  * them. They therefore do NOT ride Ledger.append: putting per-part-boundary
  * streaming facts on the decision ledger would serialize the streaming path
- * onto per-session CAS heads and grow the boot-verified hash chain
- * (verifyTail) with streaming-volume rows — diluting the decision-class
+ * onto per-session CAS heads and grow the hash chain with streaming-volume
+ * rows — diluting the decision-class
  * semantics pinned by script/conformance/p2-ledger-baseline.test.ts.
  * Instead they land in the dedicated append-only `transcript_fact` table
  * (migration 0015) INSIDE the same Storage.transaction (BEGIN IMMEDIATE on

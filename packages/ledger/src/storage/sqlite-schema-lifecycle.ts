@@ -50,10 +50,12 @@ const CLEAR_ORDER = [
   "blacklist",
   "actor_endpoint",
   "actor_identity",
-  "cron_job",
   "egress_debit",
   "worker_grant",
   "worker_run_state",
+  // The cron adapter is deleted, but migration 0004 still creates this table
+  // on every database — clear() keeps emptying legacy rows.
+  "cron_job",
   "bus_event",
   "work_item",
   "artifact",

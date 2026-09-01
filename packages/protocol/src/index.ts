@@ -30,7 +30,6 @@ export * from "./delegation/index.js";
 export * from "./engagement/index.js";
 export * from "./transcript/index.js";
 export * from "./ledger/index.js";
-export * from "./cron/index.js";
 export * from "./storage/index.js";
 export * from "./trace/index.js";
 export * from "./app-connector/index.js";

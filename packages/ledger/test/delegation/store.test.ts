@@ -7,7 +7,7 @@ import { Delegation } from "@openomni/protocol";
 
 const legacyDirectories: string[] = [];
 import { DelegationStore, SqliteStorageAdapter, Storage } from "../../src/index";
-import { createMemoryDelegationAdapter } from "../../src/storage/memory-delegation-adapter";
+import { createMemoryDelegationAdapter } from "./memory-delegation-adapter";
 import { buildDelegationRecord } from "../helpers/delegation";
 import { bareStorageAdapter } from "../helpers/wait";
 

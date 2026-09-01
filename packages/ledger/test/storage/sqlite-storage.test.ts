@@ -269,7 +269,6 @@ describe("SqliteStorageAdapter", () => {
       applyMigrationFixture(legacyDb, "0001_initial/migration.sql");
       applyMigrationFixture(legacyDb, "0002_communication_state/migration.sql");
       applyMigrationFixture(legacyDb, "0003_communication_state_constraints/migration.sql");
-      applyMigrationFixture(legacyDb, "0004_cron_job/migration.sql");
       legacyDb
         .query(
           `INSERT INTO session (id, data, time_created, time_updated)
@@ -765,6 +764,25 @@ describe("SqliteStorageAdapter", () => {
       expect(adapter.part.list("m1")).toEqual([]);
       expect(adapter.surfaceKey?.lookup("channel:1")).toBeUndefined();
       expect(adapter.artifact?.get("a1")).toBeUndefined();
+    });
+
+    test("clears legacy cron_job rows left by migration 0004", () => {
+      // The cron adapter is gone, but migration 0004 still creates the table
+      // on every database, so pre-existing deployments can hold rows in it.
+      const db = new Database(dbPath);
+      db.run(
+        "INSERT INTO cron_job (id, data, time_created, time_updated) VALUES ('legacy', '{}', 1, 1)",
+      );
+      db.close();
+
+      adapter.clear();
+
+      const probe = new Database(dbPath);
+      const row = probe.query("SELECT COUNT(*) AS count FROM cron_job").get() as {
+        count: number;
+      };
+      probe.close();
+      expect(row.count).toBe(0);
     });
   });
 
