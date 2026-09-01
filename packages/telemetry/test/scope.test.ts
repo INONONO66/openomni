@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { Operational } from "@openomni/protocol";
 import {
   collector,
@@ -222,6 +222,24 @@ describe("telemetry scope", () => {
    * boundary could leak. If it escaped, `emit` would throw and telemetry would
    * be cancelling the work it observes.
    */
+  test("the default error reporter contains a throwing sink", () => {
+    const warn = spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      const log = scope(TRACE, {
+        publish() {
+          throw new Error("sink exploded");
+        },
+      });
+
+      expect(() =>
+        log.emit(Operational.Events.Info, { component: "test", msg: "survive" }),
+      ).not.toThrow();
+      expect(warn).toHaveBeenCalledTimes(1);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   test("a throwing error reporter does not escape emit", () => {
     const log = scope(
       TRACE,

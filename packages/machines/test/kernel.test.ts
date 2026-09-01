@@ -127,6 +127,44 @@ describe("cell settlement ownership", () => {
 });
 
 describe("code-mode kernel substrate", () => {
+  test("invalid driver output replaces the interpreter", async () => {
+    const kernel = new PythonKernel();
+    try {
+      await expect(
+        kernel.run({ cellId: "before-invalid-driver-output", code: "persisted = 42", timeoutMs: 1_000 }, noTools),
+      ).resolves.toMatchObject({ status: "completed" });
+      await expect(
+        kernel.run(
+          {
+            cellId: "invalid-driver-output",
+            code: "import sys\nsys.__stdout__.write('not-json\\n')\nsys.__stdout__.flush()",
+            timeoutMs: 1_000,
+          },
+          noTools,
+        ),
+      ).rejects.toBeInstanceOf(SyntaxError);
+      await expect(
+        kernel.run({ cellId: "after-invalid-driver-output", code: "persisted", timeoutMs: 1_000 }, noTools),
+      ).resolves.toMatchObject({ status: "raised" });
+    } finally {
+      kernel.close();
+    }
+  });
+
+  test("an unserializable tool answer rejects the owning cell", async () => {
+    const kernel = new PythonKernel();
+    try {
+      await expect(
+        kernel.run(
+          { cellId: "unserializable-answer", code: "tool.test()", timeoutMs: 1_000 },
+          () => Promise.resolve({ status: "completed", value: 1n }),
+        ),
+      ).rejects.toBeInstanceOf(TypeError);
+    } finally {
+      kernel.close();
+    }
+  });
+
   test("interpreter state persists across cells in one attachment", async () => {
     await withMachine(["kernel.py"], async ({ host }) => {
       const first = await host.runCell("mac-studio", cell("value = 6 * 7"));

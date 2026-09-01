@@ -14,7 +14,7 @@ export async function withinTimeout<T>(promise: Promise<T>): Promise<T> {
 }
 
 /** Subscribe before publishing; resolves after the final queued delivery for this event. */
-export function signalAfterDeliveries<T>(
+export function signalAfterDeliveries<T extends Bus.Data>(
   event: BusEvent.Descriptor<T>,
   expectedCount: number,
 ): Promise<void> {

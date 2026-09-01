@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { BusEvent } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
 import { z } from "zod";
-import { signalAfterDeliveries } from "./delivery-signal";
+import { signalAfterDeliveries, withinTimeout } from "./delivery-signal";
 
 const TestEventSchema = z.object({
   sessionId: z.string().optional(),
@@ -105,6 +105,23 @@ describe("Bus.subscribe match filter", () => {
     await secondDelivered;
     expect(seen).toEqual(["first"]);
   });
+
+  it("accepts scoped metadata around a strict event payload", async () => {
+    const event = BusEvent.define("test:strict-metadata", z.object({ label: z.string() }).strict());
+    const delivered = Promise.withResolvers<void>();
+    const enriched = { label: "kept", traceId: "trace-strict" };
+    let received: { label: string } | undefined;
+    Bus.subscribe(event, (data) => {
+      received = data;
+      delivered.resolve();
+    });
+
+    Bus.publish(event, enriched);
+    await withinTimeout(delivered.promise);
+
+    expect(received).toBe(enriched);
+  });
+
 
   it("type safety: invalid keys in match are rejected at compile time", () => {
     const event = BusEvent.define<TestEvent>("test:type", TestEventSchema);

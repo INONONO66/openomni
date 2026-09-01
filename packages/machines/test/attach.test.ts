@@ -202,6 +202,23 @@ describe("machine attach handshake", () => {
     );
   });
 
+  test("daemon rejects host requests outside its wire contract", async () => {
+    const path = socketPath();
+    const rogue = await createIpcServer(path, (_method, _params, respond) => {
+      respond({ status: "attached", effectiveCapabilities: [] });
+    });
+    try {
+      const daemon = await attachMachineDaemon({ socketPath: path, offer: offer() });
+      try {
+        await expect(rogue.call("machine.unknown", {})).rejects.toBeInstanceOf(IpcRemoteError);
+      } finally {
+        daemon.close();
+      }
+    } finally {
+      rogue.close();
+    }
+  });
+
   test("daemon refuses a host reply that violates Machine.AttachResult", async () => {
     const path = socketPath();
     const rogue = await createIpcServer(path, (_method, _params, respond) => {

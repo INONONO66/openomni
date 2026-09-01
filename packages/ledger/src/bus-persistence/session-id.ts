@@ -1,9 +1,8 @@
-import type { Bus } from "@openomni/telemetry";
 import { getOptionalDatabase } from "./database.js";
 import { stringFromRecord, toRecord } from "./record-fields.js";
 
 export function defaultResolveSessionId(
-  _event: Bus.PublishedDescriptor,
+  _event: { readonly name: string },
   payload: unknown,
 ): string | undefined {
   const root = toRecord(payload);

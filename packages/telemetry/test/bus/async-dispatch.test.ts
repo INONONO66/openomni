@@ -14,7 +14,7 @@ describe("Bus async dispatch", () => {
   });
 
   it("publish() returns immediately (non-blocking)", async () => {
-    const event = BusEvent.define("test:event", z.unknown());
+    const event = BusEvent.define("test:event", z.string());
     let handlerCalled = false;
     const delivered = Promise.withResolvers<void>();
 
@@ -31,7 +31,7 @@ describe("Bus async dispatch", () => {
   });
 
   it("handler errors are logged and other handlers continue", async () => {
-    const event = BusEvent.define("test:error", z.unknown());
+    const event = BusEvent.define("test:error", z.string());
     const results: string[] = [];
     const delivered = Promise.withResolvers<void>();
 
@@ -61,7 +61,7 @@ describe("Bus async dispatch", () => {
   });
 
   it("FIFO order is preserved across multiple publishes", async () => {
-    const event = BusEvent.define("test:order", z.unknown());
+    const event = BusEvent.define("test:order", z.string());
     const order: string[] = [];
     const delivered = Promise.withResolvers<void>();
 
@@ -82,7 +82,7 @@ describe("Bus async dispatch", () => {
   });
 
   it("handler snapshot prevents mutation during dispatch", async () => {
-    const event = BusEvent.define("test:snapshot", z.unknown());
+    const event = BusEvent.define("test:snapshot", z.string());
     const results: string[] = [];
     const delivered = Promise.withResolvers<void>();
 
@@ -102,8 +102,22 @@ describe("Bus async dispatch", () => {
     expect(results).toEqual(["handler1", "handler2"]);
   });
 
+  it("isolates scoped subscriptions from root state", async () => {
+    const event = BusEvent.define("test:isolation", z.string());
+    const delivered = Promise.withResolvers<void>();
+
+    await Bus.withIsolation(async () => {
+      Bus.subscribe(event, () => delivered.resolve());
+      expect(Bus.stats().subscriberCount).toBe(1);
+      Bus.publish(event, "scoped");
+      await withinTimeout(delivered.promise);
+    });
+
+    expect(Bus.stats().subscriberCount).toBe(0);
+  });
+
   it("removes empty subscriber sets after the last unsubscribe", async () => {
-    const event = BusEvent.define("test:cleanup", z.unknown());
+    const event = BusEvent.define("test:cleanup", z.string());
     const unsubscribe = Bus.subscribe(event, () => undefined);
     expect(Bus.stats().subscriberEventCount).toBe(1);
 

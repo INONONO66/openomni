@@ -14,8 +14,10 @@ import { createCompletionPort, type CompletionPort } from "../src/work-item/comp
 import { validateCompletionTerminalLinkage } from "../src/work-item/terminal-linkage";
 
 const directories: string[] = [];
+const kernels: ReturnType<typeof createDelegationKernel>[] = [];
 
 afterEach(() => {
+  for (const kernel of kernels.splice(0)) kernel.stop();
   Storage.reset();
   for (const directory of directories.splice(0))
     rmSync(directory, { recursive: true, force: true });
@@ -54,13 +56,15 @@ function wiringLinkage() {
 }
 
 function bootKernel(driver: { run(): Promise<DriverOutcome> }) {
-  return createDelegationKernel({
+  const kernel = createDelegationKernel({
     drivers: { process: driver as never },
     now: () => Date.now(),
     newDelegationId: () => "dg-wiring-1",
     wake: () => undefined,
     workItems: wiringLinkage(),
   });
+  kernels.push(kernel);
+  return kernel;
 }
 
 async function delegateAssign(kernel: ReturnType<typeof bootKernel>) {

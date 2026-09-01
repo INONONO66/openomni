@@ -57,18 +57,22 @@ const SOCKET_PROBE_TIMEOUT_MS = 500;
  */
 function probeSocketLive(socketPath: string): Promise<boolean> {
   return new Promise((resolve) => {
-    const probe = net.createConnection(socketPath);
+    const probe = new net.Socket();
     let settled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    // Install this before the timer/connect listeners: Bun 1.3.6 may emit a
+    // refused-connect error during the initial connection turn.
+    probe.once("error", () => settle(false));
     const settle = (live: boolean) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
       probe.destroy();
       resolve(live);
     };
-    const timer = setTimeout(() => settle(true), SOCKET_PROBE_TIMEOUT_MS);
+    timer = setTimeout(() => settle(true), SOCKET_PROBE_TIMEOUT_MS);
     probe.once("connect", () => settle(true));
-    probe.once("error", () => settle(false));
+    probe.connect(socketPath);
   });
 }
 
@@ -289,15 +293,14 @@ export async function createIpcServer(
         const state = connId === undefined ? undefined : connections.get(connId);
         if (state) flushQueued(state);
       },
+      error(socket: BunSocket, error: Error) {
+        const id = connectionIdOf(socket);
+        if (id !== undefined) removeConnection(id, `socket error: ${error.message}`);
+      },
       close(socket: BunSocket) {
         // The connection may die before `open` assigned socket.data.
         const id = connectionIdOf(socket);
         if (id !== undefined) removeConnection(id, "socket closed");
-      },
-      error(socket: BunSocket, _err: Error) {
-        // The connection may error before `open` assigned socket.data.
-        const id = connectionIdOf(socket);
-        if (id !== undefined) removeConnection(id, "socket error");
       },
     },
   });

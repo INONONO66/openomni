@@ -2,18 +2,24 @@ import type { BusEvent, Clock, Message, Policy, TraceContext } from "@openomni/p
 
 export type PolicyPointId = keyof typeof Policy.PolicyPoint.Registry;
 
-export interface GenericPolicyContext {
+export interface GenericPolicyContext<
+  TToolInput extends object = {
+    readonly error?: object;
+    readonly outcomeType?: string;
+  },
+  TUsage extends object = object,
+> {
   agentType?: string;
   resourceDescriptor?: Policy.Resource.Descriptor;
   traceContext?: TraceContext.Type;
   toolName?: string;
   toolCallId?: string;
-  toolInput?: Record<string, unknown>;
+  toolInput?: TToolInput;
   toolLabels?: string[];
   toolOutput?: string;
   labels?: Policy.LabelEntry[];
   messages?: Message.WithParts[];
-  usage?: unknown;
+  usage?: TUsage;
 }
 
 export type DispatchContextGeneric<TCtx extends GenericPolicyContext> = Omit<TCtx, "timing"> & {
@@ -34,7 +40,7 @@ export type CanonicalAuditDispatchContextGeneric<TCtx extends GenericPolicyConte
 export type DispatchPointContextGeneric<
   TCtx extends GenericPolicyContext,
   TPointId extends PolicyPointId,
-> = DispatchContextGeneric<TCtx> & Policy.PolicyPointInputMap[TPointId] & Record<string, unknown>;
+> = DispatchContextGeneric<TCtx> & Policy.PolicyPointInputMap[TPointId];
 
 export type PolicyDecision = Policy.PolicyDecision;
 

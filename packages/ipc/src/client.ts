@@ -30,9 +30,29 @@ export function connectIpcClient(
   const connectTimeoutMs = opts.connectTimeoutMs ?? 5000;
 
   return new Promise((resolve, reject) => {
-    const socket = net.createConnection(socketPath);
+    // Register listeners before initiating the connection; Bun 1.3.6 may
+    // emit a refused-connect error during the initial connection turn.
+    const socket = new net.Socket();
     const decoder = new LineDecoder();
-    const peer = new PeerRequestTable({
+    let connected = false;
+    let connectTimer: ReturnType<typeof setTimeout> | undefined;
+    let peer!: PeerRequestTable;
+
+    const failAllPending = (err: Error): void => {
+      peer.disconnectAll(err);
+    };
+
+    socket.on("error", (err) => {
+      if (!connected) {
+        if (connectTimer) clearTimeout(connectTimer);
+        reject(new IpcConnectionError(`socket error: ${err.message}`, err));
+        return;
+      }
+      connected = false;
+      failAllPending(new IpcConnectionError(`socket error: ${err.message}`, err));
+    });
+
+    peer = new PeerRequestTable({
       send: (_peer, frame) => socket.write(encode(frame)),
       onRequest: opts.onRequest
         ? (_peer, method, params, respond) => opts.onRequest?.(method, params, respond)
@@ -40,16 +60,11 @@ export function connectIpcClient(
       onNotification: (_peer, method, params) => opts.onNotification?.(method, params),
       missingRequestHandlerMessage: (method) => `client has no request handler for ${method}`,
     });
-    let connected = false;
 
-    const connectTimer = setTimeout(() => {
+    connectTimer = setTimeout(() => {
       socket.destroy();
       reject(new IpcConnectionError(`connect timeout: ${socketPath}`));
     }, connectTimeoutMs);
-
-    function failAllPending(err: Error): void {
-      peer.disconnectAll(err);
-    }
 
     socket.on("connect", () => {
       clearTimeout(connectTimer);
@@ -90,16 +105,6 @@ export function connectIpcClient(
       }
     });
 
-    socket.on("error", (err) => {
-      if (!connected) {
-        clearTimeout(connectTimer);
-        reject(new IpcConnectionError(`socket error: ${err.message}`, err));
-        return;
-      }
-      connected = false;
-      failAllPending(new IpcConnectionError(`socket error: ${err.message}`, err));
-    });
-
     socket.on("close", () => {
       connected = false;
       failAllPending(new IpcConnectionError("socket closed"));
@@ -131,5 +136,6 @@ export function connectIpcClient(
         socket.destroy();
       },
     };
+    socket.connect(socketPath);
   });
 }
