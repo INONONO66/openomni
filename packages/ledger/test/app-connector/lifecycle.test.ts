@@ -89,7 +89,16 @@ describe("AppConnectorInstallationStore lifecycle", () => {
   });
 
   test("creates an ai agent actor endpoint when an installation is stored", () => {
-    const stored = AppConnectorInstallationStore.set(installation("install-actor"));
+    const { endpointId: _defaultEndpointId, ...input } = installation("install-actor");
+    const stored = AppConnectorInstallationStore.set({
+      ...input,
+      workspace: {
+        repoPath: "/repo/openomni",
+        worktreePath: "/repo/openomni-worktree",
+        repoPathHash: "repo-hash",
+        worktreePathHash: "worktree-hash",
+      },
+    });
 
     const actorRegistry = Storage.get().actorRegistry;
     expect(actorRegistry?.getIdentity("actor:install-actor")).toMatchObject({
@@ -101,7 +110,24 @@ describe("AppConnectorInstallationStore lifecycle", () => {
       actorId: "actor:install-actor",
       channel: "app_connector",
       externalId: "install-actor",
+      metadata: {
+        connectorId: stored.connectorId,
+        installationId: stored.id,
+        provider: stored.definition.driver.provider,
+        repoPathHash: "repo-hash",
+        worktreePathHash: "worktree-hash",
+      },
     });
+    expect(stored.endpointId).toBe("endpoint:install-actor");
+    expect(actorRegistry?.getEndpoint(stored.endpointId)?.workspace).toHaveLength(16);
+  });
+
+  test("disabling an already-disabled installation is idempotent", () => {
+    const disabled = AppConnectorInstallationStore.set({
+      ...installation("install-disabled"),
+      status: "disabled",
+    });
+    expect(AppConnectorInstallationStore.disable(disabled.id)).toEqual(disabled);
   });
 
   test("disables every pre-wire installation status", () => {

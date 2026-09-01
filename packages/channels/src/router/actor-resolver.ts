@@ -37,10 +37,13 @@ function mintProvisionalContact(
   externalId: string,
   now: number,
 ): Actor.ResolvedEndpoint | undefined {
+  // The allowlist gates minting too: a stranger gets no grant, so no contact
+  // is minted for them either.
   const resolution = resolveChannelGrant({
     surface: event.surface,
     workspace: event.workspace,
     channel: event.channel,
+    sender: externalId,
   });
   if (resolution === undefined || resolution.grant.kind !== "trusted_channel") return undefined;
   const policy = resolution.grant.provisionalMint;

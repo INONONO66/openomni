@@ -15,13 +15,19 @@ import { Bus } from "@openomni/telemetry";
  * the perimeter refuses it fail-closed. Grants are current authority, not
  * history — revoking one erases no recorded fact.
  */
-export function registerTrustedChannelGrant(surface: string): () => void {
+export function registerTrustedChannelGrant(
+  surface: string,
+  allowedSenders?: readonly string[],
+): () => void {
   const id = `openomni-resident-${surface}`;
   ChannelGrantStore.put({
     id,
     surface,
     kind: "trusted_channel",
     defaultTier: "owner",
+    // An allowlisted grant materializes owner tier for the listed senders
+    // alone — everyone else on the surface finds no grant and is blocked.
+    ...(allowedSenders === undefined ? {} : { allowedSenders: [...allowedSenders] }),
     createdBy: "local-owner",
   });
   return () => {
@@ -48,13 +54,13 @@ export function createResidentGateway(
     ...(messaging === undefined
       ? {}
       : {
-          messaging: {
-            ...messaging,
-            // Engaging the gate with an empty Owner-declared source makes
-            // cold proactive outreach zero-by-default. Reply-scoped grants
-            // bypass this budget axis in the send kernel.
-            budgets: messaging.budgets ?? (() => []),
-          },
-        }),
+        messaging: {
+          ...messaging,
+          // Engaging the gate with an empty Owner-declared source makes
+          // cold proactive outreach zero-by-default. Reply-scoped grants
+          // bypass this budget axis in the send kernel.
+          budgets: messaging.budgets ?? (() => []),
+        },
+      }),
   });
 }

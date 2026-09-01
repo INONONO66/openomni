@@ -422,10 +422,7 @@ async function validateDeepImports(): Promise<string[]> {
 
     const source = await Bun.file(filePath).text();
     for (const match of source.matchAll(importPattern)) {
-      const importPath = match[1];
-      // Unreachable: the capture group requires >=1 char; this narrows
-      // string | undefined from noUncheckedIndexedAccess, nothing more.
-      if (!importPath) continue;
+      const importPath = match[1] as string;
       const line = lineNumberForOffset(source, match.index);
       const base = `VIOLATION: ${filePath}:${line} imports ${importPath} — use package barrel instead`;
 
@@ -459,10 +456,7 @@ async function validateDeepRelativeImports(): Promise<string[]> {
 
     const source = await Bun.file(filePath).text();
     for (const match of source.matchAll(importPattern)) {
-      const importPath = match[1];
-      // Unreachable: the capture group requires >=1 char; this narrows
-      // string | undefined from noUncheckedIndexedAccess, nothing more.
-      if (!importPath) continue;
+      const importPath = match[1] as string;
       const line = lineNumberForOffset(source, match.index);
       const isSelfRootImport = importPath.startsWith("../../src/");
       const isDeepRelativeImport = parentTraversalDepth(importPath) >= 3;
@@ -482,10 +476,6 @@ async function validateDeepRelativeImports(): Promise<string[]> {
 }
 
 // See docs/golden-principles.local.md for the full list.
-
-// Allowed `as any` locations (pre-existing tech debt — do not extend).
-// protocol/error was removed 2026-08 (#552 item 5): zero remaining hits.
-const ALLOWED_AS_ANY_FILES = new Set(["packages/agent/src/runtime/messenger/transport.ts"]);
 
 async function validateGoldenPrinciples(): Promise<string[]> {
   const violations: string[] = [];
@@ -508,8 +498,8 @@ async function validateGoldenPrinciples(): Promise<string[]> {
     for (const [index, line] of lines.entries()) {
       const lineNum = index + 1;
 
-      // #5: No `as any` (except allowed files)
-      if (!ALLOWED_AS_ANY_FILES.has(filePath) && /\bas\s+any\b/.test(line)) {
+      // #5: No `as any`
+      if (/\bas\s+any\b/.test(line)) {
         violations.push(
           `VIOLATION: ${filePath}:${lineNum} — \`as any\` detected. See docs/golden-principles.local.md #5`,
         );

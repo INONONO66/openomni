@@ -406,12 +406,12 @@ export async function startOpenOmni(options: StartOptions = {}) {
       machines === undefined
         ? undefined
         : await createMachineHost({
-            socketPath: machines.socketPath,
-            enrollment: (machineId) => machines.enrolled.find((e) => e.machineId === machineId),
-            events: Bus,
-            now: () => Date.now(),
-            callTool: registry.callTool,
-          });
+          socketPath: machines.socketPath,
+          enrollment: (machineId) => machines.enrolled.find((e) => e.machineId === machineId),
+          events: Bus,
+          now: () => Date.now(),
+          callTool: registry.callTool,
+        });
     if (host !== undefined) {
       const attachedHost = host;
       await composer.mount("machines", (ctx) => ctx.effect(() => attachedHost.close()));
@@ -573,7 +573,10 @@ export async function startOpenOmni(options: StartOptions = {}) {
     const supervisor = createChannelSupervisor({
       desired: () => desiredChannels(config),
       build: (component) => component.build(routingHandler),
-      grant: registerTrustedChannelGrant,
+      // The env allowlist pins each mounted surface's grant to its listed
+      // senders; unlisted surfaces keep the open posture (loopback-ws right).
+      grant: (surfaceId) =>
+        registerTrustedChannelGrant(surfaceId, config.channelAllowedSenders?.[surfaceId]),
       deliveryRoutes,
       webhookHandlers,
       traceId: newTraceId,
@@ -584,16 +587,16 @@ export async function startOpenOmni(options: StartOptions = {}) {
       actors.length === 0
         ? undefined
         : {
-            deliveryRoutes,
-            grants: () =>
-              actors.map((actor) => ({
-                id: `resident->${actor.actorId}`,
-                senderId: "resident",
-                targetActorId: actor.actorId,
-                operations: ["awaited" as const, "fire_and_forget" as const],
-              })),
-            budgets: () => config.socialBudgets ?? [],
-          },
+          deliveryRoutes,
+          grants: () =>
+            actors.map((actor) => ({
+              id: `resident->${actor.actorId}`,
+              senderId: "resident",
+              targetActorId: actor.actorId,
+              operations: ["awaited" as const, "fire_and_forget" as const],
+            })),
+          budgets: () => config.socialBudgets ?? [],
+        },
     );
     // Recovery is deliberately after the Resident and gateway exist: boot
     // settlements must be able to deliver their one owner-session wake.

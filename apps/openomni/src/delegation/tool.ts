@@ -88,38 +88,49 @@ export const DELEGATE_TOOL_NAME = "delegate";
 export const AWAIT_DELEGATION_TOOL_NAME = "await_delegation";
 export const CANCEL_DELEGATION_TOOL_NAME = "cancel_delegation";
 
-const START_INPUT_PROPERTIES = {
-  instruction: { type: "string", minLength: 1 },
-  operation: { type: "string", enum: ["notify", "ask", "assign"] },
-  acceptanceCriteria: { type: "array", items: { type: "string", minLength: 1 } },
-  timeoutMs: { type: "integer", exclusiveMinimum: 0 },
-} as const;
-
-// Advertised as the addressing XOR the zod gate above enforces (exactly one
-// of scope / actorId): two variants of five public fields each. Every call
-// the runtime gate accepts still validates; calls it refuses (both or
-// neither addressing field) are now refused by the advertised schema too.
+// Advertised as ONE flat object schema: providers on the Anthropic wire
+// reject a root-level oneOf input_schema (400 invalid_request_error), so the
+// addressing XOR (exactly one of scope / actorId) is stated in prose here and
+// enforced only by the zod gate above, whose refusal text names the rule.
 const START_INPUT_JSON_SCHEMA: Record<string, unknown> = {
-  oneOf: [
-    {
-      type: "object",
-      additionalProperties: false,
-      required: ["instruction", "operation", "timeoutMs", "scope"],
-      properties: {
-        ...START_INPUT_PROPERTIES,
-        scope: { type: "string", enum: ["inline", "independent"] },
-      },
+  type: "object",
+  additionalProperties: false,
+  required: ["instruction", "operation", "timeoutMs"],
+  properties: {
+    instruction: {
+      type: "string",
+      minLength: 1,
+      description: "What the worker must do, self-contained.",
     },
-    {
-      type: "object",
-      additionalProperties: false,
-      required: ["instruction", "operation", "timeoutMs", "actorId"],
-      properties: {
-        ...START_INPUT_PROPERTIES,
-        actorId: { type: "string", minLength: 1 },
-      },
+    operation: {
+      type: "string",
+      enum: ["notify", "ask", "assign"],
+      description:
+        "notify = fire-and-forget, ask = expect an answer, assign = accountable work (creates a WorkItem).",
     },
-  ],
+    acceptanceCriteria: {
+      type: "array",
+      items: { type: "string", minLength: 1 },
+      description: "assign only: criteria the work must satisfy to complete.",
+    },
+    timeoutMs: {
+      type: "integer",
+      exclusiveMinimum: 0,
+      description: "Deadline in milliseconds; settlement arrives by then or as no_response.",
+    },
+    scope: {
+      type: "string",
+      enum: ["inline", "independent"],
+      description:
+        "Worker placement: inline = same-process worker, independent = spawned child process. Provide exactly one of scope or actorId.",
+    },
+    actorId: {
+      type: "string",
+      minLength: 1,
+      description:
+        "Channel contact to ask instead of a worker. Provide exactly one of scope or actorId.",
+    },
+  },
 };
 
 const AWAIT_INPUT = z
@@ -227,7 +238,7 @@ export function delegateToolExecutor(kernel: DelegationKernel, origin: Delegatio
       operation: input.operation,
       payload: { text: input.instruction },
       ...(input.acceptanceCriteria === undefined ? {} : { acceptanceCriteria: input.acceptanceCriteria }),
-      deadline: (typeof kernel.now === "function" ? kernel.now() : Date.now()) + input.timeoutMs,
+      deadline: kernel.now() + input.timeoutMs,
     };
 
     let result: Awaited<ReturnType<DelegationKernel["delegate"]>>;

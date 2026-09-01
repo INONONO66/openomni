@@ -225,6 +225,7 @@ describe("Vault envelope crypto", () => {
     expect(`${revealed}`).toBe("[redacted]");
     expect(JSON.stringify({ secret: revealed })).toBe('{"secret":"[redacted]"}');
     expect(inspect(revealed)).toBe("[redacted]");
+    expect(revealed.reveal()).toEqual(new TextEncoder().encode("tg-token"));
     expect(revealed.revealText()).toBe("tg-token");
   });
 });

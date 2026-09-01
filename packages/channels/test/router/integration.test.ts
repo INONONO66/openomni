@@ -78,6 +78,43 @@ describe("GatewayRouter integration pipeline", () => {
     });
   });
 
+  describe("sender allowlist", () => {
+    it("blocks a stranger and routes an allowlisted sender on the same surface", async () => {
+      ChannelGrantStore.put({
+        id: "grant-telegram",
+        surface: "telegram",
+        kind: "trusted_channel",
+        defaultTier: "owner",
+        allowedSenders: ["111"],
+        createdBy: "act_owner",
+      });
+
+      await expect(
+        router.ingest({
+          id: "evt-tg-stranger",
+          traceId: "trace-test",
+          mode: "direct",
+          surface: "telegram",
+          userId: "999",
+          payload: "hello",
+          meta: { actor: { role: "user" } },
+        }),
+      ).rejects.toMatchObject({ code: "route_blocked" });
+
+      const owner = await router.ingest({
+        id: "evt-tg-owner",
+        traceId: "trace-test",
+        mode: "direct",
+        surface: "telegram",
+        userId: "111",
+        payload: "hello",
+        meta: { actor: { role: "user" } },
+      });
+      if (owner.kind === "dropped") throw new Error("shape");
+      expect(owner.sessionId).toBeDefined();
+    });
+  });
+
   describe("error cases", () => {
     it("throws zod error when mode is missing", async () => {
       const invalidEvent = {
