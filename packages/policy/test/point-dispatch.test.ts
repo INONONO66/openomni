@@ -273,6 +273,76 @@ describe("tool.filter / tool.require_approval conflict rule", () => {
   });
 });
 
+describe("merge rule mutation invariants", () => {
+  test("places a tool rewrite at the earliest source order", () => {
+    const merged = mergeEntries([
+      {
+        effect: { type: "tool.rewrite_input", input: { command: "late" } },
+        policyId: "late-rewrite",
+        priority: 0,
+        decisionIndex: 0,
+        effectIndex: 0,
+        order: 10,
+      },
+      {
+        effect: { type: "audit.annotate", annotation: "between", severity: "info" },
+        policyId: "between",
+        priority: 0,
+        decisionIndex: 1,
+        effectIndex: 0,
+        order: 5,
+      },
+      {
+        effect: { type: "tool.rewrite_input", input: { cwd: "/tmp" } },
+        policyId: "early-rewrite",
+        priority: 0,
+        decisionIndex: 2,
+        effectIndex: 0,
+        order: 1,
+      },
+    ]);
+
+    expect(merged.effects).toEqual([
+      { type: "tool.rewrite_input", input: { command: "late", cwd: "/tmp" } },
+      { type: "audit.annotate", annotation: "between", severity: "info" },
+    ]);
+  });
+
+  test("keeps the first source order for duplicate tool filters", () => {
+    const merged = mergeEntries([
+      {
+        effect: { type: "tool.filter", toolPattern: "shell.*" },
+        policyId: "early-filter",
+        priority: 0,
+        decisionIndex: 0,
+        effectIndex: 0,
+        order: 1,
+      },
+      {
+        effect: { type: "audit.annotate", annotation: "between", severity: "info" },
+        policyId: "between",
+        priority: 0,
+        decisionIndex: 1,
+        effectIndex: 0,
+        order: 5,
+      },
+      {
+        effect: { type: "tool.filter", toolPattern: "shell.*" },
+        policyId: "late-filter",
+        priority: 0,
+        decisionIndex: 2,
+        effectIndex: 0,
+        order: 10,
+      },
+    ]);
+
+    expect(merged.effects).toEqual([
+      { type: "tool.filter", toolPattern: "shell.*" },
+      { type: "audit.annotate", annotation: "between", severity: "info" },
+    ]);
+  });
+});
+
 describe("WorkItem policy effect composition", () => {
   test("retains the minimum source order when merging asserted-result allowances", () => {
     const merged = mergeEntries([
