@@ -24,6 +24,8 @@ export interface WorkItemLinkage {
 
 interface OpenAssignInput {
   readonly delegationId: string;
+  /** The worker run identity allocated before the WorkItem assignment. */
+  readonly workerRunId?: string;
   readonly transport: Delegation.Transport;
   readonly instruction: string;
   readonly acceptanceCriteria: readonly string[];
@@ -93,7 +95,7 @@ export function createWorkItemLinkage(options: WorkItemLinkageOptions): WorkItem
       workItemId,
       {
         executorKind: executorKindOf(input.transport),
-        workerRunId: input.delegationId,
+        workerRunId: input.workerRunId ?? input.delegationId,
         workSessionId: input.sessionId,
       },
       traceId,
@@ -165,13 +167,18 @@ export function createWorkItemLinkage(options: WorkItemLinkageOptions): WorkItem
       },
       traceId,
     );
+    // Locate the attempt using its commissioned pair. The settlement carries
+    // the final driven run ID and stores it on the terminal attempt fact.
+    const assignedRunId = item.workerRunId ?? record.delegationId;
+    const workSessionId = item.workSessionId ?? record.origin.sessionId;
     await WorkItemAttemptRun.finish(
-      record.origin.sessionId,
-      record.delegationId,
+      workSessionId,
+      assignedRunId,
       Delegation.settlementToAttemptOutcome(settlement.status),
       traceId,
       {
         endedAt: options.now(),
+        ...(settlement.workerRunId === undefined ? {} : { workerRunId: settlement.workerRunId }),
         usage: WorkItem.AttemptUsage.parse({
           seconds: Math.max(0, (settlement.at - record.createdAt) / 1000),
           ...(tokens === undefined ? {} : { tokens }),

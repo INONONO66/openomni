@@ -12,6 +12,8 @@ export type DelegationOrigin = Delegation.Origin;
 export interface Admitted {
   readonly ok: true;
   readonly delegationId: string;
+  /** Correlation allocated by the kernel before an assigned worker is commissioned. */
+  readonly workerRunId?: string;
   readonly request: Delegation.Request;
   readonly transport: Delegation.Transport;
   readonly effectiveDeadline: number;
@@ -78,6 +80,7 @@ export interface AdmissionLimits {
 export interface AdmissionContext {
   readonly delegationId: string;
   readonly rootDelegationId: string;
+  readonly workerRunId?: string;
   readonly parent?: Pick<Delegation.Record, "delegationId" | "rootDelegationId" | "deadline" | "status">;
   readonly parentMissing?: boolean;
   readonly openFanout: number;
@@ -224,6 +227,7 @@ export function admit(
   return {
     ok: true,
     delegationId,
+    ...(context?.workerRunId === undefined ? {} : { workerRunId: context.workerRunId }),
     request,
     transport,
     effectiveDeadline,

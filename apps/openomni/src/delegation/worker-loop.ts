@@ -11,6 +11,16 @@ import { renderInstruction } from "./instruction";
 import type { DelegationKernel } from "./kernel";
 import type { InlineWorkerRunner } from "./inline-driver";
 
+export class WorkerRunError extends Error {
+  constructor(
+    message: string,
+    readonly runId: string,
+  ) {
+    super(message);
+    this.name = "WorkerRunError";
+  }
+}
+
 export interface WorkerLoopOptions {
   readonly model: Model.Ref;
   readonly apiKey: string;
@@ -46,10 +56,13 @@ export function createInlineWorkerRunner(options: WorkerLoopOptions): InlineWork
     // once — a question is answered, never nannied.
     let tokens = 0;
     let state: DriveState = initialDriveState();
+    let firstRun = true;
     for (;;) {
-      // Each driven run is its own run identity so telemetry never conflates
-      // two agent runs under one runId.
-      const runId = crypto.randomUUID();
+      // The initial run identity is allocated during admission and recorded
+      // on the commissioned WorkItem. Driven follow-ups remain distinct runs
+      // for telemetry, while the attempt remains correlated to its first run.
+      const runId = firstRun && input.workerRunId !== undefined ? input.workerRunId : crypto.randomUUID();
+      firstRun = false;
       const observation = observeComponent({
         traceId,
         sessionId,
@@ -72,21 +85,26 @@ export function createInlineWorkerRunner(options: WorkerLoopOptions): InlineWork
         signal: input.signal,
         ...(options.llm === undefined ? {} : { llm: options.llm }),
       });
-      const result = await observation.run(() =>
-        agent.run({
-          messages,
-          traceContext: { traceId, sessionId, runId, agentName: "worker" },
-        }),
-      );
+      let result: Awaited<ReturnType<typeof agent.run>>;
+      try {
+        result = await observation.run(() =>
+          agent.run({
+            messages,
+            traceContext: { traceId, sessionId, runId, agentName: "worker" },
+          }),
+        );
+      } catch (error) {
+        throw new WorkerRunError(error instanceof Error ? error.message : String(error), runId);
+      }
       tokens += result.usage.totalTokens;
-      if (input.operation !== "assign") return { text: result.text, tokens };
+      if (input.operation !== "assign") return { text: result.text, tokens, runId };
       const decision = decideDrive(state, {
         text: result.text,
         finishReason: result.finishReason,
       });
-      if (decision.action === "done") return { text: result.text, tokens };
+      if (decision.action === "done") return { text: result.text, tokens, runId };
       if (decision.action === "stop") {
-        return { text: `[drive stopped: ${decision.reason}]\n${result.text}`, tokens };
+        return { text: `[drive stopped: ${decision.reason}]\n${result.text}`, tokens, runId };
       }
       state = decision.state;
       messages.push(

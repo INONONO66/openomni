@@ -184,6 +184,7 @@ describe("operator transport reaches every model caller", () => {
   it("the process worker wire carries it across the process boundary", () => {
     const request = ProcessWorkerRequest.parse({
       delegationId: "d-1",
+      workerRunId: "run-transport",
       operation: "ask",
       instruction: "answer",
       acceptanceCriteria: [],
@@ -199,6 +200,7 @@ describe("operator transport reaches every model caller", () => {
   it("the process worker wire rejects an unknown transport field", () => {
     const parsed = ProcessWorkerRequest.safeParse({
       delegationId: "d-1",
+      workerRunId: "run-transport",
       operation: "ask",
       instruction: "answer",
       acceptanceCriteria: [],
