@@ -147,46 +147,6 @@ export async function allocateWorkItemAttempt(
   return { item, attempt: allocated };
 }
 
-export async function addWorkItemBlocker(
-  hash: string,
-  blocker: Omit<WorkItem.Blocker, "id" | "createdAt"> & Readonly<{ id?: string }>,
-  traceId: string,
-): Promise<WorkItem.Info | undefined> {
-  return mutate(hash, traceId, (existing, now) => {
-    const added = { ...blocker, id: blocker.id ?? crypto.randomUUID(), createdAt: now };
-    return {
-      changedFields: ["blockers"],
-      fact: {
-        type: "work_item.blocker_added",
-        data: { blockerId: added.id, kind: added.kind, description: added.description },
-      },
-      updated: {
-        ...existing,
-        blockers: [...existing.blockers, added],
-        timestamps: { ...existing.timestamps, updated: now },
-      },
-    };
-  });
-}
-
-export async function resolveWorkItemBlocker(
-  hash: string,
-  blockerId: string,
-  traceId: string,
-): Promise<WorkItem.Info | undefined> {
-  return mutate(hash, traceId, (existing, now) => ({
-    changedFields: ["blockers"],
-    fact: { type: "work_item.blocker_resolved", data: { blockerId, resolvedAt: now } },
-    updated: {
-      ...existing,
-      blockers: existing.blockers.map((blocker) =>
-        blocker.id === blockerId ? { ...blocker, resolvedAt: now } : blocker,
-      ),
-      timestamps: { ...existing.timestamps, updated: now },
-    },
-  }));
-}
-
 export async function addWorkItemEvidence(
   hash: string,
   evidence: Omit<WorkItem.Evidence, "id" | "createdAt" | "attempt" | "basisRef"> &

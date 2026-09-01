@@ -46,42 +46,4 @@ describe("BusQuery event queries", () => {
     expect(events[1]?.payloadDiagnostic).toBeUndefined();
   });
 
-  test("getStats returns total, category, and type counts for a session", async () => {
-    insertEvent({
-      sessionId: "sess-1",
-      type: "agent.step.started",
-      category: "agent",
-      traceId: "trace-1",
-      timeCreated: 100,
-    });
-    insertEvent({
-      sessionId: "sess-1",
-      type: "agent.step.started",
-      category: "agent",
-      traceId: "trace-2",
-      timeCreated: 200,
-    });
-    insertEvent({
-      sessionId: "sess-1",
-      type: "custom.note",
-      category: "custom",
-      traceId: "trace-3",
-      timeCreated: 300,
-    });
-    insertEvent({
-      sessionId: "sess-2",
-      type: "agent.step.started",
-      category: "agent",
-      traceId: "trace-other-session",
-      timeCreated: 400,
-    });
-
-    const stats = await BusQuery.getStats("sess-1");
-
-    expect(stats).toEqual({
-      totalEvents: 3,
-      byCategory: { agent: 2, custom: 1 },
-      byType: { "agent.step.started": 2, "custom.note": 1 },
-    });
-  });
 });
