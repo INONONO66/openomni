@@ -100,6 +100,10 @@ export namespace Storage {
       get(id: string): { meta: string; content: string; sessionId: string } | undefined;
     };
     workItem?: ProtocolStorage.WorkItemSubAdapter;
+    // Optional here for narrow test fakes only — Trigger stores fail closed
+    // with a typed adapter_absent error when either projection seam is missing.
+    trigger?: ProtocolStorage.TriggerSubAdapter;
+    triggerFire?: ProtocolStorage.TriggerFireSubAdapter;
     // Optional here for test fakes only — WaitStore fails closed (typed
     // adapter_absent error) when it is missing; production adapters wire it
     // as required (SqliteStorageAdapter).
@@ -160,6 +164,8 @@ export namespace Storage {
     "surfaceKey",
     "artifact",
     "workItem",
+    "trigger",
+    "triggerFire",
     "wait",
     "conversation",
     "lease",

@@ -34,6 +34,7 @@ const ORDERED_MIGRATIONS: Migration.Definition[] = [
   { name: "0027_lease/migration.sql" },
   { name: "0028_approval/migration.sql" },
   { name: "0029_provisioning/migration.sql" },
+  { name: "0030_trigger_subsystem/migration.sql" },
 ];
 
 const CLEAR_ORDER = [
@@ -43,6 +44,8 @@ const CLEAR_ORDER = [
   "ledger_event",
   "ledger_head",
   "event_chain",
+  "trigger_fire",
+  "trigger_record",
   "wait",
   "conversation",
   "lease",

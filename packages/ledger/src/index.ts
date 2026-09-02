@@ -24,6 +24,7 @@ export { ConversationStore } from "./conversation/index.js";
 export { ApprovalStore } from "./approval/index.js";
 export { LeaseStore } from "./lease/index.js";
 export { WaitStore } from "./wait/index.js";
+export { TriggerFireStore, TriggerStore } from "./trigger/index.js";
 export { EngagementStore } from "./engagement/index.js";
 export { DelegationStore } from "./delegation/index.js";
 export { EgressBudgetStore } from "./egress/index.js";

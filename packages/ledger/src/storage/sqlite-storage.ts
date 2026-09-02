@@ -19,6 +19,8 @@ import {
 import { createSqliteSessionAdapter } from "./sqlite-session-adapter";
 import { createSqliteSurfaceKeyAdapter } from "./sqlite-surface-key-adapter";
 import { createSqliteTranscriptFactAdapter } from "./sqlite-transcript-fact-adapter";
+import { createSqliteTriggerAdapter } from "./sqlite-trigger-adapter";
+import { createSqliteTriggerFireAdapter } from "./sqlite-trigger-fire-adapter";
 import { createSqliteEngagementAdapter } from "./sqlite-engagement-adapter";
 import { createSqliteConversationAdapter } from "./sqlite-conversation-adapter";
 import { createSqliteApprovalAdapter } from "./sqlite-approval-adapter";
@@ -51,6 +53,8 @@ export class SqliteStorageAdapter implements Storage.Adapter {
   readonly artifact: NonNullable<Storage.Adapter["artifact"]>;
   readonly workerRunState: WorkerRunStateStore.Adapter;
   readonly workItem: NonNullable<Storage.Adapter["workItem"]>;
+  readonly trigger: NonNullable<Storage.Adapter["trigger"]>;
+  readonly triggerFire: NonNullable<Storage.Adapter["triggerFire"]>;
   readonly wait: NonNullable<Storage.Adapter["wait"]>;
   readonly conversation: NonNullable<Storage.Adapter["conversation"]>;
   readonly lease: NonNullable<Storage.Adapter["lease"]>;
@@ -97,6 +101,8 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     this.artifact = createSqliteArtifactAdapter(this.db);
     this.workerRunState = createSqliteWorkerRunStateAdapter(this.db);
     this.workItem = createSqliteWorkItemAdapter(this.db);
+    this.trigger = createSqliteTriggerAdapter(this.db);
+    this.triggerFire = createSqliteTriggerFireAdapter(this.db);
     this.wait = createSqliteWaitAdapter(this.db);
     this.conversation = createSqliteConversationAdapter(this.db);
     this.lease = createSqliteLeaseAdapter(this.db);

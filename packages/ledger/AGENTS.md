@@ -1,6 +1,6 @@
 # packages/ledger
 
-Durable state substrate: session lifecycle, message/part storage, hash-chained bus persistence, artifacts, surface-key records, worker-run records, actor/grant/blacklist stores, and the WorkItem store used by the OpenOmni kernel. Depends on `@openomni/protocol` and `@openomni/telemetry`.
+Durable state substrate: session lifecycle, message/part storage, hash-chained bus persistence, artifacts, surface-key records, worker-run records, actor/grant/blacklist stores, Trigger intent/fire records, and the WorkItem store used by the OpenOmni kernel. Depends on `@openomni/protocol` and `@openomni/telemetry`.
 
 SSOT directive ([docs/gateway-design.md](../../docs/gateway-design.md) §4, Owner 2026-08-19): "exactly one database, owned by `@openomni/ledger` (the #502 rename of session's storage). No package other than ledger touches the storage engine — every read/write goes through ledger's typed store surfaces." This package is the single storage engine owner; row schemas stay in `protocol`.
 
@@ -28,7 +28,7 @@ src/
 │   ├── sqlite-storage.ts # SqliteStorageAdapter facade (Bun SQLite persistence)
 │   ├── sqlite-*-adapter.ts # SQLite sub-adapters by storage seam
 │   ├── sqlite-schema-lifecycle.ts # PRAGMAs, migrations, and clear ordering
-│   ├── commit-coordinator.ts # SOLE owner of decision-class commit MECHANICS for Conversation, Lease, Approval, Engagement, Wait, and WorkItem: append at expectedHead → adopt an empty pre-cutover stream → caller's projection CAS, with SQLITE_BUSY mapped to the caller's typed error. A refused projection is ATOMIC via a nested transaction (savepoint), so head never outruns revision even when the caller reports the refusal by RETURNING (completion-writer) rather than throwing. Domains keep their folds, fact payloads, adoption genesis, and conflict taxonomy
+│   ├── commit-coordinator.ts # SOLE owner of decision-class commit MECHANICS for Conversation, Lease, Approval, Engagement, Trigger, Wait, and WorkItem: append at expectedHead → adopt an empty pre-cutover stream → caller's projection CAS, with SQLITE_BUSY mapped to the caller's typed error. A refused projection is ATOMIC via a nested transaction (savepoint), so head never outruns revision even when the caller reports the refusal by RETURNING (completion-writer) rather than throwing. Domains keep their folds, fact payloads, adoption genesis, and conflict taxonomy
 │   ├── atomic-file.ts # sole temp-write/rename owner for durable file replacement (optional fsync durability)
 │   ├── migration-runner.ts / sqlite-busy.ts / sqlite-json-data.ts / timestamped-store.ts # shared SQLite helpers (requireSubAdapter lives in timestamped-store)
 │   └── initialize.ts     # initialize({ dbPath }) — bootstraps the default SQLite adapter
@@ -45,6 +45,7 @@ src/
 ├── lease/                # LeaseStore — durable carved send rights: lease decisions and dual-stream send debit via the shared commit coordinator, typed Lease.StoreError fail-closed
 ├── approval/             # ApprovalStore — durable Owner approval requests and decisions via the shared commit coordinator, typed Approval.StoreError fail-closed
 ├── wait/                 # WaitStore — raw correlation reads plus durable channels-produced Wait outcomes (#215/#510 B): fact-before-projection CAS via the shared commit coordinator, typed Wait.StoreError fail-closed, lazy pre-cutover adoption
+├── trigger/              # TriggerStore + TriggerFireStore — durable intent, bounded pending work, delivery receipts, boot scans, and paired parent/child fact transactions
 ├── egress/               # EgressBudgetStore — durable perimeter social-budget debit records
 ├── work-item/            # WorkItemStore — universal work state engine
 │   ├── index.ts          # WorkItemStore namespace barrel: public WorkItemStore.* API
@@ -84,6 +85,8 @@ Stores may provide CRUD and indexed queries:
 
 - `WaitStore.findByCorrelation(...)` returns raw indexed candidate records; it does not filter follow-up eligibility.
 - `WaitStore.commit(...)` persists a channels-produced outcome under revision CAS; it does not invoke a domain fold.
+- `TriggerStore.listActiveIds()` and `TriggerFireStore.listUnackedIds()` are indexed recovery scans; callers hydrate each ID independently so one corrupt JSON row cannot abort unrelated boot recovery.
+- Trigger reservation and acknowledgement bind parent and Fire stream revisions in one transaction; no source activation or delivery effect is authoritative before that commit.
 - `ChannelGrantStore` / `BlacklistStore` persist and retrieve raw records only.
 
 Stores must not own kernel decisions:
