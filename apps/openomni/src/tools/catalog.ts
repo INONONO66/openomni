@@ -80,6 +80,17 @@ import {
   workItemsToolExecutor,
   workItemsToolSpec,
 } from "./work-items";
+import type { TriggerToolPort } from "./triggers";
+import {
+  triggerCancelToolExecutor,
+  triggerCancelToolSpec,
+  triggerCreateToolExecutor,
+  triggerCreateToolSpec,
+  triggerListToolExecutor,
+  triggerListToolSpec,
+  triggerRearmToolExecutor,
+  triggerRearmToolSpec,
+} from "./triggers";
 
 export interface CatalogPorts {
   readonly delegation?: DelegationKernel;
@@ -100,6 +111,7 @@ export interface CatalogPorts {
   readonly llm?: LlmPort;
   readonly artifacts?: ArtifactsPort;
   readonly provisioning?: ProvisionPort;
+  readonly triggers?: TriggerToolPort;
 }
 
 type ToolRun = CatalogEntry["run"];
@@ -299,6 +311,36 @@ const CATALOG_TOOLS: readonly CatalogTool[] = [
   {
     spec: llmToolSpec,
     wire: (ports) => (ports.llm === undefined ? undefined : llmToolExecutor(ports.llm)),
+  },
+  {
+    // Trigger intent is Owner/Resident-session state. A worker receives no
+    // trigger administration surface rather than a tool that always refuses.
+    spec: triggerCreateToolSpec,
+    wire: (ports, origin) =>
+      ports.triggers === undefined || origin.role !== "resident"
+        ? undefined
+        : triggerCreateToolExecutor(ports.triggers, origin.sessionId),
+  },
+  {
+    spec: triggerListToolSpec,
+    wire: (ports, origin) =>
+      ports.triggers === undefined || origin.role !== "resident"
+        ? undefined
+        : triggerListToolExecutor(ports.triggers, origin.sessionId),
+  },
+  {
+    spec: triggerCancelToolSpec,
+    wire: (ports, origin) =>
+      ports.triggers === undefined || origin.role !== "resident"
+        ? undefined
+        : triggerCancelToolExecutor(ports.triggers, origin.sessionId),
+  },
+  {
+    spec: triggerRearmToolSpec,
+    wire: (ports, origin) =>
+      ports.triggers === undefined || origin.role !== "resident"
+        ? undefined
+        : triggerRearmToolExecutor(ports.triggers, origin.sessionId),
   },
   {
     // Writes are keyed to the session that asked (the origin already flows

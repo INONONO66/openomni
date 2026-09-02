@@ -28,7 +28,12 @@
 //   - streams: the ONE producer module per decision-class stream family
 //     (`wait:` / `work:` / `route:` — the class vocabulary is protocol
 //     `Ledger.StreamRegistry`). A retained protocol class may have zero
-//     producers after its owning product path is removed.
+//     producers after its owning product path is removed. A single module MAY
+//     own more than one family when the families are two halves of one
+//     durable decision (`trigger` + `trigger_fire`: the parent's scheduler
+//     revision and the Fire it reserved must commit under one owner or the
+//     record-before-delivery invariant has no single enforcement point).
+//     Each family still has exactly one owner.
 //   - appendCore: the modules allowed to touch `ledger_event`/`ledger_head`
 //     rows directly (raw prepared statements) plus the storage-adapter
 //     binding that exposes them as the ledger sub-adapter.
@@ -155,6 +160,21 @@ export const LEDGER_PRODUCER_MANIFEST: LedgerProducerManifest = {
       // this single-fact stream before resuming debit/wait/delivery state.
       streamClass: "gateway_send",
       producers: ["packages/channels/src/router/messaging/send.ts"],
+      writes: "append",
+    },
+    {
+      // Unified Trigger subsystem (docs/trigger-subsystem.md) — the parent
+      // scheduler stream. One producer: the ledger TriggerStore.
+      streamClass: "trigger",
+      producers: ["packages/ledger/src/trigger/index.ts"],
+      writes: "append",
+    },
+    {
+      // The Fire half of the same owner: a Fire is recorded BEFORE any
+      // delivery and acknowledged only after durable admission, so its
+      // attempts and ack live on their own stream.
+      streamClass: "trigger_fire",
+      producers: ["packages/ledger/src/trigger/index.ts"],
       writes: "append",
     },
   ],

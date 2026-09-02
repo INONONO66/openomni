@@ -99,7 +99,11 @@ export function makeEvent(
  * asserted on the delivery the router hands across the seam.
  */
 export function lastResolvedActor(): Ingress.Actor | undefined {
-  return deliveries.at(-1)?.event.meta?.actor;
+  const last = deliveries.at(-1);
+  // Only external channel deliveries carry a resolved actor; the internal
+  // Trigger arm of the union has no perimeter identity to resolve.
+  if (last === undefined || last.event.mode !== "direct") return undefined;
+  return last.event.meta?.actor;
 }
 
 export function registerOwnerEndpoint(workspace?: string): void {

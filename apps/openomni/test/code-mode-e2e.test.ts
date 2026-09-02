@@ -108,7 +108,7 @@ test("a cell batches delegation into one turn", async () => {
   ws.close();
 
   // The machine was attached, so the machine-placed tool was offered.
-  expect(answer).toContain("offered=[approval_decide,approval_request,await_delegation,cancel_delegation,channel_declare,channel_disable,channel_enable,complete_work,contact_promote,converse_close,converse_open,delegate,endpoint_merge,lease_open,llm,machines,memory,person_declare,person_remove,provision_status,read_artifact,run_code,secret_rotate,work_items,write_artifact]");
+  expect(answer).toContain("offered=[approval_decide,approval_request,await_delegation,cancel_delegation,channel_declare,channel_disable,channel_enable,complete_work,contact_promote,converse_close,converse_open,delegate,endpoint_merge,lease_open,llm,machines,memory,person_declare,person_remove,provision_status,read_artifact,run_code,secret_rotate,trigger_cancel,trigger_create,trigger_list,trigger_rearm,work_items,write_artifact]");
   // Three workers ran and their answers came back inside the cell. The value
   // is the cell's final expression as Python rendered it, quotes included.
   expect(answer).toContain("done(check lint); done(check types); done(check tests)");
@@ -158,7 +158,7 @@ test("the machine tool is not offered while nothing is attached", async () => {
   const answer = (JSON.parse(String((await reply).data)) as { text: string }).text;
   ws.close();
 
-  expect(offered).toEqual(["delegate", "await_delegation", "cancel_delegation", "converse_open", "converse_close", "lease_open", "approval_request", "approval_decide", "contact_promote", "endpoint_merge", "person_declare", "person_remove", "channel_declare", "channel_enable", "channel_disable", "secret_rotate", "provision_status", "machines", "memory", "work_items", "complete_work", "llm", "write_artifact", "read_artifact"]);
+  expect(offered).toEqual(["delegate", "await_delegation", "cancel_delegation", "converse_open", "converse_close", "lease_open", "approval_request", "approval_decide", "contact_promote", "endpoint_merge", "person_declare", "person_remove", "channel_declare", "channel_enable", "channel_disable", "secret_rotate", "provision_status", "machines", "memory", "work_items", "complete_work", "llm", "trigger_create", "trigger_list", "trigger_cancel", "trigger_rearm", "write_artifact", "read_artifact"]);
   // Refused by the one gate that owns this refusal, naming what was missing.
   expect(answer).toContain('tool "run_code" requires capabilities no attached target holds: kernel.py');
   // Enrolled-but-detached is honestly reported, so the model knows why run_code is absent.

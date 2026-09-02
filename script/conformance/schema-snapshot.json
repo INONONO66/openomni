@@ -17,6 +17,7 @@
     "id",
     "inboundTreatment",
     "kind",
+    "provisionalMint",
     "surface",
     "updatedAt",
     "workspace"
@@ -39,6 +40,7 @@
     "id",
     "kind",
     "metadata",
+    "standing",
     "trustTier",
     "updatedAt"
   ],
@@ -51,6 +53,7 @@
     "tools",
     "trustTier"
   ],
+  "Actor.ProvisionalMintPolicy": ["max", "windowMs"],
   "Actor.ResolvedEndpoint": ["endpoint", "identity"],
   "AppConnector.Consent": [
     "capabilities",
@@ -130,6 +133,27 @@
     "stallTimeoutMs",
     "timeoutMs"
   ],
+  "Approval.Create": ["deadline", "id", "subject"],
+  "Approval.Record": [
+    "createdAt",
+    "deadline",
+    "decidedAt",
+    "decidedBy",
+    "id",
+    "requestedBy",
+    "revision",
+    "state",
+    "subject",
+    "updatedAt"
+  ],
+  "Approval.Subject#contact_promotion": ["actorId", "kind"],
+  "Approval.Subject#endpoint_merge": [
+    "endpointId",
+    "fromActorId",
+    "kind",
+    "toActorId"
+  ],
+  "Approval.Subject#person_mutation": ["kind", "manifestDigest", "personId"],
   "Artifact.Meta": [
     "createdAt",
     "id",
@@ -230,6 +254,49 @@
     "operation",
     "payload"
   ],
+  "Delegation.Settled#cancelled": [
+    "at",
+    "delegationId",
+    "reason",
+    "status",
+    "workerRunId"
+  ],
+  "Delegation.Settled#completed": [
+    "at",
+    "delegationId",
+    "output",
+    "status",
+    "usage",
+    "workerRunId"
+  ],
+  "Delegation.Settled#delivery_failed": [
+    "at",
+    "delegationId",
+    "reason",
+    "status",
+    "workerRunId"
+  ],
+  "Delegation.Settled#failed": [
+    "at",
+    "delegationId",
+    "error",
+    "status",
+    "workerRunId"
+  ],
+  "Delegation.Settled#interrupted": [
+    "at",
+    "delegationId",
+    "status",
+    "workerRunId"
+  ],
+  "Delegation.Settled#no_response": [
+    "at",
+    "deadline",
+    "delegationId",
+    "status",
+    "workerRunId"
+  ],
+  "Delegation.Settled#sent": ["at", "delegationId", "status"],
   "Delegation.WorkerAddress#actor": ["actorId", "kind"],
   "Delegation.WorkerAddress#core": ["kind", "scope"],
   "Engagement.Create": ["createdAt", "id", "ownerSessionId", "terms", "title"],
@@ -270,7 +337,14 @@
     "resolutionPolicy",
     "waitId"
   ],
-  "Gateway.Deliver": [
+  "Gateway.Deliver#0": [
+    "actorContext",
+    "decision",
+    "event",
+    "sessionId",
+    "waitContext"
+  ],
+  "Gateway.Deliver#1": [
     "actorContext",
     "decision",
     "event",
@@ -296,6 +370,20 @@
     "countInWindow",
     "lastSendAt",
     "notifyInWindow"
+  ],
+  "Gateway.ExternalDeliver": [
+    "actorContext",
+    "decision",
+    "event",
+    "sessionId",
+    "waitContext"
+  ],
+  "Gateway.InternalDeliver": [
+    "actorContext",
+    "decision",
+    "event",
+    "sessionId",
+    "waitContext"
   ],
   "Gateway.MessageTarget": ["actorId", "endpointId"],
   "Gateway.Origin": ["externalId", "surface"],
@@ -326,6 +414,7 @@
     "body",
     "class",
     "conversationId",
+    "leaseId",
     "messageId",
     "operation",
     "senderId",
@@ -358,6 +447,7 @@
     "role",
     "runId",
     "sessionId",
+    "standing",
     "trustTier",
     "type",
     "workerId"
@@ -405,18 +495,43 @@
     "channelGrantId",
     "channelGrantKind",
     "correlation",
+    "fireId",
     "inboundTreatment",
     "kind",
     "replyToId",
     "sender",
     "surfaceKey",
     "target",
-    "threadId"
+    "threadId",
+    "triggerId"
   ],
   "Ingress.TargetSchema": ["kind", "parentSessionId", "sessionId", "workerId"],
   "Ipc.Notification": ["id", "method", "params", "type", "v"],
   "Ipc.Request": ["id", "method", "params", "type", "v"],
   "Ipc.Response": ["error", "id", "result", "type", "v"],
+  "Lease.Budget": ["maxOutbound", "outboundUsed"],
+  "Lease.Create": [
+    "contactId",
+    "conversationId",
+    "expiresAt",
+    "holderDelegationId",
+    "id",
+    "maxOutbound"
+  ],
+  "Lease.Record": [
+    "budget",
+    "closedAt",
+    "closedBy",
+    "contactId",
+    "conversationId",
+    "createdAt",
+    "expiresAt",
+    "holderDelegationId",
+    "id",
+    "revision",
+    "state",
+    "updatedAt"
+  ],
   "Ledger.AdoptGenesis": ["data", "timeCreated", "type"],
   "Ledger.ChainBreak": [
     "actual",
@@ -561,7 +676,11 @@
     "trustTier"
   ],
   "Ledger.RouteNotDelivered": ["inboundId", "reason"],
-  "Machine.AttachResult#attached": ["effectiveCapabilities", "status"],
+  "Machine.AttachResult#attached": [
+    "effectiveCapabilities",
+    "effectiveExports",
+    "status"
+  ],
   "Machine.AttachResult#refused": ["reason", "status"],
   "Machine.CellRequest": ["cellId", "code", "tenant", "timeoutMs"],
   "Machine.CellResult#completed": ["cellId", "output", "status", "value"],
@@ -569,12 +688,19 @@
   "Machine.CellResult#timed_out": ["cellId", "status"],
   "Machine.Enrollment": [
     "allowedCapabilities",
+    "allowedExports",
     "enrolledAt",
     "machineId",
     "name"
   ],
+  "Machine.FsRequest#list": ["export", "op", "path"],
+  "Machine.FsRequest#read": ["export", "limit", "offset", "op", "path"],
+  "Machine.FsRequest#stat": ["export", "op", "path"],
+  "Machine.FsResult#completed": ["status", "value"],
+  "Machine.FsResult#refused": ["message", "reason", "status"],
   "Machine.Offer": [
     "daemonVersion",
+    "exports",
     "machineId",
     "offeredAt",
     "offeredCapabilities",
@@ -854,6 +980,42 @@
     "requireApproval",
     "requireApprovalLabels"
   ],
+  "Provisioning.ChannelInstance": [
+    "createdBy",
+    "credentialRef",
+    "enabled",
+    "grant",
+    "id",
+    "provider",
+    "revision",
+    "settings",
+    "updatedAt"
+  ],
+  "Provisioning.GrantPolicy": [
+    "allowedSenders",
+    "defaultTier",
+    "provisionalMint"
+  ],
+  "Provisioning.Person": [
+    "createdBy",
+    "displayName",
+    "endpoints",
+    "id",
+    "kind",
+    "revision",
+    "trustTier",
+    "updatedAt"
+  ],
+  "Provisioning.PersonEndpoint": ["channel", "externalId", "workspace"],
+  "Provisioning.Secret": [
+    "ciphertext",
+    "createdAt",
+    "id",
+    "kekId",
+    "purpose",
+    "rotatedAt",
+    "wrappedDek"
+  ],
   "Token.AgentUsage": [
     "cacheReadTokens",
     "cacheWriteTokens",
@@ -945,6 +1107,135 @@
   "Transcript.PartTransition#interrupted": ["at", "partialOutput", "to"],
   "Transcript.PartTransition#running": ["at", "to"],
   "Transcript.Usage": ["cache", "input", "output", "reasoning"],
+  "Trigger.Create": ["at", "id", "ownerSessionId", "prompt", "source"],
+  "Trigger.CreateSource#event.command": [
+    "command",
+    "filter",
+    "kind",
+    "persistent"
+  ],
+  "Trigger.CreateSource#event.file": ["kind", "on", "path"],
+  "Trigger.CreateSource#time.every": ["intervalMs", "kind"],
+  "Trigger.CreateSource#time.once": ["at", "kind"],
+  "Trigger.Fire": [
+    "ackedAt",
+    "admission",
+    "cause",
+    "deliveredAt",
+    "deliveryAttempts",
+    "firedAt",
+    "id",
+    "overflowCount",
+    "ownerSessionId",
+    "payload",
+    "payloadDigest",
+    "recordedAt",
+    "revision",
+    "scheduledForAt",
+    "sourceItems",
+    "status",
+    "terminalReason",
+    "traceId",
+    "triggerId",
+    "updatedAt"
+  ],
+  "Trigger.FireAdmission": [
+    "admittedAt",
+    "fireId",
+    "messageId",
+    "payloadDigest",
+    "sessionId"
+  ],
+  "Trigger.FireMaterial": ["pendingBatch", "reservation"],
+  "Trigger.FireReservation": [
+    "cause",
+    "firedAt",
+    "id",
+    "overflowCount",
+    "payload",
+    "payloadDigest",
+    "scheduledForAt",
+    "sourceItems",
+    "terminalReason",
+    "traceId"
+  ],
+  "Trigger.Lifecycle#armed": ["state"],
+  "Trigger.Lifecycle#ended": ["endDetail", "endedAt", "endReason", "state"],
+  "Trigger.Lifecycle#paused": ["pausedAt", "pauseReason", "state"],
+  "Trigger.PendingBatch": [
+    "fingerprint",
+    "firstAt",
+    "items",
+    "lastAt",
+    "overflowCount",
+    "scheduledForAt",
+    "scheduleMarker",
+    "terminalReason"
+  ],
+  "Trigger.Record": [
+    "coalescedFirePending",
+    "createdAt",
+    "effectiveIntervalMs",
+    "expiresAt",
+    "fireCount",
+    "id",
+    "inFlightFireId",
+    "lastFiredAt",
+    "lastObservedAt",
+    "lifecycle",
+    "nextFireAt",
+    "ownerSessionId",
+    "pendingBatch",
+    "prompt",
+    "requestedIntervalMs",
+    "revision",
+    "source",
+    "updatedAt"
+  ],
+  "Trigger.SchedulerEffect#activate_source": ["type"],
+  "Trigger.SchedulerEffect#arm": ["dueAt", "type"],
+  "Trigger.SchedulerEffect#cancel_timer": ["type"],
+  "Trigger.SchedulerEffect#end": ["type"],
+  "Trigger.SchedulerEffect#pause_source": ["type"],
+  "Trigger.SchedulerEffect#reserve_fire": ["fireId", "type"],
+  "Trigger.SchedulerInput#cancel": [
+    "at",
+    "detail",
+    "fireMaterial",
+    "terminalBatch",
+    "type"
+  ],
+  "Trigger.SchedulerInput#delivery_acknowledged": [
+    "admission",
+    "at",
+    "fireId",
+    "nextReservation",
+    "type"
+  ],
+  "Trigger.SchedulerInput#pause": ["at", "reason", "type"],
+  "Trigger.SchedulerInput#rearm": ["at", "type"],
+  "Trigger.SchedulerInput#restore": ["at", "fireMaterial", "type"],
+  "Trigger.SchedulerInput#source_closed": [
+    "at",
+    "detail",
+    "fireMaterial",
+    "reason",
+    "terminalBatch",
+    "type"
+  ],
+  "Trigger.SchedulerInput#source_observation": [
+    "at",
+    "batch",
+    "fireMaterial",
+    "terminalReason",
+    "type"
+  ],
+  "Trigger.SchedulerInput#timer_due": ["at", "fireMaterial", "type"],
+  "Trigger.Source#event.command": ["command", "filter", "kind", "persistent"],
+  "Trigger.Source#event.file": ["kind", "on", "path"],
+  "Trigger.Source#time.every": ["intervalMs", "kind"],
+  "Trigger.Source#time.once": ["at", "kind"],
+  "Trigger.SourceItem": ["at", "kind", "text"],
   "Wait.Correlation": [
     "channelId",
     "endpointId",
@@ -1014,7 +1305,8 @@
     "endedAt",
     "error",
     "outcome",
-    "usage"
+    "usage",
+    "workerRunId"
   ],
   "WorkItem.AttemptUsage": ["seconds", "tokens"],
   "WorkItem.Blocker": ["createdAt", "description", "id", "kind", "resolvedAt"],
@@ -1219,6 +1511,34 @@
     "producer",
     "provenanceRef",
     "subjectRef"
+  ],
+  "WorkItem.ReadBackCheck#api_query": [
+    "kind",
+    "matchedText",
+    "method",
+    "observedAt",
+    "passed",
+    "responseDigest",
+    "statusCode",
+    "target"
+  ],
+  "WorkItem.ReadBackCheck#citation_match": [
+    "kind",
+    "matchedText",
+    "observedAt",
+    "passed",
+    "quotedText",
+    "statusCode",
+    "target"
+  ],
+  "WorkItem.ReadBackCheck#url_fetch": [
+    "contentDigest",
+    "kind",
+    "matchedText",
+    "observedAt",
+    "passed",
+    "statusCode",
+    "target"
   ],
   "WorkItem.ReadBackRequest#api_query": [
     "kind",

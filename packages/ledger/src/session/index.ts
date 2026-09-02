@@ -3,6 +3,7 @@ import type { SessionInfo as SessionInfoType } from "./info";
 import { Event as SessionEvent } from "./events";
 import * as Lifecycle from "./lifecycle";
 import * as Messages from "./messages";
+import * as TriggerAdmission from "./trigger-admission";
 
 export namespace Session {
   export const Info = SessionInfo;
@@ -23,4 +24,5 @@ export namespace Session {
   export const getMessages = Messages.getMessages;
   export const addPart = Messages.addPart;
   export const getParts = Messages.getParts;
+  export const admitInternalTrigger = TriggerAdmission.admitInternalTrigger;
 }

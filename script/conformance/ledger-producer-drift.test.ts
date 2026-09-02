@@ -16,8 +16,6 @@ import {
 const repoRoot = join(import.meta.dir, "..", "..");
 const adapterBinding = "packages/ledger/src/storage/sqlite-storage.ts";
 
-
-
 describe("ledger producer drift", () => {
   test("the observed write surface equals the manifest in both directions", async () => {
     const scan = await scanLedgerProducers(repoRoot);
@@ -29,9 +27,11 @@ describe("ledger producer drift", () => {
     // unmanifested stream classes.
     expect([...scan.appendCallSites].sort()).toEqual(
       [
-        ...LEDGER_PRODUCER_MANIFEST.streams.flatMap((entry) => entry.producers),
-        LEDGER_PRODUCER_MANIFEST.sharedAppendExecutor,
-        adapterBinding,
+        ...new Set([
+          ...LEDGER_PRODUCER_MANIFEST.streams.flatMap((entry) => entry.producers),
+          LEDGER_PRODUCER_MANIFEST.sharedAppendExecutor,
+          adapterBinding,
+        ]),
       ].sort(),
     );
     expect([...scan.ledgerTableWriters].sort()).toEqual(
@@ -61,21 +61,21 @@ describe("ledger producer drift", () => {
     expect(matchesLedgerWriteCall("adapter.adoptStream(\n streamId,\n head,\n genesis) ")).toBe(
       true,
     );
-    expect(matchesLedgerWriteCall("const write = ledger.append.bind(ledger); write(event, 0)")).toBe(
-      true,
-    );
+    expect(
+      matchesLedgerWriteCall("const write = ledger.append.bind(ledger); write(event, 0)"),
+    ).toBe(true);
     expect(matchesLedgerWriteCall('const write = ledger["append"]; write(event, 0)')).toBe(true);
     expect(matchesLedgerWriteCall("const write = (ledger).append; write(event, 0)")).toBe(true);
     expect(matchesLedgerWriteCall("const write = (ledger as Ledger).append; write(event, 0)")).toBe(
       true,
     );
     expect(matchesLedgerWriteCall("const write = (ledger satisfies Ledger).append")).toBe(true);
-    expect(matchesLedgerWriteCall("const { append: write } = adapter.ledger; write(event, 0)")).toBe(
-      true,
-    );
-    expect(matchesLedgerWriteCall("const { adoptStream } = adapter; adoptStream(id, 1, fact)")).toBe(
-      true,
-    );
+    expect(
+      matchesLedgerWriteCall("const { append: write } = adapter.ledger; write(event, 0)"),
+    ).toBe(true);
+    expect(
+      matchesLedgerWriteCall("const { adoptStream } = adapter; adoptStream(id, 1, fact)"),
+    ).toBe(true);
     expect(
       matchesMigrationTableWriteSql(
         "-- historical backfill\nUPDATE worker_run_state SET executor_kind = 'internal_chat_agent';",
@@ -109,11 +109,14 @@ describe("ledger producer drift", () => {
     );
   });
 
-  test("manifest stream classes equal the protocol registry and producers are unique", () => {
+  test("manifest stream classes equal the protocol registry and every family has one owner", () => {
     const classes: string[] = LEDGER_PRODUCER_MANIFEST.streams.map((entry) => entry.streamClass);
     expect(classes.sort()).toEqual(Object.keys(LedgerTypes.StreamRegistry).sort());
-    const producers = LEDGER_PRODUCER_MANIFEST.streams.flatMap((entry) => entry.producers);
-    expect(new Set(producers).size).toBe(producers.length);
+    // Each family has exactly ONE owning module. A module may own more than one
+    // family when the families are two halves of one durable decision
+    // (`trigger` + `trigger_fire`), so producers are unique per family rather
+    // than globally unique.
+    expect(new Set(classes).size).toBe(classes.length);
     for (const entry of LEDGER_PRODUCER_MANIFEST.streams) {
       expect(entry.producers.length).toBe(1);
     }

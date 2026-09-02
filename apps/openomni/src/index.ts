@@ -21,11 +21,19 @@ import {
   SecretStore,
   Session,
   Storage,
+  TriggerFireStore,
+  TriggerStore,
 } from "@openomni/ledger";
 
 import { createMachineHost, type MachineHost } from "@openomni/machines";
 import type { Placement } from "@openomni/placement";
-import { type Channel, Gateway, type Ingress, type Machine } from "@openomni/protocol";
+import {
+  type Channel,
+  Gateway,
+  type Ingress,
+  type Machine,
+  Operational,
+} from "@openomni/protocol";
 import { Bus, newTraceId } from "@openomni/telemetry";
 import { desiredChannels, materializePersons } from "./provisioning/declared";
 import { type ChannelSupervisor, createChannelSupervisor } from "./provisioning/supervisor";
@@ -61,7 +69,9 @@ import { createPolicyRegistry } from "./composition/policy-registry";
 import { createDriverRegistry } from "./composition/driver-registry";
 import { openCuratedMemory } from "./memory/store";
 import { buildInboundEvent } from "./inbound";
-import { createResident } from "./resident";
+import { createResident, type ResidentDelivery } from "./resident";
+import { createTriggerHost, type TriggerHost } from "./trigger";
+import type { TriggerToolPort } from "./tools/triggers";
 import { createMachineVfs, scopeMachineVfs, type MachineVfs } from "./machines/vfs";
 import { catalogEntries } from "./tools/catalog";
 import { HOST_TARGET } from "./tools/dispatch";
@@ -267,9 +277,25 @@ export async function startOpenOmni(options: StartOptions = {}) {
     // A worker loop holds the same delegate tool the Resident does, so the
     // runner needs the kernel that the kernel needs the runner to build. The
     // cycle is closed by handing the runner a getter rather than a value.
-    let residentDeliver:
-      | ((delivery: Gateway.Deliver) => Promise<Ingress.IngressResult>)
-      | undefined;
+    let residentDeliver: ResidentDelivery | undefined;
+    // The Trigger tool cycle: the Resident catalog needs a tool port, and the
+    // host that backs it needs the Resident it delivers Fires to. Closed with
+    // the same late-binding getter the runner/kernel and gateway pairs use.
+    let triggerHost: TriggerHost | undefined;
+    const requiredTriggerHost = (): TriggerHost => {
+      if (triggerHost === undefined) {
+        throw new Error("trigger host used before composition finished");
+      }
+      return triggerHost;
+    };
+    const triggerToolPort: TriggerToolPort = {
+      create: (ownerSessionId, input) => requiredTriggerHost().create(ownerSessionId, input),
+      list: (ownerSessionId, includeEnded) =>
+        requiredTriggerHost().list(ownerSessionId, includeEnded),
+      cancel: (ownerSessionId, triggerId) =>
+        requiredTriggerHost().cancel(ownerSessionId, triggerId),
+      rearm: (ownerSessionId, triggerId) => requiredTriggerHost().rearm(ownerSessionId, triggerId),
+    };
     // Boot-rescan wakes arrive before the Resident's deliver chain can be
     // bound; they wait in this queue until the arm call below.
     const wakeDelivery = createWakeDeliveryQueue();
@@ -515,7 +541,11 @@ export async function startOpenOmni(options: StartOptions = {}) {
         leases: leasePort,
         approvals: approvalPort,
         provisioning: provisioningPort,
+        triggers: triggerToolPort,
       },
+      // One ordinary user admission resets Trigger wake suppression; an
+      // internal Fire delivery deliberately does not.
+      onUserActivity: () => triggerHost?.noteUserActivity(),
       targets: () => attachedTargets(host, machines?.enrolled ?? []),
       ...(options.llm === undefined ? {} : { llm: options.llm }),
     });
@@ -608,6 +638,46 @@ export async function startOpenOmni(options: StartOptions = {}) {
     // the Resident delivery and flushes them. Reject-only on failure: the
     // kernel's deliverWake is the single owner of wake-failure reporting.
     wakeDelivery.arm((wake) => residentDeliver(delegationWakeDelivery(wake)).then(() => undefined));
+
+    // Behind a live Resident consumer but ahead of external channels: Fire
+    // replay must be able to deliver while no new external traffic competes.
+    const boundResident = residentDeliver;
+    triggerHost = createTriggerHost({
+      clock: { now: () => Date.now() },
+      newTriggerId: () => crypto.randomUUID(),
+      newFireId: () => crypto.randomUUID(),
+      newTraceId,
+      triggers: TriggerStore,
+      fires: TriggerFireStore,
+      sessions: { exists: (sessionId) => Session.get(sessionId) !== undefined },
+      resident: boundResident,
+      // A malformed row, unavailable source, or one failed delivery is isolated
+      // to its Trigger and reported; the sweep and the queue keep going.
+      onOperationalError: ({ triggerId, fireId, error }) => {
+        Bus.publish(
+          Operational.Events.Error,
+          Operational.envelope(
+            {
+              traceId: newTraceId(),
+              component: "trigger.host",
+              msg: "trigger subsystem operational error",
+              context: {
+                ...(triggerId === undefined ? {} : { triggerId }),
+                ...(fireId === undefined ? {} : { fireId }),
+              },
+              error: error instanceof Error ? error.message : String(error),
+            },
+            Date.now(),
+          ),
+        );
+      },
+    });
+    const boundTriggerHost = triggerHost;
+    await composer.mount("trigger.host", async (ctx) => {
+      // Cleanup registers before recovery so a partial startup still rolls back.
+      ctx.effect(() => boundTriggerHost.stop());
+      await boundTriggerHost.startRecovery();
+    });
 
     await composer.mount("channels", async (ctx) => {
       ctx.effect(() => supervisor.stopAll());

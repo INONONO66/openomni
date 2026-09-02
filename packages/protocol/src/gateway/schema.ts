@@ -107,7 +107,20 @@ const InternalDeliverSchema = z
     /** Explicitly uninhabited on the internal arm; retained in the inferred union for safe reads. */
     actorContext: z.never().optional(),
     waitContext: z.never().optional(),
-    event: Ingress.InternalEventSchema,
+    // The Fire identity, text payload, and owner pin are part of the SHAPE, not
+    // just a refinement, so a parsed internal delivery carries them in its type
+    // and no consumer has to re-check what parsing already guaranteed.
+    event: Ingress.InternalEventSchema.extend({
+      payload: z.string(),
+      target: z.object({ kind: z.literal("resident"), sessionId: z.string().min(1) }),
+      meta: z
+        .looseObject({
+          kind: z.literal("trigger.fire"),
+          triggerId: z.string().min(1),
+          fireId: z.string().min(1),
+        })
+        .describe("typed Trigger Fire identity"),
+    }),
     decision: IngressEvents.RoutingDecision.schema,
   })
   .strict()
@@ -117,19 +130,8 @@ const InternalDeliverSchema = z
       ctx.addIssue({ code: "custom", path, message });
     if (event.surface !== "internal") fail(["event", "surface"], "internal Trigger surface required");
     if (event.agentName !== "resident") fail(["event", "agentName"], "resident agent required");
-    if (typeof event.payload !== "string") fail(["event", "payload"], "text payload required");
-    if (
-      event.target?.kind !== "resident" ||
-      event.target.sessionId !== sessionId
-    ) {
+    if (event.target.sessionId !== sessionId) {
       fail(["event", "target"], "internal target must pin the owner Resident session");
-    }
-    if (
-      event.meta?.kind !== "trigger.fire" ||
-      typeof event.meta.triggerId !== "string" ||
-      typeof event.meta.fireId !== "string"
-    ) {
-      fail(["event", "meta"], "typed Trigger Fire metadata required");
     }
     if (
       decision.mode !== "internal" ||

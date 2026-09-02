@@ -1,7 +1,7 @@
 import { ChatAgent, failureFacts, type ChatAgentConfig, type ChatAgentInput } from "@openomni/agent";
 import { Session } from "@openomni/ledger";
 import type { Placement } from "@openomni/placement";
-import type { Gateway, Ingress, Message, Model } from "@openomni/protocol";
+import { Trigger, type Gateway, type Ingress, type Message, type Model } from "@openomni/protocol";
 import type { PolicyRegistry } from "./composition/policy-registry";
 import type { DelegationOrigin } from "./delegation/admission";
 import { observeComponent } from "./observation/component";
@@ -69,13 +69,29 @@ interface ResidentOptions {
    * lost between two messages suspends the second one fail-closed.
    */
   readonly policies: PolicyRegistry;
+  /** One ordinary user admission resets Trigger notifier wake suppression. */
+  readonly onUserActivity?: () => void;
 }
 
 interface DeliveryClassification {
   readonly sessionId: string;
   readonly payload: string;
   readonly evidenceOnly: boolean;
-  readonly systemKind: "delegation.settled" | "evidence_only" | undefined;
+  readonly systemKind:
+    | "delegation.settled"
+    | "evidence_only"
+    | "trigger.fire"
+    | undefined;
+}
+
+/** A callable compatibility surface plus the explicit two delivery arms. */
+export interface ResidentDelivery {
+  (delivery: Gateway.Deliver): Promise<Ingress.IngressResult>;
+  deliver(delivery: Gateway.ExternalDeliver): Promise<Ingress.IngressResult>;
+  deliverInternal(
+    delivery: Gateway.InternalDeliver,
+    beforeRun: (admission: Trigger.FireAdmission) => Promise<void>,
+  ): Promise<Ingress.IngressResult>;
 }
 
 /**
@@ -86,7 +102,7 @@ interface DeliveryClassification {
  * turn, and only a delivery with no evidence_only anywhere runs at full
  * authority. A mismatch can therefore only reduce authority, never elevate it.
  */
-function classifyDelivery(delivery: Gateway.Deliver): DeliveryClassification {
+function classifyDelivery(delivery: Gateway.ExternalDeliver): DeliveryClassification {
   const sessionId = delivery.sessionId;
   if (sessionId === undefined) {
     throw new Error("Resident delivery requires a routed sessionId");
@@ -109,7 +125,7 @@ function classifyDelivery(delivery: Gateway.Deliver): DeliveryClassification {
 }
 
 /** Who an evidence-only observation is attributed to in its framing. */
-function evidenceOrigin(delivery: Gateway.Deliver): string {
+function evidenceOrigin(delivery: Gateway.ExternalDeliver): string {
   return (
     delivery.actorContext?.actorId ??
     delivery.actorContext?.origin.externalId ??
@@ -176,7 +192,7 @@ export function createResident(options: ResidentOptions) {
     return buildAgentPrompt(RESIDENT_PRESET, { memorySnapshot: snapshot });
   }
 
-  function recordUserTurn(delivery: Gateway.Deliver, turn: DeliveryClassification): string {
+  function recordUserTurn(delivery: Gateway.ExternalDeliver, turn: DeliveryClassification): string {
     const userId = crypto.randomUUID();
     Session.addMessage(turn.sessionId, {
       id: userId,
@@ -257,10 +273,29 @@ export function createResident(options: ResidentOptions) {
     addTextPart(sessionId, assistantId, result.text);
   }
 
-  return async function deliver(delivery: Gateway.Deliver): Promise<Ingress.IngressResult> {
-    const turn = classifyDelivery(delivery);
-    const { sessionId, evidenceOnly } = turn;
+  const sessionTails = new Map<string, Promise<void>>();
 
+  /** Admission and execution share the same per-session tail. */
+  function enqueueSession<T>(sessionId: string, operation: () => Promise<T>): Promise<T> {
+    const previous = sessionTails.get(sessionId) ?? Promise.resolve();
+    const current = previous.catch(() => undefined).then(operation);
+    const settled = current.then(
+      () => undefined,
+      () => undefined,
+    );
+    sessionTails.set(sessionId, settled);
+    void settled.then(() => {
+      if (sessionTails.get(sessionId) === settled) sessionTails.delete(sessionId);
+    });
+    return current;
+  }
+
+  async function runAdmittedTurn(
+    delivery: Gateway.Deliver,
+    turn: DeliveryClassification,
+    userId: string,
+  ): Promise<Ingress.IngressResult> {
+    const { sessionId, evidenceOnly } = turn;
     // Built per delivery because the origin carries THIS session: a Wait a
     // delegation opens must be owned by the session that asked for the work.
     const origin: DelegationOrigin = { role: "resident", depth: 0, sessionId };
@@ -297,35 +332,10 @@ export function createResident(options: ResidentOptions) {
       ...(options.llm === undefined ? {} : { llm: options.llm }),
     });
 
-    Session.materialize({
-      id: sessionId,
-      traceId: delivery.event.traceId,
-      title: "Resident chat",
-      model: { providerID: options.model.provider, modelID: options.model.id },
-    });
-
-    const userId = recordUserTurn(delivery, turn);
-
     // The single enforcement layer for terminal turn failures. It sits here,
     // around the ONE agent invocation, because this is the last point that
-    // still holds what a reply needs: the session to record it in and the
-    // routed target to address it to. Above this the throw becomes a dropped
-    // gateway result and the channel user is told nothing at all.
-    //
-    // Two deliveries are deliberately NOT converted:
-    //
-    //  - An abort. A stopped run is an instruction, not a model fault, and
-    //    answering it with an apology would fabricate a turn for a caller
-    //    that asked for none.
-    //  - A delegation wake. Its resolution IS the durable receipt
-    //    (`markWoken`), so answering a failed wake with a reply would consume
-    //    the wake and lose the settlement instead of leaving it for the next
-    //    boot's rescan. Nobody is waiting on a channel for it either.
-    //
-    // Everything else has a person on the other end, but only a failure with
-    // agent-owned LLM provenance is converted. Configuration, policy, host,
-    // and observation faults must still fail loudly rather than masquerade as
-    // a provider reply.
+    // still holds what a reply needs. A delegation wake remains retryable on
+    // failure; normal and Trigger turns persist an explained LLM failure.
     const surfaceFailures = turn.systemKind !== "delegation.settled";
     let result: Awaited<ReturnType<typeof agent.run>>;
     try {
@@ -343,11 +353,9 @@ export function createResident(options: ResidentOptions) {
     } catch (error) {
       if (!surfaceFailures || isAbort(error) || failureFacts(error)?.llm !== true) throw error;
       const classified = classifyTurnFailure(error);
-      // Recorded like any other assistant turn: what the user was told is
-      // part of the session, not a side channel.
       recordFailedTurn(sessionId, userId, classified.text);
       return {
-        mode: "direct",
+        mode: delivery.event.mode,
         target: delivery.event.target ?? { kind: "resident" },
         sessionId,
         result: { output: classified.text, finishReason: "error" },
@@ -355,12 +363,71 @@ export function createResident(options: ResidentOptions) {
     }
 
     recordAssistantTurn(sessionId, userId, result);
-
     return {
-      mode: "direct",
+      mode: delivery.event.mode,
       target: delivery.event.target ?? { kind: "resident" },
       sessionId,
       result: { output: result.text, finishReason: result.finishReason },
     };
-  };
+  }
+
+  async function deliver(delivery: Gateway.ExternalDeliver): Promise<Ingress.IngressResult> {
+    const turn = classifyDelivery(delivery);
+    return enqueueSession(turn.sessionId, async () => {
+      Session.materialize({
+        id: turn.sessionId,
+        traceId: delivery.event.traceId,
+        title: "Resident chat",
+        model: { providerID: options.model.provider, modelID: options.model.id },
+      });
+      const userId = recordUserTurn(delivery, turn);
+      if (turn.systemKind === undefined) options.onUserActivity?.();
+      return runAdmittedTurn(delivery, turn, userId);
+    });
+  }
+
+  async function deliverInternal(
+    delivery: Gateway.InternalDeliver,
+    beforeRun: (admission: Trigger.FireAdmission) => Promise<void>,
+  ): Promise<Ingress.IngressResult> {
+    const sessionId = delivery.sessionId;
+    const payload = delivery.event.payload;
+    if (typeof payload !== "string") {
+      throw new Error("Resident internal delivery payload must be text");
+    }
+    const fireId = delivery.event.meta.fireId;
+    return enqueueSession(sessionId, async () => {
+      // Existing-owner-only, deterministic admission. This helper never
+      // materializes a replacement session and returns only after message,
+      // part, and session-count projections commit.
+      const admission = Session.admitInternalTrigger({
+        sessionId,
+        fireId,
+        payload,
+        payloadDigest: Trigger.canonicalDigest(payload),
+        admittedAt: Math.max(Date.now(), delivery.decision.time),
+      });
+      await beforeRun(admission);
+      return runAdmittedTurn(
+        delivery,
+        {
+          sessionId,
+          payload,
+          evidenceOnly: false,
+          systemKind: "trigger.fire",
+        },
+        admission.messageId,
+      );
+    });
+  }
+
+  const callable = ((delivery: Gateway.Deliver) => {
+    if (delivery.event.mode !== "direct") {
+      throw new Error("Internal Resident delivery requires deliverInternal acknowledgement");
+    }
+    return deliver(delivery as Gateway.ExternalDeliver);
+  }) as ResidentDelivery;
+  callable.deliver = deliver;
+  callable.deliverInternal = deliverInternal;
+  return callable;
 }
