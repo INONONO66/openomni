@@ -301,7 +301,7 @@ test("cells from different sessions never share interpreter state", async () => 
   expect(otherSession).toContain("NameError");
 }, 40_000);
 
-test("a cell's canonical llm(prompts) call receives the parsed array unchanged", async () => {
+test("a cell rejects legacy scalar llm input and preserves canonical arrays", async () => {
   const prompts: string[] = [];
   const { host, run } = await startCellHarness({
     llm: async (prompt) => {
@@ -310,12 +310,22 @@ test("a cell's canonical llm(prompts) call receives the parsed array unchanged",
     },
   });
 
-  const output = await run("llm(['summarize the ledger in one word'])");
+  const output = await run(
+    [
+      "try:",
+      "    tool.llm(prompt='x')",
+      "    legacy = 'accepted'",
+      "except ToolError:",
+      "    legacy = 'invalid_input'",
+      "canonical = tool.llm(prompts=['x'])",
+      "{'legacy': legacy, 'canonical': canonical}",
+    ].join("\n"),
+  );
   host.close();
 
-  expect(prompts).toEqual(["summarize the ledger in one word"]);
-  // The cell's final expression is repr'd by the driver, quotes included.
-  expect(output).toContain("['answered: summarize the ledger in one word']");
+  // The cell sees the dispatcher refusal as ToolError and does not invoke the port.
+  expect(output).toBe("{'legacy': 'invalid_input', 'canonical': ['answered: x']}");
+  expect(prompts).toEqual(["x"]);
 }, 40_000);
 
 test("a failing llm call raises ToolError inside the cell instead of returning failure text", async () => {

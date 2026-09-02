@@ -1,6 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import type { Conversation } from "@openomni/protocol";
-import type { ConversePort, LeasePort } from "../src/tools/mutation/converse";
+import { eraseTool } from "../src/tools/core/define";
+import { createDispatcher } from "../src/tools/core/dispatch";
+import { createConverseTool, type ConversePort, type LeasePort } from "../src/tools/mutation/converse";
 import { dispatchModelTool } from "./helpers/tool-dispatch";
 
 const RESIDENT = { role: "resident", depth: 0, sessionId: "session-origin" } as const;
@@ -58,5 +60,27 @@ describe("converse tool", () => {
     )({ operation: { op: "open", contactId: "alice" } });
     expect(result).toMatchObject({ isError: true, errorClass: "invalid_input" });
     expect(conversations.opened).toHaveLength(0);
+  });
+
+  it("rejects malformed output through the dispatcher", async () => {
+    const tool = eraseTool(createConverseTool(recordingPort(), leases));
+    const result = await createDispatcher([
+      { ...tool, execute: async () => ({ op: "open" }) },
+    ]).execute({
+      id: "converse-invalid-output",
+      tool: "converse",
+      input: {
+        operation: { op: "close", conversationId: "conv:1" },
+      },
+    });
+
+    expect(result).toEqual({
+      toolCallId: "converse-invalid-output",
+      id: "converse-invalid-output",
+      toolName: "converse",
+      output: "converse produced invalid output",
+      isError: true,
+      errorClass: "invalid_output",
+    });
   });
 });

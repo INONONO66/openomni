@@ -9,7 +9,13 @@ import {
 } from "@openomni/ledger";
 import type { ChannelRuntimeStatus } from "../src/provisioning/supervisor";
 import { createTools } from "../src/tools/core/catalog";
-import { personManifestDigest, type ProvisionPort } from "../src/tools/mutation/provision";
+import { eraseTool } from "../src/tools/core/define";
+import { createDispatcher } from "../src/tools/core/dispatch";
+import {
+  createProvisionTool,
+  personManifestDigest,
+  type ProvisionPort,
+} from "../src/tools/mutation/provision";
 import { dispatchModelTool, modelToolOutput } from "./helpers/tool-dispatch";
 
 const NOW = 1_756_000_000_000;
@@ -111,6 +117,29 @@ beforeEach(() => {
 
 afterEach(() => {
   Storage.reset();
+});
+
+describe("provision output boundary", () => {
+  test("rejects malformed output through the dispatcher", async () => {
+    const { port } = portWith();
+    const tool = eraseTool(createProvisionTool(port));
+    const result = await createDispatcher([
+      { ...tool, execute: async () => ({ op: "status" }) },
+    ]).execute({
+      id: "provision-invalid-output",
+      tool: "provision",
+      input: { operation: { op: "status", args: {} } },
+    });
+
+    expect(result).toEqual({
+      toolCallId: "provision-invalid-output",
+      id: "provision-invalid-output",
+      toolName: "provision",
+      output: "provision produced invalid output",
+      isError: true,
+      errorClass: "invalid_output",
+    });
+  });
 });
 
 describe("person_declare approval lane (§8.5)", () => {

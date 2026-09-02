@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { ActorRegistry, ApprovalStore, Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
-import type { ApprovalPort } from "../src/tools/authority/approval";
+import { createApprovalTool, type ApprovalPort } from "../src/tools/authority/approval";
 import { createTools } from "../src/tools/core/catalog";
+import { eraseTool } from "../src/tools/core/define";
+import { createDispatcher } from "../src/tools/core/dispatch";
 import { dispatchModelTool, modelToolOutput } from "./helpers/tool-dispatch";
 
 /**
@@ -92,6 +94,30 @@ async function requestPromotion(at = T0): Promise<string> {
   });
   return approvalIdFrom(text);
 }
+
+describe("approval output boundary", () => {
+  it("rejects malformed output through the dispatcher", async () => {
+    const tool = eraseTool(createApprovalTool(port));
+    const result = await createDispatcher([
+      { ...tool, execute: async () => ({ op: "request" }) },
+    ]).execute({
+      id: "approval-invalid-output",
+      tool: "approval",
+      input: {
+        operation: { op: "decide", approvalId: "approval:1", decision: "approved" },
+      },
+    });
+
+    expect(result).toEqual({
+      toolCallId: "approval-invalid-output",
+      id: "approval-invalid-output",
+      toolName: "approval",
+      output: "approval produced invalid output",
+      isError: true,
+      errorClass: "invalid_output",
+    });
+  });
+});
 
 describe("§8.13 — the approval lane fails closed", () => {
   it("an unanswered request refuses the act after its deadline", async () => {
