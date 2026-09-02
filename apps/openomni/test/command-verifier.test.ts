@@ -1,4 +1,6 @@
 import { expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import type { Machine } from "@openomni/protocol";
 import { createCommandVerifier } from "../src/delegation/command-verifier";
 import type { CellPorts } from "../src/tools/run-code";
@@ -51,6 +53,45 @@ test("a registered command runs through a tenant-bound machine cell", async () =
   expect(dispatched).toMatchObject({
     machineId: "alpha",
     request: { cellId: "verifier-cell-1", tenant: "owner-session", timeoutMs: 1250 },
+  });
+});
+
+test("a command digest covers trailing output beyond the retained-byte limit", async () => {
+  // Given: a real generated verifier cell whose registered command emits two retained limits.
+  const output = "x".repeat(2048);
+  const verifier = createCommandVerifier({
+    runCell: (_machineId, request) => {
+      const completed = spawnSync(
+        "python3",
+        ["-c", request.code.replace('cwd="/workspace"', 'cwd="/tmp"')],
+        { encoding: "utf8" },
+      );
+      return Promise.resolve({
+        status: "completed",
+        cellId: request.cellId,
+        output: { stdout: completed.stdout, stderr: completed.stderr },
+      });
+    },
+    machineFor: () => "alpha",
+    executables: new Map([["emit", "/usr/bin/python3"]]),
+    newCellId: () => "verifier-cell-output-limit",
+    maxOutputBytes: 1024,
+  });
+
+  // When: bytes after the retained prefix differ from an expected-prefix digest.
+  const result = await verifier.run({
+    executableId: "emit",
+    argv: ["-c", `print(${JSON.stringify(output)}, end="")`],
+    timeoutMs: 1_000,
+    tenant: "owner-session",
+  });
+
+  // Then: the digest and count describe the full stream while retention remains bounded.
+  expect(result).toMatchObject({
+    status: "exited",
+    stdoutSha256: createHash("sha256").update(output).digest("hex"),
+    stdoutBytes: 2048,
+    truncated: true,
   });
 });
 

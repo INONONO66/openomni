@@ -72,46 +72,71 @@ import hashlib
 import json
 import signal
 import subprocess
+import threading
 import time
 
+class _StreamCapture:
+    def __init__(self):
+        self.retained = bytearray()
+        self.digest = hashlib.sha256()
+        self.count = 0
+
+    def drain(self, pipe):
+        while True:
+            chunk = pipe.read(65536)
+            if not chunk:
+                return
+            self.digest.update(chunk)
+            self.count += len(chunk)
+            remaining = ${ports.maxOutputBytes} - len(self.retained)
+            if remaining > 0:
+                self.retained.extend(chunk[:remaining])
+
 _started = time.monotonic()
+_process = subprocess.Popen(
+    json.loads(${commandLiteral}),
+    shell=False,
+    cwd="/workspace",
+    env={},
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+)
+_stdout = _StreamCapture()
+_stderr = _StreamCapture()
+_stdout_thread = threading.Thread(target=_stdout.drain, args=(_process.stdout,))
+_stderr_thread = threading.Thread(target=_stderr.drain, args=(_process.stderr,))
+_stdout_thread.start()
+_stderr_thread.start()
 try:
-    _completed = subprocess.run(
-        json.loads(${commandLiteral}),
-        shell=False,
-        cwd="/workspace",
-        env={},
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        timeout=${timeoutSeconds},
-        check=False,
-    )
+    _returncode = _process.wait(timeout=${timeoutSeconds})
 except subprocess.TimeoutExpired:
+    _process.kill()
+    _process.wait()
+    _stdout_thread.join()
+    _stderr_thread.join()
     print(json.dumps({
         "status": "timed_out",
         "durationMs": (time.monotonic() - _started) * 1000,
     }, separators=(",", ":")))
 else:
-    _stdout = _completed.stdout
-    _stderr = _completed.stderr
-    _bounded_stdout = _stdout[:${ports.maxOutputBytes}]
-    _bounded_stderr = _stderr[:${ports.maxOutputBytes}]
+    _stdout_thread.join()
+    _stderr_thread.join()
     _duration_ms = (time.monotonic() - _started) * 1000
-    if _completed.returncode < 0:
+    if _returncode < 0:
         _result = {
             "status": "killed",
-            "signal": signal.Signals(-_completed.returncode).name,
+            "signal": signal.Signals(-_returncode).name,
             "durationMs": _duration_ms,
         }
     else:
         _result = {
             "status": "exited",
-            "exitCode": _completed.returncode,
-            "stdoutSha256": hashlib.sha256(_bounded_stdout).hexdigest(),
-            "stderrSha256": hashlib.sha256(_bounded_stderr).hexdigest(),
-            "stdoutBytes": len(_stdout),
-            "stderrBytes": len(_stderr),
-            "truncated": len(_bounded_stdout) != len(_stdout) or len(_bounded_stderr) != len(_stderr),
+            "exitCode": _returncode,
+            "stdoutSha256": _stdout.digest.hexdigest(),
+            "stderrSha256": _stderr.digest.hexdigest(),
+            "stdoutBytes": _stdout.count,
+            "stderrBytes": _stderr.count,
+            "truncated": _stdout.count > len(_stdout.retained) or _stderr.count > len(_stderr.retained),
             "durationMs": _duration_ms,
         }
     print(json.dumps(_result, separators=(",", ":")))
