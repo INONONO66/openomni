@@ -9,9 +9,8 @@ import {
 } from "./facts.js";
 
 export interface VerificationFactsInput {
-  readonly expectedAttempt: number;
-  /** Required for active writers; omission supports only pre-identity first-attempt callers. */
-  readonly expectedAttemptId?: string;
+  readonly expectedAttemptSeq: number;
+  readonly expectedAttemptId: string;
   readonly expectedBasisRef: string;
   readonly observations: readonly WorkItem.Observation[];
   readonly results: readonly WorkItem.CriterionResult[];
@@ -130,12 +129,21 @@ export function verificationFactsShapeViolation(
 }
 
 function hasForbiddenFactShape(item: WorkItem.Info, input: VerificationFactsInput): boolean {
+  const attemptRef = `attempt:${input.expectedAttemptId}`;
+  const suppliedObservationIds = new Set(input.observations.map((fact) => fact.id));
   if (
     input.observations.some(
-      (fact) => fact.subjectRef !== item.workItemId || fact.basisRef !== input.expectedBasisRef,
+      (fact) =>
+        fact.subjectRef !== item.workItemId ||
+        fact.basisRef !== input.expectedBasisRef ||
+        !fact.ancestryRefs.includes(attemptRef),
     ) ||
     input.results.some(
-      (fact) => fact.basisRef !== input.expectedBasisRef || fact.verifierRef !== input.verifierRef,
+      (fact) =>
+        fact.basisRef !== input.expectedBasisRef ||
+        fact.verifierRef !== input.verifierRef ||
+        fact.observationIds.length === 0 ||
+        fact.observationIds.some((observationId) => !suppliedObservationIds.has(observationId)),
     ) ||
     input.verificationErrors.some(
       (fact) => fact.basisRef !== input.expectedBasisRef || fact.verifierRef !== input.verifierRef,
@@ -170,11 +178,9 @@ export function appendVerificationFacts(
         return { kind: "refused", reason: "attempt_closed" };
       }
       if (
-        existing.lastAttemptSeq !== input.expectedAttempt ||
+        existing.lastAttemptSeq !== input.expectedAttemptSeq ||
         existing.currentAttemptId === undefined ||
-        (input.expectedAttemptId === undefined
-          ? existing.lastAttemptSeq !== 1
-          : existing.currentAttemptId !== input.expectedAttemptId)
+        existing.currentAttemptId !== input.expectedAttemptId
       ) {
         return { kind: "refused", reason: "stale_attempt" };
       }
@@ -207,7 +213,7 @@ export function appendVerificationFacts(
           ...existing.evidence,
           ...input.evidence.map((fact) => ({
             ...fact,
-            attempt: input.expectedAttempt,
+            attempt: input.expectedAttemptSeq,
             basisRef: input.expectedBasisRef,
             createdAt,
           })),
@@ -228,7 +234,7 @@ export function appendVerificationFacts(
           type: "work_item.verification_recorded",
           data: {
             basisRef: input.expectedBasisRef,
-            attempt: input.expectedAttempt,
+            attempt: input.expectedAttemptSeq,
             verifierRef: input.verifierRef,
             resultIds: input.results.map((fact) => fact.id),
             observationIds: input.observations.map((fact) => fact.id),

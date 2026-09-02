@@ -49,6 +49,8 @@ export function recordedCompletionSuite() {
         throw new Error("recorded fixture is incomplete");
       }
       const verifierRef = "verifier:command.v1:dg-recorded";
+      const attemptId = item.currentAttemptId;
+      if (attemptId === undefined) throw new Error("recorded fixture attempt identity missing");
       const observations = criteria.map((_criterion, index) => {
         const evidenceId = `evidence:verifier:dg-recorded:criterion-${index}`;
         return {
@@ -58,7 +60,7 @@ export function recordedCompletionSuite() {
           basisRef: item.completionContract.basisRef,
           artifactRefs: [evidenceId],
           provenanceRef: evidenceId,
-          ancestryRefs: [],
+          ancestryRefs: [`attempt:${attemptId}`],
           observedAt: 1000,
         };
       });
@@ -77,7 +79,8 @@ export function recordedCompletionSuite() {
       const recorded = WorkItemStore.appendVerificationFacts(
         workItemId,
         {
-          expectedAttempt: item.attempt,
+          expectedAttemptSeq: item.lastAttemptSeq,
+          expectedAttemptId: attemptId,
           expectedBasisRef: item.completionContract.basisRef,
           observations,
           results,

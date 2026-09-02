@@ -279,7 +279,7 @@ export function createVerificationCoordinator(ports: {
     const write = WorkItemStore.appendVerificationFacts(
       item.workItemId,
       {
-        expectedAttempt: item.lastAttemptSeq,
+        expectedAttemptSeq: item.lastAttemptSeq,
         expectedAttemptId: attemptId,
         expectedBasisRef: item.completionContract.basisRef,
         observations,
@@ -301,6 +301,9 @@ export function createVerificationCoordinator(ports: {
       publishWriterRefusal(record, write.reason, at);
       return unverified(record, outcome, at, "verification_error");
     }
+    // Bounded residual: verification append through this fold is synchronous,
+    // and product retry allocation is not wired. If retries gain a product
+    // caller, that caller must preserve this attempt scope through terminal CAS.
     return foldFacts(
       record,
       WorkItemStore.get(item.workItemId) ?? item,
@@ -340,6 +343,7 @@ export function createVerificationCoordinator(ports: {
       (fact) =>
         fact.verifierRef === verifierRef &&
         fact.basisRef === basisRef &&
+        fact.observationIds.length > 0 &&
         fact.observationIds.every((observationId) => observationIds.has(observationId)),
     );
     const errors = item.completionFacts.verificationErrors.filter(

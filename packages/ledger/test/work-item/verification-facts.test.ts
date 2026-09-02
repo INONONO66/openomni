@@ -87,7 +87,7 @@ function inputFor(item: WorkItem.Info) {
   const evidenceId = "evidence:verifier:delegation-807:criterion-0";
   const observationId = "observation:verifier:delegation-807:criterion-0";
   return {
-    expectedAttempt: item.lastAttemptSeq,
+    expectedAttemptSeq: item.lastAttemptSeq,
     expectedAttemptId: attemptId,
     expectedBasisRef: basisRef,
     observations: [
@@ -188,7 +188,7 @@ describe("WorkItemStore.appendVerificationFacts", () => {
 
     const staleAttempt = WorkItemStore.appendVerificationFacts(
       item.workItemId,
-      { ...input, expectedAttempt: item.attempt + 1 },
+      { ...input, expectedAttemptSeq: item.attempt + 1 },
       "trace",
     );
     const staleAttemptId = WorkItemStore.appendVerificationFacts(
@@ -282,6 +282,77 @@ describe("WorkItemStore.appendVerificationFacts", () => {
 
     expect(foreignSubject).toEqual({ kind: "refused", reason: "forbidden_shape" });
     expect(foreignBasis).toEqual({ kind: "refused", reason: "forbidden_shape" });
+  });
+
+  test("refuses an observation without active-attempt ancestry", async () => {
+    // Given: a verifier observation omits the attempt lineage.
+    const item = await runningItem();
+    const input = inputFor(item);
+
+    // When: the writer receives the unscoped observation.
+    const outcome = WorkItemStore.appendVerificationFacts(
+      item.workItemId,
+      { ...input, observations: [{ ...first(input.observations), ancestryRefs: [] }] },
+      "trace",
+    );
+
+    // Then: no verification projection is written.
+    expect(outcome).toEqual({ kind: "refused", reason: "forbidden_shape" });
+    expect(WorkItemStore.get(item.workItemId)?.revision).toBe(item.revision);
+  });
+
+  test("refuses an observation with foreign attempt ancestry", async () => {
+    // Given: a verifier observation names a different attempt identity.
+    const item = await runningItem();
+    const input = inputFor(item);
+
+    // When: the writer receives the foreign lineage.
+    const outcome = WorkItemStore.appendVerificationFacts(
+      item.workItemId,
+      {
+        ...input,
+        observations: [{ ...first(input.observations), ancestryRefs: ["attempt:foreign"] }],
+      },
+      "trace",
+    );
+
+    // Then: no verification projection is written.
+    expect(outcome).toEqual({ kind: "refused", reason: "forbidden_shape" });
+    expect(WorkItemStore.get(item.workItemId)?.revision).toBe(item.revision);
+  });
+
+  test("refuses a result without an observation", async () => {
+    // Given: a verifier result has no observation linkage.
+    const item = await runningItem();
+    const input = inputFor(item);
+
+    // When: the writer receives the detached result.
+    const outcome = WorkItemStore.appendVerificationFacts(
+      item.workItemId,
+      { ...input, results: [{ ...first(input.results), observationIds: [] }] },
+      "trace",
+    );
+
+    // Then: no verification projection is written.
+    expect(outcome).toEqual({ kind: "refused", reason: "forbidden_shape" });
+    expect(WorkItemStore.get(item.workItemId)?.revision).toBe(item.revision);
+  });
+
+  test("refuses a result linked to a foreign observation", async () => {
+    // Given: a verifier result names an observation outside the supplied fact set.
+    const item = await runningItem();
+    const input = inputFor(item);
+
+    // When: the writer receives the foreign observation link.
+    const outcome = WorkItemStore.appendVerificationFacts(
+      item.workItemId,
+      { ...input, results: [{ ...first(input.results), observationIds: ["observation:foreign"] }] },
+      "trace",
+    );
+
+    // Then: no verification projection is written.
+    expect(outcome).toEqual({ kind: "refused", reason: "forbidden_shape" });
+    expect(WorkItemStore.get(item.workItemId)?.revision).toBe(item.revision);
   });
 
   test("the raw adapter still refuses completion-fact writes outside the authority", async () => {
