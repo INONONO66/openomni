@@ -11,6 +11,7 @@ import {
   type TriggerTimerPort,
 } from "../../src/trigger";
 import type { ResidentDelivery } from "../../src/resident";
+import { triggerCreateToolExecutor } from "../../src/tools/triggers";
 
 const OWNER = "session-owner";
 const START = 1_700_000_000_000;
@@ -805,5 +806,111 @@ describe("TriggerHost — event.command sources become durable Fires", () => {
 
     const fire = required(second.harness.delivered[0], "post-restart fire");
     expect(fire.delivery.event.payload).toContain("after restart");
+  });
+});
+
+describe("trigger_create tool executor against the real host", () => {
+  function toolHarness() {
+    const child = new FakeChild();
+    const harness = openHarness({
+      commandDeps: {
+        cwd: dir,
+        spawn: () => child as never,
+        signalGroup: () => child.close(null, "SIGTERM"),
+        graceTimer: {
+          arm: (_delayMs: number, run: () => void) => {
+            run();
+            return () => undefined;
+          },
+        },
+      },
+      fileDeps: { cwd: dir },
+    });
+    return { harness, create: triggerCreateToolExecutor(harness.host, OWNER) };
+  }
+
+  test("creates a time.once Trigger from the tool's snake_case input", async () => {
+    const { harness, create } = toolHarness();
+    await harness.host.startRecovery();
+
+    const result = JSON.parse(await create({
+      prompt: "remind me",
+      source: { kind: "time.once", at: START + 60_000 },
+    }));
+
+    expect(result.error).toBeUndefined();
+    expect(result.kind).toBe("time.once");
+    expect(result.lifecycle).toEqual({ state: "armed" });
+    expect(required(TriggerStore.get(result.trigger_id), "trigger").source).toEqual({
+      kind: "time.once",
+      at: START + 60_000,
+    });
+    await harness.host.stop();
+  });
+
+  test("creates a time.every Trigger from interval_ms and clamps it to the minimum period", async () => {
+    const { harness, create } = toolHarness();
+    await harness.host.startRecovery();
+
+    const result = JSON.parse(await create({
+      prompt: "poll the queue",
+      source: { kind: "time.every", interval_ms: 1_000 },
+    }));
+
+    // The tool speaks snake_case; the protocol speaks intervalMs. Without the
+    // adapter this create fails closed as `unavailable`.
+    expect(result.error).toBeUndefined();
+    expect(result.kind).toBe("time.every");
+    const stored = required(TriggerStore.get(result.trigger_id), "trigger");
+    expect(stored.source).toEqual({
+      kind: "time.every",
+      intervalMs: Trigger.Constants.MIN_RECURRING_INTERVAL_MS,
+    });
+    // A sub-minute request never becomes a rapid loop.
+    expect(stored.effectiveIntervalMs).toBe(Trigger.Constants.MIN_RECURRING_INTERVAL_MS);
+    expect(result.next_fire_at).toBe(START + Trigger.Constants.MIN_RECURRING_INTERVAL_MS);
+    expect(harness.timer.dueAt(result.trigger_id)).toBe(
+      START + Trigger.Constants.MIN_RECURRING_INTERVAL_MS,
+    );
+    await harness.host.stop();
+  });
+
+  test("creates an event.command Trigger and defaults persistent to false", async () => {
+    const { harness, create } = toolHarness();
+    await harness.host.startRecovery();
+
+    const result = JSON.parse(await create({
+      prompt: "watch the check",
+      source: { kind: "event.command", command: "make check" },
+    }));
+
+    expect(result.error).toBeUndefined();
+    const stored = required(TriggerStore.get(result.trigger_id), "trigger");
+    expect(stored.source).toEqual({
+      kind: "event.command",
+      command: "make check",
+      persistent: false,
+    });
+    // A non-persistent command is finite, so it carries the absolute timeout.
+    expect(stored.expiresAt).toBe(START + Trigger.Constants.SOURCE_TIMEOUT_MS);
+    await harness.host.stop();
+  });
+
+  test("creates an event.file Trigger and defaults on to create", async () => {
+    const { harness, create } = toolHarness();
+    await harness.host.startRecovery();
+
+    const result = JSON.parse(await create({
+      prompt: "watch for the artifact",
+      source: { kind: "event.file", path: "artifact.txt" },
+    }));
+
+    expect(result.error).toBeUndefined();
+    expect(required(TriggerStore.get(result.trigger_id), "trigger").source).toEqual({
+      kind: "event.file",
+      path: "artifact.txt",
+      on: "create",
+    });
+    await harness.host.stop();
   });
 });

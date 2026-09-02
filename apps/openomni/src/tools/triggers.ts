@@ -75,6 +75,52 @@ export const TriggerCreateToolInput = z
   })
   .strict();
 
+type TriggerCreateToolInput = z.infer<typeof TriggerCreateToolInput>;
+
+/**
+ * The single adapter between the model-facing snake_case tool shape and the
+ * protocol create shape. The two vocabularies are deliberately different —
+ * `interval_ms` is a public tool field, `intervalMs` is the protocol field — so
+ * without this mapping every recurring create is rejected by the protocol
+ * schema and surfaces as `unavailable`.
+ *
+ * Branch defaults are applied here so the create input is complete before it
+ * reaches the store. The requested interval is forwarded verbatim: the store
+ * retains it as `requestedIntervalMs` and derives the effective period by
+ * clamping to `MIN_RECURRING_INTERVAL_MS`, which keeps one durable owner for
+ * the clamp while still recording exactly what was asked for.
+ */
+function toCreateInput(input: TriggerCreateToolInput): {
+  prompt: string;
+  source: Record<string, unknown>;
+} {
+  const source = input.source;
+  switch (source.kind) {
+    case "time.once":
+      return { prompt: input.prompt, source: { kind: source.kind, at: source.at } };
+    case "time.every":
+      return {
+        prompt: input.prompt,
+        source: { kind: source.kind, intervalMs: source.interval_ms },
+      };
+    case "event.command":
+      return {
+        prompt: input.prompt,
+        source: {
+          kind: source.kind,
+          command: source.command,
+          ...(source.filter === undefined ? {} : { filter: source.filter }),
+          persistent: source.persistent ?? false,
+        },
+      };
+    case "event.file":
+      return {
+        prompt: input.prompt,
+        source: { kind: source.kind, path: source.path, on: source.on ?? "create" },
+      };
+  }
+}
+
 const TriggerListInput = z
   .object({
     include_ended: z.boolean().default(false),
@@ -270,7 +316,9 @@ export function triggerCreateToolExecutor(port: TriggerToolPort, ownerSessionId:
     const parsed = TriggerCreateToolInput.safeParse(rawInput);
     if (!parsed.success) return refusal(TRIGGER_CREATE_TOOL_NAME, parsed.error);
     try {
-      return JSON.stringify(creationResult(await port.create(ownerSessionId, parsed.data)));
+      return JSON.stringify(
+        creationResult(await port.create(ownerSessionId, toCreateInput(parsed.data))),
+      );
     } catch (error) {
       return refusal(TRIGGER_CREATE_TOOL_NAME, error);
     }
