@@ -14,7 +14,7 @@ const Input = z.object({
   maxOutbound: z.number().int().positive().describe("How many outbound sends the lease may spend from the window."),
 }).strict();
 const Output = z.object({ id: z.string(), holderDelegationId: z.string(), contactId: z.string(), conversationId: z.string(), maxOutbound: z.number(), expiresAt: z.number() }).strict();
-export const LEASE_OPEN_TOOL_NAME = "lease_open";
+const LEASE_OPEN_TOOL_NAME = "lease_open";
 function executeLeaseOpen(port: LeasePort, now: () => number = Date.now) {
   return async (input: z.output<typeof Input>): Promise<z.output<typeof Output>> => {
     const delegation = port.getDelegation(input.delegationId);

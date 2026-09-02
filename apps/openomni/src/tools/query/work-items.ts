@@ -3,12 +3,12 @@ import type { CompletionPort } from "../../work-item/completion";
 import { defineTool, ToolRefused } from "../core/define";
 
 const Input = z.object({ workItemId: z.string().min(1).optional().describe("Inspect one WorkItem; omit to list all.") }).strict();
-type Summary = ReturnType<CompletionPort["list"]>[number];
+const Summary = z.custom<object>((value) => typeof value === "object" && value !== null);
 const Output = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("list"), items: z.custom<Summary[]>() }).strict(),
-  z.object({ kind: z.literal("item"), item: z.custom<Summary>() }).strict(),
+  z.object({ kind: z.literal("list"), items: z.array(Summary) }).strict(),
+  z.object({ kind: z.literal("item"), item: Summary }).strict(),
 ]);
-export const WORK_ITEMS_TOOL_NAME = "work_items";
+const WORK_ITEMS_TOOL_NAME = "work_items";
 function executeWorkItems(port: CompletionPort) {
   return async ({ workItemId }: z.output<typeof Input>): Promise<z.output<typeof Output>> => {
     if (workItemId === undefined) return { kind: "list", items: port.list() };

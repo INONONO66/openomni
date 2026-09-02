@@ -12,7 +12,7 @@ const Judgment = z.discriminatedUnion("value", [
 ]).describe("One judgment per criterion. Only verified admits.");
 const Input = z.object({ workItemId: z.string().min(1), judgments: z.array(Judgment).min(1) }).strict();
 const Output = z.object({ admitted: z.literal(true), workItemId: z.string() }).strict();
-export const COMPLETE_WORK_TOOL_NAME = "complete_work";
+const COMPLETE_WORK_TOOL_NAME = "complete_work";
 function executeCompleteWork(port: CompletionPort) {
   return async (input: z.output<typeof Input>): Promise<z.output<typeof Output>> => {
     const outcome = await port.complete({ workItemId: input.workItemId, judgments: input.judgments as readonly CompletionJudgment[] });

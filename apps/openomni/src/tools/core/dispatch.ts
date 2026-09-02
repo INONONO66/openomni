@@ -10,14 +10,14 @@ export interface CatalogEntry {
   run(input: never): Promise<unknown>;
 }
 
-export type DispatchErrorClass =
+type DispatchErrorClass =
   | "unknown_tool"
   | "invalid_input"
   | "precondition_failed"
   | "execution_failed"
   | "invalid_output";
 
-export type DispatchResult = Tool.Result & {
+type DispatchResult = Tool.Result & {
   readonly errorClass?: DispatchErrorClass;
 };
 

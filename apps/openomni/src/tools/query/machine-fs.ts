@@ -31,9 +31,9 @@ const StatOutput = z.custom<Awaited<ReturnType<MachineVfs["stat"]>>>((value) => 
 function refused(name: string, error: unknown): never {
   throw new ToolRefused(name, error instanceof MachineVfsError ? error.data.message : error instanceof Error ? error.message : String(error));
 }
-export function fsReadToolExecutor(vfs: MachineVfs) { return async (input: z.output<typeof ReadInput>) => { try { return await vfs.read(input); } catch (error) { return refused(FS_READ_TOOL_NAME, error); } }; }
-export function fsListToolExecutor(vfs: MachineVfs) { return async (input: z.output<typeof PathInput>) => { try { return await vfs.list(input); } catch (error) { return refused(FS_LIST_TOOL_NAME, error); } }; }
-export function fsStatToolExecutor(vfs: MachineVfs) { return async (input: z.output<typeof PathInput>) => { try { return await vfs.stat(input); } catch (error) { return refused(FS_STAT_TOOL_NAME, error); } }; }
+function fsReadToolExecutor(vfs: MachineVfs) { return async (input: z.output<typeof ReadInput>) => { try { return await vfs.read(input); } catch (error) { return refused(FS_READ_TOOL_NAME, error); } }; }
+function fsListToolExecutor(vfs: MachineVfs) { return async (input: z.output<typeof PathInput>) => { try { return await vfs.list(input); } catch (error) { return refused(FS_LIST_TOOL_NAME, error); } }; }
+function fsStatToolExecutor(vfs: MachineVfs) { return async (input: z.output<typeof PathInput>) => { try { return await vfs.stat(input); } catch (error) { return refused(FS_STAT_TOOL_NAME, error); } }; }
 function kindLabel(kind: "file" | "dir" | "symlink" | "other"): string { return kind === "symlink" ? "link" : kind; }
 const common = { safe: true, execution: { kind: "machine", capability: "fs.read" } as const, placement: "host" as const, visibility: { model: ["resident", "worker"], cell: ["resident", "worker"] } as const };
 export const fsReadTool = defineTool({

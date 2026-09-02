@@ -3,8 +3,8 @@ import type { DelegationOrigin } from "../../delegation/admission";
 import type { CatalogPorts } from "./catalog";
 
 export type ToolCategory = "query" | "mutation" | "authority" | "execution";
-export type ToolRole = "resident" | "worker";
-export type ExecutionLocus =
+type ToolRole = "resident" | "worker";
+type ExecutionLocus =
   | { readonly kind: "host" }
   | { readonly kind: "machine"; readonly capability: string };
 

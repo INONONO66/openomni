@@ -26,7 +26,7 @@ type CompletionOutcome =
   | Readonly<{ admitted: true; workItemId: string }>
   | Readonly<{ admitted: false; reason: string }>;
 
-export interface WorkItemSummary {
+interface WorkItemSummary {
   readonly workItemId: string;
   readonly name: string;
   readonly status: WorkItem.Status;

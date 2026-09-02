@@ -14,7 +14,7 @@ const Output = z.array(z.object({
 }).strict());
 export const MACHINES_TOOL_NAME = "machines";
 
-export function machinesToolExecutor(machines: MachinesPort) {
+function machinesToolExecutor(machines: MachinesPort) {
   return async (_input: z.output<typeof Input>): Promise<z.output<typeof Output>> => [...machines()].map((machine) => ({
     machineId: machine.machineId,
     attached: machine.attached,
