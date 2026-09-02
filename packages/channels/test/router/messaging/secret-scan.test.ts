@@ -85,6 +85,17 @@ describe("scanForSecrets: credential classes", () => {
     expect(hits.map((hit) => hit.class)).toContain("high_entropy_token");
   });
 
+  test.each([
+    ["userinfo", "https://agent:gT7kQ2vLp9wZx4mNb8rHc3yEuJ1sVd6oXt5@example.com/status"],
+    ["path", "https://example.com/artifacts/gT7kQ2vLp9wZx4mNb8rHc3yEuJ1sVd6oXt5/result"],
+    ["query", "https://example.com/callback?state=gT7kQ2vLp9wZx4mNb8rHc3yEuJ1sVd6oXt5"],
+    ["fragment", "https://example.com/callback#gT7kQ2vLp9wZx4mNb8rHc3yEuJ1sVd6oXt5"],
+  ])("Given a plaintext opaque secret in URI %s, When scanned, Then high_entropy_token is reported", (_component, uri) => {
+    const hits = scanForSecrets(uri);
+
+    expect(hits).toEqual([{ class: "high_entropy_token", line: 1 }]);
+  });
+
   test("Given a long structured URL, When scanned, Then the entropy rule does not judge it", () => {
     const hits = scanForSecrets(
       "https://github.com/openomni/openomni/compare/main...feature/egress-gate?expand=1",

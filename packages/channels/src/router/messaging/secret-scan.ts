@@ -60,8 +60,8 @@ const PATTERN_RULES: readonly (readonly [SecretClass, RegExp])[] = [
   ],
 ];
 
-/** Token delimiters for the entropy rule: whitespace and the usual quoting. */
-const TOKEN_SPLIT = /[\s"'`,;()[\]{}<>]+/;
+/** Token delimiters for the entropy rule, including URI component boundaries. */
+const TOKEN_SPLIT = /[\s"'`,;()[\]{}<>:/?#&@=]+/;
 const HEX_ONLY = /^[0-9a-fA-F]+$/;
 /**
  * The alphabet an opaque credential is drawn from (base64/base64url/hex plus
