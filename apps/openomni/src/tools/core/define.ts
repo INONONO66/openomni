@@ -71,7 +71,9 @@ export function defineTool<In extends z.ZodObject, Out extends z.ZodType>(
     throw new Error(`${definition.name} input schema root must be an object`);
   }
   for (const [index, example] of (definition.inputExamples ?? []).entries()) {
-    if (!definition.input.safeParse(example).success) {
+    try {
+      definition.input.parse(example);
+    } catch {
       throw new Error(`${definition.name} input example ${index} is invalid`);
     }
   }

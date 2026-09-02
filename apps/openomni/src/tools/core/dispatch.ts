@@ -78,15 +78,17 @@ export function createDispatcher(entries: readonly CatalogEntry[]): Dispatcher {
 
       try {
         const value = await entry.run(input.data as never);
-        const output = definition.output.safeParse(value);
-        if (!output.success) {
+        let output: unknown;
+        try {
+          output = definition.output.parse(value);
+        } catch {
           return failed(call, `${definition.name} produced invalid output`, "invalid_output");
         }
         return {
           toolCallId: call.id,
           id: call.id,
           toolName: call.tool,
-          output: definition.render(input.data as never, output.data as never),
+          output: definition.render(input.data as never, output as never),
         };
       } catch (error) {
         return error instanceof ToolRefused
