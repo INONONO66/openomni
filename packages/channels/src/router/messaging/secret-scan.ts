@@ -60,8 +60,10 @@ const PATTERN_RULES: readonly (readonly [SecretClass, RegExp])[] = [
   ],
 ];
 
-/** Token delimiters for the entropy rule, including URI component boundaries. */
-const TOKEN_SPLIT = /[\s"'`,;()[\]{}<>:/?#&@=]+/;
+/** Bare-token delimiters preserve every character in the opaque alphabet. */
+const OPAQUE_TOKEN_SPLIT = /[\s"'`,;()[\]{}<>]+/;
+const URI_LIKE = /^[A-Za-z][A-Za-z0-9+.-]*:\/\//;
+const URI_COMPONENT_SPLIT = /[:/?#&@=]+/;
 const HEX_ONLY = /^[0-9a-fA-F]+$/;
 /**
  * The alphabet an opaque credential is drawn from (base64/base64url/hex plus
@@ -100,14 +102,22 @@ function characterClassCount(token: string): number {
  * are hex (or hex plus dashes) and would otherwise be permanent false
  * positives on ordinary engineering prose.
  */
+function isHighEntropyOpaqueToken(token: string): boolean {
+  if (token.length < MIN_ENTROPY_TOKEN_LENGTH) return false;
+  if (!OPAQUE_TOKEN.test(token)) return false;
+  const compact = token.replaceAll("-", "");
+  if (HEX_ONLY.test(compact)) return false;
+  if (characterClassCount(token) < MIN_CHARACTER_CLASSES) return false;
+  return shannonEntropy(token) >= MIN_ENTROPY_BITS_PER_CHAR;
+}
+
 function hasHighEntropyToken(line: string): boolean {
-  for (const token of line.split(TOKEN_SPLIT)) {
-    if (token.length < MIN_ENTROPY_TOKEN_LENGTH) continue;
-    if (!OPAQUE_TOKEN.test(token)) continue;
-    const compact = token.replaceAll("-", "");
-    if (HEX_ONLY.test(compact)) continue;
-    if (characterClassCount(token) < MIN_CHARACTER_CLASSES) continue;
-    if (shannonEntropy(token) >= MIN_ENTROPY_BITS_PER_CHAR) return true;
+  for (const token of line.split(OPAQUE_TOKEN_SPLIT)) {
+    if (isHighEntropyOpaqueToken(token)) return true;
+    if (!URI_LIKE.test(token)) continue;
+    for (const component of token.split(URI_COMPONENT_SPLIT)) {
+      if (isHighEntropyOpaqueToken(component)) return true;
+    }
   }
   return false;
 }

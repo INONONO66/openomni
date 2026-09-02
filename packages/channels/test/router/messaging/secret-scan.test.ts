@@ -86,6 +86,15 @@ describe("scanForSecrets: credential classes", () => {
   });
 
   test.each([
+    ["padded", "gT7kQ2vL/p9wZx4m+/Nb8rHc3/yEuJ1sVd/6oXt5AqR7Kd=="],
+    ["unpadded", "gT7kQ2vL/p9wZx4m+/Nb8rHc3/yEuJ1sVd/6oXt5AqR7Kd"],
+  ])("Given a bare %s base64 credential, When scanned, Then its separators do not hide it", (_padding, token) => {
+    const hits = scanForSecrets(token);
+
+    expect(hits).toEqual([{ class: "high_entropy_token", line: 1 }]);
+  });
+
+  test.each([
     ["userinfo", "https://agent:gT7kQ2vLp9wZx4mNb8rHc3yEuJ1sVd6oXt5@example.com/status"],
     ["path", "https://example.com/artifacts/gT7kQ2vLp9wZx4mNb8rHc3yEuJ1sVd6oXt5/result"],
     ["query", "https://example.com/callback?state=gT7kQ2vLp9wZx4mNb8rHc3yEuJ1sVd6oXt5"],
