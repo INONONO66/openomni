@@ -69,7 +69,7 @@ export function createCliDeps(home: string = homedir(), options: CliRuntimeOptio
     exec: (argv: readonly string[]): ExecResult => {
       const [command, ...rest] = argv;
       if (command === undefined) throw new Error("exec requires a command");
-      const result = spawnSync(command, rest, { encoding: "utf-8" });
+      const result = spawnSync(command, rest, { encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] });
       return { code: result.status ?? 1, stdout: result.stdout ?? "", stderr: result.stderr ?? "" };
     },
     writeFile: (path: string, content: string): void => {
@@ -138,7 +138,7 @@ export function createCliDeps(home: string = homedir(), options: CliRuntimeOptio
         resolve(1);
         return;
       }
-      const child = spawn(command, rest, { stdio: "inherit" });
+      const child = spawn(command, rest, { stdio: ["ignore", "inherit", "inherit"] });
       let killTimer: ReturnType<typeof setTimeout> | undefined;
       const abort = (): void => {
         child.kill("SIGTERM");
