@@ -25,8 +25,8 @@ function resolvePlatform(): "darwin" | "linux" {
 }
 
 async function ask(question: string, options?: AskOptions): Promise<string> {
-  // Check if stdin is actually available and a TTY. Pausing stdin means it's not meant
-  // to be interactively read (used in testing with PTY from script -q).
+  // Check if stdin is available for interactive input. Paused stdin means it's not
+  // available (e.g., in tests within a PTY from script -q).
   if (!process.stdin.isTTY || process.stdin.isPaused?.()) {
     throw new Error("onboarding requires an interactive terminal");
   }

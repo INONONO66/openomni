@@ -16,11 +16,6 @@ const entry = new URL("../src/cli/main.ts", import.meta.url).pathname;
 const directories: string[] = [];
 const children = new Set<RunningCli>();
 const followControllers = new Set<AbortController>();
-// Prevent ask() from blocking when run in a PTY environment (script -q) by closing stdin's TTY
-if (process.stdin.isTTY) {
-  process.stdin.pause();
-  process.stdin.unref();
-}
 const READY_SENTINEL = /^OpenOmni Resident listening at ws:\/\/127\.0\.0\.1:\d+\/ws$/;
 const CHILD_TIMEOUT_MS = 10_000;
 const KILL_TIMEOUT_MS = 2_000;
@@ -446,7 +441,15 @@ describe("real CLI entry", () => {
         "no channel credentials in env config; nothing to import",
       ]);
       expect(existsSync(dbPath)).toBe(true);
-      await expect(deps.ask("question")).rejects.toThrow();
+      // Pause stdin if it's a TTY (e.g., in script -q environment) to prevent ask() from blocking.
+      const stdinWasPaused = process.stdin.isPaused?.();
+      if (process.stdin.isTTY) process.stdin.pause();
+      try {
+        await expect(deps.ask("question")).rejects.toThrow();
+      } finally {
+        // Restore stdin to its original state if it wasn't paused before.
+        if (!stdinWasPaused && process.stdin.isTTY) process.stdin.resume();
+      }
     } finally {
       restore();
     }
