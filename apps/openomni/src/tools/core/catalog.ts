@@ -30,8 +30,8 @@ import {
 import type { CatalogEntry } from "./dispatch";
 import type { MachineVfs } from "../../machines/vfs";
 import { fsListTool, fsReadTool, fsStatTool } from "../query/machine-fs";
-import type { LeasePort } from "../lease";
-import { leaseOpenToolExecutor, leaseOpenToolSpec } from "../lease";
+import type { LeasePort } from "../mutation/lease";
+import { leaseOpenTool } from "../mutation/lease";
 import type { LlmPort } from "../llm";
 import { llmToolExecutor, llmToolSpec } from "../llm";
 import type { MachinesPort } from "../query/machines";
@@ -120,15 +120,7 @@ export const TOOL_DEFINITIONS: readonly (AnyToolDefinition | LegacyCatalogTool)[
   },
   eraseTool(converseOpenTool),
   eraseTool(converseCloseTool),
-  {
-    // Lease issuance is the Resident's judgment alone (§3.5): a worker
-    // never widens its own authority.
-    spec: leaseOpenToolSpec,
-    wire: (ports, origin) =>
-      ports.leases === undefined || origin.role !== "resident"
-        ? undefined
-        : leaseOpenToolExecutor(ports.leases),
-  },
+  eraseTool(leaseOpenTool),
   {
     // The approval lane is the Resident's surface (§6): a worker never
     // requests, records, or consumes Owner consent.

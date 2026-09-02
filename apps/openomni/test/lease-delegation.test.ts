@@ -3,7 +3,7 @@ import type { Delegation, Gateway } from "@openomni/protocol";
 import { admit, type AdmissionLease } from "../src/delegation/admission";
 import { createChannelDriver } from "../src/delegation/channel-driver";
 import { createDelegationKernel, type LeaseLinkage } from "../src/delegation/kernel";
-import { leaseOpenToolExecutor } from "../src/tools/lease";
+import { leaseOpenToolExecutor } from "../src/tools/mutation/lease";
 import { RESIDENT, useDelegationStore } from "./helpers/delegation";
 
 useDelegationStore();
