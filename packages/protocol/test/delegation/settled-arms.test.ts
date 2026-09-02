@@ -56,6 +56,8 @@ describe("Delegation.Settled arm vocabulary", () => {
       "no_response",
       "interrupted",
       "sent",
+      "verified",
+      "unverified",
     ]);
   });
 
@@ -69,7 +71,13 @@ describe("Delegation.Settled arm vocabulary", () => {
         '{"status":"completed","delegationId":"del-1","output":"done","at":1700000000000}',
       ],
       [
-        { status: "completed", delegationId: "del-1", output: "done", at: T0, usage: { tokens: 12 } },
+        {
+          status: "completed",
+          delegationId: "del-1",
+          output: "done",
+          at: T0,
+          usage: { tokens: 12 },
+        },
         '{"status":"completed","delegationId":"del-1","output":"done","at":1700000000000,"usage":{"tokens":12}}',
       ],
       [
@@ -95,6 +103,28 @@ describe("Delegation.Settled arm vocabulary", () => {
       [
         { status: "sent", delegationId: "del-1", at: T0 },
         '{"status":"sent","delegationId":"del-1","at":1700000000000}',
+      ],
+      [
+        {
+          status: "verified",
+          delegationId: "del-1",
+          output: "done",
+          at: T0,
+          basisRef: "basis-1",
+          factIds: ["result:verifier:del-1:c1"],
+        },
+        '{"status":"verified","delegationId":"del-1","output":"done","at":1700000000000,"basisRef":"basis-1","factIds":["result:verifier:del-1:c1"]}',
+      ],
+      [
+        {
+          status: "unverified",
+          delegationId: "del-1",
+          output: "done",
+          at: T0,
+          reason: "not_declared",
+          factIds: [],
+        },
+        '{"status":"unverified","delegationId":"del-1","output":"done","at":1700000000000,"reason":"not_declared","factIds":[]}',
       ],
     ];
 
@@ -126,7 +156,11 @@ describe("Delegation.Settled arm vocabulary", () => {
       const reported = issues(Delegation.Settled.safeParse(withoutReason));
       const key = status === "failed" ? "error" : "reason";
       expect(reported).toEqual([
-        { path: key, message: "Invalid input: expected string, received undefined", code: "invalid_type" },
+        {
+          path: key,
+          message: "Invalid input: expected string, received undefined",
+          code: "invalid_type",
+        },
       ]);
     }
   });
@@ -188,16 +222,16 @@ describe("Delegation.Settled arm vocabulary", () => {
     expect(reported).toEqual([
       {
         path: "",
-        message: "Unrecognized key: \"deadline\"",
+        message: 'Unrecognized key: "deadline"',
         code: "unrecognized_keys",
       },
     ]);
   });
 
   test("terminals that carry NO reason keep their minimal field map", () => {
-    expect(Delegation.Settled.parse({ status: "interrupted", delegationId: "del-1", at: T0 })).toEqual(
-      { status: "interrupted", delegationId: "del-1", at: T0 },
-    );
+    expect(
+      Delegation.Settled.parse({ status: "interrupted", delegationId: "del-1", at: T0 }),
+    ).toEqual({ status: "interrupted", delegationId: "del-1", at: T0 });
     expect(Delegation.Settled.parse({ status: "sent", delegationId: "del-1", at: T0 })).toEqual({
       status: "sent",
       delegationId: "del-1",
@@ -213,9 +247,60 @@ describe("Delegation.Settled arm vocabulary", () => {
           reason: "nope",
         }),
       ),
-    ).toEqual([
-      { path: "", message: "Unrecognized key: \"reason\"", code: "unrecognized_keys" },
-    ]);
+    ).toEqual([{ path: "", message: 'Unrecognized key: "reason"', code: "unrecognized_keys" }]);
+  });
+
+  test("verified carries a durable basis and at least one recorded fact id", () => {
+    const base = { delegationId: "del-1", output: "worker says done", at: T0 };
+    expect(
+      Delegation.Settled.safeParse({
+        status: "verified",
+        ...base,
+        basisRef: "basis-1",
+        factIds: [],
+      }).success,
+    ).toBe(false);
+    expect(
+      issues(
+        Delegation.Settled.safeParse({ status: "verified", ...base, factIds: ["result-1"] }),
+      ).map((issue) => issue.path),
+    ).toEqual(["basisRef"]);
+    expect(
+      Delegation.Settled.safeParse({
+        status: "verified",
+        ...base,
+        basisRef: "",
+        factIds: ["result-1"],
+      }).success,
+    ).toBe(false);
+  });
+
+  test("unverified names a typed reason and admits an empty fact list", () => {
+    const base = { delegationId: "del-1", output: "worker says done", at: T0, factIds: [] };
+    for (const reason of Delegation.UnverifiedReason.options) {
+      expect(Delegation.Settled.safeParse({ status: "unverified", ...base, reason }).success).toBe(
+        true,
+      );
+    }
+    expect(
+      issues(Delegation.Settled.safeParse({ status: "unverified", ...base })).map(
+        (issue) => issue.path,
+      ),
+    ).toEqual(["reason"]);
+    // A free-text excuse is not a reason: the vocabulary is closed.
+    expect(
+      Delegation.Settled.safeParse({ status: "unverified", ...base, reason: "worker said so" })
+        .success,
+    ).toBe(false);
+    // basisRef is optional here (nothing may have been recorded) but never empty.
+    expect(
+      Delegation.Settled.safeParse({
+        status: "unverified",
+        ...base,
+        reason: "verification_failed",
+        basisRef: "",
+      }).success,
+    ).toBe(false);
   });
 
   test("an unknown status is rejected by the discriminator, not by a field", () => {

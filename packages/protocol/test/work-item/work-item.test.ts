@@ -22,7 +22,6 @@ const baseItem = {
   evidence: [],
   constraints: [],
   acceptanceCriteria: ["add work item contracts"],
-  changedFiles: [],
   completionContract: {
     version: 1 as const,
     revision: "contract:v1",

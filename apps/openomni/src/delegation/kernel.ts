@@ -2,6 +2,7 @@ import { newTraceId } from "@openomni/telemetry";
 import { Deadline, Delegation, NamedError, Operational, type BusEvent } from "@openomni/protocol";
 import { DelegationStore } from "@openomni/ledger";
 import type { WorkItemLinkage } from "./work-item-linkage";
+import type { VerificationCoordinator } from "./verification";
 import { delegationTraceId } from "./trace";
 import { z } from "zod";
 import {
@@ -101,6 +102,8 @@ export interface DelegationKernelOptions {
    * schema, so the door stays closed rather than half-open.
    */
   readonly workItems?: WorkItemLinkage;
+  /** Verifier-fact coordinator invoked between an assign report and terminal CAS. */
+  readonly verification?: VerificationCoordinator;
   /**
    * Lease linkage (§3.5): live-lease facts feed the admission fold's worker
    * relaxation, and every settlement closes the settled delegation's leases
@@ -177,6 +180,10 @@ function summaryOf(settlement: Delegation.Settled): string {
       return "host restarted while the work was in flight; outcome unknown";
     case "sent":
       return "message accepted by the transport";
+    case "verified":
+      return `verified: ${settlement.factIds.length} criteria checked by command.v1`;
+    case "unverified":
+      return `UNVERIFIED (${settlement.reason}): the worker reported completion; nothing checked it`;
   }
 }
 
@@ -197,18 +204,30 @@ export function formatSettlement(settlement: Delegation.Settled): string {
       return "the host restarted while the work was in flight — the outcome is unknown";
     case "sent":
       return "message sent";
+    case "verified":
+      return settlement.output;
+    case "unverified":
+      return `unverified (${settlement.reason}): the worker reported — ${settlement.output}`;
   }
 }
 
 function outcomeToSettlement(
+  operation: Delegation.Operation,
   delegationId: string,
   outcome: DriverOutcome,
   at: number,
 ): Delegation.Settled {
   switch (outcome.status) {
+    // #807: a driver reports `completed` for every operation, but that is only
+    // a terminal for `ask`, where the reply IS the answer. For an `assign` it
+    // is a claim awaiting a check; with no verifier wired the honest terminal
+    // is `unverified(verifier_unavailable)`, carrying the worker's words so
+    // nothing is lost and nothing is believed.
     case "completed":
       return {
-        status: "completed",
+        ...(operation === "assign"
+          ? { status: "unverified" as const, reason: "verifier_unavailable" as const, factIds: [] }
+          : { status: "completed" as const }),
         delegationId,
         output: outcome.output,
         at,
@@ -506,11 +525,18 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
         continue;
       }
       if (record.transport === "inline" || record.transport === "process") {
-        settle(record.delegationId, {
-          status: "interrupted",
-          delegationId: record.delegationId,
-          at: now,
-        });
+        const recovered =
+          record.operation === "assign"
+            ? options.verification?.recoverSettlement(record, now)
+            : undefined;
+        settle(
+          record.delegationId,
+          recovered ?? {
+            status: "interrupted",
+            delegationId: record.delegationId,
+            at: now,
+          },
+        );
         continue;
       }
       // Channel records retain their durable Wait correlation across a host
@@ -541,7 +567,14 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
       try {
         const outcome = await driver.run(admitted, handle, controller.signal, report);
         if (stopped) return undefined;
-        const settlement = outcomeToSettlement(handle.delegationId, outcome, options.now());
+        const at = options.now();
+        const record = store.get(handle.delegationId);
+        const settlement =
+          outcome.status === "completed" && handle.operation === "assign" && record !== undefined
+            ? options.verification === undefined
+              ? outcomeToSettlement(handle.operation, handle.delegationId, outcome, at)
+              : await options.verification.settleAssign({ admitted, record, outcome, at })
+            : outcomeToSettlement(handle.operation, handle.delegationId, outcome, at);
         return settle(handle.delegationId, settlement);
       } catch (error) {
         if (stopped) return undefined;
@@ -927,13 +960,18 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
     const record = store.findByWaitId(waitId);
     if (record === undefined || record.status !== "open") return false;
     if (record.transport !== "channel" || record.operation === "notify") return false;
+    // An actor's reply is the same self-report a driver makes, so it folds
+    // through the same owner: an answer for ask, an unchecked claim for assign.
     return (
-      settle(record.delegationId, {
-        status: "completed",
-        delegationId: record.delegationId,
-        output: text,
-        at: options.now(),
-      }) !== undefined
+      settle(
+        record.delegationId,
+        outcomeToSettlement(
+          record.operation,
+          record.delegationId,
+          { status: "completed", output: text },
+          options.now(),
+        ),
+      ) !== undefined
     );
   }
 

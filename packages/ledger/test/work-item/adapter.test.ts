@@ -25,7 +25,6 @@ function makeWorkItem(overrides: Partial<WorkItem.Info> = {}): WorkItem.Info {
     evidence: [],
     constraints: [],
     acceptanceCriteria: ["the item remains parseable"],
-    changedFiles: [],
     completionContract: {
       version: 1,
       revision: "contract:adapter:v1",
@@ -348,6 +347,73 @@ describe("SqliteStorageAdapter workItem", () => {
     expect(read && "parentHash" in read.relations).toBe(false);
     // The parent_hash COLUMN keeps serving the list filter under its old name.
     expect(adapter.workItem?.list({ parentId: "wi_000oldparent" })).toHaveLength(1);
+  });
+
+  test("#880: a persisted row carrying changedFiles reads back with the field stripped", () => {
+    // Given: a work_item row persisted before the field retirement, whose
+    // data blob still contains `changedFiles`.
+    const item = makeWorkItem({
+      workItemId: "wi_000legacychangedfiles",
+      sessionId: "session-legacy-cf",
+      timestamps: { created: 600, updated: 600 },
+    });
+    const legacyBlob = { ...item, changedFiles: ["legacy.ts"] };
+    const db = new Database(dbPath);
+    db.query(
+      `INSERT INTO work_item
+         (hash, data, revision, status, assignee_id, session_id, parent_hash, source_channel, time_created, time_updated)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      item.workItemId,
+      JSON.stringify(legacyBlob),
+      legacyBlob.revision,
+      "pending",
+      null,
+      item.sessionId ?? null,
+      item.relations.parentId ?? null,
+      item.sourceChannel,
+      600,
+      600,
+    );
+    db.close();
+
+    // When: the row is read back through the adapter.
+    const read = adapter.workItem?.get(item.workItemId);
+    const listed = adapter.workItem?.list();
+
+    // Then: the retired key is stripped while the rest of the record parses.
+    expect(read?.workItemId).toBe(item.workItemId);
+    expect(read && "changedFiles" in read).toBe(false);
+    const first = listed?.[0];
+    if (first === undefined) throw new Error("expected one listed item");
+    expect("changedFiles" in first).toBe(false);
+  });
+
+  test("#880: a freshly created row serializes without changedFiles", () => {
+    // Given: a new WorkItem created through the adapter after the field retirement.
+    const item = makeWorkItem({
+      workItemId: "wi_000freshnorcf",
+      sessionId: "session-fresh",
+      timestamps: { created: 700, updated: 700 },
+    });
+    expect(adapter.workItem?.create(item.workItemId, item)).toBe(true);
+
+    // When: the persisted data blob is inspected directly.
+    const db = new Database(dbPath);
+    const row = db.query("SELECT data FROM work_item WHERE hash = ?").get(item.workItemId);
+    if (
+      row === null ||
+      typeof row !== "object" ||
+      !("data" in row) ||
+      typeof row.data !== "string"
+    ) {
+      throw new Error("fresh row data is missing or malformed");
+    }
+    const raw: unknown = JSON.parse(row.data);
+    db.close();
+
+    // Then: the retired key was never written.
+    expect(typeof raw === "object" && raw !== null && !("changedFiles" in raw)).toBe(true);
   });
 
   test("rejects direct creation of completed WorkItems", () => {

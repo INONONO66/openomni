@@ -102,9 +102,9 @@ describe("Delegation.Request operation/address matrix", () => {
   });
 
   test("assign without acceptance criteria is refused", () => {
-    expect(requestIssueAt({ ...assignActor, acceptanceCriteria: undefined }, "acceptanceCriteria")).toBe(
-      "assign requires at least one acceptance criterion",
-    );
+    expect(
+      requestIssueAt({ ...assignActor, acceptanceCriteria: undefined }, "acceptanceCriteria"),
+    ).toBe("assign requires at least one acceptance criterion");
     expect(requestIssueAt({ ...assignActor, acceptanceCriteria: [] }, "acceptanceCriteria")).toBe(
       "assign requires at least one acceptance criterion",
     );
@@ -113,7 +113,12 @@ describe("Delegation.Request operation/address matrix", () => {
   test("notify and ask carry no acceptance criteria — only assign is a contract", () => {
     expect(
       requestIssueAt(
-        { ...askCoreInline, operation: "notify", address: { kind: "actor", actorId: "kim" }, acceptanceCriteria: ["x"] },
+        {
+          ...askCoreInline,
+          operation: "notify",
+          address: { kind: "actor", actorId: "kim" },
+          acceptanceCriteria: ["x"],
+        },
         "acceptanceCriteria",
       ),
     ).toBe("notify carries no acceptance criteria");
@@ -128,7 +133,7 @@ describe("Delegation.Request operation/address matrix", () => {
     expect(result.success).toBe(false);
     if (!result.success) {
       const unrecognized = result.error.issues.find((issue) => issue.code === "unrecognized_keys");
-      expect(unrecognized?.message).toBe("Unrecognized key: \"mode\"");
+      expect(unrecognized?.message).toBe('Unrecognized key: "mode"');
       const missing = result.error.issues.find((issue) => issue.path.join(".") === "operation");
       expect(missing?.message).toBe('Invalid option: expected one of "notify"|"ask"|"assign"');
     }
@@ -139,7 +144,9 @@ describe("Delegation.Request operation/address matrix", () => {
     const missing = Delegation.Request.safeParse(withoutDeadline);
     expect(missing.success).toBe(false);
     if (!missing.success) {
-      const issue = missing.error.issues.find((candidate) => candidate.path.join(".") === "deadline");
+      const issue = missing.error.issues.find(
+        (candidate) => candidate.path.join(".") === "deadline",
+      );
       expect(issue?.message).toBe("Invalid input: expected number, received undefined");
     }
     expect(requestIssueAt({ ...askCoreInline, deadline: 0 }, "deadline")).toBe(
@@ -152,9 +159,124 @@ describe("Delegation.Request operation/address matrix", () => {
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.error.issues[0]?.code).toBe("unrecognized_keys");
-      expect(result.error.issues[0]?.message).toBe("Unrecognized key: \"transport\"");
+      expect(result.error.issues[0]?.message).toBe('Unrecognized key: "transport"');
       expect(result.error.issues[0]?.path).toEqual([]);
     }
+  });
+});
+
+describe("Delegation.Request verification declaration (#807)", () => {
+  const declaration = {
+    kind: "command.v1",
+    executable: { id: "bun" },
+    argv: ["test", "packages/ledger"],
+    timeoutMs: 60_000,
+    expectations: [{ criterionIndex: 0, exitCode: 0 }],
+  } as const;
+
+  test("an assign declares the command that will check its criteria", () => {
+    expect(
+      Delegation.Request.safeParse({ ...assignActor, verification: declaration }).success,
+    ).toBe(true);
+  });
+
+  test("a declaration is refused on ask and notify — only assign holds a contract", () => {
+    expect(requestIssueAt({ ...askCoreInline, verification: declaration }, "verification")).toBe(
+      "ask carries no verification declaration",
+    );
+    expect(
+      requestIssueAt(
+        {
+          ...askCoreInline,
+          operation: "notify",
+          address: { kind: "actor", actorId: "kim" },
+          verification: declaration,
+        },
+        "verification",
+      ),
+    ).toBe("notify carries no verification declaration");
+  });
+
+  test("an expectation must bind to a criterion the request actually carries", () => {
+    expect(
+      requestIssueAt(
+        {
+          ...assignActor,
+          verification: { ...declaration, expectations: [{ criterionIndex: 1, exitCode: 0 }] },
+        },
+        "verification.expectations.0.criterionIndex",
+      ),
+    ).toBe("criterionIndex 1 has no acceptance criterion");
+  });
+
+  test("two expectations cannot claim the same criterion", () => {
+    expect(
+      requestIssueAt(
+        {
+          ...assignActor,
+          acceptanceCriteria: ["green in CI", "changelog updated"],
+          verification: {
+            ...declaration,
+            expectations: [
+              { criterionIndex: 0, exitCode: 0 },
+              { criterionIndex: 0, exitCode: 1 },
+            ],
+          },
+        },
+        "verification.expectations.1.criterionIndex",
+      ),
+    ).toBe("criterionIndex 0 is already bound by another expectation");
+  });
+
+  test("the declaration carries no shell string, cwd, or env", () => {
+    for (const smuggled of [{ shell: "bun test" }, { cwd: "/tmp" }, { env: { CI: "1" } }]) {
+      const result = Delegation.Request.safeParse({
+        ...assignActor,
+        verification: { ...declaration, ...smuggled },
+      });
+      expect(result.success).toBe(false);
+      if (result.success) throw new Error("expected rejection");
+      expect(result.error.issues[0]?.code).toBe("unrecognized_keys");
+    }
+  });
+
+  test("an executable id is an identifier, not a path, and expectations are non-empty", () => {
+    for (const id of ["/usr/bin/bun", "Bun", "", "../bun"]) {
+      expect(
+        Delegation.Request.safeParse({
+          ...assignActor,
+          verification: { ...declaration, executable: { id } },
+        }).success,
+      ).toBe(false);
+    }
+    expect(
+      Delegation.Request.safeParse({
+        ...assignActor,
+        verification: { ...declaration, expectations: [] },
+      }).success,
+    ).toBe(false);
+  });
+
+  test("an expected stdout digest is a sha256 hex, not arbitrary text", () => {
+    const digest = "a".repeat(64);
+    expect(
+      Delegation.Request.safeParse({
+        ...assignActor,
+        verification: {
+          ...declaration,
+          expectations: [{ criterionIndex: 0, exitCode: 0, stdoutSha256: digest }],
+        },
+      }).success,
+    ).toBe(true);
+    expect(
+      Delegation.Request.safeParse({
+        ...assignActor,
+        verification: {
+          ...declaration,
+          expectations: [{ criterionIndex: 0, exitCode: 0, stdoutSha256: "not-a-digest" }],
+        },
+      }).success,
+    ).toBe(false);
   });
 });
 
@@ -187,7 +309,7 @@ describe("Delegation.Settled terminal vocabulary", () => {
     expect(crossed.success).toBe(false);
     if (!crossed.success) {
       expect(crossed.error.issues[0]?.code).toBe("unrecognized_keys");
-      expect(crossed.error.issues[0]?.message).toBe("Unrecognized key: \"deadline\"");
+      expect(crossed.error.issues[0]?.message).toBe('Unrecognized key: "deadline"');
       expect(crossed.error.issues[0]?.path).toEqual([]);
     }
   });
@@ -367,9 +489,9 @@ describe("Delegation.Record durable shape", () => {
       settledAt: 5,
     };
     expect(Delegation.Record.safeParse(sentRecord).success).toBe(true);
-    expect(
-      recordIssueAt({ ...sentRecord, operation: "ask" }, "settled.status"),
-    ).toBe("sent is terminal for notify only");
+    expect(recordIssueAt({ ...sentRecord, operation: "ask" }, "settled.status")).toBe(
+      "sent is terminal for notify only",
+    );
   });
 
   test("the settlement payload must belong to the record that carries it", () => {

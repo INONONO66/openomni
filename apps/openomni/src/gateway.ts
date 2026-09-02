@@ -1,5 +1,6 @@
 import {
   type ChannelDeliveryRoute,
+  ChannelProviders,
   createGatewayRouter,
   type GatewayRouter,
 } from "@openomni/channels";
@@ -35,6 +36,18 @@ export function registerTrustedChannelGrant(
   };
 }
 
+/**
+ * Per-channel markdown renderers, keyed by the provider id the ActorEndpoint
+ * carries. Built once from the shipped registry — the gateway reads the same
+ * `RenderPolicy` the surface will apply, so the #811 gate and the wire agree.
+ */
+const CHANNEL_RENDERERS: ReadonlyMap<string, (markdown: string) => string> = new Map(
+  Object.values(ChannelProviders).map((provider) => [
+    provider.id,
+    provider.capabilities.render.renderMarkdown,
+  ]),
+);
+
 export interface OutboundMessaging {
   readonly deliveryRoutes: ReadonlyMap<string, ChannelDeliveryRoute>;
   readonly grants: () => readonly Gateway.SenderTargetGrant[];
@@ -51,16 +64,20 @@ export function createResidentGateway(
   return createGatewayRouter({
     sink: Bus.publish,
     deliver,
+    // #811: the router's egress secret gate sees what the channel would
+    // actually put on the wire. Surfaces without a dialect transform (ws)
+    // resolve to undefined and are gated on the raw body alone.
+    renderFor: (channel) => CHANNEL_RENDERERS.get(channel),
     ...(messaging === undefined
       ? {}
       : {
-        messaging: {
-          ...messaging,
-          // Engaging the gate with an empty Owner-declared source makes
-          // cold proactive outreach zero-by-default. Reply-scoped grants
-          // bypass this budget axis in the send kernel.
-          budgets: messaging.budgets ?? (() => []),
-        },
-      }),
+          messaging: {
+            ...messaging,
+            // Engaging the gate with an empty Owner-declared source makes
+            // cold proactive outreach zero-by-default. Reply-scoped grants
+            // bypass this budget axis in the send kernel.
+            budgets: messaging.budgets ?? (() => []),
+          },
+        }),
   });
 }

@@ -1182,7 +1182,6 @@
     "attempt",
     "attemptTerminal",
     "blockers",
-    "changedFiles",
     "completionContract",
     "completionFacts",
     "completionReport",

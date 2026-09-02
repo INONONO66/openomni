@@ -13,7 +13,6 @@ const baseItem = {
   goal: "close only after admission",
   constraints: [],
   acceptanceCriteria: ["publish the artifact"],
-  changedFiles: [],
   blockers: [],
   evidence: [],
 };

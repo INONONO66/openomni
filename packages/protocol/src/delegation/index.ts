@@ -1,6 +1,8 @@
 import { settlementToAttemptOutcome as settlementToAttemptOutcomeFold } from "./attempt-linkage.js";
 import { Events as EventDescriptors } from "./events.js";
+import { normalizeLegacyRecord as normalizeLegacyRecordUpcast } from "./legacy.js";
 import * as Schema from "./schema.js";
+import * as Verification from "./verification.js";
 
 /**
  * Delegation domain (docs/machines-and-delegation.md): the uniform contract
@@ -35,6 +37,18 @@ export namespace Delegation {
 
   export const Record = Schema.Record;
   export type Record = Schema.Record;
+
+  export const VerificationDeclaration = Verification.VerificationDeclaration;
+  export type VerificationDeclaration = Verification.VerificationDeclaration;
+
+  export const CommandV1 = Verification.CommandV1;
+  export type CommandV1 = Verification.CommandV1;
+
+  export const UnverifiedReason = Verification.UnverifiedReason;
+  export type UnverifiedReason = Verification.UnverifiedReason;
+
+  /** Upcast-on-read for pre-#807 assign rows that stored a worker self-report. */
+  export const normalizeLegacyRecord = normalizeLegacyRecordUpcast;
 
   export const Events = EventDescriptors;
 

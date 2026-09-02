@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
-import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { RunInput, Sink } from "@openomni/llm";
-import { attachMachineDaemon, type MachineDaemon } from "@openomni/machines";
+import { attachMachineDaemon, type MachineDaemon, type SandboxProfile } from "@openomni/machines";
 import type { Machine } from "@openomni/protocol";
 import { assistantMessage } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
@@ -12,6 +12,21 @@ import { nextMessage, openSocket } from "./helpers/ws";
 const WS_TOKEN = "machine-fs-e2e-token";
 const MACHINE_ID = "alpha";
 const OTHER_MACHINE_ID = "beta";
+const sandboxTest = test.skipIf(
+  (process.platform !== "linux" || !existsSync("/usr/bin/bwrap")) &&
+    process.env.OPENOMNI_REQUIRE_SANDBOX_TESTS !== "1",
+);
+
+function sandboxProfile(workspaceRoot: string): SandboxProfile {
+  return {
+    backend: "bubblewrap",
+    bwrapPath: "/usr/bin/bwrap",
+    pythonPath: "/usr/bin/python3",
+    workspaceRoot,
+    readOnlyPaths: ["/usr", "/lib", "/lib64", "/bin", "/etc/ld.so.cache", "/etc/alternatives"],
+    maxOutputBytes: 1_048_576,
+  };
+}
 
 let daemon: MachineDaemon | undefined;
 let otherDaemon: MachineDaemon | undefined;
@@ -25,7 +40,7 @@ const suite = residentSuite(() => {
 const enrollment: Machine.Enrollment = {
   machineId: MACHINE_ID,
   name: "the laptop",
-  allowedCapabilities: ["fs.read", "kernel.py"],
+  allowedCapabilities: ["fs.read", "kernel.py", "sandbox.process"],
   allowedExports: ["notes"],
   enrolledAt: 0,
 };
@@ -102,6 +117,7 @@ async function bootFsApp(
         offeredAt: 0,
       },
       fsExports: new Map([[options.exportName ?? "notes", root]]),
+      sandbox: sandboxProfile(join(directory, "sandbox")),
     });
     expect(daemon.attachment.status).toBe("attached");
   }
@@ -147,61 +163,70 @@ test("the model reads, lists, and stats an attached machine's export", async () 
   expect(answer).toContain("dir   plans");
   expect(answer).toContain("<<file  22 bytes  modified ");
   // Discovery names the path the tools take, not a bare export name.
-  expect(answer).toContain(`${MACHINE_ID} — attached, may: fs.read, kernel.py; files: /machines/${MACHINE_ID}/notes`);
+  expect(answer).toContain(`${MACHINE_ID} — attached, may: fs.read`);
+  expect(answer).toContain(`files: /machines/${MACHINE_ID}/notes`);
 }, 60_000);
 
 /** Cell door: the same catalog, reached from inside Python. */
-test("a cell reads a machine file through tool.fs_read", async () => {
-  const app = await bootFsApp("openomni-fs-cell-");
+sandboxTest(
+  "a cell reads a machine file through tool.fs_read",
+  async () => {
+    const app = await bootFsApp("openomni-fs-cell-");
 
-  const answer = await app.answer([
-    {
-      tool: "run_code",
-      input: {
-        machineId: MACHINE_ID,
-        code: [
-          `text = tool.fs_read(path='/machines/${MACHINE_ID}/notes/greeting.txt')`,
-          `listing = tool.fs_list(path='/machines/${MACHINE_ID}/notes')`,
-          "text + ' | entries=' + str(len(listing.splitlines()))",
-        ].join("\n"),
-        timeoutMs: 20_000,
+    const answer = await app.answer([
+      {
+        tool: "run_code",
+        input: {
+          machineId: MACHINE_ID,
+          code: [
+            `text = tool.fs_read(path='/machines/${MACHINE_ID}/notes/greeting.txt')`,
+            `listing = tool.fs_list(path='/machines/${MACHINE_ID}/notes')`,
+            "text + ' | entries=' + str(len(listing.splitlines()))",
+          ].join("\n"),
+          timeoutMs: 20_000,
+        },
       },
-    },
-  ]);
+    ]);
 
-  expect(answer).toContain("hello from the machine | entries=3");
-}, 60_000);
+    expect(answer).toContain("hello from the machine | entries=3");
+  },
+  60_000,
+);
 
 /**
  * A refusal must reach the cell as an EXCEPTION, not as text that reads like
  * file content — otherwise cell code stores the refusal and carries on.
  */
-test("a refused read raises ToolError inside a cell instead of returning refusal text", async () => {
-  const app = await bootFsApp("openomni-fs-cell-raise-");
+sandboxTest(
+  "a refused read raises ToolError inside a cell instead of returning refusal text",
+  async () => {
+    const app = await bootFsApp("openomni-fs-cell-raise-");
 
-  const answer = await app.answer([
-    {
-      tool: "run_code",
-      input: {
-        machineId: MACHINE_ID,
-        code: [
-          "try:",
-          `    tool.fs_read(path='/machines/${MACHINE_ID}/notes/escape.txt')`,
-          "    outcome = 'returned as data'",
-          "except ToolError as error:",
-          "    outcome = 'raised: ' + str(error)",
-          "outcome",
-        ].join("\n"),
-        timeoutMs: 20_000,
+    const answer = await app.answer([
+      {
+        tool: "run_code",
+        input: {
+          machineId: MACHINE_ID,
+          code: [
+            "try:",
+            `    tool.fs_read(path='/machines/${MACHINE_ID}/notes/escape.txt')`,
+            "    outcome = 'returned as data'",
+            "except ToolError as error:",
+            "    outcome = 'raised: ' + str(error)",
+            "outcome",
+          ].join("\n"),
+          timeoutMs: 20_000,
+        },
       },
-    },
-  ]);
+    ]);
 
-  expect(answer).toContain("raised: ");
-  expect(answer).toContain("path escapes export");
-  expect(answer).not.toContain("returned as data");
-  expect(answer).not.toContain("not yours");
-}, 60_000);
+    expect(answer).toContain("raised: ");
+    expect(answer).toContain("path escapes export");
+    expect(answer).not.toContain("returned as data");
+    expect(answer).not.toContain("not yours");
+  },
+  60_000,
+);
 
 /** Every boundary, as the exact sentence the agent would read. */
 test("the adversarial paths each refuse with the boundary that held", async () => {
@@ -264,7 +289,7 @@ test("an export the Owner never allowed is refused even though the daemon offers
     `<<fs_read refused: /machines/${MACHINE_ID}/secrets/greeting.txt refused: export is not available: secrets>>`,
   );
   // And discovery says so: attached, capable, but no export reaches anything.
-  expect(answer).toContain(`${MACHINE_ID} — attached, may: fs.read, kernel.py>>`);
+  expect(answer).toContain(`${MACHINE_ID} — attached, may: fs.read`);
 }, 60_000);
 
 /**
@@ -277,7 +302,7 @@ test("no allowed export means no fs tools in the catalog", async () => {
       {
         machineId: MACHINE_ID,
         name: "the laptop",
-        allowedCapabilities: ["fs.read", "kernel.py"],
+        allowedCapabilities: ["fs.read", "kernel.py", "sandbox.process"],
         enrolledAt: 0,
       },
     ],
@@ -356,6 +381,7 @@ async function bootTwoMachines(prefix: string) {
       offeredAt: 0,
     },
     fsExports: new Map([["notes", rootA]]),
+    sandbox: sandboxProfile(join(directory, "sandbox")),
   });
   expect(daemon.attachment.status).toBe("attached");
 
@@ -370,6 +396,7 @@ async function bootTwoMachines(prefix: string) {
       offeredAt: 0,
     },
     fsExports: new Map([["docs", rootB]]),
+    sandbox: sandboxProfile(join(directoryB, "sandbox")),
   });
   expect(otherDaemon.attachment.status).toBe("attached");
 
@@ -392,54 +419,62 @@ async function bootTwoMachines(prefix: string) {
  * an A cell must refuse — the guard lives where the composition root binds the
  * cell catalog, so no fixture can be arranged to bypass it.
  */
-test("a cell on one machine cannot read another machine's export", async () => {
-  const app = await bootTwoMachines("openomni-fs-cross-");
+sandboxTest(
+  "a cell on one machine cannot read another machine's export",
+  async () => {
+    const app = await bootTwoMachines("openomni-fs-cross-");
 
-  const answer = await app.answer([
-    {
-      tool: "run_code",
-      input: {
-        machineId: MACHINE_ID,
-        code: [
-          "try:",
-          `    outcome = 'returned: ' + tool.fs_read(path='/machines/${OTHER_MACHINE_ID}/docs/secret.txt')`,
-          "except ToolError as error:",
-          "    outcome = 'raised: ' + str(error)",
-          "outcome",
-        ].join("\n"),
-        timeoutMs: 20_000,
+    const answer = await app.answer([
+      {
+        tool: "run_code",
+        input: {
+          machineId: MACHINE_ID,
+          code: [
+            "try:",
+            `    outcome = 'returned: ' + tool.fs_read(path='/machines/${OTHER_MACHINE_ID}/docs/secret.txt')`,
+            "except ToolError as error:",
+            "    outcome = 'raised: ' + str(error)",
+            "outcome",
+          ].join("\n"),
+          timeoutMs: 20_000,
+        },
       },
-    },
-  ]);
+    ]);
 
-  expect(answer).toContain(
-    `raised: fs_read refused: /machines/${OTHER_MACHINE_ID}/docs/secret.txt is not reachable from a cell on machine ${MACHINE_ID}`,
-  );
-  expect(answer).not.toContain("B-ONLY-SECRET");
-  expect(answer).not.toContain("returned: ");
-}, 60_000);
+    expect(answer).toContain(
+      `raised: fs_read refused: /machines/${OTHER_MACHINE_ID}/docs/secret.txt is not reachable from a cell on machine ${MACHINE_ID}`,
+    );
+    expect(answer).not.toContain("B-ONLY-SECRET");
+    expect(answer).not.toContain("returned: ");
+  },
+  60_000,
+);
 
 /**
  * The scope is a CELL-door property, not a namespace amputation: the Owner's
  * own door keeps the whole flat namespace, and a cell keeps its own machine.
  */
-test("the model door still reads both machines, and a cell still reads its own", async () => {
-  const app = await bootTwoMachines("openomni-fs-cross-ok-");
+sandboxTest(
+  "the model door still reads both machines, and a cell still reads its own",
+  async () => {
+    const app = await bootTwoMachines("openomni-fs-cross-ok-");
 
-  const answer = await app.answer([
-    { tool: "fs_read", input: { path: `/machines/${OTHER_MACHINE_ID}/docs/secret.txt` } },
-    {
-      tool: "run_code",
-      input: {
-        machineId: MACHINE_ID,
-        code: `'own: ' + tool.fs_read(path='/machines/${MACHINE_ID}/notes/greeting.txt')`,
-        timeoutMs: 20_000,
+    const answer = await app.answer([
+      { tool: "fs_read", input: { path: `/machines/${OTHER_MACHINE_ID}/docs/secret.txt` } },
+      {
+        tool: "run_code",
+        input: {
+          machineId: MACHINE_ID,
+          code: `'own: ' + tool.fs_read(path='/machines/${MACHINE_ID}/notes/greeting.txt')`,
+          timeoutMs: 20_000,
+        },
       },
-    },
-  ]);
+    ]);
 
-  // The model door returns the file verbatim; a cell's last expression comes
-  // back as the kernel's repr of it.
-  expect(answer).toContain("<<B-ONLY-SECRET>>");
-  expect(answer).toContain("<<'own: hello from the machine'>>");
-}, 60_000);
+    // The model door returns the file verbatim; a cell's last expression comes
+    // back as the kernel's repr of it.
+    expect(answer).toContain("<<B-ONLY-SECRET>>");
+    expect(answer).toContain("<<'own: hello from the machine'>>");
+  },
+  60_000,
+);

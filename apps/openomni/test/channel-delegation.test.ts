@@ -96,13 +96,23 @@ describe("channel delegation driver", () => {
       },
       now: () => NOW,
       newWaitId: () => "never-used",
-      conversations: { open: () => { throw new Error("not reached"); }, get: () => undefined },
-    });
-    const outcome = await driver.run(admitted("notify"), { ...HANDLE, operation: "notify", waitId: undefined }, new AbortController().signal, {
-      delivered: () => {
-        delivered += 1;
+      conversations: {
+        open: () => {
+          throw new Error("not reached");
+        },
+        get: () => undefined,
       },
     });
+    const outcome = await driver.run(
+      admitted("notify"),
+      { ...HANDLE, operation: "notify", waitId: undefined },
+      new AbortController().signal,
+      {
+        delivered: () => {
+          delivered += 1;
+        },
+      },
+    );
     expect(outcome).toEqual({ status: "sent" });
     expect(delivered).toBe(1);
     expect(sentInput?.operation).toBe("fire_and_forget");
@@ -122,7 +132,12 @@ describe("channel delegation driver", () => {
       }),
       now: () => NOW,
       newWaitId: () => "wait-1",
-      conversations: { open: () => { throw new Error("not reached"); }, get: () => undefined },
+      conversations: {
+        open: () => {
+          throw new Error("not reached");
+        },
+        get: () => undefined,
+      },
     });
     await expect(denied.run(admitted(), HANDLE, new AbortController().signal)).resolves.toEqual({
       status: "delivery_failed",
@@ -135,7 +150,12 @@ describe("channel delegation driver", () => {
       },
       now: () => NOW,
       newWaitId: () => "wait-1",
-      conversations: { open: () => { throw new Error("not reached"); }, get: () => undefined },
+      conversations: {
+        open: () => {
+          throw new Error("not reached");
+        },
+        get: () => undefined,
+      },
     });
     await expect(broken.run(admitted(), HANDLE, new AbortController().signal)).resolves.toEqual({
       status: "delivery_failed",
@@ -148,19 +168,33 @@ describe("channel delegation driver", () => {
       send: async (input) => awaitedReceipt(input),
       now: () => NOW,
       newWaitId: () => "wait-durable",
-      conversations: { open: () => { throw new Error("not reached"); }, get: () => undefined },
+      conversations: {
+        open: () => {
+          throw new Error("not reached");
+        },
+        get: () => undefined,
+      },
     });
     const kernel = createDelegationKernel({
       drivers: { channel: driver },
       now: () => NOW,
       newDelegationId: () => "delegation-durable",
       wake: () => undefined,
-      workItems: createWorkItemLinkage({ model: { provider: "test", id: "model" }, now: () => NOW }),
+      workItems: createWorkItemLinkage({
+        model: { provider: "test", id: "model" },
+        now: () => NOW,
+      }),
     });
-    const started = await kernel.delegate({
-      address: { kind: "actor", actorId: "alice" }, operation: "assign",
-      payload: { text: "review" }, acceptanceCriteria: ["read"], deadline: DEADLINE,
-    }, RESIDENT);
+    const started = await kernel.delegate(
+      {
+        address: { kind: "actor", actorId: "alice" },
+        operation: "assign",
+        payload: { text: "review" },
+        acceptanceCriteria: ["read"],
+        deadline: DEADLINE,
+      },
+      RESIDENT,
+    );
     if ("refused" in started) throw new Error(started.refused);
     const workItemId = DelegationStore.get("delegation-durable")?.workItemId;
     const item = await WorkItemStore.get(workItemId ?? "");
@@ -175,7 +209,12 @@ describe("channel delegation driver", () => {
       send: async (input) => awaitedReceipt(input),
       now: () => NOW,
       newWaitId: () => "wait-1",
-      conversations: { open: () => { throw new Error("not reached"); }, get: () => undefined },
+      conversations: {
+        open: () => {
+          throw new Error("not reached");
+        },
+        get: () => undefined,
+      },
     });
     const kernel = createDelegationKernel({
       drivers: { channel: driver },
@@ -200,9 +239,11 @@ describe("channel delegation driver", () => {
     expect(started.handle.waitId).toBe("wait-1");
     expect(kernel.settleFromReply("wait-1", "all read")).toBe(true);
     expect(kernel.settleFromReply("wait-1", "late reply")).toBe(false);
+    // #807: an actor's reply to an ASSIGN is still only a self-report, so the
+    // durable terminal names the missing check instead of claiming success.
     expect(DelegationStore.get("delegation-1")).toMatchObject({
       status: "settled",
-      settled: { status: "completed", output: "all read" },
+      settled: { status: "unverified", reason: "verifier_unavailable", output: "all read" },
     });
     await events.waitFor("delegation.settled");
   });
@@ -264,4 +305,3 @@ describe("channel delegation driver", () => {
     expect(opens).toBe(0);
   });
 });
-

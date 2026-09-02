@@ -3,7 +3,7 @@ import { placementGatedExecutor } from "@openomni/agent";
 import { Placement } from "@openomni/placement";
 import type { Machine, Tool } from "@openomni/protocol";
 import { catalogEntries } from "../src/tools/core/catalog";
-import { createDispatcher, HOST_TARGET } from "../src/tools/core/dispatch";
+import { createDispatcher, HOST_TARGET, type CatalogEntry } from "../src/tools/core/dispatch";
 import { createCellRegistry } from "../src/tools/cell-registry";
 import type { CellPorts } from "../src/tools/execution/run-code";
 import { MACHINES_TOOL_NAME, type MachineStatus, type MachinesPort } from "../src/tools/query/machines";
@@ -55,8 +55,13 @@ function cellPorts(options: {
 describe("tool catalog placement", () => {
   it("hands the loop the whole catalog and lets it fold", () => {
     const { kernel } = recordingDelegation();
-    const { ports } = cellPorts({ delegation: kernel, runCell: async () => ({ status: "timed_out", cellId: "x" }) });
-    const catalog = createDispatcher(catalogEntries({ delegation: kernel, cells: ports }, RESIDENT));
+    const { ports } = cellPorts({
+      delegation: kernel,
+      runCell: async () => ({ status: "timed_out", cellId: "x" }),
+    });
+    const catalog = createDispatcher(
+      catalogEntries({ delegation: kernel, cells: ports }, RESIDENT),
+    );
 
     // Unfiltered on purpose: the agent loop folds this against the turn's
     // targets and gates the calls, so a second fold here would be a copy.
@@ -68,21 +73,39 @@ describe("tool catalog placement", () => {
     ]);
   });
 
-  it("serves the machine tool only for a machine holding the capability it requires", async () => {
+  it("serves run_code only when one machine holds both the kernel and sandbox capabilities", async () => {
+    // Given: run_code is in the catalog and candidate machines hold neither,
+    // only the kernel, or the complete isolated execution capability set.
     const { kernel } = recordingDelegation();
-    const { ports } = cellPorts({ delegation: kernel, runCell: async () => ({ status: "timed_out", cellId: "x" }) });
+    const { ports } = cellPorts({
+      delegation: kernel,
+      runCell: async () => ({ status: "timed_out", cellId: "x" }),
+    });
     const entries = catalogEntries({ delegation: kernel, cells: ports }, RESIDENT);
-    const call = { id: "1", tool: RUN_CODE_TOOL_NAME, input: { machineId: "alpha", code: "x", timeoutMs: 250 } };
-
+    const call = {
+      id: "1",
+      tool: RUN_CODE_TOOL_NAME,
+      input: { machineId: "alpha", code: "x", timeoutMs: 250 },
+    };
     const gate = (targets: Placement.ToolTarget[]) =>
-      placementGatedExecutor(Placement.resolveTools(createDispatcher(entries).specs, targets), createDispatcher(entries).execute);
+      placementGatedExecutor(
+        Placement.resolveTools(createDispatcher(entries).specs, targets),
+        createDispatcher(entries).execute,
+      );
 
+    // When: placement resolves and executes the same tool call for each set.
     const withoutKernel = await gate([HOST_TARGET, machineTarget(["fs.read"])])(call);
-    const withKernel = await gate([HOST_TARGET, machineTarget(["fs.read", "kernel.py"])])(call);
+    const withoutSandbox = await gate([HOST_TARGET, machineTarget(["kernel.py"])])(call);
+    const isolated = await gate([HOST_TARGET, machineTarget(["kernel.py", "sandbox.process"])])(
+      call,
+    );
 
+    // Then: only the machine proving process isolation can receive run_code.
     expect(withoutKernel.isError).toBe(true);
     expect(withoutKernel.output).toContain("kernel.py");
-    expect(withKernel.isError).toBeUndefined();
+    expect(withoutSandbox.isError).toBe(true);
+    expect(withoutSandbox.output).toContain("sandbox.process");
+    expect(isolated.isError).toBeUndefined();
   });
 
   it("refuses a name it never had, whoever asks", async () => {
@@ -110,10 +133,19 @@ describe("the cell door", () => {
           await registry.callTool({
             cellId: request.cellId,
             name: "delegate",
-            arguments: { instruction: "count the files", mode: "ask", scope: "inline", timeoutMs: 1000 },
+            arguments: {
+              instruction: "count the files",
+              mode: "ask",
+              scope: "inline",
+              timeoutMs: 1000,
+            },
           }),
         );
-        return { status: "completed", cellId: request.cellId, output: { stdout: "ok", stderr: "" } };
+        return {
+          status: "completed",
+          cellId: request.cellId,
+          output: { stdout: "ok", stderr: "" },
+        };
       },
     });
 
@@ -141,7 +173,11 @@ describe("the cell door", () => {
           name: RUN_CODE_TOOL_NAME,
           arguments: { machineId: "alpha", code: "pass", timeoutMs: 1000 },
         });
-        return { status: "completed", cellId: request.cellId, output: { stdout: "done", stderr: "" } };
+        return {
+          status: "completed",
+          cellId: request.cellId,
+          output: { stdout: "done", stderr: "" },
+        };
       },
     });
 
@@ -150,7 +186,9 @@ describe("the cell door", () => {
     // The cell is already on a machine; reaching back to reach another is the
     // round trip code mode removes. Placement says so — nothing restates it.
     expect(refusal?.status).toBe("failed");
-    expect(refusal).toMatchObject({ error: expect.stringContaining('tool "run_code" requires capabilities') });
+    expect(refusal).toMatchObject({
+      error: expect.stringContaining('tool "run_code" requires capabilities'),
+    });
   });
 
   it("stops serving a cell's tools once the cell has settled", async () => {
@@ -202,19 +240,49 @@ describe("the cell door", () => {
 });
 
 describe("run_code outcomes", () => {
-  const cases: Array<[string, Machine.CellResult | { status: "refused"; reason: "machine_not_attached" }, string]> = [
-    ["a value", { status: "completed", cellId: "c", output: { stdout: "ignored", stderr: "" }, value: "42" }, "42"],
-    ["stdout when there is no value", { status: "completed", cellId: "c", output: { stdout: "printed", stderr: "" } }, "printed"],
-    ["a raise", { status: "raised", cellId: "c", output: { stdout: "", stderr: "trace" }, error: "ValueError" }, "the cell raised: ValueError\ntrace"],
-    ["a timeout as unknown, not undone", { status: "timed_out", cellId: "c" }, "unknown, not undone"],
+  const cases: Array<
+    [string, Machine.CellResult | { status: "refused"; reason: "machine_not_attached" }, string]
+  > = [
+    [
+      "a value",
+      { status: "completed", cellId: "c", output: { stdout: "ignored", stderr: "" }, value: "42" },
+      "42",
+    ],
+    [
+      "stdout when there is no value",
+      { status: "completed", cellId: "c", output: { stdout: "printed", stderr: "" } },
+      "printed",
+    ],
+    [
+      "a raise",
+      {
+        status: "raised",
+        cellId: "c",
+        output: { stdout: "", stderr: "trace" },
+        error: "ValueError",
+      },
+      "the cell raised: ValueError\ntrace",
+    ],
+    [
+      "a timeout as unknown, not undone",
+      { status: "timed_out", cellId: "c" },
+      "unknown, not undone",
+    ],
     ["a detached machine", { status: "refused", reason: "machine_not_attached" }, "not attached"],
   ];
 
   for (const [name, result, expected] of cases) {
     it(`reports ${name}`, async () => {
       const { kernel } = recordingDelegation();
-      const { ports } = cellPorts({ delegation: kernel, runCell: async () => result as Machine.CellResult });
-      const answer = await runCode(ports, RESIDENT)({ machineId: "alpha", code: "x", timeoutMs: 250 });
+      const { ports } = cellPorts({
+        delegation: kernel,
+        runCell: async () => result as Machine.CellResult,
+      });
+      const answer = await runCode(ports, RESIDENT)({
+        machineId: "alpha",
+        code: "x",
+        timeoutMs: 250,
+      });
       expect(answer).toContain(expected);
     });
   }
@@ -239,6 +307,23 @@ describe("run_code outcomes", () => {
     expect(answer).toMatchObject({ isError: true, errorClass: "invalid_input" });
     expect(answer.output).toStartWith("\nrun_code refused:");
     expect(dispatched).toBe(false);
+  });
+});
+
+describe("the advertised schema and the runtime gate agree", () => {
+  it("advertises exactly the keys the gate requires", () => {
+    const { kernel } = recordingDelegation();
+    const { ports } = cellPorts({
+      delegation: kernel,
+      runCell: async () => ({ status: "timed_out", cellId: "c" }),
+    });
+    const spec = catalogEntries({ delegation: kernel, cells: ports }, RESIDENT).find(
+      (e: CatalogEntry) => e.spec.name === RUN_CODE_TOOL_NAME,
+    )?.spec;
+    const schema = spec?.inputSchema as { required: string[]; properties: Record<string, unknown> };
+
+    expect(schema.required.sort()).toEqual(["code", "machineId", "timeoutMs"]);
+    expect(Object.keys(schema.properties).sort()).toEqual(["code", "machineId", "timeoutMs"]);
   });
 });
 
@@ -330,10 +415,9 @@ describe("the machines tool", () => {
 
   it("is host-placed: offerable on the brain, absent from a machine-only fold", () => {
     const { kernel } = recordingDelegation();
-    const specs = catalogEntries(
-      { delegation: kernel, machines: () => statuses },
-      RESIDENT,
-    ).map((entry) => entry.spec);
+    const specs = catalogEntries({ delegation: kernel, machines: () => statuses }, RESIDENT).map(
+      (entry) => entry.spec,
+    );
     const offeredOnHost = Placement.resolveTools(specs, [HOST_TARGET])
       .filter((decision) => decision.offerable)
       .map((decision) => decision.tool.name);

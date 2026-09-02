@@ -17,8 +17,9 @@ const offer = {
 } satisfies Machine.Offer;
 
 describe("Machine.WellKnownCapability", () => {
-  test("exports the Python kernel capability", () => {
+  test("exports the Python kernel and process sandbox capabilities", () => {
     expect(Machine.WellKnownCapability.pythonKernel).toBe("kernel.py");
+    expect(Machine.WellKnownCapability.sandboxProcess).toBe("sandbox.process");
   });
 });
 
@@ -79,7 +80,7 @@ describe("Machine.Enrollment", () => {
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.error.issues[0]?.code).toBe("unrecognized_keys");
-      expect(result.error.issues[0]?.message).toBe("Unrecognized key: \"extra\"");
+      expect(result.error.issues[0]?.message).toBe('Unrecognized key: "extra"');
       expect(result.error.issues[0]?.path).toEqual([]);
     }
   });
@@ -124,7 +125,10 @@ describe("Machine.effectiveCapabilities", () => {
   test("structurally duplicated offers still yield a set", () => {
     const outcome = Machine.effectiveCapabilities(enrollment, {
       ...offer,
-      offeredCapabilities: ["fs.read", "fs.read"] as string[] as Machine.Offer["offeredCapabilities"],
+      offeredCapabilities: [
+        "fs.read",
+        "fs.read",
+      ] as string[] as Machine.Offer["offeredCapabilities"],
     });
     expect(outcome).toEqual({ kind: "effective", machineId: "mac-0", capabilities: ["fs.read"] });
   });
@@ -181,9 +185,7 @@ describe("Machine.AttachResult", () => {
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.error.issues[0]?.code).toBe("unrecognized_keys");
-      expect(result.error.issues[0]?.message).toBe(
-        "Unrecognized key: \"effectiveCapabilities\"",
-      );
+      expect(result.error.issues[0]?.message).toBe('Unrecognized key: "effectiveCapabilities"');
       expect(result.error.issues[0]?.path).toEqual([]);
     }
   });

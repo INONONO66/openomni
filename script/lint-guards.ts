@@ -6,6 +6,7 @@ type GuardRuleId =
   | "inline-authorization-throw"
   | "missing-canonical-policy-evaluator"
   | "policy-package-boundary"
+  | "machine-process-launch-boundary"
   | "run-reason-code-vocabulary"
   | "policy-point-registration";
 
@@ -101,6 +102,8 @@ const pointIdLiteralPattern = /["'`]([a-z][a-z._]+)["'`]/g;
 
 const policyPackageBoundaryPattern =
   /(?:from\s+|import\s+)["'](@openomni\/(?:agent|ledger))[^"']*["']/g;
+const machineProcessLaunchPattern =
+  /\bspawn\s*\(|(?:from\s+|import\s+)["'](?:node:)?child_process["']/g;
 
 /**
  * File-path allowlists go silently vacuous when a scanned file is renamed or
@@ -135,6 +138,7 @@ async function main(): Promise<void> {
     violations.push(...validateListMembership(filePath, source));
     violations.push(...validateInlineAuthorization(filePath, source));
     violations.push(...validatePolicyPackageBoundary(filePath, source));
+    violations.push(...validateMachineProcessLaunchBoundary(filePath, source));
     violations.push(...validateRunReasonCodeVocabulary(filePath, source));
   }
 
@@ -248,6 +252,22 @@ function validatePolicyPackageBoundary(filePath: string, source: string): GuardV
     filePath,
     line: lineNumberForOffset(source, match.index),
     message: "packages/policy must not import from @openomni/agent or @openomni/ledger",
+  }));
+}
+
+function validateMachineProcessLaunchBoundary(filePath: string, source: string): GuardViolation[] {
+  if (
+    !filePath.startsWith("packages/machines/src/") ||
+    filePath === "packages/machines/src/launcher.ts"
+  ) {
+    return [];
+  }
+
+  return matches(source, machineProcessLaunchPattern).map((match) => ({
+    ruleId: "machine-process-launch-boundary",
+    filePath,
+    line: lineNumberForOffset(source, match.index),
+    message: "machine production processes must be spawned only by launcher.ts",
   }));
 }
 

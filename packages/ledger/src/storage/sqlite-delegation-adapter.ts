@@ -122,13 +122,18 @@ function decodeRow(row: DelegationRow): Delegation.Record {
   // Assign rows written before WorkItem linkage carry no workItemId; reads
   // normalize them to a sentinel that resolves to no WorkItem, so the boot
   // sweep can still settle them instead of dying on the whole table.
-  const record = Delegation.Record.parse({
-    ...stored,
-    ...(stored.operation === "assign" && stored.workItemId === undefined
-      ? { workItemId: "legacy:pre-work-item-linkage" }
-      : {}),
-    ...(row.woken_at === null ? {} : { wokenAt: row.woken_at }),
-  });
+  // Pre-#807 assign rows stored the worker's own `completed` report, which the
+  // current contract refuses; the same upcast-on-read discipline rewrites them
+  // as `unverified(legacy_self_report)` before parsing.
+  const record = Delegation.Record.parse(
+    Delegation.normalizeLegacyRecord({
+      ...stored,
+      ...(stored.operation === "assign" && stored.workItemId === undefined
+        ? { workItemId: "legacy:pre-work-item-linkage" }
+        : {}),
+      ...(row.woken_at === null ? {} : { wokenAt: row.woken_at }),
+    }),
+  );
   if (record.delegationId !== row.delegation_id) {
     throw new Error(
       `Delegation id mismatch: key=${row.delegation_id} payload=${record.delegationId}`,

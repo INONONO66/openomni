@@ -96,7 +96,6 @@ function terminalItem(evidence: { readonly attempt: number; readonly passed: boo
     ],
     constraints: [],
     acceptanceCriteria: [statement],
-    changedFiles: [],
     completionContract: { version: 1, revision: contractRevision, basisRef },
     completionFacts: {
       ...WorkItem.emptyCompletionFacts(),

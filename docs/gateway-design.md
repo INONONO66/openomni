@@ -377,6 +377,11 @@ consumer-dead after the #797 decommission).
   the router.
 - **S9 gateway never rewrites content** — persona/voice rendering is
   brain-side; the gateway delivers bytes it was given (routing ≠ rendering).
+  The target egress secret gate is a block-with-receipt route decision
+  (`secret_egress_denied` / `messaging.egress_withheld`) evaluated once in the
+  router for proactive sends and reactive replies; it blocks rather than
+  rewriting content. [Implementation Status](implementation-status.md) alone
+  records whether that target gate is currently wired.
 
 ## 8. Superseded rulings (Owner receipt)
 

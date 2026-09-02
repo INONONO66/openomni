@@ -2,9 +2,14 @@ import { describe, expect, test } from "bun:test";
 import { statSync } from "node:fs";
 import { IpcRemoteError, connectIpcClient, createIpcServer } from "@openomni/ipc";
 import type { BusEvent, Machine } from "@openomni/protocol";
-import { attachMachineDaemon } from "../src/daemon";
+import { attachMachineDaemon as attachDaemon, type MachineDaemonOptions } from "../src/daemon";
 import { type MachineHost, createMachineHost } from "../src/host";
+import { testProfile } from "./helpers/plain-launcher";
 import { socketPath } from "./helpers/socket-path";
+
+function attachMachineDaemon(options: Omit<MachineDaemonOptions, "sandbox">) {
+  return attachDaemon({ ...options, sandbox: testProfile() });
+}
 
 interface RecordedEvent {
   readonly name: string;

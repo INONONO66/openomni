@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
 import type { BusEvent, Machine } from "@openomni/protocol";
 import { attachMachineDaemon } from "../src/daemon";
 import { type MachineHost, createMachineHost } from "../src/host";
 import { type CellToolCaller, PythonKernel } from "../src/kernel";
+import { plainLauncher, testProfile } from "./helpers/plain-launcher";
 import { socketPath } from "./helpers/socket-path";
 
 /** These cells call no tools, so a call is a test bug and must be visible. */
@@ -53,7 +55,11 @@ async function withMachine(
     now: () => 5000,
     callTool,
   });
-  const daemon = await attachMachineDaemon({ socketPath: path, offer: offer(capabilities) });
+  const daemon = await attachMachineDaemon({
+    socketPath: path,
+    offer: offer(capabilities),
+    sandbox: testProfile(),
+  });
   try {
     await run({ host });
   } finally {
@@ -69,7 +75,7 @@ function cell(code: string, timeoutMs = 15_000): Machine.CellRequest {
 
 describe("cell settlement ownership", () => {
   test("a queued cell times out from its enqueue deadline without replacing the interpreter", async () => {
-    const kernel = new PythonKernel();
+    const kernel = new PythonKernel({ launch: plainLauncher });
     try {
       const first = kernel.run(
         {
@@ -79,10 +85,7 @@ describe("cell settlement ownership", () => {
         },
         noTools,
       );
-      const queued = kernel.run(
-        { cellId: "queued", code: "value = 99", timeoutMs: 5 },
-        noTools,
-      );
+      const queued = kernel.run({ cellId: "queued", code: "value = 99", timeoutMs: 5 }, noTools);
 
       expect(await first).toMatchObject({ status: "completed", cellId: "blocking" });
       expect(await queued).toMatchObject({ status: "timed_out", cellId: "queued" });
@@ -104,7 +107,7 @@ describe("cell settlement ownership", () => {
     // already pending when the killed interpreter's exit event lands. That is
     // the interleaving where a process that settles "whatever is pending"
     // instead of "its own cell" rejects work it never ran.
-    const kernel = new PythonKernel();
+    const kernel = new PythonKernel({ launch: plainLauncher });
     try {
       const [timedOut, successor] = await Promise.all([
         kernel.run(
@@ -126,12 +129,18 @@ describe("cell settlement ownership", () => {
   });
 });
 
-describe("code-mode kernel substrate", () => {
+describe.skipIf(
+  (process.platform !== "linux" || !existsSync("/usr/bin/bwrap")) &&
+    process.env.OPENOMNI_REQUIRE_SANDBOX_TESTS !== "1",
+)("code-mode kernel substrate", () => {
   test("invalid driver output replaces the interpreter", async () => {
-    const kernel = new PythonKernel();
+    const kernel = new PythonKernel({ launch: plainLauncher });
     try {
       await expect(
-        kernel.run({ cellId: "before-invalid-driver-output", code: "persisted = 42", timeoutMs: 1_000 }, noTools),
+        kernel.run(
+          { cellId: "before-invalid-driver-output", code: "persisted = 42", timeoutMs: 1_000 },
+          noTools,
+        ),
       ).resolves.toMatchObject({ status: "completed" });
       await expect(
         kernel.run(
@@ -144,7 +153,10 @@ describe("code-mode kernel substrate", () => {
         ),
       ).rejects.toBeInstanceOf(SyntaxError);
       await expect(
-        kernel.run({ cellId: "after-invalid-driver-output", code: "persisted", timeoutMs: 1_000 }, noTools),
+        kernel.run(
+          { cellId: "after-invalid-driver-output", code: "persisted", timeoutMs: 1_000 },
+          noTools,
+        ),
       ).resolves.toMatchObject({ status: "raised" });
     } finally {
       kernel.close();
@@ -152,12 +164,11 @@ describe("code-mode kernel substrate", () => {
   });
 
   test("an unserializable tool answer rejects the owning cell", async () => {
-    const kernel = new PythonKernel();
+    const kernel = new PythonKernel({ launch: plainLauncher });
     try {
       await expect(
-        kernel.run(
-          { cellId: "unserializable-answer", code: "tool.test()", timeoutMs: 1_000 },
-          () => Promise.resolve({ status: "completed", value: 1n }),
+        kernel.run({ cellId: "unserializable-answer", code: "tool.test()", timeoutMs: 1_000 }, () =>
+          Promise.resolve({ status: "completed", value: 1n }),
         ),
       ).rejects.toBeInstanceOf(TypeError);
     } finally {

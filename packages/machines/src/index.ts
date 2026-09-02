@@ -7,6 +7,13 @@ export {
 } from "./errors";
 export { createFsDriver, type FsDriver } from "./fs";
 export {
+  type Launcher,
+  type SandboxProbe,
+  type SandboxProfile,
+  probeSandbox,
+  sandboxedLauncher,
+} from "./launcher";
+export {
   createMachineHost,
   type MachineHost,
   type FsOpOutcome,

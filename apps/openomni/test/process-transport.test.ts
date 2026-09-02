@@ -502,9 +502,12 @@ test("an assign rides the real wire: parent driver, spawned child, drive loop, u
     });
   });
   const settled = await kernel.awaitDelegation(result.handle.delegationId, 20_000);
-  if (settled.kind !== "settled" || settled.settlement.status !== "completed") {
-    throw new Error(`process did not settle completed: ${JSON.stringify(settled)}`);
+  // #807: the child reported completion over the real wire and no verifier was
+  // wired, so the assign settles unverified while keeping the reported output.
+  if (settled.kind !== "settled" || settled.settlement.status !== "unverified") {
+    throw new Error(`process did not settle unverified: ${JSON.stringify(settled)}`);
   }
+  expect(settled.settlement.reason).toBe("verifier_unavailable");
   // Drive loop ran in the child: three driven runs, blocked stop, summed spend.
   expect(settled.settlement.output).toBe(
     "[drive stopped: blocked]\nBLOCKED: the registry is unreachable",
@@ -577,7 +580,7 @@ test("a single process run consumes the commissioned run identity", async () => 
   const record = DelegationStore.get("d-wire-single");
   const item = await WorkItemStore.get(record?.workItemId ?? "");
   const settled = await kernel.awaitDelegation("d-wire-single", 20_000);
-  if (settled.kind !== "settled" || settled.settlement.status !== "completed")
+  if (settled.kind !== "settled" || settled.settlement.status !== "unverified")
     throw new Error("not settled");
   expect(settled.settlement.workerRunId).toBe(item?.workerRunId);
   kernel.stop();

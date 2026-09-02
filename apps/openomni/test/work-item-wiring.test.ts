@@ -149,7 +149,9 @@ test("settlement demotes worker output to Evidence and closes the attempt withou
   await closed;
 
   const item = await WorkItemStore.get(workItemId);
-  expect(item?.attemptTerminal?.outcome).toBe("succeeded");
+  // #807: the worker reported completion and nothing checked it, so the
+  // attempt closes `unverified` — not `succeeded`.
+  expect(item?.attemptTerminal?.outcome).toBe("unverified");
   expect(item?.evidence).toHaveLength(1);
   // Worker self-report NEVER passes verification: completion can only ride
   // Resident-recorded verification evidence.
@@ -218,7 +220,10 @@ async function settledAssign(): Promise<{
 test("completion inspection summarizes durable criteria, evidence, and attempt outcome", async () => {
   const { workItemId, completion } = await settledAssign();
   expect(completion.list()).toHaveLength(1);
-  expect(completion.inspect(workItemId)).toMatchObject({ workItemId, attemptOutcome: "succeeded" });
+  expect(completion.inspect(workItemId)).toMatchObject({
+    workItemId,
+    attemptOutcome: "unverified",
+  });
   expect(completion.inspect("missing")).toBeUndefined();
 });
 
@@ -583,6 +588,7 @@ test("work item tool adapters cover validation, list, inspect, and both completi
     status: "running",
     criteria: [],
     evidence: [],
+    recordedResults: [],
   } as const;
   const port: CompletionPort = {
     list: () => [summary],
@@ -636,11 +642,13 @@ test("a crash between settlement and closure loses nothing: the sweep rebuilds t
   // The settlement CAS commits directly against the store — the kernel's
   // closeAttempt hook never fires, exactly the crash window recovery covers.
   DelegationStore.settleOnce("dg-wiring-1", {
-    status: "completed",
+    status: "unverified",
     delegationId: "dg-wiring-1",
     output: "done before the crash",
     at: Date.now(),
     usage: { tokens: 777 },
+    reason: "verifier_unavailable",
+    factIds: [],
   });
   kernel.stop();
   expect((await WorkItemStore.get(workItemId))?.attemptTerminal).toBeUndefined();
@@ -679,7 +687,11 @@ test("a restart sweep re-closes an attempt whose settlement write was lost", asy
   if (record === undefined || record.settled === undefined) throw new Error("record not settled");
   // Tokens ride the durable settlement, so a crash between settlement and
   // attempt closure loses nothing: the sweep re-closes from this record alone.
-  expect(record.settled).toMatchObject({ status: "completed", usage: { tokens: 555 } });
+  expect(record.settled).toMatchObject({
+    status: "unverified",
+    reason: "verifier_unavailable",
+    usage: { tokens: 555 },
+  });
   await linkage.closeAttempt({ record, settlement: record.settled });
   await linkage.recoverAttempts((id) => DelegationStore.get(id));
   const after = await WorkItemStore.get(workItemId);

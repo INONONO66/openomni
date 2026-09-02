@@ -1,5 +1,6 @@
+// allow: SIZE_OK — one env-to-typed-config boundary owns every boot setting and its fail-closed parse.
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { Actor, Gateway, Machine, type Model } from "@openomni/protocol";
 import { z } from "zod";
 
@@ -32,6 +33,10 @@ export interface OpenOmniConfig {
      * uses the primary.
      */
     readonly fallbacks?: readonly Model.Ref[];
+  };
+  /** Owner-registered command verifier ids; values are absolute executable paths. */
+  readonly verifiers?: {
+    readonly executables: ReadonlyMap<string, string>;
   };
   /**
    * Absent means this brain has no body: no socket is bound and machine-placed
@@ -122,7 +127,10 @@ const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "::1"]);
 // ingress to the network. startOpenOmni calls this before binding — the
 // single enforcement layer for this invariant, covering injected config too.
 export function assertWsExposure(config: Pick<OpenOmniConfig, "host" | "wsToken">): void {
-  if (!LOOPBACK_HOSTS.has(config.host) && (config.wsToken === undefined || config.wsToken.length === 0)) {
+  if (
+    !LOOPBACK_HOSTS.has(config.host) &&
+    (config.wsToken === undefined || config.wsToken.length === 0)
+  ) {
     throw new Error("OPENOMNI_WS_TOKEN is required when OPENOMNI_WS_HOST is not loopback");
   }
 }
@@ -180,6 +188,10 @@ function modelFallbacksFromEnv(): readonly Model.Ref[] | undefined {
 
 const Enrollments = z.array(Machine.Enrollment).min(1);
 const SocialBudgets = z.array(Gateway.SocialBudget);
+const VerifierExecutables = z.record(
+  z.string().regex(/^[a-z][a-z0-9._-]{0,63}$/),
+  z.string().refine(isAbsolute, { message: "executable path must be absolute" }),
+);
 
 const Actors = z
   .array(
@@ -199,7 +211,11 @@ const Actors = z
 /** Reads an env var holding JSON, naming the variable on both parse and schema failure. */
 function parseEnvJson<T>(
   name: string,
-  schema: { safeParse: (value: unknown) => { success: true; data: T } | { success: false; error: z.ZodError } },
+  schema: {
+    safeParse: (
+      value: unknown,
+    ) => { success: true; data: T } | { success: false; error: z.ZodError };
+  },
 ): T | undefined {
   const raw = process.env[name]?.trim();
   if (raw === undefined || raw.length === 0) return undefined;
@@ -242,18 +258,25 @@ function channelsFromEnv(): OpenOmniConfig["channels"] {
     ...(telegramToken ? { telegram: { token: telegramToken } } : {}),
     ...(githubSecret
       ? {
-        github: {
-          secret: githubSecret,
-          ...(githubToken ? { token: githubToken } : {}),
-          ...(githubBotUsername ? { botUsername: githubBotUsername } : {}),
-        },
-      }
+          github: {
+            secret: githubSecret,
+            ...(githubToken ? { token: githubToken } : {}),
+            ...(githubBotUsername ? { botUsername: githubBotUsername } : {}),
+          },
+        }
       : {}),
   };
 }
 
 function socialBudgetsFromEnv(): OpenOmniConfig["socialBudgets"] {
   return parseEnvJson("OPENOMNI_SOCIAL_BUDGETS", SocialBudgets);
+}
+
+function verifiersFromEnv(): OpenOmniConfig["verifiers"] {
+  const executables = parseEnvJson("OPENOMNI_VERIFIER_EXECUTABLES", VerifierExecutables);
+  return executables === undefined
+    ? undefined
+    : { executables: new Map(Object.entries(executables)) };
 }
 
 function modelFromEnv(): OpenOmniConfig["model"] {
@@ -292,6 +315,7 @@ export function loadConfig(home: string = homedir()): OpenOmniConfig {
   const actors = actorsFromEnv();
   const channels = channelsFromEnv();
   const socialBudgets = socialBudgetsFromEnv();
+  const verifiers = verifiersFromEnv();
   const channelAllowedSenders = channelAllowedSendersFromEnv();
   return {
     dbPath: process.env.OPENOMNI_DB_PATH?.trim() || join(home, ".openomni", "storage.db"),
@@ -304,6 +328,7 @@ export function loadConfig(home: string = homedir()): OpenOmniConfig {
     ...(actors === undefined ? {} : { actors }),
     ...(channels === undefined ? {} : { channels }),
     ...(socialBudgets === undefined ? {} : { socialBudgets }),
+    ...(verifiers === undefined ? {} : { verifiers }),
     ...(channelAllowedSenders === undefined ? {} : { channelAllowedSenders }),
   };
 }

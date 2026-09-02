@@ -1,4 +1,4 @@
-import type { Delegation } from "@openomni/protocol";
+import { Delegation } from "@openomni/protocol";
 import { z } from "zod";
 import { defineTool, ToolRefused } from "../core/define";
 import type { DelegationOrigin } from "../../delegation/admission";
@@ -22,10 +22,15 @@ const StartInput = z.preprocess(
   },
   z
     .object({
-      instruction: z.string().min(1).describe("What the recipient must do, stated so it can stand alone."),
+      instruction: z
+        .string()
+        .min(1)
+        .describe("What the recipient must do, stated so it can stand alone."),
       operation: z
         .enum(["notify", "ask", "assign"])
-        .describe("notify = send and do not expect a reply; ask = request an answer; assign = commission work."),
+        .describe(
+          "notify = send and do not expect a reply; ask = request an answer; assign = commission work.",
+        ),
       scope: z
         .enum(["inline", "independent"])
         .optional()
@@ -39,6 +44,12 @@ const StartInput = z.preprocess(
         .array(z.string().min(1))
         .optional()
         .describe("Required for assign and forbidden for ask/notify."),
+      // The protocol schema IS the boundary: the tool re-states nothing about
+      // the declaration's shape, so the advertised surface cannot drift from
+      // what admission accepts.
+      verification: Delegation.VerificationDeclaration.optional().describe(
+        "assign only: the registered command that must confirm the criteria it names, or the work settles unverified.",
+      ),
       timeoutMs: z.number().int().positive().describe("How long the delegation may remain open."),
     })
     .strict()
@@ -80,6 +91,13 @@ const StartInput = z.preprocess(
           path: ["acceptanceCriteria"],
         });
       }
+      if (input.operation !== "assign" && input.verification !== undefined) {
+        ctx.addIssue({
+          code: "custom",
+          message: `${input.operation} carries no verification declaration`,
+          path: ["verification"],
+        });
+      }
     }),
 );
 
@@ -114,6 +132,51 @@ const DELEGATE_WIRE_PROJECTION: Record<string, unknown> = {
       items: { type: "string", minLength: 1 },
       description: "assign only: criteria the work must satisfy to complete.",
     },
+    verification: {
+      type: "object",
+      additionalProperties: false,
+      required: ["kind", "executable", "argv", "timeoutMs", "expectations"],
+      description:
+        "assign only: the command that checks the criteria it binds. Without it the work settles unverified — a worker's own report is never proof.",
+      properties: {
+        kind: { type: "string", enum: ["command.v1"] },
+        executable: {
+          type: "object",
+          additionalProperties: false,
+          required: ["id"],
+          properties: {
+            id: {
+              type: "string",
+              pattern: "^[a-z][a-z0-9._-]{0,63}$",
+              description: "Owner-registered executable id; never a path or a shell string.",
+            },
+          },
+        },
+        argv: {
+          type: "array",
+          maxItems: 64,
+          items: { type: "string", maxLength: 4096 },
+          description: "Literal arguments; no shell parsing happens.",
+        },
+        timeoutMs: { type: "integer", exclusiveMinimum: 0, maximum: 600000 },
+        expectations: {
+          type: "array",
+          minItems: 1,
+          description: "Each entry binds one acceptanceCriteria index to an expected observation.",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["criterionIndex", "exitCode"],
+            properties: {
+              criterionIndex: { type: "integer", minimum: 0 },
+              exitCode: { type: "integer" },
+              stdoutSha256: { type: "string", pattern: "^[0-9a-f]{64}$" },
+              stderrSha256: { type: "string", pattern: "^[0-9a-f]{64}$" },
+            },
+          },
+        },
+      },
+    },
     timeoutMs: {
       type: "integer",
       exclusiveMinimum: 0,
@@ -142,7 +205,6 @@ const AWAIT_INPUT = z
   })
   .strict();
 const CANCEL_INPUT = z.object({ delegationId: z.string().min(1) }).strict();
-
 function handleText(handle: {
   delegationId: string;
   operation: string;
@@ -186,7 +248,10 @@ function executeDelegate(kernel: DelegationKernel, origin: DelegationOrigin) {
             : { kind: "core" as const, scope: "independent" as const },
       operation: input.operation,
       payload: { text: input.instruction },
-      ...(input.acceptanceCriteria === undefined ? {} : { acceptanceCriteria: input.acceptanceCriteria }),
+      ...(input.acceptanceCriteria === undefined
+        ? {}
+        : { acceptanceCriteria: input.acceptanceCriteria }),
+      ...(input.verification === undefined ? {} : { verification: input.verification }),
       deadline: kernel.now() + input.timeoutMs,
     };
 

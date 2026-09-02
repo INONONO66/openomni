@@ -39,7 +39,6 @@ export function buildWorkItem(input: CreateWorkItemInput, now: number): WorkItem
     context: input.context,
     constraints: input.constraints ?? [],
     acceptanceCriteria: input.acceptanceCriteria,
-    changedFiles: [],
     blockers: [],
     evidence: [],
     completionContract: {

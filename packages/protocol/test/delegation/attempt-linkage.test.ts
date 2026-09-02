@@ -9,6 +9,10 @@ describe("Delegation.settlementToAttemptOutcome", () => {
     ["delivery_failed", "interrupted"],
     ["no_response", "interrupted"],
     ["interrupted", "interrupted"],
+    // #807: only a settlement citing recorded checks closes the attempt as a
+    // success; the self-report terminal gets its own outcome.
+    ["verified", "succeeded"],
+    ["unverified", "unverified"],
   ] as const)("%s settles the attempt as %s", (settled, outcome) => {
     expect(Delegation.settlementToAttemptOutcome(settled)).toBe(outcome);
   });

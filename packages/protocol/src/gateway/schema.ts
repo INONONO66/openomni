@@ -221,6 +221,10 @@ const MessageDenialCodeSchema = z.enum([
   // #P2 lease send right (§3.5): a lease-pinned send the lease refuses —
   // dead, lapsed, or its carved allocation spent.
   "lease_denied",
+  // #811 egress secret gate: the body (or its channel rendering) carries
+  // credential-shaped content. Refused in the router before any durable
+  // effect; the reason names the class and line, never the bytes.
+  "secret_egress_denied",
 ]);
 
 /**

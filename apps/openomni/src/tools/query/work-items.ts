@@ -19,7 +19,7 @@ function executeWorkItems(port: CompletionPort) {
 }
 export const workItemsTool = defineTool({
   name: WORK_ITEMS_TOOL_NAME, category: "query",
-  description: "Inspect commissioned WorkItems: status, acceptance criteria (with ids), recorded evidence, and the attempt outcome. Pass workItemId for one item's detail; omit it to list everything.",
+  description: "Inspect commissioned WorkItems: status, acceptance criteria, recorded evidence, verifier result ids/verdicts, and the attempt outcome. Pass workItemId for one item's detail; omit it to list everything.",
   input: Input, output: Output, safe: true, execution: { kind: "host" }, placement: "host",
   visibility: { model: ["resident"], cell: ["resident"] },
   bind: (ports) => ports.workItems === undefined ? undefined : executeWorkItems(ports.workItems),

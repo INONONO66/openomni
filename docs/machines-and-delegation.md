@@ -286,6 +286,17 @@ The machine axis of `@openomni/placement` folds candidate machines against
      asking session): a Python process offers no in-process isolation, so
      the process boundary is what keeps one session's state — and anything
      a cell leaves running — out of another session's cells.
+
+     Execution is additionally gated by `sandbox.process`: the daemon offers
+     it atomically with `kernel.py` only after a real isolation probe passes,
+     and both host admission and tool placement require it. The implemented
+     backend is Linux bubblewrap with a writable per-tenant `/workspace`,
+     read-only system binds, a cleared environment, and deny-all networking
+     through `--unshare-all`; there is no unsandboxed fallback. The long-lived
+     per-tenant interpreter is the isolation unit, so changing its profile
+     requires a daemon restart. macOS Seatbelt is not implemented: macOS and
+     Linux hosts without usable bubblewrap keep the machine attached for
+     unrelated capabilities but do not offer `run_code` or command verification.
    - **5b — the `tool.<name>()` bridge: landed.** A running cell calls back to
      the host's tool port over the same attachment (`machine.call_tool`), so
      one cell replaces N tool round trips. The host does not re-implement the

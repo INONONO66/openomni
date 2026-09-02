@@ -2,6 +2,7 @@ import { newTraceId } from "../support/trace";
 import {
   Gateway,
   Ingress,
+  MessagingEvents,
   Operational,
   Wait,
   extractSurfaceKey,
@@ -20,6 +21,7 @@ import {
 } from "./messaging/reply-grant.js";
 import { createExistingAgentMessaging, type DeliveryReceipt } from "./messaging/send.js";
 import type { ExistingAgentMessaging } from "./messaging/send.js";
+import { scanForSecrets } from "./messaging/secret-scan.js";
 import { executeWaitRoute, requireRoutedDecision } from "./routing-execution.js";
 import { resolveAndRecordRoute, type KernelRouteResolution } from "./routing-resolution.js";
 
@@ -52,6 +54,13 @@ export interface GatewayRouterPorts {
   readonly deliver: (delivery: Gateway.Deliver) => Promise<Ingress.IngressResult>;
   /** Observer for routed pre-run authority decisions (never blocks the run). */
   readonly onPolicyDecision?: (decision: Policy.PolicyDecision) => void | Promise<void>;
+  /**
+   * Per-channel outbound markdown renderer (#811). Top-level, not under
+   * `messaging`: the egress secret gate is a route decision the router owns
+   * for every outbound path, so it must be available even where the send
+   * kernel is not wired. Undefined for identity surfaces (ws).
+   */
+  readonly renderFor?: (channel: string) => ((markdown: string) => string) | undefined;
   /** Outbound send kernel wiring (#215): channel delivery routes + Owner grants. */
   readonly messaging?: Readonly<{
     deliveryRoutes: ReadonlyMap<string, ChannelDeliveryRoute>;
@@ -125,10 +134,7 @@ function publishSurfaceStickinessClaim(
   });
 }
 
-function claimResidentSurfaceSession(
-  surfaceKey: string,
-  sink: GatewayRouterPorts["sink"],
-): string {
+function claimResidentSurfaceSession(surfaceKey: string, sink: GatewayRouterPorts["sink"]): string {
   const existing = SurfaceKey.lookup(surfaceKey);
   if (existing !== undefined) return existing;
   const requestedSessionId = crypto.randomUUID();
@@ -346,6 +352,9 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
           // #219: thread the Owner-declared egress budgets through iff the
           // composition root wired them, so the gate stays a no-op otherwise.
           ...(messagingPorts.budgets === undefined ? {} : { budgets: messagingPorts.budgets }),
+          // #811: the egress gate scans the raw body and its channel
+          // rendering in ONE place — here — so no surface re-implements it.
+          ...(ports.renderFor === undefined ? {} : { renderFor: ports.renderFor }),
           publish: ports.sink,
         });
 
@@ -415,7 +424,33 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
         sessionId = claimResidentSurfaceSession(extractSurfaceKey(pinned), ports.sink);
       }
 
-      return ports.deliver(buildDelivery(pinned, route.decision, waitContextOf(route), sessionId));
+      const result = await ports.deliver(
+        buildDelivery(pinned, route.decision, waitContextOf(route), sessionId),
+      );
+      if (result.kind === "dropped") return result;
+
+      const output = result.result.output;
+      const rendered = ports.renderFor?.(externalEvent.surface)?.(output);
+      const hit = [
+        ...scanForSecrets(output),
+        ...(rendered === undefined ? [] : scanForSecrets(rendered)),
+      ][0];
+      if (hit === undefined) return result;
+
+      ports.sink(MessagingEvents.EgressWithheld, {
+        traceId: trace.traceId,
+        time: Date.now(),
+        surfaceKey: extractSurfaceKey(pinned),
+        channel: externalEvent.surface,
+        class: hit.class,
+        line: hit.line,
+      });
+      return {
+        kind: "dropped",
+        mode: result.mode,
+        target: result.target,
+        reason: "secret_egress_denied",
+      };
     },
 
     get messaging(): ExistingAgentMessaging {

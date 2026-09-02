@@ -144,8 +144,11 @@ const TOOL_NAME_PATTERN = /^[a-z][a-z0-9]*(?:[._][a-z][a-z0-9]*){0,2}$/;
 const MAX_PUBLIC_FIELDS = 5;
 // delegate carries an addressing XOR (scope | actorId) that must be advertised
 // as one flat object: Anthropic-wire providers reject a root-level oneOf
-// input_schema, so the pair costs one extra top-level field.
-const FIELD_ALLOWANCE: Readonly<Record<string, number>> = { delegate: 6 };
+// input_schema, so the pair costs one extra top-level field. #807 adds a
+// seventh: `verification` is the declaration that lets an assign settle
+// `verified` at all, and it cannot be folded into acceptanceCriteria (an array
+// of criterion text) without inventing a second criterion shape.
+const FIELD_ALLOWANCE: Readonly<Record<string, number>> = { delegate: 7 };
 
 function localReference(
   root: Record<string, unknown>,

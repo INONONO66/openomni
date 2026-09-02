@@ -17,7 +17,10 @@ export interface CellPorts {
     request: Machine.CellRequest,
   ): Promise<
     | Machine.CellResult
-    | { readonly status: "refused"; readonly reason: "machine_not_attached" | "kernel_not_available" }
+    | {
+        readonly status: "refused";
+        readonly reason: "machine_not_attached" | "kernel_not_available" | "isolation_unavailable";
+      }
   >;
   /**
    * The whole catalog `origin` holds when the cell runs on `machineId` —
@@ -65,7 +68,11 @@ const Input = z
       .describe(
         "Python source. Call host tools inside it as tool.<name>(...) — that is the point: many calls, one round trip.",
       ),
-    timeoutMs: z.number().int().positive().describe("How long the cell may run before it is stopped."),
+    timeoutMs: z
+      .number()
+      .int()
+      .positive()
+      .describe("How long the cell may run before it is stopped."),
   })
   .strict();
 
@@ -80,9 +87,14 @@ function describe(result: Awaited<ReturnType<CellPorts["runCell"]>>, timeoutMs: 
     case "timed_out":
       return `the cell did not finish within ${timeoutMs}ms — what it had done is unknown, not undone`;
     case "refused":
-      return result.reason === "machine_not_attached"
-        ? "that machine is not attached right now"
-        : "that machine has no code kernel to run this";
+      switch (result.reason) {
+        case "machine_not_attached":
+          return "that machine is not attached right now";
+        case "kernel_not_available":
+          return "that machine has no code kernel to run this";
+        case "isolation_unavailable":
+          return "run_code refused: process isolation is unavailable on that machine";
+      }
   }
 }
 
@@ -106,7 +118,11 @@ export const runCodeTool = defineTool({
   name: RUN_CODE_TOOL_NAME, category: "execution",
   description: "Run Python on an attached machine; state persists across cells in _scope, so do a whole step in one cell. Inside it, tool.<name>(...) bridges to the tools you hold here, parallel(thunks) runs independent calls concurrently, llm(prompt) asks a budget-capped sub-model, and write_artifact/read_artifact move large text by id.",
   input: Input, output: z.custom<Awaited<ReturnType<CellPorts["runCell"]>>>((value) => typeof value === "object" && value !== null), safe: false,
-  execution: { kind: "machine", capability: "kernel.py" }, requires: [Machine.WellKnownCapability.pythonKernel],
+  execution: { kind: "machine", capability: "kernel.py" },
+  requires: [
+    Machine.WellKnownCapability.pythonKernel,
+    Machine.WellKnownCapability.sandboxProcess,
+  ],
   visibility: { model: ["resident", "worker"], cell: ["resident", "worker"] },
   bind: (ports, origin) => ports.cells === undefined ? undefined : executeRunCode(ports.cells, origin),
   render: (args, value) => describe(value, args.timeoutMs),

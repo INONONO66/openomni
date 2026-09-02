@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { EpochMs } from "../time.js";
+import { UnverifiedReason, VerificationDeclaration } from "./verification.js";
 
 /**
  * Where delegated work goes (docs/machines-and-delegation.md §3).
@@ -52,6 +53,12 @@ export const Request = z
     operation: Operation,
     payload: z.object({ text: z.string().min(1) }).strict(),
     acceptanceCriteria: z.array(z.string().min(1)).optional(),
+    /**
+     * #807 — the check that may produce a `verified` terminal, declared before
+     * the work starts and bound to specific acceptance criteria by index. An
+     * assign without one can only end `unverified`.
+     */
+    verification: VerificationDeclaration.optional(),
     /** Epoch ms. Required: no unbounded delegation exists (kernel-contract Wait law). */
     deadline: EpochMs.int().positive(),
   })
@@ -75,10 +82,7 @@ export const Request = z
         path: ["address"],
       });
     }
-    if (
-      request.operation === "assign" &&
-      (request.acceptanceCriteria?.length ?? 0) === 0
-    ) {
+    if (request.operation === "assign" && (request.acceptanceCriteria?.length ?? 0) === 0) {
       ctx.addIssue({
         code: "custom",
         message: "assign requires at least one acceptance criterion",
@@ -91,6 +95,40 @@ export const Request = z
         message: `${request.operation} carries no acceptance criteria`,
         path: ["acceptanceCriteria"],
       });
+    }
+    if (request.verification === undefined) return;
+    if (request.operation !== "assign") {
+      ctx.addIssue({
+        code: "custom",
+        message: `${request.operation} carries no verification declaration`,
+        path: ["verification"],
+      });
+      return;
+    }
+    // Every expectation binds to a criterion this very request carries, and no
+    // two expectations claim the same one: that binding is the whole reason a
+    // recorded result can satisfy a criterion later without re-reading its text.
+    const criteriaCount = request.acceptanceCriteria?.length ?? 0;
+    const bound = new Set<number>();
+    for (const [index, expectation] of request.verification.expectations.entries()) {
+      const path = ["verification", "expectations", index, "criterionIndex"];
+      if (expectation.criterionIndex >= criteriaCount) {
+        ctx.addIssue({
+          code: "custom",
+          message: `criterionIndex ${expectation.criterionIndex} has no acceptance criterion`,
+          path,
+        });
+        continue;
+      }
+      if (bound.has(expectation.criterionIndex)) {
+        ctx.addIssue({
+          code: "custom",
+          message: `criterionIndex ${expectation.criterionIndex} is already bound by another expectation`,
+          path,
+        });
+        continue;
+      }
+      bound.add(expectation.criterionIndex);
     }
   });
 export type Request = z.infer<typeof Request>;
@@ -149,9 +187,12 @@ export type Handle = z.infer<typeof Handle>;
  * DISTINCT terminals: unknown-outcome must never be read as did-not-happen.
  *
  * `completed` means the worker/actor REPORTED completion (or replied) —
- * nothing more. Acceptance-criteria enforcement is deliberately OUT of this
- * terminal; completion authority over assigned work is a future WorkItem
- * integration, not a schema claim.
+ * nothing more, which is why #807 confines it to `ask`: a reply IS the answer,
+ * but a self-report is not delivery of commissioned work. An `assign` settles
+ * `verified` (a durably recorded check confirmed every criterion, and the
+ * terminal cites those facts) or `unverified` (typed reason for why nothing
+ * confirmed it). Both rules are pinned on `Record`, where operation meets
+ * settlement.
  *
  * `interrupted` is set only by the boot sweep: the host restarted while
  * volatile (inline/process) transport work was still open.
@@ -224,6 +265,40 @@ const SettledUnion = z.discriminatedUnion("status", [
       at: EpochMs,
     })
     .strict(),
+  // #807 assign terminals. Both repeat the `completed` arm's reported prefix
+  // (status, delegationId, workerRunId?, output, at, usage?) so the emitted
+  // JSON bytes stay a stable settlement identity, then add their own evidence.
+  z
+    .object({
+      status: z.literal("verified"),
+      delegationId: z.string().min(1),
+      workerRunId: z.string().min(1).optional(),
+      output: z.string(),
+      at: EpochMs,
+      /** Transport-reported spend; visibility only, never an admission input. */
+      usage: z.object({ tokens: z.number().int().nonnegative() }).strict().optional(),
+      /** The WorkItem completion basis the recorded facts were stamped against. */
+      basisRef: z.string().min(1),
+      /** Recorded `CriterionResult` ids — the durable facts this terminal cites. */
+      factIds: z.array(z.string().min(1)).min(1),
+    })
+    .strict(),
+  z
+    .object({
+      status: z.literal("unverified"),
+      delegationId: z.string().min(1),
+      workerRunId: z.string().min(1).optional(),
+      output: z.string(),
+      at: EpochMs,
+      /** Transport-reported spend; visibility only, never an admission input. */
+      usage: z.object({ tokens: z.number().int().nonnegative() }).strict().optional(),
+      reason: UnverifiedReason,
+      /** Present only when facts were recorded before the verdict fell short. */
+      basisRef: z.string().min(1).optional(),
+      /** Recorded fact ids; empty when nothing was checked at all. */
+      factIds: z.array(z.string().min(1)),
+    })
+    .strict(),
 ]);
 
 export const Settled = SettledUnion.superRefine((settled, ctx) => {
@@ -267,14 +342,20 @@ const RecordBase = Handle.extend({
 }).strict();
 
 export const Record = RecordBase.superRefine((record, ctx) => {
-  if (record.status === "settled" && (record.settled === undefined || record.settledAt === undefined)) {
+  if (
+    record.status === "settled" &&
+    (record.settled === undefined || record.settledAt === undefined)
+  ) {
     ctx.addIssue({
       code: "custom",
       message: "a settled record carries its settlement payload and settledAt",
       path: ["settled"],
     });
   }
-  if (record.status === "open" && (record.settled !== undefined || record.settledAt !== undefined)) {
+  if (
+    record.status === "open" &&
+    (record.settled !== undefined || record.settledAt !== undefined)
+  ) {
     ctx.addIssue({
       code: "custom",
       message: "an open record carries no settlement",
@@ -313,6 +394,28 @@ export const Record = RecordBase.superRefine((record, ctx) => {
     ctx.addIssue({
       code: "custom",
       message: "sent is terminal for notify only",
+      path: ["settled", "status"],
+    });
+  }
+  // #807 — the two halves of "a worker cannot self-report success":
+  // verification terminals exist only where a contract exists (assign), and
+  // the bare self-report terminal exists only where the reply IS the outcome
+  // (ask). Pre-#807 assign+completed rows are normalized before parsing
+  // (normalizeLegacyRecord), never excused here.
+  if (
+    (record.settled?.status === "verified" || record.settled?.status === "unverified") &&
+    record.operation !== "assign"
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      message: "verified and unverified are terminals for assign only",
+      path: ["settled", "status"],
+    });
+  }
+  if (record.settled?.status === "completed" && record.operation !== "ask") {
+    ctx.addIssue({
+      code: "custom",
+      message: "completed is the reply to an ask; assigned work settles verified or unverified",
       path: ["settled", "status"],
     });
   }

@@ -35,7 +35,7 @@ export type RunCellOutcome =
   | Machine.CellResult
   | {
       readonly status: "refused";
-      readonly reason: "machine_not_attached" | "kernel_not_available";
+      readonly reason: "machine_not_attached" | "kernel_not_available" | "isolation_unavailable";
     };
 
 export type FsOpOutcome =
@@ -196,6 +196,9 @@ export async function createMachineHost(options: MachineHostOptions): Promise<Ma
       const attachment = attachments.get(connectionId);
       if (!attachment?.capabilities.includes(Machine.WellKnownCapability.pythonKernel)) {
         return { status: "refused", reason: "kernel_not_available" };
+      }
+      if (!attachment.capabilities.includes(Machine.WellKnownCapability.sandboxProcess)) {
+        return { status: "refused", reason: "isolation_unavailable" };
       }
       server.useConnection(connectionId);
       const cells = inFlight.get(connectionId) ?? new Set<string>();

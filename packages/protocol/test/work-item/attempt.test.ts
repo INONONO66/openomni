@@ -164,4 +164,24 @@ describe("WorkItem.Attempt", () => {
     expect(id).toBe("attempt_avh9he7dy896m08s18udxr");
     expect(WorkItem.AttemptId.safeParse(id).success).toBe(true);
   });
+
+  test("#807: unverified is its own attempt outcome — neither success nor failure", () => {
+    expect(WorkItem.AttemptOutcome.options).toEqual([
+      "succeeded",
+      "failed",
+      "cancelled",
+      "interrupted",
+      "unverified",
+    ]);
+    // An attempt whose executor reported completion with nothing checking it
+    // records the ABSENCE of a verdict; folding it onto succeeded or failed
+    // would claim a check that never happened.
+    expect(
+      WorkItem.AttemptTerminal.safeParse({
+        attemptId: "attempt_alpha",
+        outcome: "unverified",
+        endedAt: 1_700_000_000_000,
+      }).success,
+    ).toBe(true);
+  });
 });

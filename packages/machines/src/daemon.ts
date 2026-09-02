@@ -2,11 +2,19 @@ import { type IpcClient, connectIpcClient, typedCall } from "@openomni/ipc";
 import { Machine } from "@openomni/protocol";
 import { MachineDaemonProtocolError } from "./errors";
 import { createFsDriver } from "./fs";
-import { PythonKernel } from "./kernel";
+import { PYTHON_DRIVER, PythonKernel } from "./kernel";
+import {
+  type Launcher,
+  type SandboxProbe,
+  type SandboxProfile,
+  probeSandbox,
+  sandboxedLauncher,
+} from "./launcher";
 
 export interface MachineDaemonOptions {
   readonly socketPath: string;
   readonly offer: Machine.Offer;
+  readonly sandbox: SandboxProfile;
   /** Daemon-local export roots; absolute paths never cross the wire. */
   readonly fsExports?: ReadonlyMap<string, string>;
   readonly attachTimeoutMs?: number;
@@ -15,6 +23,7 @@ export interface MachineDaemonOptions {
 export interface MachineDaemon {
   /** The host's verdict — a refusal is a typed outcome, not a thrown error. */
   readonly attachment: Machine.AttachResult;
+  readonly sandbox: SandboxProbe;
   close(): void;
 }
 
@@ -28,18 +37,39 @@ export interface MachineDaemon {
  * leave behind) out of another session's way is a process boundary.
  */
 export async function attachMachineDaemon(options: MachineDaemonOptions): Promise<MachineDaemon> {
-  const offersKernel = options.offer.offeredCapabilities.includes(
+  const sandbox = await probeSandbox(options.sandbox);
+  const requestedKernel = options.offer.offeredCapabilities.includes(
     Machine.WellKnownCapability.pythonKernel,
   );
-  const offersFs = options.offer.offeredCapabilities.includes(Machine.WellKnownCapability.fsRead);
-  const offeredExports = new Set((options.offer.exports ?? []).map((entry) => entry.name));
+  const nonExecutionCapabilities = options.offer.offeredCapabilities.filter(
+    (capability) =>
+      capability !== Machine.WellKnownCapability.pythonKernel &&
+      capability !== Machine.WellKnownCapability.sandboxProcess,
+  );
+  const executionCapabilities =
+    sandbox.ok && requestedKernel
+      ? [Machine.WellKnownCapability.pythonKernel, Machine.WellKnownCapability.sandboxProcess]
+      : [];
+  const offer: Machine.Offer = {
+    ...options.offer,
+    offeredCapabilities: [...nonExecutionCapabilities, ...executionCapabilities],
+  };
+  const offersKernel = executionCapabilities.length > 0;
+  const offersFs = offer.offeredCapabilities.includes(Machine.WellKnownCapability.fsRead);
+  const offeredExports = new Set((offer.exports ?? []).map((entry) => entry.name));
   const fsOp = createFsDriver(options.fsExports ?? new Map());
+  const launch = sandbox.ok ? sandboxedLauncher(options.sandbox, PYTHON_DRIVER) : undefined;
   const kernels = new Map<string, PythonKernel>();
-  const kernelFor = (tenant: string | undefined): PythonKernel => {
-    const key = tenant ?? "default";
+  const kernelFor = (
+    tenant: string | undefined,
+    profileDigest: string,
+    launcher: Launcher,
+  ): PythonKernel => {
+    const tenantId = tenant ?? "default";
+    const key = `${tenantId}::${profileDigest}`;
     let kernel = kernels.get(key);
     if (kernel === undefined) {
-      kernel = new PythonKernel();
+      kernel = new PythonKernel({ launch: () => launcher(tenantId) });
       kernels.set(key, kernel);
     }
     return kernel;
@@ -91,14 +121,14 @@ export async function attachMachineDaemon(options: MachineDaemonOptions): Promis
       }
       // The host gate owns this refusal; a daemon that never offered the Python-kernel capability
       // still re-checks because the host is across a trust boundary.
-      if (!offersKernel) {
+      if (!offersKernel || !sandbox.ok || launch === undefined) {
         throw new Error(
           `${Machine.WellKnownCapability.pythonKernel} was not offered by this machine`,
         );
       }
       const request = Machine.CellRequest.parse(params);
       respond(
-        await kernelFor(request.tenant).run(request, async (call) =>
+        await kernelFor(request.tenant, sandbox.profileDigest, launch).run(request, async (call) =>
           Machine.ToolCallResult.parse(
             await typedCall(requireClient(), Machine.WireMethod.CallTool, call, request.timeoutMs),
           ),
@@ -112,15 +142,11 @@ export async function attachMachineDaemon(options: MachineDaemonOptions): Promis
     // typedCall types the wire result but does not validate it; the host is
     // across a trust boundary, so parse before believing it.
     const attachment = Machine.AttachResult.parse(
-      await typedCall(
-        connected,
-        Machine.WireMethod.Attach,
-        options.offer,
-        options.attachTimeoutMs,
-      ),
+      await typedCall(connected, Machine.WireMethod.Attach, offer, options.attachTimeoutMs),
     );
     return {
       attachment,
+      sandbox,
       close() {
         closeKernels();
         fsOp.close();

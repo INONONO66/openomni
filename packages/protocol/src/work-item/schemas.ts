@@ -198,7 +198,6 @@ const InfoShape = z.object({
   context: z.string().optional(),
   constraints: z.array(z.string()),
   acceptanceCriteria: z.array(z.string().refine((value) => value.trim().length > 0)).min(1),
-  changedFiles: z.array(z.string()),
   failureReason: z.string().optional(),
   blockers: z.array(Blocker),
   evidence: z.array(Evidence),

@@ -42,4 +42,18 @@ export const MessagingEvents = {
       visibility: "internal",
     },
   ),
+  EgressWithheld: BusEvent.define(
+    "messaging.egress_withheld",
+    z
+      .object({
+        traceId: z.string().min(1),
+        time: EpochMs,
+        surfaceKey: z.string().min(1),
+        channel: z.string().min(1),
+        class: z.string().min(1),
+        line: z.number().int().positive(),
+      })
+      .strict(),
+    { visibility: "internal" },
+  ),
 } as const;

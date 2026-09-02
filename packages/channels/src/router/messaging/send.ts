@@ -24,6 +24,7 @@ import {
   resolveScopedSenderTargetGrant,
   resolveSenderTargetGrant,
 } from "./grant.js";
+import { scanForSecrets } from "./secret-scan.js";
 import { evaluateSocialBudget } from "./social-budget.js";
 
 type DeliveryTarget = Gateway.DeliveryTarget;
@@ -97,6 +98,14 @@ export type MessagingPorts = Readonly<{
   budgets?: () => readonly SocialBudget[];
   /** Injected observation sink (messaging.sent / messaging.denied) — channels never imports the observation channel. */
   publish: BusEvent.Sink["publish"];
+  /**
+   * The channel's outbound markdown renderer (#811), supplied by the router
+   * from the provider registry. The egress gate scans the raw body AND its
+   * rendering, because a dialect transform can reassemble a credential the
+   * raw text splits. Absent renderer (identity surfaces like ws) — the raw
+   * body is the whole surface, and the gate still runs on it.
+   */
+  renderFor?: (channel: string) => ((markdown: string) => string) | undefined;
 }>;
 
 export type ExistingAgentMessaging = Readonly<{
@@ -442,6 +451,35 @@ function authorizeLeaseSend(
   return pinnedGrant(input, `lease:${leaseId}`);
 }
 
+/**
+ * #811 proactive egress gate. Runs after authority is resolved (so the target
+ * channel — and therefore its renderer — is known) and BEFORE `admitSend`,
+ * which means before the admission fact, every budget/lease/conversation
+ * debit, the Wait row, and delivery. Blocking is the whole remedy: the body
+ * is never rewritten, and the denial reason carries the class and line only
+ * so the sender can rephrase without the audit trail echoing the credential.
+ * Pure and cheap, so retries under the same messageId are re-scanned rather
+ * than trusted to an earlier verdict.
+ */
+function secretEgressGate(
+  authorization: AuthorizedSend,
+  ports: MessagingPorts,
+  deny: DenySend,
+): SendReceipt | undefined {
+  const { input, target } = authorization;
+  const render = ports.renderFor?.(target.channel);
+  const [hit] = [
+    ...scanForSecrets(input.body),
+    ...(render === undefined ? [] : scanForSecrets(render(input.body))),
+  ];
+  if (hit === undefined) return undefined;
+  return deny(
+    input,
+    "secret_egress_denied",
+    `secret-shaped content (${hit.class}) at line ${hit.line}`,
+  );
+}
+
 /** Records all admission debits before the delivery effect. */
 function admitSend(
   authorization: AuthorizedSend,
@@ -676,6 +714,9 @@ export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAge
     const authorization = authorizeSend(input, ports, deny);
     if ("kind" in authorization) return authorization;
     const { target } = authorization;
+
+    const withheld = secretEgressGate(authorization, ports, deny);
+    if (withheld !== undefined) return withheld;
 
     const admission = admitSend(authorization, ports, deny);
     if ("kind" in admission) return admission;

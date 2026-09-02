@@ -55,6 +55,10 @@ export function createWorkItemCompletionWriter(
   };
 }
 
+export function runAsCompletionWriter<T>(unit: () => T): T {
+  return authorizedWriter.run(writerAuthority, unit);
+}
+
 export function isAuthorizedCompletionWriter(): boolean {
   return authorizedWriter.getStore() === writerAuthority;
 }

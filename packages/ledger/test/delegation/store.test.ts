@@ -179,11 +179,13 @@ for (const { name, create } of adapters) {
     });
 
     test("atomically refuses a child claim when its required parent is settled", () => {
-      DelegationStore.create(buildDelegationRecord({
-        delegationId: "parent",
-        waitId: "wait-parent",
-        rootDelegationId: "parent",
-      }));
+      DelegationStore.create(
+        buildDelegationRecord({
+          delegationId: "parent",
+          waitId: "wait-parent",
+          rootDelegationId: "parent",
+        }),
+      );
       DelegationStore.settle("parent", {
         status: "cancelled",
         delegationId: "parent",
@@ -298,6 +300,112 @@ describe("DelegationStore legacy wake-receipt upcast (SQLite)", () => {
     expect(DelegationStore.markWoken("delegation-1", 202)).toBe(false);
     expect(DelegationStore.get("delegation-1")?.wokenAt).toBe(201);
     expect(DelegationStore.listSettledUnwoken()).toEqual([]);
+  });
+
+  test("#807: a legacy assign+completed row reads back as unverified(legacy_self_report)", () => {
+    const directory = mkdtempSync(join(tmpdir(), "openomni-legacy-assign-completed-"));
+    legacyDirectories.push(directory);
+    const dbPath = join(directory, "legacy.db");
+    Storage.configure(new SqliteStorageAdapter(dbPath));
+
+    // Pre-#807 rows recorded the worker's own "completed" report as an assign
+    // terminal. The current contract refuses that shape, so the read path must
+    // normalize the stored self-report instead of dying on the whole table.
+    // Raw SQL is mandatory here: the write path can no longer produce it.
+    const stored = {
+      ...buildDelegationRecord({
+        delegationId: "delegation-legacy-assign",
+        operation: "assign",
+        rootDelegationId: "delegation-legacy-assign",
+        waitId: "wait-legacy-assign",
+        workItemId: "work-item-legacy",
+      }),
+      status: "settled",
+      settled: {
+        status: "completed",
+        delegationId: "delegation-legacy-assign",
+        workerRunId: "run-legacy",
+        output: "I finished it",
+        at: 200,
+        usage: { tokens: 7 },
+      },
+      settledAt: 200,
+    };
+    const raw = new Database(dbPath);
+    raw
+      .query(
+        `INSERT INTO delegation (
+           delegation_id, status, root_delegation_id, wait_id, data, time_created, settled_at, woken_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL)`,
+      )
+      .run(
+        "delegation-legacy-assign",
+        "settled",
+        "delegation-legacy-assign",
+        "wait-legacy-assign",
+        JSON.stringify(stored),
+        stored.createdAt,
+        200,
+      );
+    raw.close();
+
+    const decoded = DelegationStore.get("delegation-legacy-assign");
+    expect(decoded?.settled).toEqual({
+      status: "unverified",
+      delegationId: "delegation-legacy-assign",
+      workerRunId: "run-legacy",
+      output: "I finished it",
+      at: 200,
+      reason: "legacy_self_report",
+      factIds: [],
+      usage: { tokens: 7 },
+    });
+    // Every read path normalizes, not just the point lookup.
+    expect(DelegationStore.listSettledUnwoken().map((record) => record.settled?.status)).toEqual([
+      "unverified",
+    ]);
+    expect(DelegationStore.findByWaitId("wait-legacy-assign")?.settled?.status).toBe("unverified");
+  });
+
+  test("#807: a legacy ask+completed row keeps its completed terminal byte-for-byte", () => {
+    const directory = mkdtempSync(join(tmpdir(), "openomni-legacy-ask-completed-"));
+    legacyDirectories.push(directory);
+    const dbPath = join(directory, "legacy.db");
+    Storage.configure(new SqliteStorageAdapter(dbPath));
+
+    const settled = {
+      status: "completed" as const,
+      delegationId: "delegation-1",
+      output: "the answer",
+      at: 200,
+    };
+    const stored = {
+      ...buildDelegationRecord(),
+      status: "settled",
+      settled,
+      settledAt: 200,
+    };
+    const raw = new Database(dbPath);
+    raw
+      .query(
+        `INSERT INTO delegation (
+           delegation_id, status, root_delegation_id, wait_id, data, time_created, settled_at, woken_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL)`,
+      )
+      .run(
+        "delegation-1",
+        "settled",
+        stored.rootDelegationId,
+        stored.waitId ?? null,
+        JSON.stringify(stored),
+        stored.createdAt,
+        200,
+      );
+    raw.close();
+
+    expect(JSON.stringify(DelegationStore.get("delegation-1")?.settled)).toBe(
+      JSON.stringify(settled),
+    );
   });
 });
 

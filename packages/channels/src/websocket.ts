@@ -170,13 +170,8 @@ export class WebSocketHandler {
       });
 
       ws.send(JSON.stringify({ type: "response", text: result?.text ?? "" }));
-    } catch (err) {
-      ws.send(
-        JSON.stringify({
-          type: "error",
-          message: err instanceof Error ? err.message : String(err),
-        }),
-      );
+    } catch {
+      ws.send(JSON.stringify({ type: "error", message: "handler error", traceId }));
     }
   }
 }

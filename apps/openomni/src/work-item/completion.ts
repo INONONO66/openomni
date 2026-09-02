@@ -1,3 +1,4 @@
+// allow: SIZE_OK — one completion-admission state machine owns selection, durable admission, and terminal linkage.
 import { newTraceId } from "@openomni/telemetry";
 import type { Storage } from "@openomni/ledger";
 import { WorkItemStore } from "@openomni/ledger";
@@ -20,6 +21,12 @@ export type CompletionJudgment =
       checkedPredicate: string;
       /** Evidence already on the WorkItem that the check consumed. */
       evidenceIds: readonly string[];
+    }>
+  | Readonly<{
+      criterionId: string;
+      value: "recorded";
+      /** A durable verifier-produced `verified` result selected by id. */
+      resultId: string;
     }>;
 
 type CompletionOutcome =
@@ -33,6 +40,16 @@ interface WorkItemSummary {
   readonly criteria: ReadonlyArray<Readonly<{ id: string; statement: string; required: boolean }>>;
   readonly evidence: ReadonlyArray<
     Readonly<{ id: string; kind: string; description: string; passed: boolean; detail?: string }>
+  >;
+  readonly recordedResults: ReadonlyArray<
+    Readonly<{
+      id: string;
+      criterionId: string;
+      value: WorkItem.ResultValue;
+      verifierRef: string;
+      basisRef: string;
+      invalidated: boolean;
+    }>
   >;
   readonly attemptOutcome?: WorkItem.AttemptOutcome;
 }
@@ -59,6 +76,9 @@ function linkageRefusal(path: readonly PropertyKey[] | undefined): string {
 }
 
 function summarize(item: WorkItem.Info): WorkItemSummary {
+  const invalidated = new Set(
+    item.completionFacts.invalidations.map((invalidation) => invalidation.resultId),
+  );
   return {
     workItemId: item.workItemId,
     name: item.name,
@@ -75,6 +95,12 @@ function summarize(item: WorkItem.Info): WorkItemSummary {
       passed,
       ...(detail === undefined ? {} : { detail }),
     })),
+    recordedResults: item.completionFacts.results.flatMap(
+      ({ id, criterionId, value, verifierRef, basisRef }) =>
+        verifierRef === undefined
+          ? []
+          : [{ id, criterionId, value, verifierRef, basisRef, invalidated: invalidated.has(id) }],
+    ),
     ...(item.attemptTerminal === undefined ? {} : { attemptOutcome: item.attemptTerminal.outcome }),
   };
 }
@@ -82,6 +108,34 @@ function summarize(item: WorkItem.Info): WorkItemSummary {
 interface CompletionInput {
   readonly workItemId: string;
   readonly judgments: readonly CompletionJudgment[];
+}
+
+type VerifierRecordedResult = WorkItem.CriterionResult &
+  Readonly<{
+    value: "verified";
+    verifierRef: string;
+    checkedPredicate: string;
+  }>;
+
+type ResolvedCompletionJudgment =
+  | Exclude<CompletionJudgment, Readonly<{ value: "recorded" }>>
+  | Readonly<{
+      criterionId: string;
+      value: "recorded";
+      result: VerifierRecordedResult;
+    }>;
+
+interface ResolvedCompletionInput {
+  readonly workItemId: string;
+  readonly judgments: readonly ResolvedCompletionJudgment[];
+}
+
+type RecordedResolution =
+  | Readonly<{ ok: true; input: ResolvedCompletionInput }>
+  | Readonly<{ ok: false; reason: string }>;
+
+function assertNever(value: never): never {
+  throw new TypeError(`unreachable completion judgment: ${JSON.stringify(value)}`);
 }
 
 interface CompletionFacts {
@@ -132,26 +186,95 @@ function judgmentCriteriaRefusal(
   return undefined;
 }
 
+function resolveRecordedJudgments(
+  input: CompletionInput,
+  current: WorkItem.Info,
+): RecordedResolution {
+  const results = new Map(current.completionFacts.results.map((result) => [result.id, result]));
+  const invalidated = new Set(
+    current.completionFacts.invalidations.map((invalidation) => invalidation.resultId),
+  );
+  const judgments: ResolvedCompletionJudgment[] = [];
+  for (const judgment of input.judgments) {
+    switch (judgment.value) {
+      case "asserted":
+      case "verified":
+      case "refuted":
+        judgments.push(judgment);
+        break;
+      case "recorded": {
+        const result = results.get(judgment.resultId);
+        if (result === undefined) {
+          return { ok: false, reason: `recorded result was not recorded: ${judgment.resultId}` };
+        }
+        if (result.value !== "verified") {
+          return { ok: false, reason: `recorded result is not verified: ${judgment.resultId}` };
+        }
+        if (result.criterionId !== judgment.criterionId) {
+          return {
+            ok: false,
+            reason: `recorded result ${judgment.resultId} belongs to criterion ${result.criterionId}`,
+          };
+        }
+        if (result.basisRef !== current.completionContract.basisRef) {
+          return {
+            ok: false,
+            reason: `recorded result ${judgment.resultId} does not match the current basis`,
+          };
+        }
+        if (result.verifierRef === undefined) {
+          return {
+            ok: false,
+            reason: `recorded result ${judgment.resultId} has no verifier reference`,
+          };
+        }
+        if (invalidated.has(result.id)) {
+          return { ok: false, reason: `recorded result was invalidated: ${judgment.resultId}` };
+        }
+        judgments.push({
+          criterionId: judgment.criterionId,
+          value: "recorded",
+          result: { ...result, value: "verified", verifierRef: result.verifierRef },
+        });
+        break;
+      }
+      default:
+        assertNever(judgment);
+    }
+  }
+  return { ok: true, input: { workItemId: input.workItemId, judgments } };
+}
+
 function judgmentEvidenceRefusal(
   input: CompletionInput,
   current: WorkItem.Info,
 ): string | undefined {
   const evidenceIds = new Set(current.evidence.map(({ id }) => id));
   for (const judgment of input.judgments) {
-    if (judgment.value === "asserted") continue;
-    if (judgment.evidenceIds.length === 0) {
-      return `a ${judgment.value} judgment consumes at least one piece of evidence`;
-    }
-    const missing = judgment.evidenceIds.find((id) => !evidenceIds.has(id));
-    if (missing !== undefined) {
-      return `judgment references evidence not on the WorkItem: ${missing}`;
+    switch (judgment.value) {
+      case "asserted":
+      case "recorded":
+        break;
+      case "verified":
+      case "refuted": {
+        if (judgment.evidenceIds.length === 0) {
+          return `a ${judgment.value} judgment consumes at least one piece of evidence`;
+        }
+        const missing = judgment.evidenceIds.find((id) => !evidenceIds.has(id));
+        if (missing !== undefined) {
+          return `judgment references evidence not on the WorkItem: ${missing}`;
+        }
+        break;
+      }
+      default:
+        assertNever(judgment);
     }
   }
   return undefined;
 }
 
 function buildCompletionFacts(
-  input: CompletionInput,
+  input: ResolvedCompletionInput,
   base: WorkItem.Info,
   criteria: ReadonlyMap<string, WorkItem.Criterion>,
   verificationEvidence: ReadonlyMap<string, string>,
@@ -163,72 +286,110 @@ function buildCompletionFacts(
   const results: WorkItem.CriterionResult[] = [];
   const claims: WorkItem.Claim[] = [];
   for (const [index, judgment] of input.judgments.entries()) {
-    if (judgment.value === "asserted") {
-      results.push(
-        WorkItem.CriterionResult.parse({
-          id: `result:${input.workItemId}:${nextFactsRevision}:${index}`,
-          criterionId: judgment.criterionId,
-          observationIds: [],
-          value: "asserted",
-          assumptions: [],
-          residualRisks: [],
+    switch (judgment.value) {
+      case "asserted":
+        results.push(
+          WorkItem.CriterionResult.parse({
+            id: `result:${input.workItemId}:${nextFactsRevision}:${index}`,
+            criterionId: judgment.criterionId,
+            observationIds: [],
+            value: "asserted",
+            assumptions: [],
+            residualRisks: [],
+            basisRef,
+            createdAt: now,
+          }),
+        );
+        break;
+      case "recorded":
+        claims.push(
+          WorkItem.Claim.parse({
+            id: `claim:${input.workItemId}:${nextFactsRevision}:${index}`,
+            criterionId: judgment.criterionId,
+            statement: criteria.get(judgment.criterionId)?.statement ?? judgment.criterionId,
+            observationIds: judgment.result.observationIds,
+            basisRef,
+            createdAt: now,
+          }),
+        );
+        break;
+      case "verified":
+      case "refuted": {
+        const verificationId = verificationEvidence.get(judgment.criterionId);
+        const observation = WorkItem.Observation.parse({
+          id: `observation:${input.workItemId}:${nextFactsRevision}:${index}`,
+          producer: "resident-completion",
+          subjectRef: input.workItemId,
           basisRef,
-          createdAt: now,
-        }),
-      );
-      continue;
+          artifactRefs:
+            verificationId === undefined
+              ? [...judgment.evidenceIds]
+              : [verificationId, ...judgment.evidenceIds],
+          provenanceRef: verificationId ?? judgment.evidenceIds[0],
+          ancestryRefs: [],
+          observedAt: now,
+        });
+        observations.push(observation);
+        if (judgment.value === "verified") {
+          claims.push(
+            WorkItem.Claim.parse({
+              id: `claim:${input.workItemId}:${nextFactsRevision}:${index}`,
+              criterionId: judgment.criterionId,
+              statement: criteria.get(judgment.criterionId)?.statement ?? judgment.criterionId,
+              observationIds: [observation.id],
+              basisRef,
+              createdAt: now,
+            }),
+          );
+        }
+        results.push(
+          WorkItem.CriterionResult.parse({
+            id: `result:${input.workItemId}:${nextFactsRevision}:${index}`,
+            criterionId: judgment.criterionId,
+            observationIds: [observation.id],
+            value: judgment.value,
+            checkedPredicate: judgment.checkedPredicate,
+            assumptions: [],
+            residualRisks: [],
+            basisRef,
+            createdAt: now,
+          }),
+        );
+        break;
+      }
+      default:
+        assertNever(judgment);
     }
-    const verificationId = verificationEvidence.get(judgment.criterionId);
-    const observation = WorkItem.Observation.parse({
-      id: `observation:${input.workItemId}:${nextFactsRevision}:${index}`,
-      producer: "resident-completion",
-      subjectRef: input.workItemId,
-      basisRef,
-      artifactRefs:
-        verificationId === undefined
-          ? [...judgment.evidenceIds]
-          : [verificationId, ...judgment.evidenceIds],
-      provenanceRef: verificationId ?? judgment.evidenceIds[0],
-      ancestryRefs: [],
-      observedAt: now,
-    });
-    observations.push(observation);
-    if (judgment.value === "verified") {
-      claims.push(
-        WorkItem.Claim.parse({
-          id: `claim:${input.workItemId}:${nextFactsRevision}:${index}`,
-          criterionId: judgment.criterionId,
-          statement: criteria.get(judgment.criterionId)?.statement ?? judgment.criterionId,
-          observationIds: [observation.id],
-          basisRef,
-          createdAt: now,
-        }),
-      );
-    }
-    results.push(
-      WorkItem.CriterionResult.parse({
-        id: `result:${input.workItemId}:${nextFactsRevision}:${index}`,
-        criterionId: judgment.criterionId,
-        observationIds: [observation.id],
-        value: judgment.value,
-        checkedPredicate: judgment.checkedPredicate,
-        assumptions: [],
-        residualRisks: [],
-        basisRef,
-        createdAt: now,
-      }),
-    );
   }
   return { observations, results, claims };
+}
+
+function recordedResults(
+  judgments: readonly ResolvedCompletionJudgment[],
+): readonly VerifierRecordedResult[] {
+  return judgments.flatMap((judgment) => {
+    switch (judgment.value) {
+      case "asserted":
+      case "verified":
+      case "refuted":
+        return [];
+      case "recorded":
+        return [judgment.result];
+      default:
+        return assertNever(judgment);
+    }
+  });
 }
 
 function decideCompletion(
   base: WorkItem.Info,
   results: readonly WorkItem.CriterionResult[],
+  judgments: readonly ResolvedCompletionJudgment[],
 ): CompletionDecision {
-  const verifiedCriterionIds = new Set(
-    results.filter(({ value }) => value === "verified").map(({ criterionId }) => criterionId),
-  );
+  const verifiedCriterionIds = new Set([
+    ...results.filter(({ value }) => value === "verified").map(({ criterionId }) => criterionId),
+    ...recordedResults(judgments).map(({ criterionId }) => criterionId),
+  ]);
   const refutedCriterionIds = results
     .filter(({ value }) => value === "refuted")
     .map(({ criterionId }) => criterionId);
@@ -244,36 +405,55 @@ function decideCompletion(
 }
 
 function buildCompletionReport(
-  input: CompletionInput,
+  input: ResolvedCompletionInput,
   base: WorkItem.Info,
   criteria: ReadonlyMap<string, WorkItem.Criterion>,
   verificationEvidence: ReadonlyMap<string, string>,
   decision: CompletionDecision,
 ): WorkItem.CompletionReport | undefined {
   if (!decision.admit) return undefined;
+  const observations = new Map(
+    base.completionFacts.observations.map((observation) => [observation.id, observation]),
+  );
   return WorkItem.canonicalCompletionReport(
     WorkItem.CompletionReport.parse({
       summary: `Resident verified ${decision.verifiedCriterionIds.size} acceptance criteria for ${base.name}`,
       claims: input.judgments.flatMap((judgment) => {
-        const verificationId =
-          judgment.value === "verified"
-            ? verificationEvidence.get(judgment.criterionId)
-            : undefined;
-        return verificationId === undefined
-          ? []
-          : [
+        switch (judgment.value) {
+          case "asserted":
+          case "refuted":
+            return [];
+          case "verified": {
+            const verificationId = verificationEvidence.get(judgment.criterionId);
+            return verificationId === undefined
+              ? []
+              : [
+                  {
+                    statement:
+                      criteria.get(judgment.criterionId)?.statement ?? judgment.criterionId,
+                    evidenceIds: [verificationId],
+                  },
+                ];
+          }
+          case "recorded":
+            return [
               {
                 statement: criteria.get(judgment.criterionId)?.statement ?? judgment.criterionId,
-                evidenceIds: [verificationId],
+                evidenceIds: judgment.result.observationIds.flatMap(
+                  (observationId) => observations.get(observationId)?.artifactRefs ?? [],
+                ),
               },
             ];
+          default:
+            return assertNever(judgment);
+        }
       }),
     }),
   );
 }
 
 function buildAdmission(
-  input: CompletionInput,
+  input: ResolvedCompletionInput,
   base: WorkItem.Info,
   facts: CompletionFacts,
   decision: CompletionDecision,
@@ -282,9 +462,11 @@ function buildAdmission(
   now: number,
 ): WorkItem.CompletionAdmission {
   const requestId = `completion-request:${input.workItemId}:${base.revision}:resident`;
-  const effectiveResultIds = facts.results
-    .filter(({ value }) => value === "verified")
-    .map(({ id }) => id);
+  const effectiveResultIds = [
+    ...facts.results.filter(({ value }) => value === "verified").map(({ id }) => id),
+    ...recordedResults(input.judgments).map(({ id }) => id),
+  ];
+  const consumesRecordedResults = input.judgments.some((judgment) => judgment.value === "recorded");
   return WorkItem.CompletionAdmission.parse({
     version: 1,
     id: `admission:${input.workItemId}:${base.revision + 1}:resident`,
@@ -305,12 +487,15 @@ function buildAdmission(
     effectiveResultIds,
     unresolvedCriterionIds: decision.admit ? [] : decision.unresolved,
     decision: decision.admit ? "admit" : "block",
-    reasonCodes: decision.admit
-      ? ["resident_verified_all_required"]
-      : [
-          ...(decision.unresolved.length > 0 ? ["unverified_required_criteria"] : []),
-          ...(decision.refutedCriterionIds.length > 0 ? ["refuted_criteria"] : []),
-        ],
+    reasonCodes: [
+      ...(decision.admit
+        ? ["resident_verified_all_required"]
+        : [
+            ...(decision.unresolved.length > 0 ? ["unverified_required_criteria"] : []),
+            ...(decision.refutedCriterionIds.length > 0 ? ["refuted_criteria"] : []),
+          ]),
+      ...(consumesRecordedResults ? ["verifier_recorded_results"] : []),
+    ],
     residualRisks: [],
     policyRef: POLICY_REF,
     ...(report === undefined
@@ -356,7 +541,7 @@ function blockedCompletionReason(decision: CompletionDecision): string {
 }
 
 function completeAdmissionCandidate(
-  input: CompletionInput,
+  input: ResolvedCompletionInput,
   recorded: WorkItem.Info,
   admission: WorkItem.CompletionAdmission,
   report: WorkItem.CompletionReport | undefined,
@@ -386,7 +571,7 @@ function completeAdmissionCandidate(
 type FinalizeOutcome = CompletionOutcome | "admission_race" | "receipt_race";
 
 async function finalize(
-  input: CompletionInput,
+  input: ResolvedCompletionInput,
   base: WorkItem.Info,
   criteria: ReadonlyMap<string, WorkItem.Criterion>,
   verificationEvidence: ReadonlyMap<string, string>,
@@ -394,7 +579,7 @@ async function finalize(
 ): Promise<FinalizeOutcome> {
   const now = options.now();
   const facts = buildCompletionFacts(input, base, criteria, verificationEvidence, now);
-  const decision = decideCompletion(base, facts.results);
+  const decision = decideCompletion(base, facts.results, input.judgments);
   const report = buildCompletionReport(input, base, criteria, verificationEvidence, decision);
   const reportRef = report === undefined ? undefined : WorkItem.completionReportReference(report);
   const admission = buildAdmission(input, base, facts, decision, report, reportRef, now);
@@ -430,6 +615,8 @@ export function createCompletionPort(options: CompletionPortOptions): Completion
     if (criteriaRefusal !== undefined) return refuse(criteriaRefusal);
     const evidenceRefusal = judgmentEvidenceRefusal(input, current);
     if (evidenceRefusal !== undefined) return refuse(evidenceRefusal);
+    const recordedResolution = resolveRecordedJudgments(input, current);
+    if (!recordedResolution.ok) return refuse(recordedResolution.reason);
 
     // Verification writes remain sequential: each durable evidence record is
     // completed before the next is attempted and before terminal admission.
@@ -466,9 +653,12 @@ export function createCompletionPort(options: CompletionPortOptions): Completion
           ? { admitted: true, workItemId: input.workItemId }
           : refuse(linkageRefusal(linkage.error.issues[0]?.path));
       }
+      const base = settledLate ?? current;
+      const latestResolution = resolveRecordedJudgments(input, base);
+      if (!latestResolution.ok) return refuse(latestResolution.reason);
       const outcome = await finalize(
-        input,
-        settledLate ?? current,
+        latestResolution.input,
+        base,
         criteria,
         verificationEvidence,
         options,

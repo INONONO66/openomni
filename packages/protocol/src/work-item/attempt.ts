@@ -6,7 +6,8 @@ import { EpochMs } from "../time.js";
  * #510 C2 — Attempt identity vocabulary.
  *
  * An Attempt is one execution instance of a WorkItem. Per the retained
- * kernel/ledger contract:
+ * kernel/ledger contract (see also `AttemptOutcome` below for the #807
+ * `unverified` outcome):
  *
  *   - `attemptId` is opaque, immutable, globally unique execution-instance
  *     identity. Consumers never parse it — no format contract beyond
@@ -218,8 +219,19 @@ export type Attempt = z.infer<typeof Attempt>;
  * `cancelled`/`interrupted`) onto the attempt lifecycle; the non-terminal
  * worker-run states have existing homes in the WorkItem fold (started ↔
  * running, waiting_input ↔ unresolved `waiting_input` blocker).
+ *
+ * #807 adds `unverified`: the attempt's executor reported completion and
+ * nothing checked it. It is deliberately NOT folded onto succeeded (no check
+ * confirmed the work) nor onto failed (no check refuted it either) — an
+ * unverified attempt records the absence of a verdict as its own fact.
  */
-export const AttemptOutcome = z.enum(["succeeded", "failed", "cancelled", "interrupted"]);
+export const AttemptOutcome = z.enum([
+  "succeeded",
+  "failed",
+  "cancelled",
+  "interrupted",
+  "unverified",
+]);
 export type AttemptOutcome = z.infer<typeof AttemptOutcome>;
 
 /** Transport-reported spend. Visibility only — never an admission input. */

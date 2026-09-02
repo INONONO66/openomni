@@ -16,6 +16,7 @@ const ENV_KEYS = [
   "OPENOMNI_SOCIAL_BUDGETS",
   "OPENOMNI_MACHINES_ENROLLED",
   "OPENOMNI_MACHINES_SOCKET",
+  "OPENOMNI_VERIFIER_EXECUTABLES",
   "OPENOMNI_CHANNEL_ALLOWED_SENDERS",
 ] as const;
 
@@ -232,6 +233,36 @@ describe("ws exposure enforcement", () => {
     expect((invalidName as Error).message).toBe(
       "OPENOMNI_MACHINES_ENROLLED is invalid: export name must be lowercase alphanumeric with - or _ (e.g. notes)",
     );
+  });
+
+  it("reads registered verifier executable ids as absolute paths", () => {
+    process.env.OPENOMNI_VERIFIER_EXECUTABLES = JSON.stringify({
+      build: "/usr/bin/true",
+      "test.unit": "/usr/bin/false",
+    });
+
+    const config = loadConfig();
+
+    expect(config.verifiers?.executables).toEqual(
+      new Map([
+        ["build", "/usr/bin/true"],
+        ["test.unit", "/usr/bin/false"],
+      ]),
+    );
+  });
+
+  it("leaves command verification unwired when no executable registry is configured", () => {
+    expect(loadConfig().verifiers).toBeUndefined();
+  });
+
+  it.each([
+    { name: "a non-object registry", value: JSON.stringify(["/usr/bin/true"]) },
+    { name: "an invalid executable id", value: JSON.stringify({ "Build Now": "/usr/bin/true" }) },
+    { name: "a relative executable path", value: JSON.stringify({ build: "bin/true" }) },
+  ])("fails closed on $name", ({ value }) => {
+    process.env.OPENOMNI_VERIFIER_EXECUTABLES = value;
+
+    expect(() => loadConfig()).toThrow("OPENOMNI_VERIFIER_EXECUTABLES is invalid");
   });
 
   it("reads explicit social budgets while keeping the default absent", () => {

@@ -1,8 +1,8 @@
-import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
+import type { ChildProcessWithoutNullStreams } from "./launcher";
 import { createInterface, type Interface } from "node:readline";
 import { Machine } from "@openomni/protocol";
 
-const PYTHON_DRIVER = String.raw`
+export const PYTHON_DRIVER = String.raw`
 import ast
 import concurrent.futures
 import contextlib
@@ -227,6 +227,10 @@ export class PythonKernel {
   private pending: PendingCell | undefined;
   private tail: Promise<void> = Promise.resolve();
 
+  constructor(
+    private readonly options: { readonly launch: () => ChildProcessWithoutNullStreams },
+  ) {}
+
   run(request: Machine.CellRequest, callTool: CellToolCaller): Promise<Machine.CellResult> {
     const deadline = Date.now() + request.timeoutMs;
     let queueExpired = false;
@@ -298,7 +302,7 @@ export class PythonKernel {
   }
 
   private start(): ChildProcessWithoutNullStreams {
-    const process = spawn("python3", ["-u", "-c", PYTHON_DRIVER]);
+    const process = this.options.launch();
     const lines = createInterface({ input: process.stdout });
     this.process = process;
     this.lines = lines;

@@ -1,3 +1,4 @@
+// allow: SIZE_OK — the composition root is one ordered acquisition/release graph; splitting hides boot order.
 import { processEntryPath } from "./process-entry-path";
 import { type ChatAgentConfig, createCompactionPolicy } from "@openomni/agent";
 import {
@@ -25,7 +26,7 @@ import {
 
 import { createMachineHost, type MachineHost } from "@openomni/machines";
 import type { Placement } from "@openomni/placement";
-import { type Channel, Gateway, type Ingress, type Machine } from "@openomni/protocol";
+import { type Channel, Gateway, type Ingress, Machine } from "@openomni/protocol";
 import { Bus, newTraceId } from "@openomni/telemetry";
 import { desiredChannels, materializePersons } from "./provisioning/declared";
 import { type ChannelSupervisor, createChannelSupervisor } from "./provisioning/supervisor";
@@ -52,6 +53,8 @@ import {
 import { delegationTraceId } from "./delegation/trace";
 import { createWakeDeliveryQueue } from "./delegation/wake-delivery";
 import { createWorkItemLinkage } from "./delegation/work-item-linkage";
+import { createCommandVerifier } from "./delegation/command-verifier";
+import { createVerificationCoordinator } from "./delegation/verification";
 import { createCompletionPort } from "./work-item/completion";
 import { createProcessDriver } from "./delegation/process-driver";
 import { createInlineWorkerRunner } from "./delegation/worker-loop";
@@ -67,6 +70,8 @@ import { catalogEntries } from "./tools/core/catalog";
 import { HOST_TARGET } from "./tools/core/dispatch";
 import { createCellRegistry } from "./tools/cell-registry";
 import type { CellPorts } from "./tools/execution/run-code";
+
+const COMMAND_VERIFIER_MAX_OUTPUT_BYTES = 1_048_576;
 
 interface StartOptions {
   readonly config?: OpenOmniConfig;
@@ -376,6 +381,43 @@ export async function startOpenOmni(options: StartOptions = {}) {
       promote: ActorRegistry.promote,
       mergeEndpoint: ActorRegistry.mergeEndpoint,
     };
+    // The cell door is bound per cell rather than globally, so a cell serves
+    // exactly the tools its own dispatcher holds. The host is acquired before
+    // the kernel so the verifier port can close over a real isolation gate;
+    // reverse-order disposal then stops delegation before closing that host.
+    const registry = createCellRegistry();
+    const machines = config.machines;
+    const host: MachineHost | undefined =
+      machines === undefined
+        ? undefined
+        : await createMachineHost({
+            socketPath: machines.socketPath,
+            enrollment: (machineId) => machines.enrolled.find((e) => e.machineId === machineId),
+            events: Bus,
+            now: () => Date.now(),
+            callTool: registry.callTool,
+          });
+    if (host !== undefined) {
+      const attachedHost = host;
+      await composer.mount("machines", (ctx) => ctx.effect(() => attachedHost.close()));
+    }
+    const machineHost = host;
+    const commandVerifier =
+      machineHost === undefined || config.verifiers === undefined
+        ? undefined
+        : createCommandVerifier({
+            runCell: (machineId, request) => machineHost.runCell(machineId, request),
+            machineFor: () =>
+              (machines?.enrolled ?? []).find((enrollment) =>
+                machineHost
+                  .attached(enrollment.machineId)
+                  ?.includes(Machine.WellKnownCapability.sandboxProcess),
+              )?.machineId,
+            executables: config.verifiers.executables,
+            newCellId: () => crypto.randomUUID(),
+            maxOutputBytes: COMMAND_VERIFIER_MAX_OUTPUT_BYTES,
+          });
+
     kernel = createDelegationKernel({
       events: Bus,
       // §3.5 lease linkage: live-lease facts admit a worker's channel
@@ -383,6 +425,10 @@ export async function startOpenOmni(options: StartOptions = {}) {
       leases: createLeaseLinkage(),
       workItems: createWorkItemLinkage({
         model: { provider: config.model.provider, id: config.model.id },
+        now: () => Date.now(),
+      }),
+      verification: createVerificationCoordinator({
+        ...(commandVerifier === undefined ? {} : { verifier: commandVerifier }),
         now: () => Date.now(),
       }),
       wake: (wake) => wakeDelivery.deliver(wake),
@@ -398,32 +444,12 @@ export async function startOpenOmni(options: StartOptions = {}) {
       ctx.effect(() => delegationKernel.stop());
     });
 
-    // The cell door is bound per cell rather than globally, so a cell serves
-    // exactly the tools its own dispatcher holds.
-    const registry = createCellRegistry();
-    const machines = config.machines;
-    const host: MachineHost | undefined =
-      machines === undefined
-        ? undefined
-        : await createMachineHost({
-          socketPath: machines.socketPath,
-          enrollment: (machineId) => machines.enrolled.find((e) => e.machineId === machineId),
-          events: Bus,
-          now: () => Date.now(),
-          callTool: registry.callTool,
-        });
-    if (host !== undefined) {
-      const attachedHost = host;
-      await composer.mount("machines", (ctx) => ctx.effect(() => attachedHost.close()));
-    }
-
     // Self-referential: a cell's catalog is the same one that dispatches cells,
     // and placement subtracts what a cell cannot reach.
     // The Resident's one durable memory (kernel-contract §5): curated through
     // the memory tool, frozen into the system prompt per session.
     const memory = openCuratedMemory(config.memoryPath);
 
-    const machineHost = host;
     const machinesPort = createMachinesPort(machineHost, machines);
     // The read-only machine filesystem as one flat namespace, wired only when
     // the Owner has published at least one export to reach. Fail-closed on
@@ -555,7 +581,10 @@ export async function startOpenOmni(options: StartOptions = {}) {
       if (gateway === undefined)
         throw new Error("channel delivery used before composition finished");
       const result = await gateway.ingest(buildInboundEvent(message));
-      return result.kind === "dropped" ? null : { text: result.result.output };
+      if (result.kind !== "dropped") return { text: result.result.output };
+      return result.reason === "secret_egress_denied"
+        ? { text: "Reply withheld: credential-shaped content was detected and not sent." }
+        : null;
     };
     let wsHandler: WebSocketHandler | undefined;
     const wsRoute = async (externalId: string, body: string) => {
@@ -587,16 +616,16 @@ export async function startOpenOmni(options: StartOptions = {}) {
       actors.length === 0
         ? undefined
         : {
-          deliveryRoutes,
-          grants: () =>
-            actors.map((actor) => ({
-              id: `resident->${actor.actorId}`,
-              senderId: "resident",
-              targetActorId: actor.actorId,
-              operations: ["awaited" as const, "fire_and_forget" as const],
-            })),
-          budgets: () => config.socialBudgets ?? [],
-        },
+            deliveryRoutes,
+            grants: () =>
+              actors.map((actor) => ({
+                id: `resident->${actor.actorId}`,
+                senderId: "resident",
+                targetActorId: actor.actorId,
+                operations: ["awaited" as const, "fire_and_forget" as const],
+              })),
+            budgets: () => config.socialBudgets ?? [],
+          },
     );
     // Recovery is deliberately after the Resident and gateway exist: boot
     // settlements must be able to deliver their one owner-session wake.

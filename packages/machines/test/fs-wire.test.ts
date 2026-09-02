@@ -4,10 +4,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { IpcRemoteError, connectIpcClient, createIpcServer, typedCall } from "@openomni/ipc";
 import type { BusEvent, Machine } from "@openomni/protocol";
-import { attachMachineDaemon } from "../src/daemon";
+import { attachMachineDaemon as attachDaemon, type MachineDaemonOptions } from "../src/daemon";
 import { MachineDaemonProtocolError } from "../src/errors";
 import { type MachineHost, createMachineHost } from "../src/host";
+import { testProfile } from "./helpers/plain-launcher";
 import { socketPath } from "./helpers/socket-path";
+
+function attachMachineDaemon(options: Omit<MachineDaemonOptions, "sandbox">) {
+  return attachDaemon({ ...options, sandbox: testProfile() });
+}
 
 // These tests assert the fs wire surface, not attach telemetry.
 const silent: BusEvent.Sink = {

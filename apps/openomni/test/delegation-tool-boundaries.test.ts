@@ -166,4 +166,76 @@ describe("delegation tool boundaries", () => {
     ];
     expect(settlements.map(formatSettlement)).toHaveLength(settlements.length);
   });
+
+  test("#807: an assign carries its verification declaration through to the kernel", async () => {
+    let request: unknown;
+    const execute = delegateToolExecutor(
+      kernel({
+        delegate: (candidate) => {
+          request = candidate;
+          return Promise.resolve({ handle: HANDLE });
+        },
+      }),
+      ORIGIN,
+    );
+    const verification = {
+      kind: "command.v1",
+      executable: { id: "bun" },
+      argv: ["test", "packages/ledger"],
+      timeoutMs: 60_000,
+      expectations: [{ criterionIndex: 0, exitCode: 0 }],
+    };
+
+    await execute({
+      instruction: "fix the flaky test",
+      operation: "assign",
+      scope: "independent",
+      acceptanceCriteria: ["bun test packages/ledger green"],
+      verification,
+      timeoutMs: 10,
+    });
+
+    expect(request).toMatchObject({ operation: "assign", verification });
+  });
+
+  test("#807: a declaration is refused for ask, and for a malformed executable id", async () => {
+    let calls = 0;
+    const execute = delegateToolExecutor(
+      kernel({
+        delegate: () => {
+          calls += 1;
+          return Promise.resolve({ handle: HANDLE });
+        },
+      }),
+      ORIGIN,
+    );
+    const declaration = {
+      kind: "command.v1",
+      executable: { id: "bun" },
+      argv: [],
+      timeoutMs: 1_000,
+      expectations: [{ criterionIndex: 0, exitCode: 0 }],
+    };
+
+    expect(await execute({ ...valid, verification: declaration })).toContain(
+      "ask carries no verification declaration",
+    );
+    expect(
+      await execute({
+        ...valid,
+        operation: "assign",
+        acceptanceCriteria: ["done"],
+        verification: { ...declaration, executable: { id: "/usr/bin/bun" } },
+      }),
+    ).toBeString();
+    expect(
+      await execute({
+        ...valid,
+        operation: "assign",
+        acceptanceCriteria: ["done"],
+        verification: { ...declaration, shell: "bun test" },
+      }),
+    ).toBeString();
+    expect(calls).toBe(0);
+  });
 });

@@ -19,6 +19,7 @@ export type CapabilityId = z.infer<typeof CapabilityId>;
 /** Capability ids whose behavior is defined by the machine protocol. */
 export const WellKnownCapability = {
   pythonKernel: "kernel.py",
+  sandboxProcess: "sandbox.process",
   /**
    * ONE capability gates the whole read-only fs surface (read|list|stat).
    * Splitting it per-op would let an Owner grant `list` while believing they

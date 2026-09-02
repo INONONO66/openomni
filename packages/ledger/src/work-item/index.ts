@@ -11,6 +11,11 @@ import {
   type AttemptAllocationInput,
 } from "./lifecycle.js";
 import type { CreateWorkItemInput, WorkItemListFilter } from "./types.js";
+import {
+  appendVerificationFacts as appendFacts,
+  type VerificationFactsInput,
+  type VerificationFactsOutcome,
+} from "./verification-facts.js";
 
 export namespace WorkItemStore {
   export async function create(
@@ -76,5 +81,13 @@ export namespace WorkItemStore {
     traceId: string,
   ): Promise<Readonly<{ item: WorkItem.Info; attempt: WorkItem.Attempt }> | undefined> {
     return allocateWorkItemAttempt(hash, identity, traceId);
+  }
+
+  export function appendVerificationFacts(
+    hash: string,
+    input: VerificationFactsInput,
+    traceId: string,
+  ): VerificationFactsOutcome {
+    return appendFacts(hash, input, traceId);
   }
 }

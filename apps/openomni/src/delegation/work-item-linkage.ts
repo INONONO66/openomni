@@ -106,14 +106,23 @@ export function createWorkItemLinkage(options: WorkItemLinkageOptions): WorkItem
         contentFingerprint: WorkItem.contentFingerprintOf({
           workInput: input.instruction,
           handlerKind: `delegation:${input.transport}`,
-          handlerCodeRef: { absent: true, reason: "handler code identity not captured at delegation admission" },
+          handlerCodeRef: {
+            absent: true,
+            reason: "handler code identity not captured at delegation admission",
+          },
           model: {
             provider: options.model.provider,
             id: options.model.id,
             parameters: { absent: true, reason: "provider defaults; no per-delegation overrides" },
           },
-          upstreamFingerprints: { absent: true, reason: "a delegation attempt consumes no upstream attempts" },
-          dependencyLock: { absent: true, reason: "dependency lock not captured at delegation admission" },
+          upstreamFingerprints: {
+            absent: true,
+            reason: "a delegation attempt consumes no upstream attempts",
+          },
+          dependencyLock: {
+            absent: true,
+            reason: "dependency lock not captured at delegation admission",
+          },
         }),
         environmentFingerprint: WorkItem.environmentFingerprintOf({
           os: process.platform,
@@ -123,9 +132,18 @@ export function createWorkItemLinkage(options: WorkItemLinkageOptions): WorkItem
           schemaVersions: { delegation: 1, workItem: 1 },
           policy: { absent: true, reason: "no policy plan is bound at delegation admission" },
           toolVersions: { absent: true, reason: "worker tool catalog is resolved after admission" },
-          verifierVersions: { absent: true, reason: "verification happens at completion admission, not here" },
-          providerParameters: { absent: true, reason: "provider defaults; no per-delegation overrides" },
-          configRef: { absent: true, reason: "config identity not captured at delegation admission" },
+          verifierVersions: {
+            absent: true,
+            reason: "verification happens at completion admission, not here",
+          },
+          providerParameters: {
+            absent: true,
+            reason: "provider defaults; no per-delegation overrides",
+          },
+          configRef: {
+            absent: true,
+            reason: "config identity not captured at delegation admission",
+          },
         }),
       },
       traceId,
@@ -140,14 +158,22 @@ export function createWorkItemLinkage(options: WorkItemLinkageOptions): WorkItem
     if (record.workItemId === undefined || settlement.status === "sent") return;
     // Spend rides the durable settlement itself, so a restart-sweep re-close
     // recovers the same tokens the live fold would have recorded.
-    const tokens = settlement.status === "completed" ? settlement.usage?.tokens : undefined;
+    // #807: an assign now settles verified|unverified, and both carry the same
+    // reported output/usage the `completed` arm carries for an ask.
+    const reported =
+      settlement.status === "completed" ||
+      settlement.status === "verified" ||
+      settlement.status === "unverified"
+        ? settlement
+        : undefined;
+    const tokens = reported?.usage?.tokens;
     const item = await WorkItemStore.get(record.workItemId);
     // Unknown item: a legacy record upcast points at nothing durable — no-op.
     if (item === undefined || item.attemptTerminal !== undefined) return;
     const traceId = newTraceId();
     const detail =
-      settlement.status === "completed"
-        ? settlement.output
+      reported !== undefined
+        ? reported.output
         : settlement.status === "failed"
           ? settlement.error
           : "reason" in settlement

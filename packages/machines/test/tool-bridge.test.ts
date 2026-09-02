@@ -1,11 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
+import { existsSync } from "node:fs";
 import { connectIpcClient, typedCall } from "@openomni/ipc";
 import { Machine } from "@openomni/protocol";
 import { attachMachineDaemon } from "../src/daemon";
 import { type MachineHost, createMachineHost } from "../src/host";
 import { MachineCellError } from "../src/index";
 import { PythonKernel } from "../src/kernel";
+import { plainLauncher, testProfile } from "./helpers/plain-launcher";
 import { socketPath } from "./helpers/socket-path";
 
 const silent = {
@@ -39,7 +41,7 @@ async function withBridge(
     enrollment: () => ({
       name: "workstation",
       machineId: "m-1",
-      allowedCapabilities: ["kernel.py"],
+      allowedCapabilities: ["kernel.py", "sandbox.process"],
       enrolledAt: 1000,
     }),
     events: silent,
@@ -65,6 +67,7 @@ async function withBridge(
       offeredCapabilities: ["kernel.py"],
       offeredAt: 2000,
     },
+    sandbox: testProfile(),
   });
   try {
     await run({ host, calls });
@@ -74,7 +77,10 @@ async function withBridge(
   }
 }
 
-describe("code-mode tool bridge", () => {
+describe.skipIf(
+  (process.platform !== "linux" || !existsSync("/usr/bin/bwrap")) &&
+    process.env.OPENOMNI_REQUIRE_SANDBOX_TESTS !== "1",
+)("code-mode tool bridge", () => {
   test("a cell reaches host tools repeatedly within one run_cell", async () => {
     await withBridge(async ({ host, calls }) => {
       // The whole point of code mode: two tool calls, one round trip.
@@ -168,7 +174,7 @@ describe("code-mode tool bridge", () => {
   });
 
   test("an unknown callId answer is ignored without disturbing the waiting call", async () => {
-    const kernel = new PythonKernel();
+    const kernel = new PythonKernel({ launch: plainLauncher });
     const callEntered = deferred<void>();
     const releaseCall = deferred<void>();
     try {
@@ -225,7 +231,7 @@ describe("code-mode tool bridge", () => {
   });
 
   test("a timeout SIGKILLs a cell with in-flight tool calls and consumes late rejection", async () => {
-    const kernel = new PythonKernel();
+    const kernel = new PythonKernel({ launch: plainLauncher });
     const callEntered = deferred<void>();
     const toolAnswer = deferred<Machine.ToolCallResult>();
     type KillSignal = Parameters<ChildProcessWithoutNullStreams["kill"]>[0];
@@ -356,7 +362,7 @@ describe("code-mode tool bridge", () => {
       enrollment: () => ({
         name: "workstation",
         machineId: "m-1",
-        allowedCapabilities: ["kernel.py"],
+        allowedCapabilities: ["kernel.py", "sandbox.process"],
         enrolledAt: 1000,
       }),
       events: silent,
@@ -393,7 +399,7 @@ describe("code-mode tool bridge", () => {
           machineId: "m-1",
           daemonVersion: "0.1.0",
           platform: "darwin",
-          offeredCapabilities: ["kernel.py"],
+          offeredCapabilities: ["kernel.py", "sandbox.process"],
           offeredAt: 2000,
         },
         5000,
@@ -471,7 +477,7 @@ describe("code-mode tool bridge", () => {
   });
 
   test("a tool answer that outlives its cell never reaches the next one", async () => {
-    const kernel = new PythonKernel();
+    const kernel = new PythonKernel({ launch: plainLauncher });
     let announceSlowCall!: () => void;
     const slowCallEntered = new Promise<void>((resolve) => {
       announceSlowCall = resolve;
@@ -519,7 +525,7 @@ describe("code-mode tool bridge", () => {
       enrollment: () => ({
         name: "workstation",
         machineId: "m-1",
-        allowedCapabilities: ["kernel.py"],
+        allowedCapabilities: ["kernel.py", "sandbox.process"],
         enrolledAt: 1000,
       }),
       events: silent,
@@ -538,7 +544,7 @@ describe("code-mode tool bridge", () => {
           machineId: "m-1",
           daemonVersion: "0.1.0",
           platform: "darwin",
-          offeredCapabilities: ["kernel.py"],
+          offeredCapabilities: ["kernel.py", "sandbox.process"],
           offeredAt: 2000,
         },
         5000,
@@ -568,7 +574,7 @@ describe("code-mode tool bridge", () => {
       enrollment: () => ({
         name: "workstation",
         machineId: "m-1",
-        allowedCapabilities: ["kernel.py"],
+        allowedCapabilities: ["kernel.py", "sandbox.process"],
         enrolledAt: 1000,
       }),
       events: silent,
@@ -600,7 +606,7 @@ describe("code-mode tool bridge", () => {
           machineId: "m-1",
           daemonVersion: "0.1.0",
           platform: "darwin",
-          offeredCapabilities: ["kernel.py"],
+          offeredCapabilities: ["kernel.py", "sandbox.process"],
           offeredAt: 2000,
         },
         5000,
@@ -650,7 +656,7 @@ describe("code-mode tool bridge", () => {
       enrollment: () => ({
         name: "workstation",
         machineId: "m-1",
-        allowedCapabilities: ["kernel.py"],
+        allowedCapabilities: ["kernel.py", "sandbox.process"],
         enrolledAt: 1000,
       }),
       events: silent,
@@ -671,7 +677,11 @@ describe("code-mode tool bridge", () => {
       offeredCapabilities: ["kernel.py" as const],
       offeredAt: 2000,
     };
-    const first = await attachMachineDaemon({ socketPath: path, offer });
+    const first = await attachMachineDaemon({
+      socketPath: path,
+      offer,
+      sandbox: testProfile(),
+    });
     let second: Awaited<ReturnType<typeof attachMachineDaemon>> | undefined;
     try {
       const cell = host.runCell("m-1", {
@@ -689,7 +699,11 @@ describe("code-mode tool bridge", () => {
 
       // Take the machine over while the cell sits inside its first tool call.
       await firstCallEntered;
-      second = await attachMachineDaemon({ socketPath: path, offer });
+      second = await attachMachineDaemon({
+        socketPath: path,
+        offer,
+        sandbox: testProfile(),
+      });
       release(null);
 
       // Being superseded revokes tools, but the cell still finishes on its
@@ -807,7 +821,7 @@ describe("code-mode tool bridge", () => {
       enrollment: () => ({
         name: "workstation",
         machineId: "m-1",
-        allowedCapabilities: ["kernel.py"],
+        allowedCapabilities: ["kernel.py", "sandbox.process"],
         enrolledAt: 1000,
       }),
       events: silent,
@@ -822,6 +836,7 @@ describe("code-mode tool bridge", () => {
         offeredCapabilities: ["kernel.py"],
         offeredAt: 2000,
       },
+      sandbox: testProfile(),
     });
     try {
       const result = await host.runCell("m-1", {
