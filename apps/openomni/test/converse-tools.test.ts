@@ -1,14 +1,16 @@
 import { describe, expect, it } from "bun:test";
 import type { Conversation } from "@openomni/protocol";
 import { catalogEntries } from "../src/tools/core/catalog";
-import {
-  converseCloseToolExecutor,
-  converseOpenToolExecutor,
-  type ConversePort,
-} from "../src/tools/mutation/converse";
+import type { ConversePort } from "../src/tools/mutation/converse";
+import { dispatchModelTool, modelToolOutput } from "./helpers/tool-dispatch";
 
 const RESIDENT = { role: "resident", depth: 0, sessionId: "session-origin" } as const;
 const WORKER = { role: "worker", depth: 1, sessionId: "session-origin" } as const;
+
+const converseOpen = (port: ConversePort, origin = RESIDENT, now?: () => number) =>
+  modelToolOutput("converse_open", { conversations: port }, origin, now);
+const converseClose = (port: ConversePort) =>
+  modelToolOutput("converse_close", { conversations: port }, RESIDENT);
 
 function recordingPort(): ConversePort & {
   opened: Conversation.Create[];
@@ -39,7 +41,7 @@ function failingPort(port: ConversePort, overrides: Partial<ConversePort>): Conv
 describe("converse tools", () => {
   it("converse_open opens a bounded window owned by the caller's session", async () => {
     const port = recordingPort();
-    const run = converseOpenToolExecutor(port, RESIDENT, () => 1_000);
+    const run = converseOpen(port, RESIDENT, () => 1_000);
 
     const text = await run({
       contactId: "alice",
@@ -65,11 +67,12 @@ describe("converse tools", () => {
 
   it("converse_open refuses invalid input without touching the store", async () => {
     const port = recordingPort();
-    const run = converseOpenToolExecutor(port, RESIDENT);
+    const run = dispatchModelTool("converse_open", { conversations: port }, RESIDENT);
 
-    const text = await run({ contactId: "alice" });
+    const result = await run({ contactId: "alice" });
 
-    expect(text).toContain("converse_open refused:");
+    expect(result).toMatchObject({ isError: true, errorClass: "invalid_input" });
+    expect(result.output).toContain("converse_open refused:");
     expect(port.opened).toHaveLength(0);
   });
 
@@ -79,7 +82,7 @@ describe("converse tools", () => {
         throw new Error("storage unavailable");
       },
     });
-    const run = converseOpenToolExecutor(port, RESIDENT);
+    const run = converseOpen(port, RESIDENT);
 
     const text = await run({ contactId: "alice", endpointId: "ws:alice", timeoutMs: 1_000 });
 
@@ -88,12 +91,12 @@ describe("converse tools", () => {
 
   it("converse_close settles the window and reports an already-settled one idempotently", async () => {
     const port = recordingPort();
-    const run = converseCloseToolExecutor(port);
+    const run = converseClose(port);
 
     expect(await run({ conversationId: "conv:1" })).toBe("conversation conv:1 closed");
     expect(port.closed).toEqual(["conv:1"]);
 
-    const settled = converseCloseToolExecutor(
+    const settled = converseClose(
       failingPort(port, {
         close: () => ({ kind: "unchanged", record: { id: "conv:1", closedBy: "expiry" } }) as never,
       }),
@@ -105,11 +108,12 @@ describe("converse tools", () => {
 
   it("converse_close refuses invalid input without touching the store", async () => {
     const port = recordingPort();
-    const run = converseCloseToolExecutor(port);
+    const run = dispatchModelTool("converse_close", { conversations: port }, RESIDENT);
 
-    const text = await run({});
+    const result = await run({});
 
-    expect(text).toContain("converse_close refused:");
+    expect(result).toMatchObject({ isError: true, errorClass: "invalid_input" });
+    expect(result.output).toContain("converse_close refused:");
     expect(port.closed).toHaveLength(0);
   });
 
@@ -119,7 +123,7 @@ describe("converse tools", () => {
         throw new Error("Conversation not found: conv:ghost");
       },
     });
-    const run = converseCloseToolExecutor(port);
+    const run = converseClose(port);
 
     expect(await run({ conversationId: "conv:ghost" })).toBe(
       "converse_close refused: Conversation not found: conv:ghost",

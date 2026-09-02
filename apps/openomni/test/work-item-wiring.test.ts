@@ -9,8 +9,7 @@ import type { DelegationOrigin } from "../src/delegation/admission";
 import { createDelegationKernel, type DriverOutcome } from "../src/delegation/kernel";
 import { createWorkItemLinkage } from "../src/delegation/work-item-linkage";
 import { catalogEntries } from "../src/tools/core/catalog";
-import { completeWorkToolExecutor } from "../src/tools/mutation/work-items";
-import { workItemsToolExecutor } from "../src/tools/query/work-items";
+import { dispatchModelTool } from "./helpers/tool-dispatch";
 import { createCompletionPort, type CompletionPort } from "../src/work-item/completion";
 import { validateCompletionTerminalLinkage } from "../src/work-item/terminal-linkage";
 
@@ -597,17 +596,17 @@ test("work item tool adapters cover validation, list, inspect, and both completi
       );
     },
   };
-  const inspect = workItemsToolExecutor(port);
-  expect(await inspect({ extra: true })).toBeString();
-  expect(JSON.parse(await inspect(undefined))).toHaveLength(1);
-  expect(await inspect({ workItemId: "missing" })).toBeString();
-  expect(JSON.parse(await inspect({ workItemId: "wi-1" }))).toMatchObject({ workItemId: "wi-1" });
+  const inspect = dispatchModelTool("work_items", { workItems: port }, RESIDENT);
+  expect(await inspect({ extra: true })).toMatchObject({ isError: true, errorClass: "invalid_input" });
+  expect(JSON.parse(String((await inspect({})).output))).toHaveLength(1);
+  expect(await inspect({ workItemId: "missing" })).toMatchObject({ isError: true, errorClass: "precondition_failed" });
+  expect(JSON.parse(String((await inspect({ workItemId: "wi-1" })).output))).toMatchObject({ workItemId: "wi-1" });
 
-  const complete = completeWorkToolExecutor(port);
-  expect(await complete({})).toBeString();
+  const complete = dispatchModelTool("complete_work", { workItems: port }, RESIDENT);
+  expect(await complete({})).toMatchObject({ isError: true, errorClass: "invalid_input" });
   const judgments = [{ criterionId: "criterion", value: "asserted" as const }];
-  expect(await complete({ workItemId: "wi-1", judgments })).toBeString();
-  expect(await complete({ workItemId: "wi-2", judgments })).toBeString();
+  expect((await complete({ workItemId: "wi-1", judgments })).isError).toBeUndefined();
+  expect(await complete({ workItemId: "wi-2", judgments })).toMatchObject({ isError: true, errorClass: "precondition_failed" });
   expect(calls).toHaveLength(2);
 });
 

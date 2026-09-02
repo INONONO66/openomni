@@ -10,12 +10,12 @@ import { createDispatcher, HOST_TARGET } from "../src/tools/core/dispatch";
 import {
   createLlmToolPort,
   LLM_TOOL_NAME,
-  llmToolExecutor,
   MAX_LLM_CALLS,
   resolveLlmToolModel,
 } from "../src/tools/execution/llm";
 import type { RunInput } from "@openomni/llm";
 import { assistantMessage } from "./helpers/assistant-message";
+import { dispatchModelTool, modelToolOutput } from "./helpers/tool-dispatch";
 
 const RESIDENT = { role: "resident", depth: 0, sessionId: "session-origin" } as const;
 
@@ -36,35 +36,39 @@ function memoryArtifacts() {
 
 describe("the llm tool", () => {
   it("returns the port's answer", async () => {
-    const run = llmToolExecutor(async (prompt) => `answered: ${prompt}`);
+    const run = modelToolOutput(LLM_TOOL_NAME, { llm: async (prompt) => `answered: ${prompt}` }, RESIDENT);
     expect(await run({ prompt: "summarize this" })).toBe("answered: summarize this");
   });
 
-  it("refuses a malformed call by throwing, without touching the port", async () => {
+  it("classifies a malformed call as invalid input without touching the port", async () => {
     let invoked = 0;
-    const run = llmToolExecutor(async () => {
+    const run = dispatchModelTool(LLM_TOOL_NAME, { llm: async () => {
       invoked += 1;
       return "x";
-    });
-    await expect(run({ prompt: "" })).rejects.toThrow(/^llm refused:/);
-    await expect(run({ prompt: "ok", extra: true })).rejects.toThrow(/^llm refused:/);
+    } }, RESIDENT);
+    expect(await run({ prompt: "" })).toMatchObject({ isError: true, errorClass: "invalid_input" });
+    expect(await run({ prompt: "ok", extra: true })).toMatchObject({ isError: true, errorClass: "invalid_input" });
     expect(invoked).toBe(0);
   });
 
-  it(`serves ${MAX_LLM_CALLS} calls, then throws without invoking the port`, async () => {
+  it(`serves ${MAX_LLM_CALLS} calls, then classifies refusal without invoking the port`, async () => {
     let invoked = 0;
-    const run = llmToolExecutor(async () => {
+    const run = dispatchModelTool(LLM_TOOL_NAME, { llm: async () => {
       invoked += 1;
       return `call ${invoked}`;
-    });
+    } }, RESIDENT);
 
     for (let i = 1; i <= MAX_LLM_CALLS; i++) {
-      expect(await run({ prompt: `q${i}` })).toBe(`call ${i}`);
+      const result = await run({ prompt: `q${i}` });
+      expect(result.output).toBe(`call ${i}`);
+      expect(result.isError).toBeUndefined();
     }
 
-    await expect(run({ prompt: "one too many" })).rejects.toThrow(
-      `llm refused: the per-cell budget of ${MAX_LLM_CALLS} sub-model calls is spent`,
-    );
+    expect(await run({ prompt: "one too many" })).toMatchObject({
+      isError: true,
+      errorClass: "precondition_failed",
+      output: `llm refused: the per-cell budget of ${MAX_LLM_CALLS} sub-model calls is spent`,
+    });
     expect(invoked).toBe(MAX_LLM_CALLS);
   });
 

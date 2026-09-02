@@ -13,9 +13,9 @@ import {
   CANCEL_DELEGATION_TOOL_NAME,
   DELEGATE_TOOL_NAME,
   delegateTool,
-  delegateToolExecutor,
 } from "../src/tools/authority/delegation";
 import { toolSpec } from "../src/tools/core/project";
+import { modelToolOutput } from "./helpers/tool-dispatch";
 import {
   awaitedReceipt,
   eventCollector,
@@ -834,7 +834,7 @@ describe("delegation controls and tool surface", () => {
     expect(schema.properties.operation?.enum).toEqual(["notify", "ask", "assign"]);
     expect(Object.keys(schema.properties)).toContain("scope");
     expect(Object.keys(schema.properties)).toContain("actorId");
-    const answer = await delegateToolExecutor(kernel, RESIDENT)({
+    const answer = await modelToolOutput("delegate", { delegation: kernel }, RESIDENT)({
       instruction: "send it",
       operation: "ask",
       scope: "independent",

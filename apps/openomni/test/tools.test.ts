@@ -8,9 +8,12 @@ import { createCellRegistry } from "../src/tools/cell-registry";
 import type { CellPorts } from "../src/tools/execution/run-code";
 import { MACHINES_TOOL_NAME, type MachineStatus, type MachinesPort } from "../src/tools/query/machines";
 import { MEMORY_TOOL_NAME } from "../src/tools/mutation/memory";
-import { cellDoor, RUN_CODE_TOOL_NAME, runCodeToolExecutor } from "../src/tools/execution/run-code";
+import { cellDoor, RUN_CODE_TOOL_NAME } from "../src/tools/execution/run-code";
+import { dispatchModelTool, modelToolOutput } from "./helpers/tool-dispatch";
 
 const RESIDENT = { role: "resident", depth: 0, sessionId: "session-origin" } as const;
+const runCode = (ports: CellPorts, origin = RESIDENT) =>
+  modelToolOutput(RUN_CODE_TOOL_NAME, { cells: ports }, origin);
 
 function machineTarget(capabilities: string[]): Placement.ToolTarget {
   return { kind: "machine", id: "alpha", capabilities };
@@ -114,7 +117,7 @@ describe("the cell door", () => {
       },
     });
 
-    const answer = await runCodeToolExecutor(ports, RESIDENT)({
+    const answer = await runCode(ports, RESIDENT)({
       machineId: "alpha",
       code: "tool.delegate(...)",
       timeoutMs: 5000,
@@ -142,7 +145,7 @@ describe("the cell door", () => {
       },
     });
 
-    await runCodeToolExecutor(ports, RESIDENT)({ machineId: "alpha", code: "x", timeoutMs: 5000 });
+    await runCode(ports, RESIDENT)({ machineId: "alpha", code: "x", timeoutMs: 5000 });
 
     // The cell is already on a machine; reaching back to reach another is the
     // round trip code mode removes. Placement says so — nothing restates it.
@@ -163,7 +166,7 @@ describe("the cell door", () => {
       },
     });
 
-    await runCodeToolExecutor(ports, RESIDENT)({ machineId: "alpha", code: "x", timeoutMs: 5000 });
+    await runCode(ports, RESIDENT)({ machineId: "alpha", code: "x", timeoutMs: 5000 });
 
     const late = await registry.callTool({
       cellId: escaped ?? "",
@@ -211,7 +214,7 @@ describe("run_code outcomes", () => {
     it(`reports ${name}`, async () => {
       const { kernel } = recordingDelegation();
       const { ports } = cellPorts({ delegation: kernel, runCell: async () => result as Machine.CellResult });
-      const answer = await runCodeToolExecutor(ports, RESIDENT)({ machineId: "alpha", code: "x", timeoutMs: 250 });
+      const answer = await runCode(ports, RESIDENT)({ machineId: "alpha", code: "x", timeoutMs: 250 });
       expect(answer).toContain(expected);
     });
   }
@@ -227,9 +230,14 @@ describe("run_code outcomes", () => {
       },
     });
 
-    const answer = await runCodeToolExecutor(ports, RESIDENT)({ machineId: "alpha", code: "", timeoutMs: 250 });
+    const answer = await dispatchModelTool(RUN_CODE_TOOL_NAME, { cells: ports }, RESIDENT)({
+      machineId: "alpha",
+      code: "",
+      timeoutMs: 250,
+    });
 
-    expect(answer).toStartWith("run_code refused:");
+    expect(answer).toMatchObject({ isError: true, errorClass: "invalid_input" });
+    expect(answer.output).toStartWith("\nrun_code refused:");
     expect(dispatched).toBe(false);
   });
 });
