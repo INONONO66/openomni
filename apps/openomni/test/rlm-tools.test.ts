@@ -2,15 +2,11 @@ import { describe, expect, it } from "bun:test";
 import { placementGatedExecutor } from "@openomni/agent";
 import { Placement } from "@openomni/placement";
 import type { Artifact } from "@openomni/protocol";
-import type { ArtifactsPort } from "../src/tools/artifacts";
-import {
-  READ_ARTIFACT_TOOL_NAME,
-  readArtifactToolExecutor,
-  WRITE_ARTIFACT_TOOL_NAME,
-  writeArtifactToolExecutor,
-} from "../src/tools/artifacts";
-import { catalogEntries, collectToolSpecs } from "../src/tools/catalog";
-import { createDispatcher, HOST_TARGET } from "../src/tools/dispatch";
+import type { ArtifactsPort } from "../src/tools/mutation/artifacts";
+import { WRITE_ARTIFACT_TOOL_NAME } from "../src/tools/mutation/artifacts";
+import { READ_ARTIFACT_TOOL_NAME } from "../src/tools/query/artifacts";
+import { catalogEntries, collectToolSpecs } from "../src/tools/core/catalog";
+import { createDispatcher, HOST_TARGET } from "../src/tools/core/dispatch";
 import {
   createLlmToolPort,
   LLM_TOOL_NAME,
@@ -205,16 +201,22 @@ describe("the llm tool port", () => {
 });
 
 describe("the artifact tools", () => {
+  const tools = (port: ArtifactsPort) =>
+    createDispatcher(catalogEntries({ artifacts: port }, RESIDENT)).execute;
+  const call = (run: ReturnType<typeof tools>, id: string, tool: string, input: unknown) =>
+    run({ id, tool, input });
+
   it("round-trips content by the returned id, scoped to the origin session", async () => {
     const { rows, port } = memoryArtifacts();
-    const write = writeArtifactToolExecutor(port, RESIDENT.sessionId);
-    const read = readArtifactToolExecutor(port);
+    const run = tools(port);
+    const written = await call(run, "write", WRITE_ARTIFACT_TOOL_NAME, {
+      name: "report",
+      content: "the whole dataset",
+    });
+    const id = written.output.replace("artifact stored: ", "");
 
-    const written = await write({ name: "report", content: "the whole dataset" });
-    const id = written.replace("artifact stored: ", "");
-
-    expect(written).toStartWith("artifact stored: ");
-    expect(written).not.toContain("the whole dataset");
+    expect(written.output).toStartWith("artifact stored: ");
+    expect(written.output).not.toContain("the whole dataset");
     expect(rows.get(id)?.sessionId).toBe(RESIDENT.sessionId);
     expect(rows.get(id)?.meta).toMatchObject({
       id,
@@ -222,26 +224,34 @@ describe("the artifact tools", () => {
       title: "report",
       version: 1,
     });
-    expect(await read({ artifactId: id })).toBe("the whole dataset");
+    const read = await call(run, "read", READ_ARTIFACT_TOOL_NAME, { artifactId: id });
+    expect(read.output).toBe("the whole dataset");
   });
 
-  it("refuses an unknown id with a typed not-found refusal", async () => {
+  it("returns an error result for an unknown id", async () => {
     const { port } = memoryArtifacts();
-    const read = readArtifactToolExecutor(port);
+    const result = await call(tools(port), "missing", READ_ARTIFACT_TOOL_NAME, {
+      artifactId: "nope",
+    });
 
-    expect(await read({ artifactId: "nope" })).toBe(
-      "read_artifact refused: no artifact with id nope",
-    );
+    expect(result).toMatchObject({
+      isError: true,
+      output: "read_artifact refused: no artifact with id nope",
+    });
   });
 
-  it("refuses malformed calls", async () => {
+  it("returns error results for malformed calls", async () => {
     const { port } = memoryArtifacts();
-    const write = writeArtifactToolExecutor(port, RESIDENT.sessionId);
-    const read = readArtifactToolExecutor(port);
-
-    expect(await write({ name: "", content: "x" })).toStartWith("write_artifact refused:");
-    expect(await write({ name: "x" })).toStartWith("write_artifact refused:");
-    expect(await read({ artifactId: "" })).toStartWith("read_artifact refused:");
+    const run = tools(port);
+    for (const [id, tool, input] of [
+      ["empty-name", WRITE_ARTIFACT_TOOL_NAME, { name: "", content: "x" }],
+      ["missing-content", WRITE_ARTIFACT_TOOL_NAME, { name: "x" }],
+      ["empty-id", READ_ARTIFACT_TOOL_NAME, { artifactId: "" }],
+    ] as const) {
+      const result = await call(run, id, tool, input);
+      expect(result.isError).toBe(true);
+      expect(result.output).toContain(`${tool} refused:`);
+    }
   });
 });
 
