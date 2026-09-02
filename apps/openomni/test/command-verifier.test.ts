@@ -1,6 +1,9 @@
 import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { Machine } from "@openomni/protocol";
 import { createCommandVerifier } from "../src/delegation/command-verifier";
 import type { CellPorts } from "../src/tools/run-code";
@@ -23,6 +26,19 @@ function verifierWith(runCell: CellPorts["runCell"], machineId: string | null = 
     executables: new Map([["build", "/usr/bin/true"]]),
     newCellId: () => "verifier-cell-1",
     maxOutputBytes: 1024,
+  });
+}
+
+function executeGeneratedCell(request: Machine.CellRequest): Promise<Machine.CellResult> {
+  const completed = spawnSync(
+    "python3",
+    ["-c", request.code.replace('cwd="/workspace"', 'cwd="/tmp"')],
+    { encoding: "utf8" },
+  );
+  return Promise.resolve({
+    status: "completed",
+    cellId: request.cellId,
+    output: { stdout: completed.stdout, stderr: completed.stderr },
   });
 }
 
@@ -60,18 +76,7 @@ test("a command digest covers trailing output beyond the retained-byte limit", a
   // Given: a real generated verifier cell whose registered command emits two retained limits.
   const output = "x".repeat(2048);
   const verifier = createCommandVerifier({
-    runCell: (_machineId, request) => {
-      const completed = spawnSync(
-        "python3",
-        ["-c", request.code.replace('cwd="/workspace"', 'cwd="/tmp"')],
-        { encoding: "utf8" },
-      );
-      return Promise.resolve({
-        status: "completed",
-        cellId: request.cellId,
-        output: { stdout: completed.stdout, stderr: completed.stderr },
-      });
-    },
+    runCell: (_machineId, request) => executeGeneratedCell(request),
     machineFor: () => "alpha",
     executables: new Map([["emit", "/usr/bin/python3"]]),
     newCellId: () => "verifier-cell-output-limit",
@@ -93,6 +98,59 @@ test("a command digest covers trailing output beyond the retained-byte limit", a
     stdoutBytes: 2048,
     truncated: true,
   });
+});
+
+test("a timed-out command kills descendants before returning", async () => {
+  // Given: a registered parent synchronizes with a descendant that writes only if it survives.
+  const directory = mkdtempSync(join(tmpdir(), "openomni-command-timeout-"));
+  const marker = join(directory, "descendant-survived");
+  const pidFile = join(directory, "descendant-pid");
+  const childCode = [
+    "import os, sys, time",
+    "from pathlib import Path",
+    "fd = int(sys.argv[1])",
+    "os.write(fd, str(os.getpid()).encode())",
+    "os.close(fd)",
+    "time.sleep(2)",
+    `Path(${JSON.stringify(marker)}).write_text('survived')`,
+  ].join("\n");
+  const parentCode = [
+    "import os, subprocess, time",
+    "from pathlib import Path",
+    "read_fd, write_fd = os.pipe()",
+    `subprocess.Popen(['/usr/bin/python3', '-c', ${JSON.stringify(childCode)}, str(write_fd)], pass_fds=(write_fd,), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)`,
+    "os.close(write_fd)",
+    `Path(${JSON.stringify(pidFile)}).write_bytes(os.read(read_fd, 32))`,
+    "os.close(read_fd)",
+    "time.sleep(10)",
+  ].join("\n");
+  const verifier = createCommandVerifier({
+    runCell: (_machineId, request) => executeGeneratedCell(request),
+    machineFor: () => "alpha",
+    executables: new Map([["spawn-descendant", "/usr/bin/python3"]]),
+    newCellId: () => "verifier-cell-timeout-tree",
+    maxOutputBytes: 1024,
+  });
+
+  try {
+    // When: the synchronized parent exceeds the inner command timeout.
+    const result = await verifier.run({
+      executableId: "spawn-descendant",
+      argv: ["-c", parentCode],
+      timeoutMs: 500,
+      tenant: "owner-session",
+    });
+
+    // Then: timed_out is not returned until the descendant is unable to leave a marker.
+    expect(result.status).toBe("timed_out");
+    const descendantPid = Bun.file(pidFile)
+      .text()
+      .then((text) => text.trim());
+    expect(spawnSync("kill", ["-0", await descendantPid]).status).not.toBe(0);
+    expect(existsSync(marker)).toBe(false);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test("an unregistered executable is refused before any machine call", async () => {

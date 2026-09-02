@@ -70,6 +70,7 @@ export function createCommandVerifier(ports: {
       const code = `
 import hashlib
 import json
+import os
 import signal
 import subprocess
 import threading
@@ -100,6 +101,7 @@ _process = subprocess.Popen(
     env={},
     stdout=subprocess.PIPE,
     stderr=subprocess.PIPE,
+    start_new_session=True,
 )
 _stdout = _StreamCapture()
 _stderr = _StreamCapture()
@@ -110,7 +112,10 @@ _stderr_thread.start()
 try:
     _returncode = _process.wait(timeout=${timeoutSeconds})
 except subprocess.TimeoutExpired:
-    _process.kill()
+    try:
+        os.killpg(_process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
     _process.wait()
     _stdout_thread.join()
     _stderr_thread.join()
