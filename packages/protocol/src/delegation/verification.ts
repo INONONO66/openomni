@@ -56,7 +56,20 @@ export const CommandV1 = z
     timeoutMs: z.number().int().positive().max(600_000),
     expectations: z.array(CommandExpectation).min(1),
   })
-  .strict();
+  .strict()
+  .superRefine((declaration, ctx) => {
+    const bound = new Set<number>();
+    for (const [index, expectation] of declaration.expectations.entries()) {
+      if (bound.has(expectation.criterionIndex)) {
+        ctx.addIssue({
+          code: "custom",
+          message: `criterionIndex ${expectation.criterionIndex} is already bound by another expectation`,
+          path: ["expectations", index, "criterionIndex"],
+        });
+      }
+      bound.add(expectation.criterionIndex);
+    }
+  });
 export type CommandV1 = z.infer<typeof CommandV1>;
 
 export const VerificationDeclaration = z.discriminatedUnion("kind", [CommandV1]);

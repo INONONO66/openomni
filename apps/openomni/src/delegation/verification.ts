@@ -107,11 +107,16 @@ function foldFacts(
       .filter((criterion) => criterion.required)
       .map((criterion) => criterion.id),
   );
-  const verified = facts.results.filter(
-    (result) => result.value === "verified" && required.has(result.criterionId),
-  );
+  const requiredResults = facts.results.filter((result) => required.has(result.criterionId));
+  const verified = requiredResults.filter((result) => result.value === "verified");
+  const verifiedCriteria = new Set(verified.map((result) => result.criterionId));
   const prefix = settlementPrefix(record, output, at, outcome);
-  if (required.size > 0 && verified.length === required.size && facts.errors.length === 0) {
+  if (
+    required.size > 0 &&
+    verifiedCriteria.size === required.size &&
+    requiredResults.every((result) => result.value === "verified") &&
+    facts.errors.length === 0
+  ) {
     return Delegation.Settled.parse({
       ...prefix,
       status: "verified",

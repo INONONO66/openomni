@@ -19,7 +19,11 @@ function linkage() {
   return createWorkItemLinkage({ model: { provider: "test", id: "test" }, now: () => NOW });
 }
 
-async function fixture(delegationId: string, verifier?: CommandVerifierPort) {
+async function fixture(
+  delegationId: string,
+  verifier?: CommandVerifierPort,
+  acceptanceCriteria = ["build passes"],
+) {
   const adapter = new SqliteStorageAdapter(":memory:");
   adapters.push(adapter);
   Storage.configure(adapter);
@@ -29,14 +33,14 @@ async function fixture(delegationId: string, verifier?: CommandVerifierPort) {
     workerRunId: delegationId,
     transport: "process",
     instruction: "run the build",
-    acceptanceCriteria: ["build passes"],
+    acceptanceCriteria,
     sessionId: "session-807",
   });
   const request = Delegation.Request.parse({
     operation: "assign",
     address: { kind: "core", scope: "independent" },
     payload: { text: "run the build" },
-    acceptanceCriteria: ["build passes"],
+    acceptanceCriteria,
     verification: {
       kind: "command.v1",
       executable: { id: "bun" },
@@ -86,6 +90,74 @@ async function fixture(delegationId: string, verifier?: CommandVerifierPort) {
       now: () => NOW,
     }),
   };
+}
+
+type VerificationScope = Awaited<ReturnType<typeof fixture>>;
+type RecoveredResult = Readonly<{
+  readonly criterionIndex: number;
+  readonly value: "verified" | "refuted";
+}>;
+
+function recordRecoveryFacts(scope: VerificationScope, entries: readonly RecoveredResult[]): void {
+  const item = WorkItemStore.get(scope.workItemId);
+  if (item === undefined || item.currentAttemptId === undefined) {
+    throw new Error("recovery fixture is missing an active WorkItem attempt");
+  }
+  const attemptRef = `attempt:${item.currentAttemptId}`;
+  const verifierRef = `verifier:command.v1:${scope.record.delegationId}:${attemptRef}`;
+  const facts = entries.map((entry, index) => {
+    const criterion = item.completionFacts.criteria[entry.criterionIndex];
+    if (criterion === undefined) throw new Error("recovery fixture criterion missing");
+    const evidenceId = `evidence:recovery:${scope.record.delegationId}:${index}`;
+    const observationId = `observation:recovery:${scope.record.delegationId}:${index}`;
+    return {
+      evidence: {
+        id: evidenceId,
+        kind: "verification" as const,
+        criterionId: criterion.id,
+        description: "recovery verifier result",
+        passed: entry.value === "verified",
+        detail: "{}",
+      },
+      observation: {
+        id: observationId,
+        producer: "verifier:command.v1",
+        subjectRef: item.workItemId,
+        basisRef: item.completionContract.basisRef,
+        artifactRefs: [evidenceId],
+        provenanceRef: evidenceId,
+        ancestryRefs: [attemptRef],
+        observedAt: NOW,
+      },
+      result: {
+        id: `result:recovery:${scope.record.delegationId}:${index}`,
+        criterionId: criterion.id,
+        value: entry.value,
+        checkedPredicate: "command.v1:recovery:exit=0",
+        observationIds: [observationId],
+        verifierRef,
+        assumptions: [],
+        basisRef: item.completionContract.basisRef,
+        residualRisks: [],
+        createdAt: NOW,
+      },
+    };
+  });
+  const recorded = WorkItemStore.appendVerificationFacts(
+    item.workItemId,
+    {
+      expectedAttemptSeq: item.lastAttemptSeq,
+      expectedAttemptId: item.currentAttemptId,
+      expectedBasisRef: item.completionContract.basisRef,
+      observations: facts.map((fact) => fact.observation),
+      results: facts.map((fact) => fact.result),
+      verificationErrors: [],
+      evidence: facts.map((fact) => fact.evidence),
+      verifierRef,
+    },
+    "trace-recovery",
+  );
+  if (recorded.kind !== "appended") throw new Error("recovery facts were not recorded");
 }
 
 const completed = {
@@ -234,6 +306,43 @@ describe("verification coordinator", () => {
         basisRef: item.completionContract.basisRef,
       }),
     ]);
+  });
+
+  test("recovery cannot verify duplicate results that leave a required criterion unchecked", async () => {
+    // Given: two required criteria but verified facts only for the first, duplicated twice.
+    const scope = await fixture("d-recovery-missing", passingVerifier, [
+      "build passes",
+      "report exists",
+    ]);
+    recordRecoveryFacts(scope, [
+      { criterionIndex: 0, value: "verified" },
+      { criterionIndex: 0, value: "verified" },
+    ]);
+
+    // When: restart recovery folds the durable verifier facts.
+    const settlement = scope.coordinator.recoverSettlement(scope.record, NOW);
+
+    // Then: duplicate facts cannot substitute for distinct required coverage.
+    expect(settlement).toMatchObject({ status: "unverified", reason: "verification_failed" });
+  });
+
+  test("recovery cannot verify duplicate results when a required criterion is refuted", async () => {
+    // Given: duplicate verified facts for one required criterion and a refuted fact for the other.
+    const scope = await fixture("d-recovery-refuted", passingVerifier, [
+      "build passes",
+      "report exists",
+    ]);
+    recordRecoveryFacts(scope, [
+      { criterionIndex: 0, value: "verified" },
+      { criterionIndex: 0, value: "verified" },
+      { criterionIndex: 1, value: "refuted" },
+    ]);
+
+    // When: restart recovery folds the durable verifier facts.
+    const settlement = scope.coordinator.recoverSettlement(scope.record, NOW);
+
+    // Then: every required criterion must have only verified results.
+    expect(settlement).toMatchObject({ status: "unverified", reason: "verification_failed" });
   });
 
   test("boot recovery cancels an orphan commission and preserves an open delegation", async () => {
