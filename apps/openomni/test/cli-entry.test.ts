@@ -446,8 +446,8 @@ describe("real CLI entry", () => {
       const isTty = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
       Object.defineProperty(process.stdin, "isTTY", { value: false, configurable: true });
       try {
-        await expect(deps.ask("question")).rejects.toThrow(
-          "onboarding requires an interactive terminal"
+        await expect(deps.ask("question")).rejects.toEqual(
+          new Error("onboarding requires an interactive terminal")
         );
       } finally {
         if (isTty) Object.defineProperty(process.stdin, "isTTY", isTty);
