@@ -30,7 +30,7 @@ import { Bus, newTraceId } from "@openomni/telemetry";
 import { desiredChannels, materializePersons } from "./provisioning/declared";
 import { type ChannelSupervisor, createChannelSupervisor } from "./provisioning/supervisor";
 import { resolveKek } from "./provisioning/vault-key";
-import type { ProvisionPort } from "./tools/provision";
+import type { ProvisionPort } from "./tools/mutation/provision";
 import {
   assertWsExposure,
   loadConfig,

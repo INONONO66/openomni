@@ -19,7 +19,7 @@ import {
   type ProvisionPort,
   provisionStatusToolExecutor,
   secretRotateToolExecutor,
-} from "../src/tools/provision";
+} from "../src/tools/mutation/provision";
 
 const NOW = 1_756_000_000_000;
 const TRACE = "00-11111111111111111111111111111111-2222222222222222-01";

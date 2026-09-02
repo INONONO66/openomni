@@ -27,25 +27,9 @@ import type { LlmPort } from "../execution/llm";
 import { llmTool } from "../execution/llm";
 import type { MachinesPort } from "../query/machines";
 import { machinesTool } from "../query/machines";
-import type { ProvisionPort } from "../provision";
-import {
-  channelDeclareToolExecutor,
-  channelDisableToolExecutor,
-  channelEnableToolExecutor,
-  personDeclareToolExecutor,
-  personRemoveToolExecutor,
-  provisionStatusToolExecutor,
-  secretRotateToolExecutor,
-} from "../provision";
-import {
-  channelDeclareToolSpec,
-  channelDisableToolSpec,
-  channelEnableToolSpec,
-  personDeclareToolSpec,
-  personRemoveToolSpec,
-  provisionStatusToolSpec,
-  secretRotateToolSpec,
-} from "../provision-specs";
+import type { ProvisionPort } from "../mutation/provision";
+import { channelDeclareTool, channelDisableTool, channelEnableTool, personDeclareTool, personRemoveTool, secretRotateTool } from "../mutation/provision";
+import { provisionStatusTool } from "../query/provision";
 import type { CellPorts } from "../execution/run-code";
 import { runCodeTool } from "../execution/run-code";
 import type { CompletionPort } from "../../work-item/completion";
@@ -116,58 +100,13 @@ export const TOOL_DEFINITIONS: readonly (AnyToolDefinition | LegacyCatalogTool)[
   eraseTool(approvalDecideTool),
   eraseTool(contactPromoteTool),
   eraseTool(endpointMergeTool),
-  {
-    // Provisioning administration is the Resident's surface (provisioning
-    // §5, §8.5): a delegated worker never edits Persons, channels, or
-    // secrets — the same role gate as the approval lane it consumes.
-    spec: personDeclareToolSpec,
-    wire: (ports, origin) =>
-      ports.provisioning === undefined || origin.role !== "resident"
-        ? undefined
-        : personDeclareToolExecutor(ports.provisioning),
-  },
-  {
-    spec: personRemoveToolSpec,
-    wire: (ports, origin) =>
-      ports.provisioning === undefined || origin.role !== "resident"
-        ? undefined
-        : personRemoveToolExecutor(ports.provisioning),
-  },
-  {
-    spec: channelDeclareToolSpec,
-    wire: (ports, origin) =>
-      ports.provisioning === undefined || origin.role !== "resident"
-        ? undefined
-        : channelDeclareToolExecutor(ports.provisioning),
-  },
-  {
-    spec: channelEnableToolSpec,
-    wire: (ports, origin) =>
-      ports.provisioning === undefined || origin.role !== "resident"
-        ? undefined
-        : channelEnableToolExecutor(ports.provisioning),
-  },
-  {
-    spec: channelDisableToolSpec,
-    wire: (ports, origin) =>
-      ports.provisioning === undefined || origin.role !== "resident"
-        ? undefined
-        : channelDisableToolExecutor(ports.provisioning),
-  },
-  {
-    spec: secretRotateToolSpec,
-    wire: (ports, origin) =>
-      ports.provisioning === undefined || origin.role !== "resident"
-        ? undefined
-        : secretRotateToolExecutor(ports.provisioning),
-  },
-  {
-    spec: provisionStatusToolSpec,
-    wire: (ports, origin) =>
-      ports.provisioning === undefined || origin.role !== "resident"
-        ? undefined
-        : provisionStatusToolExecutor(ports.provisioning),
-  },
+  eraseTool(personDeclareTool),
+  eraseTool(personRemoveTool),
+  eraseTool(channelDeclareTool),
+  eraseTool(channelEnableTool),
+  eraseTool(channelDisableTool),
+  eraseTool(secretRotateTool),
+  eraseTool(provisionStatusTool),
   eraseTool(runCodeTool),
   eraseTool(machinesTool),
   eraseTool(fsReadTool),
