@@ -301,7 +301,7 @@ test("cells from different sessions never share interpreter state", async () => 
   expect(otherSession).toContain("NameError");
 }, 40_000);
 
-test("a cell's llm(prompt) is answered by the LlmPort wired into the catalog", async () => {
+test("a cell's canonical llm(prompts) call receives the parsed array unchanged", async () => {
   const prompts: string[] = [];
   const { host, run } = await startCellHarness({
     llm: async (prompt) => {
@@ -310,12 +310,12 @@ test("a cell's llm(prompt) is answered by the LlmPort wired into the catalog", a
     },
   });
 
-  const output = await run("llm(prompt='summarize the ledger in one word')");
+  const output = await run("llm(['summarize the ledger in one word'])");
   host.close();
 
   expect(prompts).toEqual(["summarize the ledger in one word"]);
   // The cell's final expression is repr'd by the driver, quotes included.
-  expect(output).toContain("answered: summarize the ledger in one word");
+  expect(output).toContain("['answered: summarize the ledger in one word']");
 }, 40_000);
 
 test("a failing llm call raises ToolError inside the cell instead of returning failure text", async () => {
@@ -328,7 +328,7 @@ test("a failing llm call raises ToolError inside the cell instead of returning f
   const output = await run(
     [
       "try:",
-      "    llm(prompt='doomed')",
+      "    llm(['doomed'])",
       "    outcome = 'returned as data'",
       "except ToolError as error:",
       "    outcome = 'raised: ' + str(error)",
@@ -370,8 +370,8 @@ test("parallel() runs independent tool calls concurrently and returns both resul
   const output = await run(
     [
       "results = parallel([",
-      "  lambda: llm('first'),",
-      "  lambda: llm('second'),",
+      "  lambda: llm(['first'])[0],",
+      "  lambda: llm(['second'])[0],",
       "])",
       "'; '.join(results)",
     ].join("\n"),

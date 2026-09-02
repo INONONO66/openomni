@@ -30,6 +30,25 @@ const Output = z.discriminatedUnion("op", [
 
 export const ARTIFACTS_TOOL_NAME = "artifacts";
 
+export function storeTextArtifact(
+  artifacts: ArtifactsPort,
+  sessionId: string,
+  title: string,
+  content: string,
+): string {
+  const id = crypto.randomUUID();
+  const meta: Artifact.Meta = {
+    id,
+    sessionId,
+    mimeType: "text/plain",
+    title,
+    version: 1,
+    createdAt: new Date().toISOString(),
+  };
+  artifacts.store(sessionId, meta, content);
+  return id;
+}
+
 export function createArtifactsTool(artifacts: ArtifactsPort) {
   return defineTool({
     name: ARTIFACTS_TOOL_NAME,
@@ -46,16 +65,12 @@ export function createArtifactsTool(artifacts: ArtifactsPort) {
           throw new ToolRefused(ARTIFACTS_TOOL_NAME, `no artifact with id ${input.artifactId}`);
         return { op: "read" as const, content: found.content };
       }
-      const id = crypto.randomUUID();
-      const meta: Artifact.Meta = {
-        id,
-        sessionId: ctx.sessionId,
-        mimeType: "text/plain",
-        title: input.name as string,
-        version: 1,
-        createdAt: new Date().toISOString(),
-      };
-      artifacts.store(ctx.sessionId, meta, input.content as string);
+      const id = storeTextArtifact(
+        artifacts,
+        ctx.sessionId,
+        input.name as string,
+        input.content as string,
+      );
       return { op: "write" as const, id };
     },
     render: (_args, value) =>

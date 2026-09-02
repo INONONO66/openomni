@@ -5,7 +5,7 @@ type ToolRole = "resident" | "worker";
 
 export interface ToolExecutionContext {
   readonly sessionId: string;
-  readonly turnId?: string;
+  readonly turnId: string;
   readonly callId: string;
   readonly signal: AbortSignal;
 }

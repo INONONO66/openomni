@@ -15,13 +15,14 @@ export function dispatchModelTool(
 ) {
   const persistentDispatcher =
     now === undefined
-      ? createDispatcher(createTools(ports, origin), origin.sessionId)
+      ? createDispatcher(createTools(ports, origin), origin.sessionId, ports.artifacts)
       : undefined;
   return async (input: unknown) => {
     const clock = now === undefined ? undefined : spyOn(Date, "now").mockImplementation(now);
     try {
       const dispatcher =
-        persistentDispatcher ?? createDispatcher(createTools(ports, origin), origin.sessionId);
+        persistentDispatcher ??
+        createDispatcher(createTools(ports, origin), origin.sessionId, ports.artifacts);
       return await dispatcher.execute({
         id: `test-tool-call-${nextCallId++}`,
         tool: name,

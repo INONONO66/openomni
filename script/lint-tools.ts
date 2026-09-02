@@ -338,17 +338,30 @@ export interface LocatedDefinition {
   readonly filePath: string;
 }
 
-async function locateExportedDefinitions(): Promise<LocatedDefinition[]> {
-  const located: LocatedDefinition[] = [];
+async function locateExportedDefinitions(
+  definitions: readonly AnyToolDefinition[],
+): Promise<LocatedDefinition[]> {
+  const located = new Map<AnyToolDefinition, string>();
   const glob = new Bun.Glob(TOOL_SOURCE_GLOB);
   for await (const filePath of glob.scan({ cwd: ".", onlyFiles: true })) {
     if (TEST_SUFFIXES.some((suffix) => filePath.endsWith(suffix))) continue;
+    const source = await Bun.file(filePath).text();
     const module = (await import(`../${filePath}`)) as Record<string, unknown>;
     for (const value of Object.values(module)) {
-      if (looksLikeToolDefinition(value)) located.push({ definition: value, filePath });
+      if (looksLikeToolDefinition(value)) located.set(value, filePath);
+    }
+    for (const definition of definitions) {
+      const escaped = definition.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const declaration = new RegExp(`(?:name\\s*:|=)\\s*["']${escaped}["']`);
+      if (!declaration.test(source)) continue;
+      const previous = located.get(definition);
+      if (previous !== undefined && previous !== filePath) {
+        throw new Error(`tool ${definition.name} has ambiguous source: ${previous}, ${filePath}`);
+      }
+      located.set(definition, filePath);
     }
   }
-  return located;
+  return Array.from(located, ([definition, filePath]) => ({ definition, filePath }));
 }
 
 export function definitionInvariantViolations(
@@ -374,7 +387,13 @@ export function definitionInvariantViolations(
     names.set(definition.name, (names.get(definition.name) ?? 0) + 1);
   for (const definition of definitions) {
     const filePath = locations.get(definition);
-    if (filePath !== undefined) {
+    if (filePath === undefined) {
+      violations.push({
+        check: "tool-lint",
+        subject: definition.name,
+        message: "[tool-source-location] catalog definition has no verifiable source file",
+      });
+    } else {
       const directory = filePath.match(/\/tools\/(query|mutation|authority|execution)\//)?.[1];
       if (directory !== definition.category) {
         violations.push({
@@ -417,7 +436,10 @@ export function definitionInvariantViolations(
 }
 
 async function checkEarned(): Promise<Violation[]> {
-  return definitionInvariantViolations(TOOL_DEFINITIONS, await locateExportedDefinitions());
+  return definitionInvariantViolations(
+    TOOL_DEFINITIONS,
+    await locateExportedDefinitions(TOOL_DEFINITIONS),
+  );
 }
 
 // ---------------------------------------------------------------------------

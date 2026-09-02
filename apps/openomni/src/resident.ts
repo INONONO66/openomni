@@ -272,7 +272,11 @@ export function createResident(options: ResidentOptions) {
     const targets = options.targets();
     let catalog = catalogs.get(sessionId);
     if (catalog === undefined) {
-      catalog = createDispatcher(createTools(options.tools, origin), sessionId);
+      catalog = createDispatcher(
+        createTools(options.tools, origin),
+        sessionId,
+        options.tools.artifacts,
+      );
       catalogs.set(sessionId, catalog);
     }
     // An evidence-only turn gets no execution surface: the model is offered

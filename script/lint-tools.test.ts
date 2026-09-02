@@ -51,6 +51,11 @@ describe("lint-tools definition invariants", () => {
     );
   });
 
+  test("every catalog definition must map to a source file", () => {
+    const item = definition("unlocated_query");
+    expect(messages([item], [])).toContainEqual(expect.stringContaining("[tool-source-location]"));
+  });
+
   test("tool names must be unique", () => {
     const first = definition("duplicate_name");
     const second = definition("duplicate_name", "mutation");

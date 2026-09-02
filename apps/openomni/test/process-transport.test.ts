@@ -439,6 +439,7 @@ let kernel;
 const runner = createInlineWorkerRunner({
   model: { provider: "fake", id: "drive-test" },
   apiKey: "test-key",
+  artifacts: { store() {}, get() { return null; } },
   llm,
   kernel: () => kernel,
 });

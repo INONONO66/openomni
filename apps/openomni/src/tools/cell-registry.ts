@@ -1,5 +1,6 @@
 import type { Machine } from "@openomni/protocol";
 import type { ChatAgentConfig } from "@openomni/agent";
+import type { ToolExecutionContext } from "./core/define";
 
 /**
  * Which tools a running cell may reach back for.
@@ -17,32 +18,52 @@ import type { ChatAgentConfig } from "@openomni/agent";
  * dispatched to, and only while it is still in flight.
  */
 export interface CellRegistry {
-  bind(cellId: string, execute: NonNullable<ChatAgentConfig["toolExecutor"]>): void;
+  bind(
+    cellId: string,
+    execute: NonNullable<ChatAgentConfig["toolExecutor"]>,
+    parent: ToolExecutionContext,
+  ): void;
   release(cellId: string): void;
   /** The `callTool` port handed to the machine host. */
   callTool(call: Machine.ToolCall): Promise<Machine.ToolCallResult>;
 }
 
 export function createCellRegistry(): CellRegistry {
-  const live = new Map<string, NonNullable<ChatAgentConfig["toolExecutor"]>>();
+  const live = new Map<
+    string,
+    {
+      readonly execute: NonNullable<ChatAgentConfig["toolExecutor"]>;
+      readonly parent: ToolExecutionContext;
+    }
+  >();
 
   return {
-    bind(cellId, execute) {
-      live.set(cellId, execute);
+    bind(cellId, execute, parent) {
+      live.set(cellId, { execute, parent });
     },
     release(cellId) {
       live.delete(cellId);
     },
     async callTool(call) {
-      const execute = live.get(call.cellId);
-      if (execute === undefined) {
+      const bound = live.get(call.cellId);
+      if (bound === undefined) {
         return { status: "failed", error: `no tools are bound to cell ${call.cellId}` };
       }
-      const result = await execute({
-        id: `cell:${call.cellId}`,
-        tool: call.name,
-        input: call.arguments,
-      });
+      const result = await bound.execute(
+        {
+          id: `cell:${call.cellId}:${crypto.randomUUID()}`,
+          tool: call.name,
+          input: call.arguments,
+        },
+        {
+          signal: bound.parent.signal,
+          traceContext: {
+            traceId: bound.parent.turnId,
+            sessionId: bound.parent.sessionId,
+            runId: bound.parent.turnId,
+          },
+        },
+      );
       // A refused or failed tool is a value the cell can catch, not a
       // transport error: the contract's `failed` arm exists for exactly this.
       return result.isError === true

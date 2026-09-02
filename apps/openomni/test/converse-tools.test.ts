@@ -31,8 +31,12 @@ describe("converse tool", () => {
     expect(
       (
         await run({
-          op: "open",
-          args: { contactId: "alice", endpointId: "ws:alice", timeoutMs: 5_000 },
+          operation: {
+            op: "open",
+            contactId: "alice",
+            endpointId: "ws:alice",
+            timeoutMs: 5_000,
+          },
         })
       ).isError,
     ).toBeUndefined();
@@ -41,7 +45,7 @@ describe("converse tool", () => {
       policy: { expiresAt: 6_000 },
     });
     expect(
-      (await run({ op: "close", args: { conversationId: "conv:1" } })).isError,
+      (await run({ operation: { op: "close", conversationId: "conv:1" } })).isError,
     ).toBeUndefined();
     expect(conversations.closed).toEqual(["conv:1"]);
   });
@@ -51,7 +55,7 @@ describe("converse tool", () => {
       "converse",
       { conversations, leases },
       RESIDENT,
-    )({ op: "open", args: { contactId: "alice" } });
+    )({ operation: { op: "open", contactId: "alice" } });
     expect(result).toMatchObject({ isError: true, errorClass: "invalid_input" });
     expect(conversations.opened).toHaveLength(0);
   });

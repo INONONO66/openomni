@@ -33,18 +33,10 @@ function cellDoor(
     (tool) => tool.name !== RUN_CODE_TOOL_NAME && tool.visibility.cell.length > 0,
   );
   const dispatcher = createDispatcher(cellTools, sessionId);
-  return async (call, context) => {
-    const legacyLlmPrompt = call.tool === "llm" && typeof call.input.prompt === "string";
-    const effectiveCall = legacyLlmPrompt
-      ? { ...call, input: { prompts: [call.input.prompt] } }
-      : call;
-    const result = await dispatcher.executeCell(effectiveCall, context);
-    const output =
-      legacyLlmPrompt && Array.isArray(result.output) ? result.output[0] : result.output;
-    return { ...result, output } as Awaited<
-      ReturnType<NonNullable<ChatAgentConfig["toolExecutor"]>>
+  return async (call, context) =>
+    dispatcher.executeCell(call, context) as Promise<
+      Awaited<ReturnType<NonNullable<ChatAgentConfig["toolExecutor"]>>>
     >;
-  };
 }
 
 const Input = z
@@ -88,7 +80,7 @@ export function createRunCodeTool(ports: CellPorts) {
     visibility: { model: ["resident", "worker"], cell: ["resident", "worker"] },
     execute: async ({ code, timeoutMs }, ctx) => {
       const cellId = ports.newCellId();
-      ports.registry.bind(cellId, cellDoor(ports.tools(ctx.sessionId), ctx.sessionId));
+      ports.registry.bind(cellId, cellDoor(ports.tools(ctx.sessionId), ctx.sessionId), ctx);
       try {
         return await ports.runCell(ports.defaultMachineId, {
           cellId,

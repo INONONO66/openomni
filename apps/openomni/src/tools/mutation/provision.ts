@@ -430,7 +430,24 @@ function executeProvisionStatus(port: ProvisionPort) {
 }
 
 const Statuses = z.array(
-  z.custom<ChannelRuntimeStatus>((value) => typeof value === "object" && value !== null),
+  z
+    .object({
+      id: z.string(),
+      surface: z.string(),
+      state: z.enum([
+        "ready",
+        "disabled",
+        "vault_locked",
+        "unknown_provider",
+        "missing_credential",
+        "credential_invalid",
+        "mounted",
+        "start_failed",
+        "paused_by_breaker",
+      ]),
+      detail: z.string().optional(),
+    })
+    .strict(),
 );
 export const ProvisionStatusOutput = z
   .object({
@@ -455,38 +472,72 @@ function renderProvisionStatus(value: z.output<typeof ProvisionStatusOutput>): s
     ...value.preconditions.map(({ surface, text }) => `${surface} precondition: ${text}`),
   ].join("\n");
 }
-const ProvisionInput = z
-  .object({
-    op: z.union([
-      z.literal("person_declare"),
-      z.literal("person_remove"),
-      z.literal("channel_declare"),
-      z.literal("channel_enable"),
-      z.literal("channel_disable"),
-      z.literal("secret_rotate"),
-      z.literal("status"),
-    ]),
-    args: z.record(z.string(), z.unknown()),
-  })
-  .strict()
-  .superRefine((value, ctx) => {
-    const schemas = {
-      person_declare: PERSON_DECLARE_INPUT,
-      person_remove: PERSON_REMOVE_INPUT,
-      channel_declare: CHANNEL_DECLARE_INPUT,
-      channel_enable: INSTANCE_INPUT,
-      channel_disable: INSTANCE_INPUT,
-      secret_rotate: SECRET_ROTATE_INPUT,
-      status: EMPTY_INPUT,
-    } as const;
-    const parsed = schemas[value.op].safeParse(value.args);
-    if (!parsed.success)
-      for (const issue of parsed.error.issues)
-        ctx.addIssue({ ...issue, path: ["args", ...issue.path] });
-  });
-const ProvisionOutput = z.custom<Record<string, unknown>>(
-  (value) => typeof value === "object" && value !== null,
-);
+const ProvisionOperation = z.discriminatedUnion("op", [
+  z.object({ op: z.literal("person_declare"), args: PERSON_DECLARE_INPUT }).strict(),
+  z.object({ op: z.literal("person_remove"), args: PERSON_REMOVE_INPUT }).strict(),
+  z.object({ op: z.literal("channel_declare"), args: CHANNEL_DECLARE_INPUT }).strict(),
+  z.object({ op: z.literal("channel_enable"), args: INSTANCE_INPUT }).strict(),
+  z.object({ op: z.literal("channel_disable"), args: INSTANCE_INPUT }).strict(),
+  z.object({ op: z.literal("secret_rotate"), args: SECRET_ROTATE_INPUT }).strict(),
+  z.object({ op: z.literal("status"), args: EMPTY_INPUT }).strict(),
+]);
+const ProvisionInput = z.object({ operation: ProvisionOperation }).strict();
+const PersonDeclareResult = z.discriminatedUnion("kind", [
+  z
+    .object({
+      kind: z.literal("pending"),
+      requirement: z.string(),
+      approvalId: z.string(),
+      digest: z.string(),
+      deadline: z.number(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("declared"),
+      id: z.string(),
+      trustTier: z.string(),
+      revision: z.number(),
+    })
+    .strict(),
+]);
+const ProvisionOutput = z.discriminatedUnion("op", [
+  z.object({ op: z.literal("person_declare"), result: PersonDeclareResult }).strict(),
+  z.object({ op: z.literal("person_remove"), id: z.string() }).strict(),
+  z
+    .object({
+      op: z.literal("channel_declare"),
+      id: z.string(),
+      action: z.literal("declared"),
+      statuses: Statuses,
+    })
+    .strict(),
+  z
+    .object({
+      op: z.literal("channel_enable"),
+      id: z.string(),
+      action: z.literal("enabled"),
+      statuses: Statuses,
+    })
+    .strict(),
+  z
+    .object({
+      op: z.literal("channel_disable"),
+      id: z.string(),
+      action: z.literal("disabled"),
+      statuses: Statuses,
+    })
+    .strict(),
+  z
+    .object({
+      op: z.literal("secret_rotate"),
+      id: z.string(),
+      kekId: z.string(),
+      statuses: Statuses,
+    })
+    .strict(),
+  ProvisionStatusOutput.extend({ op: z.literal("status") }),
+]);
 function statusLines(statuses: readonly ChannelRuntimeStatus[]): string {
   return statuses.length === 0
     ? "no channels declared or configured"
@@ -516,41 +567,47 @@ export function createProvisionTool(port: ProvisionPort) {
     input: ProvisionInput,
     output: ProvisionOutput,
     visibility: { model: ["resident"], cell: ["resident"] },
-    execute: async (input) => {
-      switch (input.op) {
+    execute: async ({ operation }) => {
+      switch (operation.op) {
         case "person_declare":
-          return executors.person_declare(PERSON_DECLARE_INPUT.parse(input.args));
+          return { op: operation.op, result: await executors.person_declare(operation.args) };
         case "person_remove":
-          return executors.person_remove(PERSON_REMOVE_INPUT.parse(input.args));
+          return { op: operation.op, ...(await executors.person_remove(operation.args)) };
         case "channel_declare":
-          return executors.channel_declare(CHANNEL_DECLARE_INPUT.parse(input.args));
+          return { op: operation.op, ...(await executors.channel_declare(operation.args)) };
         case "channel_enable":
-          return executors.channel_enable(INSTANCE_INPUT.parse(input.args));
+          return {
+            op: operation.op,
+            ...(await executors.channel_enable(operation.args)),
+            action: "enabled" as const,
+          };
         case "channel_disable":
-          return executors.channel_disable(INSTANCE_INPUT.parse(input.args));
+          return {
+            op: operation.op,
+            ...(await executors.channel_disable(operation.args)),
+            action: "disabled" as const,
+          };
         case "secret_rotate":
-          return executors.secret_rotate(SECRET_ROTATE_INPUT.parse(input.args));
+          return { op: operation.op, ...(await executors.secret_rotate(operation.args)) };
         case "status":
-          return executors.status({});
+          return { op: operation.op, ...(await executors.status(operation.args)) };
       }
     },
-    render: (args, value) => {
-      if ("source" in value)
-        return renderProvisionStatus(value as z.output<typeof ProvisionStatusOutput>);
-      if (args.op === "person_declare" && value.kind === "pending")
-        return `person_declare pending: ${String(value.requirement)} — approval ${String(value.approvalId)} opened (digest ${String(value.digest)}); unanswered after ${String(value.deadline)} reads as refused.`;
-      if (args.op === "person_declare")
-        return `person ${String(value.id)} declared (tier ${String(value.trustTier)}, revision ${String(value.revision)})`;
-      if (args.op === "person_remove") return `person ${String(value.id)} removed`;
+    render: (_args, value) => {
+      if (value.op === "status") return renderProvisionStatus(value);
+      if (value.op === "person_declare") {
+        return value.result.kind === "pending"
+          ? `person_declare pending: ${value.result.requirement} — approval ${value.result.approvalId} opened (digest ${value.result.digest}); unanswered after ${value.result.deadline} reads as refused.`
+          : `person ${value.result.id} declared (tier ${value.result.trustTier}, revision ${value.result.revision})`;
+      }
+      if (value.op === "person_remove") return `person ${value.id} removed`;
       if (
-        args.op === "channel_declare" ||
-        args.op === "channel_enable" ||
-        args.op === "channel_disable"
+        value.op === "channel_declare" ||
+        value.op === "channel_enable" ||
+        value.op === "channel_disable"
       )
-        return `channel ${String(value.id)} ${String(value.action)}\n${statusLines(value.statuses as readonly ChannelRuntimeStatus[])}`;
-      if (args.op === "secret_rotate")
-        return `secret ${String(value.id)} rotated (kek ${String(value.kekId)})\n${statusLines(value.statuses as readonly ChannelRuntimeStatus[])}`;
-      return JSON.stringify(value, null, 2);
+        return `channel ${value.id} ${value.action}\n${statusLines(value.statuses)}`;
+      return `secret ${value.id} rotated (kek ${value.kekId})\n${statusLines(value.statuses)}`;
     },
   });
 }

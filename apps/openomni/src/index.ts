@@ -289,6 +289,8 @@ export async function startOpenOmni(options: StartOptions = {}) {
     // idempotent identity upserts; the provisioning store is the durable one.
     materializePersons();
 
+    const artifactsPort: ArtifactsPort = { store: Artifact.store, get: Artifact.get };
+
     // A worker loop holds the same delegate tool the Resident does, so the
     // runner needs the kernel that the kernel needs the runner to build. The
     // cycle is closed by handing the runner a getter rather than a value.
@@ -301,6 +303,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
     const runner = createInlineWorkerRunner({
       model: config.model,
       apiKey: config.model.apiKey,
+      artifacts: artifactsPort,
       ...(transport === undefined ? {} : { transport }),
       kernel: () => {
         if (kernel === undefined)
@@ -457,7 +460,6 @@ export async function startOpenOmni(options: StartOptions = {}) {
       { ...config.model, ...(transport === undefined ? {} : { transport }) },
       options.llm ?? {},
     );
-    const artifactsPort: ArtifactsPort = { store: Artifact.store, get: Artifact.get };
     const defaultMachineId = machines?.enrolled[0]?.machineId;
     const sessionTools = new Map<
       string,

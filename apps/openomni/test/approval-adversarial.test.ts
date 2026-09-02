@@ -34,7 +34,10 @@ const approvalOp = (
   now: () => number,
 ) => {
   const run = modelToolOutput("approval", { approvals: approvalPort }, RESIDENT, now);
-  return (input: Record<string, unknown>) => run({ op, args: input });
+  return (input: Record<string, unknown>) =>
+    run({
+      operation: op === "request" ? { op, request: input } : { op, ...input },
+    });
 };
 const approvalRequest = (approvalPort: ApprovalPort, now: () => number = Date.now) =>
   approvalOp("request", approvalPort, now);

@@ -91,31 +91,99 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "op": {
-          "anyOf": [
+        "operation": {
+          "oneOf": [
             {
-              "type": "string",
-              "const": "open"
+              "type": "object",
+              "properties": {
+                "op": {
+                  "type": "string",
+                  "const": "open"
+                },
+                "contactId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Registered actor the window reaches."
+                },
+                "endpointId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Allocated endpoint of that actor the window is pinned to."
+                },
+                "timeoutMs": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991,
+                  "description": "How long the window stays open from now."
+                },
+                "maxOutbound": {
+                  "description": "Outbound message cap inside the window (default 8).",
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "maxInbound": {
+                  "description": "Inbound message cap before demotion (default 32).",
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": ["op", "contactId", "endpointId", "timeoutMs"],
+              "additionalProperties": false
             },
             {
-              "type": "string",
-              "const": "close"
+              "type": "object",
+              "properties": {
+                "op": {
+                  "type": "string",
+                  "const": "close"
+                },
+                "conversationId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Window to settle."
+                }
+              },
+              "required": ["op", "conversationId"],
+              "additionalProperties": false
             },
             {
-              "type": "string",
-              "const": "lease"
+              "type": "object",
+              "properties": {
+                "op": {
+                  "type": "string",
+                  "const": "lease"
+                },
+                "delegationId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Open delegation that will hold the lease."
+                },
+                "conversationId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Open conversation whose budget is carved."
+                },
+                "maxOutbound": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991,
+                  "description": "Outbound sends allocated from the window."
+                }
+              },
+              "required": [
+                "op",
+                "delegationId",
+                "conversationId",
+                "maxOutbound"
+              ],
+              "additionalProperties": false
             }
           ]
-        },
-        "args": {
-          "type": "object",
-          "propertyNames": {
-            "type": "string"
-          },
-          "additionalProperties": {}
         }
       },
-      "required": ["op", "args"],
+      "required": ["operation"],
       "additionalProperties": false
     },
     "safe": false,
@@ -127,35 +195,134 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "op": {
-          "anyOf": [
+        "operation": {
+          "oneOf": [
             {
-              "type": "string",
-              "const": "request"
+              "type": "object",
+              "properties": {
+                "op": {
+                  "type": "string",
+                  "const": "request"
+                },
+                "request": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "act": {
+                          "type": "string",
+                          "const": "contact_promotion"
+                        },
+                        "actorId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Provisional contact to register."
+                        },
+                        "timeoutMs": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991,
+                          "description": "How long the Owner has to answer."
+                        }
+                      },
+                      "required": ["act", "actorId", "timeoutMs"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "act": {
+                          "type": "string",
+                          "const": "endpoint_merge"
+                        },
+                        "endpointId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Endpoint that would move."
+                        },
+                        "toActorId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Identity the endpoint would join."
+                        },
+                        "timeoutMs": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991,
+                          "description": "How long the Owner has to answer."
+                        }
+                      },
+                      "required": [
+                        "act",
+                        "endpointId",
+                        "toActorId",
+                        "timeoutMs"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "required": ["op", "request"],
+              "additionalProperties": false
             },
             {
-              "type": "string",
-              "const": "decide"
+              "type": "object",
+              "properties": {
+                "op": {
+                  "type": "string",
+                  "const": "decide"
+                },
+                "approvalId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Pending approval request."
+                },
+                "decision": {
+                  "type": "string",
+                  "enum": ["approved", "refused"],
+                  "description": "The Owner's answer."
+                }
+              },
+              "required": ["op", "approvalId", "decision"],
+              "additionalProperties": false
             },
             {
-              "type": "string",
-              "const": "contact_promote"
+              "type": "object",
+              "properties": {
+                "op": {
+                  "type": "string",
+                  "const": "contact_promote"
+                },
+                "approvalId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Approved request that authorizes this act."
+                }
+              },
+              "required": ["op", "approvalId"],
+              "additionalProperties": false
             },
             {
-              "type": "string",
-              "const": "endpoint_merge"
+              "type": "object",
+              "properties": {
+                "op": {
+                  "type": "string",
+                  "const": "endpoint_merge"
+                },
+                "approvalId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Approved request that authorizes this act."
+                }
+              },
+              "required": ["op", "approvalId"],
+              "additionalProperties": false
             }
           ]
-        },
-        "args": {
-          "type": "object",
-          "propertyNames": {
-            "type": "string"
-          },
-          "additionalProperties": {}
         }
       },
-      "required": ["op", "args"],
+      "required": ["operation"],
       "additionalProperties": false
     },
     "safe": false,
@@ -167,47 +334,262 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "op": {
-          "anyOf": [
+        "operation": {
+          "oneOf": [
             {
-              "type": "string",
-              "const": "person_declare"
+              "type": "object",
+              "properties": {
+                "op": {
+                  "type": "string",
+                  "const": "person_declare"
+                },
+                "args": {
+                  "type": "object",
+                  "properties": {
+                    "manifest": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Person id, person:<slug>."
+                        },
+                        "displayName": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": ["human", "ai_agent", "service"],
+                          "description": "What this Person is."
+                        },
+                        "trustTier": {
+                          "type": "string",
+                          "enum": [
+                            "owner",
+                            "co_owner",
+                            "manager",
+                            "collaborator",
+                            "observer",
+                            "assigned_worker"
+                          ],
+                          "description": "Standing trust tier for every bound endpoint."
+                        },
+                        "endpoints": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "channel": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "externalId": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "workspace": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": ["channel", "externalId"],
+                            "additionalProperties": false
+                          },
+                          "description": "Platform identities this Person speaks through."
+                        }
+                      },
+                      "required": ["id", "kind", "trustTier", "endpoints"],
+                      "additionalProperties": false
+                    },
+                    "approvalId": {
+                      "description": "Approved person_mutation approval, when the guard requires one.",
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "timeoutMs": {
+                      "description": "Answer window for a guard-opened approval request (default 24h).",
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": ["manifest"],
+                  "additionalProperties": false
+                }
+              },
+              "required": ["op", "args"],
+              "additionalProperties": false
             },
             {
-              "type": "string",
-              "const": "person_remove"
+              "type": "object",
+              "properties": {
+                "op": {
+                  "type": "string",
+                  "const": "person_remove"
+                },
+                "args": {
+                  "type": "object",
+                  "properties": {
+                    "personId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": ["personId"],
+                  "additionalProperties": false
+                }
+              },
+              "required": ["op", "args"],
+              "additionalProperties": false
             },
             {
-              "type": "string",
-              "const": "channel_declare"
+              "type": "object",
+              "properties": {
+                "op": {
+                  "type": "string",
+                  "const": "channel_declare"
+                },
+                "args": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Instance id, channel:<provider>:<slug>."
+                    },
+                    "provider": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "enabled": {
+                      "default": true,
+                      "type": "boolean"
+                    },
+                    "settings": {
+                      "default": {},
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": ["string", "number", "boolean"]
+                      }
+                    },
+                    "credential": {
+                      "description": "Plaintext credential payload; sealed into the vault, never stored bare.",
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": ["id", "provider"],
+                  "additionalProperties": false
+                }
+              },
+              "required": ["op", "args"],
+              "additionalProperties": false
             },
             {
-              "type": "string",
-              "const": "channel_enable"
+              "type": "object",
+              "properties": {
+                "op": {
+                  "type": "string",
+                  "const": "channel_enable"
+                },
+                "args": {
+                  "type": "object",
+                  "properties": {
+                    "instanceId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": ["instanceId"],
+                  "additionalProperties": false
+                }
+              },
+              "required": ["op", "args"],
+              "additionalProperties": false
             },
             {
-              "type": "string",
-              "const": "channel_disable"
+              "type": "object",
+              "properties": {
+                "op": {
+                  "type": "string",
+                  "const": "channel_disable"
+                },
+                "args": {
+                  "type": "object",
+                  "properties": {
+                    "instanceId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": ["instanceId"],
+                  "additionalProperties": false
+                }
+              },
+              "required": ["op", "args"],
+              "additionalProperties": false
             },
             {
-              "type": "string",
-              "const": "secret_rotate"
+              "type": "object",
+              "properties": {
+                "op": {
+                  "type": "string",
+                  "const": "secret_rotate"
+                },
+                "args": {
+                  "type": "object",
+                  "properties": {
+                    "secretId": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "credential": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      },
+                      "description": "Replacement plaintext payload."
+                    }
+                  },
+                  "required": ["secretId", "credential"],
+                  "additionalProperties": false
+                }
+              },
+              "required": ["op", "args"],
+              "additionalProperties": false
             },
             {
-              "type": "string",
-              "const": "status"
+              "type": "object",
+              "properties": {
+                "op": {
+                  "type": "string",
+                  "const": "status"
+                },
+                "args": {
+                  "type": "object",
+                  "properties": {},
+                  "additionalProperties": false
+                }
+              },
+              "required": ["op", "args"],
+              "additionalProperties": false
             }
           ]
-        },
-        "args": {
-          "type": "object",
-          "propertyNames": {
-            "type": "string"
-          },
-          "additionalProperties": {}
         }
       },
-      "required": ["op", "args"],
+      "required": ["operation"],
       "additionalProperties": false
     },
     "safe": false,

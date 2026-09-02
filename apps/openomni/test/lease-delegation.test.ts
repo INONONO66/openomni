@@ -20,7 +20,7 @@ const leaseOpen = (port: LeasePort, now?: () => number) => {
     RESIDENT,
     now,
   );
-  return (input: Record<string, unknown>) => run({ op: "lease", args: input });
+  return (input: Record<string, unknown>) => run({ operation: { op: "lease", ...input } });
 };
 
 const LEASE: AdmissionLease = {
@@ -391,7 +391,7 @@ describe("lease_open tool", () => {
         leases: { issue: never as never, getDelegation: () => openDelegation },
       },
       RESIDENT,
-    )({ op: "lease", args: { maxOutbound: 0 } });
+    )({ operation: { op: "lease", maxOutbound: 0 } });
     expect(invalid).toMatchObject({ isError: true, errorClass: "invalid_input" });
     expect(invalid.output).toStartWith("converse refused:");
   });

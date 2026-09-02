@@ -221,28 +221,64 @@ function describeSubject(subject: Approval.Subject): string {
   return `merge endpoint ${subject.endpointId} from ${subject.fromActorId} into ${subject.toActorId}`;
 }
 
-const ApprovalInput = z
-  .object({
-    op: z.union([
-      z.literal("request"),
-      z.literal("decide"),
-      z.literal("contact_promote"),
-      z.literal("endpoint_merge"),
-    ]),
-    args: z.record(z.string(), z.unknown()),
-  })
-  .strict()
-  .superRefine((value, ctx) => {
-    const schema =
-      value.op === "request" ? REQUEST_INPUT : value.op === "decide" ? DECIDE_INPUT : ACT_INPUT;
-    const parsed = schema.safeParse(value.args);
-    if (!parsed.success)
-      for (const issue of parsed.error.issues)
-        ctx.addIssue({ ...issue, path: ["args", ...issue.path] });
-  });
-const ApprovalOutput = z.custom<Record<string, unknown>>(
-  (value) => typeof value === "object" && value !== null,
-);
+const ApprovalOperation = z.discriminatedUnion("op", [
+  z.object({ op: z.literal("request"), request: REQUEST_INPUT }).strict(),
+  z
+    .object({
+      op: z.literal("decide"),
+      approvalId: DECIDE_INPUT.shape.approvalId,
+      decision: DECIDE_INPUT.shape.decision,
+    })
+    .strict(),
+  z.object({ op: z.literal("contact_promote"), approvalId: ACT_INPUT.shape.approvalId }).strict(),
+  z.object({ op: z.literal("endpoint_merge"), approvalId: ACT_INPUT.shape.approvalId }).strict(),
+]);
+const ApprovalInput = z.object({ operation: ApprovalOperation }).strict();
+const ApprovalSubject = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("contact_promotion"), actorId: z.string() }).strict(),
+  z
+    .object({
+      kind: z.literal("endpoint_merge"),
+      endpointId: z.string(),
+      fromActorId: z.string(),
+      toActorId: z.string(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("person_mutation"),
+      personId: z.string(),
+      manifestDigest: z.string(),
+    })
+    .strict(),
+]);
+const ApprovalOutput = z.discriminatedUnion("op", [
+  z
+    .object({
+      op: z.literal("request"),
+      id: z.string(),
+      subject: ApprovalSubject,
+      deadline: z.number(),
+    })
+    .strict(),
+  z
+    .object({
+      op: z.literal("decide"),
+      approvalId: z.string(),
+      state: z.enum(["pending", "approved", "refused"]),
+      decidedBy: z.string().nullable().optional(),
+      unchanged: z.boolean(),
+    })
+    .strict(),
+  z
+    .object({
+      op: z.literal("contact_promote"),
+      id: z.string(),
+      trustTier: z.string(),
+    })
+    .strict(),
+  z.object({ op: z.literal("endpoint_merge"), id: z.string(), actorId: z.string() }).strict(),
+]);
 
 export function createApprovalTool(port: ApprovalPort) {
   const request = executeApprovalRequest(port);
@@ -257,20 +293,22 @@ export function createApprovalTool(port: ApprovalPort) {
     input: ApprovalInput,
     output: ApprovalOutput,
     visibility: { model: ["resident"], cell: ["resident"] },
-    execute: async (input) => {
-      if (input.op === "request") return request(input.args as z.output<typeof REQUEST_INPUT>);
-      if (input.op === "decide") return decide(input.args as z.output<typeof DECIDE_INPUT>);
-      if (input.op === "contact_promote") return promote(input.args as z.output<typeof ACT_INPUT>);
-      return merge(input.args as z.output<typeof ACT_INPUT>);
+    execute: async ({ operation }) => {
+      if (operation.op === "request")
+        return { op: operation.op, ...(await request(operation.request)) };
+      if (operation.op === "decide") return { op: operation.op, ...(await decide(operation)) };
+      if (operation.op === "contact_promote")
+        return { op: operation.op, ...(await promote(operation)) };
+      return { op: operation.op, ...(await merge(operation)) };
     },
-    render: (args, value) => {
-      if (args.op === "request")
+    render: (_args, value) => {
+      if (value.op === "request")
         return `approval ${String(value.id)} pending: ${describeSubject(value.subject as Approval.Subject)} — unanswered after ${String(value.deadline)} reads as refused`;
-      if (args.op === "decide")
+      if (value.op === "decide")
         return value.unchanged
           ? `approval ${String(value.approvalId)} was already ${String(value.state)} (${String(value.decidedBy ?? "unknown")})`
           : `approval ${String(value.approvalId)} ${String(value.state)} by ${String(value.decidedBy ?? "owner")}`;
-      if (args.op === "contact_promote")
+      if (value.op === "contact_promote")
         return `contact ${String(value.id)} registered (tier ${String(value.trustTier)})`;
       return `endpoint ${String(value.id)} merged into ${String(value.actorId)}`;
     },

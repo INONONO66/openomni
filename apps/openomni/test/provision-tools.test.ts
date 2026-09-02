@@ -19,7 +19,7 @@ const RESIDENT = { role: "resident", depth: 0, sessionId: "provision-test" } as 
 const provisionTool = (name: string, port: ProvisionPort, now: () => number = Date.now) => {
   const run = modelToolOutput("provision", { provisioning: port }, RESIDENT, now);
   const op = name === "provision_status" ? "status" : name;
-  return (input: Record<string, unknown>) => run({ op, args: input });
+  return (input: Record<string, unknown>) => run({ operation: { op, args: input } });
 };
 const personDeclare = (port: ProvisionPort, now?: () => number) =>
   provisionTool("person_declare", port, now);
