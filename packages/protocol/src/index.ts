@@ -34,3 +34,4 @@ export * from "./ledger/index.js";
 export * from "./storage/index.js";
 export * from "./trace/index.js";
 export * from "./app-connector/index.js";
+export * from "./trigger/index.js";

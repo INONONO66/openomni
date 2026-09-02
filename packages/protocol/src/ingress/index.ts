@@ -94,6 +94,7 @@ const ActivationMetadataSchemaImpl = z
       .object({
         kind: z.enum(["cron", "webhook", "manual", "internal"]),
         id: z.string().optional(),
+        fireId: z.string().min(1).optional(),
         scheduledAt: EpochMs.optional(),
         firedAt: EpochMs.optional(),
         attempt: z.number().optional(),
@@ -128,6 +129,8 @@ const MetaSchemaImpl = z
     channelGrantKind: Actor.ChannelGrantKind.optional(),
     surfaceKey: z.string().optional(),
     kind: z.string().optional(),
+    triggerId: z.string().min(1).optional(),
+    fireId: z.string().min(1).optional(),
     sender: SenderMetaSchema.optional(),
     threadId: z.string().optional(),
     replyToId: z.string().optional(),

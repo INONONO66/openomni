@@ -12,6 +12,7 @@ import type { Wait } from "../wait/index.js";
 import type { WorkItem } from "../work-item/index.js";
 import type { Gateway } from "../gateway/index.js";
 import type { Provisioning } from "../provisioning/index.js";
+import type { Trigger } from "../trigger/index.js";
 
 export namespace Storage {
   export interface ActorRegistrySubAdapter {
@@ -231,6 +232,39 @@ export namespace Storage {
    * the sessionId that owns the key after the attempt. The key format codec
    * stays `Channel.SurfaceKey`; this is the row surface only.
    */
+  export interface TriggerListFilter {
+    readonly ownerSessionId?: string;
+    readonly states?: readonly Trigger.LifecycleState[];
+    readonly kinds?: readonly Trigger.KindName[];
+    readonly order?: "oldest" | "newest";
+    readonly limit?: number;
+  }
+
+  export interface TriggerFireListFilter {
+    readonly triggerId?: string;
+    readonly ownerSessionId?: string;
+    readonly statuses?: readonly Trigger.FireStatus[];
+    readonly limit?: number;
+  }
+
+  export interface TriggerSubAdapter {
+    create(record: Trigger.Record): boolean;
+    get(id: string): Trigger.Record | undefined;
+    list(filter?: TriggerListFilter): Trigger.Record[];
+    listIds(filter?: TriggerListFilter): string[];
+    listActiveIds(): string[];
+    countActiveByOwner(ownerSessionId: string): number;
+    compareAndSet(id: string, expectedRevision: number, record: Trigger.Record): boolean;
+  }
+
+  export interface TriggerFireSubAdapter {
+    create(record: Trigger.Fire): boolean;
+    get(id: string): Trigger.Fire | undefined;
+    list(filter?: TriggerFireListFilter): Trigger.Fire[];
+    compareAndSet(id: string, expectedRevision: number, record: Trigger.Fire): boolean;
+    listUnackedIds(): string[];
+  }
+
   export interface SurfaceKeySubAdapter {
     claim(key: string, sessionId: string, expectedSessionId?: string): string;
     lookup(key: string): string | undefined;

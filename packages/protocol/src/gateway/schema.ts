@@ -90,7 +90,7 @@ const DeliveredEventSchema = Ingress.DirectEventSchema.omit({ agent: true });
  * - `event` + `decision` carry the routed event residue and the recorded
  *   route.decided fact — the brain parses all three at the seam.
  */
-const DeliverSchema = z
+const ExternalDeliverSchema = z
   .object({
     sessionId: z.string().min(1).optional(),
     actorContext: ActorContextSchema.optional(),
@@ -100,6 +100,52 @@ const DeliverSchema = z
     decision: IngressEvents.RoutingDecision.schema,
   })
   .strict();
+
+const InternalDeliverSchema = z
+  .object({
+    sessionId: z.string().min(1),
+    /** Explicitly uninhabited on the internal arm; retained in the inferred union for safe reads. */
+    actorContext: z.never().optional(),
+    waitContext: z.never().optional(),
+    event: Ingress.InternalEventSchema,
+    decision: IngressEvents.RoutingDecision.schema,
+  })
+  .strict()
+  .superRefine((delivery, ctx) => {
+    const { event, decision, sessionId } = delivery;
+    const fail = (path: (string | number)[], message: string) =>
+      ctx.addIssue({ code: "custom", path, message });
+    if (event.surface !== "internal") fail(["event", "surface"], "internal Trigger surface required");
+    if (event.agentName !== "resident") fail(["event", "agentName"], "resident agent required");
+    if (typeof event.payload !== "string") fail(["event", "payload"], "text payload required");
+    if (
+      event.target?.kind !== "resident" ||
+      event.target.sessionId !== sessionId
+    ) {
+      fail(["event", "target"], "internal target must pin the owner Resident session");
+    }
+    if (
+      event.meta?.kind !== "trigger.fire" ||
+      typeof event.meta.triggerId !== "string" ||
+      typeof event.meta.fireId !== "string"
+    ) {
+      fail(["event", "meta"], "typed Trigger Fire metadata required");
+    }
+    if (
+      decision.mode !== "internal" ||
+      decision.stage !== "surface_default" ||
+      decision.outcome !== "route" ||
+      decision.inboundId !== event.id ||
+      decision.sessionId !== sessionId ||
+      decision.target !== `resident:${sessionId}` ||
+      decision.surface !== event.surface ||
+      decision.traceId !== event.traceId
+    ) {
+      fail(["decision"], "internal Trigger routing decision is inconsistent");
+    }
+  });
+
+const DeliverSchema = z.union([ExternalDeliverSchema, InternalDeliverSchema]);
 
 // Outbound vocabulary — re-homed from the #215 messaging kernel verbatim
 // (openomni/messaging re-exports these until stage 2 moves the kernel).
@@ -425,6 +471,12 @@ export namespace Gateway {
 
   export const DeliveredEvent = DeliveredEventSchema;
   export type DeliveredEvent = z.infer<typeof DeliveredEventSchema>;
+
+  export const ExternalDeliver = ExternalDeliverSchema;
+  export type ExternalDeliver = z.infer<typeof ExternalDeliverSchema>;
+
+  export const InternalDeliver = InternalDeliverSchema;
+  export type InternalDeliver = z.infer<typeof InternalDeliverSchema>;
 
   export const Deliver = DeliverSchema;
   export type Deliver = z.infer<typeof DeliverSchema>;

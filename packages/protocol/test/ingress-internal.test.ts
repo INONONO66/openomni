@@ -55,6 +55,61 @@ describe("InternalEventSchema", () => {
     expect(result.activation?.trigger?.kind).toBe("cron");
     expect(result.activation?.trigger?.id).toBe("job-1");
   });
+
+  test("a Trigger Fire carries typed activation and meta identity, not untyped fields", () => {
+    const result = Ingress.InternalEventSchema.parse({
+      id: "fire-9",
+      traceId: "trace-fire",
+      surface: "internal",
+      mode: "internal",
+      agentName: "resident",
+      target: { kind: "resident", sessionId: "s-owner" },
+      payload: "trigger fired",
+      meta: {
+        actor: { role: "system", id: "system:trigger" },
+        kind: "trigger.fire",
+        triggerId: "trigger-9",
+        fireId: "fire-9",
+      },
+      activation: {
+        trigger: {
+          kind: "internal",
+          id: "trigger-9",
+          fireId: "fire-9",
+          firedAt: 1_001,
+          attempt: 2,
+        },
+      },
+    });
+
+    expect(result.meta?.triggerId).toBe("trigger-9");
+    expect(result.meta?.fireId).toBe("fire-9");
+    expect(result.activation?.trigger?.fireId).toBe("fire-9");
+    expect(result.activation?.trigger?.attempt).toBe(2);
+  });
+
+  test("empty typed Trigger identity strings are rejected", () => {
+    const base = {
+      id: "fire-10",
+      traceId: "trace-fire",
+      surface: "internal",
+      mode: "internal",
+      agentName: "resident",
+      payload: "x",
+    };
+    expectParseFailure(() =>
+      Ingress.InternalEventSchema.parse({
+        ...base,
+        meta: { kind: "trigger.fire", triggerId: "", fireId: "fire-10" },
+      }),
+    );
+    expectParseFailure(() =>
+      Ingress.InternalEventSchema.parse({
+        ...base,
+        activation: { trigger: { kind: "internal", id: "t", fireId: "" } },
+      }),
+    );
+  });
 });
 
 function expectParseFailure(parse: () => unknown): void {

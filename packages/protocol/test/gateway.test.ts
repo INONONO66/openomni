@@ -145,6 +145,157 @@ describe("Gateway.Deliver", () => {
   });
 });
 
+describe("Gateway.InternalDeliver — the Trigger arm of the delivery union", () => {
+  const OWNER = "s-owner";
+  const FIRE_ID = "fire-1";
+
+  const internalEvent = {
+    id: FIRE_ID,
+    traceId: "t-int",
+    surface: "internal",
+    mode: "internal",
+    agentName: "resident",
+    target: { kind: "resident", sessionId: OWNER },
+    payload: "trigger fired",
+    meta: {
+      actor: { role: "system", id: "system:trigger" },
+      kind: "trigger.fire",
+      triggerId: "trigger-1",
+      fireId: FIRE_ID,
+    },
+    activation: {
+      trigger: {
+        kind: "internal",
+        id: "trigger-1",
+        fireId: FIRE_ID,
+        firedAt: 900,
+        attempt: 1,
+      },
+    },
+  } as const;
+
+  const internalDecision = {
+    traceId: "t-int",
+    time: 1_000,
+    inboundId: FIRE_ID,
+    surface: "internal",
+    mode: "internal",
+    sessionId: OWNER,
+    reason: "trigger fire",
+    factsUsed: ["trigger:trigger-1", `trigger_fire:${FIRE_ID}`],
+    stage: "surface_default",
+    outcome: "route",
+    target: `resident:${OWNER}`,
+  } as const;
+
+  const internalDelivery = {
+    sessionId: OWNER,
+    event: internalEvent,
+    decision: internalDecision,
+  } as const;
+
+  test("a coherent internal delivery parses through the Deliver union", () => {
+    const parsed = Gateway.Deliver.parse(internalDelivery);
+    expect(parsed.event.mode).toBe("internal");
+    expect(parsed.sessionId).toBe(OWNER);
+    expect(parsed.decision.target).toBe(`resident:${OWNER}`);
+    expect(Gateway.InternalDeliver.parse(internalDelivery).event.id).toBe(FIRE_ID);
+  });
+
+  test("the internal arm carries no actor or wait context", () => {
+    expect(() => Gateway.InternalDeliver.parse({ ...internalDelivery, actorContext })).toThrow(
+      ZodError,
+    );
+    expect(() =>
+      Gateway.InternalDeliver.parse({
+        ...internalDelivery,
+        waitContext: { waitId: "w-1", allowedAction: "report_result" },
+      }),
+    ).toThrow(ZodError);
+  });
+
+  test("the internal target must pin the owner Resident session", () => {
+    expect(() =>
+      Gateway.InternalDeliver.parse({
+        ...internalDelivery,
+        event: { ...internalEvent, target: { kind: "resident", sessionId: "s-other" } },
+      }),
+    ).toThrow(ZodError);
+    expect(() =>
+      Gateway.InternalDeliver.parse({
+        ...internalDelivery,
+        event: { ...internalEvent, target: { kind: "worker", workerId: "w-1" } },
+      }),
+    ).toThrow(ZodError);
+  });
+
+  test("typed Trigger Fire metadata is required", () => {
+    for (const meta of [
+      { actor: { role: "system", id: "system:trigger" }, kind: "cron.tick" },
+      {
+        actor: { role: "system", id: "system:trigger" },
+        kind: "trigger.fire",
+        fireId: FIRE_ID,
+      },
+      {
+        actor: { role: "system", id: "system:trigger" },
+        kind: "trigger.fire",
+        triggerId: "trigger-1",
+      },
+    ]) {
+      expect(() =>
+        Gateway.InternalDeliver.parse({
+          ...internalDelivery,
+          event: { ...internalEvent, meta },
+        }),
+      ).toThrow(ZodError);
+    }
+  });
+
+  test("the recorded route decision must be internally consistent with the event", () => {
+    for (const override of [
+      { mode: "direct" },
+      { stage: "actor_binding" },
+      { outcome: "drop" },
+      { inboundId: "m-other" },
+      { sessionId: "s-other" },
+      { target: "resident" },
+      { surface: "telegram" },
+      { traceId: "t-other" },
+    ]) {
+      expect(() =>
+        Gateway.InternalDeliver.parse({
+          ...internalDelivery,
+          decision: { ...internalDecision, ...override },
+        }),
+      ).toThrow(ZodError);
+    }
+  });
+
+  test("the internal arm requires the internal surface and the resident agent", () => {
+    expect(() =>
+      Gateway.InternalDeliver.parse({
+        ...internalDelivery,
+        event: { ...internalEvent, surface: "cron" },
+        decision: { ...internalDecision, surface: "cron" },
+      }),
+    ).toThrow(ZodError);
+    expect(() =>
+      Gateway.InternalDeliver.parse({
+        ...internalDelivery,
+        event: { ...internalEvent, agentName: "worker" },
+      }),
+    ).toThrow(ZodError);
+  });
+
+  test("an external delivery still parses only as the external arm", () => {
+    const external = { sessionId: "s-1", actorContext, event, decision };
+    expect(Gateway.ExternalDeliver.parse(external).event.mode).toBe("direct");
+    expect(() => Gateway.InternalDeliver.parse(external)).toThrow(ZodError);
+    expect(() => Gateway.ExternalDeliver.parse(internalDelivery)).toThrow(ZodError);
+  });
+});
+
 describe("Gateway.SendInput (re-homed #215 vocabulary)", () => {
   const base = {
     messageId: "m-1",

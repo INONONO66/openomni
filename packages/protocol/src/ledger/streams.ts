@@ -95,6 +95,36 @@ export const StreamRegistry = {
     ],
     status: "shipped",
   },
+  // SHIPPED — ledger TriggerStore publishes; SQLite trigger projection consumes.
+  trigger: {
+    stream: "trigger:<triggerId>",
+    heads: "revision-bound (expectedHead = revision before the transition)",
+    conflictMeans: "duplicate create or stale scheduler transition — typed Trigger store error",
+    factTypes: [
+      "trigger.created",
+      "trigger.restored",
+      "trigger.paused",
+      "trigger.rearmed",
+      "trigger.ended",
+      "trigger.fire.reserved",
+      "trigger.fire.coalesced",
+      "trigger.fire.released",
+    ],
+    status: "shipped",
+  },
+  // SHIPPED — ledger TriggerFireStore publishes; SQLite Fire projection consumes.
+  trigger_fire: {
+    stream: "trigger_fire:<fireId>",
+    heads: "revision-bound (expectedHead = revision before the transition)",
+    conflictMeans: "duplicate Fire identity or stale delivery/ack receipt — typed Trigger store error",
+    factTypes: [
+      "trigger.fire.recorded",
+      "trigger.fire.delivery_attempted",
+      "trigger.fire.delivered",
+      "trigger.fire.acked",
+    ],
+    status: "shipped",
+  },
   // SHIPPED — channels routing resolution publishes and its replay gate consumes via headFact.
   route: {
     // Channel-scoped key (#510 review fix F1): normalizer-minted inbound ids
