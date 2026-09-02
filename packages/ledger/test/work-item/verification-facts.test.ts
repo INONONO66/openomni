@@ -1,3 +1,4 @@
+// allow: SIZE_OK — one writer contract suite shares the same transactional fixture.
 import { afterEach, describe, expect, test } from "bun:test";
 import { WorkItem } from "@openomni/protocol";
 import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage";
@@ -12,6 +13,35 @@ function first<T>(values: readonly T[]): T {
   const value = values[0];
   if (value === undefined) throw new Error("fixture value missing");
   return value;
+}
+
+function attemptIdentity(workInput: string) {
+  return {
+    contentFingerprint: WorkItem.contentFingerprintOf({
+      workInput,
+      handlerKind: "internal_chat_agent",
+      handlerCodeRef: { absent: true, reason: "test fixture" },
+      model: {
+        provider: "test",
+        id: "test",
+        parameters: { absent: true, reason: "test fixture" },
+      },
+      upstreamFingerprints: { absent: true, reason: "test fixture" },
+      dependencyLock: { absent: true, reason: "test fixture" },
+    }),
+    environmentFingerprint: WorkItem.environmentFingerprintOf({
+      os: process.platform,
+      arch: process.arch,
+      bunVersion: Bun.version,
+      workspaceRoot: { absent: true, reason: "test fixture" },
+      schemaVersions: { workItem: 1 },
+      policy: { absent: true, reason: "test fixture" },
+      toolVersions: { absent: true, reason: "test fixture" },
+      verifierVersions: { absent: true, reason: "test fixture" },
+      providerParameters: { absent: true, reason: "test fixture" },
+      configRef: { absent: true, reason: "test fixture" },
+    }),
+  };
 }
 
 async function runningItem(): Promise<WorkItem.Info> {
@@ -41,32 +71,7 @@ async function runningItem(): Promise<WorkItem.Info> {
   );
   const allocated = await WorkItemStore.allocateAttempt(
     created.workItemId,
-    {
-      contentFingerprint: WorkItem.contentFingerprintOf({
-        workInput: "verify",
-        handlerKind: "internal_chat_agent",
-        handlerCodeRef: { absent: true, reason: "test fixture" },
-        model: {
-          provider: "test",
-          id: "test",
-          parameters: { absent: true, reason: "test fixture" },
-        },
-        upstreamFingerprints: { absent: true, reason: "test fixture" },
-        dependencyLock: { absent: true, reason: "test fixture" },
-      }),
-      environmentFingerprint: WorkItem.environmentFingerprintOf({
-        os: process.platform,
-        arch: process.arch,
-        bunVersion: Bun.version,
-        workspaceRoot: { absent: true, reason: "test fixture" },
-        schemaVersions: { workItem: 1 },
-        policy: { absent: true, reason: "test fixture" },
-        toolVersions: { absent: true, reason: "test fixture" },
-        verifierVersions: { absent: true, reason: "test fixture" },
-        providerParameters: { absent: true, reason: "test fixture" },
-        configRef: { absent: true, reason: "test fixture" },
-      }),
-    },
+    attemptIdentity("verify"),
     "trace-attempt",
   );
   if (allocated === undefined) throw new Error("fixture attempt was not allocated");
@@ -76,11 +81,14 @@ async function runningItem(): Promise<WorkItem.Info> {
 function inputFor(item: WorkItem.Info) {
   const criterion = item.completionFacts.criteria[0];
   if (criterion === undefined) throw new Error("fixture criterion missing");
+  const attemptId = item.currentAttemptId;
+  if (attemptId === undefined) throw new Error("fixture attempt identity missing");
   const basisRef = item.completionContract.basisRef;
   const evidenceId = "evidence:verifier:delegation-807:criterion-0";
   const observationId = "observation:verifier:delegation-807:criterion-0";
   return {
-    expectedAttempt: item.attempt,
+    expectedAttempt: item.lastAttemptSeq,
+    expectedAttemptId: attemptId,
     expectedBasisRef: basisRef,
     observations: [
       {
@@ -90,7 +98,7 @@ function inputFor(item: WorkItem.Info) {
         basisRef,
         artifactRefs: [evidenceId],
         provenanceRef: evidenceId,
-        ancestryRefs: [],
+        ancestryRefs: [`attempt:${attemptId}`],
         observedAt: 1_000,
       },
     ],
@@ -183,6 +191,11 @@ describe("WorkItemStore.appendVerificationFacts", () => {
       { ...input, expectedAttempt: item.attempt + 1 },
       "trace",
     );
+    const staleAttemptId = WorkItemStore.appendVerificationFacts(
+      item.workItemId,
+      { ...input, expectedAttemptId: "attempt-stale" },
+      "trace",
+    );
     const staleBasis = WorkItemStore.appendVerificationFacts(
       item.workItemId,
       { ...input, expectedBasisRef: "stale:basis" },
@@ -190,8 +203,34 @@ describe("WorkItemStore.appendVerificationFacts", () => {
     );
 
     expect(staleAttempt).toEqual({ kind: "refused", reason: "stale_attempt" });
+    expect(staleAttemptId).toEqual({ kind: "refused", reason: "stale_attempt" });
     expect(staleBasis).toEqual({ kind: "refused", reason: "stale_basis" });
     expect(WorkItemStore.get(item.workItemId)?.revision).toBe(item.revision);
+  });
+
+  test("refuses attempt-one facts after attempt two becomes active", async () => {
+    // Given: verification began on attempt one, then a retry became current.
+    const firstAttempt = await runningItem();
+    const staleInput = inputFor(firstAttempt);
+    const secondAllocation = await WorkItemStore.allocateAttempt(
+      firstAttempt.workItemId,
+      attemptIdentity("verify again"),
+      "trace-retry",
+    );
+    if (secondAllocation === undefined) throw new Error("fixture retry was not allocated");
+
+    // When: the attempt-one verifier tries to commit after attempt two allocation.
+    const outcome = WorkItemStore.appendVerificationFacts(
+      firstAttempt.workItemId,
+      staleInput,
+      "trace-stale",
+    );
+
+    // Then: legacy Info.attempt remains one, but the active watermark refuses the stale write.
+    expect(secondAllocation.item.attempt).toBe(1);
+    expect(secondAllocation.item.lastAttemptSeq).toBe(2);
+    expect(outcome).toEqual({ kind: "refused", reason: "stale_attempt" });
+    expect(WorkItemStore.get(firstAttempt.workItemId)?.completionFacts.results).toEqual([]);
   });
 
   test("refuses a closed attempt without writing verification facts", async () => {

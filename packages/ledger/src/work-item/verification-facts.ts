@@ -10,6 +10,8 @@ import {
 
 export interface VerificationFactsInput {
   readonly expectedAttempt: number;
+  /** Required for active writers; omission supports only pre-identity first-attempt callers. */
+  readonly expectedAttemptId?: string;
   readonly expectedBasisRef: string;
   readonly observations: readonly WorkItem.Observation[];
   readonly results: readonly WorkItem.CriterionResult[];
@@ -167,7 +169,13 @@ export function appendVerificationFacts(
       if (existing.attemptTerminal !== undefined) {
         return { kind: "refused", reason: "attempt_closed" };
       }
-      if (existing.attempt !== input.expectedAttempt) {
+      if (
+        existing.lastAttemptSeq !== input.expectedAttempt ||
+        existing.currentAttemptId === undefined ||
+        (input.expectedAttemptId === undefined
+          ? existing.lastAttemptSeq !== 1
+          : existing.currentAttemptId !== input.expectedAttemptId)
+      ) {
         return { kind: "refused", reason: "stale_attempt" };
       }
       if (existing.completionContract.basisRef !== input.expectedBasisRef) {

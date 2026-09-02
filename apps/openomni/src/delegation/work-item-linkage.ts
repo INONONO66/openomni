@@ -225,7 +225,11 @@ export function createWorkItemLinkage(options: WorkItemLinkageOptions): WorkItem
         continue;
       }
       const record = lookup(item.sourceMessageId);
-      if (record?.status === "settled" && record.settled !== undefined) {
+      if (record === undefined) {
+        await cancelAssign(item.workItemId);
+        continue;
+      }
+      if (record.status === "settled" && record.settled !== undefined) {
         await closeAttempt({ record, settlement: record.settled });
       }
     }

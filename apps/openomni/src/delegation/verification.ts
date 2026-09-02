@@ -186,7 +186,10 @@ export function createVerificationCoordinator(ports: {
     if (requiredIndexes.some((index) => !declaredIndexes.has(index))) {
       return unverified(record, outcome, at, "not_declared");
     }
-    const verifierRef = `verifier:command.v1:${record.delegationId}`;
+    const attemptId = item.currentAttemptId;
+    if (attemptId === undefined) return unverified(record, outcome, at, "scope_superseded");
+    const attemptRef = `attempt:${attemptId}`;
+    const verifierRef = `verifier:command.v1:${record.delegationId}:${attemptRef}`;
     let run: z.infer<typeof CommandRunResultSchema> | undefined;
     try {
       const candidate = await ports.verifier.run({
@@ -207,7 +210,7 @@ export function createVerificationCoordinator(ports: {
       Omit<WorkItem.Evidence, "attempt" | "basisRef" | "createdAt"> & { id: string }
     > = [
       {
-        id: `evidence:delegation:${record.delegationId}:worker-report`,
+        id: `evidence:delegation:${record.delegationId}:${attemptRef}:worker-report`,
         kind: "custom",
         description: "worker-reported completion, unverified",
         passed: false,
@@ -218,7 +221,7 @@ export function createVerificationCoordinator(ports: {
     for (const expectation of declaration.expectations) {
       const criterion = item.completionFacts.criteria[expectation.criterionIndex];
       if (criterion === undefined) continue;
-      const suffix = `${record.delegationId}:${criterion.id}`;
+      const suffix = `${record.delegationId}:${attemptRef}:${criterion.id}`;
       const errorId = `error:verifier:${suffix}`;
       if (run === undefined || run.status === "refused") {
         errors.push({
@@ -257,7 +260,7 @@ export function createVerificationCoordinator(ports: {
         basisRef: item.completionContract.basisRef,
         artifactRefs: [evidenceId],
         provenanceRef: evidenceId,
-        ancestryRefs: [],
+        ancestryRefs: [attemptRef],
         observedAt: at,
       });
       results.push({
@@ -276,7 +279,8 @@ export function createVerificationCoordinator(ports: {
     const write = WorkItemStore.appendVerificationFacts(
       item.workItemId,
       {
-        expectedAttempt: item.attempt,
+        expectedAttempt: item.lastAttemptSeq,
+        expectedAttemptId: attemptId,
         expectedBasisRef: item.completionContract.basisRef,
         observations,
         results,
@@ -313,18 +317,40 @@ export function createVerificationCoordinator(ports: {
   ): Delegation.Settled | undefined {
     if (record.operation !== "assign" || record.workItemId === undefined) return undefined;
     const item = WorkItemStore.get(record.workItemId);
-    if (item === undefined) return undefined;
-    const verifierRef = `verifier:command.v1:${record.delegationId}`;
+    if (item === undefined || item.currentAttemptId === undefined) return undefined;
+    const attemptRef = `attempt:${item.currentAttemptId}`;
+    const verifierRef = `verifier:command.v1:${record.delegationId}:${attemptRef}`;
     const basisRef = item.completionContract.basisRef;
+    const evidenceIds = new Set(
+      item.evidence
+        .filter((fact) => fact.attempt === item.lastAttemptSeq && fact.basisRef === basisRef)
+        .map((fact) => fact.id),
+    );
+    const observationIds = new Set(
+      item.completionFacts.observations
+        .filter(
+          (fact) =>
+            fact.basisRef === basisRef &&
+            fact.ancestryRefs.includes(attemptRef) &&
+            fact.artifactRefs.some((artifactRef) => evidenceIds.has(artifactRef)),
+        )
+        .map((fact) => fact.id),
+    );
     const results = item.completionFacts.results.filter(
-      (fact) => fact.verifierRef === verifierRef && fact.basisRef === basisRef,
+      (fact) =>
+        fact.verifierRef === verifierRef &&
+        fact.basisRef === basisRef &&
+        fact.observationIds.every((observationId) => observationIds.has(observationId)),
     );
     const errors = item.completionFacts.verificationErrors.filter(
       (fact) => fact.verifierRef === verifierRef && fact.basisRef === basisRef,
     );
     if (results.length === 0 && errors.length === 0) return undefined;
     const report = item.evidence.find(
-      (fact) => fact.id === `evidence:delegation:${record.delegationId}:worker-report`,
+      (fact) =>
+        fact.id === `evidence:delegation:${record.delegationId}:${attemptRef}:worker-report` &&
+        fact.attempt === item.lastAttemptSeq &&
+        fact.basisRef === basisRef,
     );
     return foldFacts(record, item, { results, errors }, report?.detail ?? "", at);
   }
