@@ -10,37 +10,24 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createInterface } from "node:readline";
-import { Readable } from "node:stream";
 import { createCliDeps } from "../src/cli/main";
 
 const entry = new URL("../src/cli/main.ts", import.meta.url).pathname;
 const directories: string[] = [];
-const MUTATED_ENV_KEYS = [
-  "HOME",
-  "PATH",
-  "OPENOMNI_DB_PATH",
-  "OPENOMNI_MEMORY_PATH",
-  "OPENOMNI_MODEL_PROVIDER",
-  "OPENOMNI_MODEL_ID",
-  "OPENOMNI_MODEL_API_KEY",
-  "OPENOMNI_COMMAND_LOG",
-  "OPENOMNI_WS_HOST",
-  "OPENOMNI_WS_PORT",
-  "OPENOMNI_VAULT_KEY",
+const children = new Set<RunningCli>();
+const followControllers = new Set<AbortController>();
+const READY_SENTINEL = /^OpenOmni Resident listening at ws:\/\/127\.0\.0\.1:\d+\/ws$/;
+const CHILD_TIMEOUT_MS = 10_000;
+const KILL_TIMEOUT_MS = 2_000;
+const INHERITED_CHILD_ENV_KEYS = [
+  "LANG",
+  "LC_ALL",
+  "LC_CTYPE",
+  "TMPDIR",
+  "TMP",
+  "TEMP",
+  "TZ",
 ] as const;
-
-function saveMutatedEnv(): Record<string, string | undefined> {
-  return Object.fromEntries(MUTATED_ENV_KEYS.map((key) => [key, process.env[key]]));
-}
-
-function restoreMutatedEnv(saved: Record<string, string | undefined>): void {
-  for (const key of MUTATED_ENV_KEYS) {
-    const value = saved[key];
-    if (value === undefined) delete process.env[key];
-    else process.env[key] = value;
-  }
-}
 
 function tempHome(): string {
   const home = mkdtempSync(join(tmpdir(), "openomni-entry-"));
@@ -49,6 +36,12 @@ function tempHome(): string {
 }
 
 function appEnv(home: string): Record<string, string> {
+  const inherited = Object.fromEntries(
+    INHERITED_CHILD_ENV_KEYS.flatMap((key) => {
+      const value = process.env[key];
+      return value === undefined ? [] : [[key, value]];
+    }),
+  );
   const bin = join(home, "bin");
   mkdirSync(bin, { recursive: true });
   for (const command of ["launchctl", "systemctl", "loginctl"]) {
@@ -69,91 +62,243 @@ esac
     chmodSync(path, 0o755);
   }
   return {
-    ...process.env,
+    ...inherited,
     HOME: home,
-    PATH: `${bin}:${process.env.PATH ?? ""}`,
+    PATH: `${bin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
     OPENOMNI_COMMAND_LOG: join(home, "commands.log"),
     OPENOMNI_DB_PATH: join(home, "storage.db"),
     OPENOMNI_MEMORY_PATH: join(home, "memory.json"),
+    OPENOMNI_MACHINES_SOCKET: join(home, "machines.sock"),
+    OPENOMNI_MODELS_PATH: join(home, "models.json"),
+    OPENOMNI_DISABLE_MODELS_FETCH: "1",
     OPENOMNI_MODEL_PROVIDER: "anthropic",
     OPENOMNI_MODEL_ID: "test-model",
     OPENOMNI_MODEL_API_KEY: "test-key",
     OPENOMNI_WS_HOST: "127.0.0.1",
     OPENOMNI_WS_PORT: "0",
-  } as Record<string, string>;
+  };
 }
 
-const READY_SENTINEL = /^OpenOmni Resident listening at ws:\/\/127\.0\.0\.1:\d+\/ws$/;
+function replaceEnvironment(env: Record<string, string | undefined>): () => void {
+  const saved = { ...process.env };
+  for (const key of Object.keys(process.env)) delete process.env[key];
+  Object.assign(process.env, env);
+  return () => {
+    for (const key of Object.keys(process.env)) delete process.env[key];
+    Object.assign(process.env, saved);
+  };
+}
 
-function waitForExactLine(
-  stdout: ReadableStream<Uint8Array>,
-  expected: RegExp,
-  timeoutMs = 5_000,
-): Promise<void> {
-  const input = Readable.from(stdout);
-  const lines = createInterface({ input });
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      cleanup();
-      reject(new Error(`timed out waiting for stdout line: ${expected}`));
-    }, timeoutMs);
-    const onLine = (line: string): void => {
-      if (!expected.test(line)) return;
-      cleanup();
-      resolve();
-    };
-    const onClose = (): void => {
-      cleanup();
-      reject(new Error(`stdout closed before line: ${expected}`));
-    };
-    const cleanup = (): void => {
-      clearTimeout(timeout);
-      lines.off("line", onLine);
-      lines.off("close", onClose);
-      lines.close();
-    };
-    lines.on("line", onLine);
-    lines.once("close", onClose);
+function bounded<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timeout);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timeout);
+        reject(error);
+      },
+    );
   });
 }
 
-afterEach(() => {
+async function boundedFollow(
+  promise: Promise<number>,
+  controller: AbortController,
+): Promise<number> {
+  try {
+    return await bounded(promise, CHILD_TIMEOUT_MS, "follow child did not exit");
+  } catch (error) {
+    controller.abort();
+    await bounded(promise, KILL_TIMEOUT_MS * 2, "follow child did not settle after cancellation");
+    throw error;
+  }
+}
+
+interface StreamConsumer {
+  readonly result: Promise<string>;
+  readonly cancel: () => Promise<void>;
+}
+
+interface RunningCli {
+  readonly child: Bun.Subprocess<"ignore", "pipe", "pipe">;
+  readonly stdout: StreamConsumer;
+  readonly stderr: StreamConsumer;
+  readonly ready: Promise<void>;
+}
+
+async function terminate(running: RunningCli): Promise<void> {
+  const { child } = running;
+  try {
+    if (child.exitCode === null) {
+      child.kill("SIGTERM");
+      try {
+        await bounded(child.exited, KILL_TIMEOUT_MS, "child ignored SIGTERM");
+      } catch {
+        child.kill("SIGKILL");
+        await bounded(child.exited, KILL_TIMEOUT_MS, "child did not exit after SIGKILL");
+      }
+    }
+  } finally {
+    await Promise.all([running.stdout.cancel(), running.stderr.cancel()]);
+    await bounded(
+      Promise.all([running.stdout.result, running.stderr.result]),
+      KILL_TIMEOUT_MS,
+      "child output readers did not settle after cancellation",
+    );
+    children.delete(running);
+  }
+}
+
+function consumeLines(
+  stream: ReadableStream<Uint8Array>,
+  onLine: (line: string) => void,
+): StreamConsumer {
+  const reader = stream.getReader();
+  let active = true;
+  const result = (async () => {
+    const decoder = new TextDecoder();
+    let output = "";
+    let pending = "";
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const text = decoder.decode(value, { stream: true });
+        output += text;
+        pending += text;
+        for (;;) {
+          const newline = pending.indexOf("\n");
+          if (newline < 0) break;
+          onLine(pending.slice(0, newline).replace(/\r$/, ""));
+          pending = pending.slice(newline + 1);
+        }
+      }
+      const tail = decoder.decode();
+      output += tail;
+      pending += tail;
+      if (pending.length > 0) onLine(pending.replace(/\r$/, ""));
+      return output;
+    } finally {
+      active = false;
+      reader.releaseLock();
+    }
+  })();
+  return {
+    result,
+    cancel: async () => {
+      if (active) await reader.cancel();
+    },
+  };
+}
+
+function spawnCli(args: readonly string[], env: Record<string, string>): RunningCli {
+  const child = Bun.spawn([process.execPath, entry, ...args], {
+    env,
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  let resolveReady!: () => void;
+  const ready = new Promise<void>((resolve) => {
+    resolveReady = resolve;
+  });
+  const running = {
+    child,
+    stdout: consumeLines(child.stdout, (line) => {
+      if (READY_SENTINEL.test(line)) resolveReady();
+    }),
+    stderr: consumeLines(child.stderr, () => undefined),
+    ready,
+  } satisfies RunningCli;
+  children.add(running);
+  return running;
+}
+
+async function runCli(
+  args: readonly string[],
+  env: Record<string, string>,
+): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+  const running = spawnCli(args, env);
+  try {
+    const exitCode = await bounded(
+      running.child.exited,
+      CHILD_TIMEOUT_MS,
+      `CLI did not exit: ${args.join(" ")}`,
+    );
+    const [stdout, stderr] = await bounded(
+      Promise.all([running.stdout.result, running.stderr.result]),
+      KILL_TIMEOUT_MS,
+      `CLI output did not close: ${args.join(" ")}`,
+    );
+    return { exitCode, stdout, stderr };
+  } finally {
+    await terminate(running);
+  }
+}
+
+async function stopAtReady(running: RunningCli): Promise<number> {
+  try {
+    await bounded(running.ready, CHILD_TIMEOUT_MS, "CLI did not print the ready sentinel");
+    running.child.kill("SIGTERM");
+    const exitCode = await bounded(
+      running.child.exited,
+      CHILD_TIMEOUT_MS,
+      "CLI did not exit after SIGTERM",
+    );
+    await bounded(
+      Promise.all([running.stdout.result, running.stderr.result]),
+      KILL_TIMEOUT_MS,
+      "CLI output did not close after exit",
+    );
+    return exitCode;
+  } finally {
+    await terminate(running);
+  }
+}
+
+afterEach(async () => {
+  for (const controller of followControllers) controller.abort();
+  followControllers.clear();
+  await Promise.all([...children].map(terminate));
   for (const directory of directories.splice(0)) {
     rmSync(directory, { recursive: true, force: true });
   }
 });
 
 describe("real CLI entry", () => {
-  test("executes the import.meta.main exit path", () => {
-    const child = Bun.spawnSync([process.execPath, entry, "not-a-command"], {
-      env: appEnv(tempHome()),
-      stdout: "pipe",
-      stderr: "pipe",
-    });
+  test("managed output cancellation settles a blocked stream read", async () => {
+    let canceled = false;
+    const consumer = consumeLines(
+      new ReadableStream<Uint8Array>({
+        cancel: () => {
+          canceled = true;
+        },
+      }),
+      () => undefined,
+    );
 
+    await consumer.cancel();
+    expect(await bounded(consumer.result, KILL_TIMEOUT_MS, "canceled reader did not settle")).toBe(
+      "",
+    );
+    expect(canceled).toBe(true);
+  });
+
+  test("executes the import.meta.main exit path", async () => {
+    const child = await runCli(["not-a-command"], appEnv(tempHome()));
     expect(child.exitCode).toBe(1);
   });
 
   test("boots the Resident and shuts it down through its installed signal handler", async () => {
-    const child = Bun.spawn([process.execPath, entry, "start"], {
-      env: appEnv(tempHome()),
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-
-    try {
-      await waitForExactLine(child.stdout, READY_SENTINEL);
-      child.kill("SIGTERM");
-      expect(await child.exited).toBe(0);
-    } finally {
-      if (child.exitCode === null) {
-        child.kill("SIGTERM");
-        await child.exited;
-      }
-    }
+    const running = spawnCli(["start"], appEnv(tempHome()));
+    expect(await stopAtReady(running)).toBe(0);
   });
 
-  test("binds doctor to the real environment, daemon query, and health probe", () => {
+  test("binds doctor to the real environment, daemon query, and health probe", async () => {
     const home = tempHome();
     mkdirSync(join(home, ".openomni"), { recursive: true });
     writeFileSync(
@@ -161,25 +306,17 @@ describe("real CLI entry", () => {
       "OPENOMNI_MODEL_PROVIDER=anthropic\nOPENOMNI_MODEL_ID=test-model\nOPENOMNI_MODEL_API_KEY=test-key\nOPENOMNI_WS_PORT=1\n",
     );
 
-    const child = Bun.spawnSync([process.execPath, entry, "doctor"], {
-      env: appEnv(home),
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-
+    const child = await runCli(["doctor"], appEnv(home));
     expect(child.exitCode).toBe(0);
-    const checks = child.stdout
-      .toString()
-      .split("\n")
-      .flatMap((line) => {
-        const match = /^(PASS|WARN|FAIL)\s+([^:]+):/.exec(line);
-        return match === null ? [] : [{ status: match[1], name: match[2] }];
-      });
+    const checks = child.stdout.split("\n").flatMap((line) => {
+      const match = /^(PASS|WARN|FAIL)\s+([^:]+):/.exec(line);
+      return match === null ? [] : [{ status: match[1], name: match[2] }];
+    });
     expect(checks.length).toBeGreaterThan(0);
     expect(checks.map((check) => check.name)).toContain("health");
   });
 
-  test("binds daemon file and command IO without touching the user's home", () => {
+  test("binds daemon file and command IO without touching the user's home", async () => {
     const home = tempHome();
     const env = appEnv(home);
     const commandLog = join(home, "commands.log");
@@ -187,19 +324,11 @@ describe("real CLI entry", () => {
       process.platform === "darwin"
         ? join(home, "Library", "LaunchAgents", "ai.openomni.resident.plist")
         : join(home, ".config", "systemd", "user", "openomni.service");
-    const install = Bun.spawnSync([process.execPath, entry, "daemon", "install"], {
-      env,
-      stdout: "pipe",
-      stderr: "pipe",
-    });
+    const install = await runCli(["daemon", "install"], env);
     expect(install.exitCode).toBe(0);
     expect(existsSync(unit)).toBe(true);
 
-    const uninstall = Bun.spawnSync([process.execPath, entry, "daemon", "uninstall"], {
-      env,
-      stdout: "pipe",
-      stderr: "pipe",
-    });
+    const uninstall = await runCli(["daemon", "uninstall"], env);
     expect(uninstall.exitCode).toBe(0);
     expect(existsSync(unit)).toBe(false);
 
@@ -223,78 +352,134 @@ describe("real CLI entry", () => {
     );
   });
 
-  test("runs provisioning initialization through the real binder", () => {
+  test("runs provisioning initialization through the real binder", async () => {
     const home = tempHome();
-    const child = Bun.spawnSync([process.execPath, entry, "init"], {
-      env: appEnv(home),
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-
-    expect(child.exitCode).toBe(0);
-    expect(existsSync(join(home, ".openomni", "vault.key"))).toBe(true);
-    expect(child.stdout.toString()).toContain("minted vault key file");
+    const savedDiscordToken = process.env.DISCORD_BOT_TOKEN;
+    process.env.DISCORD_BOT_TOKEN = "poisoned-parent-token";
+    try {
+      const env = appEnv(home);
+      expect("DISCORD_BOT_TOKEN" in env).toBe(false);
+      const child = await runCli(["init"], env);
+      expect(child.exitCode).toBe(0);
+      expect(existsSync(join(home, ".openomni", "vault.key"))).toBe(true);
+      expect(child.stdout).toContain("minted vault key file");
+      expect(child.stdout).toContain("no channel credentials in env config; nothing to import");
+      expect(child.stdout).not.toContain("channel:discord:main");
+    } finally {
+      if (savedDiscordToken === undefined) delete process.env.DISCORD_BOT_TOKEN;
+      else process.env.DISCORD_BOT_TOKEN = savedDiscordToken;
+    }
   });
 
-  test("refuses onboarding before prompting when stdin is not a terminal", () => {
-    const child = Bun.spawnSync([process.execPath, entry, "onboard"], {
-      env: appEnv(tempHome()),
-      stdin: new Blob([]),
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-
+  test("refuses onboarding before prompting when stdin is not a terminal", async () => {
+    const child = await runCli(["onboard"], appEnv(tempHome()));
     expect(child.exitCode).toBe(1);
   });
 
   test("real IO adapters execute, follow, and mutate only the requested paths", async () => {
-    const deps = createCliDeps();
     const root = tempHome();
-    const file = join(root, "nested", "value");
+    const followController = new AbortController();
+    followControllers.add(followController);
+    const deps = createCliDeps(root, { followSignal: followController.signal });
+    const restore = replaceEnvironment(appEnv(root));
+    try {
+      const file = join(root, "nested", "value");
+      expect(() => deps.io.exec([])).toThrow();
+      expect(deps.io.exec([process.execPath, "-e", "process.stdout.write('ok')"])).toEqual({
+        code: 0,
+        stdout: "ok",
+        stderr: "",
+      });
+      deps.io.writeFile(file, "value");
+      expect(deps.io.fileExists(file)).toBe(true);
+      deps.io.removeFile(file);
+      expect(deps.io.fileExists(file)).toBe(false);
+      deps.io.makeDir(file);
+      expect(existsSync(file)).toBe(true);
 
-    expect(() => deps.io.exec([])).toThrow();
-    expect(deps.io.exec([process.execPath, "-e", "process.stdout.write('ok')"])).toEqual({
-      code: 0,
-      stdout: "ok",
-      stderr: "",
-    });
-    deps.io.writeFile(file, "value");
-    expect(deps.io.fileExists(file)).toBe(true);
-    deps.io.removeFile(file);
-    expect(deps.io.fileExists(file)).toBe(false);
-    deps.io.makeDir(file);
-    expect(existsSync(file)).toBe(true);
+      expect(await boundedFollow(deps.follow([]), followController)).toBe(1);
+      expect(await boundedFollow(deps.follow(["/usr/bin/true"]), followController)).toBe(0);
+      expect(
+        await boundedFollow(deps.follow([join(root, "missing-command")]), followController),
+      ).toBe(1);
 
-    expect(await deps.follow([])).toBe(1);
-    expect(await deps.follow(["/usr/bin/true"])).toBe(0);
-    expect(await deps.follow([join(root, "missing-command")])).toBe(1);
+      const canceledFollow = deps.follow(["/usr/bin/tail", "-f", "/dev/null"]);
+      followController.abort();
+      expect(
+        await bounded(canceledFollow, KILL_TIMEOUT_MS * 2, "canceled follow child did not settle"),
+      ).toBe(1);
+    } finally {
+      followController.abort();
+      followControllers.delete(followController);
+      restore();
+    }
   });
 
   test("real doctor and init adapters read effective process state", async () => {
-    const deps = createCliDeps();
     const root = tempHome();
-    const saved = saveMutatedEnv();
-    process.env.OPENOMNI_DB_PATH = join(root, "init.db");
-    process.env.OPENOMNI_MODEL_PROVIDER = "anthropic";
-    process.env.OPENOMNI_MODEL_ID = "test-model";
-    process.env.OPENOMNI_MODEL_API_KEY = "test-key";
-    process.env.OPENOMNI_VAULT_KEY = Buffer.alloc(32, 7).toString("base64");
+    const deps = createCliDeps(root);
+    const env = appEnv(root);
+    const dbPath = join(root, "effective-init.db");
+    const vaultKey = Buffer.alloc(32, 7).toString("base64");
+    env.OPENOMNI_DB_PATH = dbPath;
+    env.OPENOMNI_MODEL_PROVIDER = "anthropic";
+    env.OPENOMNI_MODEL_ID = "effective-model";
+    env.OPENOMNI_MODEL_API_KEY = "effective-key";
+    env.OPENOMNI_VAULT_KEY = vaultKey;
+    const restore = replaceEnvironment(env);
     try {
       const ports = await deps.doctorPorts();
-      expect(ports.effectiveEnv).toBeInstanceOf(Map);
+      expect(Object.fromEntries(ports.effectiveEnv)).toMatchObject({
+        OPENOMNI_DB_PATH: dbPath,
+        OPENOMNI_MODEL_PROVIDER: "anthropic",
+        OPENOMNI_MODEL_ID: "effective-model",
+        OPENOMNI_MODEL_API_KEY: "effective-key",
+        OPENOMNI_VAULT_KEY: vaultKey,
+      });
       expect(await ports.probeHealth(1)).toBe(false);
-      expect(await deps.runInit()).toBeArray();
+      expect(await deps.runInit()).toEqual([
+        "no channel credentials in env config; nothing to import",
+      ]);
+      expect(existsSync(dbPath)).toBe(true);
       await expect(deps.ask("question")).rejects.toThrow();
     } finally {
-      restoreMutatedEnv(saved);
+      restore();
+    }
+  });
+
+  test("factory home owns default state paths even when process HOME differs", async () => {
+    const root = tempHome();
+    const differentHome = tempHome();
+    const deps = createCliDeps(root);
+    const env = appEnv(differentHome);
+    delete env.OPENOMNI_DB_PATH;
+    delete env.OPENOMNI_MEMORY_PATH;
+    env.OPENOMNI_VAULT_KEY = Buffer.alloc(32, 9).toString("base64");
+    const restore = replaceEnvironment(env);
+    try {
+      expect(await deps.runInit()).toEqual([
+        "no channel credentials in env config; nothing to import",
+      ]);
+      expect(existsSync(join(root, ".openomni", "storage.db"))).toBe(true);
+      expect(existsSync(join(differentHome, ".openomni", "storage.db"))).toBe(false);
+    } finally {
+      restore();
     }
   });
 
   test("real start adapter owns shutdown through the installed signal handler", async () => {
     const root = tempHome();
-    const saved = saveMutatedEnv();
-    Object.assign(process.env, appEnv(root));
+    const deps = createCliDeps(root);
+    const restore = replaceEnvironment(appEnv(root));
     const log = spyOn(console, "log").mockImplementation(() => undefined);
+    const handlers = new Map<string, () => void>();
+    const once = spyOn(process, "once").mockImplementation(((
+      signal: string,
+      handler: () => void,
+    ) => {
+      handlers.set(signal, handler);
+      return process;
+    }) as typeof process.once);
     let resolveExit!: (code: number) => void;
     const exited = new Promise<number>((resolve) => {
       resolveExit = resolve;
@@ -304,13 +489,16 @@ describe("real CLI entry", () => {
       return undefined as never;
     }) as typeof process.exit);
     try {
-      await createCliDeps().startApp();
-      process.emit("SIGTERM");
-      expect(await exited).toBe(0);
+      await deps.startApp();
+      const handler = handlers.get("SIGTERM");
+      if (handler === undefined) throw new Error("expected SIGTERM handler");
+      handler();
+      expect(await bounded(exited, CHILD_TIMEOUT_MS, "shutdown handler did not exit")).toBe(0);
     } finally {
       exit.mockRestore();
+      once.mockRestore();
       log.mockRestore();
-      restoreMutatedEnv(saved);
+      restore();
     }
   });
 });
