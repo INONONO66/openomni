@@ -16,6 +16,11 @@ const entry = new URL("../src/cli/main.ts", import.meta.url).pathname;
 const directories: string[] = [];
 const children = new Set<RunningCli>();
 const followControllers = new Set<AbortController>();
+// Prevent ask() from blocking when run in a PTY environment (script -q) by closing stdin's TTY
+if (process.stdin.isTTY) {
+  process.stdin.pause();
+  process.stdin.unref();
+}
 const READY_SENTINEL = /^OpenOmni Resident listening at ws:\/\/127\.0\.0\.1:\d+\/ws$/;
 const CHILD_TIMEOUT_MS = 10_000;
 const KILL_TIMEOUT_MS = 2_000;

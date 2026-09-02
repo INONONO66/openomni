@@ -25,7 +25,9 @@ function resolvePlatform(): "darwin" | "linux" {
 }
 
 async function ask(question: string, options?: AskOptions): Promise<string> {
-  if (!process.stdin.isTTY) {
+  // Check if stdin is actually available and a TTY. Pausing stdin means it's not meant
+  // to be interactively read (used in testing with PTY from script -q).
+  if (!process.stdin.isTTY || process.stdin.isPaused?.()) {
     throw new Error("onboarding requires an interactive terminal");
   }
   if (options?.secret) {
@@ -69,7 +71,7 @@ export function createCliDeps(home: string = homedir(), options: CliRuntimeOptio
     exec: (argv: readonly string[]): ExecResult => {
       const [command, ...rest] = argv;
       if (command === undefined) throw new Error("exec requires a command");
-      const result = spawnSync(command, rest, { encoding: "utf-8" });
+      const result = spawnSync(command, rest, { encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] });
       return { code: result.status ?? 1, stdout: result.stdout ?? "", stderr: result.stderr ?? "" };
     },
     writeFile: (path: string, content: string): void => {
@@ -138,7 +140,7 @@ export function createCliDeps(home: string = homedir(), options: CliRuntimeOptio
         resolve(1);
         return;
       }
-      const child = spawn(command, rest, { stdio: "inherit" });
+      const child = spawn(command, rest, { stdio: ["ignore", "inherit", "inherit"] });
       let killTimer: ReturnType<typeof setTimeout> | undefined;
       const abort = (): void => {
         child.kill("SIGTERM");
