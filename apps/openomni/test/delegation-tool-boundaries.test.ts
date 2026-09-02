@@ -6,7 +6,7 @@ import {
   awaitDelegationToolExecutor,
   cancelDelegationToolExecutor,
   delegateToolExecutor,
-} from "../src/delegation/tool";
+} from "../src/tools/authority/delegation";
 
 const ORIGIN: DelegationOrigin = { role: "resident", depth: 0, sessionId: "session" };
 const HANDLE: Delegation.Handle = {

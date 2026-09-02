@@ -1,14 +1,7 @@
 import type { Tool } from "@openomni/protocol";
 import type { DelegationOrigin } from "../../delegation/admission";
 import type { DelegationKernel } from "../../delegation/kernel";
-import {
-  awaitDelegationToolExecutor,
-  awaitDelegationToolSpec,
-  cancelDelegationToolExecutor,
-  cancelDelegationToolSpec,
-  delegateToolExecutor,
-  delegateToolSpec,
-} from "../../delegation/tool";
+import { awaitDelegationTool, cancelDelegationTool, delegateTool } from "../authority/delegation";
 import type { CuratedMemory } from "../../memory/store";
 import type { ArtifactsPort } from "../mutation/artifacts";
 import type { ConversePort } from "../mutation/converse";
@@ -78,21 +71,9 @@ interface LegacyCatalogTool {
  * here without being wireable, or ship without being linted.
  */
 export const TOOL_DEFINITIONS: readonly (AnyToolDefinition | LegacyCatalogTool)[] = [
-  {
-    spec: delegateToolSpec,
-    wire: (ports, origin) =>
-      ports.delegation === undefined ? undefined : delegateToolExecutor(ports.delegation, origin),
-  },
-  {
-    spec: awaitDelegationToolSpec,
-    wire: (ports) =>
-      ports.delegation === undefined ? undefined : awaitDelegationToolExecutor(ports.delegation),
-  },
-  {
-    spec: cancelDelegationToolSpec,
-    wire: (ports) =>
-      ports.delegation === undefined ? undefined : cancelDelegationToolExecutor(ports.delegation),
-  },
+  eraseTool(delegateTool),
+  eraseTool(awaitDelegationTool),
+  eraseTool(cancelDelegationTool),
   eraseTool(converseOpenTool),
   eraseTool(converseCloseTool),
   eraseTool(leaseOpenTool),

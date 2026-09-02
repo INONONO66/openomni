@@ -10,7 +10,7 @@ function withoutDialect(schema: Record<string, unknown>): Record<string, unknown
 }
 
 export function toolInputSchema(
-  definition: AnyToolDefinition | ToolDefinition<z.ZodObject, z.ZodType>,
+  definition: AnyToolDefinition | ToolDefinition<z.ZodType, z.ZodType>,
 ): Record<string, unknown> {
   const projected = definition.wireProjection ?? withoutDialect(
     z.toJSONSchema(definition.input, { io: "input", target: "draft-7" }) as Record<string, unknown>,
@@ -32,7 +32,7 @@ export function toolInputSchema(
 }
 
 export function toolSpec(
-  definition: AnyToolDefinition | ToolDefinition<z.ZodObject, z.ZodType>,
+  definition: AnyToolDefinition | ToolDefinition<z.ZodType, z.ZodType>,
 ): Tool.Spec {
   const placement = definition.placement
     ?? (definition.execution.kind === "machine" ? "machine" : undefined);

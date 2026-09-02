@@ -12,9 +12,10 @@ import {
   AWAIT_DELEGATION_TOOL_NAME,
   CANCEL_DELEGATION_TOOL_NAME,
   DELEGATE_TOOL_NAME,
+  delegateTool,
   delegateToolExecutor,
-  delegateToolSpec,
-} from "../src/delegation/tool";
+} from "../src/tools/authority/delegation";
+import { toolSpec } from "../src/tools/core/project";
 import {
   awaitedReceipt,
   eventCollector,
@@ -821,7 +822,7 @@ describe("delegation controls and tool surface", () => {
       events,
       limits: LIMITS,
     });
-    const spec = delegateToolSpec();
+    const spec = toolSpec(delegateTool);
     expect(spec.name).toBe(DELEGATE_TOOL_NAME);
     const schema = spec.inputSchema as {
       type: string;

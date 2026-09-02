@@ -8,7 +8,7 @@ export type ExecutionLocus =
   | { readonly kind: "host" }
   | { readonly kind: "machine"; readonly capability: string };
 
-export interface ToolDefinition<In extends z.ZodObject, Out extends z.ZodType> {
+export interface ToolDefinition<In extends z.ZodType, Out extends z.ZodType> {
   readonly name: string;
   readonly category: ToolCategory;
   readonly description: string;
@@ -36,7 +36,7 @@ export interface AnyToolDefinition {
   readonly name: string;
   readonly category: ToolCategory;
   readonly description: string;
-  readonly input: z.ZodObject;
+  readonly input: z.ZodType;
   readonly output: z.ZodType;
   readonly safe: boolean;
   readonly execution: ExecutionLocus;
@@ -62,7 +62,7 @@ function schemaRoot(definition: Pick<AnyToolDefinition, "input" | "wireProjectio
   }) as Record<string, unknown>);
 }
 
-export function defineTool<In extends z.ZodObject, Out extends z.ZodType>(
+export function defineTool<In extends z.ZodType, Out extends z.ZodType>(
   definition: ToolDefinition<In, Out>,
 ): ToolDefinition<In, Out> {
   if (definition.name.trim() === "") throw new Error("tool name must not be empty");
@@ -80,7 +80,7 @@ export function defineTool<In extends z.ZodObject, Out extends z.ZodType>(
   return definition;
 }
 
-export function eraseTool<In extends z.ZodObject, Out extends z.ZodType>(
+export function eraseTool<In extends z.ZodType, Out extends z.ZodType>(
   definition: ToolDefinition<In, Out>,
 ): AnyToolDefinition {
   return definition as unknown as AnyToolDefinition;
