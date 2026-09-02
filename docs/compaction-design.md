@@ -1,6 +1,6 @@
 # Compaction & Context Window Design
 
-Last verified against `origin/main`: 2026-08-18. Design target document; [`docs/implementation-status.md`](implementation-status.md) alone says what is wired. Supersedes the two open Phase 3 rows of the archived agent-core rewrite receipt ("cut planning, incremental summarization" and "speculative overlap (D8)"; git history, `docs/agent-core-rewrite.md`) — those rows resolve here.
+Last verified against `feat/compaction-hardening`: 2026-09-02 (P0 production summarizer and speculation wiring). Design target document; [`docs/implementation-status.md`](implementation-status.md) alone says what is wired. Supersedes the two open Phase 3 rows of the archived agent-core rewrite receipt ("cut planning, incremental summarization" and "speculative overlap (D8)"; git history, `docs/agent-core-rewrite.md`) — those rows resolve here.
 
 ## Outcome
 
@@ -18,7 +18,7 @@ The context window stops being managed state and becomes an **issued view over t
 
 | Source | What we take | Where it lands |
 | --- | --- | --- |
-| pss-runtime `speculative-compaction.ts` | Two-phase prepare (65%) / promote (80%) with **no model call at promote** when the candidate is fresh (stale/absent candidate, or an overflow needing a broader range, falls back to a synchronous summarize); freshness guard = prefix snapshot equality; fire-and-forget single-flight scheduling at turn settlement; blocking path only on overflow | L4 |
+| pss-runtime `speculative-compaction.ts` | Two-phase prepare/promote with **no model call at promote** when the candidate is fresh; fire-and-forget single-flight scheduling at turn settlement | L4 |
 | pss-runtime `snapshot.ts` / `loop-overflow.ts` | Immutable history + overlay `ThreadCompactionRecord {startSeq, endSeqExclusive, summary}`; window as projection; provider context-overflow classification → blocking compact → one retry | L3, L5 |
 | senpi `harness/compaction/compaction.ts` | Anchored iterative summarization: `UPDATE` prompt receives `<previous-summary>` and merges only the newly cut span (PRESERVE + ADD + move In-Progress→Done); sectioned template (Goal / Constraints & Preferences / Progress / Key Decisions / Next Steps / Critical Context); cut-point discipline (never split tool pairs; split-turn prefix summarized separately); summary calls cache-isolated (`cacheRetention: "none"`, fresh session) | L2 (template as openomni config) |
 | senpi `CompactionDetails` | Deterministic file-ops extraction carried across compaction generations — but ours derives from the ledger, not from message scans | L6 |
@@ -43,14 +43,14 @@ Run memory (volatile):
 ## Lifecycle
 
 **Turn settlement (`run.turn.post` timing, per-run policy-factory state):**
-- measured ≥ prepare ratio (default 0.65 of window) → fire `prepare()` in the background: single-flight per run, failure = no candidate reported via `operational.warn` with a consecutive-failure cap that disables speculation for the run (never a run error). No AbortSignal linkage — dispatch contexts are structured-clone frozen, so per-run candidate state simply dies with the run's engine.
-- `prepare()` input = the would-be cut span **minus user messages minus prior summary renders**; the summarizer merges it into the previous anchor (senpi UPDATE contract). Output candidate carries a prefix fingerprint of the history it summarized.
+- One geometry resolver owns the base threshold (0.45/0.50/0.55/0.60/0.70/0.80 by window tier), previous-yield feedback (±0.05, clamped to 0.40–0.85), reserve, lead, prepare, and grace boundaries. At `threshold - lead`, `prepare()` starts in the background.
+- `prepare()` input = the would-be cut span **minus user messages minus prior summary renders**, deterministically bounded to half the context window. The summarizer receives `{maxInputTokens, maxOutputTokens, contextWindowTokens}`. Output candidates pin the summarized prefix, first-kept anchor, and latest compaction anchor.
 
-**Apply seam (`run.completion.pre`, threshold ≥ 0.8 or window yield — existing wiring unchanged):**
+**Apply seam (`run.completion.pre`, adaptive threshold or window yield):**
 1. Elision first (existing `reduce.ts`), markers now carrying recall pointers: `[output elided: N chars — recall: <callID>]`. Enough reclaim → done.
-2. Promote: candidate present and prefix fingerprint still matches → adopt `nextAnchor` with **zero model calls**; stale/absent candidate → synchronous merge (the only blocking summary path left).
+2. Promote: candidate present, summarized prefix unchanged, first-kept anchor still present, and no other compaction landed → adopt `nextAnchor` with **zero model calls**. Appends after the cut and output elision remain valid. While preparation is in flight, the grace band defers blocking merge until `min(threshold + lead, window - reserve)`.
 3. Rebuild window = `[anchor render (anchor body + ledger-derived artifact table + current-goal recitation), recent user messages verbatim within budget, protected tail]`.
-4. Record: `run.replace_messages` effect (existing) + CompactionRecord appended to the ledger (new). Guard: every user message in the rebuilt window is byte-identical to its ledger original — violation is a hard finding, not a warning.
+4. Record structural yield in `RunState`, the run-scoped owner read by both policy geometry and the loop's next yield arm. A cut saving fewer than 1024 estimated tokens or under 10% is `compaction_ineffective`, which raises the next threshold and disarms a repeated same-run window yield. Every summarizer call has a bounded deadline (60s by default): deadline failure warns with `compaction_summarizer_failed`, uses the no-summarizer snap-cut once, and disables all further synchronous and speculative summarizer calls for that run. The run's external abort is bound out-of-band in the policy factory and propagates as cancellation, never fallback.
 
 **Provider overflow (new):** classify context-length errors (llm package) and **re-enter the existing seam**, exactly as #651's yield does — the overflow handler never rewrites history itself; it dispatches `run.completion.pre` blocking (promote if possible), then retries the call once. Overflow is a third trigger into the one apply seam, not a second apply moment; a second overflow ends the run honestly. (pss applies mid-loop here — we deliberately diverge to keep Principle 4 intact.)
 
@@ -61,9 +61,9 @@ Run memory (volatile):
 | Leaf | Scope | Packages | Depends on |
 | --- | --- | --- | --- |
 | L1 | Elision marker gains recall pointer (`reduce.ts`); the `recall.output` tool reads the original from the session store (scoped to fact-recorded turns — resident-direct and child streams persist no tool parts and refuse loudly) | agent, openomni | — |
-| L2 | `onSummarize(cutSpan, previousAnchor?)` contract; prior-summary and user-message exclusion from summarizer input; `[anchor, verbatim users, tail]` rebuild; senpi-template summarizer injected as openomni config (domain strings stay out of core) | agent, openomni | — |
+| L2 | `onSummarize(cutSpan, previousAnchor, {maxInputTokens, maxOutputTokens, contextWindowTokens}, signal?)` contract; bounded input, prior-summary and user-message exclusion; `[anchor, verbatim users, tail]` rebuild | agent, openomni | — |
 | L3 | Replacement records preserve ordered anchor content and enough metadata for deterministic hydration; persistence is record-before-act and failures are visible | agent, ledger, openomni | L2 (anchor) |
-| L4 | `compaction/speculate.ts`: prepare/promote as per-run policy state (factory registration at `run.turn.post` + the existing seam) — single-flight fire-and-forget prepare at the prepare ratio (default 0.65); freshness = the candidate's message-id span is still a live prefix (tolerates later turns and elision, invalidated by any replacement); promoted/discarded reported as reasonCodes at the seam. No AbortSignal linkage — dispatch contexts are structured-clone frozen, so per-run candidate state simply dies with the run's engine and the prepare's duration is bounded by the host completion fn | agent | L2 |
+| L4 | `geometry.ts` owns adaptive threshold/reserve/lead/grace; `speculate.ts` prepares single-flight at threshold-minus-lead; warm-anchor validity tolerates post-cut appends and elision but rejects prefix changes or another landed compaction; promoted/discarded/deferred outcomes are reason-coded | agent | L2 |
 | L5 | Context-overflow error classification + blocking compact + one retry | llm, agent | — |
 | L6 | Anchor render: ledger-derived artifact table + goal recitation | openomni | L2 |
 | L7 | Byte guard enforced at the wrapper — tag-qualified multiset byte-identity of user text against the SEAM'S INPUT (a core-pipeline integrity check: at most one well-shaped anchor earns exemption, injected texts must match injected inputs; anchor quotations stay verbatim BY CONSTRUCTION via L6's deterministic quoting, not re-checked here), violation refuses the effect visibly + deterministic seeded probe bench (byte-presence probes with a compaction floor; the uniform side is an illustrative hardcoded baseline, the anchored side runs the real seam; blind LLM judge stays pluggable/manual) | openomni (guard + bench) | L2–L6 |

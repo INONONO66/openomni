@@ -60,7 +60,6 @@ describe("snapshot: compaction", () => {
       priority: 900,
       events: Bus,
       contextWindowTokens: 10000,
-      thresholdRatio: 0.8,
     }).create();
     const verdict = await mw.fn(
       baseCtx({

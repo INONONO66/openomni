@@ -1,6 +1,6 @@
 # PROJECT KNOWLEDGE BASE
 
-Last verified against `origin/main`: 2026-08-30 (`725fa4db`; paths, dependency topology, and shipped-state pointers re-checked; keep this stamp current when editing - doc-state sync law).
+Last verified against `feat/compaction-hardening`: 2026-09-02 (production compaction strategy path added; dependency topology and shipped-state pointers re-checked; keep this stamp current when editing - doc-state sync law).
 
 ## OVERVIEW
 
@@ -92,6 +92,7 @@ channels <- apps/openomni
 | Channel driver or perimeter route | `packages/channels/src/` |
 | Machine attach/cell execution | `packages/machines/src/` |
 | Resident and app composition | `apps/openomni/src/resident.ts`, `apps/openomni/src/index.ts` |
+| Production compaction strategy | `apps/openomni/src/compaction/`, `packages/agent/src/compaction/` |
 | Gateway and channel registration | `apps/openomni/src/gateway.ts`, `apps/openomni/src/channels.ts` |
 | Delegation lifecycle and transports | `apps/openomni/src/delegation/` |
 | Product tools and memory | `apps/openomni/src/tools/`, `apps/openomni/src/memory/` |

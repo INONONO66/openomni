@@ -201,7 +201,7 @@ describe("context-overflow recovery through a real run (L5)", () => {
         model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
         middleware: [
           createCompactionPolicy({
-            contextWindowTokens: 100,
+            contextWindowTokens: 10_000,
             protectRecentMessages: 2,
             onSummarize: async () => "overflow checkpoint",
             events: Bus,

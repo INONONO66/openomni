@@ -30,6 +30,27 @@ function collectBudgetNames(): { readonly names: string[]; readonly stop: () => 
 }
 
 describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
+  it("moves the window yield arm down after a high-yield compaction", async () => {
+    const engine = PolicyEngine.create({ clock: Date.now });
+    const state = makeState();
+    state.contextWindowTokens = 200_000;
+    state.lastCompactionYield = { savedTokens: 120_000, tokensBefore: 200_000 };
+
+    const result = await buildTurn(
+      state,
+      makeConfig(),
+      engine,
+      testProviderModel,
+      undefined,
+      makeTrace(),
+      makeAgentBase(),
+    );
+
+    if (result.type !== "ready") throw new Error("expected ready turn");
+    expect(result.turn.runInput.yieldAtInputTokens).toBeLessThan(140_000);
+    expect(result.turn.runInput.yieldAtInputTokens).toBe(129_999);
+  });
+
   it("dispatches turn.start and returns ready on continue", async () => {
     Bus.reset();
     const fn = mock((_ctx: PolicyContext) => allow());

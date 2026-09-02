@@ -12,6 +12,7 @@ import type { AgentResult, AgentStep, ChatAgentConfig, ChatAgentInput, TokenUsag
 import type { DispatchContext } from "../policy";
 import type { TerminalReason } from "../retry";
 import { createUserMessage, createAssistantMessage } from "../message-factory";
+import type { CompactionYield } from "../../compaction/geometry";
 
 function toMessagesWithParts(
   messages: ChatAgentInput["messages"],
@@ -128,6 +129,11 @@ export interface RunState {
    * re-yielding every step would kill a run the window could still carry.
    */
   windowYieldDisarmed?: boolean;
+  /** Last committed structural yield; the policy and loop share its adaptive threshold. */
+  lastCompactionYield?: CompactionYield;
+  /** Results of the most recent apply seam, consumed by the window-yield path. */
+  lastCompactionIneffective?: boolean;
+  lastCompactionDeferred?: boolean;
   turnIndex: number;
   /** The last `turnIndex` charged to the budget; -1 before the first turn. */
   chargedTurnIndex: number;
@@ -261,6 +267,9 @@ export function disarmWindowYield(state: RunState): void {
  */
 export function resetModelWindowGuards(state: RunState): void {
   state.windowYieldDisarmed = undefined;
+  state.lastCompactionYield = undefined;
+  state.lastCompactionIneffective = undefined;
+  state.lastCompactionDeferred = undefined;
   state.overflowCompactionAttempted = undefined;
 }
 

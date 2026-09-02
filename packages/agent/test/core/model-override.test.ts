@@ -220,8 +220,8 @@ describe("model.override at connection.llm.pre (#753)", () => {
     // Call 1: the override's 500-token window arms at 400 (0.8), not the
     // primary's 800. Call 2 reverts to the primary's plan.
     expect(calls).toEqual([
-      { modelId: override.id, yieldAt: 400 },
-      { modelId: primary.id, yieldAt: 800 },
+      { modelId: override.id, yieldAt: 225 },
+      { modelId: primary.id, yieldAt: 450 },
     ]);
   });
 
@@ -260,7 +260,7 @@ describe("model.override at connection.llm.pre (#753)", () => {
     // The first call yields at the primary window and reclaims nothing, so
     // the remaining headroom is real. A connection-scoped override on the
     // continuation must not arm another yield against that same history.
-    expect(yieldArms).toEqual([800, undefined]);
+    expect(yieldArms).toEqual([450, undefined]);
   });
 
   it("fails honestly on an override to a nonexistent model — bounded retries, zero llm calls", async () => {

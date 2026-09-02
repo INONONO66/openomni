@@ -94,6 +94,10 @@ export const RunEvents = {
        * Upcast-on-read: absent on rows recorded before the field existed.
        */
       anchored: z.boolean().optional(),
+      /** Estimated structural yield used by the next adaptive threshold. */
+      savedTokens: z.number().optional(),
+      tokensBefore: z.number().optional(),
+      ineffective: z.boolean().optional(),
       error: z.string().optional(),
     }),
     { visibility: "internal" },

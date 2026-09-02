@@ -180,7 +180,7 @@ describe("model fallback via placement (#752)", () => {
     // model CHANGED, so the guard reset and the fallback's own window arms
     // (500 × 0.8) — carrying the disarm over would fire the smaller window
     // blind.
-    expect(yieldArms).toEqual([800, undefined, 400]);
+    expect(yieldArms).toEqual([450, undefined, 225]);
   });
 
   it("uses the primary on every attempt when no fallbacks are configured", async () => {

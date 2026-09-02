@@ -1,4 +1,4 @@
-import { ModelsDev, Provider, run as llmRun, type RunInput, type Sink } from "@openomni/llm";
+import { ModelsDev, Provider, Run, run as llmRun, type RunInput, type Sink } from "@openomni/llm";
 import type { Message, Model } from "@openomni/protocol";
 import { Bus, newTraceId } from "@openomni/telemetry";
 import { z } from "zod";
@@ -81,14 +81,77 @@ export interface LlmIo {
  * turn's run identity. Auth is the configured key, exactly as the Resident
  * and the worker loop authenticate.
  */
-export function createLlmToolPort(
-  model: {
+interface ResolvedTextCall {
+  readonly model: {
     readonly provider: string;
     readonly id: string;
     readonly apiKey: string;
-    /** Operator transport config, resolved by the host (`modelTransport`). */
     readonly transport?: RunInput["transport"];
-  },
+  };
+  readonly messages: Message.WithParts[];
+  readonly sessionId: string;
+  readonly signal?: AbortSignal;
+  readonly maxTokens?: number;
+  readonly providerOptions?: Record<string, unknown>;
+}
+
+/** Shared resolved-model, credential, transport, and text-capture path for app-owned one-shot calls. */
+export async function runResolvedText(
+  call: ResolvedTextCall,
+  io: LlmIo = {},
+): Promise<string> {
+  let answer = "";
+  const sink: Sink = {
+    onMessage: (message) => {
+      if (message.info.role !== "assistant") return;
+      answer = message.parts
+        .filter((part): part is Message.TextPart => part.type === "text")
+        .map((part) => part.text)
+        .join("");
+    },
+    onToolCall: () => undefined,
+    onToolResult: () => undefined,
+  };
+  const ref: Model.Ref = { provider: call.model.provider, id: call.model.id };
+  const resolved = io.resolveProviderModel === undefined
+    ? resolveLlmToolModel(await ModelsDev.get(), ref)
+    : await io.resolveProviderModel(ref);
+  const outcome = await (io.run ?? llmRun)(
+    {
+      messages: call.messages,
+      tools: [],
+      toolChoice: "none",
+      maxSteps: 1,
+      model: resolved,
+      auth: { type: "api", key: call.model.apiKey },
+      ...(call.model.transport === undefined ? {} : { transport: call.model.transport }),
+      ...(call.signal === undefined ? {} : { signal: call.signal }),
+      ...(call.maxTokens === undefined ? {} : { maxTokens: call.maxTokens }),
+      ...(call.providerOptions === undefined ? {} : { providerOptions: call.providerOptions }),
+      trace: { traceId: newTraceId(), sessionId: call.sessionId, runId: crypto.randomUUID() },
+      events: Bus,
+    },
+    sink,
+  );
+  if (outcome.type === "stop") return answer;
+  if (outcome.type === "aborted") {
+    const error = new Error("llm failed: the sub-model run ended as aborted", {
+      ...(outcome.error === undefined ? {} : { cause: outcome.error }),
+    });
+    error.name = "AbortError";
+    throw error;
+  }
+  if (outcome.type === "continue") {
+    throw new Error("llm failed: the sub-model run ended as continue");
+  }
+  const reason = outcome.error.message;
+  const failure: unknown = outcome.error;
+  if (Run.FailureError.isInstance(failure)) throw failure;
+  throw new Error(`llm failed: ${reason}`, { cause: failure });
+}
+
+export function createLlmToolPort(
+  model: ResolvedTextCall["model"],
   io: LlmIo = {},
 ): LlmPort {
   return async (prompt) => {
@@ -103,60 +166,9 @@ export function createLlmToolPort(
         agent: "llm-tool",
         model: { providerID: model.provider, modelID: model.id },
       },
-      parts: [
-        {
-          id: crypto.randomUUID(),
-          sessionID: sessionId,
-          messageID: messageId,
-          type: "text",
-          text: prompt,
-        },
-      ],
+      parts: [{ id: crypto.randomUUID(), sessionID: sessionId, messageID: messageId, type: "text", text: prompt }],
     };
-    let answer = "";
-    const sink: Sink = {
-      onMessage: (message) => {
-        if (message.info.role !== "assistant") return;
-        answer = message.parts
-          .filter((part): part is Message.TextPart => part.type === "text")
-          .map((part) => part.text)
-          .join("");
-      },
-      onToolCall: () => undefined,
-      onToolResult: () => undefined,
-    };
-    const ref: Model.Ref = { provider: model.provider, id: model.id };
-    const resolved =
-      io.resolveProviderModel === undefined
-        ? resolveLlmToolModel(await ModelsDev.get(), ref)
-        : await io.resolveProviderModel(ref);
-    const outcome = await (io.run ?? llmRun)(
-      {
-        messages: [request],
-        tools: [],
-        maxSteps: 1,
-        model: resolved,
-        auth: { type: "api", key: model.apiKey },
-        ...(model.transport === undefined ? {} : { transport: model.transport }),
-        trace: {
-          traceId: newTraceId(),
-          sessionId,
-          runId: crypto.randomUUID(),
-        },
-        events: Bus,
-      },
-      sink,
-    );
-    if (outcome.type !== "stop") {
-      const reason =
-        "error" in outcome && outcome.error !== undefined
-          ? outcome.error.message
-          : `the sub-model run ended as ${outcome.type}`;
-      // Thrown, not returned: the consumer is cell code, and a failure string
-      // returned as data would be stored as if it were model output.
-      throw new Error(`llm failed: ${reason}`);
-    }
-    return answer;
+    return runResolvedText({ model, messages: [request], sessionId }, io);
   };
 }
 
