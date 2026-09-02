@@ -203,7 +203,12 @@ describe("the llm tool port", () => {
 describe("the artifact tools", () => {
   const tools = (port: ArtifactsPort) =>
     createDispatcher(catalogEntries({ artifacts: port }, RESIDENT)).execute;
-  const call = (run: ReturnType<typeof tools>, id: string, tool: string, input: unknown) =>
+  const call = (
+    run: ReturnType<typeof tools>,
+    id: string,
+    tool: string,
+    input: Record<string, unknown>,
+  ) =>
     run({ id, tool, input });
 
   it("round-trips content by the returned id, scoped to the origin session", async () => {

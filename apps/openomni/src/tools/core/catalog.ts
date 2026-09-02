@@ -1,6 +1,6 @@
 import type { Tool } from "@openomni/protocol";
-import type { DelegationOrigin } from "../delegation/admission";
-import type { DelegationKernel } from "../delegation/kernel";
+import type { DelegationOrigin } from "../../delegation/admission";
+import type { DelegationKernel } from "../../delegation/kernel";
 import {
   awaitDelegationToolExecutor,
   awaitDelegationToolSpec,
@@ -8,23 +8,20 @@ import {
   cancelDelegationToolSpec,
   delegateToolExecutor,
   delegateToolSpec,
-} from "../delegation/tool";
-import type { CuratedMemory } from "../memory/store";
-import type { ArtifactsPort } from "./artifacts";
-import type { ConversePort } from "./converse";
+} from "../../delegation/tool";
+import type { CuratedMemory } from "../../memory/store";
+import type { ArtifactsPort } from "../mutation/artifacts";
+import type { ConversePort } from "../converse";
 import {
   converseCloseToolExecutor,
   converseCloseToolSpec,
   converseOpenToolExecutor,
   converseOpenToolSpec,
-} from "./converse";
-import {
-  readArtifactToolExecutor,
-  readArtifactToolSpec,
-  writeArtifactToolExecutor,
-  writeArtifactToolSpec,
-} from "./artifacts";
-import type { ApprovalPort } from "./approval";
+} from "../converse";
+import { writeArtifactTool } from "../mutation/artifacts";
+import { memoryTool } from "../mutation/memory";
+import { readArtifactTool } from "../query/artifacts";
+import type { ApprovalPort } from "../approval";
 import {
   approvalDecideToolExecutor,
   approvalDecideToolSpec,
@@ -34,9 +31,9 @@ import {
   contactPromoteToolSpec,
   endpointMergeToolExecutor,
   endpointMergeToolSpec,
-} from "./approval";
+} from "../approval";
 import type { CatalogEntry } from "./dispatch";
-import type { MachineVfs } from "../machines/vfs";
+import type { MachineVfs } from "../../machines/vfs";
 import {
   fsListToolExecutor,
   fsListToolSpec,
@@ -44,15 +41,14 @@ import {
   fsReadToolSpec,
   fsStatToolExecutor,
   fsStatToolSpec,
-} from "./machine-fs";
-import type { LeasePort } from "./lease";
-import { leaseOpenToolExecutor, leaseOpenToolSpec } from "./lease";
-import type { LlmPort } from "./llm";
-import { llmToolExecutor, llmToolSpec } from "./llm";
-import { memoryToolExecutor, memoryToolSpec } from "./memory";
-import type { MachinesPort } from "./machines";
-import { machinesToolExecutor, machinesToolSpec } from "./machines";
-import type { ProvisionPort } from "./provision";
+} from "../machine-fs";
+import type { LeasePort } from "../lease";
+import { leaseOpenToolExecutor, leaseOpenToolSpec } from "../lease";
+import type { LlmPort } from "../llm";
+import { llmToolExecutor, llmToolSpec } from "../llm";
+import type { MachinesPort } from "../machines";
+import { machinesToolExecutor, machinesToolSpec } from "../machines";
+import type { ProvisionPort } from "../provision";
 import {
   channelDeclareToolExecutor,
   channelDisableToolExecutor,
@@ -61,7 +57,7 @@ import {
   personRemoveToolExecutor,
   provisionStatusToolExecutor,
   secretRotateToolExecutor,
-} from "./provision";
+} from "../provision";
 import {
   channelDeclareToolSpec,
   channelDisableToolSpec,
@@ -70,16 +66,18 @@ import {
   personRemoveToolSpec,
   provisionStatusToolSpec,
   secretRotateToolSpec,
-} from "./provision-specs";
-import type { CellPorts } from "./run-code";
-import { runCodeToolExecutor, runCodeToolSpec } from "./run-code";
-import type { CompletionPort } from "../work-item/completion";
+} from "../provision-specs";
+import type { CellPorts } from "../run-code";
+import { runCodeToolExecutor, runCodeToolSpec } from "../run-code";
+import type { CompletionPort } from "../../work-item/completion";
 import {
   completeWorkToolExecutor,
   completeWorkToolSpec,
   workItemsToolExecutor,
   workItemsToolSpec,
-} from "./work-items";
+} from "../work-items";
+import { eraseTool, type AnyToolDefinition } from "./define";
+import { toolSpec } from "./project";
 
 export interface CatalogPorts {
   readonly delegation?: DelegationKernel;
@@ -104,7 +102,8 @@ export interface CatalogPorts {
 
 type ToolRun = CatalogEntry["run"];
 
-interface CatalogTool {
+// PHASE-A BRIDGE: dies in phase B
+interface LegacyCatalogTool {
   readonly spec: () => Tool.Spec;
   /**
    * The capability gate: a port that is not wired contributes no entry — a
@@ -119,7 +118,7 @@ interface CatalogTool {
  * list both the catalog and the repository lint read, so a spec cannot exist
  * here without being wireable, or ship without being linted.
  */
-const CATALOG_TOOLS: readonly CatalogTool[] = [
+export const TOOL_DEFINITIONS: readonly (AnyToolDefinition | LegacyCatalogTool)[] = [
   {
     spec: delegateToolSpec,
     wire: (ports, origin) =>
@@ -269,16 +268,7 @@ const CATALOG_TOOLS: readonly CatalogTool[] = [
     wire: (ports) =>
       ports.machineFs === undefined ? undefined : fsStatToolExecutor(ports.machineFs),
   },
-  {
-    // Memory is owner-scoped (kernel-contract §5): the Resident curates it,
-    // a delegated worker never sees or writes it. Role, not port wiring,
-    // is the gate — the same store is wired once at the composition root.
-    spec: memoryToolSpec,
-    wire: (ports, origin) =>
-      ports.memory === undefined || origin.role !== "resident"
-        ? undefined
-        : memoryToolExecutor(ports.memory),
-  },
+  eraseTool(memoryTool),
   {
     // Completion authority is the Resident's alone (kernel-contract
     // completion law): a worker never judges its own work, so the surface is
@@ -300,26 +290,13 @@ const CATALOG_TOOLS: readonly CatalogTool[] = [
     spec: llmToolSpec,
     wire: (ports) => (ports.llm === undefined ? undefined : llmToolExecutor(ports.llm)),
   },
-  {
-    // Writes are keyed to the session that asked (the origin already flows
-    // into catalogEntries); reads are by id — the unguessable artifact id is
-    // the read capability, so a session can hand one to a delegate on purpose.
-    spec: writeArtifactToolSpec,
-    wire: (ports, origin) =>
-      ports.artifacts === undefined
-        ? undefined
-        : writeArtifactToolExecutor(ports.artifacts, origin.sessionId),
-  },
-  {
-    spec: readArtifactToolSpec,
-    wire: (ports) =>
-      ports.artifacts === undefined ? undefined : readArtifactToolExecutor(ports.artifacts),
-  },
+  eraseTool(writeArtifactTool),
+  eraseTool(readArtifactTool),
 ];
 
 /** Every spec the app can ship, as data — no ports, no origin: the repository lint's seam. */
 export function collectToolSpecs(): readonly Tool.Spec[] {
-  return CATALOG_TOOLS.map((tool) => tool.spec());
+  return TOOL_DEFINITIONS.map((tool) => "spec" in tool ? tool.spec() : toolSpec(tool));
 }
 
 /**
@@ -333,11 +310,17 @@ export function catalogEntries(
   origin: DelegationOrigin,
 ): readonly CatalogEntry[] {
   const entries: CatalogEntry[] = [];
-  for (const tool of CATALOG_TOOLS) {
-    const run = tool.wire(ports, origin);
-    if (run !== undefined) {
-      entries.push({ spec: tool.spec(), run });
+  for (const tool of TOOL_DEFINITIONS) {
+    if ("spec" in tool) {
+      const run = tool.wire(ports, origin);
+      if (run !== undefined) entries.push({ spec: tool.spec(), run });
+      continue;
     }
+    const visible = tool.visibility.model.includes(origin.role)
+      || tool.visibility.cell.includes(origin.role);
+    if (!visible) continue;
+    const run = tool.bind(ports, origin);
+    if (run !== undefined) entries.push({ spec: toolSpec(tool), definition: tool, run });
   }
   return entries;
 }

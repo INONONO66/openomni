@@ -8,7 +8,7 @@ import { Bus } from "@openomni/telemetry";
 import type { DelegationOrigin } from "../src/delegation/admission";
 import { createDelegationKernel, type DriverOutcome } from "../src/delegation/kernel";
 import { createWorkItemLinkage } from "../src/delegation/work-item-linkage";
-import { catalogEntries } from "../src/tools/catalog";
+import { catalogEntries } from "../src/tools/core/catalog";
 import { completeWorkToolExecutor, workItemsToolExecutor } from "../src/tools/work-items";
 import { createCompletionPort, type CompletionPort } from "../src/work-item/completion";
 import { validateCompletionTerminalLinkage } from "../src/work-item/terminal-linkage";

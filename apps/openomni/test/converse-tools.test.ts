@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { Conversation } from "@openomni/protocol";
-import { catalogEntries } from "../src/tools/catalog";
+import { catalogEntries } from "../src/tools/core/catalog";
 import {
   converseCloseToolExecutor,
   converseOpenToolExecutor,

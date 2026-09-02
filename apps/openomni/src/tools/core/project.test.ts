@@ -27,7 +27,7 @@ describe("tool schema projection", () => {
       type: "object",
       properties: {
         query: { type: "string", description: "What to find." },
-        limit: { type: "integer" },
+        limit: { type: "integer", minimum: -9007199254740991, maximum: 9007199254740991 },
       },
       required: ["query"],
       additionalProperties: false,

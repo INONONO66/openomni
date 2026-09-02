@@ -98,7 +98,7 @@ describe("the memory tool", () => {
   const origin = { role: "resident", depth: 0, sessionId: "memory-test" } as const;
   const tool = (memory: CuratedMemory) =>
     createDispatcher(catalogEntries({ memory }, origin)).execute;
-  const call = (run: ReturnType<typeof tool>, id: string, input: unknown) =>
+  const call = (run: ReturnType<typeof tool>, id: string, input: Record<string, unknown>) =>
     run({ id, tool: MEMORY_TOOL_NAME, input });
 
   it("spec agrees with the zod gate", () => {

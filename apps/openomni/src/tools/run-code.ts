@@ -4,8 +4,8 @@ import { Placement } from "@openomni/placement";
 import { Machine, type Tool } from "@openomni/protocol";
 import { z } from "zod";
 import type { DelegationOrigin } from "../delegation/admission";
-import type { CatalogEntry } from "./dispatch";
-import { createDispatcher, HOST_TARGET } from "./dispatch";
+import type { CatalogEntry } from "./core/dispatch";
+import { createDispatcher, HOST_TARGET } from "./core/dispatch";
 import type { CellRegistry } from "./cell-registry";
 
 /** What running a cell needs, without knowing how the host is composed. */

@@ -8,7 +8,7 @@ import {
   contactPromoteToolExecutor,
   endpointMergeToolExecutor,
 } from "../src/tools/approval";
-import { catalogEntries } from "../src/tools/catalog";
+import { catalogEntries } from "../src/tools/core/catalog";
 
 /**
  * Adversarial cases from docs/conversation-and-message-io.md against the

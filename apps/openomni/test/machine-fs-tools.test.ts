@@ -4,8 +4,8 @@ import type { Machine } from "@openomni/protocol";
 import type { DelegationOrigin } from "../src/delegation/admission";
 import type { FsOpOutcome, MachineFsPort } from "../src/machines/vfs";
 import { createMachineVfs } from "../src/machines/vfs";
-import { catalogEntries } from "../src/tools/catalog";
-import { createDispatcher, HOST_TARGET } from "../src/tools/dispatch";
+import { catalogEntries } from "../src/tools/core/catalog";
+import { createDispatcher, HOST_TARGET } from "../src/tools/core/dispatch";
 import {
   FS_LIST_TOOL_NAME,
   FS_READ_TOOL_NAME,

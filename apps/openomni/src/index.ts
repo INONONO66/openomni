@@ -38,7 +38,7 @@ import {
   type OpenOmniConfig,
   type RegisteredActor,
 } from "./config";
-import type { ArtifactsPort } from "./tools/artifacts";
+import type { ArtifactsPort } from "./tools/mutation/artifacts";
 import { createLlmToolPort } from "./tools/llm";
 import type { MachinesPort } from "./tools/machines";
 import { createChannelDriver } from "./delegation/channel-driver";
@@ -63,8 +63,8 @@ import { openCuratedMemory } from "./memory/store";
 import { buildInboundEvent } from "./inbound";
 import { createResident } from "./resident";
 import { createMachineVfs, scopeMachineVfs, type MachineVfs } from "./machines/vfs";
-import { catalogEntries } from "./tools/catalog";
-import { HOST_TARGET } from "./tools/dispatch";
+import { catalogEntries } from "./tools/core/catalog";
+import { HOST_TARGET } from "./tools/core/dispatch";
 import { createCellRegistry } from "./tools/cell-registry";
 import type { CellPorts } from "./tools/run-code";
 

@@ -28,7 +28,7 @@ const fullPorts = {
   llm: async () => "",
   artifacts: {},
   provisioning: {},
-} as CatalogPorts;
+} as unknown as CatalogPorts;
 
 function names(door: "model" | "cell", role: "resident" | "worker", ports: CatalogPorts) {
   const origin = {
@@ -52,14 +52,17 @@ describe("phase-A catalog menu parity", () => {
         it(`matches 742e67f3 for ${key}`, () => {
           const first = names(door, role, ports === "full" ? fullPorts : {});
           const second = names(door, role, ports === "full" ? fullPorts : {});
-          expect(first).toEqual(fixture[key]);
+          const expected = fixture[key];
+          const fingerprint = fingerprintFixture.fingerprints[key];
+          if (expected === undefined || fingerprint === undefined) throw new Error(`missing fixture ${key}`);
+          expect(first).toEqual(expected);
           expect(second).toEqual(first);
           expect(TOOL_PROJECTOR_VERSION).toBe(fingerprintFixture.projectorVersion);
           expect(
             createHash("sha256")
               .update(`${TOOL_PROJECTOR_VERSION}:${first.join("\0")}`)
               .digest("hex"),
-          ).toBe(fingerprintFixture.fingerprints[key]);
+          ).toBe(fingerprint);
         });
       }
     }

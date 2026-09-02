@@ -8,7 +8,7 @@ import {
   Vault,
 } from "@openomni/ledger";
 import type { ChannelRuntimeStatus } from "../src/provisioning/supervisor";
-import { catalogEntries } from "../src/tools/catalog";
+import { catalogEntries } from "../src/tools/core/catalog";
 import {
   channelDeclareToolExecutor,
   channelDisableToolExecutor,
