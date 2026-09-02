@@ -34,5 +34,3 @@ export const leaseOpenTool = defineTool({
   bind: (ports) => ports.leases === undefined ? undefined : executeLeaseOpen(ports.leases),
   render: (_args, value) => `lease ${value.id} issued to delegation ${value.holderDelegationId} for ${value.contactId} in conversation ${value.conversationId} (${value.maxOutbound} sends, expires ${value.expiresAt})`,
 });
-
-export function leaseOpenToolExecutor(port: LeasePort, now: () => number = Date.now) { return async (raw: unknown): Promise<string> => { try { const args = Input.parse(raw); return leaseOpenTool.render(args, await executeLeaseOpen(port, now)(args)); } catch (error) { return error instanceof ToolRefused ? error.message : `lease_open refused: ${error instanceof Error ? error.message : String(error)}`; } }; }

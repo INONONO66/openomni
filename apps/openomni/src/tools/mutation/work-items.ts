@@ -30,5 +30,3 @@ export const completeWorkTool = defineTool({
   bind: (ports) => ports.workItems === undefined ? undefined : executeCompleteWork(ports.workItems),
   render: (_args, value) => `WorkItem ${value.workItemId} completed: admission recorded and terminal receipt written.`,
 });
-
-export function completeWorkToolExecutor(port: CompletionPort) { return async (raw: unknown): Promise<string> => { try { const args = Input.parse(raw); return completeWorkTool.render(args, await executeCompleteWork(port)(args)); } catch (error) { return error instanceof ToolRefused ? error.message : `complete_work refused: ${error instanceof Error ? error.message : String(error)}`; } }; }

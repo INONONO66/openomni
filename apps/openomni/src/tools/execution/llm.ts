@@ -56,7 +56,6 @@ export const llmTool = defineTool({
   render: (_args, value) => value,
 });
 
-export function llmToolExecutor(llm: LlmPort) { const execute = executeLlm(llm); return async (raw: unknown): Promise<string> => { let args: z.output<typeof Input>; try { args = Input.parse(raw); } catch (error) { throw new Error(`llm refused: ${error instanceof Error ? error.message : String(error)}`); } try { return await execute(args); } catch (error) { throw error instanceof ToolRefused ? new Error(error.message) : error; } }; }
 
 /**
  * The llm tool's model, resolved from the models.dev catalog. Unlisted is an

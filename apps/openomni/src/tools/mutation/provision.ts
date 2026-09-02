@@ -305,7 +305,6 @@ function sealCredential(
 
 function executeChannelDeclare(port: ProvisionPort, now: () => number = Date.now) {
   return async (input: z.output<typeof CHANNEL_DECLARE_INPUT>) => {
-    
     // §4: knobs must parse under the provider's settings declaration before the row lands.
     const badSettings = validateProviderSettings(input.provider, input.settings);
     if (badSettings !== undefined) return refusal("channel_declare", badSettings);
@@ -435,22 +434,3 @@ export const channelEnableTool = defineTool({ ...mutationCommon, name: "channel_
 export const channelDisableTool = defineTool({ ...mutationCommon, name: "channel_disable", description: "Disable a declared channel and stop its stage.", input: INSTANCE_INPUT, output: ChannelOutput, bind: (ports) => ports.provisioning === undefined ? undefined : executeChannelDisable(ports.provisioning), render: (_args, value) => `channel ${value.id} disabled\n${statusLines(value.statuses)}` });
 export const secretRotateTool = defineTool({ ...mutationCommon, name: "secret_rotate", description: "Seal a new credential revision over an existing vault row and bounce every stage referencing it (stop → swap → start).", input: SECRET_ROTATE_INPUT, output: SecretOutput, bind: (ports) => ports.provisioning === undefined ? undefined : executeSecretRotate(ports.provisioning), render: (_args, value) => `secret ${value.id} rotated (kek ${value.kekId})\n${statusLines(value.statuses)}` });
 export { EMPTY_INPUT };
-
-export function provisionStatusToolExecutor(port: ProvisionPort) {
-  return async (raw: unknown): Promise<string> => {
-    try {
-      const args = EMPTY_INPUT.parse(raw ?? {});
-      return renderProvisionStatus(await executeProvisionStatus(port)(args));
-    } catch {
-      return "provision_status refused: provision_status takes no arguments";
-    }
-  };
-}
-
-function compatibilityRefusal(name: string, error: unknown): string { return error instanceof ToolRefused ? error.message : `${name} refused: ${error instanceof Error ? error.message : String(error)}`; }
-export function personDeclareToolExecutor(port: ProvisionPort, now: () => number = Date.now) { return async (raw: unknown) => { try { const args = PERSON_DECLARE_INPUT.parse(raw); return personDeclareTool.render(args, await executePersonDeclare(port, now)(args)); } catch (error) { return compatibilityRefusal("person_declare", error); } }; }
-export function personRemoveToolExecutor(port: ProvisionPort) { return async (raw: unknown) => { try { const args = PERSON_REMOVE_INPUT.parse(raw); return personRemoveTool.render(args, await executePersonRemove(port)(args)); } catch (error) { return compatibilityRefusal("person_remove", error); } }; }
-export function channelDeclareToolExecutor(port: ProvisionPort, now: () => number = Date.now) { return async (raw: unknown) => { try { const args = CHANNEL_DECLARE_INPUT.parse(raw); return channelDeclareTool.render(args, await executeChannelDeclare(port, now)(args)); } catch (error) { return compatibilityRefusal("channel_declare", error); } }; }
-export function channelEnableToolExecutor(port: ProvisionPort, now: () => number = Date.now) { return async (raw: unknown) => { try { const args = INSTANCE_INPUT.parse(raw); return channelEnableTool.render(args, await executeChannelEnable(port, now)(args)); } catch (error) { return compatibilityRefusal("channel_enable", error); } }; }
-export function channelDisableToolExecutor(port: ProvisionPort, now: () => number = Date.now) { return async (raw: unknown) => { try { const args = INSTANCE_INPUT.parse(raw); return channelDisableTool.render(args, await executeChannelDisable(port, now)(args)); } catch (error) { return compatibilityRefusal("channel_disable", error); } }; }
-export function secretRotateToolExecutor(port: ProvisionPort, now: () => number = Date.now) { return async (raw: unknown) => { try { const args = SECRET_ROTATE_INPUT.parse(raw); return secretRotateTool.render(args, await executeSecretRotate(port, now)(args)); } catch (error) { return compatibilityRefusal("secret_rotate", error); } }; }

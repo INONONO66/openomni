@@ -25,5 +25,3 @@ export const workItemsTool = defineTool({
   bind: (ports) => ports.workItems === undefined ? undefined : executeWorkItems(ports.workItems),
   render: (_args, value) => JSON.stringify(value.kind === "list" ? value.items : value.item, null, 2),
 });
-
-export function workItemsToolExecutor(port: CompletionPort) { return async (raw: unknown): Promise<string> => { try { const args = Input.parse(raw ?? {}); return workItemsTool.render(args, await executeWorkItems(port)(args)); } catch (error) { return error instanceof ToolRefused ? error.message : `work_items refused: ${error instanceof Error ? error.message : String(error)}`; } }; }

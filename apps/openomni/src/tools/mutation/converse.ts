@@ -86,6 +86,3 @@ export const converseCloseTool = defineTool({
     ? `conversation ${value.conversationId} was already closed (${value.closedBy ?? "unknown"})`
     : value.revoked === 0 ? `conversation ${value.conversationId} closed` : `conversation ${value.conversationId} closed (${value.revoked} live lease${value.revoked === 1 ? "" : "s"} revoked)`,
 });
-
-export function converseOpenToolExecutor(port: ConversePort, origin: DelegationOrigin, now: () => number = Date.now) { return async (raw: unknown): Promise<string> => { try { const args = OpenInput.parse(raw); return converseOpenTool.render(args, await executeConverseOpen(port, origin, now)(args)); } catch (error) { return error instanceof ToolRefused ? error.message : `converse_open refused: ${error instanceof Error ? error.message : String(error)}`; } }; }
-export function converseCloseToolExecutor(port: ConversePort) { return async (raw: unknown): Promise<string> => { try { const args = CloseInput.parse(raw); return converseCloseTool.render(args, await executeConverseClose(port)(args)); } catch (error) { return error instanceof ToolRefused ? error.message : `converse_close refused: ${error instanceof Error ? error.message : String(error)}`; } }; }

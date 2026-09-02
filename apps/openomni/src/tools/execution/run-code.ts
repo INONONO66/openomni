@@ -111,5 +111,3 @@ export const runCodeTool = defineTool({
   bind: (ports, origin) => ports.cells === undefined ? undefined : executeRunCode(ports.cells, origin),
   render: (args, value) => describe(value, args.timeoutMs),
 });
-
-export function runCodeToolExecutor(ports: CellPorts, origin: DelegationOrigin) { return async (raw: unknown): Promise<string> => { try { const args = Input.parse(raw); return runCodeTool.render(args, await executeRunCode(ports, origin)(args)); } catch (error) { return `run_code refused: ${error instanceof Error ? error.message : String(error)}`; } }; }
