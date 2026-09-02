@@ -16,17 +16,8 @@ import { converseCloseTool, converseOpenTool } from "../mutation/converse";
 import { writeArtifactTool } from "../mutation/artifacts";
 import { memoryTool } from "../mutation/memory";
 import { readArtifactTool } from "../query/artifacts";
-import type { ApprovalPort } from "../approval";
-import {
-  approvalDecideToolExecutor,
-  approvalDecideToolSpec,
-  approvalRequestToolExecutor,
-  approvalRequestToolSpec,
-  contactPromoteToolExecutor,
-  contactPromoteToolSpec,
-  endpointMergeToolExecutor,
-  endpointMergeToolSpec,
-} from "../approval";
+import type { ApprovalPort } from "../authority/approval";
+import { approvalDecideTool, approvalRequestTool, contactPromoteTool, endpointMergeTool } from "../authority/approval";
 import type { CatalogEntry } from "./dispatch";
 import type { MachineVfs } from "../../machines/vfs";
 import { fsListTool, fsReadTool, fsStatTool } from "../query/machine-fs";
@@ -121,36 +112,10 @@ export const TOOL_DEFINITIONS: readonly (AnyToolDefinition | LegacyCatalogTool)[
   eraseTool(converseOpenTool),
   eraseTool(converseCloseTool),
   eraseTool(leaseOpenTool),
-  {
-    // The approval lane is the Resident's surface (§6): a worker never
-    // requests, records, or consumes Owner consent.
-    spec: approvalRequestToolSpec,
-    wire: (ports, origin) =>
-      ports.approvals === undefined || origin.role !== "resident"
-        ? undefined
-        : approvalRequestToolExecutor(ports.approvals),
-  },
-  {
-    spec: approvalDecideToolSpec,
-    wire: (ports, origin) =>
-      ports.approvals === undefined || origin.role !== "resident"
-        ? undefined
-        : approvalDecideToolExecutor(ports.approvals),
-  },
-  {
-    spec: contactPromoteToolSpec,
-    wire: (ports, origin) =>
-      ports.approvals === undefined || origin.role !== "resident"
-        ? undefined
-        : contactPromoteToolExecutor(ports.approvals),
-  },
-  {
-    spec: endpointMergeToolSpec,
-    wire: (ports, origin) =>
-      ports.approvals === undefined || origin.role !== "resident"
-        ? undefined
-        : endpointMergeToolExecutor(ports.approvals),
-  },
+  eraseTool(approvalRequestTool),
+  eraseTool(approvalDecideTool),
+  eraseTool(contactPromoteTool),
+  eraseTool(endpointMergeTool),
   {
     // Provisioning administration is the Resident's surface (provisioning
     // §5, §8.5): a delegated worker never edits Persons, channels, or

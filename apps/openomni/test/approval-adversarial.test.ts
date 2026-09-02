@@ -7,7 +7,7 @@ import {
   approvalRequestToolExecutor,
   contactPromoteToolExecutor,
   endpointMergeToolExecutor,
-} from "../src/tools/approval";
+} from "../src/tools/authority/approval";
 import { catalogEntries } from "../src/tools/core/catalog";
 
 /**
