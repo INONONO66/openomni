@@ -39,7 +39,12 @@ test("a Resident turn hands work to an inline worker and reports what came back"
         const executed = await input.toolExecutor?.({
           id: "call-1",
           tool: "delegate",
-          input: { instruction: "check the build", mode: "ask", scope: "inline", timeoutMs: 5000 },
+          input: {
+            instruction: "check the build",
+            operation: "ask",
+            scope: "inline",
+            timeoutMs: 5000,
+          },
         });
         sink.onMessage(
           assistantMessage(input, {

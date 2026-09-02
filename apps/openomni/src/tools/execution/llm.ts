@@ -16,46 +16,42 @@ export const MAX_LLM_CALLS = 32;
 
 const Input = z
   .object({
-    prompt: z.string().min(1).describe("The complete instruction for the sub-model call."),
+    prompts: z
+      .array(z.string().min(1))
+      .min(1)
+      .describe("One or more complete instructions for stateless sub-model calls."),
   })
   .strict();
 
 export const LLM_TOOL_NAME = "llm";
-const LLM_WIRE_PROJECTION = {
-  type: "object",
-  additionalProperties: false,
-  required: ["prompt"],
-  properties: { prompt: { type: "string", minLength: 1, description: "The complete instruction for the sub-model call." } },
-} as const;
 
 function executeLlm(llm: LlmPort) {
-  // catalogEntries() builds fresh executors per catalog construction — per
-  // cell, per turn — so this counter IS the per-cell budget: a cell that
-  // spends it gets refusals, and the next cell starts at zero.
-  //
-  // Refusals and failures THROW rather than return: this tool's consumer is
-  // code, not the model, and code treats any returned string as model output.
-  // The dispatcher turns the throw into an error result, which the cell door
-  // raises as a catchable ToolError.
   let calls = 0;
-  return async ({ prompt }: z.output<typeof Input>): Promise<string> => {
-    if (calls >= MAX_LLM_CALLS) {
-      throw new ToolRefused(LLM_TOOL_NAME, `the per-cell budget of ${MAX_LLM_CALLS} sub-model calls is spent`);
+  return async ({ prompts }: z.output<typeof Input>): Promise<string[]> => {
+    if (calls + prompts.length > MAX_LLM_CALLS) {
+      throw new ToolRefused(
+        LLM_TOOL_NAME,
+        `the per-cell budget of ${MAX_LLM_CALLS} sub-model calls is spent`,
+      );
     }
-    calls += 1;
-    return llm(prompt);
+    calls += prompts.length;
+    return Promise.all(prompts.map((prompt) => llm(prompt)));
   };
 }
 
-export const llmTool = defineTool({
-  name: LLM_TOOL_NAME, category: "execution",
-  description: "Ask a sub-model a one-shot, stateless question and get its text back. Built for semantic map/reduce over data already inside a cell: summarize, classify, extract, or rank what the code fetched, one prompt per call — it remembers nothing between calls.",
-  input: Input, output: z.string(), wireProjection: LLM_WIRE_PROJECTION, safe: true, execution: { kind: "machine", capability: "kernel.py" }, placement: "host",
-  visibility: { model: ["resident", "worker"], cell: ["resident", "worker"] },
-  bind: (ports) => ports.llm === undefined ? undefined : executeLlm(ports.llm),
-  render: (_args, value) => value,
-});
-
+export function createLlmTool(llm: LlmPort) {
+  return defineTool({
+    name: LLM_TOOL_NAME,
+    category: "execution",
+    description:
+      "Ask a sub-model one or more one-shot, stateless questions. Results preserve prompt order.",
+    input: Input,
+    output: z.array(z.string()),
+    visibility: { model: [], cell: ["resident", "worker"] },
+    execute: executeLlm(llm),
+    render: (_args, value) => JSON.stringify(value),
+  });
+}
 
 /**
  * The llm tool's model, resolved from the models.dev catalog. Unlisted is an
@@ -96,10 +92,7 @@ interface ResolvedTextCall {
 }
 
 /** Shared resolved-model, credential, transport, and text-capture path for app-owned one-shot calls. */
-export async function runResolvedText(
-  call: ResolvedTextCall,
-  io: LlmIo = {},
-): Promise<string> {
+export async function runResolvedText(call: ResolvedTextCall, io: LlmIo = {}): Promise<string> {
   let answer = "";
   const sink: Sink = {
     onMessage: (message) => {
@@ -113,9 +106,10 @@ export async function runResolvedText(
     onToolResult: () => undefined,
   };
   const ref: Model.Ref = { provider: call.model.provider, id: call.model.id };
-  const resolved = io.resolveProviderModel === undefined
-    ? resolveLlmToolModel(await ModelsDev.get(), ref)
-    : await io.resolveProviderModel(ref);
+  const resolved =
+    io.resolveProviderModel === undefined
+      ? resolveLlmToolModel(await ModelsDev.get(), ref)
+      : await io.resolveProviderModel(ref);
   const outcome = await (io.run ?? llmRun)(
     {
       messages: call.messages,
@@ -150,10 +144,7 @@ export async function runResolvedText(
   throw new Error(`llm failed: ${reason}`, { cause: failure });
 }
 
-export function createLlmToolPort(
-  model: ResolvedTextCall["model"],
-  io: LlmIo = {},
-): LlmPort {
+export function createLlmToolPort(model: ResolvedTextCall["model"], io: LlmIo = {}): LlmPort {
   return async (prompt) => {
     const sessionId = "llm-tool";
     const messageId = crypto.randomUUID();
@@ -166,7 +157,15 @@ export function createLlmToolPort(
         agent: "llm-tool",
         model: { providerID: model.provider, modelID: model.id },
       },
-      parts: [{ id: crypto.randomUUID(), sessionID: sessionId, messageID: messageId, type: "text", text: prompt }],
+      parts: [
+        {
+          id: crypto.randomUUID(),
+          sessionID: sessionId,
+          messageID: messageId,
+          type: "text",
+          text: prompt,
+        },
+      ],
     };
     return runResolvedText({ model, messages: [request], sessionId }, io);
   };

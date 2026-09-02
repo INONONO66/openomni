@@ -1,75 +1,64 @@
 import type { ChatAgentConfig } from "@openomni/agent";
-import { placementGatedExecutor } from "@openomni/agent";
-import { Placement } from "@openomni/placement";
-import { Machine } from "@openomni/protocol";
+import type { Machine } from "@openomni/protocol";
 import { z } from "zod";
-import { defineTool } from "../core/define";
-import type { DelegationOrigin } from "../../delegation/admission";
-import type { CatalogEntry } from "../core/dispatch";
-import { createDispatcher, HOST_TARGET } from "../core/dispatch";
+import { defineTool, type AnyToolDefinition } from "../core/define";
+import { createDispatcher } from "../core/dispatch";
 import type { CellRegistry } from "../cell-registry";
 
 /** What running a cell needs, without knowing how the host is composed. */
 export interface CellPorts {
   readonly registry: CellRegistry;
+  readonly defaultMachineId: Machine.MachineId;
   runCell(
     machineId: Machine.MachineId,
     request: Machine.CellRequest,
   ): Promise<
     | Machine.CellResult
-    | { readonly status: "refused"; readonly reason: "machine_not_attached" | "kernel_not_available" }
+    | {
+        readonly status: "refused";
+        readonly reason: "machine_not_attached" | "kernel_not_available";
+      }
   >;
-  /**
-   * The whole catalog `origin` holds when the cell runs on `machineId` —
-   * machine-placed tools included. The brain-only fold that subtracts machine
-   * tools lives at the enforcement point: see {@link cellDoor}.
-   *
-   * `machineId` is not decoration. A cell's authority is its machine's, so a
-   * surface that addresses machines BY NAME (the fs namespace) must be bound
-   * to the one the cell actually runs on before the catalog is built — the
-   * composition root does that binding, which is why the target is a
-   * parameter here rather than a fact the cell could state about itself.
-   */
-  toolsFor(origin: DelegationOrigin, machineId: Machine.MachineId): readonly CatalogEntry[];
+  /** Session catalogs are registered once by createTools and reused by every cell call. */
+  bindTools(sessionId: string, tools: readonly AnyToolDefinition[]): void;
+  tools(sessionId: string): readonly AnyToolDefinition[];
   newCellId(): string;
 }
 
-/**
- * What a running cell may call back for: the same catalog, folded against the
- * brain alone.
- *
- * Two things follow from that single target, neither of them restated as a
- * rule here. Machine-placed tools drop out — a cell already runs on a
- * machine, so reaching back to the brain to reach another machine is the
- * round trip code mode exists to remove, and a machine tool added later is
- * excluded by the same fold. And the gate is load-bearing rather than
- * belt-and-braces: a cell's `tool.<name>()` never passes through the agent
- * loop, so this door is the only one watching it.
- */
-export function cellDoor(
-  entries: readonly CatalogEntry[],
+function cellDoor(
+  definitions: readonly AnyToolDefinition[],
+  sessionId: string,
 ): NonNullable<ChatAgentConfig["toolExecutor"]> {
-  const dispatcher = createDispatcher(entries);
-  return placementGatedExecutor(
-    Placement.resolveTools(dispatcher.specs, [HOST_TARGET]),
-    dispatcher.execute,
+  const cellTools = definitions.filter(
+    (tool) => tool.name !== RUN_CODE_TOOL_NAME && tool.visibility.cell.length > 0,
   );
+  const dispatcher = createDispatcher(cellTools, sessionId);
+  return async (call, context) => {
+    const legacyLlmPrompt = call.tool === "llm" && typeof call.input.prompt === "string";
+    const effectiveCall = legacyLlmPrompt
+      ? { ...call, input: { prompts: [call.input.prompt] } }
+      : call;
+    const result = await dispatcher.executeCell(effectiveCall, context);
+    const output =
+      legacyLlmPrompt && Array.isArray(result.output) ? result.output[0] : result.output;
+    return { ...result, output } as Awaited<
+      ReturnType<NonNullable<ChatAgentConfig["toolExecutor"]>>
+    >;
+  };
 }
 
 const Input = z
   .object({
-    machineId: z.string().min(1).describe("Which attached machine runs the code."),
-    code: z
-      .string()
-      .min(1)
-      .describe(
-        "Python source. Call host tools inside it as tool.<name>(...) — that is the point: many calls, one round trip.",
-      ),
-    timeoutMs: z.number().int().positive().describe("How long the cell may run before it is stopped."),
+    code: z.string().min(1).describe("Python source. Call host tools as tool.<name>(...)."),
+    timeoutMs: z
+      .number()
+      .int()
+      .positive()
+      .describe("How long the cell may run before it is stopped."),
   })
   .strict();
 
-export const RUN_CODE_TOOL_NAME = "run_code";
+const RUN_CODE_TOOL_NAME = "run_code";
 
 function describe(result: Awaited<ReturnType<CellPorts["runCell"]>>, timeoutMs: number): string {
   switch (result.status) {
@@ -81,33 +70,36 @@ function describe(result: Awaited<ReturnType<CellPorts["runCell"]>>, timeoutMs: 
       return `the cell did not finish within ${timeoutMs}ms — what it had done is unknown, not undone`;
     case "refused":
       return result.reason === "machine_not_attached"
-        ? "that machine is not attached right now"
-        : "that machine has no code kernel to run this";
+        ? "the default kernel host is not attached right now"
+        : "the default host has no code kernel to run this";
   }
 }
 
-function executeRunCode(ports: CellPorts, origin: DelegationOrigin) {
-  return async ({ machineId, code, timeoutMs }: z.output<typeof Input>): Promise<Awaited<ReturnType<CellPorts["runCell"]>>> => {
-
-    const cellId = ports.newCellId();
-    ports.registry.bind(cellId, cellDoor(ports.toolsFor(origin, machineId)));
-    try {
-      // The session is the tenant: the daemon runs each tenant's cells on its
-      // own interpreter, so state — and anything a cell leaves running — can
-      // never cross into another session's process.
-      return await ports.runCell(machineId, { cellId, code, timeoutMs, tenant: origin.sessionId });
-    } finally {
-      ports.registry.release(cellId);
-    }
-  };
+export function createRunCodeTool(ports: CellPorts) {
+  return defineTool({
+    name: RUN_CODE_TOOL_NAME,
+    category: "execution",
+    description:
+      "Run Python on the local default kernel host. State persists across cells in _scope; host tools are available through tool.<name>(...).",
+    input: Input,
+    output: z.custom<Awaited<ReturnType<CellPorts["runCell"]>>>(
+      (value) => typeof value === "object" && value !== null,
+    ),
+    visibility: { model: ["resident", "worker"], cell: ["resident", "worker"] },
+    execute: async ({ code, timeoutMs }, ctx) => {
+      const cellId = ports.newCellId();
+      ports.registry.bind(cellId, cellDoor(ports.tools(ctx.sessionId), ctx.sessionId));
+      try {
+        return await ports.runCell(ports.defaultMachineId, {
+          cellId,
+          code,
+          timeoutMs,
+          tenant: ctx.sessionId,
+        });
+      } finally {
+        ports.registry.release(cellId);
+      }
+    },
+    render: (args, value) => describe(value, args.timeoutMs),
+  });
 }
-
-export const runCodeTool = defineTool({
-  name: RUN_CODE_TOOL_NAME, category: "execution",
-  description: "Run Python on an attached machine; state persists across cells in _scope, so do a whole step in one cell. Inside it, tool.<name>(...) bridges to the tools you hold here, parallel(thunks) runs independent calls concurrently, llm(prompt) asks a budget-capped sub-model, and write_artifact/read_artifact move large text by id.",
-  input: Input, output: z.custom<Awaited<ReturnType<CellPorts["runCell"]>>>((value) => typeof value === "object" && value !== null), safe: false,
-  execution: { kind: "machine", capability: "kernel.py" }, requires: [Machine.WellKnownCapability.pythonKernel],
-  visibility: { model: ["resident", "worker"], cell: ["resident", "worker"] },
-  bind: (ports, origin) => ports.cells === undefined ? undefined : executeRunCode(ports.cells, origin),
-  render: (args, value) => describe(value, args.timeoutMs),
-});

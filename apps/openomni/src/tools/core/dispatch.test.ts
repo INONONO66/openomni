@@ -1,89 +1,75 @@
 import { describe, expect, it } from "bun:test";
 import { z } from "zod";
-import type { DelegationOrigin } from "../../delegation/admission";
-import type { CatalogPorts } from "./catalog";
 import { defineTool, eraseTool, ToolRefused } from "./define";
-import { createDispatcher, type CatalogEntry } from "./dispatch";
-import { toolSpec } from "./project";
+import { createDispatcher, MODEL_OUTPUT_MAX_CHARS } from "./dispatch";
 
-const ORIGIN: DelegationOrigin = { role: "resident", depth: 0, sessionId: "test" };
-
-function entry(options: {
-  execute?: (args: { value: string }) => Promise<{ rendered: string }>;
-  output?: z.ZodType<{ rendered: string }>;
-} = {}): CatalogEntry {
-  const definition = defineTool({
-    name: "example",
-    category: "query",
-    description: "An example tool.",
-    input: z.object({ value: z.string().min(1) }).strict(),
-    output: options.output ?? z.object({ rendered: z.string() }).strict(),
-    safe: true,
-    execution: { kind: "host" },
-    visibility: { model: ["resident", "worker"], cell: ["resident", "worker"] },
-    bind: () => options.execute ?? (async ({ value }) => ({ rendered: value })),
-    render: (_args, value) => value.rendered,
-  });
-  const run = definition.bind({} as CatalogPorts, ORIGIN);
-  if (run === undefined) throw new Error("test definition did not bind");
-  return { spec: toolSpec(definition), definition: eraseTool(definition), run };
+type Value = { value: string };
+type Rendered = { rendered: string };
+function definition(
+  options: { execute?: (args: Value) => Promise<Rendered>; output?: z.ZodType<Rendered> } = {},
+) {
+  return eraseTool(
+    defineTool({
+      name: "example",
+      category: "query",
+      description: "An example tool.",
+      input: z.object({ value: z.string().min(1) }).strict(),
+      output: options.output ?? z.object({ rendered: z.string() }).strict(),
+      visibility: { model: ["resident", "worker"], cell: ["resident", "worker"] },
+      execute: options.execute ?? (async ({ value }) => ({ rendered: value })),
+      render: (_args, value) => value.rendered,
+    }),
+  );
 }
 
 describe("the core tool dispatcher", () => {
-  it("turns central input validation failures into error results", async () => {
-    const result = await createDispatcher([entry()]).execute({
-      id: "bad-input",
+  it("validates input before execution", async () => {
+    const result = await createDispatcher([definition()]).execute({
+      id: "bad",
       tool: "example",
       input: { value: "" },
     });
-
-    expect(result.isError).toBe(true);
-    expect(result.errorClass).toBe("invalid_input");
-    expect(result.output).toStartWith("\nexample refused: value:");
+    expect(result).toMatchObject({ isError: true, errorClass: "invalid_input" });
+    expect(result.output).toStartWith("example refused: value:");
   });
-
-  it("maps a domain ToolRefused to an error result", async () => {
+  it("maps ToolRefused and ordinary throws", async () => {
+    const refused = await createDispatcher([
+      definition({
+        execute: async () => {
+          throw new ToolRefused("example", "no");
+        },
+      }),
+    ]).execute({ id: "r", tool: "example", input: { value: "x" } });
+    expect(refused).toMatchObject({ isError: true, errorClass: "precondition_failed" });
+    const failed = await createDispatcher([
+      definition({
+        execute: async () => {
+          throw new Error("boom");
+        },
+      }),
+    ]).execute({ id: "f", tool: "example", input: { value: "x" } });
+    expect(failed).toMatchObject({ isError: true, errorClass: "execution_failed" });
+  });
+  it("validates output", async () => {
     const result = await createDispatcher([
-      entry({ execute: async () => { throw new ToolRefused("example", "not available"); } }),
-    ]).execute({ id: "refused", tool: "example", input: { value: "x" } });
-
-    expect(result).toMatchObject({
-      isError: true,
-      errorClass: "precondition_failed",
-      output: "example refused: not available",
-    });
+      definition({ output: z.object({ rendered: z.literal("right") }) }),
+    ]).execute({ id: "o", tool: "example", input: { value: "wrong" } });
+    expect(result).toMatchObject({ isError: true, errorClass: "invalid_output" });
   });
-
-  it("isolates an invalid executor output", async () => {
-    const result = await createDispatcher([
-      entry({ execute: async () => ({ rendered: "wrong" }), output: z.object({ rendered: z.literal("right") }) }),
-    ]).execute({ id: "bad-output", tool: "example", input: { value: "x" } });
-
-    expect(result).toMatchObject({
-      isError: true,
-      errorClass: "invalid_output",
-      output: "example produced invalid output",
-    });
+  it("reports unknown tools", async () => {
+    expect(
+      await createDispatcher([]).execute({ id: "u", tool: "missing", input: {} }),
+    ).toMatchObject({ isError: true, errorClass: "unknown_tool" });
   });
-
-  it("reports an unknown tool", async () => {
-    const result = await createDispatcher([]).execute({ id: "unknown", tool: "missing", input: {} });
-    expect(result).toMatchObject({
-      isError: true,
-      errorClass: "unknown_tool",
-      output: "unknown tool: missing",
-    });
-  });
-
-  it("turns an ordinary thrown error into an error result", async () => {
-    const result = await createDispatcher([
-      entry({ execute: async () => { throw new Error("executor failed"); } }),
-    ]).execute({ id: "thrown", tool: "example", input: { value: "x" } });
-
-    expect(result).toMatchObject({
-      isError: true,
-      errorClass: "execution_failed",
-      output: "executor failed",
-    });
+  it("renders and truncates only the model door while cells receive raw values", async () => {
+    const dispatcher = createDispatcher([definition()], "session");
+    const text = "x".repeat(MODEL_OUTPUT_MAX_CHARS + 5);
+    const call = { id: "long", tool: "example", input: { value: text } };
+    const model = await dispatcher.execute(call);
+    expect(model.output).toEndWith(
+      `[truncated: ${MODEL_OUTPUT_MAX_CHARS} of ${text.length} chars]`,
+    );
+    const cell = await dispatcher.executeCell(call);
+    expect(cell.output).toEqual({ rendered: text });
   });
 });

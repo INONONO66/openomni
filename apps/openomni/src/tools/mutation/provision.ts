@@ -7,7 +7,7 @@ import type {
   SecretStore,
 } from "@openomni/ledger";
 import { Vault } from "@openomni/ledger";
-import type { Actor, Approval, Provisioning, } from "@openomni/protocol";
+import type { Actor, Approval, Provisioning } from "@openomni/protocol";
 import { newTraceId } from "@openomni/telemetry";
 import { z } from "zod";
 import { defineTool, ToolRefused } from "../core/define";
@@ -105,7 +105,8 @@ const CHANNEL_DECLARE_INPUT = z
     provider: z.string().min(1),
     enabled: z.boolean().default(true),
     settings: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).default({}),
-    credential: z.record(z.string(), z.string())
+    credential: z
+      .record(z.string(), z.string())
       .optional()
       .describe("Plaintext credential payload; sealed into the vault, never stored bare."),
   })
@@ -194,7 +195,13 @@ function openMutationApproval(
       newTraceId(),
       at,
     );
-    return { kind: "pending", requirement, approvalId: record.id, digest, deadline: record.deadline };
+    return {
+      kind: "pending",
+      requirement,
+      approvalId: record.id,
+      digest,
+      deadline: record.deadline,
+    };
   } catch (error) {
     return refusal("person_declare", error instanceof Error ? error.message : String(error));
   }
@@ -224,9 +231,13 @@ function consumeApproval(
   return undefined;
 }
 
-function refusal(tool: string, reason: string): never { throw new ToolRefused(tool, reason); }
+function refusal(tool: string, reason: string): never {
+  throw new ToolRefused(tool, reason);
+}
 
-async function reconcile(port: ProvisionPort): Promise<ChannelRuntimeStatus[]> { return port.supervisor.reconcile(); }
+async function reconcile(port: ProvisionPort): Promise<ChannelRuntimeStatus[]> {
+  return port.supervisor.reconcile();
+}
 
 function executePersonDeclare(port: ProvisionPort, now: () => number = Date.now) {
   return async (input: z.output<typeof PERSON_DECLARE_INPUT>) => {
@@ -258,7 +269,12 @@ function executePersonDeclare(port: ProvisionPort, now: () => number = Date.now)
         updatedAt: now(),
       });
       port.materialize();
-      return { kind: "declared" as const, id: person.id, trustTier: person.trustTier, revision: person.revision };
+      return {
+        kind: "declared" as const,
+        id: person.id,
+        trustTier: person.trustTier,
+        revision: person.revision,
+      };
     } catch (error) {
       // §8.8: a second owner surfaces the store's typed owner_exists refusal.
       return refusal("person_declare", error instanceof Error ? error.message : String(error));
@@ -356,7 +372,11 @@ function channelToggleExecutor(port: ProvisionPort, enabled: boolean, now: () =>
       port.supervisor.resume(existing.id);
     }
     port.instances.put({ ...existing, enabled, revision: existing.revision + 1, updatedAt: now() });
-    return { id: existing.id, action: enabled ? "enabled" as const : "disabled" as const, statuses: await reconcile(port) };
+    return {
+      id: existing.id,
+      action: enabled ? ("enabled" as const) : ("disabled" as const),
+      statuses: await reconcile(port),
+    };
   };
 }
 
@@ -389,32 +409,45 @@ function executeSecretRotate(port: ProvisionPort, now: () => number = Date.now) 
   };
 }
 
-export function executeProvisionStatus(port: ProvisionPort) {
+function executeProvisionStatus(port: ProvisionPort) {
   return async (_input: z.output<typeof EMPTY_INPUT>) => {
     const statuses = port.supervisor.status();
     const preconditions = [...new Set(statuses.map((status) => status.surface))]
       .filter(isRegisteredProvider)
-      .flatMap((surface) => ChannelProviders[surface].preconditions.map((text) => ({ surface, text })));
+      .flatMap((surface) =>
+        ChannelProviders[surface].preconditions.map((text) => ({ surface, text })),
+      );
     return {
       source: port.supervisor.source(),
-      vault: port.kek.kind === "locked" ? { kind: "locked" as const, reason: port.kek.reason } : { kind: "open" as const },
+      vault:
+        port.kek.kind === "locked"
+          ? { kind: "locked" as const, reason: port.kek.reason }
+          : { kind: "open" as const },
       statuses,
       preconditions,
     };
   };
 }
 
-const resident = { model: ["resident"], cell: ["resident"] } as const;
-const mutationCommon = { category: "mutation" as const, safe: false, execution: { kind: "host" } as const, placement: "host" as const, visibility: resident };
-const Statuses = z.array(z.custom<ChannelRuntimeStatus>((value) => typeof value === "object" && value !== null));
-export const ProvisionStatusOutput = z.object({
-  source: z.enum(["declared", "env"]),
-  vault: z.discriminatedUnion("kind", [z.object({ kind: z.literal("open") }).strict(), z.object({ kind: z.literal("locked"), reason: z.string() }).strict()]),
-  statuses: Statuses,
-  preconditions: z.array(z.object({ surface: z.string(), text: z.string() }).strict()),
-}).strict();
-export function renderProvisionStatus(value: z.output<typeof ProvisionStatusOutput>): string {
-  const lines = value.statuses.map((status) => `${status.id} [${status.surface}] → ${status.state}${status.detail === undefined ? "" : ` (${status.detail})`}`);
+const Statuses = z.array(
+  z.custom<ChannelRuntimeStatus>((value) => typeof value === "object" && value !== null),
+);
+export const ProvisionStatusOutput = z
+  .object({
+    source: z.enum(["declared", "env"]),
+    vault: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("open") }).strict(),
+      z.object({ kind: z.literal("locked"), reason: z.string() }).strict(),
+    ]),
+    statuses: Statuses,
+    preconditions: z.array(z.object({ surface: z.string(), text: z.string() }).strict()),
+  })
+  .strict();
+function renderProvisionStatus(value: z.output<typeof ProvisionStatusOutput>): string {
+  const lines = value.statuses.map(
+    (status) =>
+      `${status.id} [${status.surface}] → ${status.state}${status.detail === undefined ? "" : ` (${status.detail})`}`,
+  );
   return [
     `channel source: ${value.source}`,
     value.vault.kind === "locked" ? `vault_locked (${value.vault.reason})` : "vault open",
@@ -422,15 +455,102 @@ export function renderProvisionStatus(value: z.output<typeof ProvisionStatusOutp
     ...value.preconditions.map(({ surface, text }) => `${surface} precondition: ${text}`),
   ].join("\n");
 }
-const PersonDeclareOutput = z.discriminatedUnion("kind", [z.object({ kind: z.literal("pending"), requirement: z.string(), approvalId: z.string(), digest: z.string(), deadline: z.number() }).strict(), z.object({ kind: z.literal("declared"), id: z.string(), trustTier: z.string(), revision: z.number() }).strict()]);
-const PersonRemoveOutput = z.object({ id: z.string() }).strict();
-const ChannelOutput = z.object({ id: z.string(), action: z.enum(["declared", "enabled", "disabled"]), statuses: Statuses }).strict();
-const SecretOutput = z.object({ id: z.string(), kekId: z.string(), statuses: Statuses }).strict();
-function statusLines(statuses: readonly ChannelRuntimeStatus[]): string { return statuses.length === 0 ? "no channels declared or configured" : statuses.map((status) => `${status.id} → ${status.state}${status.detail === undefined ? "" : ` (${status.detail})`}`).join("\n"); }
-export const personDeclareTool = defineTool({ ...mutationCommon, name: "person_declare", description: "Upsert a Person manifest (identity + platform endpoint bindings). Tier raises above collaborator and any change to the owner Person open a person_mutation approval pinned to this exact manifest's digest; re-run with the approved approvalId to land it.", input: PERSON_DECLARE_INPUT, output: PersonDeclareOutput, bind: (ports) => ports.provisioning === undefined ? undefined : executePersonDeclare(ports.provisioning), render: (_args, value) => value.kind === "pending" ? `person_declare pending: ${value.requirement} — approval ${value.approvalId} opened (digest ${value.digest}); the Owner answers with approval_decide, then re-run person_declare with approvalId=${value.approvalId}. Unanswered after ${value.deadline} reads as refused.` : `person ${value.id} declared (tier ${value.trustTier}, revision ${value.revision})` });
-export const personRemoveTool = defineTool({ ...mutationCommon, name: "person_remove", description: "Remove a Person manifest and its derived identity. Refuses to remove the sole owner.", input: PERSON_REMOVE_INPUT, output: PersonRemoveOutput, bind: (ports) => ports.provisioning === undefined ? undefined : executePersonRemove(ports.provisioning), render: (_args, value) => `person ${value.id} removed` });
-export const channelDeclareTool = defineTool({ ...mutationCommon, name: "channel_declare", description: "Upsert a ChannelInstance declaration. A supplied credential is validated against the provider's schema, sealed into the vault, and referenced — invalid credentials refuse before anything lands. Affected stages bounce immediately.", input: CHANNEL_DECLARE_INPUT, output: ChannelOutput, bind: (ports) => ports.provisioning === undefined ? undefined : executeChannelDeclare(ports.provisioning), render: (_args, value) => `channel ${value.id} declared\n${statusLines(value.statuses)}` });
-export const channelEnableTool = defineTool({ ...mutationCommon, name: "channel_enable", description: "Enable a declared channel and bounce its stage. Also re-arms a breaker-paused instance (the manual resume).", input: INSTANCE_INPUT, output: ChannelOutput, bind: (ports) => ports.provisioning === undefined ? undefined : executeChannelEnable(ports.provisioning), render: (_args, value) => `channel ${value.id} enabled\n${statusLines(value.statuses)}` });
-export const channelDisableTool = defineTool({ ...mutationCommon, name: "channel_disable", description: "Disable a declared channel and stop its stage.", input: INSTANCE_INPUT, output: ChannelOutput, bind: (ports) => ports.provisioning === undefined ? undefined : executeChannelDisable(ports.provisioning), render: (_args, value) => `channel ${value.id} disabled\n${statusLines(value.statuses)}` });
-export const secretRotateTool = defineTool({ ...mutationCommon, name: "secret_rotate", description: "Seal a new credential revision over an existing vault row and bounce every stage referencing it (stop → swap → start).", input: SECRET_ROTATE_INPUT, output: SecretOutput, bind: (ports) => ports.provisioning === undefined ? undefined : executeSecretRotate(ports.provisioning), render: (_args, value) => `secret ${value.id} rotated (kek ${value.kekId})\n${statusLines(value.statuses)}` });
-export { EMPTY_INPUT };
+const ProvisionInput = z
+  .object({
+    op: z.union([
+      z.literal("person_declare"),
+      z.literal("person_remove"),
+      z.literal("channel_declare"),
+      z.literal("channel_enable"),
+      z.literal("channel_disable"),
+      z.literal("secret_rotate"),
+      z.literal("status"),
+    ]),
+    args: z.record(z.string(), z.unknown()),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const schemas = {
+      person_declare: PERSON_DECLARE_INPUT,
+      person_remove: PERSON_REMOVE_INPUT,
+      channel_declare: CHANNEL_DECLARE_INPUT,
+      channel_enable: INSTANCE_INPUT,
+      channel_disable: INSTANCE_INPUT,
+      secret_rotate: SECRET_ROTATE_INPUT,
+      status: EMPTY_INPUT,
+    } as const;
+    const parsed = schemas[value.op].safeParse(value.args);
+    if (!parsed.success)
+      for (const issue of parsed.error.issues)
+        ctx.addIssue({ ...issue, path: ["args", ...issue.path] });
+  });
+const ProvisionOutput = z.custom<Record<string, unknown>>(
+  (value) => typeof value === "object" && value !== null,
+);
+function statusLines(statuses: readonly ChannelRuntimeStatus[]): string {
+  return statuses.length === 0
+    ? "no channels declared or configured"
+    : statuses
+        .map(
+          (status) =>
+            `${status.id} → ${status.state}${status.detail === undefined ? "" : ` (${status.detail})`}`,
+        )
+        .join("\n");
+}
+
+export function createProvisionTool(port: ProvisionPort) {
+  const executors = {
+    person_declare: executePersonDeclare(port),
+    person_remove: executePersonRemove(port),
+    channel_declare: executeChannelDeclare(port),
+    channel_enable: executeChannelEnable(port),
+    channel_disable: executeChannelDisable(port),
+    secret_rotate: executeSecretRotate(port),
+    status: executeProvisionStatus(port),
+  };
+  return defineTool({
+    name: "provision",
+    category: "mutation",
+    description:
+      "Administer people, channels, credentials, and provisioning status. Use op=person_declare|person_remove|channel_declare|channel_enable|channel_disable|secret_rotate|status.",
+    input: ProvisionInput,
+    output: ProvisionOutput,
+    visibility: { model: ["resident"], cell: ["resident"] },
+    execute: async (input) => {
+      switch (input.op) {
+        case "person_declare":
+          return executors.person_declare(PERSON_DECLARE_INPUT.parse(input.args));
+        case "person_remove":
+          return executors.person_remove(PERSON_REMOVE_INPUT.parse(input.args));
+        case "channel_declare":
+          return executors.channel_declare(CHANNEL_DECLARE_INPUT.parse(input.args));
+        case "channel_enable":
+          return executors.channel_enable(INSTANCE_INPUT.parse(input.args));
+        case "channel_disable":
+          return executors.channel_disable(INSTANCE_INPUT.parse(input.args));
+        case "secret_rotate":
+          return executors.secret_rotate(SECRET_ROTATE_INPUT.parse(input.args));
+        case "status":
+          return executors.status({});
+      }
+    },
+    render: (args, value) => {
+      if ("source" in value)
+        return renderProvisionStatus(value as z.output<typeof ProvisionStatusOutput>);
+      if (args.op === "person_declare" && value.kind === "pending")
+        return `person_declare pending: ${String(value.requirement)} — approval ${String(value.approvalId)} opened (digest ${String(value.digest)}); unanswered after ${String(value.deadline)} reads as refused.`;
+      if (args.op === "person_declare")
+        return `person ${String(value.id)} declared (tier ${String(value.trustTier)}, revision ${String(value.revision)})`;
+      if (args.op === "person_remove") return `person ${String(value.id)} removed`;
+      if (
+        args.op === "channel_declare" ||
+        args.op === "channel_enable" ||
+        args.op === "channel_disable"
+      )
+        return `channel ${String(value.id)} ${String(value.action)}\n${statusLines(value.statuses as readonly ChannelRuntimeStatus[])}`;
+      if (args.op === "secret_rotate")
+        return `secret ${String(value.id)} rotated (kek ${String(value.kekId)})\n${statusLines(value.statuses as readonly ChannelRuntimeStatus[])}`;
+      return JSON.stringify(value, null, 2);
+    },
+  });
+}

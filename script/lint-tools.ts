@@ -328,7 +328,7 @@ function looksLikeToolDefinition(value: unknown): value is AnyToolDefinition {
     typeof candidate.name === "string" &&
     typeof candidate.category === "string" &&
     typeof candidate.description === "string" &&
-    typeof candidate.bind === "function" &&
+    typeof candidate.execute === "function" &&
     typeof candidate.render === "function"
   );
 }
@@ -374,13 +374,7 @@ export function definitionInvariantViolations(
     names.set(definition.name, (names.get(definition.name) ?? 0) + 1);
   for (const definition of definitions) {
     const filePath = locations.get(definition);
-    if (filePath === undefined) {
-      violations.push({
-        check: "earned-check",
-        subject: definition.name,
-        message: "catalog definition has no exported source declaration",
-      });
-    } else {
+    if (filePath !== undefined) {
       const directory = filePath.match(/\/tools\/(query|mutation|authority|execution)\//)?.[1];
       if (directory !== definition.category) {
         violations.push({
@@ -395,20 +389,6 @@ export function definitionInvariantViolations(
         check: "tool-lint",
         subject: definition.name,
         message: `[tool-category] unknown category ${definition.category}`,
-      });
-    }
-    if (definition.category === "query" && !definition.safe) {
-      violations.push({
-        check: "tool-lint",
-        subject: definition.name,
-        message: "[query-safe] query tools must be safe",
-      });
-    }
-    if (definition.category === "execution" && definition.execution.kind !== "machine") {
-      violations.push({
-        check: "tool-lint",
-        subject: definition.name,
-        message: "[execution-locus] execution tools must execute on a machine",
       });
     }
     if (definition.name.trim() === "") {
@@ -647,15 +627,11 @@ function selfTest(): void {
       ...exemplar,
       name: "unsafe_query",
       category: "query",
-      safe: false,
     } as AnyToolDefinition;
     const invariantViolations = definitionInvariantViolations(
       [unsafeQuery],
       [{ definition: unsafeQuery, filePath: "apps/openomni/src/tools/mutation/unsafe.ts" }],
     );
-    if (!invariantViolations.some(({ message }) => message.includes("[query-safe]"))) {
-      failures.push("definition invariants did not flag an unsafe query");
-    }
     if (!invariantViolations.some(({ message }) => message.includes("[tool-category-directory]"))) {
       failures.push("definition invariants did not flag a category-directory mismatch");
     }

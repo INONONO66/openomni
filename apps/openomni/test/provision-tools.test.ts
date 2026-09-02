@@ -8,7 +8,7 @@ import {
   Vault,
 } from "@openomni/ledger";
 import type { ChannelRuntimeStatus } from "../src/provisioning/supervisor";
-import { catalogEntries } from "../src/tools/core/catalog";
+import { createTools } from "../src/tools/core/catalog";
 import { personManifestDigest, type ProvisionPort } from "../src/tools/mutation/provision";
 import { dispatchModelTool, modelToolOutput } from "./helpers/tool-dispatch";
 
@@ -16,8 +16,11 @@ const NOW = 1_756_000_000_000;
 const TRACE = "00-11111111111111111111111111111111-2222222222222222-01";
 const RESIDENT = { role: "resident", depth: 0, sessionId: "provision-test" } as const;
 
-const provisionTool = (name: string, port: ProvisionPort, now: () => number = Date.now) =>
-  modelToolOutput(name, { provisioning: port }, RESIDENT, now);
+const provisionTool = (name: string, port: ProvisionPort, now: () => number = Date.now) => {
+  const run = modelToolOutput("provision", { provisioning: port }, RESIDENT, now);
+  const op = name === "provision_status" ? "status" : name;
+  return (input: Record<string, unknown>) => run({ op, args: input });
+};
 const personDeclare = (port: ProvisionPort, now?: () => number) =>
   provisionTool("person_declare", port, now);
 const personRemove = (port: ProvisionPort) => provisionTool("person_remove", port);
@@ -113,7 +116,10 @@ afterEach(() => {
 describe("person_declare approval lane (§8.5)", () => {
   test("a raise above collaborator opens a digest-pinned approval instead of landing", async () => {
     const { port, supervisor } = portWith();
-    const result = await personDeclare(port, () => NOW)({
+    const result = await personDeclare(
+      port,
+      () => NOW,
+    )({
       manifest: MANAGER_MANIFEST,
     });
     expect(result).toContain("requires Owner approval (§8.5)");
@@ -130,7 +136,10 @@ describe("person_declare approval lane (§8.5)", () => {
 
     // The Owner answers; the SAME manifest re-run with the approvalId lands.
     ApprovalStore.decide(match[1], "approved", TRACE, NOW + 1);
-    const landed = await personDeclare(port, () => NOW + 5)({
+    const landed = await personDeclare(
+      port,
+      () => NOW + 5,
+    )({
       manifest: MANAGER_MANIFEST,
       approvalId: match[1],
     });
@@ -142,7 +151,10 @@ describe("person_declare approval lane (§8.5)", () => {
   test("an approved, digest-matched mutation lands and materializes", async () => {
     const { port, supervisor } = portWith();
     approvePersonMutation("approval-1", "person:sunwoo", managerDigest(), NOW);
-    const result = await personDeclare(port, () => NOW + 5)({
+    const result = await personDeclare(
+      port,
+      () => NOW + 5,
+    )({
       manifest: MANAGER_MANIFEST,
       approvalId: "approval-1",
     });
@@ -167,7 +179,10 @@ describe("person_declare approval lane (§8.5)", () => {
       TRACE,
       NOW,
     );
-    const result = await personDeclare(port, () => NOW + 20)({
+    const result = await personDeclare(
+      port,
+      () => NOW + 20,
+    )({
       manifest: MANAGER_MANIFEST,
       approvalId: "approval-stale",
     });
@@ -177,7 +192,10 @@ describe("person_declare approval lane (§8.5)", () => {
 
   test("a collaborator-or-below declaration is direct — no approval consumed", async () => {
     const { port } = portWith();
-    const result = await personDeclare(port, () => NOW)({
+    const result = await personDeclare(
+      port,
+      () => NOW,
+    )({
       manifest: { ...MANAGER_MANIFEST, trustTier: "collaborator" },
     });
     expect(result).toContain("declared (tier collaborator");
@@ -203,14 +221,20 @@ describe("owner-Person mutation guard (§8.6) and sole owner (§8.8)", () => {
     const { port } = portWith();
     const edited = {
       ...ownerManifest,
-      endpoints: [{ channel: "telegram", externalId: "1" }, { channel: "discord", externalId: "2" }],
+      endpoints: [
+        { channel: "telegram", externalId: "1" },
+        { channel: "discord", externalId: "2" },
+      ],
     };
     const refused = await personDeclare(port, () => NOW)({ manifest: edited });
     expect(refused).toContain("any mutation of the owner Person requires Owner approval (§8.6)");
     expect(PersonStore.get("person:ino")?.endpoints).toHaveLength(1);
 
     approvePersonMutation("approval-owner", "person:ino", personManifestDigest(edited), NOW);
-    const landed = await personDeclare(port, () => NOW + 5)({
+    const landed = await personDeclare(
+      port,
+      () => NOW + 5,
+    )({
       manifest: edited,
       approvalId: "approval-owner",
     });
@@ -222,7 +246,10 @@ describe("owner-Person mutation guard (§8.6) and sole owner (§8.8)", () => {
     putOwner();
     const { port } = portWith();
     approvePersonMutation("approval-other", "person:ino", "0".repeat(64), NOW);
-    const result = await personDeclare(port, () => NOW + 5)({
+    const result = await personDeclare(
+      port,
+      () => NOW + 5,
+    )({
       manifest: ownerManifest,
       approvalId: "approval-other",
     });
@@ -245,7 +272,10 @@ describe("owner-Person mutation guard (§8.6) and sole owner (§8.8)", () => {
       personManifestDigest({ ...second, displayName: "person:evil" }),
       NOW,
     );
-    const result = await personDeclare(port, () => NOW + 5)({
+    const result = await personDeclare(
+      port,
+      () => NOW + 5,
+    )({
       manifest: second,
       approvalId: "approval-second",
     });
@@ -281,7 +311,10 @@ describe("owner-Person mutation guard (§8.6) and sole owner (§8.8)", () => {
 describe("channel administration ends in reconcile (§5, §8.7)", () => {
   test("channel_declare validates the credential BEFORE anything lands", async () => {
     const { port, supervisor } = portWith();
-    const result = await channelDeclare(port, () => NOW)({
+    const result = await channelDeclare(
+      port,
+      () => NOW,
+    )({
       id: "channel:telegram:main",
       provider: "telegram",
       credential: { wrong: "field" },
@@ -294,7 +327,10 @@ describe("channel administration ends in reconcile (§5, §8.7)", () => {
 
   test("channel_declare refuses an unregistered provider before anything lands", async () => {
     const { port, supervisor } = portWith();
-    const result = await channelDeclare(port, () => NOW)({
+    const result = await channelDeclare(
+      port,
+      () => NOW,
+    )({
       id: "channel:matrix:main",
       provider: "matrix",
       credential: { token: "x" },
@@ -306,7 +342,10 @@ describe("channel administration ends in reconcile (§5, §8.7)", () => {
 
   test("§4 channel_declare refuses unknown settings knobs — never accepted-and-ignored", async () => {
     const { port, supervisor } = portWith();
-    const result = await channelDeclare(port, () => NOW)({
+    const result = await channelDeclare(
+      port,
+      () => NOW,
+    )({
       id: "channel:telegram:main",
       provider: "telegram",
       credential: { token: "tg-token" },
@@ -320,7 +359,10 @@ describe("channel administration ends in reconcile (§5, §8.7)", () => {
   test("a valid declaration seals the credential, lands the row, and reconciles", async () => {
     const { port, supervisor } = portWith();
     supervisor.statuses = [{ id: "channel:telegram:main", surface: "telegram", state: "mounted" }];
-    const result = await channelDeclare(port, () => NOW)({
+    const result = await channelDeclare(
+      port,
+      () => NOW,
+    )({
       id: "channel:telegram:main",
       provider: "telegram",
       credential: { token: "tg-token" },
@@ -339,7 +381,10 @@ describe("channel administration ends in reconcile (§5, §8.7)", () => {
 
   test("a locked vault refuses to seal — declaration never half-lands", async () => {
     const { port } = portWith({ kek: { kind: "locked", reason: "no OPENOMNI_VAULT_KEY" } });
-    const result = await channelDeclare(port, () => NOW)({
+    const result = await channelDeclare(
+      port,
+      () => NOW,
+    )({
       id: "channel:telegram:main",
       provider: "telegram",
       credential: { token: "tg-token" },
@@ -350,21 +395,30 @@ describe("channel administration ends in reconcile (§5, §8.7)", () => {
 
   test("enable re-arms the breaker then reconciles; disable just reconciles", async () => {
     const { port, supervisor } = portWith();
-    await channelDeclare(port, () => NOW)({
+    await channelDeclare(
+      port,
+      () => NOW,
+    )({
       id: "channel:telegram:main",
       provider: "telegram",
       credential: { token: "tg-token" },
     });
     supervisor.calls.length = 0;
 
-    const disabled = await channelDisable(port, () => NOW + 1)({
+    const disabled = await channelDisable(
+      port,
+      () => NOW + 1,
+    )({
       instanceId: "channel:telegram:main",
     });
     expect(disabled).toContain("channel channel:telegram:main disabled");
     expect(ChannelInstanceStore.get("channel:telegram:main")?.enabled).toBe(false);
     expect(supervisor.calls).toEqual(["reconcile"]);
 
-    const enabled = await channelEnable(port, () => NOW + 2)({
+    const enabled = await channelEnable(
+      port,
+      () => NOW + 2,
+    )({
       instanceId: "channel:telegram:main",
     });
     expect(enabled).toContain("channel channel:telegram:main enabled");
@@ -379,21 +433,30 @@ describe("channel administration ends in reconcile (§5, §8.7)", () => {
 
   test("§8.7 secret_rotate keeps the id, bumps rotatedAt, and bounces via reconcile", async () => {
     const { port, supervisor } = portWith();
-    await channelDeclare(port, () => NOW)({
+    await channelDeclare(
+      port,
+      () => NOW,
+    )({
       id: "channel:telegram:main",
       provider: "telegram",
       credential: { token: "old-token" },
     });
     supervisor.calls.length = 0;
 
-    const invalid = await secretRotate(port, () => NOW + 10)({
+    const invalid = await secretRotate(
+      port,
+      () => NOW + 10,
+    )({
       secretId: "secret:channel-telegram-main",
       credential: { wrong: "field" },
     });
     expect(invalid).toContain("secret_rotate refused: channel:telegram:main:");
     expect(SecretStore.get("secret:channel-telegram-main")?.rotatedAt).toBeUndefined();
 
-    const rotated = await secretRotate(port, () => NOW + 10)({
+    const rotated = await secretRotate(
+      port,
+      () => NOW + 10,
+    )({
       secretId: "secret:channel-telegram-main",
       credential: { token: "new-token" },
     });
@@ -410,27 +473,25 @@ describe("channel administration ends in reconcile (§5, §8.7)", () => {
 
   test("catalog gate: provisioning administration is the Resident's alone", () => {
     const { port } = portWith();
-    const provisionTools = [
-      "person_declare",
-      "person_remove",
-      "channel_declare",
-      "channel_enable",
-      "channel_disable",
-      "secret_rotate",
-      "provision_status",
-    ];
-    const resident = catalogEntries({ provisioning: port }, {
-      role: "resident",
-      depth: 0,
-      sessionId: "s",
-    }).map((entry) => entry.spec.name);
-    const worker = catalogEntries({ provisioning: port }, {
-      role: "worker",
-      depth: 1,
-      sessionId: "s",
-    }).map((entry) => entry.spec.name);
-    const unwired = catalogEntries({}, { role: "resident", depth: 0, sessionId: "s" }).map(
-      (entry) => entry.spec.name,
+    const provisionTools = ["provision"];
+    const resident = createTools(
+      { provisioning: port },
+      {
+        role: "resident",
+        depth: 0,
+        sessionId: "s",
+      },
+    ).map((entry) => entry.name);
+    const worker = createTools(
+      { provisioning: port },
+      {
+        role: "worker",
+        depth: 1,
+        sessionId: "s",
+      },
+    ).map((entry) => entry.name);
+    const unwired = createTools({}, { role: "resident", depth: 0, sessionId: "s" }).map(
+      (entry) => entry.name,
     );
     for (const name of provisionTools) {
       expect(resident).toContain(name);
@@ -442,7 +503,12 @@ describe("channel administration ends in reconcile (§5, §8.7)", () => {
   test("provision_status reports source, vault state, and per-instance verdicts", async () => {
     const { port, supervisor } = portWith();
     supervisor.statuses = [
-      { id: "channel:telegram:main", surface: "telegram", state: "paused_by_breaker", detail: "3 consecutive start failures; channel_enable re-arms it" },
+      {
+        id: "channel:telegram:main",
+        surface: "telegram",
+        state: "paused_by_breaker",
+        detail: "3 consecutive start failures; channel_enable re-arms it",
+      },
     ];
     const result = await provisionStatus(port)({});
     expect(result).toContain("channel source: declared");
@@ -478,9 +544,14 @@ describe("refusal branches", () => {
       ["secret_rotate", {}],
       ["provision_status", "nope"],
     ] as const) {
-      const result = await dispatchModelTool(name, { provisioning: port }, RESIDENT, () => NOW)(input);
+      const result = await dispatchModelTool(
+        "provision",
+        { provisioning: port },
+        RESIDENT,
+        () => NOW,
+      )(typeof input === "object" ? { op: name, args: input } : input);
       expect(result).toMatchObject({ isError: true, errorClass: "invalid_input" });
-      expect(result.output).toContain(`${name} refused`);
+      expect(result.output).toContain("provision refused");
     }
   });
 
@@ -498,7 +569,10 @@ describe("refusal branches", () => {
     );
     ApprovalStore.decide("approval:kind", "approved", TRACE, NOW + 1);
     expect(
-      await personDeclare(port, () => NOW + 2)({
+      await personDeclare(
+        port,
+        () => NOW + 2,
+      )({
         manifest: MANAGER_MANIFEST,
         approvalId: "approval:kind",
       }),
@@ -506,7 +580,10 @@ describe("refusal branches", () => {
 
     approvePersonMutation("approval:other", "person:other", managerDigest(), NOW);
     expect(
-      await personDeclare(port, () => NOW + 2)({
+      await personDeclare(
+        port,
+        () => NOW + 2,
+      )({
         manifest: MANAGER_MANIFEST,
         approvalId: "approval:other",
       }),
@@ -539,7 +616,10 @@ describe("refusal branches", () => {
       },
     });
     expect(
-      await channelDeclare(port, () => NOW)({
+      await channelDeclare(
+        port,
+        () => NOW,
+      )({
         id: "channel:telegram:main",
         provider: "telegram",
         credential: { token: "t" },

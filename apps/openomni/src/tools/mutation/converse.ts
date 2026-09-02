@@ -1,7 +1,7 @@
 import type { ConversationStore, LeaseStore } from "@openomni/ledger";
+import type { Delegation } from "@openomni/protocol";
 import { newTraceId } from "@openomni/telemetry";
 import { z } from "zod";
-import type { DelegationOrigin } from "../../delegation/admission";
 import { defineTool, ToolRefused } from "../core/define";
 
 export interface ConversePort {
@@ -10,79 +10,149 @@ export interface ConversePort {
   readonly close: typeof ConversationStore.close;
   readonly closeLeases: typeof LeaseStore.closeByConversation;
 }
-
-const OpenInput = z.object({
-  contactId: z.string().min(1).describe("Registered actor the window reaches."),
-  endpointId: z.string().min(1).describe("Allocated endpoint of that actor the window is pinned to."),
-  timeoutMs: z.number().int().positive().describe("How long the window stays open from now."),
-  maxOutbound: z.number().int().positive().optional().describe("Outbound message cap inside the window (default 8)."),
-  maxInbound: z.number().int().positive().optional().describe("Inbound message cap before the treatment demotes to evidence_only (default 32)."),
-}).strict();
-const CloseInput = z.object({ conversationId: z.string().min(1).describe("Window to settle.") }).strict();
-
-const OpenOutput = z.object({
-  id: z.string(), contactId: z.string(), expiresAt: z.number(), maxOutbound: z.number(), maxInbound: z.number(),
-}).strict();
-const CloseOutput = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("unchanged"), conversationId: z.string(), closedBy: z.string().nullable().optional() }).strict(),
-  z.object({ kind: z.literal("closed"), conversationId: z.string(), revoked: z.number().int().nonnegative() }).strict(),
-]);
-
-function executeConverseOpen(port: ConversePort, origin: DelegationOrigin, now: () => number = Date.now) {
-  return async (input: z.output<typeof OpenInput>): Promise<z.output<typeof OpenOutput>> => {
-    const at = now();
-    try {
-      const record = port.open({
-        id: `conv:${origin.sessionId}:${crypto.randomUUID()}`,
-        contactId: input.contactId,
-        endpointId: input.endpointId,
-        ownerRef: { kind: "session", id: origin.sessionId },
-        openedBy: "resident",
-        policy: {
-          expiresAt: at + input.timeoutMs,
-          maxOutbound: input.maxOutbound ?? 8,
-          maxInbound: input.maxInbound ?? 32,
-          onInboundCapBreach: "demote",
-        },
-      }, newTraceId(), at);
-      return { id: record.id, contactId: record.contactId, expiresAt: record.policy.expiresAt, maxOutbound: record.policy.maxOutbound, maxInbound: record.policy.maxInbound };
-    } catch (error) {
-      throw new ToolRefused("converse_open", error instanceof Error ? error.message : String(error));
-    }
-  };
+export interface LeasePort {
+  readonly issue: typeof LeaseStore.issue;
+  readonly getDelegation: (delegationId: string) => Delegation.Record | undefined;
 }
+const OpenArgs = z
+  .object({
+    contactId: z.string().min(1),
+    endpointId: z.string().min(1),
+    timeoutMs: z.number().int().positive(),
+    maxOutbound: z.number().int().positive().optional(),
+    maxInbound: z.number().int().positive().optional(),
+  })
+  .strict();
+const CloseArgs = z.object({ conversationId: z.string().min(1) }).strict();
+const LeaseArgs = z
+  .object({
+    delegationId: z.string().min(1),
+    conversationId: z.string().min(1),
+    maxOutbound: z.number().int().positive(),
+  })
+  .strict();
+const Input = z
+  .object({
+    op: z.union([z.literal("open"), z.literal("close"), z.literal("lease")]),
+    args: z.record(z.string(), z.unknown()),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const schema = value.op === "open" ? OpenArgs : value.op === "close" ? CloseArgs : LeaseArgs;
+    const parsed = schema.safeParse(value.args);
+    if (!parsed.success)
+      for (const issue of parsed.error.issues)
+        ctx.addIssue({ ...issue, path: ["args", ...issue.path] });
+  });
+const Output = z.custom<Record<string, unknown>>(
+  (value) => typeof value === "object" && value !== null,
+);
 
-function executeConverseClose(port: ConversePort) {
-  return async ({ conversationId }: z.output<typeof CloseInput>): Promise<z.output<typeof CloseOutput>> => {
-    try {
-      const traceId = newTraceId();
-      const outcome = port.close(conversationId, "owner", traceId);
-      const revoked = port.closeLeases(conversationId, "conversation_revoked", traceId);
-      return outcome.kind === "unchanged"
-        ? { kind: "unchanged", conversationId, closedBy: outcome.record.closedBy }
-        : { kind: "closed", conversationId, revoked };
-    } catch (error) {
-      throw new ToolRefused("converse_close", error instanceof Error ? error.message : String(error));
-    }
-  };
+export function createConverseTool(conversations: ConversePort, leases: LeasePort) {
+  return defineTool({
+    name: "converse",
+    category: "mutation",
+    description:
+      "Open or close a bounded conversation window, or carve a delegation lease from one. Use op=open|close|lease.",
+    input: Input,
+    output: Output,
+    visibility: { model: ["resident"], cell: ["resident"] },
+    execute: async (input, ctx) => {
+      const args = input.args as Record<string, unknown>;
+      if (input.op === "open") {
+        const open = args as z.output<typeof OpenArgs>;
+        const at = Date.now();
+        try {
+          const record = conversations.open(
+            {
+              id: `conv:${ctx.sessionId}:${crypto.randomUUID()}`,
+              contactId: open.contactId,
+              endpointId: open.endpointId,
+              ownerRef: { kind: "session", id: ctx.sessionId },
+              openedBy: "resident",
+              policy: {
+                expiresAt: at + open.timeoutMs,
+                maxOutbound: open.maxOutbound ?? 8,
+                maxInbound: open.maxInbound ?? 32,
+                onInboundCapBreach: "demote",
+              },
+            },
+            newTraceId(),
+            at,
+          );
+          return {
+            op: "open",
+            id: record.id,
+            contactId: record.contactId,
+            expiresAt: record.policy.expiresAt,
+            maxOutbound: record.policy.maxOutbound,
+            maxInbound: record.policy.maxInbound,
+          };
+        } catch (error) {
+          throw new ToolRefused("converse", error instanceof Error ? error.message : String(error));
+        }
+      }
+      if (input.op === "close") {
+        try {
+          const traceId = newTraceId();
+          const close = args as z.output<typeof CloseArgs>;
+          const outcome = conversations.close(close.conversationId, "owner", traceId);
+          const revoked = conversations.closeLeases(
+            close.conversationId,
+            "conversation_revoked",
+            traceId,
+          );
+          return outcome.kind === "unchanged"
+            ? {
+                op: "close",
+                kind: "unchanged",
+                conversationId: close.conversationId,
+                closedBy: outcome.record.closedBy,
+              }
+            : { op: "close", kind: "closed", conversationId: close.conversationId, revoked };
+        } catch (error) {
+          throw new ToolRefused("converse", error instanceof Error ? error.message : String(error));
+        }
+      }
+      const lease = args as z.output<typeof LeaseArgs>;
+      const delegation = leases.getDelegation(lease.delegationId);
+      if (delegation === undefined)
+        throw new ToolRefused("converse", `delegation ${lease.delegationId} does not exist`);
+      if (delegation.status !== "open")
+        throw new ToolRefused("converse", `delegation ${lease.delegationId} is already settled`);
+      try {
+        const record = leases.issue(
+          {
+            id: `lease:${crypto.randomUUID()}`,
+            conversationId: lease.conversationId,
+            holderDelegationId: lease.delegationId,
+            delegationDeadline: delegation.deadline,
+            maxOutbound: lease.maxOutbound,
+          },
+          newTraceId(),
+          Date.now(),
+        );
+        return {
+          op: "lease",
+          id: record.id,
+          holderDelegationId: record.holderDelegationId,
+          contactId: record.contactId,
+          conversationId: record.conversationId,
+          maxOutbound: record.budget.maxOutbound,
+          expiresAt: record.expiresAt,
+        };
+      } catch (error) {
+        throw new ToolRefused("converse", error instanceof Error ? error.message : String(error));
+      }
+    },
+    render: (args, value) => {
+      if (args.op === "open")
+        return `conversation ${String(value.id)} open to ${String(value.contactId)} until ${String(value.expiresAt)} (outbound cap ${String(value.maxOutbound)}, inbound cap ${String(value.maxInbound)})`;
+      if (args.op === "lease")
+        return `lease ${String(value.id)} issued to delegation ${String(value.holderDelegationId)} for ${String(value.contactId)} in conversation ${String(value.conversationId)} (${String(value.maxOutbound)} sends, expires ${String(value.expiresAt)})`;
+      return value.kind === "unchanged"
+        ? `conversation ${String(value.conversationId)} was already closed (${String(value.closedBy ?? "unknown")})`
+        : `conversation ${String(value.conversationId)} closed`;
+    },
+  });
 }
-
-export const converseOpenTool = defineTool({
-  name: "converse_open", category: "mutation",
-  description: "Open a bounded reply window to a known contact. While it is open, the contact's inbound reaches this session directly and sends to the contact ride the window instead of a grant. The window closes on its deadline, its caps, or converse_close.",
-  input: OpenInput, output: OpenOutput, safe: false, execution: { kind: "host" }, placement: "host",
-  visibility: { model: ["resident"], cell: ["resident"] },
-  bind: (ports, origin) => ports.conversations === undefined ? undefined : executeConverseOpen(ports.conversations, origin),
-  render: (_args, value) => `conversation ${value.id} open to ${value.contactId} until ${value.expiresAt} (outbound cap ${value.maxOutbound}, inbound cap ${value.maxInbound})`,
-});
-
-export const converseCloseTool = defineTool({
-  name: "converse_close", category: "mutation",
-  description: "Settle an open reply window by id. Closing an already-closed window returns its existing settlement.",
-  input: CloseInput, output: CloseOutput, safe: false, execution: { kind: "host" }, placement: "host",
-  visibility: { model: ["resident"], cell: ["resident"] },
-  bind: (ports) => ports.conversations === undefined ? undefined : executeConverseClose(ports.conversations),
-  render: (_args, value) => value.kind === "unchanged"
-    ? `conversation ${value.conversationId} was already closed (${value.closedBy ?? "unknown"})`
-    : value.revoked === 0 ? `conversation ${value.conversationId} closed` : `conversation ${value.conversationId} closed (${value.revoked} live lease${value.revoked === 1 ? "" : "s"} revoked)`,
-});

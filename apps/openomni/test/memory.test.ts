@@ -3,8 +3,9 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openCuratedMemory, type CuratedMemory } from "../src/memory/store";
-import { catalogEntries } from "../src/tools/core/catalog";
+import { createTools } from "../src/tools/core/catalog";
 import { createDispatcher } from "../src/tools/core/dispatch";
+import { toolSpec } from "../src/tools/core/project";
 import { MEMORY_TOOL_NAME } from "../src/tools/mutation/memory";
 
 let directory: string;
@@ -97,12 +98,13 @@ describe("the curated memory store", () => {
 describe("the memory tool", () => {
   const origin = { role: "resident", depth: 0, sessionId: "memory-test" } as const;
   const tool = (memory: CuratedMemory) =>
-    createDispatcher(catalogEntries({ memory }, origin)).execute;
+    createDispatcher(createTools({ memory }, origin)).execute;
   const call = (run: ReturnType<typeof tool>, id: string, input: Record<string, unknown>) =>
     run({ id, tool: MEMORY_TOOL_NAME, input });
 
   it("spec agrees with the zod gate", () => {
-    const spec = catalogEntries({ memory: open() }, origin)[0]?.spec;
+    const definition = createTools({ memory: open() }, origin)[0];
+    const spec = definition === undefined ? undefined : toolSpec(definition);
     expect(spec?.name).toBe(MEMORY_TOOL_NAME);
     expect(spec?.safe).toBe(false);
     expect(spec?.placement).toBe("host");
@@ -132,10 +134,26 @@ describe("the memory tool", () => {
   it("refuses shape violations per action as error results", async () => {
     const run = tool(open());
     for (const [id, input, message] of [
-      ["missing-content", { action: "add", store: "system" }, "memory refused: add requires content"],
-      ["unexpected-id", { action: "add", store: "system", id: "x", content: "y" }, "memory refused: add takes no id"],
-      ["missing-id", { action: "replace", store: "owner", content: "y" }, "memory refused: replace requires id"],
-      ["unexpected-content", { action: "remove", store: "owner", id: "x", content: "y" }, "memory refused: remove takes no content"],
+      [
+        "missing-content",
+        { action: "add", store: "system" },
+        "memory refused: add requires content",
+      ],
+      [
+        "unexpected-id",
+        { action: "add", store: "system", id: "x", content: "y" },
+        "memory refused: add takes no id",
+      ],
+      [
+        "missing-id",
+        { action: "replace", store: "owner", content: "y" },
+        "memory refused: replace requires id",
+      ],
+      [
+        "unexpected-content",
+        { action: "remove", store: "owner", id: "x", content: "y" },
+        "memory refused: remove takes no content",
+      ],
     ] as const) {
       const result = await call(run, id, input);
       expect(result.isError).toBe(true);

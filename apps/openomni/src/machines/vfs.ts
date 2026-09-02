@@ -31,7 +31,6 @@ export const MachineVfsError = NamedError.create("MachineVfsError", MachineVfsEr
  * refusal arm on the host side is a type error here rather than a silent
  * fallthrough to "the daemon refused".
  */
-export type { FsOpOutcome };
 
 /**
  * The host's fs door as the app holds it: one machine, one request, one
