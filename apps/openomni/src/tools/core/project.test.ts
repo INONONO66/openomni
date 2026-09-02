@@ -22,7 +22,8 @@ describe("tool schema projection", () => {
       execution: { kind: "host" },
     });
 
-    expect(toolInputSchema(definition)).toEqual({
+    const schema = toolInputSchema(definition);
+    expect(schema).toEqual({
       type: "object",
       properties: {
         query: { type: "string", description: "What to find." },
@@ -31,6 +32,27 @@ describe("tool schema projection", () => {
       required: ["query"],
       additionalProperties: false,
     });
+    expect((schema.properties as Record<string, { description?: string }>).query?.description).toBe(
+      "What to find.",
+    );
+  });
+
+  it("validates every input example at construction time", () => {
+    expect(() => defineTool({
+      ...shared,
+      name: "valid-examples",
+      input: z.object({ query: z.string().min(1) }).strict(),
+      inputExamples: [{ query: "status" }],
+      execution: { kind: "host" },
+    })).not.toThrow();
+
+    expect(() => defineTool({
+      ...shared,
+      name: "invalid-examples",
+      input: z.object({ query: z.string().min(1) }).strict(),
+      inputExamples: [{ query: "" }],
+      execution: { kind: "host" },
+    })).toThrow("invalid-examples input example 0 is invalid");
   });
 
   it("rejects a non-object root", () => {

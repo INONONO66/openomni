@@ -1,0 +1,13 @@
+{
+  "projectorVersion": 1,
+  "fingerprints": {
+    "model:resident:full": "ffada1aee05b13e985006434c54a75fc2c46847dc9c947cdb7a9e25376d33de9",
+    "model:resident:empty": "0758ffe9350a70a1adf269901b9aa458444de136e5b6d98091f8cc33580a0088",
+    "model:worker:full": "ad667285e5cd368002866883ea0c10e6e79162a1be9434ea30d16644fc6fc62b",
+    "model:worker:empty": "0758ffe9350a70a1adf269901b9aa458444de136e5b6d98091f8cc33580a0088",
+    "cell:resident:full": "b9608bd44fdd7d1e4415f7dc7e7a8006cb1f7d94402500535d14dc882d0497f9",
+    "cell:resident:empty": "0758ffe9350a70a1adf269901b9aa458444de136e5b6d98091f8cc33580a0088",
+    "cell:worker:full": "dbb26051f47b5e13ef4697c48358712746975ac873373b919d2ea5adcbc549fc",
+    "cell:worker:empty": "0758ffe9350a70a1adf269901b9aa458444de136e5b6d98091f8cc33580a0088"
+  }
+}

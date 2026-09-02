@@ -38,6 +38,7 @@ describe("the core tool dispatcher", () => {
     });
 
     expect(result.isError).toBe(true);
+    expect(result.errorClass).toBe("invalid_input");
     expect(result.output).toStartWith("\nexample refused: value:");
   });
 
@@ -46,7 +47,11 @@ describe("the core tool dispatcher", () => {
       entry({ execute: async () => { throw new ToolRefused("example", "not available"); } }),
     ]).execute({ id: "refused", tool: "example", input: { value: "x" } });
 
-    expect(result).toMatchObject({ isError: true, output: "example refused: not available" });
+    expect(result).toMatchObject({
+      isError: true,
+      errorClass: "precondition_failed",
+      output: "example refused: not available",
+    });
   });
 
   it("isolates an invalid executor output", async () => {
@@ -54,12 +59,20 @@ describe("the core tool dispatcher", () => {
       entry({ execute: async () => ({ rendered: "wrong" }), output: z.object({ rendered: z.literal("right") }) }),
     ]).execute({ id: "bad-output", tool: "example", input: { value: "x" } });
 
-    expect(result).toMatchObject({ isError: true, output: "example produced invalid output" });
+    expect(result).toMatchObject({
+      isError: true,
+      errorClass: "invalid_output",
+      output: "example produced invalid output",
+    });
   });
 
   it("reports an unknown tool", async () => {
     const result = await createDispatcher([]).execute({ id: "unknown", tool: "missing", input: {} });
-    expect(result).toMatchObject({ isError: true, output: "unknown tool: missing" });
+    expect(result).toMatchObject({
+      isError: true,
+      errorClass: "unknown_tool",
+      output: "unknown tool: missing",
+    });
   });
 
   it("turns an ordinary thrown error into an error result", async () => {
@@ -67,6 +80,10 @@ describe("the core tool dispatcher", () => {
       entry({ execute: async () => { throw new Error("executor failed"); } }),
     ]).execute({ id: "thrown", tool: "example", input: { value: "x" } });
 
-    expect(result).toMatchObject({ isError: true, output: "executor failed" });
+    expect(result).toMatchObject({
+      isError: true,
+      errorClass: "execution_failed",
+      output: "executor failed",
+    });
   });
 });
