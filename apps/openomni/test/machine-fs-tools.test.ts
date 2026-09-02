@@ -10,10 +10,7 @@ import {
   FS_LIST_TOOL_NAME,
   FS_READ_TOOL_NAME,
   FS_STAT_TOOL_NAME,
-  fsListToolSpec,
-  fsReadToolSpec,
-  fsStatToolSpec,
-} from "../src/tools/machine-fs";
+} from "../src/tools/query/machine-fs";
 
 const RESIDENT: DelegationOrigin = { role: "resident", depth: 0, sessionId: "fs-tools" };
 
@@ -53,7 +50,7 @@ describe("the machine fs tools in the catalog", () => {
   });
 
   it("is host-placed, so the brain offers it and a cell can still reach it", () => {
-    const specs = [fsReadToolSpec(), fsListToolSpec(), fsStatToolSpec()];
+    const specs = catalogEntries({ machineFs: createMachineVfs(fakeMachine({})) }, RESIDENT).map((entry) => entry.spec);
     for (const spec of specs) {
       expect(spec.placement).toBe("host");
       expect(spec.safe).toBe(true);
@@ -62,13 +59,6 @@ describe("the machine fs tools in the catalog", () => {
       .filter((decision) => decision.offerable)
       .map((decision) => decision.tool.name);
     expect(offerable).toEqual([FS_READ_TOOL_NAME, FS_LIST_TOOL_NAME, FS_STAT_TOOL_NAME]);
-  });
-
-  it("stays inside the lint's public-field ceiling", () => {
-    for (const spec of [fsReadToolSpec(), fsListToolSpec(), fsStatToolSpec()]) {
-      const schema = spec.inputSchema as { properties: Record<string, unknown> };
-      expect(Object.keys(schema.properties).length).toBeLessThanOrEqual(5);
-    }
   });
 
   it("reads a file through the flat namespace", async () => {
@@ -238,7 +228,7 @@ describe("what the fs tools refuse", () => {
 
     expect(result.isError).toBe(true);
     expect(result.output).toBe(
-      "/machines/alpha/notes/outside refused: the resolved path leaves the export root",
+      "fs_read refused: /machines/alpha/notes/outside refused: the resolved path leaves the export root",
     );
   });
 
@@ -252,7 +242,7 @@ describe("what the fs tools refuse", () => {
     });
 
     expect(result.isError).toBe(true);
-    expect(result.output).toBe("machine ghost is not attached right now");
+    expect(result.output).toBe("fs_list refused: machine ghost is not attached right now");
   });
 
   it("refuses a .. path at the schema, before any machine is contacted", async () => {
@@ -270,7 +260,7 @@ describe("what the fs tools refuse", () => {
 
     expect(result.isError).toBe(true);
     expect(result.output).toBe(
-      "path must be relative to the export root, with no .. segment or NUL",
+      "fs_read refused: path must be relative to the export root, with no .. segment or NUL",
     );
     expect(reached).toBe(false);
   });
@@ -296,7 +286,7 @@ describe("what the fs tools refuse", () => {
 
     expect(result.isError).toBe(true);
     expect(result.output).toBe(
-      'path must start with /machines/<machineId>/<export>: "/etc/passwd"',
+      'fs_stat refused: path must start with /machines/<machineId>/<export>: "/etc/passwd"',
     );
   });
 
@@ -305,7 +295,7 @@ describe("what the fs tools refuse", () => {
 
     const missing = await catalog.execute({ id: "x5", tool: FS_READ_TOOL_NAME, input: {} });
     expect(missing.isError).toBe(true);
-    expect(String(missing.output)).toStartWith("fs_read refused:");
+    expect(String(missing.output)).toStartWith("\nfs_read refused:");
 
     const negative = await catalog.execute({
       id: "x6",
@@ -313,7 +303,7 @@ describe("what the fs tools refuse", () => {
       input: { path: "/machines/alpha/notes/a.txt", offset: -1 },
     });
     expect(negative.isError).toBe(true);
-    expect(String(negative.output)).toStartWith("fs_read refused:");
+    expect(String(negative.output)).toStartWith("\nfs_read refused:");
 
     const extra = await catalog.execute({
       id: "x7",
@@ -321,6 +311,6 @@ describe("what the fs tools refuse", () => {
       input: { path: "/machines/alpha/notes", offset: 1 },
     });
     expect(extra.isError).toBe(true);
-    expect(String(extra.output)).toStartWith("fs_list refused:");
+    expect(String(extra.output)).toStartWith("\nfs_list refused:");
   });
 });

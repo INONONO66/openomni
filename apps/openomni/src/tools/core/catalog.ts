@@ -29,14 +29,7 @@ import {
 } from "../approval";
 import type { CatalogEntry } from "./dispatch";
 import type { MachineVfs } from "../../machines/vfs";
-import {
-  fsListToolExecutor,
-  fsListToolSpec,
-  fsReadToolExecutor,
-  fsReadToolSpec,
-  fsStatToolExecutor,
-  fsStatToolSpec,
-} from "../machine-fs";
+import { fsListTool, fsReadTool, fsStatTool } from "../query/machine-fs";
 import type { LeasePort } from "../lease";
 import { leaseOpenToolExecutor, leaseOpenToolSpec } from "../lease";
 import type { LlmPort } from "../llm";
@@ -228,23 +221,9 @@ export const TOOL_DEFINITIONS: readonly (AnyToolDefinition | LegacyCatalogTool)[
       ports.cells === undefined ? undefined : runCodeToolExecutor(ports.cells, origin),
   },
   eraseTool(machinesTool),
-  {
-    // Host-placed on purpose: the BRAIN forwards the request, so a cell keeps
-    // the surface too (see machine-fs.ts for why `requires` is not declared).
-    spec: fsReadToolSpec,
-    wire: (ports) =>
-      ports.machineFs === undefined ? undefined : fsReadToolExecutor(ports.machineFs),
-  },
-  {
-    spec: fsListToolSpec,
-    wire: (ports) =>
-      ports.machineFs === undefined ? undefined : fsListToolExecutor(ports.machineFs),
-  },
-  {
-    spec: fsStatToolSpec,
-    wire: (ports) =>
-      ports.machineFs === undefined ? undefined : fsStatToolExecutor(ports.machineFs),
-  },
+  eraseTool(fsReadTool),
+  eraseTool(fsListTool),
+  eraseTool(fsStatTool),
   eraseTool(memoryTool),
   {
     // Completion authority is the Resident's alone (kernel-contract

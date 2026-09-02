@@ -226,23 +226,23 @@ test("the adversarial paths each refuse with the boundary that held", async () =
   ]);
 
   expect(answer).toContain(
-    `<</machines/${MACHINE_ID}/notes/escape.txt refused: path escapes export: escape.txt>>`,
+    `<<fs_read refused: /machines/${MACHINE_ID}/notes/escape.txt refused: path escapes export: escape.txt>>`,
   );
   expect(answer).toContain(
-    `<</machines/${MACHINE_ID}/private/keys refused: export is not available: private>>`,
+    `<<fs_read refused: /machines/${MACHINE_ID}/private/keys refused: export is not available: private>>`,
   );
   expect(answer).toContain(
-    "<<path must be relative to the export root, with no .. segment or NUL>>",
+    "<<fs_read refused: path must be relative to the export root, with no .. segment or NUL>>",
   );
-  expect(answer).toContain("<<machine ghost is not attached right now>>");
+  expect(answer).toContain("<<fs_list refused: machine ghost is not attached right now>>");
   expect(answer).toContain(
-    '<<path must start with /machines/<machineId>/<export>: "/etc/passwd">>',
-  );
-  expect(answer).toContain(
-    `<</machines/${MACHINE_ID}/notes/plans refused: path is not a file: plans>>`,
+    '<<fs_stat refused: path must start with /machines/<machineId>/<export>: "/etc/passwd">>',
   );
   expect(answer).toContain(
-    `<</machines/${MACHINE_ID}/notes/absent.txt refused: path not found: absent.txt>>`,
+    `<<fs_read refused: /machines/${MACHINE_ID}/notes/plans refused: path is not a file: plans>>`,
+  );
+  expect(answer).toContain(
+    `<<fs_stat refused: /machines/${MACHINE_ID}/notes/absent.txt refused: path not found: absent.txt>>`,
   );
   // The escaped file's contents never appeared anywhere in the answer.
   expect(answer).not.toContain("not yours");
@@ -261,7 +261,7 @@ test("an export the Owner never allowed is refused even though the daemon offers
   ]);
 
   expect(answer).toContain(
-    `<</machines/${MACHINE_ID}/secrets/greeting.txt refused: export is not available: secrets>>`,
+    `<<fs_read refused: /machines/${MACHINE_ID}/secrets/greeting.txt refused: export is not available: secrets>>`,
   );
   // And discovery says so: attached, capable, but no export reaches anything.
   expect(answer).toContain(`${MACHINE_ID} — attached, may: fs.read, kernel.py>>`);
@@ -413,7 +413,7 @@ test("a cell on one machine cannot read another machine's export", async () => {
   ]);
 
   expect(answer).toContain(
-    `raised: /machines/${OTHER_MACHINE_ID}/docs/secret.txt is not reachable from a cell on machine ${MACHINE_ID}`,
+    `raised: fs_read refused: /machines/${OTHER_MACHINE_ID}/docs/secret.txt is not reachable from a cell on machine ${MACHINE_ID}`,
   );
   expect(answer).not.toContain("B-ONLY-SECRET");
   expect(answer).not.toContain("returned: ");
