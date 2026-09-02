@@ -13,7 +13,7 @@ import {
   llmToolExecutor,
   MAX_LLM_CALLS,
   resolveLlmToolModel,
-} from "../src/tools/llm";
+} from "../src/tools/execution/llm";
 import type { RunInput } from "@openomni/llm";
 import { assistantMessage } from "./helpers/assistant-message";
 

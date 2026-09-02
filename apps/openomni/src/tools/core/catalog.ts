@@ -23,8 +23,8 @@ import type { MachineVfs } from "../../machines/vfs";
 import { fsListTool, fsReadTool, fsStatTool } from "../query/machine-fs";
 import type { LeasePort } from "../mutation/lease";
 import { leaseOpenTool } from "../mutation/lease";
-import type { LlmPort } from "../llm";
-import { llmToolExecutor, llmToolSpec } from "../llm";
+import type { LlmPort } from "../execution/llm";
+import { llmTool } from "../execution/llm";
 import type { MachinesPort } from "../query/machines";
 import { machinesTool } from "../query/machines";
 import type { ProvisionPort } from "../provision";
@@ -180,10 +180,7 @@ export const TOOL_DEFINITIONS: readonly (AnyToolDefinition | LegacyCatalogTool)[
   eraseTool(memoryTool),
   eraseTool(workItemsTool),
   eraseTool(completeWorkTool),
-  {
-    spec: llmToolSpec,
-    wire: (ports) => (ports.llm === undefined ? undefined : llmToolExecutor(ports.llm)),
-  },
+  eraseTool(llmTool),
   eraseTool(writeArtifactTool),
   eraseTool(readArtifactTool),
 ];

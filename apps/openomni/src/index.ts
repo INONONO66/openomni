@@ -39,7 +39,7 @@ import {
   type RegisteredActor,
 } from "./config";
 import type { ArtifactsPort } from "./tools/mutation/artifacts";
-import { createLlmToolPort } from "./tools/llm";
+import { createLlmToolPort } from "./tools/execution/llm";
 import type { MachinesPort } from "./tools/query/machines";
 import { createChannelDriver } from "./delegation/channel-driver";
 import { createInlineDriver } from "./delegation/inline-driver";
