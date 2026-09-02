@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { z } from "zod";
 import { defineTool } from "./define";
-import { toolInputSchema } from "./project";
+import { toolInputSchema, toolSpec } from "./project";
 
 const shared = {
   category: "query" as const,
@@ -78,6 +78,7 @@ describe("tool schema projection", () => {
     };
     expect(schema.properties.machine).toEqual({ type: "string" });
     expect(schema.required).toEqual(["command"]);
+    expect(toolSpec(definition).placement).toBe("machine");
   });
 
   it("lets an explicit wire projection override the derived schema", () => {

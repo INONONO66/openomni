@@ -34,12 +34,14 @@ export function toolInputSchema(
 export function toolSpec(
   definition: AnyToolDefinition | ToolDefinition<z.ZodObject, z.ZodType>,
 ): Tool.Spec {
+  const placement = definition.placement
+    ?? (definition.execution.kind === "machine" ? "machine" : undefined);
   return {
     name: definition.name,
     description: definition.description,
     inputSchema: toolInputSchema(definition),
     safe: definition.safe,
-    ...(definition.placement === undefined ? {} : { placement: definition.placement }),
+    ...(placement === undefined ? {} : { placement }),
     ...(definition.requires === undefined ? {} : { requires: [...definition.requires] }),
   };
 }
