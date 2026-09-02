@@ -358,6 +358,11 @@ describe("SqliteStorageAdapter workItem", () => {
       timestamps: { created: 600, updated: 600 },
     });
     const legacyBlob = { ...item, changedFiles: ["legacy.ts"] };
+    const decoy = makeWorkItem({
+      workItemId: "wi_000legacychangedfiles-decoy",
+      timestamps: { created: 500, updated: 500 },
+    });
+    expect(adapter.workItem?.create(decoy.workItemId, decoy)).toBe(true);
     const db = new Database(dbPath);
     db.query(
       `INSERT INTO work_item
@@ -381,12 +386,15 @@ describe("SqliteStorageAdapter workItem", () => {
     const read = adapter.workItem?.get(item.workItemId);
     const listed = adapter.workItem?.list();
 
-    // Then: the retired key is stripped while the rest of the record parses.
-    expect(read?.workItemId).toBe(item.workItemId);
-    expect(read && "changedFiles" in read).toBe(false);
-    const first = listed?.[0];
-    if (first === undefined) throw new Error("expected one listed item");
-    expect("changedFiles" in first).toBe(false);
+    // Then: the retired key is stripped while every other field remains on
+    // the target row, independent of list ordering.
+    const listedTarget = listed?.find(({ workItemId }) => workItemId === item.workItemId);
+    if (read === undefined) throw new Error("expected the legacy item by id");
+    if (listedTarget === undefined) throw new Error("expected the legacy item in the list");
+    expect(read).toEqual(item);
+    expect(listedTarget).toEqual(read);
+    expect("changedFiles" in read).toBe(false);
+    expect("changedFiles" in listedTarget).toBe(false);
   });
 
   test("#880: a freshly created row serializes without changedFiles", () => {
