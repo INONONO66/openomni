@@ -41,8 +41,8 @@ import type { LeasePort } from "../lease";
 import { leaseOpenToolExecutor, leaseOpenToolSpec } from "../lease";
 import type { LlmPort } from "../llm";
 import { llmToolExecutor, llmToolSpec } from "../llm";
-import type { MachinesPort } from "../machines";
-import { machinesToolExecutor, machinesToolSpec } from "../machines";
+import type { MachinesPort } from "../query/machines";
+import { machinesTool } from "../query/machines";
 import type { ProvisionPort } from "../provision";
 import {
   channelDeclareToolExecutor,
@@ -227,11 +227,7 @@ export const TOOL_DEFINITIONS: readonly (AnyToolDefinition | LegacyCatalogTool)[
     wire: (ports, origin) =>
       ports.cells === undefined ? undefined : runCodeToolExecutor(ports.cells, origin),
   },
-  {
-    spec: machinesToolSpec,
-    wire: (ports) =>
-      ports.machines === undefined ? undefined : machinesToolExecutor(ports.machines),
-  },
+  eraseTool(machinesTool),
   {
     // Host-placed on purpose: the BRAIN forwards the request, so a cell keeps
     // the surface too (see machine-fs.ts for why `requires` is not declared).

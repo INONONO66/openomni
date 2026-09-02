@@ -7,7 +7,7 @@ import type { CatalogEntry } from "../src/tools/core/dispatch";
 import { createDispatcher, HOST_TARGET } from "../src/tools/core/dispatch";
 import { createCellRegistry } from "../src/tools/cell-registry";
 import type { CellPorts } from "../src/tools/run-code";
-import { MACHINES_TOOL_NAME, type MachineStatus, type MachinesPort } from "../src/tools/machines";
+import { MACHINES_TOOL_NAME, type MachineStatus, type MachinesPort } from "../src/tools/query/machines";
 import { MEMORY_TOOL_NAME } from "../src/tools/mutation/memory";
 import { cellDoor, RUN_CODE_TOOL_NAME, runCodeToolExecutor } from "../src/tools/run-code";
 
