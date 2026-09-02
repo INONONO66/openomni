@@ -19,7 +19,7 @@ export function toolInputSchema(
     throw new Error(`${definition.name} input schema root must be an object`);
   }
 
-  if (definition.execution.kind !== "machine") return projected;
+  if (definition.wireProjection !== undefined || definition.execution.kind !== "machine") return projected;
   const properties = projected.properties;
   if (typeof properties !== "object" || properties === null || Array.isArray(properties)) {
     throw new Error(`${definition.name} input schema properties must be an object`);

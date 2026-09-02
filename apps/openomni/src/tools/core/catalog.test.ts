@@ -44,7 +44,7 @@ function names(door: "model" | "cell", role: "resident" | "worker", ports: Catal
     .map((decision) => decision.tool.name);
 }
 
-describe("phase-A catalog menu parity", () => {
+describe("full catalog menu parity", () => {
   for (const door of ["model", "cell"] as const) {
     for (const role of ["resident", "worker"] as const) {
       for (const ports of ["full", "empty"] as const) {

@@ -92,7 +92,7 @@ describe("tool schema projection", () => {
       ...shared,
       name: "wire-override",
       input: z.object({ modern: z.string() }).strict(),
-      execution: { kind: "host" },
+      execution: { kind: "machine", capability: "legacy.exec" },
       wireProjection: projection,
     });
 

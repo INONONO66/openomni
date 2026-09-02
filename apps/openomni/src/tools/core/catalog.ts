@@ -52,25 +52,12 @@ export interface CatalogPorts {
   readonly provisioning?: ProvisionPort;
 }
 
-type ToolRun = CatalogEntry["run"];
-
-// PHASE-A BRIDGE: dies in phase B
-interface LegacyCatalogTool {
-  readonly spec: () => Tool.Spec;
-  /**
-   * The capability gate: a port that is not wired contributes no entry — a
-   * capability the app does not have is absent from the catalog rather than
-   * present and always refusing.
-   */
-  readonly wire: (ports: CatalogPorts, origin: DelegationOrigin) => ToolRun | undefined;
-}
-
 /**
  * Every tool this app could offer, before placement has an opinion — the one
  * list both the catalog and the repository lint read, so a spec cannot exist
  * here without being wireable, or ship without being linted.
  */
-export const TOOL_DEFINITIONS: readonly (AnyToolDefinition | LegacyCatalogTool)[] = [
+export const TOOL_DEFINITIONS: readonly AnyToolDefinition[] = [
   eraseTool(delegateTool),
   eraseTool(awaitDelegationTool),
   eraseTool(cancelDelegationTool),
@@ -103,7 +90,7 @@ export const TOOL_DEFINITIONS: readonly (AnyToolDefinition | LegacyCatalogTool)[
 
 /** Every spec the app can ship, as data — no ports, no origin: the repository lint's seam. */
 export function collectToolSpecs(): readonly Tool.Spec[] {
-  return TOOL_DEFINITIONS.map((tool) => "spec" in tool ? tool.spec() : toolSpec(tool));
+  return TOOL_DEFINITIONS.map(toolSpec);
 }
 
 /**
@@ -118,11 +105,6 @@ export function catalogEntries(
 ): readonly CatalogEntry[] {
   const entries: CatalogEntry[] = [];
   for (const tool of TOOL_DEFINITIONS) {
-    if ("spec" in tool) {
-      const run = tool.wire(ports, origin);
-      if (run !== undefined) entries.push({ spec: tool.spec(), run });
-      continue;
-    }
     const visible = tool.visibility.model.includes(origin.role)
       || tool.visibility.cell.includes(origin.role);
     if (!visible) continue;
