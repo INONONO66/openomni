@@ -139,7 +139,8 @@ export class PythonKernel {
   private start(): ChildProcessWithoutNullStreams {
     const process = this.options.launch();
     this.process = process;
-    let buffered = Buffer.alloc(0);
+    let bufferedSegments: Buffer[] = [];
+    let bufferedBytes = 0;
 
     const acceptLine = (line: string) => {
       const pending = this.pending;
@@ -177,20 +178,23 @@ export class PythonKernel {
         const newline = chunk.indexOf(10, offset);
         const end = newline === -1 ? chunk.length : newline;
         const segment = chunk.subarray(offset, end);
-        if (buffered.length + segment.length > this.maxOutputBytes) {
+        if (bufferedBytes + segment.length > this.maxOutputBytes) {
+          bufferedSegments = [];
+          bufferedBytes = 0;
           const pending = this.pendingFor(process);
           if (pending !== undefined) {
             this.settleWithOutputLimit(process, pending);
           } else {
-            buffered = Buffer.alloc(0);
             this.discard(process);
           }
           return;
         }
-        buffered = Buffer.concat([buffered, segment], buffered.length + segment.length);
+        bufferedSegments.push(segment);
+        bufferedBytes += segment.length;
         if (newline === -1) return;
-        const line = buffered.toString("utf8");
-        buffered = Buffer.alloc(0);
+        const line = Buffer.concat(bufferedSegments, bufferedBytes).toString("utf8");
+        bufferedSegments = [];
+        bufferedBytes = 0;
         acceptLine(line);
         offset = newline + 1;
       }

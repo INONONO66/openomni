@@ -102,6 +102,58 @@ function cell(code: string, timeoutMs = 15_000): Machine.CellRequest {
 }
 
 describe("cell settlement ownership", () => {
+  test("defers stdout frame concatenation until its terminating newline", async () => {
+    // Given: an idle interpreter and a complete result frame delivered one byte at a time.
+    const processes: ChildProcessWithoutNullStreams[] = [];
+    const kernel = new PythonKernel({
+      launch: () => {
+        const child = spawn(process.execPath, ["-e", "process.stdin.resume()"]);
+        processes.push(child);
+        return child;
+      },
+    });
+    const concat = Buffer.concat;
+    let concatCalls = 0;
+    Buffer.concat = (list, totalLength) => {
+      concatCalls += 1;
+      return concat(list, totalLength);
+    };
+    try {
+      const result = kernel.run(
+        { cellId: "fragmented-frame", code: "ignored", timeoutMs: 1_000 },
+        noTools,
+      );
+      await Promise.resolve();
+      const process = processes[0];
+      if (!process) throw new Error("expected the controlled interpreter");
+      const frame = Buffer.from(
+        JSON.stringify({
+          kind: "result",
+          result: {
+            status: "completed",
+            cellId: "fragmented-frame",
+            output: { stdout: "", stderr: "" },
+            value: "complete",
+          },
+        }),
+      );
+
+      // When: stdout emits every byte before the line terminator as a separate chunk.
+      for (const byte of frame) {
+        process.stdout.emit("data", Buffer.from([byte]));
+      }
+
+      // Then: prefix bytes are retained without copying until the full line is available.
+      expect(concatCalls).toBe(0);
+      process.stdout.emit("data", Buffer.from("\n"));
+      expect(await result).toMatchObject({ status: "completed", value: "complete" });
+      expect(concatCalls).toBe(1);
+    } finally {
+      Buffer.concat = concat;
+      kernel.close();
+    }
+  });
+
   test("small container values keep their complete repr", async () => {
     // Given: a normal container that fits comfortably inside the output ceiling.
     const kernel = new PythonKernel({ launch: plainLauncher, maxOutputBytes: 1024 });
