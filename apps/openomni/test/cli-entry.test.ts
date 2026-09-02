@@ -441,14 +441,17 @@ describe("real CLI entry", () => {
         "no channel credentials in env config; nothing to import",
       ]);
       expect(existsSync(dbPath)).toBe(true);
-      // Pause stdin if it's a TTY (e.g., in script -q environment) to prevent ask() from blocking.
-      const stdinWasPaused = process.stdin.isPaused?.();
-      if (process.stdin.isTTY) process.stdin.pause();
+      // ask() rejects when stdin is not a terminal. Force the non-TTY branch
+      // deterministically so the test never blocks on a real PTY.
+      const isTty = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
+      Object.defineProperty(process.stdin, "isTTY", { value: false, configurable: true });
       try {
-        await expect(deps.ask("question")).rejects.toThrow();
+        await expect(deps.ask("question")).rejects.toThrow(
+          "onboarding requires an interactive terminal"
+        );
       } finally {
-        // Restore stdin to its original state if it wasn't paused before.
-        if (!stdinWasPaused && process.stdin.isTTY) process.stdin.resume();
+        if (isTty) Object.defineProperty(process.stdin, "isTTY", isTty);
+        else Reflect.deleteProperty(process.stdin, "isTTY");
       }
     } finally {
       restore();
