@@ -5,7 +5,7 @@ import {
   converseCloseToolExecutor,
   converseOpenToolExecutor,
   type ConversePort,
-} from "../src/tools/converse";
+} from "../src/tools/mutation/converse";
 
 const RESIDENT = { role: "resident", depth: 0, sessionId: "session-origin" } as const;
 const WORKER = { role: "worker", depth: 1, sessionId: "session-origin" } as const;

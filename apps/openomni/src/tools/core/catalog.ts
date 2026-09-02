@@ -11,13 +11,8 @@ import {
 } from "../../delegation/tool";
 import type { CuratedMemory } from "../../memory/store";
 import type { ArtifactsPort } from "../mutation/artifacts";
-import type { ConversePort } from "../converse";
-import {
-  converseCloseToolExecutor,
-  converseCloseToolSpec,
-  converseOpenToolExecutor,
-  converseOpenToolSpec,
-} from "../converse";
+import type { ConversePort } from "../mutation/converse";
+import { converseCloseTool, converseOpenTool } from "../mutation/converse";
 import { writeArtifactTool } from "../mutation/artifacts";
 import { memoryTool } from "../mutation/memory";
 import { readArtifactTool } from "../query/artifacts";
@@ -134,22 +129,8 @@ export const TOOL_DEFINITIONS: readonly (AnyToolDefinition | LegacyCatalogTool)[
     wire: (ports) =>
       ports.delegation === undefined ? undefined : cancelDelegationToolExecutor(ports.delegation),
   },
-  {
-    // Conversation windows are the Resident's surface (§3.4): a worker
-    // never opens or settles reply windows.
-    spec: converseOpenToolSpec,
-    wire: (ports, origin) =>
-      ports.conversations === undefined || origin.role !== "resident"
-        ? undefined
-        : converseOpenToolExecutor(ports.conversations, origin),
-  },
-  {
-    spec: converseCloseToolSpec,
-    wire: (ports, origin) =>
-      ports.conversations === undefined || origin.role !== "resident"
-        ? undefined
-        : converseCloseToolExecutor(ports.conversations),
-  },
+  eraseTool(converseOpenTool),
+  eraseTool(converseCloseTool),
   {
     // Lease issuance is the Resident's judgment alone (§3.5): a worker
     // never widens its own authority.
