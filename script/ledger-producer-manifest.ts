@@ -69,7 +69,9 @@ interface LedgerStreamProducer {
     | "gateway_send"
     | "conversation"
     | "lease"
-    | "approval";
+    | "approval"
+    | "trigger"
+    | "trigger_fire";
   /**
    * Repo-relative paths of the enumerated modules that append this class's
    * facts. A retained protocol class may have no current producer.
