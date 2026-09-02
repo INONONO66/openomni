@@ -64,7 +64,8 @@ const PATTERN_RULES: readonly (readonly [SecretClass, RegExp])[] = [
 const OPAQUE_TOKEN_SPLIT = /[\s"'`,;()[\]{}<>]+/;
 const URI_SHAPED_SPAN =
   /[A-Za-z][A-Za-z0-9+.-]*:\/\/(?:\[[^\s"'`,;(){}<>]*\]|[^\s"'`,;()[\]{}<>])+/g;
-const URI_COMPONENT_SPLIT = /[:/?#&@=]+/;
+const URI_PATH_OR_USERINFO_SPLIT = /[/:@]+/;
+const URI_VALUE_SPLIT = /[?#&=]+/;
 const HEX_ONLY = /^[0-9a-fA-F]+$/;
 /**
  * The alphabet an opaque credential is drawn from (base64/base64url/hex plus
@@ -114,8 +115,11 @@ function isHighEntropyOpaqueToken(token: string): boolean {
 
 function hasHighEntropyToken(line: string): boolean {
   for (const uri of line.match(URI_SHAPED_SPAN) ?? []) {
-    for (const component of uri.split(URI_COMPONENT_SPLIT)) {
+    for (const component of uri.split(URI_PATH_OR_USERINFO_SPLIT)) {
       if (isHighEntropyOpaqueToken(component)) return true;
+    }
+    for (const value of uri.split(URI_VALUE_SPLIT)) {
+      if (isHighEntropyOpaqueToken(value)) return true;
     }
   }
   for (const token of line.split(OPAQUE_TOKEN_SPLIT)) {

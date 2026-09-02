@@ -106,6 +106,14 @@ describe("scanForSecrets: credential classes", () => {
     expect(hits).toEqual([{ class: "high_entropy_token", line: 1 }]);
   });
 
+  test("Given a slash-bearing base64 query value, When scanned, Then high_entropy_token is reported", () => {
+    const hits = scanForSecrets(
+      "https://example.com/callback?state=gT7kQ2vL/p9wZx4m+/Nb8rHc3/yEuJ1sVd/6oXt5AqR7Kd==",
+    );
+
+    expect(hits).toEqual([{ class: "high_entropy_token", line: 1 }]);
+  });
+
   test("Given a long structured URL, When scanned, Then the entropy rule does not judge it", () => {
     const hits = scanForSecrets(
       "https://github.com/openomni/openomni/compare/main...feature/egress-gate?expand=1",
