@@ -26,5 +26,14 @@ export type {
 } from "./core/policy";
 export { placementGatedExecutor } from "./core/execution/turn";
 export { McpClient } from "./runtime/mcp/index";
-export { createCompactionPolicy, isTimeCarriageMarkerPart } from "./compaction";
-export type { CompactionOptions } from "./compaction";
+export {
+  createCompactionPolicy,
+  isTimeCarriageMarkerPart,
+  resolveCompactionGeometry,
+} from "./compaction";
+export type {
+  CompactionGeometry,
+  CompactionOptions,
+  CompactionYield,
+  SummarizationBudget,
+} from "./compaction";

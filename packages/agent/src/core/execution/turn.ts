@@ -9,7 +9,7 @@ import {
   effectiveMaxToolCalls,
 } from "../budget";
 import { createAssistantMessage } from "../message-factory";
-import { DEFAULT_THRESHOLD_RATIO } from "../../compaction/compact";
+import { resolveCompactionGeometry } from "../../compaction/geometry";
 import { measuredContextTokens } from "../../compaction/measure";
 import { RunReasonCode } from "../policy/reason-codes";
 import type { PolicyEngineInstance } from "../policy";
@@ -225,7 +225,9 @@ function prepareTurnTools(
 ): PreparedTurnTools {
   const toolTargets = config.toolTargets ?? [{ kind: "host", capabilities: [] } as const];
   const placement = Placement.resolveTools(config.tools ?? [], toolTargets);
-  const allTools = placement.filter((decision) => decision.offerable).map((decision) => decision.tool);
+  const allTools = placement
+    .filter((decision) => decision.offerable)
+    .map((decision) => decision.tool);
   const placedExecutor = config.toolExecutor
     ? placementGatedExecutor(placement, config.toolExecutor)
     : undefined;
@@ -300,7 +302,13 @@ export async function buildTurn(
   if (config.signal?.aborted) throw Retry.abortError();
 
   const tools = prepareTurnTools(state, config, engine, trace);
-  const systemResult = await buildTurnSystemPrompt(state, config, engine, agentBase, tools.allTools);
+  const systemResult = await buildTurnSystemPrompt(
+    state,
+    config,
+    engine,
+    agentBase,
+    tools.allTools,
+  );
   if (systemResult.blocked) {
     return { type: "complete", result: guardAbortedResult(state) };
   }
@@ -341,7 +349,14 @@ export async function buildTurn(
   const yieldAtInputTokens =
     state.contextWindowTokens === undefined || state.windowYieldDisarmed === true
       ? undefined
-      : Math.floor(state.contextWindowTokens * DEFAULT_THRESHOLD_RATIO);
+      : Math.floor(
+          resolveCompactionGeometry({
+            contextWindowTokens: state.contextWindowTokens,
+            ...(state.lastCompactionYield === undefined
+              ? {}
+              : { previousYield: state.lastCompactionYield }),
+          }).thresholdTokens,
+        );
   const turnAssistant: TurnArtifacts["turnAssistant"] = {};
   const trackingSink = createTrackingSink(state, sink, turnUsage, turnAssistant);
   // Steering (#751): the host check is wrapped so the turn records WHY the
@@ -616,10 +631,12 @@ export async function handleStop(
     const compactionsBefore = state.compactionCount;
     const blocked = await applyPostCompaction(state, engine, config, agentBase, false, true);
     if (blocked) return blocked;
-    if (state.compactionCount === compactionsBefore) {
-      // The seam reclaimed nothing (recorded). The remaining headroom above
-      // the arm point is real — the run proceeds like a loop without the
-      // knob instead of dying at 80% of a window it never filled.
+    if (
+      (state.compactionCount === compactionsBefore && state.lastCompactionDeferred !== true) ||
+      state.lastCompactionIneffective === true
+    ) {
+      // A no-op or structurally ineffective cut cannot justify repeatedly
+      // yielding this run at the same boundary.
       disarmWindowYield(state);
     }
     advanceRunTurn(state);
@@ -869,6 +886,7 @@ async function applyPostCompaction(
       },
     }),
   );
+  if (config.signal?.aborted === true) throw Retry.abortError();
 
   if (PolicyDecision.isBlocking(compactionDecision)) {
     publishDenyDiagnostic(
@@ -891,6 +909,11 @@ async function applyPostCompaction(
   );
   if (!applied.ok) return applied.result;
   const messages = applied.value;
+  state.lastCompactionIneffective =
+    compactionDecision.reasonCodes.includes("compaction_ineffective");
+  state.lastCompactionDeferred = compactionDecision.reasonCodes.includes(
+    "compaction_deferred_speculation_grace",
+  );
   if (messages !== undefined) applyCompactionMessages(state, messages);
   PolicyEffectApplier.applyPromptMessageEffects(state, compactionDecision);
 

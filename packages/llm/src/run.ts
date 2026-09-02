@@ -35,6 +35,8 @@ export interface RunInput {
   allowAuthFallback?: boolean;
   toolExecutor?: (call: Tool.Call, context?: Tool.ExecutionContext) => Promise<Tool.Result>;
   toolChoice?: "auto" | "required" | "none";
+  /** Maximum generated tokens for this call; absent leaves the provider default. */
+  maxTokens?: number;
   maxSteps?: number;
   /**
    * Transport retries performed inside this single run call. Absent keeps the
@@ -287,6 +289,7 @@ export async function run(
       messages: [...systemMessages, ...normalizedMessages],
       tools: sdkTools,
       toolChoice: input.toolChoice,
+      ...(input.maxTokens === undefined ? {} : { maxOutputTokens: input.maxTokens }),
       maxRetries: 0,
       stopWhen: [
         ai.stepCountIs(input.maxSteps ?? 24),

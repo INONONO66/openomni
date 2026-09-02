@@ -1,8 +1,15 @@
 import type { BusEvent } from "@openomni/protocol";
 import type { Message } from "@openomni/protocol";
 import { RunEvents } from "../core/execution/events";
+import { resolveCompactionGeometry, type CompactionYield } from "./geometry";
 import { elideToolOutputs, type ToolOutputElision } from "./reduce";
 import type { CompactionCandidate } from "./speculate";
+
+export interface SummarizationBudget {
+  readonly maxInputTokens: number;
+  readonly maxOutputTokens: number;
+  readonly contextWindowTokens: number;
+}
 
 export interface CompactionOptions {
   /**
@@ -11,9 +18,8 @@ export interface CompactionOptions {
    * strategy config only sets this to compact as if the window were smaller.
    */
   contextWindowTokens?: number;
-  thresholdRatio?: number;
+  /** Minimum headroom reserved beyond the adaptive threshold. */
   reserveTokens?: number;
-  reserveRatio?: number;
   protectRecentMessages?: number;
   /**
    * Anchored iterative summarization (compaction-design L2). The summarizer
@@ -24,7 +30,8 @@ export interface CompactionOptions {
    */
   onSummarize?: (
     messages: Message.WithParts[],
-    previousAnchor?: string,
+    previousAnchor: string | undefined,
+    budget: SummarizationBudget,
     signal?: AbortSignal,
   ) => Promise<string>;
   /**
@@ -47,7 +54,9 @@ export interface CompactionOptions {
    * result with zero model calls while its span is still live. `false`
    * disables speculation; the seam then always merges synchronously.
    */
-  speculate?: false | { prepareRatio?: number };
+  speculate?: false;
+  /** Maximum duration of each summarizer call before deterministic fallback. */
+  summarizerDeadlineMs?: number;
 }
 
 /** Options with the window already resolved — the mechanism never guesses it. */
@@ -59,8 +68,12 @@ interface CompactionResult {
   removedCount: number;
   /** L4: what happened to the speculative candidate, when one was offered. */
   candidate?: "promoted" | "discarded";
-  /** #734 F1: the synchronous merge failed; the cut degraded, the run lives. */
+  /** The synchronous merge failed and used the deterministic snap-cut fallback. */
   summarizerFailed?: boolean;
+  /** Estimated structural yield of the replacement, used by the next geometry decision. */
+  yield?: CompactionYield;
+  /** A compacted replacement that saved too little to justify another early round. */
+  ineffective?: boolean;
   /** Set when the trigger fired but no provider-valid cut exists: no summary
    * anchor and no user boundary at or before the cutoff. The caller records
    * it; killing the run over housekeeping would be worse than a full window. */
@@ -86,14 +99,9 @@ interface AnchoredCutAttempt {
   readonly summarizerError?: Error;
 }
 
-/**
- * One ratio, two readers: the compaction trigger's default threshold, and the
- * loop's step-boundary yield — they must agree, or the loop yields at a level
- * the trigger refuses to act on (or never yields where the trigger would).
- */
-export const DEFAULT_THRESHOLD_RATIO = 0.8;
 // Only decides the cut's eagerness after an elision round — never the trigger.
 const ESTIMATED_CHARS_PER_TOKEN = 4;
+const BASE64_RUN_RE = /[A-Za-z0-9+/=_-]{512,}/g;
 export const DEFAULT_PROTECT_RECENT = 6;
 // ~20k tokens of verbatim user text carried through a cut (Codex ships the
 // same order of magnitude). Strategy may narrow or widen it.
@@ -220,8 +228,7 @@ function replacementRecord(
   return [...stampedUsers, ...keepSpan].flatMap((message) =>
     message.parts
       .filter(
-        (part): part is Message.TextPart =>
-          part.type === "text" && !isTimeCarriageMarkerPart(part),
+        (part): part is Message.TextPart => part.type === "text" && !isTimeCarriageMarkerPart(part),
       )
       .map((part) => ({
         role: message.info.role,
@@ -239,20 +246,28 @@ async function attemptAnchoredCut(
   working: Message.WithParts[],
   firstRemoved: Message.WithParts,
   preserveBudget: number,
+  contextWindowTokens: number,
   onSummarize: NonNullable<CompactionOptions["onSummarize"]>,
 ): Promise<AnchoredCutAttempt> {
   const previousAnchor = latestAnchorBody(cutSpan);
   const summarizerInput = cutSpan.filter(
     (message) => message.info.role !== "user" && !isAnchorMessage(message),
   );
+  const { messages: boundedInput, budget } = prepareSummarizerInput(
+    summarizerInput,
+    contextWindowTokens,
+    previousAnchor,
+  );
   let anchorText = precomputed ?? previousAnchor;
   let summarizerError: Error | undefined;
-  if (precomputed === undefined && summarizerInput.length > 0) {
+  if (precomputed === undefined && boundedInput.length > 0) {
     try {
-      const merged = await onSummarize(summarizerInput, previousAnchor);
+      const merged = await onSummarize(boundedInput, previousAnchor, budget);
       anchorText = merged.trim().length > 0 ? merged : previousAnchor;
     } catch (error) {
-      summarizerError = error instanceof Error ? error : new Error(String(error));
+      const normalized = error instanceof Error ? error : new Error(String(error));
+      if (normalized.name === "AbortError") throw normalized;
+      summarizerError = normalized;
       anchorText = previousAnchor;
     }
   }
@@ -263,9 +278,7 @@ async function attemptAnchoredCut(
     carriesUserSpeech(message) ? stampTimeMarker(message) : message,
   );
   const keptWindow = replacementRecord(stampedUsers, keepSpan);
-  const stampedAny = stampedUsers.some((message) =>
-    message.parts.some(isTimeCarriageMarkerPart),
-  );
+  const stampedAny = stampedUsers.some((message) => message.parts.some(isTimeCarriageMarkerPart));
   const anchorMessages =
     anchorText === undefined
       ? []
@@ -354,9 +367,12 @@ function finishAnchoredCut(
 }
 
 export namespace Compaction {
-  export function shouldCompact(totalTokens: number, options: ResolvedCompactionOptions): boolean {
-    const threshold = resolveThresholdTokens(options);
-    return totalTokens >= threshold;
+  export function shouldCompact(
+    totalTokens: number,
+    options: ResolvedCompactionOptions,
+    previousYield?: CompactionYield,
+  ): boolean {
+    return totalTokens >= resolveThresholdTokens(options, previousYield);
   }
 
   /**
@@ -389,8 +405,8 @@ export namespace Compaction {
       readonly trigger: "threshold" | "yield";
       readonly measuredTokens?: number;
       /** A speculative candidate (L4): promoted with zero model calls when
-       * its span is still a live id-prefix of the history; otherwise the
-       * synchronous merge runs and the result reports the discard. */
+       * its canonical prefix is unchanged; otherwise the synchronous merge
+       * runs and the result reports the discard. */
       readonly candidate?: CompactionCandidate;
     },
   ): Promise<CompactionResult> {
@@ -411,6 +427,16 @@ export namespace Compaction {
       anchored?: boolean,
       summarizerError?: Error,
     ): CompactionResult => {
+      const estimatedTokensBefore = estimateMessagesTokens(messages);
+      const tokensBefore = dispatch.measuredTokens ?? estimatedTokensBefore;
+      const savedTokens = Math.max(
+        0,
+        estimatedTokensBefore - estimateMessagesTokens(result.messages),
+      );
+      const ineffective = result.compacted && isIneffectiveCompaction(savedTokens, tokensBefore);
+      const completed = result.compacted
+        ? { ...result, yield: { savedTokens, tokensBefore }, ineffective }
+        : result;
       events.publish(RunEvents.CompactionCompleted, {
         ...identity,
         time: Date.now(),
@@ -419,10 +445,11 @@ export namespace Compaction {
         messagesAfter: result.messages.length,
         removedCount: result.removedCount,
         elidedChars,
+        ...(result.compacted ? { savedTokens, tokensBefore, ineffective } : {}),
         ...(anchored === undefined ? {} : { anchored }),
         ...(summarizerError === undefined ? {} : { error: summarizerError.message }),
       });
-      return result;
+      return completed;
     };
 
     try {
@@ -536,18 +563,15 @@ export namespace Compaction {
       let attempt: AnchoredCutAttempt = {};
 
       if (candidate !== undefined) {
-        const live =
-          candidate.spanIds.length > 0 &&
-          candidate.spanIds.length <= working.length &&
-          candidate.spanIds.every((id, index) => working[index]?.info.id === id);
-        if (live) {
+        if (isWarmCandidateValid(candidate, working)) {
           attempt = await attemptAnchoredCut(
-            working.slice(0, candidate.spanIds.length),
-            working.slice(candidate.spanIds.length),
+            working.slice(0, candidate.prefixIds.length),
+            working.slice(candidate.prefixIds.length),
             candidate.anchorBody,
             working,
             firstRemoved,
             preserveBudget,
+            options.contextWindowTokens,
             options.onSummarize,
           );
         }
@@ -561,17 +585,29 @@ export namespace Compaction {
           working,
           firstRemoved,
           preserveBudget,
+          options.contextWindowTokens,
           options.onSummarize,
         );
       }
-      return finishAnchoredCut(
-        attempt,
-        candidateOutcome,
-        messages,
-        working,
-        elidedChars,
-        finish,
-      );
+      if (attempt.summarizerError !== undefined) {
+        const fallbackCutoff = snapToUserBoundary(working, naturalCutoff);
+        if (fallbackCutoff !== undefined && fallbackCutoff > 0) {
+          return finish(
+            {
+              messages: working.slice(fallbackCutoff),
+              compacted: true,
+              removedCount: fallbackCutoff,
+              summarizerFailed: true,
+              ...(candidateOutcome === undefined ? {} : { candidate: candidateOutcome }),
+            },
+            "cut",
+            elidedChars,
+            false,
+            attempt.summarizerError,
+          );
+        }
+      }
+      return finishAnchoredCut(attempt, candidateOutcome, messages, working, elidedChars, finish);
     }
 
     const compacted = [...toKeep];
@@ -589,22 +625,15 @@ export namespace Compaction {
   }
 }
 
-function resolveThresholdTokens(options: ResolvedCompactionOptions): number {
-  const ratioThreshold =
-    options.contextWindowTokens * (options.thresholdRatio ?? DEFAULT_THRESHOLD_RATIO);
-  const reserveTokens = resolveReserveTokens(options);
-  if (reserveTokens === undefined) return ratioThreshold;
-  return Math.min(ratioThreshold, options.contextWindowTokens - reserveTokens);
-}
-
-function resolveReserveTokens(options: ResolvedCompactionOptions): number | undefined {
-  const reserveTokens =
-    options.reserveTokens ??
-    (options.reserveRatio === undefined
-      ? undefined
-      : options.contextWindowTokens * options.reserveRatio);
-  if (reserveTokens === undefined || !Number.isFinite(reserveTokens)) return undefined;
-  return Math.min(options.contextWindowTokens, Math.max(0, reserveTokens));
+function resolveThresholdTokens(
+  options: ResolvedCompactionOptions,
+  previousYield?: CompactionYield,
+): number {
+  return resolveCompactionGeometry({
+    contextWindowTokens: options.contextWindowTokens,
+    ...(options.reserveTokens === undefined ? {} : { reserveTokens: options.reserveTokens }),
+    ...(previousYield === undefined ? {} : { previousYield }),
+  }).thresholdTokens;
 }
 
 function snapToUserBoundary(
@@ -628,7 +657,8 @@ export function planAnchoredCut(
   protectRecentMessages: number,
 ):
   | {
-      readonly spanIds: readonly string[];
+      readonly prefixIds: readonly string[];
+      readonly prefixFingerprint: string;
       readonly previousAnchor: string | undefined;
       readonly summarizerInput: Message.WithParts[];
     }
@@ -638,7 +668,8 @@ export function planAnchoredCut(
   if (cutoff <= 0) return undefined;
   const toRemove = messages.slice(0, cutoff);
   return {
-    spanIds: toRemove.map((message) => message.info.id),
+    prefixIds: toRemove.map((message) => message.info.id),
+    prefixFingerprint: canonicalPrefixFingerprint(toRemove),
     previousAnchor: latestAnchorBody(toRemove),
     summarizerInput: toRemove.filter(
       (message) => message.info.role !== "user" && !isAnchorMessage(message),
@@ -658,6 +689,57 @@ function isAnchorMessage(message: Message.WithParts): boolean {
     message.info.role === "user" &&
     message.parts.some((part) => part.type === "text" && part.metadata?.compactionAnchor === true)
   );
+}
+
+export function latestCompactionAnchorId(span: readonly Message.WithParts[]): string | undefined {
+  for (let index = span.length - 1; index >= 0; index -= 1) {
+    const message = span[index];
+    if (message !== undefined && isAnchorMessage(message)) return message.info.id;
+  }
+  return undefined;
+}
+
+export function isWarmCandidateValid(
+  candidate: CompactionCandidate,
+  messages: readonly Message.WithParts[],
+): boolean {
+  const cut = messages.findIndex((message) => message.info.id === candidate.firstKeptId);
+  if (cut !== candidate.prefixIds.length) return false;
+  if (latestCompactionAnchorId(messages) !== candidate.compactionAnchorId) return false;
+  if (!candidate.prefixIds.every((id, index) => messages[index]?.info.id === id)) return false;
+  return (
+    canonicalPrefixFingerprint(messages.slice(0, candidate.prefixIds.length)) ===
+    candidate.prefixFingerprint
+  );
+}
+
+function canonicalPartContent(part: Message.Part): unknown {
+  if (part.type === "text") return { type: part.type, text: part.text, metadata: part.metadata };
+  if (part.type === "reasoning") {
+    return { type: part.type, text: part.text, signature: part.signature, metadata: part.metadata };
+  }
+  if (part.type === "step-start") return { type: part.type };
+  if (part.type === "step-finish") {
+    return { type: part.type, reason: part.reason, cost: part.cost, tokens: part.tokens };
+  }
+  const state =
+    part.state.status === "completed" ? { ...part.state, output: "[tool output]" } : part.state;
+  return { type: part.type, callID: part.callID, tool: part.tool, state };
+}
+
+function canonicalPrefixFingerprint(messages: readonly Message.WithParts[]): string {
+  const canonical = JSON.stringify(
+    messages.map((message) => ({
+      role: message.info.role,
+      parts: message.parts.map(canonicalPartContent),
+    })),
+  );
+  let hash = 2_166_136_261;
+  for (let index = 0; index < canonical.length; index += 1) {
+    hash ^= canonical.charCodeAt(index);
+    hash = Math.imul(hash, 16_777_619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
 function latestAnchorBody(span: readonly Message.WithParts[]): string | undefined {
@@ -707,6 +789,62 @@ function estimateContentChars(span: readonly Message.WithParts[]): number {
     chars += userTextChars(message);
   }
   return chars;
+}
+
+function weightedTextChars(text: string): number {
+  let weighted = text.length;
+  for (const match of text.matchAll(BASE64_RUN_RE)) weighted += match[0].length * 3;
+  return weighted;
+}
+
+export function estimateMessagesTokens(messages: readonly Message.WithParts[]): number {
+  let weightedChars = 0;
+  for (const message of messages) {
+    for (const part of message.parts) {
+      if (part.type === "text") weightedChars += weightedTextChars(part.text);
+      else if (part.type === "tool" && part.state.status === "completed") {
+        weightedChars += weightedTextChars(part.state.output);
+      }
+    }
+  }
+  return Math.ceil(weightedChars / ESTIMATED_CHARS_PER_TOKEN);
+}
+
+export function isIneffectiveCompaction(savedTokens: number, tokensBefore: number): boolean {
+  return savedTokens < 1024 || savedTokens / Math.max(1, tokensBefore) < 0.1;
+}
+
+export function prepareSummarizerInput(
+  messages: readonly Message.WithParts[],
+  contextWindowTokens: number,
+  previousAnchor?: string,
+): { readonly messages: Message.WithParts[]; readonly budget: SummarizationBudget } {
+  const halfWindow = Math.max(0, Math.floor(contextWindowTokens * 0.5));
+  const messageBudget = Math.max(
+    0,
+    halfWindow - Math.ceil(weightedTextChars(previousAnchor ?? "") / ESTIMATED_CHARS_PER_TOKEN),
+  );
+  const budget = {
+    maxInputTokens: halfWindow,
+    maxOutputTokens: Math.min(32_768, halfWindow),
+    contextWindowTokens,
+  };
+  const elided = messages.map((message) => {
+    let changed = false;
+    const parts = message.parts.map((part) => {
+      if (part.type !== "tool" || part.state.status !== "completed") return part;
+      const marker = `[tool output elided for summarization: ${part.state.output.length} chars]`;
+      if (marker.length >= part.state.output.length) return part;
+      changed = true;
+      return { ...part, state: { ...part.state, output: marker } };
+    });
+    return changed ? { ...message, parts } : message;
+  });
+  let first = 0;
+  while (first < elided.length && estimateMessagesTokens(elided.slice(first)) > messageBudget) {
+    first += 1;
+  }
+  return { messages: elided.slice(first), budget };
 }
 
 /**

@@ -1,6 +1,6 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, jest } from "bun:test";
 import type { Message } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
+import { Bus, collector } from "@openomni/telemetry";
 import { createCompactionPolicy } from "../../src/compaction/policy";
 import { createSpeculator } from "../../src/compaction/speculate";
 
@@ -72,7 +72,7 @@ function turnPostCtx(messages: Message.WithParts[], contextTokens: number) {
     runId: "run-spec",
     messages,
     contextTokens,
-    contextWindowTokens: 100,
+    contextWindowTokens: 32_000,
     steps: [],
     usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
     turnCount: 1,
@@ -91,7 +91,7 @@ function seamCtx(messages: Message.WithParts[], contextTokens: number) {
     runId: "run-spec",
     messages,
     contextTokens,
-    contextWindowTokens: 100,
+    contextWindowTokens: 32_000,
     steps: [],
     usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
     turnCount: 1,
@@ -102,10 +102,15 @@ function seamCtx(messages: Message.WithParts[], contextTokens: number) {
 }
 
 function build(
-  summarize: (m: Message.WithParts[], p?: string, signal?: AbortSignal) => Promise<string>,
+  summarize: (
+    m: Message.WithParts[],
+    p: string | undefined,
+    _budget: { maxInputTokens: number },
+    signal?: AbortSignal,
+  ) => Promise<string>,
 ) {
   return createCompactionPolicy({
-    contextWindowTokens: 100,
+    contextWindowTokens: 32_000,
     protectRecentMessages: 2,
     onSummarize: summarize,
     events: Bus,
@@ -126,14 +131,14 @@ describe("speculative prepare/promote (L4)", () => {
     expect(withSpec.effectCapabilities["run.turn.post"]).toEqual([]);
 
     const noSummarizer = createCompactionPolicy({
-      contextWindowTokens: 100,
+      contextWindowTokens: 32_000,
       events: Bus,
       priority: 900,
     }).create();
     expect(noSummarizer.pointIds).toEqual(["run.completion.pre"]);
 
     const disabled = createCompactionPolicy({
-      contextWindowTokens: 100,
+      contextWindowTokens: 32_000,
       onSummarize: async () => "x",
       speculate: false,
       events: Bus,
@@ -148,13 +153,42 @@ describe("speculative prepare/promote (L4)", () => {
       calls += 1;
       return "candidate";
     });
-    await registration.fn(turnPostCtx(history(), 60)); // below 0.65 × 100
+    await registration.fn(turnPostCtx(history(), 7_000)); // below the adaptive prepare point
     await settle(registration);
     expect(calls).toBe(0);
 
-    await registration.fn(turnPostCtx(history(), 70)); // above
+    await registration.fn(turnPostCtx(history(), 8_000)); // above the adaptive prepare point
     await settle(registration);
     expect(calls).toBe(1);
+  });
+
+  it("defers only below the exact grace boundary", async () => {
+    const evaluate = async (tokens: number): Promise<{ calls: number; deferred: boolean }> => {
+      let calls = 0;
+      let release: (value: string) => void = () => undefined;
+      const registration = build(
+        () =>
+          new Promise<string>((resolve) => {
+            calls += 1;
+            if (calls === 1) release = resolve;
+            else resolve("synchronous");
+          }),
+      );
+      const messages = history();
+      await registration.fn(turnPostCtx(messages, 8_000));
+      await (registration as { speculationStarted?: () => Promise<void> }).speculationStarted?.();
+      const decision = await registration.fn(seamCtx(messages, tokens));
+      release("candidate");
+      await settle(registration);
+      return {
+        calls,
+        deferred: decision.reasonCodes.includes("compaction_deferred_speculation_grace"),
+      };
+    };
+
+    expect(await evaluate(24_191)).toEqual({ calls: 1, deferred: true });
+    expect(await evaluate(24_192)).toEqual({ calls: 2, deferred: false });
+    expect(await evaluate(24_193)).toEqual({ calls: 2, deferred: false });
   });
 
   it("is single-flight and keeps one candidate", async () => {
@@ -168,11 +202,11 @@ describe("speculative prepare/promote (L4)", () => {
         }),
     );
     const messages = history();
-    await registration.fn(turnPostCtx(messages, 70));
-    await registration.fn(turnPostCtx(messages, 75)); // while in flight
+    await registration.fn(turnPostCtx(messages, 8_000));
+    await registration.fn(turnPostCtx(messages, 9_000)); // while in flight
     release("candidate");
     await settle(registration);
-    await registration.fn(turnPostCtx(messages, 80)); // candidate already held
+    await registration.fn(turnPostCtx(messages, 10_000)); // candidate already held
     await settle(registration);
     expect(calls).toBe(1);
   });
@@ -184,11 +218,11 @@ describe("speculative prepare/promote (L4)", () => {
       return "prepared-anchor";
     });
     const messages = history();
-    await registration.fn(turnPostCtx(messages, 70));
+    await registration.fn(turnPostCtx(messages, 8_000));
     await settle(registration);
     expect(calls).toBe(1);
 
-    const decision = await registration.fn(seamCtx(messages, 85));
+    const decision = await registration.fn(seamCtx(messages, 17_000));
     expect(calls).toBe(1); // promoted — no synchronous merge
     expect((decision as { reasonCodes?: string[] }).reasonCodes).toContain(
       "compaction_candidate_promoted",
@@ -207,12 +241,12 @@ describe("speculative prepare/promote (L4)", () => {
       return "prefix-anchor";
     });
     const messages = history();
-    await registration.fn(turnPostCtx(messages, 70));
+    await registration.fn(turnPostCtx(messages, 8_000));
     await settle(registration);
 
     // Two more turns landed before the seam fired.
     const grown = [...messages, user("late-q"), assistant("late-a")];
-    const decision = await registration.fn(seamCtx(grown, 90));
+    const decision = await registration.fn(seamCtx(grown, 18_000));
     expect(calls).toBe(1);
     expect((decision as { reasonCodes?: string[] }).reasonCodes).toContain(
       "compaction_candidate_promoted",
@@ -227,6 +261,80 @@ describe("speculative prepare/promote (L4)", () => {
     expect(texts.some((t) => t.includes("late-q"))).toBe(true);
   });
 
+  it("rejects the same prefix ids when assistant text changed", async () => {
+    let calls = 0;
+    const registration = build(async () => {
+      calls += 1;
+      return `anchor-${calls}`;
+    });
+    const messages = history();
+    await registration.fn(turnPostCtx(messages, 8_000));
+    await settle(registration);
+    const changed = structuredClone(messages);
+    const part = changed[1]?.parts[0];
+    if (part?.type !== "text") throw new Error("shape");
+    part.text = "adversarial replacement";
+
+    const decision = await registration.fn(seamCtx(changed, 17_000));
+    expect(calls).toBe(2);
+    expect(decision.reasonCodes).toContain("compaction_candidate_discarded");
+  });
+
+  it("promotes when only a completed tool output was elided", async () => {
+    let calls = 0;
+    const registration = build(async () => {
+      calls += 1;
+      return "tool-anchor";
+    });
+    const messages = history();
+    const assistantMessage = messages[1];
+    if (assistantMessage === undefined) throw new Error("shape");
+    assistantMessage.parts.push({
+      id: "tool-part",
+      sessionID,
+      messageID: assistantMessage.info.id,
+      type: "tool",
+      callID: "call-1",
+      tool: "read",
+      state: {
+        status: "completed",
+        input: { path: "/tmp/a" },
+        output: "large original output",
+        title: "read",
+        metadata: {},
+        time: { start: 1, end: 2 },
+      },
+    });
+    await registration.fn(turnPostCtx(messages, 8_000));
+    await settle(registration);
+    const elided = structuredClone(messages);
+    const tool = elided[1]?.parts.find((part) => part.type === "tool");
+    if (tool?.type !== "tool" || tool.state.status !== "completed") throw new Error("shape");
+    tool.state.output = "[output elided by compaction]";
+
+    const decision = await registration.fn(seamCtx(elided, 17_000));
+    expect(calls).toBe(1);
+    expect(decision.reasonCodes).toContain("compaction_candidate_promoted");
+  });
+
+  it("invalidates a warm candidate when another compaction anchor lands", async () => {
+    let calls = 0;
+    const registration = build(async () => {
+      calls += 1;
+      return `anchor-${calls}`;
+    });
+    const original = history();
+    await registration.fn(turnPostCtx(original, 8_000));
+    await settle(registration);
+    const landed = user("landed-compaction");
+    const part = landed.parts[0];
+    if (part?.type !== "text") throw new Error("shape");
+    landed.parts = [{ ...part, metadata: { compactionAnchor: true, anchorBody: "other" } }];
+    await registration.fn(turnPostCtx([landed, ...history()], 8_000));
+    await settle(registration);
+    expect(calls).toBe(2);
+  });
+
   it("replaces a stale candidate during the next background prepare", async () => {
     let calls = 0;
     const registration = build(async () => {
@@ -234,15 +342,15 @@ describe("speculative prepare/promote (L4)", () => {
       return `anchor-${calls}`;
     });
     const original = history();
-    await registration.fn(turnPostCtx(original, 70));
+    await registration.fn(turnPostCtx(original, 8_000));
     await settle(registration);
 
     const replaced = history();
-    await registration.fn(turnPostCtx(replaced, 70));
+    await registration.fn(turnPostCtx(replaced, 8_000));
     await settle(registration);
     expect(calls).toBe(2);
 
-    const decision = await registration.fn(seamCtx(replaced, 85));
+    const decision = await registration.fn(seamCtx(replaced, 17_000));
     expect((decision as { reasonCodes?: string[] }).reasonCodes).toContain(
       "compaction_candidate_promoted",
     );
@@ -255,17 +363,138 @@ describe("speculative prepare/promote (L4)", () => {
       return `anchor-${calls}`;
     });
     const messages = history();
-    await registration.fn(turnPostCtx(messages, 70));
+    await registration.fn(turnPostCtx(messages, 8_000));
     await settle(registration);
     expect(calls).toBe(1);
 
     // History replaced (fresh ids): the candidate's span is no longer a prefix.
     const replaced = history();
-    const decision = await registration.fn(seamCtx(replaced, 85));
+    const decision = await registration.fn(seamCtx(replaced, 17_000));
     expect(calls).toBe(2); // synchronous merge ran
     expect((decision as { reasonCodes?: string[] }).reasonCodes).toContain(
       "compaction_candidate_discarded",
     );
+  });
+
+  it("warns once and uses snap-cut after a synchronous summarizer failure", async () => {
+    const events = collector();
+    let calls = 0;
+    const registration = createCompactionPolicy({
+      contextWindowTokens: 32_000,
+      protectRecentMessages: 2,
+      speculate: false,
+      onSummarize: async () => {
+        calls += 1;
+        throw new Error("summarizer down");
+      },
+      events,
+      priority: 900,
+    }).create();
+    const messages = history();
+    const first = await registration.fn(seamCtx(messages, 17_000));
+    const second = await registration.fn(seamCtx(messages, 17_000));
+    expect(calls).toBe(1);
+    expect((first as { reasonCodes?: string[] }).reasonCodes).toContain(
+      "compaction_summarizer_failed",
+    );
+    expect((second as { reasonCodes?: string[] }).reasonCodes).not.toContain(
+      "compaction_summarizer_failed",
+    );
+    const warnings = events.named("operational.warn") as Array<{
+      context?: Record<string, unknown>;
+    }>;
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]?.context).toEqual({ reasonCode: "compaction_summarizer_failed" });
+  });
+
+  it("disables speculative and synchronous calls after synchronous fallback", async () => {
+    let calls = 0;
+    const registration = build(async () => {
+      calls += 1;
+      throw new Error("summarizer down");
+    });
+    const messages = history();
+    const first = await registration.fn(seamCtx(messages, 17_000));
+    expect(first.reasonCodes).toContain("compaction_summarizer_failed");
+    expect(calls).toBe(1);
+
+    await registration.fn(turnPostCtx(messages, 18_000));
+    await settle(registration);
+    const second = await registration.fn(seamCtx(messages, 18_000));
+    expect(second.reasonCodes).not.toContain("compaction_summarizer_failed");
+    expect(calls).toBe(1);
+  });
+
+  it("uses one warned fallback when the summarizer deadline expires", async () => {
+    jest.useFakeTimers();
+    try {
+      const events = collector();
+      let calls = 0;
+      let started: () => void = () => undefined;
+      const entered = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      const factory = createCompactionPolicy({
+        contextWindowTokens: 32_000,
+        protectRecentMessages: 2,
+        speculate: false,
+        summarizerDeadlineMs: 100,
+        onSummarize: (_messages, _previous, _budget, signal) => {
+          calls += 1;
+          started();
+          return new Promise<string>((_resolve, reject) => {
+            signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+          });
+        },
+        events,
+        priority: 900,
+      });
+      const registration = factory.createForRun({
+        getPreviousYield: () => undefined,
+        recordYield: () => undefined,
+      });
+      const pending = registration.fn(seamCtx(history(), 17_000));
+      await entered;
+      jest.advanceTimersByTime(100);
+      const decision = await pending;
+      expect(decision.reasonCodes).toContain("compaction_summarizer_failed");
+      expect(calls).toBe(1);
+      expect(events.named("operational.warn")).toHaveLength(1);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("propagates external abort instead of using fallback", async () => {
+    const events = collector();
+    const controller = new AbortController();
+    let started: () => void = () => undefined;
+    const entered = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const factory = createCompactionPolicy({
+      contextWindowTokens: 32_000,
+      protectRecentMessages: 2,
+      speculate: false,
+      onSummarize: (_messages, _previous, _budget, signal) => {
+        started();
+        return new Promise<string>((_resolve, reject) => {
+          signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+        });
+      },
+      events,
+      priority: 900,
+    });
+    const registration = factory.createForRun({
+      signal: controller.signal,
+      getPreviousYield: () => undefined,
+      recordYield: () => undefined,
+    });
+    const pending = registration.fn(seamCtx(history(), 17_000));
+    await entered;
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    expect(events.named("operational.warn")).toHaveLength(0);
   });
 
   it("a prepare failure leaves no candidate and never throws into the run", async () => {
@@ -276,13 +505,13 @@ describe("speculative prepare/promote (L4)", () => {
       return "recovered";
     });
     const messages = history();
-    await registration.fn(turnPostCtx(messages, 70));
+    await registration.fn(turnPostCtx(messages, 8_000));
     await settle(registration);
     expect(calls).toBe(1);
 
     // Seam falls back to the synchronous merge — the failure stayed out of
     // the run and the retry went through the normal fail-closed bracket.
-    const decision = await registration.fn(seamCtx(messages, 85));
+    const decision = await registration.fn(seamCtx(messages, 17_000));
     expect(calls).toBe(2);
     expect((decision as { reasonCodes?: string[] }).reasonCodes).toContain(
       "compaction_threshold_exceeded",
@@ -300,7 +529,7 @@ describe("speculative prepare/promote (L4)", () => {
     // Tiny history at prepare time: the candidate span is small, its anchor
     // render outweighs it.
     const tiny = [user("q"), assistant("a"), user("t1"), user("t2")];
-    await registration.fn(turnPostCtx(tiny, 70));
+    await registration.fn(turnPostCtx(tiny, 8_000));
     await settle(registration);
     expect(calls).toBe(1);
 
@@ -313,7 +542,7 @@ describe("speculative prepare/promote (L4)", () => {
       user("tail-q"),
       assistant("tail-a"),
     ];
-    const decision = await registration.fn(seamCtx(grown, 95));
+    const decision = await registration.fn(seamCtx(grown, 19_000));
     expect(calls).toBe(2); // synchronous merge ran
     const reasons = (decision as { reasonCodes?: string[] }).reasonCodes ?? [];
     expect(reasons).toContain("compaction_candidate_discarded");
@@ -332,19 +561,19 @@ describe("speculative prepare/promote (L4)", () => {
       return "kept-candidate";
     });
     const messages = history();
-    await registration.fn(turnPostCtx(messages, 70));
+    await registration.fn(turnPostCtx(messages, 8_000));
     await settle(registration);
     expect(calls).toBe(1);
 
     // A seam that never reaches the candidate branch (history within the
     // protected tail) must not destroy the candidate.
-    const shortSeam = await registration.fn(seamCtx(messages.slice(0, 2), 85));
+    const shortSeam = await registration.fn(seamCtx(messages.slice(0, 2), 17_000));
     expect((shortSeam as { reasonCodes?: string[] }).reasonCodes).toContain(
       "compaction_skipped_nothing_reclaimed",
     );
 
     // The next real seam still promotes with zero further model calls.
-    const decision = await registration.fn(seamCtx(messages, 85));
+    const decision = await registration.fn(seamCtx(messages, 17_000));
     expect(calls).toBe(1);
     expect((decision as { reasonCodes?: string[] }).reasonCodes).toContain(
       "compaction_candidate_promoted",
@@ -354,14 +583,13 @@ describe("speculative prepare/promote (L4)", () => {
   it("does not start preparation after an abort before its microtask", async () => {
     let calls = 0;
     const speculator = createSpeculator({
-      prepareRatio: 0.65,
       protectRecentMessages: 2,
       onSummarize: async () => {
         calls += 1;
         return "late";
       },
     });
-    speculator.maybePrepare(history(), 70, 100);
+    speculator.maybePrepare(history(), 70, 60, 100);
     speculator.abort();
     await speculator.settled();
     expect(calls).toBe(0);
@@ -370,12 +598,14 @@ describe("speculative prepare/promote (L4)", () => {
   it("aborts an in-flight candidate when the run ends", async () => {
     const registration = build(async () => "must-not-promote");
     const messages = history();
-    await registration.fn(turnPostCtx(messages, 70));
+    await registration.fn(turnPostCtx(messages, 8_000));
     (registration as { readonly onRunEnd?: () => void }).onRunEnd?.();
     await settle(registration);
 
-    expect((registration as { readonly speculationSettled?: () => Promise<void> }).speculationSettled).toBeDefined();
-    const decision = await registration.fn(seamCtx(messages, 85));
+    expect(
+      (registration as { readonly speculationSettled?: () => Promise<void> }).speculationSettled,
+    ).toBeDefined();
+    const decision = await registration.fn(seamCtx(messages, 17_000));
     expect((decision as { reasonCodes?: string[] }).reasonCodes).not.toContain(
       "compaction_candidate_promoted",
     );
@@ -388,13 +618,13 @@ describe("speculative prepare/promote (L4)", () => {
       throw new Error("provider down");
     });
     const messages = history();
-    await registration.fn(turnPostCtx(messages, 70));
+    await registration.fn(turnPostCtx(messages, 8_000));
     await settle(registration);
-    await registration.fn(turnPostCtx(messages, 72));
+    await registration.fn(turnPostCtx(messages, 9_000));
     await settle(registration);
     expect(calls).toBe(2);
     // Streak cap reached: no more prepares this run.
-    await registration.fn(turnPostCtx(messages, 74));
+    await registration.fn(turnPostCtx(messages, 10_000));
     await settle(registration);
     expect(calls).toBe(2);
   });

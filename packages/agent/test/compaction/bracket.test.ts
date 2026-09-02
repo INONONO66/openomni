@@ -220,8 +220,10 @@ describe("Compaction bracket", () => {
       await capture.done;
 
       // Housekeeping failed; the run did not: no throw, the cut degraded
-      // (users still head the window, no anchor), and the record names it.
+      // once to the no-summarizer snap-cut, and the record names it.
       expect(result.summarizerFailed).toBe(true);
+      expect(result.compacted).toBe(true);
+      expect(result.messages[0]?.info.role).toBe("user");
       expect(capture.started).toHaveLength(1);
       expect(capture.completed).toHaveLength(1);
       expect(String(capture.completed[0]?.error)).toContain("summarizer exploded");

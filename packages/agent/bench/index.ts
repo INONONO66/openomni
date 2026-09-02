@@ -17,7 +17,6 @@ interface BenchmarkResult {
 
 const compactionOptions = {
   contextWindowTokens: 128000,
-  thresholdRatio: 0.8,
   protectRecentMessages: 6,
 };
 

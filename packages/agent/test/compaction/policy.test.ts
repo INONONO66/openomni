@@ -78,7 +78,6 @@ describe("createCompactionPolicy", () => {
       priority: 900,
       events: Bus,
       contextWindowTokens: 10000,
-      thresholdRatio: 0.8,
     }).create();
 
     const messages = [createTestMessage("msg1"), createTestMessage("msg2")];
@@ -97,7 +96,6 @@ describe("createCompactionPolicy", () => {
       priority: 900,
       events: Bus,
       contextWindowTokens: 1000,
-      thresholdRatio: 0.8,
       protectRecentMessages: 2,
     }).create();
 
@@ -113,6 +111,22 @@ describe("createCompactionPolicy", () => {
     const replacement = effectOf(verdict, "run.replace_messages");
     expect(replacement).toBeDefined();
     expect(replacement?.messages.length).toBeLessThan(messages.length);
+    expect(verdict.reasonCodes).toContain("compaction_ineffective");
+  });
+
+  it("moves the next threshold later after an ineffective compaction", async () => {
+    const middleware = createCompactionPolicy({
+      priority: 900,
+      events: Bus,
+      contextWindowTokens: 1000,
+      protectRecentMessages: 2,
+    }).create();
+    const messages = Array.from({ length: 10 }, (_, index) => createTestMessage(`adaptive${index}`));
+    const first = await middleware.fn(baseCtx({ messages, contextTokens: 500 }));
+    expect(first.reasonCodes).toContain("compaction_ineffective");
+
+    const second = await middleware.fn(baseCtx({ messages, contextTokens: 470 }));
+    expect(second.effects).toHaveLength(0);
   });
 
   it("transforms when reserve budget is reached before ratio threshold", async () => {
@@ -120,7 +134,6 @@ describe("createCompactionPolicy", () => {
       priority: 900,
       events: Bus,
       contextWindowTokens: 1000,
-      thresholdRatio: 0.95,
       reserveTokens: 250,
       protectRecentMessages: 2,
     }).create();
@@ -144,7 +157,6 @@ describe("createCompactionPolicy", () => {
       priority: 900,
       events: Bus,
       contextWindowTokens: 1000,
-      thresholdRatio: 0.8,
     }).create();
 
     const ctx = baseCtx({
@@ -162,7 +174,6 @@ describe("createCompactionPolicy", () => {
       priority: 900,
       events: Bus,
       contextWindowTokens: 1000,
-      thresholdRatio: 0.8,
     }).create();
 
     const ctx = baseCtx({
@@ -180,7 +191,6 @@ describe("createCompactionPolicy", () => {
       priority: 900,
       events: Bus,
       contextWindowTokens: 1000,
-      thresholdRatio: 0.8,
     }).create();
 
     const messages = Array.from({ length: 10 }, (_, i) => createTestMessage(`msg${i}`));
@@ -233,7 +243,6 @@ describe("createCompactionPolicy", () => {
       priority: 900,
       events: Bus,
       contextWindowTokens: 1000,
-      thresholdRatio: 0.8,
       protectRecentMessages: 2,
     }).create();
     const verdict = await middleware.fn(
@@ -359,14 +368,11 @@ describe("createCompactionPolicy", () => {
     expect(verdict.reasonCodes).toContain("compaction_skipped_nothing_reclaimed");
   });
 
-  it("compacts a yield-borne dispatch even when the config ratio sits above the arm point", async () => {
-    // #651 review M2: the loop arms at the default ratio; a plan with
-    // thresholdRatio 0.95 would otherwise refuse at 80% measured and the run
-    // would die without the seam ever trying. The yield IS the trigger.
+  it("compacts a yield-borne dispatch without re-gating the loop's trigger", async () => {
+    // The yield IS the trigger; the seam must not re-derive a stricter gate.
     const middleware = createCompactionPolicy({
       priority: 900,
       events: Bus,
-      thresholdRatio: 0.95,
       protectRecentMessages: 2,
     }).create();
     const verdict = await middleware.fn(
@@ -381,17 +387,16 @@ describe("createCompactionPolicy", () => {
     expect(effectOf(verdict, "run.replace_messages")).toBeDefined();
   });
 
-  it("still honors the config ratio on non-yield dispatches", async () => {
+  it("honors the adaptive threshold on non-yield dispatches", async () => {
     const middleware = createCompactionPolicy({
       priority: 900,
       events: Bus,
-      thresholdRatio: 0.95,
       protectRecentMessages: 2,
     }).create();
     const verdict = await middleware.fn(
       baseCtx({
         messages: Array.from({ length: 12 }, (_unused, index) => createTestMessage(`m${index}`)),
-        contextTokens: 800,
+        contextTokens: 400,
         contextWindowTokens: 1000,
       }),
     );

@@ -1,7 +1,16 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { Actor, Gateway, Machine, type Model } from "@openomni/protocol";
+import { Actor, Gateway, Machine, NamedError, type Model } from "@openomni/protocol";
 import { z } from "zod";
+
+export const ConfigurationError = NamedError.create(
+  "OpenOmniConfigurationError",
+  z.object({
+    code: z.enum(["invalid_compaction_summarizer"]),
+    message: z.string(),
+  }),
+);
+export type ConfigurationError = InstanceType<typeof ConfigurationError>;
 
 export interface OpenOmniConfig {
   readonly dbPath: string;
@@ -9,6 +18,8 @@ export interface OpenOmniConfig {
   readonly memoryPath: string;
   readonly host: string;
   readonly wsPort: number;
+  /** Enabled unless explicitly disabled with OPENOMNI_COMPACTION_SUMMARIZER=off. */
+  readonly compactionSummarizer?: boolean;
   /** Required for non-loopback hosts; every ws sender is granted owner tier. */
   readonly wsToken?: string;
   readonly model: {
@@ -113,6 +124,16 @@ function portFromEnv(): number {
     throw new Error("OPENOMNI_WS_PORT must be an integer from 0 to 65535");
   }
   return port;
+}
+
+function compactionSummarizerFromEnv(): boolean {
+  const raw = process.env.OPENOMNI_COMPACTION_SUMMARIZER?.trim();
+  if (raw === undefined || raw.length === 0) return true;
+  if (raw === "off") return false;
+  throw new ConfigurationError({
+    code: "invalid_compaction_summarizer",
+    message: 'OPENOMNI_COMPACTION_SUMMARIZER must be "off" when set',
+  });
 }
 
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "::1"]);
@@ -298,6 +319,7 @@ export function loadConfig(home: string = homedir()): OpenOmniConfig {
     memoryPath: process.env.OPENOMNI_MEMORY_PATH?.trim() || join(home, ".openomni", "memory.json"),
     host,
     wsPort: portFromEnv(),
+    compactionSummarizer: compactionSummarizerFromEnv(),
     ...(wsToken === undefined || wsToken.length === 0 ? {} : { wsToken }),
     model: modelFromEnv(),
     ...(machines === undefined ? {} : { machines }),

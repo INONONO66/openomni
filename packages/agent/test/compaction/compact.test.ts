@@ -2,7 +2,12 @@ import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
 import { RunEvents } from "../../src/core/execution/events";
 import { Bus } from "@openomni/telemetry";
-import { Compaction } from "../../src/compaction/compact";
+import {
+  Compaction,
+  estimateMessagesTokens,
+  isIneffectiveCompaction,
+  prepareSummarizerInput,
+} from "../../src/compaction/compact";
 import { captureBusEvents } from "../helpers/bus-event";
 
 /** Compaction rewrites a run's history; the record carries that run's trace. */
@@ -116,94 +121,35 @@ describe("Compaction", () => {
   });
 
   describe("shouldCompact", () => {
-    it("returns false when tokens are below threshold", () => {
-      expect(Compaction.shouldCompact(700, { contextWindowTokens: 1000 })).toBe(false);
+    it("uses the adaptive geometry threshold", () => {
+      expect(Compaction.shouldCompact(449, { contextWindowTokens: 1000 })).toBe(false);
+      expect(Compaction.shouldCompact(450, { contextWindowTokens: 1000 })).toBe(true);
     });
 
-    it("returns true when tokens reach 80% threshold", () => {
-      expect(Compaction.shouldCompact(800, { contextWindowTokens: 1000 })).toBe(true);
-    });
-
-    it("returns true when tokens exceed threshold", () => {
-      expect(Compaction.shouldCompact(900, { contextWindowTokens: 1000 })).toBe(true);
-    });
-
-    it("respects custom thresholdRatio", () => {
+    it("compacts before consuming a larger configured reserve", () => {
       expect(
-        Compaction.shouldCompact(600, {
-          contextWindowTokens: 1000,
-          thresholdRatio: 0.5,
+        Compaction.shouldCompact(50_000, {
+          contextWindowTokens: 100_000,
+          reserveTokens: 50_000,
         }),
       ).toBe(true);
-      expect(
-        Compaction.shouldCompact(400, {
-          contextWindowTokens: 1000,
-          thresholdRatio: 0.5,
-        }),
-      ).toBe(false);
     });
 
-    it("compacts early when reserveTokens would be consumed", () => {
+    it("moves a low-yield next round later", () => {
       expect(
-        Compaction.shouldCompact(751, {
-          contextWindowTokens: 1000,
-          reserveTokens: 250,
-        }),
-      ).toBe(true);
-      expect(
-        Compaction.shouldCompact(749, {
-          contextWindowTokens: 1000,
-          reserveTokens: 250,
-        }),
+        Compaction.shouldCompact(
+          450,
+          { contextWindowTokens: 1000 },
+          { savedTokens: 50, tokensBefore: 1000 },
+        ),
       ).toBe(false);
     });
+  });
 
-    it("compacts early when reserveRatio would be consumed", () => {
-      expect(
-        Compaction.shouldCompact(701, {
-          contextWindowTokens: 1000,
-          reserveRatio: 0.3,
-        }),
-      ).toBe(true);
-      expect(
-        Compaction.shouldCompact(699, {
-          contextWindowTokens: 1000,
-          reserveRatio: 0.3,
-        }),
-      ).toBe(false);
-    });
-
-    it("prefers reserveTokens over reserveRatio", () => {
-      expect(
-        Compaction.shouldCompact(751, {
-          contextWindowTokens: 1000,
-          reserveTokens: 250,
-          reserveRatio: 0.5,
-        }),
-      ).toBe(true);
-      expect(
-        Compaction.shouldCompact(749, {
-          contextWindowTokens: 1000,
-          reserveTokens: 250,
-          reserveRatio: 0.5,
-        }),
-      ).toBe(false);
-    });
-
-    it("normalizes out-of-range reserve values", () => {
-      expect(
-        Compaction.shouldCompact(999, {
-          contextWindowTokens: 1000,
-          thresholdRatio: 1,
-          reserveTokens: -100,
-        }),
-      ).toBe(false);
-      expect(
-        Compaction.shouldCompact(0, {
-          contextWindowTokens: 1000,
-          reserveTokens: 1200,
-        }),
-      ).toBe(true);
+  describe("ineffective yield", () => {
+    it("requires both the absolute and ratio floors", () => {
+      expect(isIneffectiveCompaction(1024, 10_241)).toBe(true);
+      expect(isIneffectiveCompaction(1024, 10_240)).toBe(false);
     });
   });
 
@@ -272,6 +218,48 @@ describe("Compaction", () => {
       );
       expect(texts).toContain("recent-3");
       expect(texts).not.toContain("old-1");
+    });
+
+    it("passes a bounded summarizer budget contract", async () => {
+      const messages = Array.from({ length: 8 }, (_, index) =>
+        index % 2 === 0
+          ? makeUserMessage(`user ${index}`)
+          : makeAssistantMessage("word ".repeat(300)),
+      );
+      let observed:
+        | { input: Message.WithParts[]; maxInputTokens: number; maxOutputTokens: number }
+        | undefined;
+      await Compaction.compact(
+        messages,
+        {
+          contextWindowTokens: 2000,
+          protectRecentMessages: 2,
+          onSummarize: async (input, _previous, budget) => {
+            observed = {
+              input,
+              maxInputTokens: budget.maxInputTokens,
+              maxOutputTokens: budget.maxOutputTokens,
+            };
+            return "bounded";
+          },
+        },
+        { traceId: TEST_TRACE_ID, sessionId: "test" },
+        Bus,
+        { trigger: "threshold" },
+      );
+      expect(observed?.maxInputTokens).toBe(1000);
+      expect(observed?.maxOutputTokens).toBe(1000);
+      expect(estimateMessagesTokens(observed?.input ?? [])).toBeLessThanOrEqual(1000);
+    });
+
+    it("weights long base64-like runs at four times their character length", () => {
+      const plain = makeAssistantMessage("a".repeat(511));
+      const encoded = makeAssistantMessage("a".repeat(512));
+      expect(estimateMessagesTokens([encoded]) - estimateMessagesTokens([plain])).toBeGreaterThan(
+        300,
+      );
+      const bounded = prepareSummarizerInput([encoded], 1000);
+      expect(bounded.messages).toHaveLength(0);
     });
 
     it("inserts summary message when onSummarize is provided", async () => {

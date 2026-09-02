@@ -9,10 +9,11 @@ import {
 import { ModelsDev, Provider, Retry as LlmRetry, type Run, run as llmRun } from "@openomni/llm";
 import type { Sink } from "@openomni/llm";
 import { Placement } from "@openomni/placement";
-import { DEFAULT_THRESHOLD_RATIO } from "../../compaction/compact";
+import { resolveCompactionGeometry } from "../../compaction/geometry";
+import type { CompactionRunBinding } from "../../compaction/policy";
 import type { AgentResult, ChatAgentConfig, ChatAgentInput } from "../types";
 import * as Retry from "../retry";
-import { PolicyEngine, type PolicyEngineInstance } from "../policy";
+import { PolicyEngine, type PolicyEngineInstance, type PolicyRegistration } from "../policy";
 import { emitRunCompleted, emitRunFailed, emitRunStarted, emitTurnStart } from "./run-events";
 import {
   dispatchBudgetCheck,
@@ -70,9 +71,9 @@ export async function runAgent(
   // Configuration is validated before opening the run.
   assertToolExecutor(config);
   assertUnambiguousToolMetadata(config);
-  const engine = buildPolicyEngine(config, agentBase);
-  emitRunStarted(config.events, trace, config.model.id);
   const state = createRunState({ ...input, traceContext: trace });
+  const engine = buildPolicyEngine(config, agentBase, state);
+  emitRunStarted(config.events, trace, config.model.id);
 
   const finish = (result: AgentResult): AgentResult => {
     engine.endRun();
@@ -304,7 +305,14 @@ async function resolveConnectionModel(
   const overrideWindow = model.limit?.context ?? 0;
   const yieldAt =
     overrideWindow > 0 && state.windowYieldDisarmed !== true
-      ? Math.floor(overrideWindow * DEFAULT_THRESHOLD_RATIO)
+      ? Math.floor(
+          resolveCompactionGeometry({
+            contextWindowTokens: overrideWindow,
+            ...(state.lastCompactionYield === undefined
+              ? {}
+              : { previousYield: state.lastCompactionYield }),
+          }).thresholdTokens,
+        )
       : undefined;
   const { yieldAtInputTokens: _priorYield, ...restInput } = turn.runInput;
   turn.windowYieldArmed = yieldAt !== undefined;
@@ -405,6 +413,7 @@ type RunPolicyEngine = PolicyEngineInstance & { readonly endRun: () => void };
 export function buildPolicyEngine(
   config: ChatAgentConfig,
   agentBase: AgentRunBase,
+  state?: RunState,
 ): RunPolicyEngine {
   const engine = PolicyEngine.create({
     clock: Date.now,
@@ -418,7 +427,17 @@ export function buildPolicyEngine(
   const onRunEnd: Array<() => void> = [];
   for (const reg of config.middleware ?? []) {
     if (reg.kind === "factory") {
-      const created = reg.create();
+      const runBinding: CompactionRunBinding = {
+        signal: config.signal,
+        getPreviousYield: () => state?.lastCompactionYield,
+        recordYield: (value) => {
+          if (state !== undefined) state.lastCompactionYield = value;
+        },
+      };
+      const created =
+        "createForRun" in reg && typeof reg.createForRun === "function"
+          ? (reg.createForRun as (binding: CompactionRunBinding) => PolicyRegistration)(runBinding)
+          : reg.create();
       // Re-wrap the already-created registration so the generic engine keeps
       // its async factory lane while this runner retains its run-end hook.
       engine.register({ kind: "factory", name: reg.name, create: () => created });

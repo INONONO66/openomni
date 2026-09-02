@@ -1,76 +1,43 @@
 import type { Message } from "@openomni/protocol";
-import { planAnchoredCut } from "./compact";
+import {
+  isWarmCandidateValid,
+  latestCompactionAnchorId,
+  planAnchoredCut,
+  prepareSummarizerInput,
+  type CompactionOptions,
+} from "./compact";
 
-/**
- * Speculative compaction (compaction-design L4, D8; pss-runtime's shipped
- * prepare/promote shape). The expensive summarize call runs in the
- * background once the window passes the prepare ratio, so the apply seam —
- * still the only place history is rewritten — almost never waits on a
- * model call: a fresh candidate promotes with zero model calls.
- *
- * Freshness is span identity: the candidate pins the exact message-id
- * prefix it summarized. In-run ids are stable (append-only history; elision
- * rewrites a part's output, never its id), so the prefix check tolerates
- * both later turns (the candidate cuts less than the natural cutoff would —
- * still a valid, smaller cut) and elision (the candidate summarized the
- * richer pre-elision content). Any history REPLACEMENT (a prior cut) mints
- * new ids and invalidates the candidate structurally.
- *
- * Abort linkage: dispatch contexts are structured-clone frozen, so no
- * AbortSignal can ride them. A prepare in flight when the run ends resolves
- * against per-run state that dies with the run's engine (factory-created
- * registration), and its duration is bounded by the host's completion fn —
- * the same bound the synchronous seam call already has.
- */
+/** A warm summary is pinned to the cut anchor, not to later appends. */
 export interface CompactionCandidate {
-  readonly spanIds: readonly string[];
+  readonly prefixIds: readonly string[];
+  readonly prefixFingerprint: string;
+  readonly firstKeptId: string;
+  readonly compactionAnchorId: string | undefined;
   readonly anchorBody: string;
 }
 
 export interface Speculator {
-  /**
-   * Fire-and-forget, single-flight. Never throws; failure = no candidate,
-   * reported through `onFailure` with the consecutive-failure streak. After
-   * MAX_PREPARE_FAILURES consecutive failures speculation stops for the run
-   * (#724 review M5): the synchronous seam merge remains, and ITS failure
-   * surfaces through the fail-closed bracket — no silent per-turn burn.
-   */
   maybePrepare(
     messages: readonly Message.WithParts[],
     contextTokens: number,
+    prepareTokens: number,
     contextWindowTokens: number,
     onFailure?: (error: unknown, failStreak: number) => void,
   ): void;
   peek(): CompactionCandidate | undefined;
-  /** The seam consumed (promoted or discarded) whatever was pending. */
+  isInFlight(): boolean;
   consume(): void;
-  /** Cancel and invalidate background work when the run reaches a terminal. */
+  disable(): void;
   abort(): void;
-  /** Resolves when the current background preparation starts. */
   started(): Promise<void>;
-  /** Resolves when the current background preparation settles. */
   settled(): Promise<void>;
 }
 
-export const DEFAULT_PREPARE_RATIO = 0.65;
 const MAX_PREPARE_FAILURES = 2;
 
-function isIdPrefix(spanIds: readonly string[], messages: readonly Message.WithParts[]): boolean {
-  if (spanIds.length > messages.length) return false;
-  for (let index = 0; index < spanIds.length; index += 1) {
-    if (messages[index]?.info.id !== spanIds[index]) return false;
-  }
-  return true;
-}
-
 export function createSpeculator(config: {
-  readonly prepareRatio: number;
   readonly protectRecentMessages: number;
-  readonly onSummarize: (
-    messages: Message.WithParts[],
-    previousAnchor?: string,
-    signal?: AbortSignal,
-  ) => Promise<string>;
+  readonly onSummarize: NonNullable<CompactionOptions["onSummarize"]>;
 }): Speculator {
   let candidate: CompactionCandidate | undefined;
   let inFlight = false;
@@ -82,18 +49,23 @@ export function createSpeculator(config: {
   let resolveStarted: (() => void) | undefined;
 
   return {
-    maybePrepare(messages, contextTokens, contextWindowTokens, onFailure) {
+    maybePrepare(messages, contextTokens, prepareTokens, contextWindowTokens, onFailure) {
       if (failStreak >= MAX_PREPARE_FAILURES) return;
-      // A candidate whose span is no longer a live prefix (history was
-      // replaced) is dead weight — drop it so a fresh prepare can run.
-      if (candidate !== undefined && !isIdPrefix(candidate.spanIds, messages)) {
+      if (candidate !== undefined && !isWarmCandidateValid(candidate, messages)) {
         candidate = undefined;
       }
-      if (inFlight || candidate !== undefined) return;
-      if (contextTokens < contextWindowTokens * config.prepareRatio) return;
+      if (inFlight || candidate !== undefined || contextTokens < prepareTokens) return;
 
       const plan = planAnchoredCut(messages, config.protectRecentMessages);
-      if (plan === undefined || plan.summarizerInput.length === 0) return;
+      const firstKept = messages[plan?.prefixIds.length ?? -1];
+      if (plan === undefined || plan.summarizerInput.length === 0 || firstKept === undefined)
+        return;
+      const prepared = prepareSummarizerInput(
+        plan.summarizerInput,
+        contextWindowTokens,
+        plan.previousAnchor,
+      );
+      if (prepared.messages.length === 0) return;
 
       inFlight = true;
       started = new Promise<void>((resolve) => {
@@ -106,10 +78,12 @@ export function createSpeculator(config: {
         .then(() => {
           resolveStarted?.();
           resolveStarted = undefined;
-          if (runGeneration !== generation || preparationController.signal.aborted) return undefined;
+          if (runGeneration !== generation || preparationController.signal.aborted)
+            return undefined;
           return config.onSummarize(
-            plan.summarizerInput,
+            prepared.messages,
             plan.previousAnchor,
+            prepared.budget,
             preparationController.signal,
           );
         })
@@ -117,15 +91,20 @@ export function createSpeculator(config: {
           if (runGeneration !== generation || merged === undefined) return;
           failStreak = 0;
           candidate =
-            merged.trim().length > 0 ? { spanIds: plan.spanIds, anchorBody: merged } : undefined;
+            merged.trim().length > 0
+              ? {
+                  prefixIds: plan.prefixIds,
+                  prefixFingerprint: plan.prefixFingerprint,
+                  firstKeptId: firstKept.info.id,
+                  compactionAnchorId: latestCompactionAnchorId(messages),
+                  anchorBody: merged,
+                }
+              : undefined;
         })
         .catch((error: unknown) => {
           if (runGeneration !== generation) return;
-          // Absent candidate: the seam falls back to its synchronous merge,
-          // which surfaces the same failure through the fail-closed bracket
-          // if it repeats there. Nothing to rethrow into — this promise has
-          // no awaiter by design; the streak caps the retry burn.
           candidate = undefined;
+          if (error instanceof Error && error.name === "AbortError") return;
           failStreak += 1;
           onFailure?.(error, failStreak);
         })
@@ -137,8 +116,17 @@ export function createSpeculator(config: {
         });
     },
     peek: () => candidate,
+    isInFlight: () => inFlight,
     consume: () => {
       candidate = undefined;
+    },
+    disable: () => {
+      failStreak = MAX_PREPARE_FAILURES;
+      generation += 1;
+      candidate = undefined;
+      controller?.abort();
+      controller = undefined;
+      inFlight = false;
     },
     abort: () => {
       generation += 1;

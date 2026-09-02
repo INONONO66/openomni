@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { assertWsExposure, loadConfig } from "../src/config";
+import { assertWsExposure, ConfigurationError, loadConfig } from "../src/config";
 import { startOpenOmni } from "../src/index";
 
 const ENV_KEYS = [
@@ -13,6 +13,7 @@ const ENV_KEYS = [
   "OPENOMNI_MODEL_BASE_URL",
   "OPENOMNI_MODEL_HEADERS",
   "OPENOMNI_MODEL_FALLBACKS",
+  "OPENOMNI_COMPACTION_SUMMARIZER",
   "OPENOMNI_SOCIAL_BUDGETS",
   "OPENOMNI_MACHINES_ENROLLED",
   "OPENOMNI_MACHINES_SOCKET",
@@ -45,6 +46,23 @@ afterEach(() => {
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
   }
+});
+
+describe("compaction summarizer config", () => {
+  it("defaults on and accepts only explicit off", () => {
+    expect(loadConfig().compactionSummarizer).toBe(true);
+    process.env.OPENOMNI_COMPACTION_SUMMARIZER = "off";
+    expect(loadConfig().compactionSummarizer).toBe(false);
+  });
+
+  it("fails closed on unknown values with a typed configuration code", () => {
+    process.env.OPENOMNI_COMPACTION_SUMMARIZER = "false";
+
+    const error = thrownBy(loadConfig);
+    expect(ConfigurationError.isInstance(error)).toBe(true);
+    if (!ConfigurationError.isInstance(error)) throw error;
+    expect(error.data.code).toBe("invalid_compaction_summarizer");
+  });
 });
 
 describe("ws exposure enforcement", () => {

@@ -25,7 +25,7 @@ import {
 
 import { createMachineHost, type MachineHost } from "@openomni/machines";
 import type { Placement } from "@openomni/placement";
-import { type Channel, Gateway, type Ingress, type Machine } from "@openomni/protocol";
+import { type BusEvent, type Channel, Gateway, type Ingress, type Machine } from "@openomni/protocol";
 import { Bus, newTraceId } from "@openomni/telemetry";
 import { desiredChannels, materializePersons } from "./provisioning/declared";
 import { type ChannelSupervisor, createChannelSupervisor } from "./provisioning/supervisor";
@@ -39,7 +39,8 @@ import {
   type RegisteredActor,
 } from "./config";
 import type { ArtifactsPort } from "./tools/mutation/artifacts";
-import { createLlmToolPort } from "./tools/execution/llm";
+import { createLlmToolPort, type LlmIo } from "./tools/execution/llm";
+import { createCompactionSummarizer } from "./compaction/summarizer";
 import type { MachinesPort } from "./tools/query/machines";
 import { createChannelDriver } from "./delegation/channel-driver";
 import { createInlineDriver } from "./delegation/inline-driver";
@@ -71,6 +72,27 @@ import type { CellPorts } from "./tools/execution/run-code";
 interface StartOptions {
   readonly config?: OpenOmniConfig;
   readonly llm?: ChatAgentConfig["llm"];
+}
+
+export function createConfiguredCompactionPolicy(
+  config: OpenOmniConfig,
+  events: BusEvent.Sink,
+  io: LlmIo = {},
+): ReturnType<typeof createCompactionPolicy> {
+  const transport = modelTransport(config.model);
+  return createCompactionPolicy({
+    events,
+    priority: 900,
+    elideToolOutputs: { minOutputChars: 4000, keepHeadChars: 500 },
+    ...(config.compactionSummarizer === false
+      ? {}
+      : {
+          onSummarize: createCompactionSummarizer({
+            model: { ...config.model, ...(transport === undefined ? {} : { transport }) },
+            io,
+          }),
+        }),
+  });
 }
 
 /**
@@ -487,11 +509,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
     const policyRegistry = createPolicyRegistry({ mandatory: ["compaction"] });
     await composer.mount("policy", (ctx) => {
       const compaction = policyRegistry.register("compaction", (run) =>
-        createCompactionPolicy({
-          events: run.events,
-          priority: 900,
-          elideToolOutputs: { minOutputChars: 4000, keepHeadChars: 500 },
-        }),
+        createConfiguredCompactionPolicy(config, run.events, options.llm ?? {}),
       );
       ctx.effect(() => compaction.dispose());
     });
