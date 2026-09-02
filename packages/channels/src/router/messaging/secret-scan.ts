@@ -12,7 +12,7 @@
  * the body and the gate can run on every send attempt.
  */
 
-export type SecretClass =
+type SecretClass =
   | "pem_private_key"
   | "provider_token"
   | "auth_header"

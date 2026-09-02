@@ -18,15 +18,21 @@ import { z } from "zod";
  */
 
 /** Lowercase sha256 hex digest — the only expected-output form we compare. */
-export const Sha256Hex = z.string().regex(/^[0-9a-f]{64}$/);
-export type Sha256Hex = z.infer<typeof Sha256Hex>;
+type Sha256Hex = string;
+const Sha256Hex: z.ZodType<Sha256Hex> = z.string().regex(/^[0-9a-f]{64}$/);
 
 /**
  * One criterion's expected observation. Digests are optional because plenty of
  * checks are exit-code-only; when present they are compared byte-exactly
  * against the captured stream digest — raw output never becomes a fact.
  */
-export const CommandExpectation = z
+type CommandExpectation = {
+  readonly criterionIndex: number;
+  readonly exitCode: number;
+  readonly stdoutSha256?: Sha256Hex;
+  readonly stderrSha256?: Sha256Hex;
+};
+const CommandExpectation: z.ZodType<CommandExpectation> = z
   .object({
     criterionIndex: z.number().int().nonnegative(),
     exitCode: z.number().int(),
@@ -34,7 +40,6 @@ export const CommandExpectation = z
     stderrSha256: Sha256Hex.optional(),
   })
   .strict();
-export type CommandExpectation = z.infer<typeof CommandExpectation>;
 
 /**
  * The one verification kind v1 ships: run a registered executable with a fixed
