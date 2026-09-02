@@ -1,3 +1,4 @@
+// allow: SIZE_OK — real-process kernel lifecycle scenarios share one process-cleanup fixture.
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import type { BusEvent, Machine } from "@openomni/protocol";
@@ -74,6 +75,58 @@ function cell(code: string, timeoutMs = 15_000): Machine.CellRequest {
 }
 
 describe("cell settlement ownership", () => {
+  test("small container values keep their complete repr", async () => {
+    // Given: a normal container that fits comfortably inside the output ceiling.
+    const kernel = new PythonKernel({ launch: plainLauncher, maxOutputBytes: 1024 });
+    try {
+      // When: the public kernel renders the trailing value.
+      const result = await kernel.run(
+        { cellId: "small-container", code: "[1, 2, 3]", timeoutMs: 1_000 },
+        noTools,
+      );
+
+      // Then: conservative large-container limits do not truncate ordinary values.
+      expect(result).toMatchObject({ status: "completed", value: "[1, 2, 3]" });
+    } finally {
+      kernel.close();
+    }
+  });
+
+  test("large container repr stops visiting elements at the output ceiling", async () => {
+    // Given: repr elements make their visitation observable through the real tool bridge.
+    const kernel = new PythonKernel({ launch: plainLauncher, maxOutputBytes: 1024 });
+    let reprCalls = 0;
+    try {
+      // When: a container's complete repr would be much larger than the byte ceiling.
+      const result = await kernel.run(
+        {
+          cellId: "container-output-limit",
+          code: [
+            "class Item:",
+            " def __repr__(self):",
+            "  tool.repr_seen()",
+            "  return 'x' * 100",
+            "[Item() for _ in range(1000)]",
+          ].join("\n"),
+          timeoutMs: 15_000,
+        },
+        () => {
+          reprCalls += 1;
+          return Promise.resolve({ status: "completed" });
+        },
+      );
+
+      // Then: repr refuses through the bounded result without traversing the whole container.
+      expect(result).toMatchObject({
+        status: "raised",
+        error: "cell output exceeded maxOutputBytes",
+      });
+      expect(reprCalls).toBeLessThanOrEqual(16);
+    } finally {
+      kernel.close();
+    }
+  });
+
   test.each([
     ["stdout", "print('x' * 2048)"],
     ["stderr", "import sys\nsys.stderr.write('x' * 2048)"],
