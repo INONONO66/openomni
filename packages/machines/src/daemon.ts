@@ -69,7 +69,10 @@ export async function attachMachineDaemon(options: MachineDaemonOptions): Promis
     const key = `${tenantId}::${profileDigest}`;
     let kernel = kernels.get(key);
     if (kernel === undefined) {
-      kernel = new PythonKernel({ launch: () => launcher(tenantId) });
+      kernel = new PythonKernel({
+        launch: () => launcher(tenantId),
+        maxOutputBytes: options.sandbox.maxOutputBytes,
+      });
       kernels.set(key, kernel);
     }
     return kernel;

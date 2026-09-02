@@ -23,7 +23,7 @@ const silent: BusEvent.Sink = {
 const enrollment: Machine.Enrollment = {
   name: "studio",
   machineId: "mac-studio",
-  allowedCapabilities: ["kernel.py", "fs.read"],
+  allowedCapabilities: ["kernel.py", "sandbox.process", "fs.read"],
   enrolledAt: 1000,
 };
 
@@ -74,6 +74,41 @@ function cell(code: string, timeoutMs = 15_000): Machine.CellRequest {
 }
 
 describe("cell settlement ownership", () => {
+  test.each([
+    ["stdout", "print('x' * 2048)"],
+    ["stderr", "import sys\nsys.stderr.write('x' * 2048)"],
+    ["value", "'x' * 2048"],
+    ["error", "raise ValueError('x' * 2048)"],
+    ["raw driver frame", "import sys\nsys.__stdout__.write('x' * 2048)\nsys.__stdout__.flush()"],
+  ])("%s over the configured byte limit replaces the interpreter", async (_path, code) => {
+    // Given: a real public Python kernel with state and a 1024-byte cell output ceiling.
+    const kernel = new PythonKernel({ launch: plainLauncher, maxOutputBytes: 1024 });
+    try {
+      await expect(
+        kernel.run(
+          { cellId: "before-output-limit", code: "persisted = 42", timeoutMs: 1_000 },
+          noTools,
+        ),
+      ).resolves.toMatchObject({ status: "completed" });
+
+      // When: one cell writes more than the configured limit.
+      const limited = await kernel.run({ cellId: "output-limit", code, timeoutMs: 1_000 }, noTools);
+
+      // Then: no oversized bytes return and the unsafe interpreter state is replaced.
+      expect(limited).toEqual({
+        status: "raised",
+        cellId: "output-limit",
+        output: { stdout: "", stderr: "" },
+        error: "cell output exceeded maxOutputBytes",
+      });
+      await expect(
+        kernel.run({ cellId: "after-output-limit", code: "persisted", timeoutMs: 1_000 }, noTools),
+      ).resolves.toMatchObject({ status: "raised" });
+    } finally {
+      kernel.close();
+    }
+  });
+
   test("a queued cell times out from its enqueue deadline without replacing the interpreter", async () => {
     const kernel = new PythonKernel({ launch: plainLauncher });
     try {

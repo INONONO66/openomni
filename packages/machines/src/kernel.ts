@@ -1,6 +1,8 @@
-import type { ChildProcessWithoutNullStreams } from "./launcher";
-import { createInterface, type Interface } from "node:readline";
 import { Machine } from "@openomni/protocol";
+import type { ChildProcessWithoutNullStreams } from "./launcher";
+
+const DEFAULT_MAX_OUTPUT_BYTES = 1_048_576;
+const OUTPUT_LIMIT_ERROR = "cell output exceeded maxOutputBytes";
 
 export const PYTHON_DRIVER = String.raw`
 import ast
@@ -10,6 +12,7 @@ import io
 import itertools
 import json
 import queue
+import reprlib
 import sys
 import threading
 import traceback
@@ -24,7 +27,20 @@ _call_ids = itertools.count(1)
 
 def _emit(payload):
     with _emit_lock:
-        sys.__stdout__.write(json.dumps(payload) + "\n")
+        _limit = getattr(_cell_context, "max_output_bytes", None)
+        _chunks = []
+        _size = 0
+        for _chunk in json.JSONEncoder(separators=(",", ":")).iterencode(payload):
+            _chunk_size = len(_chunk.encode("utf-8"))
+            if _limit is not None and _size + _chunk_size > _limit:
+                _chunks = [json.dumps({
+                    "kind": "output_limit",
+                    "cellId": getattr(_cell_context, "cell_id", "unknown"),
+                }, separators=(",", ":"))]
+                break
+            _chunks.append(_chunk)
+            _size += _chunk_size
+        sys.__stdout__.write("".join(_chunks) + "\n")
         sys.__stdout__.flush()
 
 
@@ -53,6 +69,31 @@ def _read_stdin():
 
 class ToolError(Exception):
     """Raised in the cell when a host tool refuses or fails, so it is catchable."""
+
+
+class _OutputLimitExceeded(BaseException):
+    """Stops a cell before its captured text grows beyond the declared ceiling."""
+
+
+class _BoundedText(io.TextIOBase):
+    def __init__(self, limit):
+        self._limit = limit
+        self._size = 0
+        self._chunks = []
+
+    def write(self, value):
+        _size = len(value.encode("utf-8"))
+        if self._size + _size > self._limit:
+            raise _OutputLimitExceeded()
+        self._chunks.append(value)
+        self._size += _size
+        return len(value)
+
+    def getvalue(self):
+        return "".join(self._chunks)
+
+    def flush(self):
+        return None
 
 
 class _Tools:
@@ -103,10 +144,12 @@ def parallel(thunks, max_workers=8):
     if not _thunks:
         return []
     _cell = getattr(_cell_context, "cell_id", None)
+    _limit = getattr(_cell_context, "max_output_bytes", None)
 
     def _in_cell(_thunk):
         def _run():
             _cell_context.cell_id = _cell
+            _cell_context.max_output_bytes = _limit
             return _thunk()
 
         return _run
@@ -143,8 +186,10 @@ while True:
     if _request is None:
         break
     _cell_context.cell_id = _request["cellId"]
-    _stdout = io.StringIO()
-    _stderr = io.StringIO()
+    _limit = _request["maxOutputBytes"]
+    _cell_context.max_output_bytes = _limit
+    _stdout = _BoundedText(_limit)
+    _stderr = _BoundedText(_limit)
     _filename = f"<cell {_request['cellId']}>"
     try:
         with contextlib.redirect_stdout(_stdout), contextlib.redirect_stderr(_stderr):
@@ -167,19 +212,45 @@ while True:
             "output": {"stdout": _stdout.getvalue(), "stderr": _stderr.getvalue()},
         }
         if _has_value:
-            _result["value"] = repr(_value)
+            if hasattr(_value, "__len__") and len(_value) > _limit:
+                raise _OutputLimitExceeded()
+            _renderer = reprlib.Repr()
+            _renderer.maxstring = _limit
+            _renderer.maxother = _limit
+            _renderer.maxlist = _limit
+            _renderer.maxtuple = _limit
+            _renderer.maxset = _limit
+            _renderer.maxfrozenset = _limit
+            _renderer.maxdeque = _limit
+            _renderer.maxarray = _limit
+            _renderer.maxdict = _limit
+            _rendered = _renderer.repr(_value)
+            if len(_rendered.encode("utf-8")) > _limit:
+                raise _OutputLimitExceeded()
+            _result["value"] = _rendered
+    except _OutputLimitExceeded:
+        _result = {"kind": "output_limit", "cellId": _request["cellId"]}
     except BaseException as _exc:
         # Drop this driver's own exec/eval frame so the reported traceback starts
         # at the caller's code rather than at the harness that ran it.
         _tb = _exc.__traceback__.tb_next if _exc.__traceback__ else None
-        _result = {
-            "status": "raised",
-            "cellId": _request["cellId"],
-            "output": {"stdout": _stdout.getvalue(), "stderr": _stderr.getvalue()},
-            "error": "".join(traceback.format_exception(type(_exc), _exc, _tb)),
-        }
+        _error = _BoundedText(_limit)
+        try:
+            traceback.print_exception(type(_exc), _exc, _tb, file=_error)
+        except _OutputLimitExceeded:
+            _result = {"kind": "output_limit", "cellId": _request["cellId"]}
+        else:
+            _result = {
+                "status": "raised",
+                "cellId": _request["cellId"],
+                "output": {"stdout": _stdout.getvalue(), "stderr": _stderr.getvalue()},
+                "error": _error.getvalue(),
+            }
     _cell_context.cell_id = None
-    _emit({"kind": "result", "result": _result})
+    if _result.get("kind") == "output_limit":
+        _emit(_result)
+    else:
+        _emit({"kind": "result", "result": _result})
 `;
 
 type ToolCallFrame = {
@@ -196,6 +267,10 @@ type ToolCallFrame = {
  */
 function isToolCallFrame(frame: unknown): frame is ToolCallFrame {
   return (frame as { kind?: unknown } | null)?.kind === "tool_call";
+}
+
+function isOutputLimitFrame(frame: unknown): boolean {
+  return (frame as { kind?: unknown } | null)?.kind === "output_limit";
 }
 
 function resultOf(frame: unknown): unknown {
@@ -223,13 +298,18 @@ type PendingCell = {
 /** One serial, persistent Python interpreter owned by a daemon attachment. */
 export class PythonKernel {
   private process: ChildProcessWithoutNullStreams | undefined;
-  private lines: Interface | undefined;
   private pending: PendingCell | undefined;
   private tail: Promise<void> = Promise.resolve();
+  private readonly maxOutputBytes: number;
 
   constructor(
-    private readonly options: { readonly launch: () => ChildProcessWithoutNullStreams },
-  ) {}
+    private readonly options: {
+      readonly launch: () => ChildProcessWithoutNullStreams;
+      readonly maxOutputBytes?: number;
+    },
+  ) {
+    this.maxOutputBytes = options.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES;
+  }
 
   run(request: Machine.CellRequest, callTool: CellToolCaller): Promise<Machine.CellResult> {
     const deadline = Date.now() + request.timeoutMs;
@@ -266,8 +346,6 @@ export class PythonKernel {
   close(): void {
     const process = this.process;
     this.process = undefined;
-    this.lines?.close();
-    this.lines = undefined;
     process?.kill("SIGKILL");
   }
 
@@ -297,17 +375,18 @@ export class PythonKernel {
         callTool,
         inFlight: new Map(),
       };
-      process.stdin.write(`${JSON.stringify(request)}\n`);
+      process.stdin.write(
+        `${JSON.stringify({ ...request, maxOutputBytes: this.maxOutputBytes })}\n`,
+      );
     });
   }
 
   private start(): ChildProcessWithoutNullStreams {
     const process = this.options.launch();
-    const lines = createInterface({ input: process.stdout });
     this.process = process;
-    this.lines = lines;
+    let buffered = Buffer.alloc(0);
 
-    lines.on("line", (line) => {
+    const acceptLine = (line: string) => {
       const pending = this.pending;
       if (pending?.process !== process) return;
       let frame: unknown;
@@ -323,6 +402,10 @@ export class PythonKernel {
         this.answerToolCall(process, pending, frame);
         return;
       }
+      if (isOutputLimitFrame(frame)) {
+        this.settleWithOutputLimit(process, pending);
+        return;
+      }
       clearTimeout(pending.timer);
       this.pending = undefined;
       pending.inFlight.clear();
@@ -332,12 +415,30 @@ export class PythonKernel {
         this.discard(process);
         pending.reject(error instanceof Error ? error : new Error(String(error)));
       }
+    };
+    process.stdout.on("data", (chunk: Buffer) => {
+      let offset = 0;
+      while (offset < chunk.length) {
+        const newline = chunk.indexOf(10, offset);
+        const end = newline === -1 ? chunk.length : newline;
+        const segment = chunk.subarray(offset, end);
+        if (buffered.length + segment.length > this.maxOutputBytes) {
+          const pending = this.pendingFor(process);
+          if (pending !== undefined) this.settleWithOutputLimit(process, pending);
+          return;
+        }
+        buffered = Buffer.concat([buffered, segment], buffered.length + segment.length);
+        if (newline === -1) return;
+        const line = buffered.toString("utf8");
+        buffered = Buffer.alloc(0);
+        acceptLine(line);
+        offset = newline + 1;
+      }
     });
 
     const fail = (error: Error) => {
       if (this.process === process) {
         this.process = undefined;
-        this.lines = undefined;
       }
       const pending = this.pending;
       if (pending?.process !== process) return;
@@ -363,6 +464,22 @@ export class PythonKernel {
     pending.inFlight.clear();
     this.discard(process);
     pending.reject(error instanceof Error ? error : new Error(String(error)));
+  }
+
+  private settleWithOutputLimit(
+    process: ChildProcessWithoutNullStreams,
+    pending: PendingCell,
+  ): void {
+    clearTimeout(pending.timer);
+    this.pending = undefined;
+    pending.inFlight.clear();
+    this.discard(process);
+    pending.resolve({
+      status: "raised",
+      cellId: pending.cellId,
+      output: { stdout: "", stderr: "" },
+      error: OUTPUT_LIMIT_ERROR,
+    });
   }
 
   private answerToolCall(
@@ -429,8 +546,6 @@ export class PythonKernel {
   private discard(process: ChildProcessWithoutNullStreams): void {
     if (this.process === process) {
       this.process = undefined;
-      this.lines?.close();
-      this.lines = undefined;
     }
     process.kill("SIGKILL");
   }
