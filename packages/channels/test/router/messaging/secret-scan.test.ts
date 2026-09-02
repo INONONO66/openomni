@@ -98,6 +98,7 @@ describe("scanForSecrets: credential classes", () => {
     ["userinfo", "https://agent:gT7kQ2vLp9wZx4mNb8rHc3yEuJ1sVd6oXt5@example.com/status"],
     ["path", "https://example.com/artifacts/gT7kQ2vLp9wZx4mNb8rHc3yEuJ1sVd6oXt5/result"],
     ["query", "https://example.com/callback?state=gT7kQ2vLp9wZx4mNb8rHc3yEuJ1sVd6oXt5"],
+    ["IPv6 query", "https://[2001:db8::1]/download?sig=gT7kQ2vLp9wZx4mNb8rHc3yEuJ1sVd6oXt5"],
     ["fragment", "https://example.com/callback#gT7kQ2vLp9wZx4mNb8rHc3yEuJ1sVd6oXt5"],
   ])("Given a plaintext opaque secret in URI %s, When scanned, Then high_entropy_token is reported", (_component, uri) => {
     const hits = scanForSecrets(uri);
@@ -175,6 +176,7 @@ const BENIGN_CORPUS: string[] = [
   "commit 8f4c1d2e9b7a63f50c1e8d4a2b9f7c30ab12cd34",
   "fixed in 8f4c1d2 and reverted in ab12cd34ef",
   "https://api.example.com/v1/items?page=2&sort=created_at&limit=100",
+  "https://[2001:db8::1]/download?part=1",
   "See https://github.com/openomni/openomni/pull/811#issuecomment-1234567890",
   "dGhpcyBpcyBzaG9ydA==",
   "| id | name | status |\n| --- | --- | --- |\n| 7 | build | green |",

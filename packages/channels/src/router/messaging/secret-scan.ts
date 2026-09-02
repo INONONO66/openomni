@@ -62,7 +62,8 @@ const PATTERN_RULES: readonly (readonly [SecretClass, RegExp])[] = [
 
 /** Bare-token delimiters preserve every character in the opaque alphabet. */
 const OPAQUE_TOKEN_SPLIT = /[\s"'`,;()[\]{}<>]+/;
-const URI_LIKE = /^[A-Za-z][A-Za-z0-9+.-]*:\/\//;
+const URI_SHAPED_SPAN =
+  /[A-Za-z][A-Za-z0-9+.-]*:\/\/(?:\[[^\s"'`,;(){}<>]*\]|[^\s"'`,;()[\]{}<>])+/g;
 const URI_COMPONENT_SPLIT = /[:/?#&@=]+/;
 const HEX_ONLY = /^[0-9a-fA-F]+$/;
 /**
@@ -112,12 +113,13 @@ function isHighEntropyOpaqueToken(token: string): boolean {
 }
 
 function hasHighEntropyToken(line: string): boolean {
-  for (const token of line.split(OPAQUE_TOKEN_SPLIT)) {
-    if (isHighEntropyOpaqueToken(token)) return true;
-    if (!URI_LIKE.test(token)) continue;
-    for (const component of token.split(URI_COMPONENT_SPLIT)) {
+  for (const uri of line.match(URI_SHAPED_SPAN) ?? []) {
+    for (const component of uri.split(URI_COMPONENT_SPLIT)) {
       if (isHighEntropyOpaqueToken(component)) return true;
     }
+  }
+  for (const token of line.split(OPAQUE_TOKEN_SPLIT)) {
+    if (isHighEntropyOpaqueToken(token)) return true;
   }
   return false;
 }
