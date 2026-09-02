@@ -3,7 +3,6 @@ import { placementGatedExecutor } from "@openomni/agent";
 import { Placement } from "@openomni/placement";
 import type { Machine, Tool } from "@openomni/protocol";
 import { catalogEntries } from "../src/tools/core/catalog";
-import type { CatalogEntry } from "../src/tools/core/dispatch";
 import { createDispatcher, HOST_TARGET } from "../src/tools/core/dispatch";
 import { createCellRegistry } from "../src/tools/cell-registry";
 import type { CellPorts } from "../src/tools/execution/run-code";
