@@ -9,7 +9,8 @@ import type { DelegationOrigin } from "../src/delegation/admission";
 import { createDelegationKernel, type DriverOutcome } from "../src/delegation/kernel";
 import { createWorkItemLinkage } from "../src/delegation/work-item-linkage";
 import { catalogEntries } from "../src/tools/core/catalog";
-import { completeWorkToolExecutor, workItemsToolExecutor } from "../src/tools/work-items";
+import { completeWorkToolExecutor } from "../src/tools/mutation/work-items";
+import { workItemsToolExecutor } from "../src/tools/query/work-items";
 import { createCompletionPort, type CompletionPort } from "../src/work-item/completion";
 import { validateCompletionTerminalLinkage } from "../src/work-item/terminal-linkage";
 

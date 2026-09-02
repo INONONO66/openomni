@@ -58,12 +58,8 @@ import {
 import type { CellPorts } from "../run-code";
 import { runCodeToolExecutor, runCodeToolSpec } from "../run-code";
 import type { CompletionPort } from "../../work-item/completion";
-import {
-  completeWorkToolExecutor,
-  completeWorkToolSpec,
-  workItemsToolExecutor,
-  workItemsToolSpec,
-} from "../work-items";
+import { completeWorkTool } from "../mutation/work-items";
+import { workItemsTool } from "../query/work-items";
 import { eraseTool, type AnyToolDefinition } from "./define";
 import { toolSpec } from "./project";
 
@@ -225,23 +221,8 @@ export const TOOL_DEFINITIONS: readonly (AnyToolDefinition | LegacyCatalogTool)[
   eraseTool(fsListTool),
   eraseTool(fsStatTool),
   eraseTool(memoryTool),
-  {
-    // Completion authority is the Resident's alone (kernel-contract
-    // completion law): a worker never judges its own work, so the surface is
-    // role-gated exactly like memory.
-    spec: workItemsToolSpec,
-    wire: (ports, origin) =>
-      ports.workItems === undefined || origin.role !== "resident"
-        ? undefined
-        : workItemsToolExecutor(ports.workItems),
-  },
-  {
-    spec: completeWorkToolSpec,
-    wire: (ports, origin) =>
-      ports.workItems === undefined || origin.role !== "resident"
-        ? undefined
-        : completeWorkToolExecutor(ports.workItems),
-  },
+  eraseTool(workItemsTool),
+  eraseTool(completeWorkTool),
   {
     spec: llmToolSpec,
     wire: (ports) => (ports.llm === undefined ? undefined : llmToolExecutor(ports.llm)),
