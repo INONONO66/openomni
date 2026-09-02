@@ -1,12 +1,13 @@
 import type { ChatAgentConfig } from "@openomni/agent";
 import { placementGatedExecutor } from "@openomni/agent";
 import { Placement } from "@openomni/placement";
-import { Machine, type Tool } from "@openomni/protocol";
+import { Machine } from "@openomni/protocol";
 import { z } from "zod";
-import type { DelegationOrigin } from "../delegation/admission";
-import type { CatalogEntry } from "./dispatch";
-import { createDispatcher, HOST_TARGET } from "./dispatch";
-import type { CellRegistry } from "./cell-registry";
+import { defineTool } from "../core/define";
+import type { DelegationOrigin } from "../../delegation/admission";
+import type { CatalogEntry } from "../core/dispatch";
+import { createDispatcher, HOST_TARGET } from "../core/dispatch";
+import type { CellRegistry } from "../cell-registry";
 
 /** What running a cell needs, without knowing how the host is composed. */
 export interface CellPorts {
@@ -70,43 +71,6 @@ const Input = z
 
 export const RUN_CODE_TOOL_NAME = "run_code";
 
-/**
- * Hand-written for the same reason the delegate tool's is: zod 3 ships no
- * JSON Schema conversion. The zod object above stays the runtime gate, and a
- * test pins the two together so they cannot drift apart silently.
- */
-const INPUT_JSON_SCHEMA: Record<string, unknown> = {
-  type: "object",
-  additionalProperties: false,
-  required: ["machineId", "code", "timeoutMs"],
-  properties: {
-    machineId: { type: "string", minLength: 1, description: "Which attached machine runs the code." },
-    code: {
-      type: "string",
-      minLength: 1,
-      description:
-        "Python source. Call host tools inside it as tool.<name>(...) — that is the point: many calls, one round trip.",
-    },
-    timeoutMs: {
-      type: "integer",
-      exclusiveMinimum: 0,
-      description: "How long the cell may run before it is stopped.",
-    },
-  },
-};
-
-export function runCodeToolSpec(): Tool.Spec {
-  return {
-    name: RUN_CODE_TOOL_NAME,
-    description:
-      "Run Python on an attached machine; state persists across cells in _scope, so do a whole step in one cell. Inside it, tool.<name>(...) bridges to the tools you hold here, parallel(thunks) runs independent calls concurrently, llm(prompt) asks a budget-capped sub-model, and write_artifact/read_artifact move large text by id.",
-    inputSchema: INPUT_JSON_SCHEMA,
-    safe: false,
-    placement: "machine",
-    requires: [Machine.WellKnownCapability.pythonKernel],
-  };
-}
-
 function describe(result: Awaited<ReturnType<CellPorts["runCell"]>>, timeoutMs: number): string {
   switch (result.status) {
     case "completed":
@@ -122,13 +86,8 @@ function describe(result: Awaited<ReturnType<CellPorts["runCell"]>>, timeoutMs: 
   }
 }
 
-export function runCodeToolExecutor(ports: CellPorts, origin: DelegationOrigin) {
-  return async (rawInput: unknown): Promise<string> => {
-    const parsed = Input.safeParse(rawInput);
-    if (!parsed.success) {
-      return `run_code refused: ${parsed.error.issues[0]?.message ?? "invalid input"}`;
-    }
-    const { machineId, code, timeoutMs } = parsed.data;
+function executeRunCode(ports: CellPorts, origin: DelegationOrigin) {
+  return async ({ machineId, code, timeoutMs }: z.output<typeof Input>): Promise<Awaited<ReturnType<CellPorts["runCell"]>>> => {
 
     const cellId = ports.newCellId();
     ports.registry.bind(cellId, cellDoor(ports.toolsFor(origin, machineId)));
@@ -136,12 +95,19 @@ export function runCodeToolExecutor(ports: CellPorts, origin: DelegationOrigin) 
       // The session is the tenant: the daemon runs each tenant's cells on its
       // own interpreter, so state — and anything a cell leaves running — can
       // never cross into another session's process.
-      return describe(
-        await ports.runCell(machineId, { cellId, code, timeoutMs, tenant: origin.sessionId }),
-        timeoutMs,
-      );
+      return await ports.runCell(machineId, { cellId, code, timeoutMs, tenant: origin.sessionId });
     } finally {
       ports.registry.release(cellId);
     }
   };
 }
+
+export const runCodeTool = defineTool({
+  name: RUN_CODE_TOOL_NAME, category: "execution",
+  description: "Run Python on an attached machine; state persists across cells in _scope, so do a whole step in one cell. Inside it, tool.<name>(...) bridges to the tools you hold here, parallel(thunks) runs independent calls concurrently, llm(prompt) asks a budget-capped sub-model, and write_artifact/read_artifact move large text by id.",
+  input: Input, output: z.custom<Awaited<ReturnType<CellPorts["runCell"]>>>((value) => typeof value === "object" && value !== null), safe: false,
+  execution: { kind: "machine", capability: "kernel.py" }, requires: [Machine.WellKnownCapability.pythonKernel],
+  visibility: { model: ["resident", "worker"], cell: ["resident", "worker"] },
+  bind: (ports, origin) => ports.cells === undefined ? undefined : executeRunCode(ports.cells, origin),
+  render: (args, value) => describe(value, args.timeoutMs),
+});

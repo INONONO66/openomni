@@ -11,7 +11,7 @@ import type { DelegationKernel } from "../src/delegation/kernel";
 import { createChildKernel, ProcessWorkerRequest } from "../src/delegation/process-entry";
 import { createInlineWorkerRunner } from "../src/delegation/worker-loop";
 import { createResident } from "../src/resident";
-import { createLlmToolPort } from "../src/tools/llm";
+import { createLlmToolPort } from "../src/tools/execution/llm";
 import { assistantMessage } from "./helpers/assistant-message";
 
 const directories: string[] = [];

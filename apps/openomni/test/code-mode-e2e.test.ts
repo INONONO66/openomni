@@ -6,11 +6,12 @@ import { Placement } from "@openomni/placement";
 import type { Artifact, Machine } from "@openomni/protocol";
 import type { DelegationOrigin } from "../src/delegation/admission";
 import type { DelegationKernel } from "../src/delegation/kernel";
-import type { ArtifactsPort } from "../src/tools/artifacts";
-import { catalogEntries, type CatalogPorts } from "../src/tools/catalog";
+import type { ArtifactsPort } from "../src/tools/mutation/artifacts";
+import { catalogEntries, type CatalogPorts } from "../src/tools/core/catalog";
 import { createCellRegistry } from "../src/tools/cell-registry";
-import { createDispatcher, HOST_TARGET } from "../src/tools/dispatch";
-import { type CellPorts, runCodeToolExecutor } from "../src/tools/run-code";
+import { createDispatcher, HOST_TARGET } from "../src/tools/core/dispatch";
+import type { CellPorts } from "../src/tools/execution/run-code";
+import { modelToolOutput } from "./helpers/tool-dispatch";
 import { assistantMessage } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { socketPath as testSocketPath } from "./helpers/socket-path";
@@ -263,12 +264,12 @@ async function startCellHarness(ports: CatalogPorts) {
     toolsFor: (origin) => catalogEntries(ports, origin),
     newCellId: () => crypto.randomUUID(),
   };
-  const execute = runCodeToolExecutor(cells, CELL_ORIGIN);
+  const execute = modelToolOutput("run_code", { cells }, CELL_ORIGIN);
   return {
     host,
     run: (code: string) => execute({ machineId: MACHINE_ID, code, timeoutMs: 15_000 }),
     runWith: (origin: DelegationOrigin, code: string) =>
-      runCodeToolExecutor(cells, origin)({ machineId: MACHINE_ID, code, timeoutMs: 15_000 }),
+      modelToolOutput("run_code", { cells }, origin)({ machineId: MACHINE_ID, code, timeoutMs: 15_000 }),
   };
 }
 

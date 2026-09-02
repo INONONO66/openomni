@@ -1,7 +1,8 @@
-import type { Tool } from "@openomni/protocol";
+import type { Delegation } from "@openomni/protocol";
 import { z } from "zod";
-import type { DelegationOrigin } from "./admission";
-import { type DelegationKernel, formatSettlement } from "./kernel";
+import { defineTool, ToolRefused } from "../core/define";
+import type { DelegationOrigin } from "../../delegation/admission";
+import { type DelegationKernel, formatSettlement } from "../../delegation/kernel";
 
 /**
  * The model asks in relative time; the kernel records an absolute deadline
@@ -92,7 +93,7 @@ export const CANCEL_DELEGATION_TOOL_NAME = "cancel_delegation";
 // reject a root-level oneOf input_schema (400 invalid_request_error), so the
 // addressing XOR (exactly one of scope / actorId) is stated in prose here and
 // enforced only by the zod gate above, whose refusal text names the rule.
-const START_INPUT_JSON_SCHEMA: Record<string, unknown> = {
+const DELEGATE_WIRE_PROJECTION: Record<string, unknown> = {
   type: "object",
   additionalProperties: false,
   required: ["instruction", "operation", "timeoutMs"],
@@ -133,61 +134,14 @@ const START_INPUT_JSON_SCHEMA: Record<string, unknown> = {
   },
 };
 
+
 const AWAIT_INPUT = z
   .object({
     delegationId: z.string().min(1),
     timeoutMs: z.number().int().positive().optional(),
   })
   .strict();
-const AWAIT_INPUT_JSON_SCHEMA: Record<string, unknown> = {
-  type: "object",
-  additionalProperties: false,
-  required: ["delegationId"],
-  properties: {
-    delegationId: { type: "string", minLength: 1 },
-    timeoutMs: { type: "integer", exclusiveMinimum: 0 },
-  },
-};
-
 const CANCEL_INPUT = z.object({ delegationId: z.string().min(1) }).strict();
-const CANCEL_INPUT_JSON_SCHEMA: Record<string, unknown> = {
-  type: "object",
-  additionalProperties: false,
-  required: ["delegationId"],
-  properties: { delegationId: { type: "string", minLength: 1 } },
-};
-
-export function delegateToolSpec(): Tool.Spec {
-  return {
-    name: DELEGATE_TOOL_NAME,
-    description:
-      "Start durable delegated work. Inline ask waits in this turn; process/channel work returns a handle immediately and its settlement arrives as a message. Notify sends once to an actor and settles sent at transport acceptance.",
-    inputSchema: START_INPUT_JSON_SCHEMA,
-    safe: false,
-    placement: "host",
-  };
-}
-
-export function awaitDelegationToolSpec(): Tool.Spec {
-  return {
-    name: AWAIT_DELEGATION_TOOL_NAME,
-    description:
-      "Re-invoke a durable delegation by id. It returns its settlement when available, or says it is still open until the supplied wait limit.",
-    inputSchema: AWAIT_INPUT_JSON_SCHEMA,
-    safe: false,
-    placement: "host",
-  };
-}
-
-export function cancelDelegationToolSpec(): Tool.Spec {
-  return {
-    name: CANCEL_DELEGATION_TOOL_NAME,
-    description: "Cancel open delegated work by id; cancelling settled work returns the existing settlement.",
-    inputSchema: CANCEL_INPUT_JSON_SCHEMA,
-    safe: false,
-    placement: "host",
-  };
-}
 
 function handleText(handle: {
   delegationId: string;
@@ -206,28 +160,23 @@ function handleText(handle: {
   ].join("; ");
 }
 
-function refusalText(prefix: string, error: unknown): string {
+function refusalReason(error: unknown): string {
   const candidate: unknown = error;
   if (typeof candidate === "object" && candidate !== null && "data" in candidate) {
     const data = candidate.data;
     if (typeof data === "object" && data !== null && "message" in data && typeof data.message === "string") {
-      return `${prefix} refused: ${data.message}`;
+      return data.message;
     }
   }
   if (typeof candidate === "object" && candidate !== null && "message" in candidate && typeof candidate.message === "string") {
-    return `${prefix} refused: ${candidate.message}`;
+    return candidate.message;
   }
-  return `${prefix} refused: ${String(candidate)}`;
+  return String(candidate);
 }
 
 /** Binds the start tool to one trusted originator. */
-export function delegateToolExecutor(kernel: DelegationKernel, origin: DelegationOrigin) {
-  return async (rawInput: unknown): Promise<string> => {
-    const parsed = StartInput.safeParse(rawInput);
-    if (!parsed.success) {
-      return `delegate refused: ${parsed.error.issues[0]?.message ?? "invalid input"}`;
-    }
-    const input: StartInput = parsed.data;
+function executeDelegate(kernel: DelegationKernel, origin: DelegationOrigin) {
+  return async (input: StartInput) => {
     const request = {
       address:
         input.actorId !== undefined
@@ -245,44 +194,41 @@ export function delegateToolExecutor(kernel: DelegationKernel, origin: Delegatio
     try {
       result = await kernel.delegate(request, origin);
     } catch (error) {
-      return refusalText("delegate", error);
+      throw new ToolRefused(DELEGATE_TOOL_NAME, refusalReason(error));
     }
-    if ("refused" in result) return `delegate refused: ${result.refused}`;
-    if (result.settled !== undefined) {
-      return formatSettlement(result.settled);
-    }
-    return handleText(result.handle);
+    if ("refused" in result) throw new ToolRefused(DELEGATE_TOOL_NAME, result.refused);
+    if (result.settled !== undefined) return { kind: "settled" as const, settlement: result.settled };
+    return { kind: "accepted" as const, handle: result.handle };
   };
 }
 
-export function awaitDelegationToolExecutor(kernel: DelegationKernel) {
-  return async (rawInput: unknown): Promise<string> => {
-    const parsed = AWAIT_INPUT.safeParse(rawInput);
-    if (!parsed.success) {
-      return `await_delegation refused: ${parsed.error.issues[0]?.message ?? "invalid input"}`;
-    }
+function executeAwaitDelegation(kernel: DelegationKernel) {
+  return async (input: z.output<typeof AWAIT_INPUT>) => {
     try {
-      const result = await kernel.awaitDelegation(parsed.data.delegationId, parsed.data.timeoutMs);
-      if (result.kind === "timeout") {
-        return `delegation ${result.delegationId} is still open; settlement will arrive as a message`;
-      }
-      return formatSettlement(result.settlement);
+      const result = await kernel.awaitDelegation(input.delegationId, input.timeoutMs);
+      if (result.kind === "timeout") return { kind: "timeout" as const, delegationId: result.delegationId };
+      return { kind: "settled" as const, settlement: result.settlement };
     } catch (error) {
-      return refusalText("await_delegation", error);
+      throw new ToolRefused(AWAIT_DELEGATION_TOOL_NAME, refusalReason(error));
     }
   };
 }
 
-export function cancelDelegationToolExecutor(kernel: DelegationKernel) {
-  return async (rawInput: unknown): Promise<string> => {
-    const parsed = CANCEL_INPUT.safeParse(rawInput);
-    if (!parsed.success) {
-      return `cancel_delegation refused: ${parsed.error.issues[0]?.message ?? "invalid input"}`;
-    }
+function executeCancelDelegation(kernel: DelegationKernel) {
+  return async (input: z.output<typeof CANCEL_INPUT>) => {
     try {
-      return formatSettlement(await kernel.cancelDelegation(parsed.data.delegationId));
+      return { settlement: await kernel.cancelDelegation(input.delegationId) };
     } catch (error) {
-      return refusalText("cancel_delegation", error);
+      throw new ToolRefused(CANCEL_DELEGATION_TOOL_NAME, refusalReason(error));
     }
   };
 }
+
+const common = { category: "authority" as const, safe: false, execution: { kind: "host" } as const, placement: "host" as const, visibility: { model: ["resident", "worker"], cell: ["resident", "worker"] } as const };
+const Settlement = z.custom<Delegation.Settled>((value) => typeof value === "object" && value !== null);
+const DelegateOutput = z.discriminatedUnion("kind", [z.object({ kind: z.literal("settled"), settlement: Settlement }).strict(), z.object({ kind: z.literal("accepted"), handle: z.object({ delegationId: z.string(), operation: z.string(), transport: z.string(), deadline: z.number(), waitId: z.string().optional() }).passthrough() }).strict()]);
+const AwaitOutput = z.discriminatedUnion("kind", [z.object({ kind: z.literal("settled"), settlement: Settlement }).strict(), z.object({ kind: z.literal("timeout"), delegationId: z.string() }).strict()]);
+const CancelOutput = z.object({ settlement: Settlement }).strict();
+export const delegateTool = defineTool({ ...common, name: DELEGATE_TOOL_NAME, description: "Start durable delegated work. Inline ask waits in this turn; process/channel work returns a handle immediately and its settlement arrives as a message. Notify sends once to an actor and settles sent at transport acceptance.", input: StartInput, inputExamples: [{ instruction: "Inspect the repository and report the relevant implementation.", operation: "ask", scope: "inline", timeoutMs: 30000 }], output: DelegateOutput, wireProjection: DELEGATE_WIRE_PROJECTION, bind: (ports, origin) => ports.delegation === undefined ? undefined : executeDelegate(ports.delegation, origin), render: (_args, value) => value.kind === "settled" ? formatSettlement(value.settlement) : handleText(value.handle) });
+export const awaitDelegationTool = defineTool({ ...common, name: AWAIT_DELEGATION_TOOL_NAME, description: "Re-invoke a durable delegation by id. It returns its settlement when available, or says it is still open until the supplied wait limit.", input: AWAIT_INPUT, output: AwaitOutput, bind: (ports) => ports.delegation === undefined ? undefined : executeAwaitDelegation(ports.delegation), render: (_args, value) => value.kind === "timeout" ? `delegation ${value.delegationId} is still open; settlement will arrive as a message` : formatSettlement(value.settlement) });
+export const cancelDelegationTool = defineTool({ ...common, name: CANCEL_DELEGATION_TOOL_NAME, description: "Cancel open delegated work by id; cancelling settled work returns the existing settlement.", input: CANCEL_INPUT, output: CancelOutput, bind: (ports) => ports.delegation === undefined ? undefined : executeCancelDelegation(ports.delegation), render: (_args, value) => formatSettlement(value.settlement) });

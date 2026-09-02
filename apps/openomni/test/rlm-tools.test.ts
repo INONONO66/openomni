@@ -2,24 +2,20 @@ import { describe, expect, it } from "bun:test";
 import { placementGatedExecutor } from "@openomni/agent";
 import { Placement } from "@openomni/placement";
 import type { Artifact } from "@openomni/protocol";
-import type { ArtifactsPort } from "../src/tools/artifacts";
-import {
-  READ_ARTIFACT_TOOL_NAME,
-  readArtifactToolExecutor,
-  WRITE_ARTIFACT_TOOL_NAME,
-  writeArtifactToolExecutor,
-} from "../src/tools/artifacts";
-import { catalogEntries, collectToolSpecs } from "../src/tools/catalog";
-import { createDispatcher, HOST_TARGET } from "../src/tools/dispatch";
+import type { ArtifactsPort } from "../src/tools/mutation/artifacts";
+import { WRITE_ARTIFACT_TOOL_NAME } from "../src/tools/mutation/artifacts";
+import { READ_ARTIFACT_TOOL_NAME } from "../src/tools/query/artifacts";
+import { catalogEntries, collectToolSpecs } from "../src/tools/core/catalog";
+import { createDispatcher, HOST_TARGET } from "../src/tools/core/dispatch";
 import {
   createLlmToolPort,
   LLM_TOOL_NAME,
-  llmToolExecutor,
   MAX_LLM_CALLS,
   resolveLlmToolModel,
-} from "../src/tools/llm";
+} from "../src/tools/execution/llm";
 import type { RunInput } from "@openomni/llm";
 import { assistantMessage } from "./helpers/assistant-message";
+import { dispatchModelTool, modelToolOutput } from "./helpers/tool-dispatch";
 
 const RESIDENT = { role: "resident", depth: 0, sessionId: "session-origin" } as const;
 
@@ -40,35 +36,39 @@ function memoryArtifacts() {
 
 describe("the llm tool", () => {
   it("returns the port's answer", async () => {
-    const run = llmToolExecutor(async (prompt) => `answered: ${prompt}`);
+    const run = modelToolOutput(LLM_TOOL_NAME, { llm: async (prompt) => `answered: ${prompt}` }, RESIDENT);
     expect(await run({ prompt: "summarize this" })).toBe("answered: summarize this");
   });
 
-  it("refuses a malformed call by throwing, without touching the port", async () => {
+  it("classifies a malformed call as invalid input without touching the port", async () => {
     let invoked = 0;
-    const run = llmToolExecutor(async () => {
+    const run = dispatchModelTool(LLM_TOOL_NAME, { llm: async () => {
       invoked += 1;
       return "x";
-    });
-    await expect(run({ prompt: "" })).rejects.toThrow(/^llm refused:/);
-    await expect(run({ prompt: "ok", extra: true })).rejects.toThrow(/^llm refused:/);
+    } }, RESIDENT);
+    expect(await run({ prompt: "" })).toMatchObject({ isError: true, errorClass: "invalid_input" });
+    expect(await run({ prompt: "ok", extra: true })).toMatchObject({ isError: true, errorClass: "invalid_input" });
     expect(invoked).toBe(0);
   });
 
-  it(`serves ${MAX_LLM_CALLS} calls, then throws without invoking the port`, async () => {
+  it(`serves ${MAX_LLM_CALLS} calls, then classifies refusal without invoking the port`, async () => {
     let invoked = 0;
-    const run = llmToolExecutor(async () => {
+    const run = dispatchModelTool(LLM_TOOL_NAME, { llm: async () => {
       invoked += 1;
       return `call ${invoked}`;
-    });
+    } }, RESIDENT);
 
     for (let i = 1; i <= MAX_LLM_CALLS; i++) {
-      expect(await run({ prompt: `q${i}` })).toBe(`call ${i}`);
+      const result = await run({ prompt: `q${i}` });
+      expect(result.output).toBe(`call ${i}`);
+      expect(result.isError).toBeUndefined();
     }
 
-    await expect(run({ prompt: "one too many" })).rejects.toThrow(
-      `llm refused: the per-cell budget of ${MAX_LLM_CALLS} sub-model calls is spent`,
-    );
+    expect(await run({ prompt: "one too many" })).toMatchObject({
+      isError: true,
+      errorClass: "precondition_failed",
+      output: `llm refused: the per-cell budget of ${MAX_LLM_CALLS} sub-model calls is spent`,
+    });
     expect(invoked).toBe(MAX_LLM_CALLS);
   });
 
@@ -205,16 +205,27 @@ describe("the llm tool port", () => {
 });
 
 describe("the artifact tools", () => {
+  const tools = (port: ArtifactsPort) =>
+    createDispatcher(catalogEntries({ artifacts: port }, RESIDENT)).execute;
+  const call = (
+    run: ReturnType<typeof tools>,
+    id: string,
+    tool: string,
+    input: Record<string, unknown>,
+  ) =>
+    run({ id, tool, input });
+
   it("round-trips content by the returned id, scoped to the origin session", async () => {
     const { rows, port } = memoryArtifacts();
-    const write = writeArtifactToolExecutor(port, RESIDENT.sessionId);
-    const read = readArtifactToolExecutor(port);
+    const run = tools(port);
+    const written = await call(run, "write", WRITE_ARTIFACT_TOOL_NAME, {
+      name: "report",
+      content: "the whole dataset",
+    });
+    const id = written.output.replace("artifact stored: ", "");
 
-    const written = await write({ name: "report", content: "the whole dataset" });
-    const id = written.replace("artifact stored: ", "");
-
-    expect(written).toStartWith("artifact stored: ");
-    expect(written).not.toContain("the whole dataset");
+    expect(written.output).toStartWith("artifact stored: ");
+    expect(written.output).not.toContain("the whole dataset");
     expect(rows.get(id)?.sessionId).toBe(RESIDENT.sessionId);
     expect(rows.get(id)?.meta).toMatchObject({
       id,
@@ -222,26 +233,34 @@ describe("the artifact tools", () => {
       title: "report",
       version: 1,
     });
-    expect(await read({ artifactId: id })).toBe("the whole dataset");
+    const read = await call(run, "read", READ_ARTIFACT_TOOL_NAME, { artifactId: id });
+    expect(read.output).toBe("the whole dataset");
   });
 
-  it("refuses an unknown id with a typed not-found refusal", async () => {
+  it("returns an error result for an unknown id", async () => {
     const { port } = memoryArtifacts();
-    const read = readArtifactToolExecutor(port);
+    const result = await call(tools(port), "missing", READ_ARTIFACT_TOOL_NAME, {
+      artifactId: "nope",
+    });
 
-    expect(await read({ artifactId: "nope" })).toBe(
-      "read_artifact refused: no artifact with id nope",
-    );
+    expect(result).toMatchObject({
+      isError: true,
+      output: "read_artifact refused: no artifact with id nope",
+    });
   });
 
-  it("refuses malformed calls", async () => {
+  it("returns error results for malformed calls", async () => {
     const { port } = memoryArtifacts();
-    const write = writeArtifactToolExecutor(port, RESIDENT.sessionId);
-    const read = readArtifactToolExecutor(port);
-
-    expect(await write({ name: "", content: "x" })).toStartWith("write_artifact refused:");
-    expect(await write({ name: "x" })).toStartWith("write_artifact refused:");
-    expect(await read({ artifactId: "" })).toStartWith("read_artifact refused:");
+    const run = tools(port);
+    for (const [id, tool, input] of [
+      ["empty-name", WRITE_ARTIFACT_TOOL_NAME, { name: "", content: "x" }],
+      ["missing-content", WRITE_ARTIFACT_TOOL_NAME, { name: "x" }],
+      ["empty-id", READ_ARTIFACT_TOOL_NAME, { artifactId: "" }],
+    ] as const) {
+      const result = await call(run, id, tool, input);
+      expect(result.isError).toBe(true);
+      expect(result.output).toContain(`${tool} refused:`);
+    }
   });
 });
 

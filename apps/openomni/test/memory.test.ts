@@ -2,8 +2,10 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openCuratedMemory } from "../src/memory/store";
-import { MEMORY_TOOL_NAME, memoryToolExecutor, memoryToolSpec } from "../src/tools/memory";
+import { openCuratedMemory, type CuratedMemory } from "../src/memory/store";
+import { catalogEntries } from "../src/tools/core/catalog";
+import { createDispatcher } from "../src/tools/core/dispatch";
+import { MEMORY_TOOL_NAME } from "../src/tools/mutation/memory";
 
 let directory: string;
 beforeEach(() => {
@@ -93,12 +95,18 @@ describe("the curated memory store", () => {
 });
 
 describe("the memory tool", () => {
+  const origin = { role: "resident", depth: 0, sessionId: "memory-test" } as const;
+  const tool = (memory: CuratedMemory) =>
+    createDispatcher(catalogEntries({ memory }, origin)).execute;
+  const call = (run: ReturnType<typeof tool>, id: string, input: Record<string, unknown>) =>
+    run({ id, tool: MEMORY_TOOL_NAME, input });
+
   it("spec agrees with the zod gate", () => {
-    const spec = memoryToolSpec();
-    expect(spec.name).toBe(MEMORY_TOOL_NAME);
-    expect(spec.safe).toBe(false);
-    expect(spec.placement).toBe("host");
-    const schema = spec.inputSchema as {
+    const spec = catalogEntries({ memory: open() }, origin)[0]?.spec;
+    expect(spec?.name).toBe(MEMORY_TOOL_NAME);
+    expect(spec?.safe).toBe(false);
+    expect(spec?.placement).toBe("host");
+    const schema = spec?.inputSchema as {
       required: string[];
       properties: Record<string, { enum?: string[] }>;
       additionalProperties: boolean;
@@ -111,45 +119,50 @@ describe("the memory tool", () => {
   });
 
   it("add returns the minted id and says when it renders", async () => {
-    const run = memoryToolExecutor(open());
-    const output = await run({ action: "add", store: "system", content: "likes evidence" });
-    expect(output).toMatch(
+    const output = await call(tool(open()), "add", {
+      action: "add",
+      store: "system",
+      content: "likes evidence",
+    });
+    expect(output.output).toMatch(
       /^remembered as \[[0-9a-f-]{8}\] in the system store \(renders next session\)$/,
     );
   });
 
-  it("refuses shape violations per action", async () => {
-    const run = memoryToolExecutor(open());
-    expect(await run({ action: "add", store: "system" })).toBe(
-      "memory refused: add requires content",
-    );
-    expect(await run({ action: "add", store: "system", id: "x", content: "y" })).toBe(
-      "memory refused: add takes no id",
-    );
-    expect(await run({ action: "replace", store: "owner", content: "y" })).toBe(
-      "memory refused: replace requires id",
-    );
-    expect(await run({ action: "remove", store: "owner", id: "x", content: "y" })).toBe(
-      "memory refused: remove takes no content",
-    );
+  it("refuses shape violations per action as error results", async () => {
+    const run = tool(open());
+    for (const [id, input, message] of [
+      ["missing-content", { action: "add", store: "system" }, "memory refused: add requires content"],
+      ["unexpected-id", { action: "add", store: "system", id: "x", content: "y" }, "memory refused: add takes no id"],
+      ["missing-id", { action: "replace", store: "owner", content: "y" }, "memory refused: replace requires id"],
+      ["unexpected-content", { action: "remove", store: "owner", id: "x", content: "y" }, "memory refused: remove takes no content"],
+    ] as const) {
+      const result = await call(run, id, input);
+      expect(result.isError).toBe(true);
+      expect(result.output).toContain(message);
+    }
   });
 
-  it("budget refusal surfaces as a refusal string, not a throw", async () => {
-    const run = memoryToolExecutor(open());
-    await run({ action: "add", store: "owner", content: "x".repeat(1900) });
-    const output = await run({ action: "add", store: "owner", content: "y".repeat(200) });
-    expect(String(output)).toStartWith("memory refused: owner store budget exceeded");
+  it("maps a store budget refusal to an error result", async () => {
+    const run = tool(open());
+    await call(run, "fill", { action: "add", store: "owner", content: "x".repeat(1900) });
+    const result = await call(run, "overflow", {
+      action: "add",
+      store: "owner",
+      content: "y".repeat(200),
+    });
+    expect(result.isError).toBe(true);
+    expect(result.output).toStartWith("memory refused: owner store budget exceeded");
   });
 
   it("replace and remove act on the persisted file", async () => {
     const path = join(directory, "memory.json");
-    const memory = openCuratedMemory(path);
-    const run = memoryToolExecutor(memory);
-    const added = await run({ action: "add", store: "owner", content: "old fact" });
-    const id = /\[([0-9a-f-]{8})\]/.exec(String(added))?.[1] as string;
-    await run({ action: "replace", store: "owner", id, content: "new fact" });
+    const run = tool(openCuratedMemory(path));
+    const added = await call(run, "add", { action: "add", store: "owner", content: "old fact" });
+    const id = /\[([0-9a-f-]{8})\]/.exec(added.output)?.[1] as string;
+    await call(run, "replace", { action: "replace", store: "owner", id, content: "new fact" });
     expect(readFileSync(path, "utf8")).toContain("new fact");
-    await run({ action: "remove", store: "owner", id });
+    await call(run, "remove", { action: "remove", store: "owner", id });
     expect(readFileSync(path, "utf8")).not.toContain("new fact");
   });
 });

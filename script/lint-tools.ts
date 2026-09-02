@@ -26,9 +26,17 @@
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
+import { collectToolSpecs, TOOL_DEFINITIONS } from "../apps/openomni/src/tools/core/catalog.js";
+import type { AnyToolDefinition, ToolCategory } from "../apps/openomni/src/tools/core/define.js";
 
 interface Violation {
-  readonly check: "vocab-ratchet" | "tool-lint" | "naming" | "earned-check" | "schema-snapshot";
+  readonly check:
+    | "vocab-ratchet"
+    | "tool-lint"
+    | "naming"
+    | "earned-check"
+    | "schema-snapshot"
+    | "tool-schema-snapshot";
   readonly subject: string;
   readonly message: string;
 }
@@ -45,6 +53,7 @@ type SchemaSnapshot = Readonly<Record<string, readonly string[]>>;
 
 const BASELINE_PATH = "script/conformance/lint-tools-baseline.json";
 const SNAPSHOT_PATH = "script/conformance/schema-snapshot.json";
+const TOOL_SNAPSHOT_PATH = "script/conformance/tool-schema-snapshot.json";
 const PROTOCOL_SRC = "packages/protocol/src";
 const CORE_MODEL_PATH = "docs/core-model.md";
 const TEST_SUFFIXES = [".test.ts", ".test.tsx", ".bench.ts"];
@@ -138,16 +147,81 @@ const MAX_PUBLIC_FIELDS = 5;
 // input_schema, so the pair costs one extra top-level field.
 const FIELD_ALLOWANCE: Readonly<Record<string, number>> = { delegate: 6 };
 
-function topLevelFieldCount(schema: Record<string, unknown>): number {
-  const variants = Array.isArray(schema.oneOf)
-    ? (schema.oneOf as Record<string, unknown>[])
-    : [schema];
-  let max = 0;
-  for (const variant of variants) {
-    const properties = variant.properties as Record<string, unknown> | undefined;
-    max = Math.max(max, properties ? Object.keys(properties).length : 0);
+function localReference(
+  root: Record<string, unknown>,
+  reference: string,
+): Record<string, unknown> | undefined {
+  if (!reference.startsWith("#/")) return undefined;
+  let value: unknown = root;
+  for (const encoded of reference.slice(2).split("/")) {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+    const key = encoded.replaceAll("~1", "/").replaceAll("~0", "~");
+    value = (value as Record<string, unknown>)[key];
   }
-  return max;
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function combineFieldSets(
+  left: readonly Set<string>[],
+  right: readonly Set<string>[],
+): Set<string>[] {
+  return left.flatMap((a) => right.map((b) => new Set([...a, ...b])));
+}
+
+function topLevelFieldSets(
+  schema: Record<string, unknown>,
+  root: Record<string, unknown>,
+  references: ReadonlySet<string> = new Set(),
+): Set<string>[] {
+  const own = new Set(
+    Object.keys(
+      typeof schema.properties === "object" &&
+        schema.properties !== null &&
+        !Array.isArray(schema.properties)
+        ? (schema.properties as Record<string, unknown>)
+        : {},
+    ),
+  );
+  const reference = typeof schema.$ref === "string" ? schema.$ref : undefined;
+  let sets: Set<string>[] = [own];
+  if (reference !== undefined && !references.has(reference)) {
+    const target = localReference(root, reference);
+    if (target !== undefined) {
+      sets = combineFieldSets(
+        sets,
+        topLevelFieldSets(target, root, new Set([...references, reference])),
+      );
+    }
+  }
+  for (const key of ["allOf"] as const) {
+    const branches = schema[key];
+    if (!Array.isArray(branches)) continue;
+    for (const branch of branches) {
+      if (typeof branch === "object" && branch !== null && !Array.isArray(branch)) {
+        sets = combineFieldSets(
+          sets,
+          topLevelFieldSets(branch as Record<string, unknown>, root, references),
+        );
+      }
+    }
+  }
+  for (const key of ["anyOf", "oneOf"] as const) {
+    const branches = schema[key];
+    if (!Array.isArray(branches)) continue;
+    const variants = branches.flatMap((branch) =>
+      typeof branch === "object" && branch !== null && !Array.isArray(branch)
+        ? topLevelFieldSets(branch as Record<string, unknown>, root, references)
+        : [],
+    );
+    if (variants.length > 0) sets = combineFieldSets(sets, variants);
+  }
+  return sets;
+}
+
+function topLevelFieldCount(schema: Record<string, unknown>): number {
+  return Math.max(0, ...topLevelFieldSets(schema, schema).map((fields) => fields.size));
 }
 
 export interface ToolLintFailure {
@@ -178,11 +252,7 @@ export function lintToolSurface(tool: ToolSurface): ToolLintFailure[] {
   return failures;
 }
 
-async function collectToolSurfaces(): Promise<ToolSurface[]> {
-  // The sole app exposes its whole shippable surface as data through
-  // collectToolSpecs — the catalog table in apps/openomni/src/tools/catalog.ts
-  // is the single owner, so what the lint reads is what the app can ship.
-  const { collectToolSpecs } = await import("../apps/openomni/src/tools/catalog.js");
+function collectToolSurfaces(): ToolSurface[] {
   return collectToolSpecs().map((spec) => ({
     name: spec.name,
     description: spec.description,
@@ -191,7 +261,7 @@ async function collectToolSurfaces(): Promise<ToolSurface[]> {
 }
 
 async function checkToolLint(baseline: Baseline): Promise<Violation[]> {
-  const surfaces = await collectToolSurfaces();
+  const surfaces = collectToolSurfaces();
   const violations: Violation[] = [];
 
   for (const surface of surfaces) {
@@ -248,53 +318,126 @@ async function checkNaming(baseline: Baseline): Promise<Violation[]> {
 // check 6 — earned check
 // ---------------------------------------------------------------------------
 
-// The legacy registry's reference-count leg died with its product tree: the
-// sole app's tools are capability-composed at the catalog and consumed by the
-// model over the gateway, so no static string reference can ever mark a tool
-// "earned". What remains checkable is the other direction — every tool spec
-// the app defines must be wired into the catalog. The catalog is the only
-// registration path, so an unwired spec factory is surface no consumer can
-// ever reach.
-const CATALOG_PATH = "apps/openomni/src/tools/catalog.ts";
-const TOOL_SPEC_FACTORY_PATTERN = /export function (\w+ToolSpec)\(\): Tool\.Spec/g;
+const TOOL_SOURCE_GLOB = "apps/openomni/src/tools/**/*.ts";
+const TOOL_CATEGORIES: readonly ToolCategory[] = ["query", "mutation", "authority", "execution"];
 
-export function unwiredToolSpecFactories(
-  files: ReadonlyMap<string, string>,
-  catalogPath: string,
-): string[] {
-  const catalogSource = files.get(catalogPath) ?? "";
-  const unwired: string[] = [];
-  for (const [filePath, source] of files) {
-    if (filePath === catalogPath) {
-      continue;
-    }
-    for (const match of source.matchAll(TOOL_SPEC_FACTORY_PATTERN)) {
-      const factory = match[1];
-      // Table-row form, not bare mention: an unused import still names the
-      // factory, but only the CATALOG_TOOLS table wires it as `spec: <factory>`.
-      if (factory !== undefined && !catalogSource.includes(`spec: ${factory}`)) {
-        unwired.push(`${filePath}:${factory}`);
-      }
+function looksLikeToolDefinition(value: unknown): value is AnyToolDefinition {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as Partial<AnyToolDefinition>;
+  return (
+    typeof candidate.name === "string" &&
+    typeof candidate.category === "string" &&
+    typeof candidate.description === "string" &&
+    typeof candidate.bind === "function" &&
+    typeof candidate.render === "function"
+  );
+}
+
+export interface LocatedDefinition {
+  readonly definition: AnyToolDefinition;
+  readonly filePath: string;
+}
+
+async function locateExportedDefinitions(): Promise<LocatedDefinition[]> {
+  const located: LocatedDefinition[] = [];
+  const glob = new Bun.Glob(TOOL_SOURCE_GLOB);
+  for await (const filePath of glob.scan({ cwd: ".", onlyFiles: true })) {
+    if (TEST_SUFFIXES.some((suffix) => filePath.endsWith(suffix))) continue;
+    const module = (await import(`../${filePath}`)) as Record<string, unknown>;
+    for (const value of Object.values(module)) {
+      if (looksLikeToolDefinition(value)) located.push({ definition: value, filePath });
     }
   }
-  return unwired.sort((a, b) => a.localeCompare(b));
+  return located;
+}
+
+export function definitionInvariantViolations(
+  definitions: readonly AnyToolDefinition[],
+  located: readonly LocatedDefinition[],
+): Violation[] {
+  const violations: Violation[] = [];
+  const catalog = new Set(definitions);
+  const locations = new Map<AnyToolDefinition, string>();
+  for (const item of located) {
+    locations.set(item.definition, item.filePath);
+    if (!catalog.has(item.definition)) {
+      violations.push({
+        check: "earned-check",
+        subject: `${item.filePath}:${item.definition.name}`,
+        message: "exported tool definition is not wired into TOOL_DEFINITIONS",
+      });
+    }
+  }
+
+  const names = new Map<string, number>();
+  for (const definition of definitions)
+    names.set(definition.name, (names.get(definition.name) ?? 0) + 1);
+  for (const definition of definitions) {
+    const filePath = locations.get(definition);
+    if (filePath === undefined) {
+      violations.push({
+        check: "earned-check",
+        subject: definition.name,
+        message: "catalog definition has no exported source declaration",
+      });
+    } else {
+      const directory = filePath.match(/\/tools\/(query|mutation|authority|execution)\//)?.[1];
+      if (directory !== definition.category) {
+        violations.push({
+          check: "tool-lint",
+          subject: definition.name,
+          message: `[tool-category-directory] category ${definition.category} must live in tools/${definition.category}, found ${filePath}`,
+        });
+      }
+    }
+    if (!TOOL_CATEGORIES.includes(definition.category)) {
+      violations.push({
+        check: "tool-lint",
+        subject: definition.name,
+        message: `[tool-category] unknown category ${definition.category}`,
+      });
+    }
+    if (definition.category === "query" && !definition.safe) {
+      violations.push({
+        check: "tool-lint",
+        subject: definition.name,
+        message: "[query-safe] query tools must be safe",
+      });
+    }
+    if (definition.category === "execution" && definition.execution.kind !== "machine") {
+      violations.push({
+        check: "tool-lint",
+        subject: definition.name,
+        message: "[execution-locus] execution tools must execute on a machine",
+      });
+    }
+    if (definition.name.trim() === "") {
+      violations.push({
+        check: "tool-lint",
+        subject: "<empty>",
+        message: "[tool-name] name must not be empty",
+      });
+    }
+    if (definition.description.trim() === "") {
+      violations.push({
+        check: "tool-lint",
+        subject: definition.name,
+        message: "[tool-description] description must not be empty",
+      });
+    }
+    if ((names.get(definition.name) ?? 0) > 1) {
+      violations.push({
+        check: "tool-lint",
+        subject: definition.name,
+        message: "[tool-name-unique] tool names must be unique",
+      });
+    }
+  }
+  return violations;
 }
 
 async function checkEarned(): Promise<Violation[]> {
-  const files = new Map<string, string>();
-  const glob = new Bun.Glob("apps/openomni/src/**/*.ts");
-  for await (const filePath of glob.scan({ cwd: ".", onlyFiles: true })) {
-    if (TEST_SUFFIXES.some((suffix) => filePath.endsWith(suffix))) {
-      continue;
-    }
-    files.set(filePath, await Bun.file(filePath).text());
-  }
-  return unwiredToolSpecFactories(files, CATALOG_PATH).map((subject) => ({
-    check: "earned-check" as const,
-    subject,
-    message:
-      "tool spec factory is not wired into the catalog — the catalog is the only registration path, so an unwired spec is surface no consumer can reach",
-  }));
+  return definitionInvariantViolations(TOOL_DEFINITIONS, await locateExportedDefinitions());
 }
 
 // ---------------------------------------------------------------------------
@@ -419,6 +562,39 @@ async function checkSchemaSnapshot(): Promise<Violation[]> {
   return diffSnapshots(previous, current);
 }
 
+export function buildToolSchemaSnapshot(): readonly unknown[] {
+  return collectToolSpecs();
+}
+
+export function diffToolSchemaSnapshots(
+  previous: readonly unknown[],
+  current: readonly unknown[],
+): Violation[] {
+  if (JSON.stringify(previous) === JSON.stringify(current)) return [];
+  const previousNames = previous.flatMap((value) =>
+    typeof value === "object" && value !== null && "name" in value && typeof value.name === "string"
+      ? [value.name]
+      : [],
+  );
+  const currentNames = current.flatMap((value) =>
+    typeof value === "object" && value !== null && "name" in value && typeof value.name === "string"
+      ? [value.name]
+      : [],
+  );
+  return [
+    {
+      check: "tool-schema-snapshot",
+      subject: "TOOL_DEFINITIONS",
+      message: `derived tool specs differ from the reviewed snapshot (before: ${previousNames.join(", ")}; now: ${currentNames.join(", ")}) — run --update only with review authorization`,
+    },
+  ];
+}
+
+function checkToolSchemaSnapshot(): Violation[] {
+  const previous = JSON.parse(readFileSync(TOOL_SNAPSHOT_PATH, "utf8")) as readonly unknown[];
+  return diffToolSchemaSnapshots(previous, buildToolSchemaSnapshot());
+}
+
 // ---------------------------------------------------------------------------
 // self-test — every check must flag a known-bad fixture (discrimination bench)
 // ---------------------------------------------------------------------------
@@ -464,32 +640,49 @@ function selfTest(): void {
     failures.push("naming lint flagged a clean identifier");
   }
 
-  const wiredFiles = new Map([
-    ["apps/openomni/src/tools/catalog.ts", "spec: machinesToolSpec, spec: memoryToolSpec,"],
-    ["apps/openomni/src/tools/machines.ts", "export function machinesToolSpec(): Tool.Spec {"],
-    ["apps/openomni/src/tools/memory.ts", "export function memoryToolSpec(): Tool.Spec {"],
-  ]);
-  if (unwiredToolSpecFactories(wiredFiles, "apps/openomni/src/tools/catalog.ts").length !== 0) {
-    failures.push("earned-check flagged a fully wired catalog");
+  const exemplar = TOOL_DEFINITIONS[0];
+  if (exemplar === undefined) failures.push("definition invariant self-test has no exemplar");
+  else {
+    const unsafeQuery = {
+      ...exemplar,
+      name: "unsafe_query",
+      category: "query",
+      safe: false,
+    } as AnyToolDefinition;
+    const invariantViolations = definitionInvariantViolations(
+      [unsafeQuery],
+      [{ definition: unsafeQuery, filePath: "apps/openomni/src/tools/mutation/unsafe.ts" }],
+    );
+    if (!invariantViolations.some(({ message }) => message.includes("[query-safe]"))) {
+      failures.push("definition invariants did not flag an unsafe query");
+    }
+    if (!invariantViolations.some(({ message }) => message.includes("[tool-category-directory]"))) {
+      failures.push("definition invariants did not flag a category-directory mismatch");
+    }
+    if (
+      !definitionInvariantViolations(
+        [],
+        [{ definition: unsafeQuery, filePath: "apps/openomni/src/tools/query/unsafe.ts" }],
+      ).some(({ check }) => check === "earned-check")
+    ) {
+      failures.push("earned-check did not flag an exported definition absent from the catalog");
+    }
   }
-  const unwiredFiles = new Map([
-    ["apps/openomni/src/tools/catalog.ts", "spec: machinesToolSpec,"],
-    ["apps/openomni/src/tools/machines.ts", "export function machinesToolSpec(): Tool.Spec {"],
-    ["apps/openomni/src/tools/memory.ts", "export function memoryToolSpec(): Tool.Spec {"],
-  ]);
-  if (unwiredToolSpecFactories(unwiredFiles, "apps/openomni/src/tools/catalog.ts").length !== 1) {
-    failures.push("earned-check did not flag an unwired tool spec factory");
-  }
-  const importOnlyFiles = new Map([
-    [
-      "apps/openomni/src/tools/catalog.ts",
-      'import { memoryToolSpec } from "./memory"; spec: machinesToolSpec,',
+
+  const composedSchema = {
+    $defs: { common: { type: "object", properties: { a: {}, b: {}, c: {} } } },
+    allOf: [
+      { $ref: "#/$defs/common" },
+      {
+        anyOf: [
+          { type: "object", properties: { d: {}, e: {} } },
+          { type: "object", properties: { d: {}, e: {}, f: {} } },
+        ],
+      },
     ],
-    ["apps/openomni/src/tools/machines.ts", "export function machinesToolSpec(): Tool.Spec {"],
-    ["apps/openomni/src/tools/memory.ts", "export function memoryToolSpec(): Tool.Spec {"],
-  ]);
-  if (unwiredToolSpecFactories(importOnlyFiles, "apps/openomni/src/tools/catalog.ts").length !== 1) {
-    failures.push("earned-check counted an unused import as wiring");
+  };
+  if (topLevelFieldCount(composedSchema) !== 6) {
+    failures.push("tool field budget walker did not follow allOf/anyOf/$ref");
   }
 
   const snapshotViolations = diffSnapshots(
@@ -501,6 +694,12 @@ function selfTest(): void {
   }
   if (diffSnapshots({ "Tool.Call": ["id"] }, { "Tool.Call": ["id", "extra"] }).length !== 0) {
     failures.push("schema-snapshot flagged an additive change");
+  }
+  if (diffToolSchemaSnapshots([{ name: "a" }], [{ name: "b" }]).length !== 1) {
+    failures.push("tool-schema snapshot did not flag a derived spec change");
+  }
+  if (diffToolSchemaSnapshots([{ name: "a" }], [{ name: "a" }]).length !== 0) {
+    failures.push("tool-schema snapshot flagged identical derived specs");
   }
 
   if (failures.length > 0) {
@@ -528,9 +727,11 @@ async function main(): Promise<void> {
 
   if (args.has("--update")) {
     const snapshot = await buildSchemaSnapshot();
+    const toolSnapshot = buildToolSchemaSnapshot();
     writeFileSync(SNAPSHOT_PATH, `${JSON.stringify(snapshot, null, 2)}\n`);
+    writeFileSync(TOOL_SNAPSHOT_PATH, `${JSON.stringify(toolSnapshot, null, 2)}\n`);
     process.stdout.write(
-      `OK: schema snapshot regenerated (${Object.keys(snapshot).length} types) — this diff is the Owner-sign-off surface\n`,
+      `OK: snapshots regenerated (${Object.keys(snapshot).length} protocol types, ${toolSnapshot.length} derived tool specs) — these diffs are the review surface\n`,
     );
     return;
   }
@@ -542,11 +743,12 @@ async function main(): Promise<void> {
     ...(await checkNaming(baseline)),
     ...(await checkEarned()),
     ...(await checkSchemaSnapshot()),
+    ...checkToolSchemaSnapshot(),
   ];
 
   if (violations.length === 0) {
     process.stdout.write(
-      "OK: conformance lint — vocab ratchet, tool lint, naming, earned, schema snapshot\n",
+      "OK: conformance lint — vocab ratchet, definition invariants, tool lint, naming, earned, protocol schema snapshot, derived tool snapshot\n",
     );
     return;
   }

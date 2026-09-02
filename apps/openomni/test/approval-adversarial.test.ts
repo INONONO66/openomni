@@ -1,14 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { ActorRegistry, ApprovalStore, Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
-import {
-  approvalDecideToolExecutor,
-  type ApprovalPort,
-  approvalRequestToolExecutor,
-  contactPromoteToolExecutor,
-  endpointMergeToolExecutor,
-} from "../src/tools/approval";
-import { catalogEntries } from "../src/tools/catalog";
+import type { ApprovalPort } from "../src/tools/authority/approval";
+import { catalogEntries } from "../src/tools/core/catalog";
+import { dispatchModelTool, modelToolOutput } from "./helpers/tool-dispatch";
 
 /**
  * Adversarial cases from docs/conversation-and-message-io.md against the
@@ -31,6 +26,16 @@ const port: ApprovalPort = {
 
 const T0 = 1_000;
 const TIMEOUT = 60_000;
+const RESIDENT = { role: "resident", depth: 0, sessionId: "approval-test" } as const;
+
+const approvalRequest = (approvalPort: ApprovalPort, now: () => number = Date.now) =>
+  modelToolOutput("approval_request", { approvals: approvalPort }, RESIDENT, now);
+const approvalDecide = (approvalPort: ApprovalPort, now: () => number = Date.now) =>
+  modelToolOutput("approval_decide", { approvals: approvalPort }, RESIDENT, now);
+const contactPromote = (approvalPort: ApprovalPort, now: () => number = Date.now) =>
+  modelToolOutput("contact_promote", { approvals: approvalPort }, RESIDENT, now);
+const endpointMerge = (approvalPort: ApprovalPort, now: () => number = Date.now) =>
+  modelToolOutput("endpoint_merge", { approvals: approvalPort }, RESIDENT, now);
 
 beforeEach(() => {
   Bus.reset();
@@ -66,7 +71,7 @@ function approvalIdFrom(text: string): string {
 }
 
 async function requestPromotion(at = T0): Promise<string> {
-  const text = await approvalRequestToolExecutor(
+  const text = await approvalRequest(
     port,
     () => at,
   )({
@@ -81,10 +86,10 @@ describe("§8.13 — the approval lane fails closed", () => {
   it("an unanswered request refuses the act after its deadline", async () => {
     const approvalId = await requestPromotion();
 
-    const early = await contactPromoteToolExecutor(port, () => T0 + 1)({ approvalId });
+    const early = await contactPromote(port, () => T0 + 1)({ approvalId });
     expect(early).toContain("is pending");
 
-    const late = await contactPromoteToolExecutor(port, () => T0 + TIMEOUT)({ approvalId });
+    const late = await contactPromote(port, () => T0 + TIMEOUT)({ approvalId });
     expect(late).toContain("is refused");
     expect(ActorRegistry.getIdentity("contact:whatsapp:mallory")?.standing).toBe("provisional");
   });
@@ -92,7 +97,7 @@ describe("§8.13 — the approval lane fails closed", () => {
   it("the Owner cannot approve into the past — a late answer records the deadline's refusal", async () => {
     const approvalId = await requestPromotion();
 
-    const text = await approvalDecideToolExecutor(
+    const text = await approvalDecide(
       port,
       () => T0 + TIMEOUT + 1,
     )({
@@ -104,7 +109,7 @@ describe("§8.13 — the approval lane fails closed", () => {
   });
 
   it("a request storm hits the volume bound instead of burying the Owner", async () => {
-    const run = approvalRequestToolExecutor(port, () => T0);
+    const run = approvalRequest(port, () => T0);
     for (let i = 0; i < 8; i += 1) {
       expect(
         await run({
@@ -131,9 +136,9 @@ describe("§8.13 — the approval lane fails closed", () => {
 describe("§8.12 — a provisional contact holds no authority until promoted", () => {
   it("promotion executes only with the Owner's recorded approval", async () => {
     const approvalId = await requestPromotion();
-    await approvalDecideToolExecutor(port, () => T0 + 1)({ approvalId, decision: "approved" });
+    await approvalDecide(port, () => T0 + 1)({ approvalId, decision: "approved" });
 
-    const text = await contactPromoteToolExecutor(port, () => T0 + 2)({ approvalId });
+    const text = await contactPromote(port, () => T0 + 2)({ approvalId });
 
     expect(text).toContain("contact contact:whatsapp:mallory registered");
     expect(ActorRegistry.getIdentity("contact:whatsapp:mallory")?.standing).toBe("registered");
@@ -141,16 +146,16 @@ describe("§8.12 — a provisional contact holds no authority until promoted", (
 
   it("a refused approval never promotes", async () => {
     const approvalId = await requestPromotion();
-    await approvalDecideToolExecutor(port, () => T0 + 1)({ approvalId, decision: "refused" });
+    await approvalDecide(port, () => T0 + 1)({ approvalId, decision: "refused" });
 
-    const text = await contactPromoteToolExecutor(port, () => T0 + 2)({ approvalId });
+    const text = await contactPromote(port, () => T0 + 2)({ approvalId });
 
     expect(text).toContain("is refused");
     expect(ActorRegistry.getIdentity("contact:whatsapp:mallory")?.standing).toBe("provisional");
   });
 
   it("requesting promotion of a registered or missing contact refuses upfront", async () => {
-    const run = approvalRequestToolExecutor(port, () => T0);
+    const run = approvalRequest(port, () => T0);
     expect(
       await run({ act: "contact_promotion", actorId: "actor:alice", timeoutMs: TIMEOUT }),
     ).toContain("already registered");
@@ -162,7 +167,7 @@ describe("§8.12 — a provisional contact holds no authority until promoted", (
 
 describe("§8.4 — cross-channel merging is an explicit Owner act", () => {
   async function requestMerge(at = T0): Promise<string> {
-    const text = await approvalRequestToolExecutor(
+    const text = await approvalRequest(
       port,
       () => at,
     )({
@@ -184,11 +189,11 @@ describe("§8.4 — cross-channel merging is an explicit Owner act", () => {
   it("a merge lands only with the Owner's approval and moves exactly the approved endpoint", async () => {
     const approvalId = await requestMerge();
 
-    const unapproved = await endpointMergeToolExecutor(port, () => T0 + 1)({ approvalId });
+    const unapproved = await endpointMerge(port, () => T0 + 1)({ approvalId });
     expect(unapproved).toContain("is pending");
 
-    await approvalDecideToolExecutor(port, () => T0 + 1)({ approvalId, decision: "approved" });
-    const text = await endpointMergeToolExecutor(port, () => T0 + 2)({ approvalId });
+    await approvalDecide(port, () => T0 + 1)({ approvalId, decision: "approved" });
+    const text = await endpointMerge(port, () => T0 + 2)({ approvalId });
 
     expect(text).toContain("merged into actor:alice");
     expect(ActorRegistry.resolveEndpoint("whatsapp", "mallory-wa")?.identity.id).toBe(
@@ -198,21 +203,21 @@ describe("§8.4 — cross-channel merging is an explicit Owner act", () => {
 
   it("an approval for one act never authorizes the other", async () => {
     const approvalId = await requestPromotion();
-    await approvalDecideToolExecutor(port, () => T0 + 1)({ approvalId, decision: "approved" });
+    await approvalDecide(port, () => T0 + 1)({ approvalId, decision: "approved" });
 
-    const text = await endpointMergeToolExecutor(port, () => T0 + 2)({ approvalId });
+    const text = await endpointMerge(port, () => T0 + 2)({ approvalId });
 
     expect(text).toContain("approves a contact_promotion, not a endpoint_merge");
   });
 
   it("a merge whose endpoint changed hands since the request refuses (anti-TOCTOU)", async () => {
     const approvalId = await requestMerge();
-    await approvalDecideToolExecutor(port, () => T0 + 1)({ approvalId, decision: "approved" });
+    await approvalDecide(port, () => T0 + 1)({ approvalId, decision: "approved" });
     // The endpoint moves elsewhere between request and act.
     ActorRegistry.registerIdentity({ id: "actor:bob", kind: "human", trustTier: "collaborator" });
     ActorRegistry.mergeEndpoint("ep:whatsapp:mallory", "actor:bob");
 
-    const text = await endpointMergeToolExecutor(port, () => T0 + 2)({ approvalId });
+    const text = await endpointMerge(port, () => T0 + 2)({ approvalId });
 
     expect(text).toContain("no longer belongs to contact:whatsapp:mallory");
     expect(ActorRegistry.resolveEndpoint("whatsapp", "mallory-wa")?.identity.id).toBe("actor:bob");
@@ -221,12 +226,13 @@ describe("§8.4 — cross-channel merging is an explicit Owner act", () => {
 
 describe("approval tool boundary failures", () => {
   it("rejects malformed calls, invalid merge subjects, repeated decisions, and store failures", async () => {
-    expect(await approvalRequestToolExecutor(port)({})).toBeString();
-    expect(await approvalDecideToolExecutor(port)({})).toBeString();
-    expect(await contactPromoteToolExecutor(port)({})).toBeString();
-    expect(await endpointMergeToolExecutor(port)({})).toBeString();
+    for (const name of ["approval_request", "approval_decide", "contact_promote", "endpoint_merge"]) {
+      const result = await dispatchModelTool(name, { approvals: port }, RESIDENT)({});
+      expect(result).toMatchObject({ isError: true, errorClass: "invalid_input" });
+      expect(result.output).toBeString();
+    }
 
-    const request = approvalRequestToolExecutor(port, () => T0);
+    const request = approvalRequest(port, () => T0);
     expect(
       await request({
         act: "endpoint_merge",
@@ -245,7 +251,7 @@ describe("approval tool boundary failures", () => {
     ).toBeString();
 
     const approvalId = await requestPromotion();
-    const decide = approvalDecideToolExecutor(port, () => T0 + 1);
+    const decide = approvalDecide(port, () => T0 + 1);
     await decide({ approvalId, decision: "approved" });
     expect(await decide({ approvalId, decision: "approved" })).toBeString();
 
@@ -265,18 +271,18 @@ describe("approval tool boundary failures", () => {
       },
     } as unknown as ApprovalPort;
     expect(
-      await approvalRequestToolExecutor(failing)({
+      await approvalRequest(failing)({
         act: "contact_promotion",
         actorId: "contact:whatsapp:mallory",
         timeoutMs: 1,
       }),
     ).toBeString();
     expect(
-      await approvalDecideToolExecutor(failing)({ approvalId, decision: "approved" }),
+      await approvalDecide(failing)({ approvalId, decision: "approved" }),
     ).toBeString();
-    expect(await contactPromoteToolExecutor(failing)({ approvalId })).toBeString();
+    expect(await contactPromote(failing)({ approvalId })).toBeString();
 
-    const mergeText = await approvalRequestToolExecutor(
+    const mergeText = await approvalRequest(
       port,
       () => T0 + 2,
     )({
@@ -286,11 +292,11 @@ describe("approval tool boundary failures", () => {
       timeoutMs: TIMEOUT,
     });
     const mergeId = approvalIdFrom(mergeText);
-    await approvalDecideToolExecutor(
+    await approvalDecide(
       port,
       () => T0 + 3,
     )({ approvalId: mergeId, decision: "approved" });
-    expect(await endpointMergeToolExecutor(failing)({ approvalId: mergeId })).toBeString();
+    expect(await endpointMerge(failing)({ approvalId: mergeId })).toBeString();
   });
 });
 

@@ -30,7 +30,7 @@ import { Bus, newTraceId } from "@openomni/telemetry";
 import { desiredChannels, materializePersons } from "./provisioning/declared";
 import { type ChannelSupervisor, createChannelSupervisor } from "./provisioning/supervisor";
 import { resolveKek } from "./provisioning/vault-key";
-import type { ProvisionPort } from "./tools/provision";
+import type { ProvisionPort } from "./tools/mutation/provision";
 import {
   assertWsExposure,
   loadConfig,
@@ -38,9 +38,9 @@ import {
   type OpenOmniConfig,
   type RegisteredActor,
 } from "./config";
-import type { ArtifactsPort } from "./tools/artifacts";
-import { createLlmToolPort } from "./tools/llm";
-import type { MachinesPort } from "./tools/machines";
+import type { ArtifactsPort } from "./tools/mutation/artifacts";
+import { createLlmToolPort } from "./tools/execution/llm";
+import type { MachinesPort } from "./tools/query/machines";
 import { createChannelDriver } from "./delegation/channel-driver";
 import { createInlineDriver } from "./delegation/inline-driver";
 import {
@@ -63,10 +63,10 @@ import { openCuratedMemory } from "./memory/store";
 import { buildInboundEvent } from "./inbound";
 import { createResident } from "./resident";
 import { createMachineVfs, scopeMachineVfs, type MachineVfs } from "./machines/vfs";
-import { catalogEntries } from "./tools/catalog";
-import { HOST_TARGET } from "./tools/dispatch";
+import { catalogEntries } from "./tools/core/catalog";
+import { HOST_TARGET } from "./tools/core/dispatch";
 import { createCellRegistry } from "./tools/cell-registry";
-import type { CellPorts } from "./tools/run-code";
+import type { CellPorts } from "./tools/execution/run-code";
 
 interface StartOptions {
   readonly config?: OpenOmniConfig;

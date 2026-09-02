@@ -2,13 +2,16 @@ import { describe, expect, test } from "bun:test";
 import type { Delegation } from "@openomni/protocol";
 import type { DelegationOrigin } from "../src/delegation/admission";
 import { formatSettlement, type DelegationKernel } from "../src/delegation/kernel";
-import {
-  awaitDelegationToolExecutor,
-  cancelDelegationToolExecutor,
-  delegateToolExecutor,
-} from "../src/delegation/tool";
+import { dispatchModelTool, modelToolOutput } from "./helpers/tool-dispatch";
 
 const ORIGIN: DelegationOrigin = { role: "resident", depth: 0, sessionId: "session" };
+
+const delegate = (delegation: DelegationKernel, origin: DelegationOrigin) =>
+  modelToolOutput("delegate", { delegation }, origin);
+const awaitDelegation = (delegation: DelegationKernel) =>
+  modelToolOutput("await_delegation", { delegation }, ORIGIN);
+const cancelDelegation = (delegation: DelegationKernel) =>
+  modelToolOutput("cancel_delegation", { delegation }, ORIGIN);
 const HANDLE: Delegation.Handle = {
   delegationId: "d-1",
   operation: "ask",
@@ -45,13 +48,16 @@ const valid = {
 describe("delegation tool boundaries", () => {
   test("rejects every invalid addressing and operation combination before the kernel", async () => {
     let calls = 0;
-    const execute = delegateToolExecutor(
-      kernel({
-        delegate: () => {
-          calls += 1;
-          return Promise.resolve({ handle: HANDLE });
-        },
-      }),
+    const execute = dispatchModelTool(
+      "delegate",
+      {
+        delegation: kernel({
+          delegate: () => {
+            calls += 1;
+            return Promise.resolve({ handle: HANDLE });
+          },
+        }),
+      },
       ORIGIN,
     );
     const invalid = [
@@ -64,13 +70,15 @@ describe("delegation tool boundaries", () => {
       { ...valid, acceptanceCriteria: ["not allowed"] },
     ];
 
-    for (const input of invalid) expect(await execute(input)).toBeString();
+    for (const input of invalid) {
+      expect(await execute(input)).toMatchObject({ isError: true, errorClass: "invalid_input" });
+    }
     expect(calls).toBe(0);
   });
 
   test("supports the legacy mode boundary and every kernel result arm", async () => {
     let request: unknown;
-    const accepted = delegateToolExecutor(
+    const accepted = delegate(
       kernel({
         delegate: (candidate) => {
           request = candidate;
@@ -84,7 +92,7 @@ describe("delegation tool boundaries", () => {
     ).toBeString();
     expect(request).toMatchObject({ operation: "ask", deadline: 10 });
 
-    const refused = delegateToolExecutor(
+    const refused = delegate(
       kernel({
         delegate: () => Promise.resolve({ refused: "no", error: new Error("no") as never }),
       }),
@@ -92,7 +100,7 @@ describe("delegation tool boundaries", () => {
     );
     expect(await refused(valid)).toBeString();
 
-    const settled = delegateToolExecutor(
+    const settled = delegate(
       kernel({
         delegate: () =>
           Promise.resolve({
@@ -107,7 +115,7 @@ describe("delegation tool boundaries", () => {
 
   test("renders structured, ordinary, and primitive refusals", async () => {
     for (const error of [{ data: { message: "structured" } }, new Error("ordinary"), "primitive"]) {
-      const execute = delegateToolExecutor(
+      const execute = delegate(
         kernel({ delegate: () => Promise.reject(error) }),
         ORIGIN,
       );
@@ -116,12 +124,12 @@ describe("delegation tool boundaries", () => {
   });
 
   test("await and cancel cover malformed, timeout, settlement, and failure results", async () => {
-    expect(await awaitDelegationToolExecutor(kernel({}))({})).toBeString();
+    expect(await awaitDelegation(kernel({}))({})).toBeString();
     expect(
-      await awaitDelegationToolExecutor(kernel({}))({ delegationId: "d-1", timeoutMs: 1 }),
+      await awaitDelegation(kernel({}))({ delegationId: "d-1", timeoutMs: 1 }),
     ).toBeString();
     expect(
-      await awaitDelegationToolExecutor(
+      await awaitDelegation(
         kernel({
           awaitDelegation: () =>
             Promise.resolve({
@@ -132,15 +140,15 @@ describe("delegation tool boundaries", () => {
       )({ delegationId: "d-1" }),
     ).toBe("done");
     expect(
-      await awaitDelegationToolExecutor(
+      await awaitDelegation(
         kernel({ awaitDelegation: () => Promise.reject({ data: { message: "no" } }) }),
       )({ delegationId: "d-1" }),
     ).toBeString();
 
-    expect(await cancelDelegationToolExecutor(kernel({}))({})).toBeString();
-    expect(await cancelDelegationToolExecutor(kernel({}))({ delegationId: "d-1" })).toBeString();
+    expect(await cancelDelegation(kernel({}))({})).toBeString();
+    expect(await cancelDelegation(kernel({}))({ delegationId: "d-1" })).toBeString();
     expect(
-      await cancelDelegationToolExecutor(
+      await cancelDelegation(
         kernel({ cancelDelegation: () => Promise.reject(new Error("no")) }),
       )({ delegationId: "d-1" }),
     ).toBeString();

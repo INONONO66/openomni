@@ -2,16 +2,18 @@ import { describe, expect, it } from "bun:test";
 import { placementGatedExecutor } from "@openomni/agent";
 import { Placement } from "@openomni/placement";
 import type { Machine, Tool } from "@openomni/protocol";
-import { catalogEntries } from "../src/tools/catalog";
-import type { CatalogEntry } from "../src/tools/dispatch";
-import { createDispatcher, HOST_TARGET } from "../src/tools/dispatch";
+import { catalogEntries } from "../src/tools/core/catalog";
+import { createDispatcher, HOST_TARGET } from "../src/tools/core/dispatch";
 import { createCellRegistry } from "../src/tools/cell-registry";
-import type { CellPorts } from "../src/tools/run-code";
-import { MACHINES_TOOL_NAME, type MachineStatus, type MachinesPort } from "../src/tools/machines";
-import { MEMORY_TOOL_NAME } from "../src/tools/memory";
-import { cellDoor, RUN_CODE_TOOL_NAME, runCodeToolExecutor } from "../src/tools/run-code";
+import type { CellPorts } from "../src/tools/execution/run-code";
+import { MACHINES_TOOL_NAME, type MachineStatus, type MachinesPort } from "../src/tools/query/machines";
+import { MEMORY_TOOL_NAME } from "../src/tools/mutation/memory";
+import { cellDoor, RUN_CODE_TOOL_NAME } from "../src/tools/execution/run-code";
+import { dispatchModelTool, modelToolOutput } from "./helpers/tool-dispatch";
 
 const RESIDENT = { role: "resident", depth: 0, sessionId: "session-origin" } as const;
+const runCode = (ports: CellPorts, origin = RESIDENT) =>
+  modelToolOutput(RUN_CODE_TOOL_NAME, { cells: ports }, origin);
 
 function machineTarget(capabilities: string[]): Placement.ToolTarget {
   return { kind: "machine", id: "alpha", capabilities };
@@ -115,7 +117,7 @@ describe("the cell door", () => {
       },
     });
 
-    const answer = await runCodeToolExecutor(ports, RESIDENT)({
+    const answer = await runCode(ports, RESIDENT)({
       machineId: "alpha",
       code: "tool.delegate(...)",
       timeoutMs: 5000,
@@ -143,7 +145,7 @@ describe("the cell door", () => {
       },
     });
 
-    await runCodeToolExecutor(ports, RESIDENT)({ machineId: "alpha", code: "x", timeoutMs: 5000 });
+    await runCode(ports, RESIDENT)({ machineId: "alpha", code: "x", timeoutMs: 5000 });
 
     // The cell is already on a machine; reaching back to reach another is the
     // round trip code mode removes. Placement says so — nothing restates it.
@@ -164,7 +166,7 @@ describe("the cell door", () => {
       },
     });
 
-    await runCodeToolExecutor(ports, RESIDENT)({ machineId: "alpha", code: "x", timeoutMs: 5000 });
+    await runCode(ports, RESIDENT)({ machineId: "alpha", code: "x", timeoutMs: 5000 });
 
     const late = await registry.callTool({
       cellId: escaped ?? "",
@@ -212,7 +214,7 @@ describe("run_code outcomes", () => {
     it(`reports ${name}`, async () => {
       const { kernel } = recordingDelegation();
       const { ports } = cellPorts({ delegation: kernel, runCell: async () => result as Machine.CellResult });
-      const answer = await runCodeToolExecutor(ports, RESIDENT)({ machineId: "alpha", code: "x", timeoutMs: 250 });
+      const answer = await runCode(ports, RESIDENT)({ machineId: "alpha", code: "x", timeoutMs: 250 });
       expect(answer).toContain(expected);
     });
   }
@@ -228,36 +230,15 @@ describe("run_code outcomes", () => {
       },
     });
 
-    const answer = await runCodeToolExecutor(ports, RESIDENT)({ machineId: "alpha", code: "", timeoutMs: 250 });
-
-    expect(answer).toStartWith("run_code refused:");
-    expect(dispatched).toBe(false);
-  });
-});
-
-describe("the advertised schema and the runtime gate agree", () => {
-  it("rejects every key the JSON Schema does not advertise", async () => {
-    const { kernel } = recordingDelegation();
-    const { ports } = cellPorts({ delegation: kernel, runCell: async () => ({ status: "timed_out", cellId: "c" }) });
-    const answer = await runCodeToolExecutor(ports, RESIDENT)({
+    const answer = await dispatchModelTool(RUN_CODE_TOOL_NAME, { cells: ports }, RESIDENT)({
       machineId: "alpha",
-      code: "x",
+      code: "",
       timeoutMs: 250,
-      asRoot: true,
     });
-    expect(answer).toStartWith("run_code refused:");
-  });
 
-  it("advertises exactly the keys the gate requires", () => {
-    const { kernel } = recordingDelegation();
-    const { ports } = cellPorts({ delegation: kernel, runCell: async () => ({ status: "timed_out", cellId: "c" }) });
-    const spec = catalogEntries({ delegation: kernel, cells: ports }, RESIDENT).find(
-      (e: CatalogEntry) => e.spec.name === RUN_CODE_TOOL_NAME,
-    )?.spec;
-    const schema = spec?.inputSchema as { required: string[]; properties: Record<string, unknown> };
-
-    expect(schema.required.sort()).toEqual(["code", "machineId", "timeoutMs"]);
-    expect(Object.keys(schema.properties).sort()).toEqual(["code", "machineId", "timeoutMs"]);
+    expect(answer).toMatchObject({ isError: true, errorClass: "invalid_input" });
+    expect(answer.output).toStartWith("\nrun_code refused:");
+    expect(dispatched).toBe(false);
   });
 });
 
@@ -344,7 +325,7 @@ describe("the machines tool", () => {
       tool: MACHINES_TOOL_NAME,
       input: { machineId: "alpha" },
     });
-    expect(String(result.output)).toStartWith("machines refused:");
+    expect(String(result.output)).toStartWith("\nmachines refused:");
   });
 
   it("is host-placed: offerable on the brain, absent from a machine-only fold", () => {

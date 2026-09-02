@@ -1,7 +1,8 @@
 import { ModelsDev, Provider, run as llmRun, type RunInput, type Sink } from "@openomni/llm";
-import type { Message, Model, Tool } from "@openomni/protocol";
+import type { Message, Model } from "@openomni/protocol";
 import { Bus, newTraceId } from "@openomni/telemetry";
 import { z } from "zod";
+import { defineTool, ToolRefused } from "../core/define";
 
 /**
  * A one-shot sub-model call, without knowing how the host is composed: a
@@ -20,36 +21,14 @@ const Input = z
   .strict();
 
 export const LLM_TOOL_NAME = "llm";
-
-/**
- * Hand-written for the same reason the delegate tool's is: zod 3 ships no
- * JSON Schema conversion. The zod object above stays the runtime gate.
- */
-const INPUT_JSON_SCHEMA: Record<string, unknown> = {
+const LLM_WIRE_PROJECTION = {
   type: "object",
   additionalProperties: false,
   required: ["prompt"],
-  properties: {
-    prompt: {
-      type: "string",
-      minLength: 1,
-      description: "The complete instruction for the sub-model call.",
-    },
-  },
-};
+  properties: { prompt: { type: "string", minLength: 1, description: "The complete instruction for the sub-model call." } },
+} as const;
 
-export function llmToolSpec(): Tool.Spec {
-  return {
-    name: LLM_TOOL_NAME,
-    description:
-      "Ask a sub-model a one-shot, stateless question and get its text back. Built for semantic map/reduce over data already inside a cell: summarize, classify, extract, or rank what the code fetched, one prompt per call — it remembers nothing between calls.",
-    inputSchema: INPUT_JSON_SCHEMA,
-    safe: true,
-    placement: "host",
-  };
-}
-
-export function llmToolExecutor(llm: LlmPort) {
+function executeLlm(llm: LlmPort) {
   // catalogEntries() builds fresh executors per catalog construction — per
   // cell, per turn — so this counter IS the per-cell budget: a cell that
   // spends it gets refusals, and the next cell starts at zero.
@@ -59,18 +38,24 @@ export function llmToolExecutor(llm: LlmPort) {
   // The dispatcher turns the throw into an error result, which the cell door
   // raises as a catchable ToolError.
   let calls = 0;
-  return async (rawInput: unknown): Promise<string> => {
-    const parsed = Input.safeParse(rawInput);
-    if (!parsed.success) {
-      throw new Error(`llm refused: ${parsed.error.issues[0]?.message ?? "invalid input"}`);
-    }
+  return async ({ prompt }: z.output<typeof Input>): Promise<string> => {
     if (calls >= MAX_LLM_CALLS) {
-      throw new Error(`llm refused: the per-cell budget of ${MAX_LLM_CALLS} sub-model calls is spent`);
+      throw new ToolRefused(LLM_TOOL_NAME, `the per-cell budget of ${MAX_LLM_CALLS} sub-model calls is spent`);
     }
     calls += 1;
-    return llm(parsed.data.prompt);
+    return llm(prompt);
   };
 }
+
+export const llmTool = defineTool({
+  name: LLM_TOOL_NAME, category: "execution",
+  description: "Ask a sub-model a one-shot, stateless question and get its text back. Built for semantic map/reduce over data already inside a cell: summarize, classify, extract, or rank what the code fetched, one prompt per call — it remembers nothing between calls.",
+  input: Input, output: z.string(), wireProjection: LLM_WIRE_PROJECTION, safe: true, execution: { kind: "machine", capability: "kernel.py" }, placement: "host",
+  visibility: { model: ["resident", "worker"], cell: ["resident", "worker"] },
+  bind: (ports) => ports.llm === undefined ? undefined : executeLlm(ports.llm),
+  render: (_args, value) => value,
+});
+
 
 /**
  * The llm tool's model, resolved from the models.dev catalog. Unlisted is an

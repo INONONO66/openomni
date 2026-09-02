@@ -1,7 +1,8 @@
 import { newTraceId } from "@openomni/telemetry";
 import type { ActorRegistry, ApprovalStore } from "@openomni/ledger";
-import type { Approval, Tool } from "@openomni/protocol";
+import type { Approval } from "@openomni/protocol";
 import { z } from "zod";
+import { defineTool, ToolRefused } from "../core/define";
 
 /**
  * Resident-facing approval lane (#P3, docs/conversation-and-message-io.md
@@ -61,7 +62,7 @@ const ACT_INPUT = z
   })
   .strict();
 
-const REQUEST_INPUT_JSON_SCHEMA: Record<string, unknown> = {
+const REQUEST_WIRE_PROJECTION: Record<string, unknown> = {
   type: "object",
   additionalProperties: false,
   required: ["act", "timeoutMs"],
@@ -74,68 +75,6 @@ const REQUEST_INPUT_JSON_SCHEMA: Record<string, unknown> = {
   },
 };
 
-const DECIDE_INPUT_JSON_SCHEMA: Record<string, unknown> = {
-  type: "object",
-  additionalProperties: false,
-  required: ["approvalId", "decision"],
-  properties: {
-    approvalId: { type: "string", minLength: 1 },
-    decision: { type: "string", enum: ["approved", "refused"] },
-  },
-};
-
-const ACT_INPUT_JSON_SCHEMA: Record<string, unknown> = {
-  type: "object",
-  additionalProperties: false,
-  required: ["approvalId"],
-  properties: {
-    approvalId: { type: "string", minLength: 1 },
-  },
-};
-
-export function approvalRequestToolSpec(): Tool.Spec {
-  return {
-    name: "approval_request",
-    description:
-      "Open a deadline-bound Owner-approval request for a contact promotion or a cross-channel endpoint merge. Unanswered requests read as refused after the deadline.",
-    inputSchema: REQUEST_INPUT_JSON_SCHEMA,
-    safe: false,
-    placement: "host",
-  };
-}
-
-export function approvalDecideToolSpec(): Tool.Spec {
-  return {
-    name: "approval_decide",
-    description:
-      "Record the Owner's answer to a pending approval request. Only usable when the Owner has answered in this session; answers past the deadline record the deadline's refusal.",
-    inputSchema: DECIDE_INPUT_JSON_SCHEMA,
-    safe: false,
-    placement: "host",
-  };
-}
-
-export function contactPromoteToolSpec(): Tool.Spec {
-  return {
-    name: "contact_promote",
-    description:
-      "Register a provisional contact. Requires an approved, unexpired contact_promotion approval naming that contact.",
-    inputSchema: ACT_INPUT_JSON_SCHEMA,
-    safe: false,
-    placement: "host",
-  };
-}
-
-export function endpointMergeToolSpec(): Tool.Spec {
-  return {
-    name: "endpoint_merge",
-    description:
-      "Move an endpoint onto another identity (cross-channel merge). Requires an approved, unexpired endpoint_merge approval naming exactly that move.",
-    inputSchema: ACT_INPUT_JSON_SCHEMA,
-    safe: false,
-    placement: "host",
-  };
-}
 
 function subjectOf(
   port: ApprovalPort,
@@ -165,15 +104,11 @@ function subjectOf(
   };
 }
 
-export function approvalRequestToolExecutor(port: ApprovalPort, now: () => number = Date.now) {
-  return async (rawInput: unknown): Promise<string> => {
-    const parsed = REQUEST_INPUT.safeParse(rawInput);
-    if (!parsed.success) {
-      return `approval_request refused: ${parsed.error.issues[0]?.message ?? "invalid input"}`;
-    }
-    const subject = subjectOf(port, parsed.data);
+function executeApprovalRequest(port: ApprovalPort, now: () => number = Date.now) {
+  return async (input: z.output<typeof REQUEST_INPUT>) => {
+    const subject = subjectOf(port, input);
     if (typeof subject === "string") {
-      return `approval_request refused: ${subject}`;
+      throw new ToolRefused("approval_request", subject);
     }
     const at = now();
     try {
@@ -181,34 +116,27 @@ export function approvalRequestToolExecutor(port: ApprovalPort, now: () => numbe
         {
           id: `approval:${crypto.randomUUID()}`,
           subject,
-          deadline: at + parsed.data.timeoutMs,
+          deadline: at + input.timeoutMs,
         },
         REQUEST_BOUND,
         // The tool call IS the trace origin (D11).
         newTraceId(),
         at,
       );
-      return `approval ${record.id} pending: ${describeSubject(record.subject)} — unanswered after ${record.deadline} reads as refused`;
+      return { id: record.id, subject: record.subject, deadline: record.deadline };
     } catch (error) {
-      return `approval_request refused: ${error instanceof Error ? error.message : String(error)}`;
+      throw new ToolRefused("approval_request", error instanceof Error ? error.message : String(error));
     }
   };
 }
 
-export function approvalDecideToolExecutor(port: ApprovalPort, now: () => number = Date.now) {
-  return async (rawInput: unknown): Promise<string> => {
-    const parsed = DECIDE_INPUT.safeParse(rawInput);
-    if (!parsed.success) {
-      return `approval_decide refused: ${parsed.error.issues[0]?.message ?? "invalid input"}`;
-    }
+function executeApprovalDecide(port: ApprovalPort, now: () => number = Date.now) {
+  return async (input: z.output<typeof DECIDE_INPUT>) => {
     try {
-      const outcome = port.decide(parsed.data.approvalId, parsed.data.decision, newTraceId(), now());
-      if (outcome.kind === "unchanged") {
-        return `approval ${parsed.data.approvalId} was already ${outcome.record.state} (${outcome.record.decidedBy ?? "unknown"})`;
-      }
-      return `approval ${parsed.data.approvalId} ${outcome.record.state} by ${outcome.record.decidedBy ?? "owner"}`;
+      const outcome = port.decide(input.approvalId, input.decision, newTraceId(), now());
+      return { approvalId: input.approvalId, state: outcome.record.state, decidedBy: outcome.record.decidedBy, unchanged: outcome.kind === "unchanged" };
     } catch (error) {
-      return `approval_decide refused: ${error instanceof Error ? error.message : String(error)}`;
+      throw new ToolRefused("approval_decide", error instanceof Error ? error.message : String(error));
     }
   };
 }
@@ -236,46 +164,38 @@ function approvedSubject(
   return record.subject;
 }
 
-export function contactPromoteToolExecutor(port: ApprovalPort, now: () => number = Date.now) {
-  return async (rawInput: unknown): Promise<string> => {
-    const parsed = ACT_INPUT.safeParse(rawInput);
-    if (!parsed.success) {
-      return `contact_promote refused: ${parsed.error.issues[0]?.message ?? "invalid input"}`;
-    }
-    const subject = approvedSubject(port, parsed.data.approvalId, "contact_promotion", now());
+function executeContactPromote(port: ApprovalPort, now: () => number = Date.now) {
+  return async (input: z.output<typeof ACT_INPUT>) => {
+    const subject = approvedSubject(port, input.approvalId, "contact_promotion", now());
     if (typeof subject === "string" || subject.kind !== "contact_promotion") {
-      return `contact_promote refused: ${typeof subject === "string" ? subject : "subject mismatch"}`;
+      throw new ToolRefused("contact_promote", typeof subject === "string" ? subject : "subject mismatch");
     }
     try {
       const identity = port.promote(subject.actorId);
-      return `contact ${identity.id} registered (tier ${identity.trustTier})`;
+      return { id: identity.id, trustTier: identity.trustTier };
     } catch (error) {
-      return `contact_promote refused: ${error instanceof Error ? error.message : String(error)}`;
+      throw new ToolRefused("contact_promote", error instanceof Error ? error.message : String(error));
     }
   };
 }
 
-export function endpointMergeToolExecutor(port: ApprovalPort, now: () => number = Date.now) {
-  return async (rawInput: unknown): Promise<string> => {
-    const parsed = ACT_INPUT.safeParse(rawInput);
-    if (!parsed.success) {
-      return `endpoint_merge refused: ${parsed.error.issues[0]?.message ?? "invalid input"}`;
-    }
-    const subject = approvedSubject(port, parsed.data.approvalId, "endpoint_merge", now());
+function executeEndpointMerge(port: ApprovalPort, now: () => number = Date.now) {
+  return async (input: z.output<typeof ACT_INPUT>) => {
+    const subject = approvedSubject(port, input.approvalId, "endpoint_merge", now());
     if (typeof subject === "string" || subject.kind !== "endpoint_merge") {
-      return `endpoint_merge refused: ${typeof subject === "string" ? subject : "subject mismatch"}`;
+      throw new ToolRefused("endpoint_merge", typeof subject === "string" ? subject : "subject mismatch");
     }
     // Anti-TOCTOU: the merge executes ONLY the move the Owner saw — if the
     // endpoint changed hands since the request, the act refuses.
     const endpoint = port.getEndpoint(subject.endpointId);
     if (endpoint === undefined || endpoint.actorId !== subject.fromActorId) {
-      return `endpoint_merge refused: endpoint ${subject.endpointId} no longer belongs to ${subject.fromActorId}`;
+      throw new ToolRefused("endpoint_merge", `endpoint ${subject.endpointId} no longer belongs to ${subject.fromActorId}`);
     }
     try {
       const merged = port.mergeEndpoint(subject.endpointId, subject.toActorId);
-      return `endpoint ${merged.id} merged into ${merged.actorId}`;
+      return { id: merged.id, actorId: merged.actorId };
     } catch (error) {
-      return `endpoint_merge refused: ${error instanceof Error ? error.message : String(error)}`;
+      throw new ToolRefused("endpoint_merge", error instanceof Error ? error.message : String(error));
     }
   };
 }
@@ -288,3 +208,13 @@ function describeSubject(subject: Approval.Subject): string {
   }
   return `merge endpoint ${subject.endpointId} from ${subject.fromActorId} into ${subject.toActorId}`;
 }
+
+const common = { category: "authority" as const, safe: false, execution: { kind: "host" } as const, placement: "host" as const, visibility: { model: ["resident"], cell: ["resident"] } as const };
+const RequestOutput = z.object({ id: z.string(), subject: z.custom<Approval.Subject>(), deadline: z.number() }).strict();
+const DecideOutput = z.object({ approvalId: z.string(), state: z.string(), decidedBy: z.string().nullable().optional(), unchanged: z.boolean() }).strict();
+const PromoteOutput = z.object({ id: z.string(), trustTier: z.string() }).strict();
+const MergeOutput = z.object({ id: z.string(), actorId: z.string() }).strict();
+export const approvalRequestTool = defineTool({ ...common, name: "approval_request", description: "Open a deadline-bound Owner-approval request for a contact promotion or a cross-channel endpoint merge. Unanswered requests read as refused after the deadline.", input: REQUEST_INPUT, output: RequestOutput, wireProjection: REQUEST_WIRE_PROJECTION, bind: (ports) => ports.approvals === undefined ? undefined : executeApprovalRequest(ports.approvals), render: (_args, value) => `approval ${value.id} pending: ${describeSubject(value.subject)} — unanswered after ${value.deadline} reads as refused` });
+export const approvalDecideTool = defineTool({ ...common, name: "approval_decide", description: "Record the Owner's answer to a pending approval request. Only usable when the Owner has answered in this session; answers past the deadline record the deadline's refusal.", input: DECIDE_INPUT, output: DecideOutput, bind: (ports) => ports.approvals === undefined ? undefined : executeApprovalDecide(ports.approvals), render: (_args, value) => value.unchanged ? `approval ${value.approvalId} was already ${value.state} (${value.decidedBy ?? "unknown"})` : `approval ${value.approvalId} ${value.state} by ${value.decidedBy ?? "owner"}` });
+export const contactPromoteTool = defineTool({ ...common, name: "contact_promote", description: "Register a provisional contact. Requires an approved, unexpired contact_promotion approval naming that contact.", input: ACT_INPUT, output: PromoteOutput, bind: (ports) => ports.approvals === undefined ? undefined : executeContactPromote(ports.approvals), render: (_args, value) => `contact ${value.id} registered (tier ${value.trustTier})` });
+export const endpointMergeTool = defineTool({ ...common, name: "endpoint_merge", description: "Move an endpoint onto another identity (cross-channel merge). Requires an approved, unexpired endpoint_merge approval naming exactly that move.", input: ACT_INPUT, output: MergeOutput, bind: (ports) => ports.approvals === undefined ? undefined : executeEndpointMerge(ports.approvals), render: (_args, value) => `endpoint ${value.id} merged into ${value.actorId}` });

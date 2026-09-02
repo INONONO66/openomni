@@ -1,0 +1,770 @@
+[
+  {
+    "name": "delegate",
+    "description": "Start durable delegated work. Inline ask waits in this turn; process/channel work returns a handle immediately and its settlement arrives as a message. Notify sends once to an actor and settles sent at transport acceptance.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["instruction", "operation", "timeoutMs"],
+      "properties": {
+        "instruction": {
+          "type": "string",
+          "minLength": 1,
+          "description": "What the worker must do, self-contained."
+        },
+        "operation": {
+          "type": "string",
+          "enum": ["notify", "ask", "assign"],
+          "description": "notify = fire-and-forget, ask = expect an answer, assign = accountable work (creates a WorkItem)."
+        },
+        "acceptanceCriteria": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "assign only: criteria the work must satisfy to complete."
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "description": "Deadline in milliseconds; settlement arrives by then or as no_response."
+        },
+        "scope": {
+          "type": "string",
+          "enum": ["inline", "independent"],
+          "description": "Worker placement: inline = same-process worker, independent = spawned child process. Provide exactly one of scope or actorId."
+        },
+        "actorId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Channel contact to ask instead of a worker. Provide exactly one of scope or actorId."
+        }
+      }
+    },
+    "safe": false,
+    "placement": "host"
+  },
+  {
+    "name": "await_delegation",
+    "description": "Re-invoke a durable delegation by id. It returns its settlement when available, or says it is still open until the supplied wait limit.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "delegationId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["delegationId"],
+      "additionalProperties": false
+    },
+    "safe": false,
+    "placement": "host"
+  },
+  {
+    "name": "cancel_delegation",
+    "description": "Cancel open delegated work by id; cancelling settled work returns the existing settlement.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "delegationId": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": ["delegationId"],
+      "additionalProperties": false
+    },
+    "safe": false,
+    "placement": "host"
+  },
+  {
+    "name": "converse_open",
+    "description": "Open a bounded reply window to a known contact. While it is open, the contact's inbound reaches this session directly and sends to the contact ride the window instead of a grant. The window closes on its deadline, its caps, or converse_close.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "contactId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Registered actor the window reaches."
+        },
+        "endpointId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Allocated endpoint of that actor the window is pinned to."
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991,
+          "description": "How long the window stays open from now."
+        },
+        "maxOutbound": {
+          "description": "Outbound message cap inside the window (default 8).",
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "maxInbound": {
+          "description": "Inbound message cap before the treatment demotes to evidence_only (default 32).",
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["contactId", "endpointId", "timeoutMs"],
+      "additionalProperties": false
+    },
+    "safe": false,
+    "placement": "host"
+  },
+  {
+    "name": "converse_close",
+    "description": "Settle an open reply window by id. Closing an already-closed window returns its existing settlement.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "conversationId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Window to settle."
+        }
+      },
+      "required": ["conversationId"],
+      "additionalProperties": false
+    },
+    "safe": false,
+    "placement": "host"
+  },
+  {
+    "name": "lease_open",
+    "description": "Carve a bounded send allocation from an open conversation for a live delegation. The holder may then message that contact directly; the lease dies with the delegation, the conversation, or its own budget.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "delegationId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Open delegation that will hold the lease."
+        },
+        "conversationId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Open conversation whose budget is carved."
+        },
+        "maxOutbound": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991,
+          "description": "How many outbound sends the lease may spend from the window."
+        }
+      },
+      "required": ["delegationId", "conversationId", "maxOutbound"],
+      "additionalProperties": false
+    },
+    "safe": false,
+    "placement": "host"
+  },
+  {
+    "name": "approval_request",
+    "description": "Open a deadline-bound Owner-approval request for a contact promotion or a cross-channel endpoint merge. Unanswered requests read as refused after the deadline.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["act", "timeoutMs"],
+      "properties": {
+        "act": {
+          "type": "string",
+          "enum": ["contact_promotion", "endpoint_merge"]
+        },
+        "actorId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "endpointId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "toActorId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "exclusiveMinimum": 0
+        }
+      }
+    },
+    "safe": false,
+    "placement": "host"
+  },
+  {
+    "name": "approval_decide",
+    "description": "Record the Owner's answer to a pending approval request. Only usable when the Owner has answered in this session; answers past the deadline record the deadline's refusal.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "approvalId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Pending approval request."
+        },
+        "decision": {
+          "type": "string",
+          "enum": ["approved", "refused"],
+          "description": "The Owner's answer."
+        }
+      },
+      "required": ["approvalId", "decision"],
+      "additionalProperties": false
+    },
+    "safe": false,
+    "placement": "host"
+  },
+  {
+    "name": "contact_promote",
+    "description": "Register a provisional contact. Requires an approved, unexpired contact_promotion approval naming that contact.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "approvalId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Approved request that authorizes this act."
+        }
+      },
+      "required": ["approvalId"],
+      "additionalProperties": false
+    },
+    "safe": false,
+    "placement": "host"
+  },
+  {
+    "name": "endpoint_merge",
+    "description": "Move an endpoint onto another identity (cross-channel merge). Requires an approved, unexpired endpoint_merge approval naming exactly that move.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "approvalId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Approved request that authorizes this act."
+        }
+      },
+      "required": ["approvalId"],
+      "additionalProperties": false
+    },
+    "safe": false,
+    "placement": "host"
+  },
+  {
+    "name": "person_declare",
+    "description": "Upsert a Person manifest (identity + platform endpoint bindings). Tier raises above collaborator and any change to the owner Person open a person_mutation approval pinned to this exact manifest's digest; re-run with the approved approvalId to land it.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "manifest": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Person id, person:<slug>."
+            },
+            "displayName": {
+              "type": "string",
+              "minLength": 1
+            },
+            "kind": {
+              "type": "string",
+              "enum": ["human", "ai_agent", "service"],
+              "description": "What this Person is."
+            },
+            "trustTier": {
+              "type": "string",
+              "enum": [
+                "owner",
+                "co_owner",
+                "manager",
+                "collaborator",
+                "observer",
+                "assigned_worker"
+              ],
+              "description": "Standing trust tier for every bound endpoint."
+            },
+            "endpoints": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "channel": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "externalId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "workspace": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": ["channel", "externalId"],
+                "additionalProperties": false
+              },
+              "description": "Platform identities this Person speaks through."
+            }
+          },
+          "required": ["id", "kind", "trustTier", "endpoints"],
+          "additionalProperties": false
+        },
+        "approvalId": {
+          "description": "Approved person_mutation approval, when the guard requires one.",
+          "type": "string",
+          "minLength": 1
+        },
+        "timeoutMs": {
+          "description": "Answer window for a guard-opened approval request (default 24h).",
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["manifest"],
+      "additionalProperties": false
+    },
+    "safe": false,
+    "placement": "host"
+  },
+  {
+    "name": "person_remove",
+    "description": "Remove a Person manifest and its derived identity. Refuses to remove the sole owner.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "personId": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": ["personId"],
+      "additionalProperties": false
+    },
+    "safe": false,
+    "placement": "host"
+  },
+  {
+    "name": "channel_declare",
+    "description": "Upsert a ChannelInstance declaration. A supplied credential is validated against the provider's schema, sealed into the vault, and referenced — invalid credentials refuse before anything lands. Affected stages bounce immediately.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Instance id, channel:<provider>:<slug>."
+        },
+        "provider": {
+          "type": "string",
+          "minLength": 1
+        },
+        "enabled": {
+          "default": true,
+          "type": "boolean"
+        },
+        "settings": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": ["string", "number", "boolean"]
+          }
+        },
+        "credential": {
+          "description": "Plaintext credential payload; sealed into the vault, never stored bare.",
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "required": ["id", "provider"],
+      "additionalProperties": false
+    },
+    "safe": false,
+    "placement": "host"
+  },
+  {
+    "name": "channel_enable",
+    "description": "Enable a declared channel and bounce its stage. Also re-arms a breaker-paused instance (the manual resume).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "instanceId": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": ["instanceId"],
+      "additionalProperties": false
+    },
+    "safe": false,
+    "placement": "host"
+  },
+  {
+    "name": "channel_disable",
+    "description": "Disable a declared channel and stop its stage.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "instanceId": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": ["instanceId"],
+      "additionalProperties": false
+    },
+    "safe": false,
+    "placement": "host"
+  },
+  {
+    "name": "secret_rotate",
+    "description": "Seal a new credential revision over an existing vault row and bounce every stage referencing it (stop → swap → start).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "secretId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "credential": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Replacement plaintext payload."
+        }
+      },
+      "required": ["secretId", "credential"],
+      "additionalProperties": false
+    },
+    "safe": false,
+    "placement": "host"
+  },
+  {
+    "name": "provision_status",
+    "description": "Read-only: where channel truth comes from (declared store vs env), per-instance mount state including vault_locked and paused_by_breaker, and vault lock state.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "safe": true,
+    "placement": "host"
+  },
+  {
+    "name": "run_code",
+    "description": "Run Python on an attached machine; state persists across cells in _scope, so do a whole step in one cell. Inside it, tool.<name>(...) bridges to the tools you hold here, parallel(thunks) runs independent calls concurrently, llm(prompt) asks a budget-capped sub-model, and write_artifact/read_artifact move large text by id.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "machineId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Which attached machine runs the code."
+        },
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Python source. Call host tools inside it as tool.<name>(...) — that is the point: many calls, one round trip."
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991,
+          "description": "How long the cell may run before it is stopped."
+        }
+      },
+      "required": ["machineId", "code", "timeoutMs"],
+      "additionalProperties": false
+    },
+    "safe": false,
+    "placement": "machine",
+    "requires": ["kernel.py"]
+  },
+  {
+    "name": "machines",
+    "description": "List the machines this system is enrolled with: which are attached right now and what each may do. Use it to pick the machineId a run_code cell targets.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "safe": true,
+    "placement": "host"
+  },
+  {
+    "name": "fs_read",
+    "description": "Read a file on an attached machine through the flat /machines/<machineId>/<export>/<path> namespace. Use fs_list to discover what an export holds. Large files come back truncated, and say so.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "A path in the machine namespace: /machines/<machineId>/<export>/<path inside it>."
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Byte to start reading at."
+        },
+        "limit": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "description": "How many bytes to read; capped at 262144."
+        }
+      }
+    },
+    "safe": true,
+    "placement": "host"
+  },
+  {
+    "name": "fs_list",
+    "description": "List a directory on an attached machine: /machines/<machineId>/<export> is the export root. Each line is kind, name, and size for files.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "A path in the machine namespace: /machines/<machineId>/<export>/<path inside it>."
+        }
+      }
+    },
+    "safe": true,
+    "placement": "host"
+  },
+  {
+    "name": "fs_stat",
+    "description": "What a path on an attached machine IS — file, directory, symlink, or other — with its size and last modification time.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "A path in the machine namespace: /machines/<machineId>/<export>/<path inside it>."
+        }
+      }
+    },
+    "safe": true,
+    "placement": "host"
+  },
+  {
+    "name": "memory",
+    "description": "Curate durable memory: add, replace, or remove an entry in the system or owner store. What memory holds is already in your context under # Memory — there is no read. Budgets are hard: when a store is full, curate instead of appending. Writes render from the NEXT session, not this one.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": ["add", "replace", "remove"]
+        },
+        "store": {
+          "type": "string",
+          "enum": ["system", "owner"],
+          "description": "system = durable operating notes; owner = the Owner's profile."
+        },
+        "id": {
+          "description": "Which entry (replace and remove only).",
+          "type": "string",
+          "minLength": 1
+        },
+        "content": {
+          "description": "The entry text (add and replace only).",
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": ["action", "store"],
+      "additionalProperties": false
+    },
+    "safe": false,
+    "placement": "host"
+  },
+  {
+    "name": "work_items",
+    "description": "Inspect commissioned WorkItems: status, acceptance criteria (with ids), recorded evidence, and the attempt outcome. Pass workItemId for one item's detail; omit it to list everything.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "workItemId": {
+          "description": "Inspect one WorkItem; omit to list all.",
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "safe": true,
+    "placement": "host"
+  },
+  {
+    "name": "complete_work",
+    "description": "Judge a WorkItem's acceptance criteria for completion admission. Only verified judgments (with the predicate you checked and the evidence ids consumed) admit; asserted or refuted judgments record a durable block and refuse.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "workItemId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "judgments": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "criterionId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "value": {
+                    "type": "string",
+                    "const": "asserted"
+                  }
+                },
+                "required": ["criterionId", "value"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "criterionId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "value": {
+                    "type": "string",
+                    "enum": ["verified", "refuted"]
+                  },
+                  "checkedPredicate": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "What you actually checked."
+                  },
+                  "evidenceIds": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "description": "Evidence ids the check consumed."
+                  }
+                },
+                "required": [
+                  "criterionId",
+                  "value",
+                  "checkedPredicate",
+                  "evidenceIds"
+                ],
+                "additionalProperties": false
+              }
+            ],
+            "description": "One judgment per criterion. Only verified admits."
+          }
+        }
+      },
+      "required": ["workItemId", "judgments"],
+      "additionalProperties": false
+    },
+    "safe": false,
+    "placement": "host"
+  },
+  {
+    "name": "llm",
+    "description": "Ask a sub-model a one-shot, stateless question and get its text back. Built for semantic map/reduce over data already inside a cell: summarize, classify, extract, or rank what the code fetched, one prompt per call — it remembers nothing between calls.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["prompt"],
+      "properties": {
+        "prompt": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The complete instruction for the sub-model call."
+        }
+      }
+    },
+    "safe": true,
+    "placement": "host"
+  },
+  {
+    "name": "write_artifact",
+    "description": "Store text too large to keep quoting in the conversation — a cell's fetched dataset, a long report — under the current session. Returns the artifact id; the content is never echoed back.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "A short title for the artifact."
+        },
+        "content": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The full text to store."
+        }
+      },
+      "required": ["name", "content"],
+      "additionalProperties": false
+    },
+    "safe": false,
+    "placement": "host"
+  },
+  {
+    "name": "read_artifact",
+    "description": "Read back the full content of an artifact stored by write_artifact, by its id.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "artifactId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The id write_artifact returned."
+        }
+      },
+      "required": ["artifactId"],
+      "additionalProperties": false
+    },
+    "safe": true,
+    "placement": "host"
+  }
+]

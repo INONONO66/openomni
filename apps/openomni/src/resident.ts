@@ -7,9 +7,9 @@ import type { DelegationOrigin } from "./delegation/admission";
 import { observeComponent } from "./observation/component";
 import { buildAgentPrompt } from "./prompt/build";
 import { RESIDENT_PRESET } from "./prompt/roles";
-import type { CatalogPorts } from "./tools/catalog";
-import { catalogEntries } from "./tools/catalog";
-import { createDispatcher } from "./tools/dispatch";
+import type { CatalogPorts } from "./tools/core/catalog";
+import { catalogEntries } from "./tools/core/catalog";
+import { createDispatcher } from "./tools/core/dispatch";
 import { classifyTurnFailure } from "./observation/llm-failure";
 
 const EVIDENCE_ONLY_TOOL_REFUSAL =
