@@ -333,6 +333,76 @@ export function createTriggerHost(deps: TriggerHostDeps): TriggerHost {
     return record.source.kind === "time.once" ? record.source.at : record.nextFireAt;
   }
 
+  /**
+   * Builds the `restore` input for one durable row.
+   *
+   * The fold refuses to invent a Fire, so the host must hand it rendered
+   * material for exactly the rows the boot matrix says fire on restore: an
+   * overdue once alarm, a due recurring period before expiry, and a finite
+   * source found at or past its absolute expiry. Downtime therefore costs one
+   * late Fire, never a silently dropped one.
+   */
+  function restoreInput(
+    record: Trigger.Record,
+    at: number,
+    cause: Extract<Trigger.FireCause, "alarm" | "recovery">,
+  ): Extract<Trigger.SchedulerInput, { type: "restore" }> {
+    const armed = record.lifecycle.state === "armed";
+    const expiresAt = record.expiresAt;
+    const scheduledForAt =
+      record.source.kind === "time.once"
+        ? record.source.at
+        : record.source.kind === "time.every"
+          ? record.nextFireAt
+          : undefined;
+    const dueTimeFire =
+      armed &&
+      scheduledForAt !== undefined &&
+      at >= scheduledForAt &&
+      // A recurring row at or past expiry ends instead of firing; the
+      // inclusive boundary belongs to expiry, not to a last Fire.
+      (record.source.kind === "time.once" || expiresAt === undefined || at < expiresAt);
+    if (dueTimeFire) {
+      return {
+        type: "restore",
+        at,
+        fireMaterial: buildFireMaterial({
+          trigger: record,
+          fireId: deps.newFireId(),
+          traceId: deps.newTraceId(),
+          cause,
+          items: [],
+          overflowCount: 0,
+          firstAt: at,
+          lastAt: at,
+          firedAt: at,
+          ...(scheduledForAt === undefined ? {} : { scheduledForAt }),
+        }),
+      };
+    }
+    const timedOutSource =
+      record.source.kind.startsWith("event.") && expiresAt !== undefined && at >= expiresAt;
+    if (!timedOutSource) return { type: "restore", at };
+    return {
+      type: "restore",
+      at,
+      fireMaterial: buildFireMaterial({
+        trigger: record,
+        fireId: deps.newFireId(),
+        traceId: deps.newTraceId(),
+        cause: "source_summary",
+        // The absolute lifetime elapsed while the process was down; the
+        // Resident is still owed the summary that says so.
+        items: [{ kind: "summary", text: "source_timeout", at }],
+        overflowCount: 0,
+        firstAt: at,
+        lastAt: at,
+        firedAt: at,
+        terminalReason: "source_timeout",
+      }),
+    };
+  }
+
   /** The notifier decides when a coalesced batch becomes one durable Fire. */
   function armNotifierFlush(dueAt: number): void {
     if (flushArmed || stopped) return;
@@ -543,7 +613,12 @@ export function createTriggerHost(deps: TriggerHostDeps): TriggerHost {
         } as FileSourceDeps);
       }
       const created = deps.triggers.create(parsed, deps.newTraceId());
-      const armed = step(created, { type: "restore", at: triggerLogicalNow(deps.clock, created) });
+      // A `time.once` created at or after its instant fires immediately: that
+      // first step is an ordinary alarm, not crash recovery.
+      const armed = step(
+        created,
+        restoreInput(created, triggerLogicalNow(deps.clock, created), "alarm"),
+      );
       return needsSource(armed) ? activateOrPause(armed) : (deps.triggers.get(armed.id) ?? armed);
     },
 
@@ -666,10 +741,10 @@ export function createTriggerHost(deps: TriggerHostDeps): TriggerHost {
             }
             continue;
           }
-          const restored = step(record, {
-            type: "restore",
-            at: triggerLogicalNow(deps.clock, record),
-          });
+          const restored = step(
+            record,
+            restoreInput(record, triggerLogicalNow(deps.clock, record), "recovery"),
+          );
           if (restored.lifecycle.state === "armed" && needsSource(restored)) {
             await activateOrPause(restored);
           }

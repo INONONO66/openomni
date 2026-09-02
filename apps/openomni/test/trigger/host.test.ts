@@ -460,6 +460,113 @@ describe("TriggerHost — the app-side owner of Trigger effects", () => {
     await harness.host.stop();
   });
 
+  test("an overdue time.once Trigger fires late on the next boot instead of staying armed forever", async () => {
+    const harness = openHarness();
+    await harness.host.startRecovery();
+    const created = await harness.host.create(OWNER, {
+      prompt: "late but never dropped",
+      source: { kind: "time.once", at: START + 60_000 },
+    });
+    // The process dies before the deadline: no timer survives a restart.
+    await harness.host.stop();
+    expect(harness.delivered).toEqual([]);
+
+    // The next boot happens long after the instant the Owner asked for.
+    harness.advance(600_000);
+    const rebooted = harness.build();
+    await rebooted.startRecovery();
+    await rebooted.stop();
+
+    // A once alarm is never discarded for lateness: exactly one recovery Fire.
+    const fire = required(harness.delivered[0], "recovery fire");
+    expect(harness.delivered).toHaveLength(1);
+    expect(fire.delivery.event.payload).toContain("late but never dropped");
+    const recorded = required(TriggerFireStore.get(fire.admission.fireId), "fire");
+    expect(recorded.cause).toBe("recovery");
+    expect(recorded.status).toBe("acked");
+    const after = required(TriggerStore.get(created.id), "trigger");
+    expect(after.lifecycle.state).toBe("ended");
+    expect(after.lifecycle.state === "ended" ? after.lifecycle.endReason : undefined).toBe(
+      "completed",
+    );
+    expect(TriggerFireStore.listUnackedIds()).toEqual([]);
+    expect(harness.errors).toEqual([]);
+  });
+
+  test("a due time.every Trigger reserves one recovery Fire on boot and re-arms from now", async () => {
+    const harness = openHarness();
+    await harness.host.startRecovery();
+    const created = await harness.host.create(OWNER, {
+      prompt: "hourly sweep survives downtime",
+      source: { kind: "time.every", intervalMs: 3_600_000 },
+    });
+    await harness.host.stop();
+
+    // Three periods are missed while the process is down.
+    harness.advance(3 * 3_600_000);
+    const rebooted = harness.build();
+    await rebooted.startRecovery();
+    await rebooted.stop();
+
+    // Missed periods collapse to exactly one catch-up Fire.
+    expect(harness.delivered).toHaveLength(1);
+    const recorded = required(
+      TriggerFireStore.get(required(harness.delivered[0], "recovery fire").admission.fireId),
+      "fire",
+    );
+    expect(recorded.cause).toBe("recovery");
+    const after = required(TriggerStore.get(created.id), "trigger");
+    expect(after.lifecycle.state).toBe("armed");
+    expect(after.fireCount).toBe(1);
+    // next = now + interval, not a backlog of missed instants.
+    expect(after.nextFireAt).toBe(START + 3 * 3_600_000 + 3_600_000);
+    expect(harness.errors).toEqual([]);
+  });
+
+  test("a finite event source found past its expiry ends source_timeout on boot without a handle", async () => {
+    const child = new FakeChild();
+    const commandDeps = {
+      cwd: dir,
+      spawn: () => child as never,
+      signalGroup: () => child.close(null, "SIGTERM"),
+      graceTimer: {
+        arm: (_delayMs: number, run: () => void) => {
+          run();
+          return () => undefined;
+        },
+      },
+    };
+    const harness = openHarness({ commandDeps });
+    await harness.host.startRecovery();
+    const created = await harness.host.create(OWNER, {
+      prompt: "one-shot check",
+      source: { kind: "event.command", command: "make check", persistent: false },
+    });
+    const expiresAt = required(
+      required(TriggerStore.get(created.id), "trigger").expiresAt,
+      "expiresAt",
+    );
+    await harness.host.stop();
+
+    // Downtime does not extend an absolute lifetime.
+    harness.advance(expiresAt - START + 1_000);
+    const rebooted = harness.build();
+    await rebooted.startRecovery();
+    await rebooted.stop();
+
+    const after = required(TriggerStore.get(created.id), "trigger");
+    expect(after.lifecycle.state).toBe("ended");
+    expect(after.lifecycle.state === "ended" ? after.lifecycle.endReason : undefined).toBe(
+      "source_timeout",
+    );
+    // The timeout summary is owed to the Resident, and no source was opened.
+    const fire = required(harness.delivered[0], "timeout fire");
+    expect(fire.delivery.event.payload).toContain("source_timeout");
+    expect(harness.delivered).toHaveLength(1);
+    expect(TriggerFireStore.listUnackedIds()).toEqual([]);
+    expect(harness.errors).toEqual([]);
+  });
+
   test("stop is cleanup, not cancellation: armed rows and their durable state survive", async () => {
     const harness = openHarness();
     await harness.host.startRecovery();
