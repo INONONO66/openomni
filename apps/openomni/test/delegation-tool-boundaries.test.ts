@@ -115,19 +115,14 @@ describe("delegation tool boundaries", () => {
 
   test("renders structured, ordinary, and primitive refusals", async () => {
     for (const error of [{ data: { message: "structured" } }, new Error("ordinary"), "primitive"]) {
-      const execute = delegate(
-        kernel({ delegate: () => Promise.reject(error) }),
-        ORIGIN,
-      );
+      const execute = delegate(kernel({ delegate: () => Promise.reject(error) }), ORIGIN);
       expect(await execute(valid)).toBeString();
     }
   });
 
   test("await and cancel cover malformed, timeout, settlement, and failure results", async () => {
     expect(await awaitDelegation(kernel({}))({})).toBeString();
-    expect(
-      await awaitDelegation(kernel({}))({ delegationId: "d-1", timeoutMs: 1 }),
-    ).toBeString();
+    expect(await awaitDelegation(kernel({}))({ delegationId: "d-1", timeoutMs: 1 })).toBeString();
     expect(
       await awaitDelegation(
         kernel({
@@ -148,9 +143,9 @@ describe("delegation tool boundaries", () => {
     expect(await cancelDelegation(kernel({}))({})).toBeString();
     expect(await cancelDelegation(kernel({}))({ delegationId: "d-1" })).toBeString();
     expect(
-      await cancelDelegation(
-        kernel({ cancelDelegation: () => Promise.reject(new Error("no")) }),
-      )({ delegationId: "d-1" }),
+      await cancelDelegation(kernel({ cancelDelegation: () => Promise.reject(new Error("no")) }))({
+        delegationId: "d-1",
+      }),
     ).toBeString();
   });
 
@@ -169,7 +164,7 @@ describe("delegation tool boundaries", () => {
 
   test("#807: an assign carries its verification declaration through to the kernel", async () => {
     let request: unknown;
-    const execute = delegateToolExecutor(
+    const execute = delegate(
       kernel({
         delegate: (candidate) => {
           request = candidate;
@@ -200,7 +195,7 @@ describe("delegation tool boundaries", () => {
 
   test("#807: a declaration is refused for ask, and for a malformed executable id", async () => {
     let calls = 0;
-    const execute = delegateToolExecutor(
+    const execute = delegate(
       kernel({
         delegate: () => {
           calls += 1;

@@ -1,5 +1,7 @@
 // allow: SIZE_OK — real-process kernel lifecycle scenarios share one process-cleanup fixture.
 import { describe, expect, test } from "bun:test";
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { once } from "node:events";
 import { existsSync } from "node:fs";
 import type { BusEvent, Machine } from "@openomni/protocol";
 import { attachMachineDaemon } from "../src/daemon";
@@ -11,6 +13,31 @@ import { socketPath } from "./helpers/socket-path";
 /** These cells call no tools, so a call is a test bug and must be visible. */
 const noTools: CellToolCaller = (call) =>
   Promise.resolve({ status: "failed", error: `unexpected tool call: ${call.name}` });
+
+const CONTROLLED_KERNEL_DRIVER = String.raw`
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (input) => {
+  for (const line of input.split("\n")) {
+    if (line === "") continue;
+    if (line === "late-output") {
+      process.stdout.write("x".repeat(512));
+      continue;
+    }
+    const request = JSON.parse(line);
+    process.stdout.write(
+      JSON.stringify({
+        kind: "result",
+        result: {
+          status: "completed",
+          cellId: request.cellId,
+          output: { stdout: "", stderr: "" },
+          value: process.env.KERNEL_PROCESS_ID,
+        },
+      }) + "\n",
+    );
+  }
+});
+`;
 
 let cellCounter = 0;
 
@@ -157,6 +184,42 @@ describe("cell settlement ownership", () => {
       await expect(
         kernel.run({ cellId: "after-output-limit", code: "persisted", timeoutMs: 1_000 }, noTools),
       ).resolves.toMatchObject({ status: "raised" });
+    } finally {
+      kernel.close();
+    }
+  });
+
+  test("late oversized output after settlement discards the idle interpreter", async () => {
+    // Given: a controlled driver whose late bytes are emitted only when the test triggers them.
+    const processes: ChildProcessWithoutNullStreams[] = [];
+    const kernel = new PythonKernel({
+      launch: () => {
+        const child = spawn(process.execPath, ["-e", CONTROLLED_KERNEL_DRIVER], {
+          env: { ...process.env, KERNEL_PROCESS_ID: String(processes.length + 1) },
+        });
+        processes.push(child);
+        return child;
+      },
+      maxOutputBytes: 256,
+    });
+    try {
+      await expect(
+        kernel.run({ cellId: "settled", code: "first", timeoutMs: 1_000 }, noTools),
+      ).resolves.toMatchObject({ status: "completed", value: "1" });
+      const first = processes[0];
+      if (!first) throw new Error("expected the first controlled interpreter");
+      const lateOutput = once(first.stdout, "data");
+
+      // When: the settled interpreter emits an oversized raw frame with no pending cell.
+      first.stdin.write("late-output\n");
+      await lateOutput;
+
+      // Then: the stale process is discarded and the next cell receives a clean replacement.
+      expect(first.killed).toBe(true);
+      await expect(
+        kernel.run({ cellId: "fresh", code: "second", timeoutMs: 1_000 }, noTools),
+      ).resolves.toMatchObject({ status: "completed", value: "2" });
+      expect(processes).toHaveLength(2);
     } finally {
       kernel.close();
     }

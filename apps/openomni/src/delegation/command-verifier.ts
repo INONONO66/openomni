@@ -1,6 +1,6 @@
 import type { Machine } from "@openomni/protocol";
 import { z } from "zod";
-import type { CellPorts } from "../tools/run-code";
+import type { CellPorts } from "../tools/execution/run-code";
 import type { CommandRunResult, CommandVerifierPort } from "./verification";
 
 const Sha256 = z.string().regex(/^[0-9a-f]{64}$/);

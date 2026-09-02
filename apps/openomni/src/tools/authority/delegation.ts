@@ -3,6 +3,7 @@ import { z } from "zod";
 import { defineTool, ToolRefused } from "../core/define";
 import type { DelegationOrigin } from "../../delegation/admission";
 import { type DelegationKernel, formatSettlement } from "../../delegation/kernel";
+import { DELEGATE_WIRE_PROJECTION } from "./delegation-wire";
 
 /**
  * The model asks in relative time; the kernel records an absolute deadline
@@ -107,97 +108,6 @@ export const DELEGATE_TOOL_NAME = "delegate";
 export const AWAIT_DELEGATION_TOOL_NAME = "await_delegation";
 export const CANCEL_DELEGATION_TOOL_NAME = "cancel_delegation";
 
-// Advertised as ONE flat object schema: providers on the Anthropic wire
-// reject a root-level oneOf input_schema (400 invalid_request_error), so the
-// addressing XOR (exactly one of scope / actorId) is stated in prose here and
-// enforced only by the zod gate above, whose refusal text names the rule.
-const DELEGATE_WIRE_PROJECTION: Record<string, unknown> = {
-  type: "object",
-  additionalProperties: false,
-  required: ["instruction", "operation", "timeoutMs"],
-  properties: {
-    instruction: {
-      type: "string",
-      minLength: 1,
-      description: "What the worker must do, self-contained.",
-    },
-    operation: {
-      type: "string",
-      enum: ["notify", "ask", "assign"],
-      description:
-        "notify = fire-and-forget, ask = expect an answer, assign = accountable work (creates a WorkItem).",
-    },
-    acceptanceCriteria: {
-      type: "array",
-      items: { type: "string", minLength: 1 },
-      description: "assign only: criteria the work must satisfy to complete.",
-    },
-    verification: {
-      type: "object",
-      additionalProperties: false,
-      required: ["kind", "executable", "argv", "timeoutMs", "expectations"],
-      description:
-        "assign only: the command that checks the criteria it binds. Without it the work settles unverified — a worker's own report is never proof.",
-      properties: {
-        kind: { type: "string", enum: ["command.v1"] },
-        executable: {
-          type: "object",
-          additionalProperties: false,
-          required: ["id"],
-          properties: {
-            id: {
-              type: "string",
-              pattern: "^[a-z][a-z0-9._-]{0,63}$",
-              description: "Owner-registered executable id; never a path or a shell string.",
-            },
-          },
-        },
-        argv: {
-          type: "array",
-          maxItems: 64,
-          items: { type: "string", maxLength: 4096 },
-          description: "Literal arguments; no shell parsing happens.",
-        },
-        timeoutMs: { type: "integer", exclusiveMinimum: 0, maximum: 600000 },
-        expectations: {
-          type: "array",
-          minItems: 1,
-          description: "Each entry binds one acceptanceCriteria index to an expected observation.",
-          items: {
-            type: "object",
-            additionalProperties: false,
-            required: ["criterionIndex", "exitCode"],
-            properties: {
-              criterionIndex: { type: "integer", minimum: 0 },
-              exitCode: { type: "integer" },
-              stdoutSha256: { type: "string", pattern: "^[0-9a-f]{64}$" },
-              stderrSha256: { type: "string", pattern: "^[0-9a-f]{64}$" },
-            },
-          },
-        },
-      },
-    },
-    timeoutMs: {
-      type: "integer",
-      exclusiveMinimum: 0,
-      description: "Deadline in milliseconds; settlement arrives by then or as no_response.",
-    },
-    scope: {
-      type: "string",
-      enum: ["inline", "independent"],
-      description:
-        "Worker placement: inline = same-process worker, independent = spawned child process. Provide exactly one of scope or actorId.",
-    },
-    actorId: {
-      type: "string",
-      minLength: 1,
-      description:
-        "Channel contact to ask instead of a worker. Provide exactly one of scope or actorId.",
-    },
-  },
-};
-
-
 const AWAIT_INPUT = z
   .object({
     delegationId: z.string().min(1),
@@ -226,11 +136,21 @@ function refusalReason(error: unknown): string {
   const candidate: unknown = error;
   if (typeof candidate === "object" && candidate !== null && "data" in candidate) {
     const data = candidate.data;
-    if (typeof data === "object" && data !== null && "message" in data && typeof data.message === "string") {
+    if (
+      typeof data === "object" &&
+      data !== null &&
+      "message" in data &&
+      typeof data.message === "string"
+    ) {
       return data.message;
     }
   }
-  if (typeof candidate === "object" && candidate !== null && "message" in candidate && typeof candidate.message === "string") {
+  if (
+    typeof candidate === "object" &&
+    candidate !== null &&
+    "message" in candidate &&
+    typeof candidate.message === "string"
+  ) {
     return candidate.message;
   }
   return String(candidate);
@@ -262,7 +182,8 @@ function executeDelegate(kernel: DelegationKernel, origin: DelegationOrigin) {
       throw new ToolRefused(DELEGATE_TOOL_NAME, refusalReason(error));
     }
     if ("refused" in result) throw new ToolRefused(DELEGATE_TOOL_NAME, result.refused);
-    if (result.settled !== undefined) return { kind: "settled" as const, settlement: result.settled };
+    if (result.settled !== undefined)
+      return { kind: "settled" as const, settlement: result.settled };
     return { kind: "accepted" as const, handle: result.handle };
   };
 }
@@ -271,7 +192,8 @@ function executeAwaitDelegation(kernel: DelegationKernel) {
   return async (input: z.output<typeof AWAIT_INPUT>) => {
     try {
       const result = await kernel.awaitDelegation(input.delegationId, input.timeoutMs);
-      if (result.kind === "timeout") return { kind: "timeout" as const, delegationId: result.delegationId };
+      if (result.kind === "timeout")
+        return { kind: "timeout" as const, delegationId: result.delegationId };
       return { kind: "settled" as const, settlement: result.settlement };
     } catch (error) {
       throw new ToolRefused(AWAIT_DELEGATION_TOOL_NAME, refusalReason(error));
@@ -289,11 +211,81 @@ function executeCancelDelegation(kernel: DelegationKernel) {
   };
 }
 
-const common = { category: "authority" as const, safe: false, execution: { kind: "host" } as const, placement: "host" as const, visibility: { model: ["resident", "worker"], cell: ["resident", "worker"] } as const };
-const Settlement = z.custom<Delegation.Settled>((value) => typeof value === "object" && value !== null);
-const DelegateOutput = z.discriminatedUnion("kind", [z.object({ kind: z.literal("settled"), settlement: Settlement }).strict(), z.object({ kind: z.literal("accepted"), handle: z.object({ delegationId: z.string(), operation: z.string(), transport: z.string(), deadline: z.number(), waitId: z.string().optional() }).passthrough() }).strict()]);
-const AwaitOutput = z.discriminatedUnion("kind", [z.object({ kind: z.literal("settled"), settlement: Settlement }).strict(), z.object({ kind: z.literal("timeout"), delegationId: z.string() }).strict()]);
+const common = {
+  category: "authority" as const,
+  safe: false,
+  execution: { kind: "host" } as const,
+  placement: "host" as const,
+  visibility: { model: ["resident", "worker"], cell: ["resident", "worker"] } as const,
+};
+const Settlement = z.custom<Delegation.Settled>(
+  (value) => typeof value === "object" && value !== null,
+);
+const DelegateOutput = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("settled"), settlement: Settlement }).strict(),
+  z
+    .object({
+      kind: z.literal("accepted"),
+      handle: z
+        .object({
+          delegationId: z.string(),
+          operation: z.string(),
+          transport: z.string(),
+          deadline: z.number(),
+          waitId: z.string().optional(),
+        })
+        .passthrough(),
+    })
+    .strict(),
+]);
+const AwaitOutput = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("settled"), settlement: Settlement }).strict(),
+  z.object({ kind: z.literal("timeout"), delegationId: z.string() }).strict(),
+]);
 const CancelOutput = z.object({ settlement: Settlement }).strict();
-export const delegateTool = defineTool({ ...common, name: DELEGATE_TOOL_NAME, description: "Start durable delegated work. Inline ask waits in this turn; process/channel work returns a handle immediately and its settlement arrives as a message. Notify sends once to an actor and settles sent at transport acceptance.", input: StartInput, inputExamples: [{ instruction: "Inspect the repository and report the relevant implementation.", operation: "ask", scope: "inline", timeoutMs: 30000 }], output: DelegateOutput, wireProjection: DELEGATE_WIRE_PROJECTION, bind: (ports, origin) => ports.delegation === undefined ? undefined : executeDelegate(ports.delegation, origin), render: (_args, value) => value.kind === "settled" ? formatSettlement(value.settlement) : handleText(value.handle) });
-export const awaitDelegationTool = defineTool({ ...common, name: AWAIT_DELEGATION_TOOL_NAME, description: "Re-invoke a durable delegation by id. It returns its settlement when available, or says it is still open until the supplied wait limit.", input: AWAIT_INPUT, output: AwaitOutput, bind: (ports) => ports.delegation === undefined ? undefined : executeAwaitDelegation(ports.delegation), render: (_args, value) => value.kind === "timeout" ? `delegation ${value.delegationId} is still open; settlement will arrive as a message` : formatSettlement(value.settlement) });
-export const cancelDelegationTool = defineTool({ ...common, name: CANCEL_DELEGATION_TOOL_NAME, description: "Cancel open delegated work by id; cancelling settled work returns the existing settlement.", input: CANCEL_INPUT, output: CancelOutput, bind: (ports) => ports.delegation === undefined ? undefined : executeCancelDelegation(ports.delegation), render: (_args, value) => formatSettlement(value.settlement) });
+export const delegateTool = defineTool({
+  ...common,
+  name: DELEGATE_TOOL_NAME,
+  description:
+    "Start durable delegated work. Inline ask waits in this turn; process/channel work returns a handle immediately and its settlement arrives as a message. Notify sends once to an actor and settles sent at transport acceptance.",
+  input: StartInput,
+  inputExamples: [
+    {
+      instruction: "Inspect the repository and report the relevant implementation.",
+      operation: "ask",
+      scope: "inline",
+      timeoutMs: 30000,
+    },
+  ],
+  output: DelegateOutput,
+  wireProjection: DELEGATE_WIRE_PROJECTION,
+  bind: (ports, origin) =>
+    ports.delegation === undefined ? undefined : executeDelegate(ports.delegation, origin),
+  render: (_args, value) =>
+    value.kind === "settled" ? formatSettlement(value.settlement) : handleText(value.handle),
+});
+export const awaitDelegationTool = defineTool({
+  ...common,
+  name: AWAIT_DELEGATION_TOOL_NAME,
+  description:
+    "Re-invoke a durable delegation by id. It returns its settlement when available, or says it is still open until the supplied wait limit.",
+  input: AWAIT_INPUT,
+  output: AwaitOutput,
+  bind: (ports) =>
+    ports.delegation === undefined ? undefined : executeAwaitDelegation(ports.delegation),
+  render: (_args, value) =>
+    value.kind === "timeout"
+      ? `delegation ${value.delegationId} is still open; settlement will arrive as a message`
+      : formatSettlement(value.settlement),
+});
+export const cancelDelegationTool = defineTool({
+  ...common,
+  name: CANCEL_DELEGATION_TOOL_NAME,
+  description:
+    "Cancel open delegated work by id; cancelling settled work returns the existing settlement.",
+  input: CANCEL_INPUT,
+  output: CancelOutput,
+  bind: (ports) =>
+    ports.delegation === undefined ? undefined : executeCancelDelegation(ports.delegation),
+  render: (_args, value) => formatSettlement(value.settlement),
+});

@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Machine } from "@openomni/protocol";
 import { createCommandVerifier } from "../src/delegation/command-verifier";
-import type { CellPorts } from "../src/tools/run-code";
+import type { CellPorts } from "../src/tools/execution/run-code";
 
 const EXITED = {
   status: "exited" as const,

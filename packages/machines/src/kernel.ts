@@ -179,7 +179,12 @@ export class PythonKernel {
         const segment = chunk.subarray(offset, end);
         if (buffered.length + segment.length > this.maxOutputBytes) {
           const pending = this.pendingFor(process);
-          if (pending !== undefined) this.settleWithOutputLimit(process, pending);
+          if (pending !== undefined) {
+            this.settleWithOutputLimit(process, pending);
+          } else {
+            buffered = Buffer.alloc(0);
+            this.discard(process);
+          }
           return;
         }
         buffered = Buffer.concat([buffered, segment], buffered.length + segment.length);
