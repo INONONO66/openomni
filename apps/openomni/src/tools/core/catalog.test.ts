@@ -36,10 +36,21 @@ function names(door: "model" | "cell", role: "resident" | "worker", ports: Catal
     depth: role === "resident" ? 0 : 1,
     sessionId: "fixture",
   } as DelegationOrigin;
-  const targets: Placement.ToolTarget[] = door === "cell"
-    ? [HOST_TARGET]
-    : [HOST_TARGET, { kind: "machine", id: "fixture", capabilities: ["kernel.py", "fs.read"] }];
-  return Placement.resolveTools(catalogEntries(ports, origin).map((entry) => entry.spec), targets)
+  const targets: Placement.ToolTarget[] =
+    door === "cell"
+      ? [HOST_TARGET]
+      : [
+          HOST_TARGET,
+          {
+            kind: "machine",
+            id: "fixture",
+            capabilities: ["kernel.py", "sandbox.process", "fs.read"],
+          },
+        ];
+  return Placement.resolveTools(
+    catalogEntries(ports, origin).map((entry) => entry.spec),
+    targets,
+  )
     .filter((decision) => decision.offerable)
     .map((decision) => decision.tool.name);
 }
@@ -54,7 +65,8 @@ describe("full catalog menu parity", () => {
           const second = names(door, role, ports === "full" ? fullPorts : {});
           const expected = fixture[key];
           const fingerprint = fingerprintFixture.fingerprints[key];
-          if (expected === undefined || fingerprint === undefined) throw new Error(`missing fixture ${key}`);
+          if (expected === undefined || fingerprint === undefined)
+            throw new Error(`missing fixture ${key}`);
           expect(first).toEqual(expected);
           expect(second).toEqual(first);
           expect(TOOL_PROJECTOR_VERSION).toBe(fingerprintFixture.projectorVersion);
