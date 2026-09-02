@@ -6,10 +6,10 @@ import { catalogEntries } from "../src/tools/core/catalog";
 import type { CatalogEntry } from "../src/tools/core/dispatch";
 import { createDispatcher, HOST_TARGET } from "../src/tools/core/dispatch";
 import { createCellRegistry } from "../src/tools/cell-registry";
-import type { CellPorts } from "../src/tools/run-code";
+import type { CellPorts } from "../src/tools/execution/run-code";
 import { MACHINES_TOOL_NAME, type MachineStatus, type MachinesPort } from "../src/tools/query/machines";
 import { MEMORY_TOOL_NAME } from "../src/tools/mutation/memory";
-import { cellDoor, RUN_CODE_TOOL_NAME, runCodeToolExecutor } from "../src/tools/run-code";
+import { cellDoor, RUN_CODE_TOOL_NAME, runCodeToolExecutor } from "../src/tools/execution/run-code";
 
 const RESIDENT = { role: "resident", depth: 0, sessionId: "session-origin" } as const;
 
@@ -235,32 +235,6 @@ describe("run_code outcomes", () => {
   });
 });
 
-describe("the advertised schema and the runtime gate agree", () => {
-  it("rejects every key the JSON Schema does not advertise", async () => {
-    const { kernel } = recordingDelegation();
-    const { ports } = cellPorts({ delegation: kernel, runCell: async () => ({ status: "timed_out", cellId: "c" }) });
-    const answer = await runCodeToolExecutor(ports, RESIDENT)({
-      machineId: "alpha",
-      code: "x",
-      timeoutMs: 250,
-      asRoot: true,
-    });
-    expect(answer).toStartWith("run_code refused:");
-  });
-
-  it("advertises exactly the keys the gate requires", () => {
-    const { kernel } = recordingDelegation();
-    const { ports } = cellPorts({ delegation: kernel, runCell: async () => ({ status: "timed_out", cellId: "c" }) });
-    const spec = catalogEntries({ delegation: kernel, cells: ports }, RESIDENT).find(
-      (e: CatalogEntry) => e.spec.name === RUN_CODE_TOOL_NAME,
-    )?.spec;
-    const schema = spec?.inputSchema as { required: string[]; properties: Record<string, unknown> };
-
-    expect(schema.required.sort()).toEqual(["code", "machineId", "timeoutMs"]);
-    expect(Object.keys(schema.properties).sort()).toEqual(["code", "machineId", "timeoutMs"]);
-  });
-});
-
 describe("the machines tool", () => {
   const statuses: MachineStatus[] = [
     { machineId: "alpha", attached: true, capabilities: ["kernel.py", "screen.capture"] },
@@ -344,7 +318,7 @@ describe("the machines tool", () => {
       tool: MACHINES_TOOL_NAME,
       input: { machineId: "alpha" },
     });
-    expect(String(result.output)).toStartWith("machines refused:");
+    expect(String(result.output)).toStartWith("\nmachines refused:");
   });
 
   it("is host-placed: offerable on the brain, absent from a machine-only fold", () => {

@@ -66,7 +66,7 @@ import { createMachineVfs, scopeMachineVfs, type MachineVfs } from "./machines/v
 import { catalogEntries } from "./tools/core/catalog";
 import { HOST_TARGET } from "./tools/core/dispatch";
 import { createCellRegistry } from "./tools/cell-registry";
-import type { CellPorts } from "./tools/run-code";
+import type { CellPorts } from "./tools/execution/run-code";
 
 interface StartOptions {
   readonly config?: OpenOmniConfig;

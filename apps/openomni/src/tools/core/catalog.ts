@@ -46,8 +46,8 @@ import {
   provisionStatusToolSpec,
   secretRotateToolSpec,
 } from "../provision-specs";
-import type { CellPorts } from "../run-code";
-import { runCodeToolExecutor, runCodeToolSpec } from "../run-code";
+import type { CellPorts } from "../execution/run-code";
+import { runCodeTool } from "../execution/run-code";
 import type { CompletionPort } from "../../work-item/completion";
 import { completeWorkTool } from "../mutation/work-items";
 import { workItemsTool } from "../query/work-items";
@@ -168,11 +168,7 @@ export const TOOL_DEFINITIONS: readonly (AnyToolDefinition | LegacyCatalogTool)[
         ? undefined
         : provisionStatusToolExecutor(ports.provisioning),
   },
-  {
-    spec: runCodeToolSpec,
-    wire: (ports, origin) =>
-      ports.cells === undefined ? undefined : runCodeToolExecutor(ports.cells, origin),
-  },
+  eraseTool(runCodeTool),
   eraseTool(machinesTool),
   eraseTool(fsReadTool),
   eraseTool(fsListTool),

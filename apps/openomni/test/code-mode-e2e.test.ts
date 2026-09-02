@@ -10,7 +10,7 @@ import type { ArtifactsPort } from "../src/tools/mutation/artifacts";
 import { catalogEntries, type CatalogPorts } from "../src/tools/core/catalog";
 import { createCellRegistry } from "../src/tools/cell-registry";
 import { createDispatcher, HOST_TARGET } from "../src/tools/core/dispatch";
-import { type CellPorts, runCodeToolExecutor } from "../src/tools/run-code";
+import { type CellPorts, runCodeToolExecutor } from "../src/tools/execution/run-code";
 import { assistantMessage } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { socketPath as testSocketPath } from "./helpers/socket-path";
