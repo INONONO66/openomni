@@ -30,16 +30,6 @@ export const ProviderError = NamedError.create(
   }),
 );
 
-export const InvalidUsageError = NamedError.create(
-  "TokenInvalidUsageError",
-  z.object({
-    message: z.string(),
-    key: z.string(),
-    value: z.string(),
-    valueClass: z.string(),
-  }),
-);
-
 /**
  * Coerce an AI SDK provider error (AI_APICallError and shape-compatible
  * wrappers) into the protocol APIError so retry classification can read

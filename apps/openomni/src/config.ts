@@ -6,7 +6,7 @@ import { z } from "zod";
 export const ConfigurationError = NamedError.create(
   "OpenOmniConfigurationError",
   z.object({
-    code: z.enum(["invalid_compaction_summarizer"]),
+    code: z.enum(["invalid_compaction_summarizer", "invalid_ws_port"]),
     message: z.string(),
   }),
 );
@@ -116,12 +116,21 @@ function required(name: string): string {
   return value;
 }
 
-function portFromEnv(): number {
-  const raw = process.env.OPENOMNI_WS_PORT;
+/**
+ * The one parser for `OPENOMNI_WS_PORT`: `startOpenOmni` binds what this
+ * returns, so every other reader (doctor's health probe) must ask here
+ * rather than re-deriving a port the daemon never bound. `0` is a legal
+ * ephemeral bind, and an unset value resolves to the same default the
+ * daemon uses — the default has no second home.
+ */
+export function parseWsPort(raw: string | undefined): number {
   if (raw === undefined) return 3000;
   const port = Number(raw);
   if (!Number.isInteger(port) || port < 0 || port > 65_535) {
-    throw new Error("OPENOMNI_WS_PORT must be an integer from 0 to 65535");
+    throw new ConfigurationError({
+      code: "invalid_ws_port",
+      message: "OPENOMNI_WS_PORT must be an integer from 0 to 65535",
+    });
   }
   return port;
 }
@@ -318,7 +327,7 @@ export function loadConfig(home: string = homedir()): OpenOmniConfig {
     dbPath: process.env.OPENOMNI_DB_PATH?.trim() || join(home, ".openomni", "storage.db"),
     memoryPath: process.env.OPENOMNI_MEMORY_PATH?.trim() || join(home, ".openomni", "memory.json"),
     host,
-    wsPort: portFromEnv(),
+    wsPort: parseWsPort(process.env.OPENOMNI_WS_PORT),
     compactionSummarizer: compactionSummarizerFromEnv(),
     ...(wsToken === undefined || wsToken.length === 0 ? {} : { wsToken }),
     model: modelFromEnv(),

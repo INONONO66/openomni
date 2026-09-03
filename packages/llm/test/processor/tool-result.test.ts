@@ -162,7 +162,7 @@ describe("Processor tool result projection", () => {
       }),
     });
 
-    const processing = processor.process({ system: "" });
+    const processing = processor.process({ system: "", promptText: "" });
     await toolCallObserved.promise;
     const runningSnapshot = messages
       .flatMap((message) => message.parts)
@@ -223,7 +223,7 @@ describe("Processor tool result projection", () => {
         }),
       });
 
-      await processor.process({ system: "" });
+      await processor.process({ system: "", promptText: "" });
 
       if (expectedCalls !== undefined) expect(toolCalls).toEqual(expectedCalls);
       if (expectedResults !== undefined) expect(toolResults).toHaveLength(expectedResults);
@@ -271,7 +271,7 @@ describe("Processor tool output normalization", () => {
       }),
     });
 
-    await processor.process({ system: "" });
+    await processor.process({ system: "", promptText: "" });
 
     expect(toolResults).toHaveLength(1);
     expect(toolResults[0]?.output).toBe('{"content":[{"type":"text","text":"hit"}]}');
@@ -317,7 +317,7 @@ describe("Processor tool error normalization", () => {
       }),
     });
 
-    await processor.process({ system: "" });
+    await processor.process({ system: "", promptText: "" });
 
     expect(toolResults).toHaveLength(1);
     // Error objects must not JSON-serialize to "{}".
@@ -383,7 +383,7 @@ describe("Processor abort settlement grace (#532 candidate 2)", () => {
       }),
     });
 
-    await expect(processor.process({ system: "" })).rejects.toMatchObject({
+    await expect(processor.process({ system: "", promptText: "" })).rejects.toMatchObject({
       name: "AbortError",
     });
 
@@ -433,7 +433,7 @@ describe("Processor abort settlement grace (#532 candidate 2)", () => {
       }),
     });
 
-    await expect(processor.process({ system: "" })).rejects.toMatchObject({
+    await expect(processor.process({ system: "", promptText: "" })).rejects.toMatchObject({
       name: "AbortError",
     });
     expect(scheduledDelays).toContain(250);

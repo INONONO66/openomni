@@ -30,6 +30,7 @@ import {
   unitPath,
 } from "../src/cli/daemon";
 import { applyEnvFile, parseEnvFile, renderEnvFile, writeEnvFile } from "../src/cli/env-file";
+import { ConfigurationError, parseWsPort } from "../src/config";
 import { runDoctor } from "../src/cli/doctor";
 import { processEntryPath } from "../src/process-entry-path";
 import type { DoctorPorts } from "../src/cli/doctor";
@@ -538,6 +539,70 @@ describe("doctor", () => {
     const byName = new Map(report.checks.map((check) => [check.name, check.status]));
     expect(byName.get("model config")).toBe("fail");
     expect(byName.get("health")).toBe("fail");
+  });
+
+  test("an ephemeral port skips the probe and warns instead of failing an active daemon", async () => {
+    let probes = 0;
+    const report = await runDoctor({
+      ...healthyPorts,
+      effectiveEnv: new Map([...healthyPorts.effectiveEnv, ["OPENOMNI_WS_PORT", "0"]]),
+      probeHealth: () => {
+        probes += 1;
+        return Promise.resolve(false);
+      },
+    });
+    expect(report.checks.find((check) => check.name === "health")).toEqual({
+      name: "health",
+      status: "warn",
+      detail: "ephemeral WS port (OPENOMNI_WS_PORT=0) — health probe skipped",
+    });
+    expect(report.ok).toBe(true);
+    expect(probes).toBe(0);
+  });
+
+  test("a port the daemon would refuse to bind fails with the config parser's verdict", async () => {
+    let probes = 0;
+    const report = await runDoctor({
+      ...healthyPorts,
+      effectiveEnv: new Map([...healthyPorts.effectiveEnv, ["OPENOMNI_WS_PORT", "70000"]]),
+      probeHealth: () => {
+        probes += 1;
+        return Promise.resolve(true);
+      },
+    });
+    const parserVerdict = ((): ConfigurationError => {
+      try {
+        parseWsPort("70000");
+      } catch (error) {
+        if (ConfigurationError.isInstance(error)) return error;
+        throw error;
+      }
+      throw new Error("expected the config parser to refuse 70000");
+    })();
+    expect(parserVerdict.data.code).toBe("invalid_ws_port");
+    expect(report.checks.find((check) => check.name === "health")).toEqual({
+      name: "health",
+      status: "fail",
+      detail: parserVerdict.data.message,
+    });
+    expect(report.ok).toBe(false);
+    expect(probes).toBe(0);
+  });
+
+  test("an unset port probes the same default the daemon binds", async () => {
+    const effectiveEnv = new Map(healthyPorts.effectiveEnv);
+    effectiveEnv.delete("OPENOMNI_WS_PORT");
+    let probed = 0;
+    const report = await runDoctor({
+      ...healthyPorts,
+      effectiveEnv,
+      probeHealth: (port) => {
+        probed = port;
+        return Promise.resolve(true);
+      },
+    });
+    expect(probed).toBe(parseWsPort(undefined));
+    expect(report.ok).toBe(true);
   });
 });
 
