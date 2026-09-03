@@ -209,9 +209,7 @@ class SessionRegistry {
   private install(id: string, runner: SessionRunner): RegistryEntry {
     const existing = this.entries.get(id);
     if (existing !== undefined) return existing;
-    const controller = createController(id, runner, this.runtime, () => {
-      this.entries.delete(id);
-    });
+    const controller = createController(id, runner, this.runtime);
     const entry = { runner, controller };
     this.entries.set(id, entry);
     return entry;
@@ -222,7 +220,6 @@ function createController(
   sessionId: string,
   runner: SessionRunner,
   runtime: SessionRuntime,
-  evict: () => void,
 ): SessionController {
   const clock = runtime.clock ?? Date.now;
   const entropy = runtime.entropy ?? crypto.randomUUID;
@@ -760,7 +757,6 @@ function createController(
     if (current.leaseOwner !== null) return;
     if (SessionHandleStore.pendingInbox(sessionId).length > 0) return;
     await runtime.onHibernate?.(sessionId);
-    evict();
   }
 
   return { handle, owner, reconcile, isRunning: () => active !== undefined };

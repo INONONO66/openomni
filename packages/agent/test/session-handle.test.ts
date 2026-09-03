@@ -321,6 +321,7 @@ describe("durable session handle", () => {
     await bounded(hibernated.promise, "runtime hibernation");
     const snapshot = first.get();
     const fenceBeforeGet = snapshot.lease.fence;
+    const reopened = session(options, runtime);
 
     expect(snapshot.state).toBe("idle");
     expect(snapshot.turns.at(-1)?.messages).toEqual([
@@ -328,6 +329,7 @@ describe("durable session handle", () => {
       { role: "assistant", text: "complete" },
     ]);
     expect(hibernations).toBe(1);
+    expect(reopened).toBe(first);
     expect(first.get().lease.fence).toBe(fenceBeforeGet);
     await first.prompt("wake again");
     expect(first.get().lease.fence).toBe(fenceBeforeGet + 1);
