@@ -37,6 +37,7 @@ const ORDERED_MIGRATIONS: Migration.Definition[] = [
   { name: "0029_provisioning/migration.sql" },
   { name: "0030_drop_artifact/migration.sql" },
   { name: "0030_drop_retired_tables/migration.sql" },
+  { name: "0031_l0_ledger_base/migration.sql" },
 ];
 
 const CLEAR_ORDER = [

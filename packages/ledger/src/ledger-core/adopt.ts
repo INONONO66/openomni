@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { z } from "zod";
 import { Ledger as LedgerTypes } from "@openomni/protocol";
-import { GENESIS_SEED } from "../bus-persistence/hash";
+import { GENESIS_SEED } from "./hash";
 import { computeLedgerEventHash } from "./hash";
 
 const HeadRevision = z.number().int().positive();

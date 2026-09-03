@@ -1,5 +1,5 @@
 import { Wait, type Storage as ProtocolStorage } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
+import { Bus as LegacyObservationSink } from "@openomni/telemetry";
 import { commitFact, runCommitTransaction } from "../storage/commit-coordinator";
 import { Storage } from "../storage/storage";
 import { withCreateTimestamps } from "../storage/timestamped-store";
@@ -147,7 +147,7 @@ function publishChange(outcome: CommittedOutcome, traceId: string): void {
   const base = eventBase(outcome.record, outcome.record.updatedAt, traceId);
   switch (outcome.kind) {
     case "attached":
-      Bus.publish(Wait.Events.ReplyAttached, {
+      LegacyObservationSink.publish(Wait.Events.ReplyAttached, {
         ...base,
         replyKey: outcome.reply.replyKey,
         responderId: outcome.reply.responderId,
@@ -157,7 +157,7 @@ function publishChange(outcome: CommittedOutcome, traceId: string): void {
       });
       return;
     case "resolved":
-      Bus.publish(Wait.Events.ReplyAttached, {
+      LegacyObservationSink.publish(Wait.Events.ReplyAttached, {
         ...base,
         replyKey: outcome.reply.replyKey,
         responderId: outcome.reply.responderId,
@@ -165,13 +165,13 @@ function publishChange(outcome: CommittedOutcome, traceId: string): void {
         threshold: outcome.threshold,
         followUp: false,
       });
-      Bus.publish(Wait.Events.Resolved, { ...base, resolvedAt: outcome.record.updatedAt });
+      LegacyObservationSink.publish(Wait.Events.Resolved, { ...base, resolvedAt: outcome.record.updatedAt });
       return;
     case "expired":
-      Bus.publish(Wait.Events.Expired, { ...base, partial: outcome.partial });
+      LegacyObservationSink.publish(Wait.Events.Expired, { ...base, partial: outcome.partial });
       return;
     case "cancelled":
-      Bus.publish(Wait.Events.Cancelled, { ...base, cancelledAt: outcome.record.updatedAt });
+      LegacyObservationSink.publish(Wait.Events.Cancelled, { ...base, cancelledAt: outcome.record.updatedAt });
       return;
     case "delivery_recorded":
       // Correlation projection update only (replyToMessageId re-keys to the
@@ -232,7 +232,7 @@ export namespace WaitStore {
       );
       if (outcome.kind !== "committed") throw duplicate();
     });
-    Bus.publish(Wait.Events.Opened, eventBase(record, record.createdAt, traceId));
+    LegacyObservationSink.publish(Wait.Events.Opened, eventBase(record, record.createdAt, traceId));
     return record;
   }
 
@@ -281,7 +281,7 @@ export namespace WaitStore {
     // the existing lossy rejection observation without asking storage to
     // decide the rejection.
     if (outcome.kind === "rejected") {
-      Bus.publish(Wait.Events.ReplyRejected, {
+      LegacyObservationSink.publish(Wait.Events.ReplyRejected, {
         ...eventBase(outcome.record, outcome.at, traceId),
         code: outcome.code,
         ...(rejectionReplyKey === undefined ? {} : { replyKey: rejectionReplyKey }),

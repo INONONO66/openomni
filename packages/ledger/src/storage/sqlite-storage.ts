@@ -10,11 +10,9 @@ import { createSqliteEgressBudgetAdapter } from "./sqlite-egress-budget-adapter"
 import { createSqliteDelegationAdapter } from "./sqlite-delegation-adapter";
 import { createSqliteMessageAdapter } from "./sqlite-message-adapter";
 import { createSqlitePartAdapter } from "./sqlite-part-adapter";
-import {
-  clearSqliteStorage,
-  initializeSqliteDatabase,
-  initializeTelemetryConnection,
-} from "./sqlite-schema-lifecycle";
+import { clearSqliteStorage, initializeSqliteDatabase } from "./sqlite-schema-lifecycle";
+import { createSqliteL0Adapters } from "./sqlite-l0-adapter";
+import type { ObservationSink } from "@openomni/protocol";
 import { createSqliteSessionAdapter } from "./sqlite-session-adapter";
 import { createSqliteSurfaceKeyAdapter } from "./sqlite-surface-key-adapter";
 import { createSqliteTranscriptFactAdapter } from "./sqlite-transcript-fact-adapter";
@@ -26,16 +24,6 @@ import { productionStorageAdapterBrand, type Storage } from "./storage";
 export class SqliteStorageAdapter implements Storage.Adapter {
   declare readonly [productionStorageAdapterBrand]: true;
   private readonly db: Database;
-  /**
-   * #510 D1 durability split: NORMAL/group-commit telemetry connection on
-   * the SAME database file. bus-persistence writes ride this connection so
-   * a telemetry write can never join a decision-class transaction — the
-   * decision path stays synchronous=FULL on `db`. Writer serialization
-   * between the two connections is WAL + per-connection busy_timeout.
-   * For `:memory:` this IS `db` (an in-memory database cannot be shared
-   * across connections), so the split degrades to the single connection.
-   */
-  private readonly telemetryDb: Database;
   private closed = false;
 
   readonly session: Storage.Adapter["session"];
@@ -54,27 +42,19 @@ export class SqliteStorageAdapter implements Storage.Adapter {
   readonly channelGrant: NonNullable<Storage.Adapter["channelGrant"]>;
   readonly appConnectorInstallation: NonNullable<Storage.Adapter["appConnectorInstallation"]>;
   readonly provisioning: NonNullable<Storage.Adapter["provisioning"]>;
+  readonly sessions: NonNullable<Storage.Adapter["sessions"]>;
+  readonly actions: NonNullable<Storage.Adapter["actions"]>;
+  readonly inbox: NonNullable<Storage.Adapter["inbox"]>;
+  readonly alarms: NonNullable<Storage.Adapter["alarms"]>;
+  readonly policies: NonNullable<Storage.Adapter["policies"]>;
 
-  constructor(dbPath: string) {
+  constructor(dbPath: string, observationSink: ObservationSink = { publish: () => undefined }) {
     this.db = new Database(dbPath);
     try {
       initializeSqliteDatabase(this.db);
     } catch (err) {
       this.db.close();
       throw err;
-    }
-
-    if (dbPath === ":memory:") {
-      this.telemetryDb = this.db;
-    } else {
-      this.telemetryDb = new Database(dbPath);
-      try {
-        initializeTelemetryConnection(this.telemetryDb);
-      } catch (err) {
-        this.telemetryDb.close();
-        this.db.close();
-        throw err;
-      }
     }
 
     this.session = createSqliteSessionAdapter(this.db);
@@ -104,20 +84,20 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     this.channelGrant = createSqliteChannelGrantAdapter(this.db);
     this.appConnectorInstallation = createSqliteAppConnectorInstallationAdapter(this.db);
     this.provisioning = createSqliteProvisioningAdapter(this.db);
+    const l0 = createSqliteL0Adapters(
+      this.db,
+      (operation) => this.transaction(operation),
+      observationSink,
+    );
+    this.sessions = l0.sessions;
+    this.actions = l0.actions;
+    this.inbox = l0.inbox;
+    this.alarms = l0.alarms;
+    this.policies = l0.policies;
 
     // Non-enumerable so object-spread test fakes stay narrow and are not
     // mistaken for the concrete production adapter during Storage.configure.
     Object.defineProperty(this, productionStorageAdapterBrand, { value: true });
-  }
-
-  /**
-   * #510 D1: the sanctioned accessor to the telemetry connection for
-   * bus-persistence — never exposes the private handle for casting. Always the
-   * telemetry connection (which IS `db` for `:memory:`), so it already encodes
-   * the "prefer telemetry, fall back to primary" resolution.
-   */
-  telemetryConnection(): Database {
-    return this.telemetryDb;
   }
 
   clear(): void {
@@ -138,13 +118,8 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     // reset is a supported teardown order (test fixtures do both).
     if (this.closed) return;
     this.closed = true;
-    if (this.telemetryDb !== this.db) {
-      this.telemetryDb.close();
-    }
-    // Shutdown checkpoint (#510 D1 accepted-append drain): fold the WAL back
-    // into the main file so a cold start reads a clean baseline. Runs after
-    // the telemetry connection closed (no reader pins the WAL) and is a
-    // no-op for `:memory:` (never in WAL mode).
+    // Fold the WAL back into the main file so a cold start reads a clean
+    // baseline. This is a no-op for `:memory:` databases.
     this.db.query("PRAGMA wal_checkpoint(TRUNCATE)").get();
     this.db.close();
   }

@@ -3,9 +3,18 @@ import type { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Wait } from "@openomni/protocol";
+import {
+  Alarm,
+  Inbox,
+  LedgerAction,
+  LedgerSession,
+  PolicyRow,
+  type Storage as ProtocolStorage,
+  Wait,
+} from "@openomni/protocol";
 import { DelegationStore } from "../../src/delegation/index.js";
 import { SessionInfo } from "../../src/session/info.js";
+import { createMemoryL0Adapter } from "./memory-l0-adapter.js";
 import { Migration } from "../../src/storage/migration-runner.js";
 import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage.js";
 import { Storage } from "../../src/storage/storage.js";
@@ -15,6 +24,157 @@ import { buildWaitCreate } from "../helpers/wait.js";
 
 const directories: string[] = [];
 let adapter: SqliteStorageAdapter;
+
+interface L0Adapter {
+  transaction<T>(operation: () => T): T;
+  sessions: ProtocolStorage.SessionLedgerSubAdapter;
+  actions: ProtocolStorage.ActionSubAdapter;
+  inbox: ProtocolStorage.InboxSubAdapter;
+  alarms: ProtocolStorage.AlarmSubAdapter;
+  policies: ProtocolStorage.PolicyRowSubAdapter;
+}
+
+const encoded = (value: string) => ({ encodingVersion: 1 as const, value: { value } });
+
+function sessionRow(id: string): LedgerSession.Row {
+  return LedgerSession.Row.parse({
+    id,
+    parentId: null,
+    role: "resident",
+    leaseOwner: null,
+    leaseFence: 0,
+    leaseExpiresAt: null,
+    revision: 0,
+    state: "idle",
+  });
+}
+
+function exerciseL0Contracts(storage: L0Adapter) {
+  const session = sessionRow("session-l0");
+  expect(storage.sessions.create(session)).toBe(true);
+  expect(storage.sessions.create(session)).toBe(false);
+
+  const root = storage.actions.append(
+    LedgerAction.Append.parse({
+      id: "action-root",
+      parentId: null,
+      sessionId: session.id,
+      kind: "turn",
+      intent: encoded("intent"),
+      effect: encoded("result"),
+      irreversible: true,
+      ts: 100,
+    }),
+    0,
+  );
+  expect(root?.revision).toBe(1);
+
+  const stale = storage.actions.append(
+    LedgerAction.Append.parse({
+      id: "action-stale",
+      parentId: "action-root",
+      sessionId: session.id,
+      kind: "tool",
+      intent: encoded("stale"),
+      effect: encoded("stale"),
+      irreversible: true,
+      ts: 101,
+    }),
+    0,
+  );
+  expect(stale).toBeUndefined();
+
+  const reverted = storage.actions.append(
+    LedgerAction.Append.parse({
+      id: "action-revert",
+      parentId: "action-root",
+      sessionId: session.id,
+      kind: "tool",
+      intent: encoded("undo"),
+      effect: encoded("undone"),
+      revert: encoded("action-root"),
+      ts: 102,
+    }),
+    1,
+  );
+  expect(reverted?.revision).toBe(2);
+
+  expect(
+    storage.inbox.commit(
+      Inbox.Commit.parse({
+        id: "inbox-2",
+        sessionId: session.id,
+        kind: "interrupt",
+        content: "stop",
+        origin: encoded("owner"),
+        createdAt: 201,
+      }),
+    ),
+  ).toMatchObject({ ordinal: 1, status: "pending" });
+  expect(
+    storage.inbox.commit(
+      Inbox.Commit.parse({
+        id: "inbox-1",
+        sessionId: session.id,
+        kind: "prompt",
+        content: "go",
+        origin: encoded("owner"),
+        createdAt: 200,
+      }),
+    ),
+  ).toMatchObject({ ordinal: 2, status: "pending" });
+  expect(storage.inbox.claim(session.id, "owner-1", 300).map((row) => row.id)).toEqual([
+    "inbox-2",
+    "inbox-1",
+  ]);
+  expect(storage.inbox.claim(session.id, "owner-2", 301)).toEqual([]);
+
+  expect(
+    storage.alarms.arm(
+      Alarm.Arm.parse({
+        id: "alarm-later",
+        sessionId: session.id,
+        kind: "at",
+        fireAt: 500,
+      }),
+    ),
+  ).toMatchObject({ status: "armed" });
+  expect(
+    storage.alarms.arm(
+      Alarm.Arm.parse({
+        id: "alarm-now",
+        sessionId: session.id,
+        kind: "watch",
+        fireAt: 400,
+        spec: encoded("watch"),
+      }),
+    ),
+  ).toMatchObject({ status: "armed" });
+  expect(storage.alarms.cancel("alarm-later", 450)).toMatchObject({ status: "cancelled" });
+  expect(storage.alarms.due(450).map((row) => row.id)).toEqual(["alarm-now"]);
+
+  const policy = PolicyRow.Row.parse({
+    name: "allow-tool",
+    kind: "tool",
+    phase: "pre",
+    match: encoded("all"),
+    verdict: encoded("allow"),
+    priority: 10,
+    generation: 1,
+  });
+  expect(storage.policies.append(policy)).toBe(true);
+  expect(storage.policies.append(policy)).toBe(false);
+  expect(storage.policies.rows()).toEqual([policy]);
+  expect(storage.sessions.get(session.id)?.revision).toBe(4);
+
+  return {
+    session: storage.sessions.get(session.id),
+    tree: storage.actions.tree(session.id),
+    inbox: storage.inbox.list(session.id),
+    alarms: storage.alarms.due(1000),
+    policies: storage.policies.rows(),
+  };
+}
 
 function database(): Database {
   return (adapter as unknown as { db: Database }).db;
@@ -31,6 +191,22 @@ afterEach(() => {
   for (const directory of directories.splice(0)) {
     rmSync(directory, { recursive: true, force: true });
   }
+});
+
+describe("L0 adapter contracts", () => {
+  test("memory and SQLite produce identical action/session/inbox/alarm/policy state", () => {
+    const memory = createMemoryL0Adapter();
+    const sqlite: L0Adapter = {
+      transaction: (operation) => adapter.transaction(operation),
+      sessions: adapter.sessions,
+      actions: adapter.actions,
+      inbox: adapter.inbox,
+      alarms: adapter.alarms,
+      policies: adapter.policies,
+    };
+
+    expect(exerciseL0Contracts(memory)).toEqual(exerciseL0Contracts(sqlite));
+  });
 });
 
 describe("SQLite adapter contract guards", () => {

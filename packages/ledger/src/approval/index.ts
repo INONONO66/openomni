@@ -1,5 +1,5 @@
 import { Approval, type Storage as ProtocolStorage } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
+import { Bus as LegacyObservationSink } from "@openomni/telemetry";
 import { commitFact, runCommitTransaction } from "../storage/commit-coordinator";
 import { Storage } from "../storage/storage";
 
@@ -133,7 +133,7 @@ export namespace ApprovalStore {
       );
       if (committed.kind !== "committed") throw duplicate();
     });
-    Bus.publish(Approval.Events.Requested, {
+    LegacyObservationSink.publish(Approval.Events.Requested, {
       ...eventBase(record, traceId, record.createdAt),
       deadline: record.deadline,
     });
@@ -193,7 +193,7 @@ export namespace ApprovalStore {
     const decidedBy = outcome.record.decidedBy;
     const state = outcome.record.state;
     if (decidedBy !== undefined && state !== "pending") {
-      Bus.publish(Approval.Events.Decided, {
+      LegacyObservationSink.publish(Approval.Events.Decided, {
         ...eventBase(outcome.record, traceId, outcome.record.updatedAt),
         state,
         decidedBy,

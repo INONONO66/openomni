@@ -27,5 +27,6 @@ export * from "./delegation/index.js";
 export * from "./transcript/index.js";
 export * from "./ledger/index.js";
 export * from "./storage/index.js";
+export * from "./l0/index.js";
 export * from "./trace/index.js";
 export * from "./app-connector/index.js";
