@@ -37,3 +37,24 @@ export type {
   CompactionYield,
   SummarizationBudget,
 } from "./compaction";
+export {
+  closeSessions,
+  session,
+  SessionCommitError,
+  SessionLeaseError,
+  sweepSessions,
+} from "./session-handle";
+export type {
+  SessionBoundaryResult,
+  SessionCreateOptions,
+  SessionGetOptions,
+  SessionHandle,
+  SessionRunner,
+  SessionRunnerInput,
+  SessionRunnerResult,
+  SessionRuntime,
+  SessionSystem,
+  SessionSystemBlocksHandle,
+  SessionTool,
+  SessionToolsHandle,
+} from "./session-handle";

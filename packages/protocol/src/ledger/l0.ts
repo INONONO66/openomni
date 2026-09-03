@@ -408,6 +408,7 @@ export namespace SessionTurn {
 
   export interface Watch {
     readonly snapshot: Snapshot;
+    readonly subscribe: (handler: (observation: Observation) => void) => () => void;
     readonly unsubscribe: () => void;
   }
 

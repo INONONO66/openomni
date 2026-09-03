@@ -120,6 +120,7 @@ export const TOPOLOGY = [
     packageName: "@openomni/agent",
     allowedDeps: [
       "@openomni/protocol",
+      "@openomni/ledger",
       "@openomni/policy",
       "@openomni/placement",
       "@openomni/llm",
@@ -127,6 +128,7 @@ export const TOPOLOGY = [
     ],
     srcAllowedDeps: [
       "@openomni/protocol",
+      "@openomni/ledger",
       "@openomni/policy",
       "@openomni/placement",
       "@openomni/llm",
@@ -254,7 +256,9 @@ export function assertTopologyComplete(
     throw new Error(`topology omits on-disk workspace(s): ${unaccounted.join(", ")}`);
   }
   if (nonexistent.length > 0) {
-    throw new Error(`topology names workspace(s) with no on-disk package: ${nonexistent.join(", ")}`);
+    throw new Error(
+      `topology names workspace(s) with no on-disk package: ${nonexistent.join(", ")}`,
+    );
   }
 }
 
@@ -292,8 +296,7 @@ export function ciTestSteps(topology: readonly WorkspaceTopology[] = TOPOLOGY): 
       displayName: workspace.displayName,
     }));
   const scriptStep = {
-    command:
-      "bun test --timeout 15000 --coverage --coverage-reporter=lcov --coverage-dir=coverage",
+    command: "bun test --timeout 15000 --coverage --coverage-reporter=lcov --coverage-dir=coverage",
     dir: SCRIPT_COVERAGE_LANE.dir,
     displayName: SCRIPT_COVERAGE_LANE.displayName,
   };

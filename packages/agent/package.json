@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",
+    "@openomni/ledger": "workspace:*",
     "@openomni/llm": "workspace:*",
     "@openomni/placement": "workspace:*",
     "@openomni/policy": "workspace:*",
