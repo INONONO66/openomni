@@ -36,7 +36,6 @@ describe("health endpoint", () => {
     const app = await startOpenOmni({
       config: {
         dbPath: join(directory, "openomni.db"),
-        memoryPath: join(directory, "memory.json"),
         host: "127.0.0.1",
         wsPort: 0,
         model: { provider: "fake", id: "health-test", apiKey: "test-key" },
@@ -56,7 +55,7 @@ describe("npm package staging", () => {
   });
 
   test("build stages a dependency-free package whose bundle boots with real migrations", async () => {
-    const build = Bun.spawnSync(["bun", "run", "script/build-npm-package.ts"], { cwd: appDir });
+    const build = Bun.spawnSync([process.execPath, "run", "script/build-npm-package.ts"], { cwd: appDir });
     expect(build.exitCode).toBe(0);
 
     // Manifest contract: no workspace deps may leak into the registry artifact.
@@ -74,13 +73,12 @@ describe("npm package staging", () => {
 
     // Boot the bundle exactly as the daemon would: `bun dist/app/main.js start`.
     const home = tempDir("openomni-pack-home-");
-    const proc = Bun.spawn(["bun", join(staging, "dist", "app", "main.js"), "start"], {
+    const proc = Bun.spawn([process.execPath, join(staging, "dist", "app", "main.js"), "start"], {
       cwd: staging,
       env: {
         ...process.env,
         HOME: home,
         OPENOMNI_DB_PATH: join(home, "storage.db"),
-        OPENOMNI_MEMORY_PATH: join(home, "memory.json"),
         OPENOMNI_WS_PORT: "0",
         OPENOMNI_MODEL_PROVIDER: "fake",
         OPENOMNI_MODEL_ID: "pack-smoke",

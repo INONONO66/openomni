@@ -14,8 +14,6 @@ export type ConfigurationError = InstanceType<typeof ConfigurationError>;
 
 export interface OpenOmniConfig {
   readonly dbPath: string;
-  /** The built-in curated memory file (kernel-contract §5). */
-  readonly memoryPath: string;
   readonly host: string;
   readonly wsPort: number;
   /** Enabled unless explicitly disabled with OPENOMNI_COMPACTION_SUMMARIZER=off. */
@@ -325,7 +323,6 @@ export function loadConfig(home: string = homedir()): OpenOmniConfig {
   const channelAllowedSenders = channelAllowedSendersFromEnv();
   return {
     dbPath: process.env.OPENOMNI_DB_PATH?.trim() || join(home, ".openomni", "storage.db"),
-    memoryPath: process.env.OPENOMNI_MEMORY_PATH?.trim() || join(home, ".openomni", "memory.json"),
     host,
     wsPort: parseWsPort(process.env.OPENOMNI_WS_PORT),
     compactionSummarizer: compactionSummarizerFromEnv(),

@@ -60,7 +60,6 @@ async function withConfigEnv(
 function configEnvFor(directory: string): Record<string, string> {
   return {
     OPENOMNI_DB_PATH: join(directory, "chat.db"),
-    OPENOMNI_MEMORY_PATH: join(directory, "memory.json"),
     OPENOMNI_WS_PORT: "0",
     OPENOMNI_WS_TOKEN: WS_TOKEN,
     OPENOMNI_MODEL_PROVIDER: "fake",
@@ -78,7 +77,6 @@ const CONFIG_ENV = [
   "GITHUB_TOKEN",
   "GITHUB_BOT_USERNAME",
   "OPENOMNI_DB_PATH",
-  "OPENOMNI_MEMORY_PATH",
   "OPENOMNI_WS_HOST",
   "OPENOMNI_WS_PORT",
   "OPENOMNI_WS_TOKEN",

@@ -67,7 +67,6 @@ esac
     PATH: `${bin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
     OPENOMNI_COMMAND_LOG: join(home, "commands.log"),
     OPENOMNI_DB_PATH: join(home, "storage.db"),
-    OPENOMNI_MEMORY_PATH: join(home, "memory.json"),
     OPENOMNI_MACHINES_SOCKET: join(home, "machines.sock"),
     OPENOMNI_MODELS_PATH: join(home, "models.json"),
     OPENOMNI_DISABLE_MODELS_FETCH: "1",
@@ -464,7 +463,6 @@ describe("real CLI entry", () => {
     const deps = createCliDeps(root);
     const env = appEnv(differentHome);
     delete env.OPENOMNI_DB_PATH;
-    delete env.OPENOMNI_MEMORY_PATH;
     env.OPENOMNI_VAULT_KEY = Buffer.alloc(32, 9).toString("base64");
     const restore = replaceEnvironment(env);
     try {

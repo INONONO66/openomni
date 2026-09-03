@@ -153,34 +153,6 @@ function history(sessionId: string): ChatAgentInput["messages"] {
 }
 
 export function createResident(options: ResidentOptions) {
-  // The built-in curated memory (kernel-contract §5) reaches the Resident
-  // twice from ONE wiring point (tools.memory): as the memory tool in its
-  // catalog, and as a snapshot frozen per session at the first delivery and
-  // injected into the system prompt. A mid-session write renders from the
-  // next session only — the prompt prefix stays stable for caching and what
-  // the model read stays auditable.
-  // Bounded: a session evicted after many others re-freezes to current
-  // memory on its next turn — acceptable drift; unbounded growth is not.
-  const SNAPSHOT_CAP = 64;
-  const sessionSnapshots = new Map<string, string>();
-
-  function systemPromptFor(sessionId: string): string {
-    const memory = options.tools.memory;
-    let snapshot: string | undefined;
-    if (memory !== undefined) {
-      snapshot = sessionSnapshots.get(sessionId);
-      if (snapshot === undefined) {
-        snapshot = memory.render();
-        if (sessionSnapshots.size >= SNAPSHOT_CAP) {
-          const oldest = sessionSnapshots.keys().next().value;
-          if (oldest !== undefined) sessionSnapshots.delete(oldest);
-        }
-        sessionSnapshots.set(sessionId, snapshot);
-      }
-    }
-    return buildAgentPrompt(RESIDENT_PRESET, { memorySnapshot: snapshot });
-  }
-
   function recordUserTurn(delivery: Gateway.Deliver, turn: DeliveryClassification): string {
     const userId = crypto.randomUUID();
     Session.addMessage(turn.sessionId, {
@@ -202,39 +174,12 @@ export function createResident(options: ResidentOptions) {
     return userId;
   }
 
-  /**
-   * The failure reply, persisted as this turn's assistant message. Its usage
-   * is zero and its finish is `error`: the turn spent no answer, and a later
-   * reader must be able to tell an explained failure from a real reply.
-   */
-  function recordFailedTurn(sessionId: string, userId: string, text: string): void {
-    const assistantId = crypto.randomUUID();
-    Session.addMessage(sessionId, {
-      id: assistantId,
-      sessionID: sessionId,
-      role: "assistant",
-      time: { created: Date.now(), completed: Date.now() },
-      parentID: userId,
-      modelID: options.model.id,
-      providerID: options.model.provider,
-      agent: "resident",
-      path: { cwd: process.cwd(), root: process.cwd() },
-      cost: 0,
-      tokens: {
-        input: 0,
-        output: 0,
-        reasoning: 0,
-        cache: { read: 0, write: 0 },
-      },
-      finish: "error",
-    });
-    addTextPart(sessionId, assistantId, text);
-  }
-
-  function recordAssistantTurn(
+  function recordAssistantMessage(
     sessionId: string,
     userId: string,
-    result: Awaited<ReturnType<ReturnType<typeof ChatAgent.create>["run"]>>,
+    text: string,
+    tokens: Message.AssistantMessage["tokens"],
+    finish: string,
   ): void {
     const assistantId = crypto.randomUUID();
     Session.addMessage(sessionId, {
@@ -248,7 +193,37 @@ export function createResident(options: ResidentOptions) {
       agent: "resident",
       path: { cwd: process.cwd(), root: process.cwd() },
       cost: 0,
-      tokens: {
+      tokens,
+      finish,
+    });
+    addTextPart(sessionId, assistantId, text);
+  }
+
+  /**
+   * The failure reply, persisted as this turn's assistant message. Its usage
+   * is zero and its finish is `error`: the turn spent no answer, and a later
+   * reader must be able to tell an explained failure from a real reply.
+   */
+  function recordFailedTurn(sessionId: string, userId: string, text: string): void {
+    recordAssistantMessage(
+      sessionId,
+      userId,
+      text,
+      { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      "error",
+    );
+  }
+
+  function recordAssistantTurn(
+    sessionId: string,
+    userId: string,
+    result: Awaited<ReturnType<ReturnType<typeof ChatAgent.create>["run"]>>,
+  ): void {
+    recordAssistantMessage(
+      sessionId,
+      userId,
+      result.text,
+      {
         input: result.usage.inputTokens,
         output: result.usage.outputTokens,
         reasoning: result.usage.reasoningTokens ?? 0,
@@ -257,9 +232,8 @@ export function createResident(options: ResidentOptions) {
           write: result.usage.cacheWriteTokens ?? 0,
         },
       },
-      finish: result.finishReason,
-    });
-    addTextPart(sessionId, assistantId, result.text);
+      result.finishReason,
+    );
   }
 
   const catalogs = new Map<string, ReturnType<typeof createDispatcher>>();
@@ -291,7 +265,7 @@ export function createResident(options: ResidentOptions) {
     });
     const agent = ChatAgent.create({
       events: observation.events,
-      systemPrompt: systemPromptFor(sessionId),
+      systemPrompt: buildAgentPrompt(RESIDENT_PRESET),
       tools,
       toolTargets: targets,
       toolChoice: evidenceOnly || tools.length === 0 ? "none" : "auto",

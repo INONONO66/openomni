@@ -52,7 +52,6 @@ export function residentSuite(beforeReset?: () => Promise<void> | void): Residen
       const directory = this.tempDir(prefix);
       return {
         dbPath: join(directory, "chat.db"),
-        memoryPath: join(directory, "memory.json"),
         host: "127.0.0.1",
         wsPort: 0,
         model: { provider: "fake", id: "resident-test", apiKey: "test-key" },
