@@ -722,14 +722,14 @@ function createController(
   ): Promise<SessionGeneration.ConfigureReceipt> {
     const before = SessionHandleStore.latestGeneration(SessionHandleStore.tree(sessionId));
     const generation = before.generation + 1;
-    const authorized =
+    const configureAccepted =
       (await runtime.authorizeConfigure?.({
         sessionId,
         role: SessionHandleStore.row(sessionId).role,
         operation,
         generation,
       })) ?? true;
-    if (!authorized) {
+    if (!configureAccepted) {
       throw new SessionGeneration.ConfigureError({
         code: "denied",
         message: `session configure denied: ${operation}`,
