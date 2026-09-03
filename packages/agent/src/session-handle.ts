@@ -140,13 +140,13 @@ interface RegistryEntry {
   readonly controller: SessionController;
 }
 
-const registries = new WeakMap<ObservationSink, SessionRegistry>();
+const registries = new WeakMap<SessionRuntime, SessionRegistry>();
 
 export function session(options: SessionCreateOptions, runtime: SessionRuntime): SessionHandle {
-  let registry = registries.get(runtime.observations);
+  let registry = registries.get(runtime);
   if (registry === undefined) {
     registry = new SessionRegistry(runtime);
-    registries.set(runtime.observations, registry);
+    registries.set(runtime, registry);
   }
   return registry.declare(options);
 }
@@ -155,18 +155,18 @@ export async function sweepSessions(
   resolveRunner: (row: LedgerSession.Row) => SessionRunner,
   runtime: SessionRuntime,
 ): Promise<void> {
-  let registry = registries.get(runtime.observations);
+  let registry = registries.get(runtime);
   if (registry === undefined) {
     registry = new SessionRegistry(runtime);
-    registries.set(runtime.observations, registry);
+    registries.set(runtime, registry);
   }
   await registry.sweep(resolveRunner);
 }
 
 export async function closeSessions(runtime: SessionRuntime): Promise<void> {
-  const registry = registries.get(runtime.observations);
+  const registry = registries.get(runtime);
   if (registry === undefined) return;
-  registries.delete(runtime.observations);
+  registries.delete(runtime);
   await registry.close();
 }
 
@@ -177,7 +177,7 @@ class SessionRegistry {
   constructor(private readonly runtime: SessionRuntime) {}
 
   declare(options: SessionCreateOptions): SessionHandle {
-    const entropy = this.runtime.entropy ?? crypto.randomUUID;
+    const entropy = this.runtime.entropy ?? (() => crypto.randomUUID());
     const id = options.id ?? entropy();
     const existing = this.entries.get(id);
     if (existing !== undefined) {
@@ -239,7 +239,7 @@ function createController(
   runtime: SessionRuntime,
 ): SessionController {
   const clock = runtime.clock ?? Date.now;
-  const entropy = runtime.entropy ?? crypto.randomUUID;
+  const entropy = runtime.entropy ?? (() => crypto.randomUUID());
   const owner = `${runtime.processId ?? String(process.pid)}:${entropy()}`;
   const scheduleHeartbeat = runtime.scheduleHeartbeat ?? defaultHeartbeat;
   let active: Promise<SessionRunnerResult | undefined> | undefined;
