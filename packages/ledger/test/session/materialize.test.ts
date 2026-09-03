@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Bus } from "@openomni/telemetry";
-import { Session, Storage } from "../../src/index";
+import { Session, SessionHandleStore, Storage } from "../../src/index";
+
+const directories: string[] = [];
 
 /**
  * Characterization of `Session.materialize` (slop-audit duplication #6
@@ -29,6 +34,9 @@ beforeEach(() => {
 afterEach(() => {
   Storage.reset();
   Bus.reset();
+  for (const directory of directories.splice(0)) {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 const flushBus = () => new Promise<void>((resolve) => queueMicrotask(() => resolve()));
@@ -186,5 +194,77 @@ describe("Session.materialize", () => {
 
     await flushBus();
     expect(seen).toEqual([{ name: "session.created", id: "ses-expired" }]);
+  });
+});
+
+describe("L0 session materialization", () => {
+  const tools = [{ name: "read", inputSchema: { type: "object" }, category: "query" as const }];
+  const system = {
+    preset: "worker preset",
+    blocks: [{ id: "rules", source: "test", content: "Do the work." }],
+  };
+
+  test("promotes an existing static session into the canonical L0 row", () => {
+    Session.materialize({ id: "legacy-resident", traceId: "trace", title: "Resident", model });
+
+    const promoted = SessionHandleStore.materialize({
+      id: "legacy-resident",
+      parentId: null,
+      role: "resident",
+      tools,
+      system,
+      policyGeneration: 0,
+      actionId: "legacy-resident:configure",
+      at: 10,
+    });
+
+    expect(promoted.created).toBe(true);
+    expect(promoted.row).toMatchObject({ role: "resident", revision: 1 });
+    expect(SessionHandleStore.tree("legacy-resident").map((action) => action.kind)).toEqual([
+      "session.configure",
+    ]);
+  });
+
+  test("reopens a parent-linked worker with identical generations, revision, and tree", () => {
+    const directory = mkdtempSync(join(tmpdir(), "openomni-l0-materialize-"));
+    directories.push(directory);
+    const dbPath = join(directory, "ledger.db");
+    Storage.reset();
+    Storage.initialize({ dbPath, observationSink: Bus });
+    SessionHandleStore.materialize({
+      id: "resident-parent",
+      parentId: null,
+      role: "resident",
+      tools,
+      system,
+      policyGeneration: 3,
+      actionId: "resident-parent:configure",
+      at: 10,
+    });
+    SessionHandleStore.materialize({
+      id: "worker-child",
+      parentId: "resident-parent",
+      role: "worker",
+      tools,
+      system,
+      policyGeneration: 3,
+      actionId: "worker-child:configure",
+      at: 11,
+    });
+    const row = SessionHandleStore.row("worker-child");
+    const tree = SessionHandleStore.tree("worker-child");
+
+    Storage.reset();
+    Storage.initialize({ dbPath, observationSink: Bus });
+
+    expect(SessionHandleStore.row("worker-child")).toEqual(row);
+    expect(SessionHandleStore.tree("worker-child")).toEqual(tree);
+    expect(SessionHandleStore.row("worker-child")).toMatchObject({
+      parentId: "resident-parent",
+      role: "worker",
+      revision: 1,
+      toolsGeneration: 1,
+      policyGeneration: 3,
+    });
   });
 });

@@ -128,8 +128,31 @@ function createSessions(
       }
       const result = transaction(() => {
         if (!insertSession(db, parsed.row)) {
-          const existing = selectSession(db, parsed.row.id);
-          return existing === undefined ? undefined : { created: false as const, row: existing };
+          const existing = selectSessionSql(db, parsed.row.id);
+          if (existing === undefined) return undefined;
+          if (existing.role !== null) {
+            return { created: false as const, row: decodeSession(existing) };
+          }
+          const promoted = db
+            .query(
+              `UPDATE session SET parent_id = ?, role = ?, lease_owner = ?, lease_fence = ?,
+                 lease_expires_at = ?, state = ?, tools_generation = ?, system_hash = ?,
+                 policy_generation = ?
+               WHERE id = ? AND role IS NULL AND revision = 0`,
+            )
+            .run(
+              parsed.row.parentId,
+              parsed.row.role,
+              parsed.row.leaseOwner,
+              parsed.row.leaseFence,
+              parsed.row.leaseExpiresAt,
+              parsed.row.state,
+              parsed.row.toolsGeneration,
+              parsed.row.systemHash,
+              parsed.row.policyGeneration,
+              parsed.row.id,
+            );
+          if (promoted.changes !== 1) return undefined;
         }
         const receipt = appendAction(db, parsed.initialAction, 0);
         if (receipt === undefined) throw new Error("initial session configuration was refused");
@@ -263,9 +286,14 @@ function insertSession(db: Database, row: LedgerSession.Row): boolean {
   return result.changes === 1;
 }
 
-function selectSession(db: Database, id: string): LedgerSession.Row | undefined {
+function selectSessionSql(db: Database, id: string): SessionSqlRow | undefined {
   const row = db.query(`${sessionSelect} WHERE id = ?`).get(id) as SessionSqlRow | null;
-  return row === null ? undefined : decodeSession(row);
+  return row === null ? undefined : row;
+}
+
+function selectSession(db: Database, id: string): LedgerSession.Row | undefined {
+  const row = selectSessionSql(db, id);
+  return row === undefined ? undefined : decodeSession(row);
 }
 
 function createActions(
