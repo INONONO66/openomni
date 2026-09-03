@@ -1,15 +1,10 @@
-import type { z } from "zod";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { Model as ProtocolModel } from "@openomni/protocol";
 const DEFAULT_CACHE_DIR = join(homedir(), ".openomni");
 const DEFAULT_CACHE_PATH = join(DEFAULT_CACHE_DIR, "models.json");
 const TRUSTED_REMOTE_PROVIDER_PACKAGES = new Set(["@ai-sdk/anthropic", "@ai-sdk/openai"]);
 
 export namespace ModelsDev {
-  export const ModelStatus = ProtocolModel.Status;
-  export type ModelStatus = z.infer<typeof ModelStatus>;
-
   /**
    * The subset of a models.dev model record this package consumes. The
    * upstream payload carries more (cost, modalities, capabilities,

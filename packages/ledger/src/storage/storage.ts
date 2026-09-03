@@ -8,17 +8,6 @@ export const productionStorageAdapterBrand: unique symbol = Symbol("productionSt
 // Same-process application modules are trusted composition-root code. The completion writer
 // prevents accidental bypass through ordinary store APIs; it is not an OS isolation boundary.
 export namespace Storage {
-  /** One stored transcript fact in immutable session-stream order. */
-  export type TranscriptFactRow = {
-    sessionID: string;
-    seq: number;
-    messageID: string;
-    attemptID: string;
-    type: string;
-    data: string;
-    timeCreated: number;
-  };
-
   export interface Adapter {
     readonly [productionStorageAdapterBrand]?: true;
     readonly observationSink?: BusEvent.Sink;

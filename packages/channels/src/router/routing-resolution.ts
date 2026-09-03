@@ -22,10 +22,6 @@ const ingressRoutingErrorCodes = [
   "route_record_failed",
   /** Redelivered inbound whose fresh decision diverges from the recorded route.decided fact — fail closed, no action, no second fact (#510 review fix F2). */
   "route_replay_divergent",
-  "dispatch_runtime_missing",
-  "dispatch_route_invalid",
-  "dispatch_failed",
-  "dispatch_output_unsupported",
   "wait_reply_rejected",
 ] as const;
 export type IngressRoutingErrorCode = (typeof ingressRoutingErrorCodes)[number];

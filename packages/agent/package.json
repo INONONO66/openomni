@@ -13,7 +13,6 @@
     "test:ci": "bun test --timeout 15000 --coverage --coverage-reporter=lcov --coverage-dir=coverage"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.27.1",
     "@openomni/llm": "workspace:*",
     "@openomni/placement": "workspace:*",
     "@openomni/policy": "workspace:*",

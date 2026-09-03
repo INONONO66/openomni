@@ -7,7 +7,6 @@ import { Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { loadConfig } from "../config";
 import { installShutdownHandlers, startOpenOmni } from "../index";
-import { runProvisioningInit } from "../provisioning/init";
 import { type CliDeps, runCli } from "./commands";
 import type { DaemonIo, DaemonTarget, ExecResult } from "./daemon";
 import { daemonActive, unitPath } from "./daemon";
@@ -163,12 +162,6 @@ export function createCliDeps(home: string = homedir(), options: CliRuntimeOptio
     io,
     envPath,
     startApp,
-    runInit: () => {
-      applyEnvFile(envPath, process.env);
-      return Promise.resolve(
-        runProvisioningInit({ config: loadConfig(home), env: process.env, home, now: Date.now }),
-      );
-    },
     ask,
     writeEnv: (entries) => writeEnvFile(envPath, entries),
     doctorPorts,

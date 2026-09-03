@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { normalizeKnipIssues } from "./check-dead-exports";
 import type { AnyToolDefinition, ToolCategory } from "../apps/openomni/src/tools/core/define";
 import {
   definitionInvariantViolations,
@@ -37,6 +38,46 @@ function messages(
 ) {
   return definitionInvariantViolations(definitions, locations).map(({ message }) => message);
 }
+
+const DELETED_SYMBOLS = ["TranscriptStore", "claimSurface", "McpClient", "runtime/mcp"] as const;
+
+async function deletedSymbolViolations(): Promise<string[]> {
+  const violations: string[] = [];
+  for (const root of ["apps", "packages", "script"] as const) {
+    const glob = new Bun.Glob(`${root}/**/*.ts`);
+    for await (const filePath of glob.scan({ cwd: ".", onlyFiles: true })) {
+      if (filePath.endsWith(".test.ts") || filePath.includes("/dist/")) continue;
+      const source = await Bun.file(filePath).text();
+      for (const symbol of DELETED_SYMBOLS) {
+        if (filePath.includes(symbol) || source.includes(symbol)) {
+          violations.push(`${symbol} ${filePath}`);
+        }
+      }
+    }
+  }
+  return violations.sort((left, right) => left.localeCompare(right));
+}
+
+describe("deleted surface census", () => {
+  test("deleted production symbols stay absent", async () => {
+    expect(await deletedSymbolViolations()).toEqual([]);
+  });
+
+  test("unused-export fixture has one stable key and removing it has none", () => {
+    const fixture = {
+      issues: [
+        {
+          file: "packages/fixture/src/index.ts",
+          exports: [{ name: "DormantStore", line: 3, col: 14 }],
+        },
+      ],
+    };
+    expect(normalizeKnipIssues(fixture)).toEqual([
+      "exports packages/fixture/src/index.ts DormantStore",
+    ]);
+    expect(normalizeKnipIssues({ issues: [] })).toEqual([]);
+  });
+});
 
 describe("lint-tools definition invariants", () => {
   test("a correctly located definition passes", () => {

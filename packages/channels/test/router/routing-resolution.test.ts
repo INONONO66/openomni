@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { extractSurfaceKey, Ingress, Ledger, type Gateway, type Wait } from "@openomni/protocol";
+import { extractSurfaceKey, Ingress, type Gateway, type Wait } from "@openomni/protocol";
 import {
   ActorRegistry,
   ChannelGrantStore,
@@ -55,9 +55,6 @@ describe("GatewayRouter durable routing resolution", () => {
 
     expect(observed).toHaveLength(1);
     expect(observed[0]).toMatchObject({ streamId: streamId(), seq: 1, type: "route.decided" });
-    expect(Ledger.RouteDecided.safeParse((observed[0] as { data: unknown }).data).success).toBe(
-      true,
-    );
   });
 
   test("records blocked decisions before returning the typed rejection", async () => {

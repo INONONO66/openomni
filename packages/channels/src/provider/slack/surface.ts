@@ -15,7 +15,7 @@ import { SlackNormalizer } from "./normalizer";
 import { SlackSocket } from "./socket";
 import type { SlackMessageEvent, SocketEnvelope } from "./types";
 
-export interface SlackAuthOptions {
+interface SlackAuthOptions {
   readonly onDecision?: ChannelAuthnDecisionObserver;
 }
 
@@ -151,9 +151,7 @@ export class SlackAdapter implements Channel.Surface {
     event: SlackMessageEvent,
     traceId: string,
   ): Promise<void> {
-    const handler = this.handler;
-    if (!handler) return;
-    const outbound = await handler(inbound);
+    const outbound = await (this.handler as Channel.MessageHandler)(inbound);
     if (!outbound) return;
     // Replies stay in the thread the message arrived in (a threaded reply
     // outside its thread reads as a non-sequitur in the channel).

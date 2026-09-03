@@ -25,7 +25,6 @@ export type {
   PolicyRegistrationFactory,
 } from "./core/policy";
 export { placementGatedExecutor } from "./core/execution/turn";
-export { McpClient } from "./runtime/mcp/index";
 export {
   createCompactionPolicy,
   isTimeCarriageMarkerPart,

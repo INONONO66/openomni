@@ -17,7 +17,7 @@ import {
 } from "../../channel-authn";
 
 
-export interface TelegramAuthOptions {
+interface TelegramAuthOptions {
   readonly onDecision?: ChannelAuthnDecisionObserver;
 }
 
@@ -146,7 +146,7 @@ export class TelegramAdapter implements Channel.Surface {
     await respondUnderTyping({
       typing: () => this.client.sendTyping(chatId, traceId),
       typingIntervalMs: 4000,
-      run: () => this.getHandler()(inbound),
+      run: () => (this.handler as Channel.MessageHandler)(inbound),
       send: (message) => this.sendOutbound(chatId, message, traceId),
       onError: (err) =>
         this.publish(Operational.Events.Error, {
@@ -176,13 +176,6 @@ export class TelegramAdapter implements Channel.Surface {
       ...decisionOption(this.authOptions.onDecision),
     });
     return PolicyDecision.isBlocking(auth.verdict);
-  }
-
-  private getHandler(): Channel.MessageHandler {
-    if (!this.handler) {
-      throw new Error(`[${this.id}] No handler registered. Call onMessage() before processing.`);
-    }
-    return this.handler;
   }
 
   private async sendOutbound(

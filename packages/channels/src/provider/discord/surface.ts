@@ -15,7 +15,7 @@ import {
   decisionOption,
 } from "../../channel-authn";
 
-export interface DiscordAuthOptions {
+interface DiscordAuthOptions {
   readonly onDecision?: ChannelAuthnDecisionObserver;
 }
 
@@ -170,13 +170,10 @@ export class DiscordAdapter implements Channel.Surface {
       context: { channelId },
     });
 
-    const handler = this.handler;
-    if (!handler) return;
-
     await respondUnderTyping({
       typing: () => this.client.sendTyping(channelId, traceId),
       typingIntervalMs: 8000,
-      run: () => handler(inbound),
+      run: () => (this.handler as Channel.MessageHandler)(inbound),
       send: (message) => sendDiscordMessage(this.client, channelId, message, traceId),
       onError: (err) =>
         this.publish(Operational.Events.Error, {

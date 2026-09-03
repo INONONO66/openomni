@@ -41,18 +41,4 @@ export namespace Token {
     totalTokens: true,
   });
   export type ProviderUsage = z.infer<typeof ProviderUsage>;
-
-  /**
-   * Execution result usage preserves the historical partial accounting contract
-   * while centralizing all known token counter fields in one protocol namespace.
-   */
-  export const ExecutionUsage = z.object({
-    inputTokens: Count.optional(),
-    outputTokens: Count.optional(),
-    totalTokens: Count.optional(),
-    reasoningTokens: Count.optional(),
-    cacheReadTokens: Count.optional(),
-    cacheWriteTokens: Count.optional(),
-  });
-  export type ExecutionUsage = z.infer<typeof ExecutionUsage>;
 }

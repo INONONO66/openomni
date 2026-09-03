@@ -35,6 +35,7 @@ describe("health endpoint", () => {
     const app = await startOpenOmni({
       config: {
         dbPath: join(directory, "openomni.db"),
+        memoryPath: join(directory, "memory.json"),
         host: "127.0.0.1",
         wsPort: 0,
         model: { provider: "fake", id: "health-test", apiKey: "test-key" },
@@ -54,7 +55,9 @@ describe("npm package staging", () => {
   });
 
   test("build stages a dependency-free package whose bundle boots with real migrations", async () => {
-    const build = Bun.spawnSync([process.execPath, "run", "script/build-npm-package.ts"], { cwd: appDir });
+    const build = Bun.spawnSync([process.execPath, "run", "script/build-npm-package.ts"], {
+      cwd: appDir,
+    });
     expect(build.exitCode).toBe(0);
 
     // Manifest contract: no workspace deps may leak into the registry artifact.
@@ -78,6 +81,7 @@ describe("npm package staging", () => {
         ...process.env,
         HOME: home,
         OPENOMNI_DB_PATH: join(home, "storage.db"),
+        OPENOMNI_MEMORY_PATH: join(home, "memory.json"),
         OPENOMNI_WS_PORT: "0",
         OPENOMNI_MODEL_PROVIDER: "fake",
         OPENOMNI_MODEL_ID: "pack-smoke",
@@ -106,12 +110,15 @@ describe("npm package staging", () => {
     // closed it must reach its own request-line guard and exit with the
     // dedicated sentinel code — load errors and top-level exceptions exit 1
     // and cannot fake this.
-    const worker = Bun.spawnSync([process.execPath, join(staging, "dist", "app", "process-entry.js")], {
-      cwd: staging,
-      stdin: new Uint8Array(),
-      stdout: "pipe",
-      stderr: "pipe",
-    });
+    const worker = Bun.spawnSync(
+      [process.execPath, join(staging, "dist", "app", "process-entry.js")],
+      {
+        cwd: staging,
+        stdin: new Uint8Array(),
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
     expect(worker.exitCode).toBe(PROCESS_WORKER_NO_REQUEST_EXIT);
     expect(worker.stdout.toString()).toBe("");
   }, 30_000);

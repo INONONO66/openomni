@@ -1,7 +1,6 @@
 // Type-only storage contract vocabulary: the sub-adapter surfaces a ledger
 // adapter implements, grouped by semantic domain.
 import type { Actor } from "../actor/index.js";
-import type { AppConnector } from "../app-connector/index.js";
 import type { Ledger } from "../ledger/index.js";
 import type { Delegation } from "../delegation/index.js";
 import type { Approval } from "../approval/index.js";
@@ -91,13 +90,6 @@ export namespace Storage {
     setSecret(secret: Provisioning.Secret): void;
     listSecrets(): Provisioning.Secret[];
     removeSecret(id: string): boolean;
-  }
-
-  export interface AppConnectorInstallationSubAdapter {
-    get(id: string): AppConnector.Installation | undefined;
-    set(installation: AppConnector.Installation): void;
-    list(): AppConnector.Installation[];
-    remove(id: string): boolean;
   }
 
   /**

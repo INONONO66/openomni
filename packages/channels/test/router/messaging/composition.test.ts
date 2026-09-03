@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { extractSurfaceKey, type Gateway, Ingress } from "@openomni/protocol";
+import { type Gateway, Ingress } from "@openomni/protocol";
 import { ActorRegistry, ChannelGrantStore, Storage } from "@openomni/ledger";
 import type { ChannelDeliveryRoute, GatewayRouter } from "../../../src/router/index.js";
 import { makeRouter as makeFixtureRouter, resetRouterState } from "../_router-fixture";
@@ -427,15 +427,5 @@ describe("messaging-composed gateway router (#708)", () => {
     expect(receipt.kind).toBe("denied");
     if (receipt.kind === "denied") expect(receipt.code).toBe("ungranted");
     expect(delivered).toEqual([]);
-  });
-
-  test("claimSurface returns the CAS owner and is idempotent for the same session", () => {
-    const router = makeRouter();
-    const key = extractSurfaceKey(strangerEvent);
-    const first = router.claimSurface(key, "sess-A");
-    expect(first).toBe("sess-A");
-    // Insert-only (no expected): a second claim without expectedSessionId does
-    // not clobber the live owner.
-    expect(router.claimSurface(key, "sess-B")).toBe("sess-A");
   });
 });

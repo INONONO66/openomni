@@ -67,6 +67,7 @@ esac
     PATH: `${bin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
     OPENOMNI_COMMAND_LOG: join(home, "commands.log"),
     OPENOMNI_DB_PATH: join(home, "storage.db"),
+    OPENOMNI_MEMORY_PATH: join(home, "memory.json"),
     OPENOMNI_MACHINES_SOCKET: join(home, "machines.sock"),
     OPENOMNI_MODELS_PATH: join(home, "models.json"),
     OPENOMNI_DISABLE_MODELS_FETCH: "1",
@@ -351,25 +352,6 @@ describe("real CLI entry", () => {
     );
   });
 
-  test("runs provisioning initialization through the real binder", async () => {
-    const home = tempHome();
-    const savedDiscordToken = process.env.DISCORD_BOT_TOKEN;
-    process.env.DISCORD_BOT_TOKEN = "poisoned-parent-token";
-    try {
-      const env = appEnv(home);
-      expect("DISCORD_BOT_TOKEN" in env).toBe(false);
-      const child = await runCli(["init"], env);
-      expect(child.exitCode).toBe(0);
-      expect(existsSync(join(home, ".openomni", "vault.key"))).toBe(true);
-      expect(child.stdout).toContain("minted vault key file");
-      expect(child.stdout).toContain("no channel credentials in env config; nothing to import");
-      expect(child.stdout).not.toContain("channel:discord:main");
-    } finally {
-      if (savedDiscordToken === undefined) delete process.env.DISCORD_BOT_TOKEN;
-      else process.env.DISCORD_BOT_TOKEN = savedDiscordToken;
-    }
-  });
-
   test("refuses onboarding before prompting when stdin is not a terminal", async () => {
     const child = await runCli(["onboard"], appEnv(tempHome()));
     expect(child.exitCode).toBe(1);
@@ -414,63 +396,34 @@ describe("real CLI entry", () => {
     }
   });
 
-  test("real doctor and init adapters read effective process state", async () => {
+  test("real doctor adapter reads effective process state", async () => {
     const root = tempHome();
     const deps = createCliDeps(root);
     const env = appEnv(root);
-    const dbPath = join(root, "effective-init.db");
-    const vaultKey = Buffer.alloc(32, 7).toString("base64");
-    env.OPENOMNI_DB_PATH = dbPath;
     env.OPENOMNI_MODEL_PROVIDER = "anthropic";
     env.OPENOMNI_MODEL_ID = "effective-model";
     env.OPENOMNI_MODEL_API_KEY = "effective-key";
-    env.OPENOMNI_VAULT_KEY = vaultKey;
     const restore = replaceEnvironment(env);
     try {
       const ports = await deps.doctorPorts();
       expect(Object.fromEntries(ports.effectiveEnv)).toMatchObject({
-        OPENOMNI_DB_PATH: dbPath,
         OPENOMNI_MODEL_PROVIDER: "anthropic",
         OPENOMNI_MODEL_ID: "effective-model",
         OPENOMNI_MODEL_API_KEY: "effective-key",
-        OPENOMNI_VAULT_KEY: vaultKey,
       });
       expect(await ports.probeHealth(1)).toBe(false);
-      expect(await deps.runInit()).toEqual([
-        "no channel credentials in env config; nothing to import",
-      ]);
-      expect(existsSync(dbPath)).toBe(true);
       // ask() rejects when stdin is not a terminal. Force the non-TTY branch
       // deterministically so the test never blocks on a real PTY.
       const isTty = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
       Object.defineProperty(process.stdin, "isTTY", { value: false, configurable: true });
       try {
         await expect(deps.ask("question")).rejects.toEqual(
-          new Error("onboarding requires an interactive terminal")
+          new Error("onboarding requires an interactive terminal"),
         );
       } finally {
         if (isTty) Object.defineProperty(process.stdin, "isTTY", isTty);
         else Reflect.deleteProperty(process.stdin, "isTTY");
       }
-    } finally {
-      restore();
-    }
-  });
-
-  test("factory home owns default state paths even when process HOME differs", async () => {
-    const root = tempHome();
-    const differentHome = tempHome();
-    const deps = createCliDeps(root);
-    const env = appEnv(differentHome);
-    delete env.OPENOMNI_DB_PATH;
-    env.OPENOMNI_VAULT_KEY = Buffer.alloc(32, 9).toString("base64");
-    const restore = replaceEnvironment(env);
-    try {
-      expect(await deps.runInit()).toEqual([
-        "no channel credentials in env config; nothing to import",
-      ]);
-      expect(existsSync(join(root, ".openomni", "storage.db"))).toBe(true);
-      expect(existsSync(join(differentHome, ".openomni", "storage.db"))).toBe(false);
     } finally {
       restore();
     }
