@@ -3,7 +3,6 @@ import { createPolicyEngine } from "./engine/dispatch";
 export { PolicyRegistrationError } from "./engine/registration";
 export { evaluatePermission, decisionFromEvaluation } from "./permission-evaluate";
 export type {
-  PolicyDecision,
   PolicyEngineConfig,
   GenericPolicyContext,
   CanonicalPolicyRegistrationGeneric,

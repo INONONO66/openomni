@@ -38,6 +38,7 @@ const ORDERED_MIGRATIONS: Migration.Definition[] = [
   { name: "0030_drop_artifact/migration.sql" },
   { name: "0030_drop_retired_tables/migration.sql" },
   { name: "0031_l0_ledger_base/migration.sql" },
+  { name: "0031_drop_dormant_tables/migration.sql" }
 ];
 
 const CLEAR_ORDER = [
@@ -50,7 +51,6 @@ const CLEAR_ORDER = [
   "wait",
   "approval",
   "delegation",
-  "app_connector_installation",
   "channel_grant",
   "blacklist",
   "actor_endpoint",
@@ -58,13 +58,9 @@ const CLEAR_ORDER = [
   "egress_debit",
   "worker_grant",
   "worker_run_state",
-  // The cron adapter is deleted, but migration 0004 still creates this table
-  // on every database — clear() keeps emptying legacy rows.
-  "cron_job",
   "bus_event",
 
   "surface_key",
-  "transcript_fact",
   "part",
   "message",
   "session",

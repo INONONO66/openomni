@@ -4,7 +4,6 @@ export type {
   PolicyEngineRegistration,
   PolicyFn,
   PolicyRegistration,
-  PolicyRegistrationFactory,
 } from "./types";
 import {
   PolicyEngine as GenericPolicyEngine,

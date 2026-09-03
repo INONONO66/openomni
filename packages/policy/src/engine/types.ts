@@ -42,7 +42,6 @@ export type DispatchPointContextGeneric<
   TPointId extends PolicyPointId,
 > = DispatchContextGeneric<TCtx> & Policy.PolicyPointInputMap[TPointId];
 
-export type PolicyDecision = Policy.PolicyDecision;
 
 type AuditEmit = <T>(event: BusEvent.Descriptor<T>, data: T) => void;
 

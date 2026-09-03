@@ -1,5 +1,8 @@
-import { describe, expect, test } from "bun:test";
-import { normalizeKnipIssues } from "./check-dead-exports";
+import { afterEach, describe, expect, test } from "bun:test";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { normalizeKnipIssues, runKnip } from "./check-dead-exports";
 import type { AnyToolDefinition, ToolCategory } from "../apps/openomni/src/tools/core/define";
 import {
   definitionInvariantViolations,
@@ -40,6 +43,11 @@ function messages(
 }
 
 const DELETED_SYMBOLS = ["TranscriptStore", "claimSurface", "McpClient", "runtime/mcp"] as const;
+const knipFixtures: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(knipFixtures.splice(0).map((fixture) => rm(fixture, { recursive: true })));
+});
 
 async function deletedSymbolViolations(): Promise<string[]> {
   const violations: string[] = [];
@@ -63,19 +71,22 @@ describe("deleted surface census", () => {
     expect(await deletedSymbolViolations()).toEqual([]);
   });
 
-  test("unused-export fixture has one stable key and removing it has none", () => {
-    const fixture = {
-      issues: [
-        {
-          file: "packages/fixture/src/index.ts",
-          exports: [{ name: "DormantStore", line: 3, col: 14 }],
-        },
-      ],
-    };
-    expect(normalizeKnipIssues(fixture)).toEqual([
-      "exports packages/fixture/src/index.ts DormantStore",
+  test("Knip detects a synthetic unused package-root export and clears after removal", async () => {
+    const fixture = await mkdtemp(join(tmpdir(), "openomni-knip-"));
+    knipFixtures.push(fixture);
+    await writeFile(
+      join(fixture, "package.json"),
+      `${JSON.stringify({ name: "dead-export-fixture", type: "module" })}\n`,
+    );
+    await writeFile(join(fixture, "knip.json"), `${JSON.stringify({ entry: ["index.ts"] })}\n`);
+    await writeFile(join(fixture, "index.ts"), "export const DormantStore = 1;\n");
+
+    expect(normalizeKnipIssues(await runKnip(fixture, false, true))).toEqual([
+      "exports index.ts DormantStore",
     ]);
-    expect(normalizeKnipIssues({ issues: [] })).toEqual([]);
+
+    await writeFile(join(fixture, "index.ts"), "export {};\n");
+    expect(normalizeKnipIssues(await runKnip(fixture, false, true))).toEqual([]);
   });
 });
 

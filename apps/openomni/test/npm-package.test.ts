@@ -35,7 +35,6 @@ describe("health endpoint", () => {
     const app = await startOpenOmni({
       config: {
         dbPath: join(directory, "openomni.db"),
-        memoryPath: join(directory, "memory.json"),
         host: "127.0.0.1",
         wsPort: 0,
         model: { provider: "fake", id: "health-test", apiKey: "test-key" },
