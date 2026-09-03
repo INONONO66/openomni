@@ -106,7 +106,7 @@ describe("npm package staging", () => {
     // closed it must reach its own request-line guard and exit with the
     // dedicated sentinel code — load errors and top-level exceptions exit 1
     // and cannot fake this.
-    const worker = Bun.spawnSync(["bun", join(staging, "dist", "app", "process-entry.js")], {
+    const worker = Bun.spawnSync([process.execPath, join(staging, "dist", "app", "process-entry.js")], {
       cwd: staging,
       stdin: new Uint8Array(),
       stdout: "pipe",
