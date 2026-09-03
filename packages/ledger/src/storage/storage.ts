@@ -95,10 +95,6 @@ export namespace Storage {
     // (requireSubAdapter throw) when it is missing; production adapters wire
     // it as required (SqliteStorageAdapter).
     surfaceKey?: ProtocolStorage.SurfaceKeySubAdapter;
-    artifact?: {
-      store(id: string, sessionId: string, meta: string, content: string): void;
-      get(id: string): { meta: string; content: string; sessionId: string } | undefined;
-    };
     workItem?: ProtocolStorage.WorkItemSubAdapter;
     // Optional here for test fakes only — WaitStore fails closed (typed
     // adapter_absent error) when it is missing; production adapters wire it
@@ -158,7 +154,6 @@ export namespace Storage {
     "part",
     "transcriptFact",
     "surfaceKey",
-    "artifact",
     "workItem",
     "wait",
     "conversation",

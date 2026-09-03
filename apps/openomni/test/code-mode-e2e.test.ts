@@ -2,9 +2,8 @@ import { expect, test } from "bun:test";
 import { Bus } from "@openomni/telemetry";
 import type { RunInput, Sink } from "@openomni/llm";
 import { attachMachineDaemon, createMachineHost, type MachineDaemon } from "@openomni/machines";
-import type { Artifact, Machine } from "@openomni/protocol";
+import type { Machine } from "@openomni/protocol";
 import type { DelegationOrigin } from "../src/delegation/admission";
-import type { ArtifactsPort } from "../src/tools/mutation/artifacts";
 import type { CatalogPorts } from "../src/tools/core/catalog";
 import type { AnyToolDefinition } from "../src/tools/core/define";
 import { createCellRegistry } from "../src/tools/cell-registry";
@@ -107,7 +106,7 @@ test("a cell batches delegation into one turn", async () => {
 
   // The machine was attached, so the machine-placed tool was offered.
   expect(answer).toContain(
-    "offered=[approval,artifacts,await_delegation,cancel_delegation,converse,delegate,memory,provision,run_code,work_items]",
+    "offered=[approval,await_delegation,cancel_delegation,converse,delegate,memory,provision,run_code,work_items]",
   );
   // Three workers ran and their answers came back inside the cell. The value
   // is the cell's final expression as Python rendered it, quotes included.
@@ -165,7 +164,6 @@ test("the machine tool is not offered while nothing is attached", async () => {
     "run_code",
     "memory",
     "work_items",
-    "artifacts",
   ]);
   // All tools are host-projected; the local default host reports live attachment failure.
   expect(answer).toContain("the default kernel host is not attached right now");
@@ -391,36 +389,6 @@ test("parallel() runs independent tool calls concurrently and returns both resul
   // Both calls were in flight at once — the kernel's concurrent door, not luck.
   expect(maxInFlight).toBe(2);
   expect(output).toContain("answered(first); answered(second)");
-}, 40_000);
-
-test("write_artifact stores from inside a cell and read_artifact fetches it back by id", async () => {
-  const rows = new Map<string, { meta: Artifact.Meta; content: string }>();
-  const artifacts: ArtifactsPort = {
-    store: (_sessionId, meta, content) => {
-      rows.set(meta.id, { meta, content });
-    },
-    get: (artifactId) => rows.get(artifactId) ?? null,
-  };
-  const { host, run } = await startCellHarness({ artifacts });
-
-  const output = await run(
-    [
-      "stored = tool.artifacts(op='write', name='dataset', content='x' * 4000)",
-      "artifact_id = stored['id']",
-      "fetched = tool.artifacts(op='read', artifactId=artifact_id)['content']",
-      "'artifact stored: ' + artifact_id + ' | fetched_len=' + str(len(fetched)) + ' | match=' + str(fetched == 'x' * 4000)",
-    ].join("\n"),
-  );
-  host.close();
-
-  expect(output).toContain("artifact stored: ");
-  expect(output).toContain("fetched_len=4000");
-  expect(output).toContain("match=True");
-  // The content itself never came back through the conversation.
-  expect(output).not.toContain("x".repeat(4000));
-  const stored = [...rows.values()];
-  expect(stored).toHaveLength(1);
-  expect(stored[0]?.meta.sessionId).toBe(CELL_ORIGIN.sessionId);
 }, 40_000);
 
 /** The Owner's enrollment is the ceiling: a daemon cannot claim its way past it. */

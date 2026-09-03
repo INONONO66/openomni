@@ -17,7 +17,6 @@ export * from "./actor/index.js";
 export * from "./gateway/index.js";
 export * from "./ingress/index.js";
 export * from "./policy/index.js";
-export * from "./artifact/index.js";
 export * from "./ipc/index.js";
 export * from "./work-item/index.js";
 export * from "./deadline/index.js";

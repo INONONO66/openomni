@@ -760,45 +760,5 @@
     },
     "safe": false,
     "placement": "host"
-  },
-  {
-    "name": "artifacts",
-    "description": "Write large text under the current session or read it back by artifact id. Use op=write or op=read.",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "op": {
-          "anyOf": [
-            {
-              "type": "string",
-              "const": "write"
-            },
-            {
-              "type": "string",
-              "const": "read"
-            }
-          ]
-        },
-        "name": {
-          "description": "Write only: a short title for the artifact.",
-          "type": "string",
-          "minLength": 1
-        },
-        "content": {
-          "description": "Write only: the full text to store.",
-          "type": "string",
-          "minLength": 1
-        },
-        "artifactId": {
-          "description": "Read only: the artifact id.",
-          "type": "string",
-          "minLength": 1
-        }
-      },
-      "required": ["op"],
-      "additionalProperties": false
-    },
-    "safe": false,
-    "placement": "host"
   }
 ]

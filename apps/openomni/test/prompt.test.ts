@@ -25,7 +25,6 @@ describe("buildAgentPrompt", () => {
     expect(prompt).toContain("one run_code cell");
     expect(prompt).toContain("parallel(thunks)");
     expect(prompt).toContain("llm(prompt)");
-    expect(prompt).toContain("artifacts(op=write)");
   });
 
   test("keeps the base prefix stable across memory snapshots", () => {

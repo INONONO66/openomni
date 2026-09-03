@@ -6,7 +6,6 @@ import { createSqliteAppConnectorInstallationAdapter } from "./sqlite-app-connec
 import { createSqliteBlacklistAdapter } from "./sqlite-blacklist-adapter";
 import { createSqliteChannelGrantAdapter } from "./sqlite-channel-grant-adapter";
 import { createSqliteProvisioningAdapter } from "./sqlite-provisioning-adapter";
-import { createSqliteArtifactAdapter } from "./sqlite-artifact-adapter";
 import { createSqliteEgressBudgetAdapter } from "./sqlite-egress-budget-adapter";
 import { createSqliteDelegationAdapter } from "./sqlite-delegation-adapter";
 import { createSqliteMessageAdapter } from "./sqlite-message-adapter";
@@ -48,7 +47,6 @@ export class SqliteStorageAdapter implements Storage.Adapter {
   readonly part: Storage.Adapter["part"];
   readonly transcriptFact: NonNullable<Storage.Adapter["transcriptFact"]>;
   readonly surfaceKey: NonNullable<Storage.Adapter["surfaceKey"]>;
-  readonly artifact: NonNullable<Storage.Adapter["artifact"]>;
   readonly workerRunState: WorkerRunStateStore.Adapter;
   readonly workItem: NonNullable<Storage.Adapter["workItem"]>;
   readonly wait: NonNullable<Storage.Adapter["wait"]>;
@@ -94,7 +92,6 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     // fact append + message/part projection inside one transaction (#547 C3).
     this.transcriptFact = createSqliteTranscriptFactAdapter(this.db);
     this.surfaceKey = createSqliteSurfaceKeyAdapter(this.db);
-    this.artifact = createSqliteArtifactAdapter(this.db);
     this.workerRunState = createSqliteWorkerRunStateAdapter(this.db);
     this.workItem = createSqliteWorkItemAdapter(this.db);
     this.wait = createSqliteWaitAdapter(this.db);

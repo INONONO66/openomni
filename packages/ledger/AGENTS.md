@@ -1,6 +1,6 @@
 # packages/ledger
 
-Durable state substrate: session lifecycle, message/part storage, hash-chained bus persistence, artifacts, surface-key records, worker-run records, actor/grant/blacklist stores, and the WorkItem store used by the OpenOmni kernel. Depends on `@openomni/protocol` and `@openomni/telemetry`.
+Durable state substrate: session lifecycle, message/part storage, hash-chained bus persistence, surface-key records, worker-run records, actor/grant/blacklist stores, and the WorkItem store used by the OpenOmni kernel. Depends on `@openomni/protocol` and `@openomni/telemetry`.
 
 SSOT directive ([docs/gateway-design.md](../../docs/gateway-design.md) §4, Owner 2026-08-19): "exactly one database, owned by `@openomni/ledger` (the #502 rename of session's storage). No package other than ledger touches the storage engine — every read/write goes through ledger's typed store surfaces." This package is the single storage engine owner; row schemas stay in `protocol`.
 
@@ -37,7 +37,6 @@ src/
 ├── actor/                # ActorIdentity / ActorEndpoint registry stores
 ├── blacklist/            # Raw Blacklist entry CRUD; channels owns active/pattern matching
 ├── channel-grant/        # Raw ChannelGrant CRUD; channels owns ranking/default treatment
-├── artifact/             # Artifact.store / get; reads normalize legacy invalid metadata into the current schema
 ├── app-connector/        # Installed-app lifecycle; installation and connector actor identity/endpoint change transactionally
 ├── surface-key/          # SurfaceKey — N:1 mapping from external surface keys to session IDs
 ├── engagement/           # EngagementStore — durable delegation machine (#709, gateway-design §5): fact-before-projection appends on engagement:<id> streams via the shared commit coordinator (no adoption path — the stream class was born with the table), typed Engagement.StoreError fail-closed, lazy deadline expiry at hydration (listActive). Brain-domain surface: the brain is its sole writer
@@ -73,7 +72,6 @@ src/
 - **Bus events**: `Session.Event.Created`, `.Updated`, `.Deleted` are published on mutation. `worker.run.*` lifecycle events are published by the server worker runner (wire contract), never by this package — the frozen store publishes nothing. BusPersistence is an observational journal: schema-valid payloads persist as normalized `valid`; validation failures persist the exact raw value as `invalid`; parser failures persist it as `parse_failed` with a safe diagnostic. Query readers expose nullable markers so rows written before the marker migration remain readable.
 - **SurfaceKey records**: N:1 mapping from surface-specific keys (e.g. `telegram:botId:chat:chatId`) to session IDs, stored solely in `Storage.Adapter.surfaceKey` (no in-memory index); a missing sub-adapter fails closed — ownership answers are never fabricated (#522). This package stores and looks up the mapping; the app decides when the mapping wins over other routing facts.
 - **WorkItemStore namespace**: `WorkItemStore.create()`, `.get()`, `.list()`, `.start()`, `.fail()`, `.cancel()`, `.assignExecution()`, `.allocateAttempt()`, and `.addEvidence()` own lower-layer storage semantics; every mutation is a dedicated lifecycle helper (the freeform `.update()` and `.remove()`/`.recordOutcome()`/`.areDependenciesMet()` dead surface was removed in #606). There is NO raw completion entry point: the old `.complete()` tombstone is deleted, so completion is reachable only through the admission writer returned by `Storage.configure` — OpenOmni owns completion fact/admission appends and the terminal CAS. `parentHash` and stable completion criteria are immutable by construction.
-- **Artifact reads**: New writes must satisfy the current `Artifact.Meta` schema. `Artifact.get()` upcasts legacy persisted rows on read: non-positive/non-integral versions normalize to at least `1`, and blank `mimeType`/`createdAt` receive stable compatibility defaults before current-schema parsing.
 - **WorkerRunStateStore**: the frozen `worker_run_state` archive (#510 D2b). Reads (`get` / `listBySession` / `listByStatus`) keep serving historical rows — including the upcast-on-read attempt-run view in `WorkItemAttemptRun.find` — while every write throws the typed `WorkerRun.FrozenError` (`worker_run_frozen`) and persists nothing. Run lifecycle lives on WorkItem attempt facts (`work_item.attempt_allocated` / `attempt_finished`).
 - **Session TTL**: `Session.create({ ttlMs })` sets `expiresAt`. `Session.get()` and `.list()` are pure reads that hide expired rows without deleting them. `Session.sweepExpired()` owns physical removal (including message/part cascade) and is invoked by boot recovery; there is no periodic sweep yet.
 - **Session lineage**: `Session.createChild()` + `parentSessionId` + `spawnDepth` are the current foundation for original → self-loop → child Worker trees. Future work should add explicit metadata conventions before adding new storage shapes.
@@ -98,7 +96,7 @@ If a store method starts combining multiple product facts into an allow/deny/rou
 
 ## ANTI-PATTERNS
 
-- **Storage API tiers**: `Storage.get()` is the public low-level API for accessing sub-adapters such as `workItem` and `workerRunState` from outside this package. The interface keeps many capabilities optional so narrow test fakes are possible, but the branded production adapter must pass `Storage.assertComplete()` at configuration. For core session operations, prefer namespace APIs (`Session.*`, `Artifact.*`, `SurfaceKey.*`).
+- **Storage API tiers**: `Storage.get()` is the public low-level API for accessing sub-adapters such as `workItem` and `workerRunState` from outside this package. The interface keeps many capabilities optional so narrow test fakes are possible, but the branded production adapter must pass `Storage.assertComplete()` at configuration. For core session operations, prefer namespace APIs (`Session.*`, `SurfaceKey.*`).
 - Do NOT import internal paths from other packages — import from `@openomni/ledger` (index re-exports).
 - Do NOT persist ad-hoc delegated execution state alongside `Session`. `worker_run_state` is a frozen read-only archive; new writes use the canonical WorkItem attempt contract rather than reviving the legacy shape.
 - Do NOT write raw self-loop transcripts back into the original user session. Store internal work in child sessions and let `openomni` decide what distilled result belongs in the original session.

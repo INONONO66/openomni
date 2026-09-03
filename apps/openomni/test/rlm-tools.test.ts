@@ -1,8 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { placementGatedExecutor } from "@openomni/agent";
 import { Placement } from "@openomni/placement";
-import type { Artifact } from "@openomni/protocol";
-import { ARTIFACTS_TOOL_NAME, type ArtifactsPort } from "../src/tools/mutation/artifacts";
 import { createTools, collectToolSpecs } from "../src/tools/core/catalog";
 import { createDispatcher, HOST_TARGET } from "../src/tools/core/dispatch";
 import { toolSpec } from "../src/tools/core/project";
@@ -17,21 +15,6 @@ import { assistantMessage } from "./helpers/assistant-message";
 import { dispatchModelTool, modelToolOutput } from "./helpers/tool-dispatch";
 
 const RESIDENT = { role: "resident", depth: 0, sessionId: "session-origin" } as const;
-
-/** An in-memory ArtifactsPort: records what store was told, serves get from it. */
-function memoryArtifacts() {
-  const rows = new Map<string, { sessionId: string; meta: Artifact.Meta; content: string }>();
-  const port: ArtifactsPort = {
-    store: (sessionId, meta, content) => {
-      rows.set(meta.id, { sessionId, meta, content });
-    },
-    get: (artifactId) => {
-      const row = rows.get(artifactId);
-      return row === undefined ? null : { meta: row.meta, content: row.content };
-    },
-  };
-  return { rows, port };
-}
 
 describe("the llm tool", () => {
   it("returns the port's answer", async () => {
@@ -230,102 +213,27 @@ describe("the llm tool port", () => {
   });
 });
 
-describe("the artifact tools", () => {
-  const tools = (port: ArtifactsPort) =>
-    createDispatcher(createTools({ artifacts: port }, RESIDENT), RESIDENT.sessionId).execute;
-  const call = (
-    run: ReturnType<typeof tools>,
-    id: string,
-    tool: string,
-    input: Record<string, unknown>,
-  ) => run({ id, tool, input });
-
-  it("round-trips content by the returned id, scoped to the origin session", async () => {
-    const { rows, port } = memoryArtifacts();
-    const run = tools(port);
-    const written = await call(run, "write", ARTIFACTS_TOOL_NAME, {
-      op: "write",
-      name: "report",
-      content: "the whole dataset",
-    });
-    const id = written.output.replace("artifact stored: ", "");
-
-    expect(written.output).toStartWith("artifact stored: ");
-    expect(written.output).not.toContain("the whole dataset");
-    expect(rows.get(id)?.sessionId).toBe(RESIDENT.sessionId);
-    expect(rows.get(id)?.meta).toMatchObject({
-      id,
-      sessionId: RESIDENT.sessionId,
-      title: "report",
-      version: 1,
-    });
-    const read = await call(run, "read", ARTIFACTS_TOOL_NAME, { op: "read", artifactId: id });
-    expect(read.output).toBe("the whole dataset");
-  });
-
-  it("returns an error result for an unknown id", async () => {
-    const { port } = memoryArtifacts();
-    const result = await call(tools(port), "missing", ARTIFACTS_TOOL_NAME, {
-      op: "read",
-      artifactId: "nope",
-    });
-
-    expect(result).toMatchObject({
-      isError: true,
-      output: "artifacts refused: no artifact with id nope",
-    });
-  });
-
-  it("returns error results for malformed calls", async () => {
-    const { port } = memoryArtifacts();
-    const run = tools(port);
-    for (const [id, tool, input] of [
-      ["empty-name", ARTIFACTS_TOOL_NAME, { op: "write", name: "", content: "x" }],
-      ["missing-content", ARTIFACTS_TOOL_NAME, { op: "write", name: "x" }],
-      ["empty-id", ARTIFACTS_TOOL_NAME, { op: "read", artifactId: "" }],
-    ] as const) {
-      const result = await call(run, id, tool, input);
-      expect(result.isError).toBe(true);
-      expect(result.output).toContain(`${tool} refused:`);
-    }
-  });
-});
-
 describe("catalog gating for the rlm tools", () => {
-  it("lists all three specs in the shippable surface the lint reads", () => {
+  it("lists the llm spec in the shippable surface the lint reads", () => {
     const names = collectToolSpecs().map((spec) => spec.name);
     expect(names).toContain(LLM_TOOL_NAME);
-    expect(names).toContain(ARTIFACTS_TOOL_NAME);
-    expect(names).toContain(ARTIFACTS_TOOL_NAME);
   });
 
   it("is absent from the catalog when the ports are not wired", () => {
     const names = createTools({}, RESIDENT).map((entry) => entry.name);
     expect(names).not.toContain(LLM_TOOL_NAME);
-    expect(names).not.toContain(ARTIFACTS_TOOL_NAME);
-    expect(names).not.toContain(ARTIFACTS_TOOL_NAME);
   });
 
-  it("appears when the ports are wired", () => {
-    const { port } = memoryArtifacts();
-    const names = createTools({ llm: async () => "", artifacts: port }, RESIDENT).map(
-      (entry) => entry.name,
-    );
+  it("appears when the port is wired", () => {
+    const names = createTools({ llm: async () => "" }, RESIDENT).map((entry) => entry.name);
     expect(names).toContain(LLM_TOOL_NAME);
-    expect(names).toContain(ARTIFACTS_TOOL_NAME);
-    expect(names).toContain(ARTIFACTS_TOOL_NAME);
   });
 
-  it("offers all three on the host target", () => {
-    const { port } = memoryArtifacts();
-    const specs = createTools({ llm: async () => "", artifacts: port }, RESIDENT).map((entry) =>
-      toolSpec(entry),
-    );
+  it("offers llm on the host target", () => {
+    const specs = createTools({ llm: async () => "" }, RESIDENT).map((entry) => toolSpec(entry));
     const offerable = Placement.resolveTools(specs, [HOST_TARGET])
       .filter((decision) => decision.offerable)
       .map((decision) => decision.tool.name);
     expect(offerable).toContain(LLM_TOOL_NAME);
-    expect(offerable).toContain(ARTIFACTS_TOOL_NAME);
-    expect(offerable).toContain(ARTIFACTS_TOOL_NAME);
   });
 });

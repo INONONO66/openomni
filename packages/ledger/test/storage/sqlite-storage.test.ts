@@ -179,7 +179,7 @@ describe("SqliteStorageAdapter", () => {
       expect(tables).toContain("message");
       expect(tables).toContain("part");
       expect(tables).toContain("surface_key");
-      expect(tables).toContain("artifact");
+      expect(tables).not.toContain("artifact");
       expect(tables).toContain("bus_event");
       expect(tables).toContain("worker_run_state");
       expect(tables).toContain("_migrations");
@@ -309,6 +309,25 @@ describe("SqliteStorageAdapter", () => {
           .get("legacy-run"),
       ).toEqual({ executor_kind: "internal_chat_agent" });
 
+      upgradedAdapter.close();
+    });
+
+    test("upgrading a database removes the artifact table and its rows", () => {
+      adapter.close();
+      removeSqliteFiles(dbPath);
+
+      const legacyDb = new Database(dbPath);
+      applyMigrationFixture(legacyDb, "0001_initial/migration.sql");
+      legacyDb
+        .query(
+          `INSERT INTO artifact (id, session_id, meta, content, time_created, time_updated)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+        )
+        .run("legacy-artifact", "legacy-session", "{}", "obsolete", 1, 1);
+      legacyDb.close();
+
+      const upgradedAdapter = new SqliteStorageAdapter(dbPath);
+      expect(tableColumns(storageDb(upgradedAdapter), "artifact")).toEqual([]);
       upgradedAdapter.close();
     });
 
@@ -668,15 +687,6 @@ describe("SqliteStorageAdapter", () => {
       expect(adapter.surfaceKey?.lookup("channel:123")).toBe("s1");
     });
 
-    test("deleting session cascades to artifact", () => {
-      adapter.session.set("s1", makeSession("s1"));
-      adapter.artifact?.store("a1", "s1", "{}", "content");
-
-      adapter.session.remove("s1");
-
-      expect(adapter.artifact?.get("a1")).toBeUndefined();
-    });
-
     test("deleting session cascades to observability tables", () => {
       adapter.session.set("s1", makeSession("s1"));
       const db = storageDb(adapter);
@@ -723,47 +733,18 @@ describe("SqliteStorageAdapter", () => {
     });
   });
 
-  describe("artifact", () => {
-    beforeEach(() => {
-      adapter.session.set("s1", makeSession("s1"));
-      adapter.session.set("s2", makeSession("s2"));
-    });
-
-    test("get: returns undefined for non-existent", () => {
-      expect(adapter.artifact?.get("missing")).toBeUndefined();
-    });
-
-    test("store and get", () => {
-      adapter.artifact?.store("a1", "s1", '{"type":"file"}', "file content");
-      const result = adapter.artifact?.get("a1");
-      expect(result).toEqual({
-        meta: '{"type":"file"}',
-        content: "file content",
-        sessionId: "s1",
-      });
-    });
-
-    test("store: upsert updates existing artifact", () => {
-      adapter.artifact?.store("a1", "s1", "{}", "old content");
-      adapter.artifact?.store("a1", "s1", "{}", "new content");
-      expect(adapter.artifact?.get("a1")?.content).toBe("new content");
-    });
-  });
-
   describe("clear", () => {
     test("clears all data from all tables", () => {
       adapter.session.set("s1", makeSession("s1"));
       adapter.message.set("s1", makeUserMessage("s1", "m1"));
       adapter.part.set("m1", makeTextPart("s1", "m1", "p1", 10));
       adapter.surfaceKey?.claim("channel:1", "s1");
-      adapter.artifact?.store("a1", "s1", "{}", "content");
       adapter.clear();
 
       expect(adapter.session.list()).toEqual([]);
       expect(adapter.message.list("s1")).toEqual([]);
       expect(adapter.part.list("m1")).toEqual([]);
       expect(adapter.surfaceKey?.lookup("channel:1")).toBeUndefined();
-      expect(adapter.artifact?.get("a1")).toBeUndefined();
     });
 
     test("clears legacy cron_job rows left by migration 0004", () => {

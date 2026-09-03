@@ -1,6 +1,5 @@
 import type { Placement } from "@openomni/placement";
 import type { Tool } from "@openomni/protocol";
-import { storeTextArtifact, type ArtifactsPort } from "../mutation/artifacts";
 import { ToolRefused, type AnyToolDefinition, type ToolExecutionContext } from "./define";
 import { toolSpec } from "./project";
 
@@ -55,20 +54,15 @@ function executionContext(
   };
 }
 
-function truncate(output: string, sessionId: string, artifacts: ArtifactsPort | undefined): string {
+function truncate(output: string): string {
   if (output.length <= MODEL_OUTPUT_MAX_CHARS) return output;
-  if (artifacts === undefined) {
-    throw new Error("artifact storage is required to preserve truncated tool output");
-  }
-  const artifactId = storeTextArtifact(artifacts, sessionId, "Truncated tool output", output);
-  const marker = `\n[truncated: full output in artifact ${artifactId}; ${output.length} chars]`;
+  const marker = `\n[truncated: ${output.length} chars]`;
   return `${output.slice(0, MODEL_OUTPUT_MAX_CHARS - marker.length)}${marker}`;
 }
 
 export function createDispatcher(
   definitions: readonly AnyToolDefinition[],
   sessionId = "unknown-session",
-  artifacts?: ArtifactsPort,
 ): Dispatcher {
   const known = new Map(definitions.map((definition) => [definition.name, definition]));
 
@@ -110,11 +104,7 @@ export function createDispatcher(
       output:
         door === "cell"
           ? output.data
-          : truncate(
-              definition.render(input.data as never, output.data as never),
-              executionContext(call, context, sessionId).sessionId,
-              artifacts,
-            ),
+          : truncate(definition.render(input.data as never, output.data as never)),
     };
   }
 
