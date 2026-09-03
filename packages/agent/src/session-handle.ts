@@ -237,11 +237,7 @@ function createController(
   const tools: SessionToolsHandle = {
     async add(additions) {
       const current = SessionHandleStore.latestGeneration(SessionHandleStore.tree(sessionId));
-      const names = new Set(additions.map((tool) => tool.name));
-      const next = [
-        ...current.tools.filter((tool) => !names.has(tool.name)),
-        ...additions.map(toolSnapshot),
-      ];
+      const next = [...current.tools, ...additions.map(toolSnapshot)];
       return configure("tools.add", next, {
         preset: current.systemPreset,
         blocks: current.systemBlocks,
@@ -399,7 +395,7 @@ function createController(
     const generation = generationForOpen(open);
     const resumeCount = open.resumeCount + 1;
     const resumeId = entropy();
-    const resultId = entropy();
+    const resultId = open.resultId;
     const resume = turnResumeAction({
       id: resumeId,
       parentId: open.boundaryActionId ?? open.action.id,
@@ -550,6 +546,8 @@ function createController(
       stopHeartbeat = undefined;
       controller = undefined;
     }
+    const latestAction = SessionHandleStore.tree(sessionId).at(-1);
+    if (latestAction === undefined) throw new Error(`session tree is empty: ${sessionId}`);
     await seal(
       {
         turnId: input.turnId,
@@ -560,7 +558,7 @@ function createController(
         toolsHash: input.generation.toolsHash,
         systemHash: input.generation.systemHash,
         policyGeneration: input.generation.policyGeneration,
-        action: SessionHandleStore.tree(sessionId).at(-1)!,
+        action: latestAction,
       },
       result,
     );
@@ -623,9 +621,19 @@ function createController(
   ): Promise<void> {
     const current = SessionHandleStore.row(sessionId);
     const actions = SessionHandleStore.tree(sessionId);
+    const interrupts =
+      result.kind === "interrupted"
+        ? SessionHandleStore.pendingInbox(sessionId).filter((item) => item.kind === "interrupt")
+        : [];
+    const deliveries = deliveryActions(
+      interrupts,
+      open.turnId,
+      "before_llm",
+      actions.at(-1)?.id ?? open.action.id,
+    );
     const terminal = turnTerminalAction({
       id: open.resultId,
-      parentId: actions.at(-1)?.id ?? open.action.id,
+      parentId: deliveries.at(-1)?.id ?? actions.at(-1)?.id ?? open.action.id,
       sessionId,
       turnId: open.turnId,
       result,
@@ -640,8 +648,8 @@ function createController(
       fence,
       now: clock(),
       expectedRevision: current.revision,
-      actions: [terminal],
-      consumeInboxIds: [],
+      actions: [...deliveries, terminal],
+      consumeInboxIds: interrupts.map((item) => item.id),
       state: nextState,
       releaseLease: true,
     });
@@ -674,14 +682,12 @@ function createController(
     nextTools: readonly SessionGeneration.Tool[],
     nextSystem: SessionSystem,
   ): Promise<SessionGeneration.ConfigureReceipt> {
-    const current = SessionHandleStore.row(sessionId);
-    const actions = SessionHandleStore.tree(sessionId);
-    const previous = SessionHandleStore.latestGeneration(actions);
-    const generation = previous.generation + 1;
+    const before = SessionHandleStore.latestGeneration(SessionHandleStore.tree(sessionId));
+    const generation = before.generation + 1;
     const authorized =
       (await runtime.authorizeConfigure?.({
         sessionId,
-        role: current.role,
+        role: SessionHandleStore.row(sessionId).role,
         operation,
         generation,
       })) ?? true;
@@ -691,6 +697,15 @@ function createController(
         message: `session configure denied: ${operation}`,
       });
     }
+    const current = SessionHandleStore.row(sessionId);
+    const actions = SessionHandleStore.tree(sessionId);
+    const previous = SessionHandleStore.latestGeneration(actions);
+    if (previous.generation !== before.generation) {
+      throw new SessionGeneration.ConfigureError({
+        code: "stale",
+        message: `session generation advanced during configure: ${sessionId}`,
+      });
+    }
     const snapshot = SessionHandleStore.generationSnapshot({
       generation,
       revertTo: previous.generation,
@@ -698,7 +713,8 @@ function createController(
       system: nextSystem,
       policyGeneration: previous.policyGeneration,
     });
-    fence = acquire(current.leaseFence);
+    const ownsRunningLease = current.state === "running" && current.leaseOwner === owner;
+    fence = ownsRunningLease ? current.leaseFence : acquire(current.leaseFence);
     const configured = SessionHandleStore.configureAction({
       id: entropy(),
       sessionId,
@@ -721,7 +737,7 @@ function createController(
         systemHash: snapshot.systemHash,
         policyGeneration: snapshot.policyGeneration,
       },
-      releaseLease: true,
+      releaseLease: !ownsRunningLease,
     });
     requireCommit(committed);
     return { generation: snapshot.generation, revertTo: snapshot.revertTo };
