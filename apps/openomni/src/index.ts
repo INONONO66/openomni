@@ -61,7 +61,6 @@ import { createMountedChannelGrantRegistrar, createResidentGateway } from "./gat
 import { createComposer, rollbackToCause } from "./composition/composer";
 import { createPolicyRegistry } from "./composition/policy-registry";
 import { createDriverRegistry } from "./composition/driver-registry";
-import { openCuratedMemory } from "./memory/store";
 import { buildInboundEvent } from "./inbound";
 import { createResident } from "./resident";
 import { HOST_TARGET } from "./tools/core/dispatch";
@@ -435,10 +434,6 @@ export async function startOpenOmni(options: StartOptions = {}) {
 
     // Self-referential: a cell's catalog is the same one that dispatches cells,
     // and placement subtracts what a cell cannot reach.
-    // The Resident's one durable memory (kernel-contract §5): curated through
-    // the memory tool, frozen into the system prompt per session.
-    const memory = openCuratedMemory(config.memoryPath);
-
     const machineHost = host;
     const llmPort = createLlmToolPort(
       { ...config.model, ...(transport === undefined ? {} : { transport }) },
@@ -484,7 +479,6 @@ export async function startOpenOmni(options: StartOptions = {}) {
       tools: {
         delegation: delegationKernel,
         ...(cells === undefined ? {} : { cells }),
-        memory,
         llm: llmPort,
         conversations: conversePort,
         leases: leasePort,

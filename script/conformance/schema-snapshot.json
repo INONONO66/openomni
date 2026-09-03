@@ -155,7 +155,6 @@
     "toActorId"
   ],
   "Approval.Subject#person_mutation": ["kind", "manifestDigest", "personId"],
-
   "BusEvent.Metadata": [
     "actorId",
     "agentName",
