@@ -39,31 +39,6 @@ export namespace Storage {
       list(messageID: string): Message.Part[];
       remove(messageID: string, partID: string): boolean;
     };
-    // #547 C3: append-only Transcript.Fact rows (recording tier). The surface
-    // is deliberately append + read ONLY — a recorded fact is immutable and
-    // later lifecycle steps are NEW facts (part.advanced), never updates of
-    // stored rows. Optional here for test fakes only — TranscriptStore fails
-    // closed when it is missing; production adapters wire it as required
-    // (SqliteStorageAdapter).
-    transcriptFact?: {
-      append(row: {
-        sessionID: string;
-        messageID: string;
-        attemptID: string;
-        type: string;
-        data: string;
-        timeCreated: number;
-      }): number;
-      list(sessionID: string): TranscriptFactRow[];
-      listByAttempt(sessionID: string, attemptID: string): TranscriptFactRow[];
-      /**
-       * #562 F7: stored-fact count for one attempt — the record path's
-       * continuity check for its in-memory fold-state cache (an index count,
-       * never a row read). Still read-only surface: no update, no delete.
-       */
-      countByAttempt(sessionID: string, attemptID: string): number;
-    };
-
     // Optional here for test fakes only — SurfaceKey operations fail closed
     // (requireSubAdapter throw) when it is missing; production adapters wire
     // it as required (SqliteStorageAdapter).
@@ -91,7 +66,6 @@ export namespace Storage {
     actorRegistry?: ProtocolStorage.ActorRegistrySubAdapter;
     blacklist?: ProtocolStorage.BlacklistSubAdapter;
     channelGrant?: ProtocolStorage.ChannelGrantSubAdapter;
-    appConnectorInstallation?: ProtocolStorage.AppConnectorInstallationSubAdapter;
     // Provisioning declarations + vault rows (docs/provisioning-and-providers.md
     // §3). Optional for test fakes only — provisioning stores fail closed
     // (typed adapter_absent) when it is missing; production adapters wire it
@@ -117,7 +91,6 @@ export namespace Storage {
     "session",
     "message",
     "part",
-    "transcriptFact",
     "surfaceKey",
 
     "wait",
@@ -129,7 +102,6 @@ export namespace Storage {
     "actorRegistry",
     "blacklist",
     "channelGrant",
-    "appConnectorInstallation",
     "provisioning",
     "sessions",
     "actions",
