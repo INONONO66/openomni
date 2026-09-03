@@ -478,6 +478,40 @@ describe("Processor", () => {
         expect(processor.message.tokens.input).toBe(3);
         expect(processor.message.tokens.output).toBe(2);
       });
+
+      test("estimates each step's output from that step's emission only", async () => {
+        // Default estimator, so the output estimate reads the step's own
+        // emitted assistant text. Step 1 emits 8 chars and reports usable
+        // counts; step 2 emits 4 chars and reports nothing usable. Step 2's
+        // estimate must cover step 2's 4 chars (ceil(4/4) = 1), not the 12
+        // accumulated chars (ceil(12/4) = 3) - the per-step reset is what
+        // keeps multi-step totals additive.
+        const processor = createProcessor({
+          createStream: streamOf([
+            { type: "step-start" },
+            { type: "text-start", providerMetadata: {} },
+            { type: "text-delta", text: "01234567" },
+            { type: "text-end", providerMetadata: {} },
+            {
+              type: "step-finish",
+              finishReason: "tool_use",
+              usage: { inputTokens: 1000, outputTokens: 500 },
+            },
+            { type: "step-start" },
+            { type: "text-start", providerMetadata: {} },
+            { type: "text-delta", text: "89ab" },
+            { type: "text-end", providerMetadata: {} },
+            { type: "step-finish", finishReason: "end_turn", usage: {} },
+            { type: "finish" },
+          ]),
+        });
+
+        await processor.process({ system: "", promptText: "0123456789" });
+
+        expect(processor.message.tokens.output).toBe(500 + 1);
+        // Input for the estimated step is the turn-initial prompt (10 chars -> 3).
+        expect(processor.message.tokens.input).toBe(1000 + 3);
+      });
     });
 
     test("trims trailing whitespace from text and reasoning at block end", async () => {
