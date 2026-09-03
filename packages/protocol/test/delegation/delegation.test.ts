@@ -307,6 +307,43 @@ describe("Delegation.Origin lineage", () => {
 });
 
 describe("Delegation.Record durable shape", () => {
+  test("locks the public record key census", () => {
+    const recordPrototype = Object.getPrototypeOf(Delegation.Record);
+    const shapeGetter = Object.getOwnPropertyDescriptor(recordPrototype, "shape")?.get;
+    expect(shapeGetter).toBeFunction();
+    const shape = shapeGetter ? Reflect.apply(shapeGetter, Delegation.Record, []) : null;
+    expect(shape !== null && typeof shape === "object").toBe(true);
+    const keys = shape !== null && typeof shape === "object" ? Object.keys(shape) : [];
+    expect(keys).toEqual([
+      "delegationId",
+      "operation",
+      "address",
+      "transport",
+      "deadline",
+      "waitId",
+      "parentDelegationId",
+      "rootDelegationId",
+      "origin",
+      "instruction",
+      "status",
+      "settled",
+      "createdAt",
+      "settledAt",
+      "wokenAt",
+    ]);
+    expect(keys).not.toContain("workItemId");
+  });
+
+  test("rejects the deleted WorkItem linkage field", () => {
+    const result = Delegation.Record.safeParse({ ...OPEN_RECORD, workItemId: "wi-retired" });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues).toContainEqual(
+        expect.objectContaining({ code: "unrecognized_keys", keys: ["workItemId"] }),
+      );
+    }
+  });
+
   test("an open record parses; status open forbids a settlement", () => {
     expect(Delegation.Record.safeParse(OPEN_RECORD).success).toBe(true);
     expect(
