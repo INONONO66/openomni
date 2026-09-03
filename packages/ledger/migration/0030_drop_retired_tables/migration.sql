@@ -4,3 +4,6 @@ DROP INDEX IF EXISTS idx_work_item_session;
 DROP INDEX IF EXISTS idx_work_item_assignee;
 DROP INDEX IF EXISTS idx_work_item_status;
 DROP TABLE IF EXISTS work_item;
+DROP TABLE IF EXISTS lease;
+DROP TABLE IF EXISTS conversation;
+DROP TABLE IF EXISTS engagement;

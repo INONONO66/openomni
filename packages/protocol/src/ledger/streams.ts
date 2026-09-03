@@ -36,34 +36,12 @@ export const StreamRegistry = {
     ],
     status: "shipped",
   },
-  // SHIPPED — ledger ConversationStore publishes; SQLite ledger append/projection consumes.
-  conversation: {
-    stream: "conversation:<conversationId>",
-    heads: "revision-bound (expectedHead = revision before the transition)",
-    conflictMeans: "duplicate create (id reuse impossible) or stale revision — typed store error",
-    factTypes: [
-      "conversation.opened",
-      "conversation.closed",
-      "conversation.outbound_admitted",
-      "conversation.inbound_recorded",
-      "conversation.cap_breached",
-    ],
-    status: "shipped",
-  },
   // SHIPPED — ledger ApprovalStore publishes; SQLite ledger append/projection consumes.
   approval: {
     stream: "approval:<approvalId>",
     heads: "revision-bound (expectedHead = revision before the transition)",
     conflictMeans: "duplicate create (id reuse impossible) or stale revision — typed store error",
     factTypes: ["approval.requested", "approval.decided"],
-    status: "shipped",
-  },
-  // SHIPPED — ledger LeaseStore publishes; SQLite ledger append/projection consumes.
-  lease: {
-    stream: "lease:<leaseId>",
-    heads: "revision-bound (expectedHead = revision before the transition)",
-    conflictMeans: "duplicate create (id reuse impossible) or stale revision — typed store error",
-    factTypes: ["lease.issued", "lease.debited", "lease.closed"],
     status: "shipped",
   },
   // SHIPPED — channels routing resolution publishes and its replay gate consumes via headFact.
@@ -98,16 +76,6 @@ export const StreamRegistry = {
       "inbound already corrected as not-delivered — an idempotent redelivery of the same rejected wait reply; the recorded route.not_delivered fact stands, no second fact",
     factTypes: ["route.not_delivered"],
     status: "shipped",
-  },
-  // SHIPPED — ledger EngagementStore publishes; SQLite ledger append/projection consumes.
-  engagement: {
-    stream: "engagement:<engagementId>",
-    heads: "revision-bound (expectedHead = revision before the transition)",
-    conflictMeans:
-      "duplicate create = stream exists = typed duplicate; stale head = typed revision_conflict",
-    factTypes: ["engagement.opened", "engagement.transitioned", "engagement.expired"],
-    status:
-      "shipped (#709 — writer at ledger engagement/index.ts; brain sole writer, gateway-design §4/§5)",
   },
   // SHIPPED — channels messaging send publishes and its retry admission consumes via headFact.
   gateway_send: {

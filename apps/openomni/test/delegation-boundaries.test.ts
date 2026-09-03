@@ -84,7 +84,6 @@ describe("delegation defensive boundaries", () => {
       send: () => Promise.reject(new Error("not reached")),
       now: () => NOW,
       newWaitId: () => "wait",
-      conversations: { open: () => undefined as never, get: () => undefined },
     });
     const invalid = {
       ...channelAdmission(),
@@ -110,7 +109,6 @@ describe("delegation defensive boundaries", () => {
       }),
       now: () => NOW,
       newWaitId: () => "wait",
-      conversations: { open: () => undefined as never, get: () => undefined },
     });
     await expect(
       driver.run(channelAdmission(), { ...handle, waitId: "wait" }, new AbortController().signal),

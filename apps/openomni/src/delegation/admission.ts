@@ -21,20 +21,6 @@ export interface Admitted {
   readonly rootDelegationId: string;
   /** The origin an inline child of this delegation will present. */
   readonly childOrigin: DelegationOrigin;
-  /**
-   * The live lease that admitted a worker's channel delegation (§3.5). The
-   * driver pins every send to this lease and its conversation; an admission
-   * without one never reaches a channel from a worker origin.
-   */
-  readonly lease?: AdmissionLease;
-}
-
-/** The durable lease fact the kernel supplies; admission performs no I/O. */
-export interface AdmissionLease {
-  readonly id: string;
-  readonly conversationId: string;
-  readonly holderDelegationId: string;
-  readonly contactId: string;
 }
 
 const RefusalCode = z.enum([
@@ -86,8 +72,6 @@ export interface AdmissionContext {
   >;
   readonly parentMissing?: boolean;
   readonly openFanout: number;
-  /** Live leases held by the requesting worker's own delegation, if any. */
-  readonly leases?: readonly AdmissionLease[];
 }
 
 function refusal(code: RefusalCode, message: string): Refused {
@@ -193,30 +177,12 @@ function validateFanout(limits: AdmissionLimits, context?: AdmissionContext): Re
   return undefined;
 }
 
-interface WorkerTransportAdmission {
-  readonly lease?: AdmissionLease;
-}
-
 function admitWorkerTransport(
   origin: DelegationOrigin,
-  request: Delegation.Request,
   transport: Delegation.Transport,
   limits: AdmissionLimits,
-  context?: AdmissionContext,
-): WorkerTransportAdmission | Refused {
-  // §3.5 lease relaxation: a worker whose OWN delegation holds a live lease
-  // pinned to exactly this contact may reach the channel. The match is against
-  // parentDelegationId, so an inline grandchild is refused by construction.
-  const address = request.address;
-  const lease =
-    transport === "channel" && address.kind === "actor"
-      ? context?.leases?.find(
-          (candidate) =>
-            candidate.holderDelegationId === origin.parentDelegationId &&
-            candidate.contactId === address.actorId,
-        )
-      : undefined;
-  if (transport !== "inline" && lease === undefined) {
+): { readonly ok: true } | Refused {
+  if (transport !== "inline") {
     return refusal(
       "worker_transport",
       "a worker may only delegate to a same-domain inline child; ask the Resident for independent work",
@@ -225,7 +191,7 @@ function admitWorkerTransport(
   if (transport === "inline" && origin.depth >= limits.maxInlineDepth) {
     return refusal("inline_depth", `inline delegation is capped at depth ${limits.maxInlineDepth}`);
   }
-  return lease === undefined ? {} : { lease };
+  return { ok: true };
 }
 
 function admittedResult(
@@ -234,7 +200,6 @@ function admittedResult(
   transport: Delegation.Transport,
   deadline: number,
   context: AdmissionContext | undefined,
-  lease: AdmissionLease | undefined,
 ): Admitted {
   const delegationId = context?.delegationId ?? "delegation";
   // A root is always stamped from the newly admitted id. A child inherits the
@@ -264,7 +229,6 @@ function admittedResult(
       : { parentDelegationId: origin.parentDelegationId }),
     rootDelegationId,
     childOrigin,
-    ...(lease === undefined ? {} : { lease }),
   };
 }
 
@@ -290,9 +254,9 @@ export function admit(
   const transport = transportFor(parsed.request.address);
   const workerAdmission =
     parsed.origin.role === "worker"
-      ? admitWorkerTransport(parsed.origin, parsed.request, transport, limits, context)
-      : {};
-  if ("ok" in workerAdmission) return workerAdmission;
+      ? admitWorkerTransport(parsed.origin, transport, limits)
+      : ({ ok: true } as const);
+  if ("ok" in workerAdmission && workerAdmission.ok === false) return workerAdmission;
 
   return admittedResult(
     parsed.request,
@@ -300,6 +264,5 @@ export function admit(
     transport,
     deadline,
     context,
-    workerAdmission.lease,
   );
 }

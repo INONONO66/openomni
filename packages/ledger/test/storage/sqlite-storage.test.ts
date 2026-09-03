@@ -197,6 +197,35 @@ describe("SqliteStorageAdapter", () => {
       }
     });
 
+    test("upgrading a lifecycle-era schema drops its retired tables", () => {
+      adapter.close();
+
+      const legacyDb = new Database(dbPath);
+      legacyDb
+        .query("DELETE FROM _migrations WHERE name = ?")
+        .run("0030_drop_retired_tables/migration.sql");
+      legacyDb.exec(
+        "CREATE TABLE conversation (id TEXT); CREATE TABLE lease (id TEXT); CREATE TABLE engagement (id TEXT);",
+      );
+      legacyDb.close();
+
+      const upgradedAdapter = new SqliteStorageAdapter(dbPath);
+      const upgradedDb = storageDb(upgradedAdapter);
+      const retired = upgradedDb
+        .query<{ name: string }, []>(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('conversation', 'lease', 'engagement') ORDER BY name",
+        )
+        .all()
+        .map((row) => row.name);
+      expect(retired).toEqual([]);
+      expect(
+        upgradedDb
+          .query<{ name: string }, [string]>("SELECT name FROM _migrations WHERE name = ?")
+          .get("0030_drop_retired_tables/migration.sql"),
+      ).toEqual({ name: "0030_drop_retired_tables/migration.sql" });
+      upgradedAdapter.close();
+    });
+
     test("observability tables expose the expected columns", () => {
       const db = storageDb(adapter);
 

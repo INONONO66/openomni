@@ -9,15 +9,12 @@ import {
 } from "../authority/delegation";
 import { createLlmTool, type LlmPort } from "../execution/llm";
 import { createRunCodeTool, type CellPorts } from "../execution/run-code";
-import { createConverseTool, type ConversePort, type LeasePort } from "../mutation/converse";
 import { createProvisionTool, type ProvisionPort } from "../mutation/provision";
 import { eraseTool, type AnyToolDefinition } from "./define";
 import { toolSpec } from "./project";
 
 export interface CatalogPorts {
   readonly delegation?: DelegationKernel;
-  readonly conversations?: ConversePort;
-  readonly leases?: LeasePort;
   readonly approvals?: ApprovalPort;
   readonly cells?: CellPorts;
   readonly llm?: LlmPort;
@@ -37,8 +34,6 @@ export function createTools(
       eraseTool(createCancelDelegationTool(ports.delegation)),
     );
   }
-  if (ports.conversations !== undefined && ports.leases !== undefined)
-    tools.push(eraseTool(createConverseTool(ports.conversations, ports.leases)));
   if (ports.approvals !== undefined) tools.push(eraseTool(createApprovalTool(ports.approvals)));
   if (ports.provisioning !== undefined)
     tools.push(eraseTool(createProvisionTool(ports.provisioning)));

@@ -6,7 +6,6 @@ const EXPECTED = [
   "delegate",
   "await_delegation",
   "cancel_delegation",
-  "converse",
   "approval",
   "provision",
   "run_code",

@@ -12,10 +12,7 @@ import {
   ApprovalStore,
   BusPersistence,
   ChannelInstanceStore,
-  ConversationStore,
-  DelegationStore,
   initialize,
-  LeaseStore,
   PersonStore,
   SecretStore,
   Session,
@@ -51,7 +48,6 @@ import {
   createDelegationKernel,
   type DelegationKernel,
   type DelegationWake,
-  type LeaseLinkage,
 } from "./delegation/kernel";
 import { delegationTraceId } from "./delegation/trace";
 import { createWakeDeliveryQueue } from "./delegation/wake-delivery";
@@ -167,19 +163,6 @@ export function createMachinesPort(
             effectiveExports: [...(host.attachedExports(enrollment.machineId) ?? [])],
           };
     });
-}
-
-export function createLeaseLinkage(): LeaseLinkage {
-  return {
-    listLiveByHolder: (holderDelegationId, now) =>
-      LeaseStore.listLiveByHolder(holderDelegationId, now).map((lease) => ({
-        id: lease.id,
-        conversationId: lease.conversationId,
-        holderDelegationId: lease.holderDelegationId,
-        contactId: lease.contactId,
-      })),
-    closeByHolder: LeaseStore.closeByHolder,
-  };
 }
 
 /**
@@ -314,7 +297,6 @@ export async function startOpenOmni(options: StartOptions = {}) {
       },
       now: () => Date.now(),
       newWaitId: () => crypto.randomUUID(),
-      conversations: ConversationStore,
     });
     // The kernel reads this table at dispatch time, so registrations made
     // (or replaced) after boot are visible to the very next dispatch. Each
@@ -343,18 +325,6 @@ export async function startOpenOmni(options: StartOptions = {}) {
         ctx.effect(() => registration.dispose());
       }
     });
-    // The catalog's Conversation surface: window lifecycle plus the §3.5
-    // spatial inverse (settling a window revokes its live leases).
-    const conversePort = {
-      open: ConversationStore.open,
-      get: ConversationStore.get,
-      close: ConversationStore.close,
-      closeLeases: LeaseStore.closeByConversation,
-    };
-    const leasePort = {
-      issue: LeaseStore.issue,
-      getDelegation: (delegationId: string) => DelegationStore.get(delegationId),
-    };
     // The catalog's approval lane (§6): Owner-consent requests plus the two
     // acts they authorize — promotion and cross-channel endpoint merge.
     // Provisioning administration port: the supervisor is created after the
@@ -397,9 +367,6 @@ export async function startOpenOmni(options: StartOptions = {}) {
     };
     kernel = createDelegationKernel({
       events: Bus,
-      // §3.5 lease linkage: live-lease facts admit a worker's channel
-      // delegation, and every settlement durably closes the holder's leases.
-      leases: createLeaseLinkage(),
       wake: (wake) => wakeDelivery.deliver(wake),
       bootSweep: false,
       drivers: driverRegistry.drivers,
@@ -480,8 +447,6 @@ export async function startOpenOmni(options: StartOptions = {}) {
         delegation: delegationKernel,
         ...(cells === undefined ? {} : { cells }),
         llm: llmPort,
-        conversations: conversePort,
-        leases: leasePort,
         approvals: approvalPort,
         provisioning: provisioningPort,
       },

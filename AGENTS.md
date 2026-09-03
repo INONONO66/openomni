@@ -144,7 +144,7 @@ Coverage baselines are updated after coverage-producing test runs with `bun run 
 ## NOTES
 
 - `apps/openomni` is the only deployable composition and production entry point. `apps/desktop` is a build-infrastructure skeleton: the topology permits `protocol` only, it imports no workspace package yet, and it ships no product features.
-- `packages/channels` is the perimeter gateway; `apps/openomni` injects delivery and observation ports.
+- `packages/channels` is the perimeter gateway; `apps/openomni` injects delivery and observation ports. Conversation windows, send leases, and engagement lifecycles were removed in issue #943; ordinary sends use grants, egress budgets, idempotency, and Wait correlation.
 - `packages/agent` owns no durable state. `packages/ledger` stores facts but does not decide product meaning.
 - Shipped-state claims, including Stakes, effective authority, and connector consumers, belong only in `docs/implementation-status.md`; other docs define target contracts or historical context and defer to it.
 - CI lives in `.github/workflows/ci.yml`; whole-repository formatting is always `bunx ultracite check --formatter-enabled=false .`.

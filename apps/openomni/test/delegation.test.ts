@@ -680,12 +680,6 @@ describe("delegation controls and tool surface", () => {
             send: async (input) => awaitedReceipt(input),
             now: () => 2_000,
             newWaitId: () => "wait-restart",
-            conversations: {
-              open: () => {
-                throw new Error("not reached");
-              },
-              get: () => undefined,
-            },
           }),
         },
         now: () => 2_000,

@@ -240,10 +240,6 @@ reaches it only through tools in its catalog (`delegate`, `await_delegation`,
 
 ### Vocabulary fences
 
-- **Engagement ≠ Delegation.** `protocol/src/engagement/` is the *terms
-  machine* of one delegation relationship (constraints, expiry edges).
-  `Delegation.Request` is the commissioning act itself. An engagement may
-  govern a delegation; neither absorbs the other.
 - **Transport ≠ Lane.** `Delegation.Transport` names the wire a commissioned
   unit travels on (`inline`/`process`/`channel`); the core-model
   "Lane" noun names execution roles (Built-in/Action/Worker/Subagent). The

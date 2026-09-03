@@ -18,10 +18,7 @@ import {
 import { createSqliteSessionAdapter } from "./sqlite-session-adapter";
 import { createSqliteSurfaceKeyAdapter } from "./sqlite-surface-key-adapter";
 import { createSqliteTranscriptFactAdapter } from "./sqlite-transcript-fact-adapter";
-import { createSqliteEngagementAdapter } from "./sqlite-engagement-adapter";
-import { createSqliteConversationAdapter } from "./sqlite-conversation-adapter";
 import { createSqliteApprovalAdapter } from "./sqlite-approval-adapter";
-import { createSqliteLeaseAdapter } from "./sqlite-lease-adapter";
 import { createSqliteWaitAdapter } from "./sqlite-wait-adapter";
 import { createSqliteWorkerRunStateAdapter } from "./sqlite-worker-run-state-adapter";
 import { productionStorageAdapterBrand, type Storage } from "./storage";
@@ -48,10 +45,7 @@ export class SqliteStorageAdapter implements Storage.Adapter {
   readonly surfaceKey: NonNullable<Storage.Adapter["surfaceKey"]>;
   readonly workerRunState: WorkerRunStateStore.Adapter;
   readonly wait: NonNullable<Storage.Adapter["wait"]>;
-  readonly conversation: NonNullable<Storage.Adapter["conversation"]>;
-  readonly lease: NonNullable<Storage.Adapter["lease"]>;
   readonly approval: NonNullable<Storage.Adapter["approval"]>;
-  readonly engagement: NonNullable<Storage.Adapter["engagement"]>;
   readonly delegation: NonNullable<Storage.Adapter["delegation"]>;
   readonly ledger: NonNullable<Storage.Adapter["ledger"]>;
   readonly egressBudget: NonNullable<Storage.Adapter["egressBudget"]>;
@@ -92,10 +86,7 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     this.surfaceKey = createSqliteSurfaceKeyAdapter(this.db);
     this.workerRunState = createSqliteWorkerRunStateAdapter(this.db);
     this.wait = createSqliteWaitAdapter(this.db);
-    this.conversation = createSqliteConversationAdapter(this.db);
-    this.lease = createSqliteLeaseAdapter(this.db);
     this.approval = createSqliteApprovalAdapter(this.db);
-    this.engagement = createSqliteEngagementAdapter(this.db);
     this.delegation = createSqliteDelegationAdapter(this.db);
     // Decision-class append rides the adapter's own connection so append +
     // projection share one transaction (#510 phase B). The append core keeps

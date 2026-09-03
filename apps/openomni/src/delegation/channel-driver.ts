@@ -1,5 +1,4 @@
 import type { ExistingAgentMessaging } from "@openomni/channels";
-import type { ConversationStore } from "@openomni/ledger";
 import type { Delegation, Gateway } from "@openomni/protocol";
 import type { Admitted } from "./admission";
 import { renderInstruction } from "./instruction";
@@ -16,16 +15,6 @@ export interface ChannelDriverPorts {
   readonly send: ExistingAgentMessaging["send"];
   readonly now: () => number;
   readonly newWaitId: () => string;
-  /**
-   * Durable Conversation surface (#P1, docs/conversation-and-message-io.md
-   * §3.4): an awaited channel delegation opens its bounded reply window at
-   * dispatch. Injected as a narrow port (never the store namespace) so the
-   * driver stays testable without storage.
-   */
-  readonly conversations: {
-    readonly open: typeof ConversationStore.open;
-    readonly get: typeof ConversationStore.get;
-  };
 }
 
 export interface ChannelDelegationDriver extends DelegationDriver {
@@ -70,12 +59,6 @@ export function createChannelDriver(ports: ChannelDriverPorts): ChannelDelegatio
         throw new Error("channel transport carries actor addresses only");
       }
 
-      // §3.5 lease pin: a worker's admitted channel delegation carries the
-      // lease that admitted it, and every send it produces is pinned to that
-      // lease AND its conversation — the send kernel debits the carved
-      // allocation durably before delivery. Lease sends are conversation
-      // traffic, so even a notify rides the converse class.
-      const lease = admitted.lease;
       const common = {
         messageId: handle.delegationId,
         traceId: delegationTraceId(handle.delegationId),
@@ -86,9 +69,6 @@ export function createChannelDriver(ports: ChannelDriverPorts): ChannelDelegatio
           admitted.request.acceptanceCriteria ?? [],
         ),
         at: ports.now(),
-        ...(lease === undefined
-          ? {}
-          : { leaseId: lease.id, conversationId: lease.conversationId }),
       } as const;
 
       let input: Gateway.SendInput;
@@ -96,7 +76,7 @@ export function createChannelDriver(ports: ChannelDriverPorts): ChannelDelegatio
         input = {
           ...common,
           operation: "fire_and_forget",
-          class: lease === undefined ? "notify" : "converse",
+          class: "notify",
         };
       } else {
         const waitId = handle.waitId;
@@ -137,44 +117,8 @@ export function createChannelDriver(ports: ChannelDriverPorts): ChannelDelegatio
       report?.delivered();
       if (admitted.request.operation === "notify") return { status: "sent" };
 
-      // Bounded reply window (§3.4): the awaited ask opens its Conversation
-      // AFTER transport acceptance — a window must never exist for a message
-      // that never left. The id is the deterministic `conv:<waitId>`, the
-      // expiry is the wait deadline, and the endpoint pin comes from the
-      // admitted delivery target. A replayed dispatch finds the window
-      // already open and reuses it (idempotent).
       if (receipt.operation !== "awaited") {
         throw new Error("awaited channel delegation settled without its wait — kernel regressed");
-      }
-      if (lease !== undefined) {
-        // A lease send already lives inside its conversation — the reply
-        // window exists and its caps govern; never open a second window.
-        return waitForAbort(signal);
-      }
-      const conversationId = `conv:${receipt.wait.id}`;
-      const existing = ports.conversations.get(conversationId);
-      if (existing === undefined) {
-        ports.conversations.open(
-          {
-            id: conversationId,
-            contactId: receipt.target.actorId,
-            endpointId: receipt.target.endpointId,
-            ownerRef: { kind: "session", id: admitted.childOrigin.sessionId },
-            openedBy: "delegate_ask",
-            policy: {
-              expiresAt: receipt.wait.expiresAt,
-              maxOutbound: 8,
-              maxInbound: 32,
-              onInboundCapBreach: "demote",
-            },
-          },
-          delegationTraceId(handle.delegationId),
-        );
-      } else if (existing.state === "closed") {
-        // A replayed dispatch must never resurrect a settled window — the
-        // conversation id is deterministic per wait, so a closed row under
-        // it means the window already lived and died.
-        throw new Error(`conversation ${conversationId} is already closed`);
       }
 
       // A reply enters DelegationKernel.settleFromReply through ingress. This

@@ -171,39 +171,6 @@
     "time",
     "traceId"
   ],
-  "Conversation.Create": [
-    "contactId",
-    "endpointId",
-    "id",
-    "openedBy",
-    "ownerRef",
-    "policy"
-  ],
-  "Conversation.Policy": [
-    "expiresAt",
-    "maxInbound",
-    "maxOutbound",
-    "onInboundCapBreach",
-    "quietHours"
-  ],
-  "Conversation.QuietHours": ["endMinute", "startMinute"],
-  "Conversation.Record": [
-    "closedAt",
-    "closedBy",
-    "contactId",
-    "createdAt",
-    "endpointId",
-    "id",
-    "inboundCapBreachedAt",
-    "inboundUsed",
-    "openedBy",
-    "outboundUsed",
-    "ownerRef",
-    "policy",
-    "revision",
-    "state",
-    "updatedAt"
-  ],
   "Delegation.Handle": [
     "address",
     "deadline",
@@ -290,27 +257,6 @@
   "Delegation.Settled#sent": ["at", "delegationId", "status"],
   "Delegation.WorkerAddress#actor": ["actorId", "kind"],
   "Delegation.WorkerAddress#core": ["kind", "scope"],
-  "Engagement.Create": ["createdAt", "id", "ownerSessionId", "terms", "title"],
-  "Engagement.Record": [
-    "createdAt",
-    "expiresAt",
-    "id",
-    "openWaitIds",
-    "ownerSessionId",
-    "revision",
-    "state",
-    "terms",
-    "title",
-    "updatedAt"
-  ],
-  "Engagement.TransitionInput": [
-    "at",
-    "ownerApproved",
-    "reason",
-    "termCrossed",
-    "to",
-    "waitIds"
-  ],
   "Gateway.ActorContext": [
     "actorId",
     "inboundTreatment",
@@ -383,8 +329,6 @@
     "at",
     "body",
     "class",
-    "conversationId",
-    "leaseId",
     "messageId",
     "operation",
     "senderId",
@@ -403,7 +347,7 @@
     "targetActorId",
     "windowMs"
   ],
-  "Gateway.WaitContext": ["allowedAction", "engagementId", "waitId"],
+  "Gateway.WaitContext": ["allowedAction", "waitId"],
   "Gateway.WaitControl": ["action", "reason", "waitId"],
   "Ingress.ActorSchema": [
     "actorId",
@@ -477,29 +421,6 @@
   "Ipc.Notification": ["id", "method", "params", "type", "v"],
   "Ipc.Request": ["id", "method", "params", "type", "v"],
   "Ipc.Response": ["error", "id", "result", "type", "v"],
-  "Lease.Budget": ["maxOutbound", "outboundUsed"],
-  "Lease.Create": [
-    "contactId",
-    "conversationId",
-    "expiresAt",
-    "holderDelegationId",
-    "id",
-    "maxOutbound"
-  ],
-  "Lease.Record": [
-    "budget",
-    "closedAt",
-    "closedBy",
-    "contactId",
-    "conversationId",
-    "createdAt",
-    "expiresAt",
-    "holderDelegationId",
-    "id",
-    "revision",
-    "state",
-    "updatedAt"
-  ],
   "Ledger.AdoptGenesis": ["data", "timeCreated", "type"],
   "Ledger.ChainBreak": [
     "actual",
@@ -531,7 +452,6 @@
   ],
   "Ledger.RouteDecided#1": [
     "actorId",
-    "conversationId",
     "factsUsed",
     "inboundId",
     "inboundTreatment",
@@ -548,6 +468,7 @@
   ],
   "Ledger.RouteDecided#2": [
     "actorId",
+    "candidateInteractionIds",
     "factsUsed",
     "inboundId",
     "inboundTreatment",
@@ -564,7 +485,6 @@
   ],
   "Ledger.RouteDecided#3": [
     "actorId",
-    "candidateInteractionIds",
     "factsUsed",
     "inboundId",
     "inboundTreatment",
@@ -612,22 +532,6 @@
     "trustTier"
   ],
   "Ledger.RouteDecided#6": [
-    "actorId",
-    "factsUsed",
-    "inboundId",
-    "inboundTreatment",
-    "mode",
-    "outcome",
-    "reason",
-    "sessionId",
-    "stage",
-    "surface",
-    "target",
-    "time",
-    "traceId",
-    "trustTier"
-  ],
-  "Ledger.RouteDecided#7": [
     "actorId",
     "factsUsed",
     "inboundId",
@@ -1077,7 +981,6 @@
   "Wait.Correlation": [
     "channelId",
     "endpointId",
-    "engagementId",
     "externalConversationId",
     "replyToMessageId",
     "threadId",

@@ -162,8 +162,7 @@ describe("commitFact pre-cutover adoption gate", () => {
       () => "row" as const,
     );
 
-    // Engagement relies on this: its stream class was born with its table,
-    // so an empty stale head is a race, never a pre-cutover row.
+    // A domain without an adoption path treats an empty stale head as a race.
     expect(outcome).toEqual({ kind: "stale_head" });
     expect(ledger.adoptions).toEqual([]);
     expect(ledger.appends).toHaveLength(1);

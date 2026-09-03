@@ -1,8 +1,15 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { extractSurfaceKey, Ingress, Ledger } from "@openomni/protocol";
-import { ActorRegistry, ChannelGrantStore, Storage, SurfaceKey } from "@openomni/ledger";
+import { extractSurfaceKey, Ingress, Ledger, type Gateway, type Wait } from "@openomni/protocol";
+import {
+  ActorRegistry,
+  ChannelGrantStore,
+  Storage,
+  SurfaceKey,
+  WaitStore,
+} from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { IngressRoutingError } from "../../src/router/routing-resolution";
+import { WaitService } from "../../src/router/wait/index";
 import {
   createMappedOwnerSession,
   deliveries,
@@ -61,6 +68,68 @@ describe("GatewayRouter durable routing resolution", () => {
       type: "route.decided",
       data: { outcome: "block" },
     });
+  });
+
+  test("executes a matched wait route and delivers its action context", async () => {
+    const event = {
+      ...ownerEvent,
+      id: "inbound-wait-resolution",
+      surface: "telegram",
+      workspace: undefined,
+      channel: "telegram:dm",
+      userId: "worker-external",
+      meta: {
+        correlation: {
+          endpointId: "telegram:worker-external",
+          channelId: "telegram:dm",
+          tokenHash: "wait-token",
+        } satisfies Wait.Correlation,
+      },
+    } satisfies Gateway.DeliveredEvent;
+    ActorRegistry.registerIdentity({
+      id: "worker-actor",
+      kind: "human",
+      trustTier: "assigned_worker",
+    });
+    ActorRegistry.registerEndpoint({
+      id: "telegram:worker-external",
+      actorId: "worker-actor",
+      channel: "telegram",
+      externalId: "worker-external",
+    });
+    ChannelGrantStore.put({
+      id: "grant-telegram-wait",
+      surface: "telegram",
+      channel: "telegram:dm",
+      kind: "trusted_channel",
+      createdBy: "actor-owner",
+    });
+    WaitService.open(
+      {
+        id: "wait-resolution",
+        ownerRef: { kind: "session", id: "wait-owner" },
+        originMessageId: "outbound-wait",
+        correlation: { channelId: "telegram:dm", tokenHash: "wait-token" },
+        allowedActions: ["report_result"],
+        expectedResponders: ["worker-actor"],
+        resolutionPolicy: "first_reply",
+        expiresAt: Number.MAX_SAFE_INTEGER,
+        followUpWindow: 60_000,
+      },
+      "trace-test",
+    );
+
+    const result = await makeRouter().ingest({
+      ...event,
+      payload: { action: "report_result", output: "complete" },
+    });
+
+    expect(result).toMatchObject({ sessionId: "wait-owner" });
+    expect(deliveries[0]?.waitContext).toEqual({
+      waitId: "wait-resolution",
+      allowedAction: "report_result",
+    });
+    expect(WaitStore.get("wait-resolution")).toMatchObject({ status: "resolved" });
   });
 
   test("equivalent accepted redelivery re-delivers with exactly one route fact", async () => {

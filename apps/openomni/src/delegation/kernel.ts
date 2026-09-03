@@ -4,7 +4,6 @@ import { delegationTraceId } from "./trace";
 import { z } from "zod";
 import {
   admit,
-  type AdmissionLease,
   type Admitted,
   type AdmissionLimits,
   AdmissionRefusal,
@@ -93,29 +92,6 @@ export interface DelegationKernelOptions {
   readonly wake: (wake: DelegationWake) => void | Promise<void>;
   /** Tests and composition roots may defer recovery until the wake target exists. */
   readonly bootSweep?: boolean;
-  /**
-   * Lease linkage (§3.5): live-lease facts feed the admission fold's worker
-   * relaxation, and every settlement closes the settled delegation's leases
-   * — the lifecycle inverse that makes revocation structural, not advisory.
-   */
-  readonly leases?: LeaseLinkage;
-}
-
-export interface LeaseLinkage {
-  listLiveByHolder(holderDelegationId: string, now: number): readonly AdmissionLease[];
-  closeByHolder(
-    holderDelegationId: string,
-    closedBy: "settled" | "cancelled" | "deadline",
-    traceId: string,
-    at: number,
-  ): number;
-}
-
-/** How a settlement status maps onto the lease-close cause it implies. */
-function leaseClosedBy(status: Delegation.Settled["status"]): "settled" | "cancelled" | "deadline" {
-  if (status === "cancelled") return "cancelled";
-  if (status === "no_response") return "deadline";
-  return "settled";
 }
 
 type DelegationResult =
@@ -350,14 +326,6 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
 
     emittedSettlements.add(delegationId);
     clearTimer(delegationId);
-    // The settlement's lifecycle inverse: every lease this delegation held
-    // dies with it, durably, before the settlement is observable (§8.6).
-    options.leases?.closeByHolder(
-      delegationId,
-      leaseClosedBy(winner.status),
-      delegationTraceId(delegationId),
-      persisted.settledAt ?? winner.at,
-    );
     events.publish(Delegation.Events.Settled, {
       delegationId,
       traceId: delegationTraceId(delegationId),
@@ -522,17 +490,12 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
     const parentDelegationId = origin.parentDelegationId;
     const parent = parentDelegationId === undefined ? undefined : store.get(parentDelegationId);
     const rootDelegationId = parent?.rootDelegationId ?? delegationId;
-    const liveLeases =
-      origin.role === "worker" && parentDelegationId !== undefined
-        ? options.leases?.listLiveByHolder(parentDelegationId, now)
-        : undefined;
     const admitted = admit(candidate, origin, now, limits, {
       delegationId,
       rootDelegationId,
       ...(parent === undefined ? {} : { parent }),
       ...(parentDelegationId !== undefined && parent === undefined ? { parentMissing: true } : {}),
       openFanout: store.countOpenByRoot(rootDelegationId),
-      ...(liveLeases === undefined ? {} : { leases: liveLeases }),
     });
     if (!admitted.ok) return { refused: admitted.reason, error: admitted.error };
     const workerRunId = admitted.transport === "process" ? crypto.randomUUID() : undefined;

@@ -109,11 +109,11 @@ Any dimension missing → deny. Authority comes from verified identity and grant
 Fixed evaluation order for every inbound message:
 
 1. **Blacklist** — match → silent drop, audit record only.
-2. **Wait correlation** — correlation match → route to the wait owner's session (precedence over surface routing; a task reply is never misrouted into a personal conversation on the same channel).
+2. **Wait correlation** — correlation match → route to the wait owner's session (precedence over surface routing; a task reply is never misrouted into the channel's default session).
 3. **Channel allowed?** — not allowed → block.
 4. **Actor identification** — registered → personal grant; unregistered → channel default tier; neither → block.
 
-Ingress always submits a unified `actor.message`. The gateway's routing decision — wait/surface precedence — is authoritative for which session receives the message ([gateway-design.md](gateway-design.md) §8.5). On a Wait correlation match the router delivers into the wait owner's session with `waitContext` attached (wait id plus the matched allowed action) under a transient `assigned_worker` tier; dispatch decides brain-side work placement, never delivery re-routing. Ingress stays channel-agnostic and stateless about lifecycle. Surface routing and the wait store remain separate: the surface answers "what is this endpoint's default conversation?", the wait store answers "is this a reply to a specific outstanding request?" — merging them would break concurrent task replies on one channel.
+Ingress always submits a unified `actor.message`. The gateway's routing decision — wait/surface precedence — is authoritative for which session receives the message ([gateway-design.md](gateway-design.md) §8.5). On a Wait correlation match the router delivers into the wait owner's session with `waitContext` attached (wait id plus the matched allowed action) under a transient `assigned_worker` tier; dispatch decides brain-side work placement, never delivery re-routing. Ingress stays channel-agnostic and stateless about lifecycle. Surface routing and the wait store remain separate: the surface answers "what is this endpoint's default session?", the wait store answers "is this a reply to a specific outstanding request?" — merging them would break concurrent task replies on one channel.
 
 ### Session ownership
 
@@ -123,7 +123,7 @@ Every session carries owner, origin, and purpose fields:
 - `origin`: `actor_initiated` | `resident_initiated` | `worker_initiated` | `pending_response`
 - `purpose`: `user_conversation` | `worker_interaction` | `self_loop`
 
-Rules: a human's first message → actor-owned `user_conversation`; the Resident assigning work to an external actor → work-item-owned `worker_interaction` child session; an external actor answering assigned work routes into the existing work session — no new session. "Response sessions" are not a type; they are a routing result via Wait correlation. User-facing sessions stay clean: the Owner never sees the seller conversation directly, only the distilled report.
+Rules: a human's first message → actor-owned `user_conversation`; the Resident assigning work to an external actor → work-item-owned `worker_interaction` child session; an external actor answering assigned work routes into the existing work session — no new session. "Response sessions" are not a type; they are a routing result via Wait correlation. User-facing sessions stay clean: the Owner never sees the seller's worker-session exchange directly, only the distilled report.
 
 ### Wait and existing-agent messaging
 

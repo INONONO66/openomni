@@ -4,20 +4,15 @@ import {
   Wait as WaitProtocol,
   type Actor,
   type BusEvent,
-  type Conversation,
-  type Lease,
   type Wait,
 } from "@openomni/protocol";
 import {
   ActorRegistry,
-  ConversationStore,
   EgressBudgetStore,
   LedgerAppend,
-  LeaseStore,
   WaitStore,
 } from "@openomni/ledger";
 import { WaitService } from "../wait/index.js";
-import { matchBlacklist } from "../blacklist.js";
 import {
   deliverySurfaceKey,
   hasScopedSenderTargetCandidate,
@@ -103,63 +98,6 @@ export type ExistingAgentMessaging = Readonly<{
   send: (input: SendInput) => Promise<SendReceipt>;
 }>;
 
-/**
- * Reads the window a conversation-pinned send claims. A missing or closed
- * window reads as "no conversation arm" ONLY after the gate below refuses —
- * so this lookup stays a plain read and the typed denial happens in one
- * place (conversationGate) with the target resolved.
- */
-function conversationForSend(input: SendInput): Conversation.Record | undefined {
-  if (input.conversationId === undefined) return undefined;
-  return ConversationStore.get(input.conversationId);
-}
-
-/** Reads the lease a lease-pinned send claims (same read-then-gate discipline). */
-function leaseForSend(input: SendInput): Lease.Record | undefined {
-  if (input.leaseId === undefined) return undefined;
-  return LeaseStore.get(input.leaseId);
-}
-
-/**
- * The conversational send right (§3.4): the window must be open, unexpired,
- * and pinned to THIS actor at THIS endpoint; the absolute blacklist deny
- * (DNC) still binds. Returns the denial reason, or undefined when admitted.
- */
-function conversationGate(
-  conversationId: string,
-  conversation: Conversation.Record | undefined,
-  target: DeliveryTarget,
-): string | undefined {
-  if (conversation === undefined) {
-    return `conversation ${conversationId} does not exist`;
-  }
-  if (conversation.state !== "open") {
-    return `conversation ${conversationId} is closed (${conversation.closedBy ?? "unknown"})`;
-  }
-  if (conversation.contactId !== target.actorId || conversation.endpointId !== target.endpointId) {
-    return `conversation ${conversationId} is not pinned to ${target.actorId} at ${target.endpointId}`;
-  }
-  const dnc = matchBlacklist({
-    actorId: target.actorId,
-    endpointId: target.endpointId,
-    channel: target.channel,
-    candidates: [target.channel],
-  });
-  if (dnc !== undefined) {
-    return `conversation ${conversationId} target is blacklisted (${dnc.kind})`;
-  }
-  return undefined;
-}
-
-/** The grant stamp a conversation- or lease-pinned send carries on its audit events. */
-function pinnedGrant(input: SendInput, id: string): SenderTargetGrant {
-  return {
-    id,
-    senderId: input.senderId,
-    targetActorId: input.target.actorId,
-    operations: [input.operation],
-  };
-}
 
 type TargetDenialCode = Extract<
   MessageDenialCode,
@@ -335,10 +273,6 @@ interface AuthorizedSend {
   readonly input: SendInput;
   readonly target: DeliveryTarget;
   readonly grant: SenderTargetGrant;
-  readonly conversationPinned: boolean;
-  readonly leasePinned: boolean;
-  readonly conversation: Conversation.Record | undefined;
-  readonly lease: Lease.Record | undefined;
 }
 
 /** Resolves sender authority and its exact allocated endpoint without mutating durable state. */
@@ -354,92 +288,35 @@ function authorizeSend(
     operation: input.operation,
     at: input.at,
   };
-  const conversationPinned = input.conversationId !== undefined;
-  const leasePinned = input.leaseId !== undefined;
-  const conversation = conversationForSend(input);
-  const lease = leaseForSend(input);
-  let grant: SenderTargetGrant | undefined;
-  if (!conversationPinned && !leasePinned) {
-    grant = resolveSenderTargetGrant(grants, claim);
-    if (grant === undefined && !hasScopedSenderTargetCandidate(grants, claim)) {
-      return deny(
-        input,
-        "ungranted",
-        `no active sender-target grant covers ${input.senderId} -> ${input.target.actorId} (${input.operation})`,
-      );
-    }
+  const grant = resolveSenderTargetGrant(grants, claim);
+  if (grant === undefined && !hasScopedSenderTargetCandidate(grants, claim)) {
+    return deny(
+      input,
+      "ungranted",
+      `no active sender-target grant covers ${input.senderId} -> ${input.target.actorId} (${input.operation})`,
+    );
   }
   const resolution = resolveExistingTarget(input.target);
   if (!resolution.ok) return deny(input, resolution.code, resolution.reason);
 
-  if (leasePinned) {
-    const leaseResult = authorizeLeaseSend(
-      input,
-      resolution.target,
-      lease,
-      conversationPinned,
-      deny,
-    );
-    if ("kind" in leaseResult) return leaseResult;
-    grant = leaseResult;
-  } else if (conversationPinned) {
-    const conversationDenial = conversationGate(
-      input.conversationId ?? "",
-      conversation,
-      resolution.target,
-    );
-    if (conversationDenial !== undefined) {
-      return deny(input, "conversation_denied", conversationDenial);
-    }
-    grant = pinnedGrant(input, `conversation:${input.conversationId ?? ""}`);
-  } else if (grant === undefined) {
+  if (grant === undefined) {
     const surfaceKey = deliverySurfaceKey(resolution.target);
-    grant = resolveScopedSenderTargetGrant(grants, { ...claim, surfaceKey });
-    if (grant === undefined) {
+    const scopedGrant = resolveScopedSenderTargetGrant(grants, { ...claim, surfaceKey });
+    if (scopedGrant === undefined) {
       return deny(
         input,
         "ungranted",
         `reply-scoped grant does not cover surface ${surfaceKey} — replies stay inside the initiating container`,
       );
     }
+    return { input, target: resolution.target, grant: scopedGrant };
   }
 
   return {
     input,
     target: resolution.target,
     grant,
-    conversationPinned,
-    leasePinned,
-    conversation,
-    lease,
   };
-}
-
-function authorizeLeaseSend(
-  input: SendInput,
-  target: DeliveryTarget,
-  lease: Lease.Record | undefined,
-  conversationPinned: boolean,
-  deny: DenySend,
-): SenderTargetGrant | SendReceipt {
-  const leaseId = input.leaseId ?? "";
-  if (lease === undefined) return deny(input, "lease_denied", `lease ${leaseId} does not exist`);
-  if (conversationPinned && input.conversationId !== lease.conversationId) {
-    return deny(
-      input,
-      "lease_denied",
-      `lease ${leaseId} scopes conversation ${lease.conversationId}, not ${input.conversationId ?? ""}`,
-    );
-  }
-  const conversationDenial = conversationGate(
-    lease.conversationId,
-    ConversationStore.get(lease.conversationId),
-    target,
-  );
-  if (conversationDenial !== undefined) {
-    return deny(input, "conversation_denied", conversationDenial);
-  }
-  return pinnedGrant(input, `lease:${leaseId}`);
 }
 
 /** Records all admission debits before the delivery effect. */
@@ -448,7 +325,7 @@ function admitSend(
   ports: MessagingPorts,
   deny: DenySend,
 ): SendAdmission | SendReceipt {
-  const { input, target, grant, conversationPinned, leasePinned } = authorization;
+  const { input, target, grant } = authorization;
   const sendClass = sendClassOf(input);
   let admission: SendAdmission | undefined;
   try {
@@ -464,13 +341,7 @@ function admitSend(
     return admission;
   }
 
-  const budgeted =
-    !conversationPinned &&
-    !leasePinned &&
-    ports.budgets !== undefined &&
-    grant.replyScope === undefined;
-  const pinnedDenial = debitPinnedAuthority(authorization, deny);
-  if (pinnedDenial !== undefined) return pinnedDenial;
+  const budgeted = ports.budgets !== undefined && grant.replyScope === undefined;
   if (budgeted) {
     const budget = ports
       .budgets?.()
@@ -491,33 +362,6 @@ function admitSend(
   admission = recordAdmission(input, target, budgeted, sendClass);
   repairBudgetDebit(input, admission);
   return admission;
-}
-
-function debitPinnedAuthority(
-  authorization: AuthorizedSend,
-  deny: DenySend,
-): SendReceipt | undefined {
-  const { input, leasePinned, conversationPinned, lease, conversation } = authorization;
-  if (leasePinned && lease !== undefined) {
-    const debit = LeaseStore.sendDebit(lease.id, input.at);
-    if (debit.kind === "refused") {
-      return deny(
-        input,
-        "lease_denied",
-        `lease ${lease.id} refused the outbound send (${debit.reason})`,
-      );
-    }
-  } else if (conversationPinned && conversation !== undefined) {
-    const debit = ConversationStore.admitOutbound(conversation.id, input.traceId, input.at);
-    if (debit.kind === "refused") {
-      return deny(
-        input,
-        "conversation_denied",
-        `conversation ${conversation.id} refused the outbound send (${debit.reason})`,
-      );
-    }
-  }
-  return undefined;
 }
 
 function repairBudgetDebit(input: SendInput, admission: SendAdmission): void {
@@ -612,7 +456,7 @@ function recordSent(
   wait: Wait.Record | undefined,
   ports: MessagingPorts,
 ): SendReceipt {
-  const { input, target, grant, leasePinned, lease } = authorization;
+  const { input, target, grant } = authorization;
   ports.publish(MessagingEvents.Sent, {
     messageId: input.messageId,
     traceId: input.traceId,
@@ -622,9 +466,6 @@ function recordSent(
     grantId: grant.id,
     endpointId: target.endpointId,
     ...(wait === undefined ? {} : { waitId: wait.id }),
-    ...(leasePinned && lease !== undefined
-      ? { onBehalfOf: lease.holderDelegationId, via: `lease:${lease.id}` }
-      : {}),
     time: input.at,
   });
   if (wait !== undefined) {

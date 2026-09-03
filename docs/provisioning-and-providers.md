@@ -6,9 +6,8 @@ Owner's standing declarations — who people are, which channels exist, what
 credentials they use — from environment variables into the ledger database, and
 (b) formalizing the channel driver band into a uniform Provider contract.
 
-Companion to `docs/conversation-and-message-io.md` (which governs what messages
-*mean*); this document governs how the perimeter itself is *declared, stored,
-and mounted*.
+This document governs how the perimeter is *declared, stored, and mounted*;
+message semantics are owned by the kernel architecture.
 
 ## 1. Problem
 
@@ -169,8 +168,7 @@ Secret {
 
 ### 3.4 What stays out
 
-- **Blacklist, conversations, leases, approvals, delegations** — already
-  DB-native, unchanged.
+- **Blacklist, approvals, delegations** — already DB-native, unchanged.
 - **Machine enrollments and social budgets** — same disease, same cure, but
   deferred to keep the first slices reviewable; they migrate onto the same
   declaration pattern in a later phase (§9).
@@ -267,8 +265,8 @@ Runner operations (adopted from the same survey):
 
 ## 5. Runtime administration
 
-Resident-only tools (same `origin.role === "resident"` gate as converse/lease/
-approval tools), each a recorded act:
+Resident-only tools (the same `origin.role === "resident"` gate as approval tools),
+each a recorded act:
 
 | Tool | Act | Guard |
 | --- | --- | --- |

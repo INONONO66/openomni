@@ -59,7 +59,6 @@ const WaitContextSchema = z
   .object({
     waitId: z.string().min(1),
     allowedAction: Wait.AllowedAction,
-    engagementId: z.string().min(1).optional(),
   })
   .strict();
 
@@ -214,13 +213,6 @@ const MessageDenialCodeSchema = z.enum([
   "budget_exhausted",
   "cooldown_suppressed",
   "dnc_denied",
-  // #P1 conversational send right (docs/conversation-and-message-io.md §3.4):
-  // a conversation-pinned send the window refuses — closed, expired, cap
-  // reached, or inside quiet hours. The reason string names which.
-  "conversation_denied",
-  // #P2 lease send right (§3.5): a lease-pinned send the lease refuses —
-  // dead, lapsed, or its carved allocation spent.
-  "lease_denied",
 ]);
 
 /**
@@ -326,22 +318,6 @@ const SendInputBase = z
     at: EpochMs,
     waitSpec: AwaitSpecSchema.optional(),
     /**
-     * #P1 conversational send right: pins this send to an open Conversation
-     * window. Present → the window IS the authority (grant + social-budget
-     * gates are bypassed; the window's own caps/quiet-hours/expiry gate the
-     * send, and the debit lands on the window, not the egress budget).
-     * Additive-optional for backward compat.
-     */
-    conversationId: z.string().min(1).optional(),
-    /**
-     * #P2 lease send right (§3.5): pins this send to a live Lease. Present →
-     * the lease IS the authority (grants and the egress budget are bypassed;
-     * the debit lands atomically on the lease's carved allocation AND the
-     * scoped conversation's outbound cap). When both pins are present they
-     * must name the same conversation — the kernel refuses a mismatch.
-     */
-    leaseId: z.string().min(1).optional(),
-    /**
      * #219 policy-intent axis, additive-optional for backward compat. Absent →
      * defaults from `operation` (notify for fire_and_forget, converse for
      * awaited). Present → must stay coherent with `operation` (refined below).
@@ -380,22 +356,6 @@ const SendInputSchema = SendInputBase.superRefine((input, ctx) => {
       code: "custom",
       message: 'class "notify" requires operation "fire_and_forget" (a notify awaits nothing)',
       path: ["class"],
-    });
-  }
-  // A conversation-pinned send is conversational by construction — an
-  // explicit notify class would contradict the window's reply loop.
-  if (input.conversationId !== undefined && input.class === "notify") {
-    ctx.addIssue({
-      code: "custom",
-      message: 'a conversation-pinned send cannot be class "notify"',
-      path: ["conversationId"],
-    });
-  }
-  if (input.leaseId !== undefined && input.class === "notify") {
-    ctx.addIssue({
-      code: "custom",
-      message: 'a lease-pinned send cannot be class "notify"',
-      path: ["leaseId"],
     });
   }
 });

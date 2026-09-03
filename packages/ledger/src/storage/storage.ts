@@ -93,20 +93,7 @@ export namespace Storage {
     // adapter_absent error) when it is missing; production adapters wire it
     // as required (SqliteStorageAdapter).
     wait?: ProtocolStorage.WaitSubAdapter;
-    // Optional here for test fakes only — ConversationStore fails closed
-    // (typed adapter_absent error) when it is missing; production adapters
-    // wire it as required (SqliteStorageAdapter).
-    conversation?: ProtocolStorage.ConversationSubAdapter;
-    // Optional here for test fakes only — LeaseStore fails closed (typed
-    // adapter_absent error) when it is missing; production adapters wire it
-    // as required (SqliteStorageAdapter).
-    lease?: ProtocolStorage.LeaseSubAdapter;
     approval?: ProtocolStorage.ApprovalSubAdapter;
-    // Optional here for test fakes only — EngagementStore fails closed (typed
-    // adapter_absent error) when it is missing; production adapters wire it
-    // as required (SqliteStorageAdapter). Brain-domain surface (#709): the
-    // brain is its sole writer.
-    engagement?: ProtocolStorage.EngagementSubAdapter;
     // Optional for test fakes only — DelegationStore fails closed when it is
     // missing; production adapters wire it as required (SqliteStorageAdapter).
     delegation?: ProtocolStorage.DelegationSubAdapter;
@@ -149,10 +136,7 @@ export namespace Storage {
     "surfaceKey",
 
     "wait",
-    "conversation",
-    "lease",
     "approval",
-    "engagement",
     "delegation",
     "ledger",
     "workerRunState",

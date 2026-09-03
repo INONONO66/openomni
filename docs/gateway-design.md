@@ -1,6 +1,6 @@
 # Gateway architecture — final design (v2)
 
-Owner-directed target design, finalized 2026-08-19. Supersedes v1 (2026-08-18) and five locked clauses (§8). Reference structure: clawhip (https://github.com/Yeachan-Heo/clawhip) — routing/normalization/delivery layer with the brain outside it. [Implementation Status](implementation-status.md) alone records current wiring.
+Historical design, finalized 2026-08-19 and superseded by the [kernel architecture](../.omo/reports/operation-architecture-20260902/KERNEL.md). Its engagement machine is retained below only as decision history; the shipped conversation, send-lease, and engagement lifecycles were removed by #943. [Implementation Status](implementation-status.md) alone records current wiring.
 
 ## 0. North-star fit
 

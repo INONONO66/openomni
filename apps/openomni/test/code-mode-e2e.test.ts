@@ -106,7 +106,7 @@ test("a cell batches delegation into one turn", async () => {
 
   // The machine was attached, so the machine-placed tool was offered.
   expect(answer).toContain(
-    "offered=[approval,await_delegation,cancel_delegation,converse,delegate,provision,run_code]",
+    "offered=[approval,await_delegation,cancel_delegation,delegate,provision,run_code]",
   );
   // Three workers ran and their answers came back inside the cell. The value
   // is the cell's final expression as Python rendered it, quotes included.
@@ -158,7 +158,6 @@ test("the machine tool is not offered while nothing is attached", async () => {
     "delegate",
     "await_delegation",
     "cancel_delegation",
-    "converse",
     "approval",
     "provision",
     "run_code",
