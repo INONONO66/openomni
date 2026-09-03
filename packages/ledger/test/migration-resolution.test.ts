@@ -1,6 +1,6 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { Database } from "bun:sqlite";
-import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { initializeSqliteDatabase } from "../src/storage/sqlite-schema-lifecycle";
@@ -25,6 +25,23 @@ afterEach(() => {
 });
 
 const MIGRATION_DIR = resolve(import.meta.dir, "../migration");
+const RETIRED_WORK_MIGRATION = join(MIGRATION_DIR, "0030_drop_retired_tables/migration.sql");
+const RETIRED_WORK_INDEXES = [
+  "idx_work_item_worker_run_id",
+  "idx_work_item_parent",
+  "idx_work_item_session",
+  "idx_work_item_assignee",
+  "idx_work_item_status",
+] as const;
+const RETIRED_WORK_INDEX_SET: ReadonlySet<string> = new Set(RETIRED_WORK_INDEXES);
+
+function retiredWorkIndexesIn(db: Database): string[] {
+  return db
+    .query<{ name: string }, []>("SELECT name FROM sqlite_master WHERE type = 'index'")
+    .all()
+    .map((row) => row.name)
+    .filter((name) => RETIRED_WORK_INDEX_SET.has(name));
+}
 
 describe("moved migration resolution (#502)", () => {
   test("migration directory resolves under packages/ledger, not any former path", () => {
@@ -67,9 +84,39 @@ describe("moved migration resolution (#502)", () => {
         .map((row) => row.name);
       expect(tables).toContain("ledger_event");
       expect(tables).toContain("session");
-      expect(tables).toContain("work_item");
+      expect(tables).not.toContain("work_item");
+
+      expect(retiredWorkIndexesIn(db)).toEqual([]);
     } finally {
       db.close();
+    }
+  });
+
+  test("forward migration drops WorkItem tables from an upgraded database", () => {
+    const db = new Database(join(tmpDir, "upgraded.db"), { create: true });
+    try {
+      initializeSqliteDatabase(db);
+      db.exec("CREATE TABLE work_item (id TEXT PRIMARY KEY)");
+      for (const index of RETIRED_WORK_INDEXES) {
+        db.exec(`CREATE INDEX ${index} ON work_item(id)`);
+      }
+      db.query("DELETE FROM _migrations WHERE name = ?").run(
+        "0030_drop_retired_tables/migration.sql",
+      );
+      initializeSqliteDatabase(db);
+      expect(
+        db.query<{ name: string }, []>("SELECT name FROM sqlite_master WHERE name = 'work_item'").get(),
+      ).toBeNull();
+      expect(retiredWorkIndexesIn(db)).toEqual([]);
+    } finally {
+      db.close();
+    }
+  });
+
+  test("forward migration explicitly drops every retired WorkItem index", () => {
+    const migration = readFileSync(RETIRED_WORK_MIGRATION, "utf8");
+    for (const index of RETIRED_WORK_INDEXES) {
+      expect(migration).toContain(`DROP INDEX IF EXISTS ${index};`);
     }
   });
 

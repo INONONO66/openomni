@@ -1,5 +1,5 @@
 export * from "./error/index.js";
-export { canonicalKey, isPlainValue, PlainValueSchema } from "./json.js";
+export { canonicalDigest, canonicalKey, isPlainValue, PlainValueSchema } from "./json.js";
 export type { PlainObject, PlainValue } from "./json.js";
 export type { Clock, EntropySource, IdSource } from "./platform.js";
 export * from "./tool/index.js";
@@ -18,7 +18,6 @@ export * from "./gateway/index.js";
 export * from "./ingress/index.js";
 export * from "./policy/index.js";
 export * from "./ipc/index.js";
-export * from "./work-item/index.js";
 export * from "./deadline/index.js";
 export * from "./wait/index.js";
 export * from "./conversation/index.js";

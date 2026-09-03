@@ -6,7 +6,6 @@ import { Bus } from "@openomni/telemetry";
 import { BusPersistence } from "../../src/bus-persistence/index.js";
 import { Session } from "../../src/session/index.js";
 import { Storage } from "../../src/storage/storage.js";
-import { WorkItemStore } from "../../src/work-item/index.js";
 import "../../src/storage/initialize.js";
 
 interface BusEventRow {
@@ -437,52 +436,6 @@ describe("BusPersistence", () => {
       "legacy_probe.opened",
       "worker_run.evaluated",
     ]);
-  });
-
-  test("resolves workerRunId through the fact-backed WorkItem projection (no worker_run_state row)", async () => {
-    // #510 D2b: new runs never write worker_run_state — the canonical read
-    // for a run's session is the fact-bound WorkItem projection.
-    const workSession = createSession();
-    const item = await WorkItemStore.create(
-      {
-        name: "fact-backed-run",
-        sourceMessageId: "msg_fact_backed_run",
-        sourceChannel: "test",
-        intent: "verify",
-        goal: "resolve telemetry attribution from attempt facts",
-        sessionId: "session-origin",
-        acceptanceCriteria: ["session attribution rides the projection"],
-      },
-      "trace-test",
-    );
-    await WorkItemStore.assignExecution(
-      item.workItemId,
-      {
-        executorKind: "internal_chat_agent",
-        workerRunId: "worker-run-fact",
-        workSessionId: workSession.id,
-      },
-      "trace-test",
-    );
-    const event = BusEvent.define(
-      "worker_run.evaluated",
-      z.object({
-        workerRunId: z.string(),
-        traceId: z.string(),
-        time: z.number(),
-      }),
-    );
-
-    BusPersistence.start();
-    Bus.publish(event, {
-      workerRunId: "worker-run-fact",
-      traceId: "trace-fact-backed",
-      time: 3,
-    });
-
-    const persisted = await persistedRows(1);
-    const runRow = persisted.find((row) => row.event_type === "worker_run.evaluated");
-    expect(runRow?.session_id).toBe(workSession.id);
   });
 
   test("continues when worker run session lookup fails", async () => {

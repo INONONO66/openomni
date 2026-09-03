@@ -5,7 +5,7 @@ import type { WorkerRunRow } from "./query-rows.js";
  * Frozen-archive read (#510 D2b): `worker_run_state` gains no new rows —
  * every writer throws the typed `worker_run_frozen` error — so this history
  * query surfaces PRE-FREEZE runs only, read-only over immutable archived
- * rows. New runs' lifecycle lives in `work_item.attempt_*` facts; surfacing
+ * rows. New run history is outside this archive query; surfacing
  * that history is #493 projection scope ("#493 owns projections/export/
  * replay").
  */

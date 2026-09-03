@@ -52,15 +52,15 @@ export function createInlineWorkerRunner(options: WorkerLoopOptions): InlineWork
     ];
     const traceId = newTraceId();
 
-    // Assigned work is driven goal-style (drive-loop.ts); ask/notify runs
+    // Assign runs are driven goal-style (drive-loop.ts); ask/notify runs
     // once — a question is answered, never nannied.
     let tokens = 0;
     let state: DriveState = initialDriveState();
     let firstRun = true;
     for (;;) {
       // The initial run identity is allocated during admission and recorded
-      // on the commissioned WorkItem. Driven follow-ups remain distinct runs
-      // for telemetry, while the attempt remains correlated to its first run.
+      // during admission. Driven follow-ups remain distinct runs for telemetry,
+      // while the request remains correlated to its first run.
       const runId =
         firstRun && input.workerRunId !== undefined ? input.workerRunId : crypto.randomUUID();
       firstRun = false;

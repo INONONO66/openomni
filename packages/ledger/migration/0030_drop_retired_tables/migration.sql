@@ -1,0 +1,6 @@
+DROP INDEX IF EXISTS idx_work_item_worker_run_id;
+DROP INDEX IF EXISTS idx_work_item_parent;
+DROP INDEX IF EXISTS idx_work_item_session;
+DROP INDEX IF EXISTS idx_work_item_assignee;
+DROP INDEX IF EXISTS idx_work_item_status;
+DROP TABLE IF EXISTS work_item;

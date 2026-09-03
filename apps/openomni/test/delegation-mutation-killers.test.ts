@@ -46,28 +46,6 @@ describe("delegation kernel mutation invariants", () => {
     kernel.stop();
   });
 
-  test("assign refuses when no WorkItem linkage is installed", async () => {
-    const kernel = createDelegationKernel({
-      drivers: {},
-      now: () => 1,
-      newDelegationId: () => "d-no-work-items",
-      wake: () => undefined,
-      bootSweep: false,
-    });
-    const result = await kernel.delegate(
-      {
-        address: { kind: "core", scope: "independent" },
-        operation: "assign",
-        payload: { text: "work" },
-        acceptanceCriteria: ["done"],
-        deadline: 100,
-      },
-      RESIDENT,
-    );
-    expect(result).toHaveProperty("refused");
-    kernel.stop();
-  });
-
   test("transport preparation reports synchronous and asynchronous failures", async () => {
     for (const prepare of [
       () => {
@@ -86,85 +64,6 @@ describe("delegation kernel mutation invariants", () => {
       expect(result).toHaveProperty("refused");
       kernel.stop();
     }
-  });
-
-  test("synchronous WorkItem commissioning failures are admission refusals", async () => {
-    const kernel = createDelegationKernel({
-      drivers: {},
-      now: () => 1,
-      newDelegationId: () => "d-work-item-throw",
-      wake: () => undefined,
-      bootSweep: false,
-      workItems: {
-        openAssign: (() => {
-          throw new Error("commission failed");
-        }) as never,
-        cancelAssign: () => Promise.resolve(),
-        closeAttempt: () => Promise.resolve(),
-        recoverAttempts: () => Promise.resolve(),
-      },
-    });
-    const result = await kernel.delegate(
-      {
-        address: { kind: "core", scope: "independent" },
-        operation: "assign",
-        payload: { text: "work" },
-        acceptanceCriteria: ["done"],
-        deadline: 100,
-      },
-      RESIDENT,
-    );
-    expect(result).toHaveProperty("refused");
-    kernel.stop();
-  });
-
-  test("publishes WorkItem recovery and closure failures as operational events", async () => {
-    const recoveryEvents = eventCollector();
-    const recovering = createDelegationKernel({
-      drivers: {},
-      now: () => 1,
-      newDelegationId: () => "unused",
-      wake: () => undefined,
-      events: recoveryEvents,
-      workItems: {
-        openAssign: () => Promise.resolve("wi"),
-        cancelAssign: () => Promise.resolve(),
-        closeAttempt: () => Promise.resolve(),
-        recoverAttempts: () => Promise.reject(new Error("recovery failed")),
-      },
-    });
-    await recoveryEvents.waitFor("operational.error");
-    recovering.stop();
-
-    const closeEvents = eventCollector();
-    const closing = createDelegationKernel({
-      drivers: { process: { run: () => Promise.resolve({ status: "completed", output: "done" }) } },
-      now: () => 1,
-      newDelegationId: () => "d-close-error",
-      wake: () => undefined,
-      events: closeEvents,
-      bootSweep: false,
-      workItems: {
-        openAssign: () => Promise.resolve("wi-close"),
-        cancelAssign: () => Promise.resolve(),
-        closeAttempt: () => Promise.reject("close failed"),
-        recoverAttempts: () => Promise.resolve(),
-      },
-    });
-    const result = await closing.delegate(
-      {
-        address: { kind: "core", scope: "independent" },
-        operation: "assign",
-        payload: { text: "work" },
-        acceptanceCriteria: ["done"],
-        deadline: 100,
-      },
-      RESIDENT,
-    );
-    if ("refused" in result) throw result.error;
-    await closing.awaitDelegation(result.handle.delegationId);
-    await closeEvents.waitFor("operational.error");
-    closing.stop();
   });
 
   test("reports a wake bookkeeping failure", () => {

@@ -3,7 +3,7 @@ import { composeEffects, PolicyEngine } from "@openomni/policy";
 // Deep import: mergeEntries is engine-internal — the root barrel stopped
 // re-exporting it when its only external reader turned out to be this test.
 import { mergeEntries } from "../src/effects/merge/rules";
-import { Policy, PolicyDecision } from "@openomni/protocol";
+import { type Policy, PolicyDecision } from "@openomni/protocol";
 import { atPoint, dispatchContext } from "./point-test-fixtures";
 
 describe("PolicyEngine dispatchPoint selection", () => {
@@ -40,39 +40,6 @@ describe("PolicyEngine dispatchPoint selection", () => {
     expect(observedTiming).toBe("dispatch.authorize");
     expect(observedMarker).toBe("original");
     expect(frozen).toBe(true);
-  });
-
-  test("keeps generic run completion and canonical WorkItem completion independent", async () => {
-    const timing = Policy.Timing.COMPLETION_PREPARE;
-    const engine = PolicyEngine.create({ clock: Date.now });
-    let observedPointId: string | undefined;
-    let observedTiming: Policy.Timing | undefined;
-    engine.register({
-      kind: "point",
-      name: "work-completion-observer",
-      pointIds: ["work.complete.pre"],
-      effectCapabilities: { "work.complete.pre": [] },
-      priority: 0,
-      fn: (ctx) => {
-        observedPointId = ctx.pointId;
-        observedTiming = ctx.timing;
-        return PolicyDecision.allow({ policyId: "work-completion-observer" });
-      },
-    });
-
-    const decision = await engine.dispatchPoint("work.complete.pre", {
-      workItemHash: "wi_admission",
-      requestId: "request:completion",
-      contractRevision: "contract:v1",
-      basisRef: "basis:v1",
-      expectedHead: 7,
-      completionCandidate: { effectiveResultIds: ["result:publish"] },
-      unresolvedBlockerIds: [],
-    });
-
-    expect(decision.verdict).toBe("allow");
-    expect(observedPointId).toBe("work.complete.pre");
-    expect(observedTiming).toBe(timing);
   });
 
   test("selects only the requested point and preserves stable priority order", async () => {
@@ -339,75 +306,6 @@ describe("merge rule mutation invariants", () => {
     expect(merged.effects).toEqual([
       { type: "tool.filter", toolPattern: "shell.*" },
       { type: "audit.annotate", annotation: "between", severity: "info" },
-    ]);
-  });
-});
-
-describe("WorkItem policy effect composition", () => {
-  test("retains the minimum source order when merging asserted-result allowances", () => {
-    const merged = mergeEntries([
-      {
-        effect: { type: "work.allow_asserted", criterionIds: ["criterion:late"] },
-        policyId: "late-asserted-allowance",
-        priority: 0,
-        decisionIndex: 0,
-        effectIndex: 0,
-        order: 10,
-      },
-      {
-        effect: { type: "audit.annotate", annotation: "between" },
-        policyId: "between",
-        priority: 0,
-        decisionIndex: 1,
-        effectIndex: 0,
-        order: 5,
-      },
-      {
-        effect: { type: "work.allow_asserted", criterionIds: ["criterion:early"] },
-        policyId: "early-asserted-allowance",
-        priority: 0,
-        decisionIndex: 2,
-        effectIndex: 0,
-        order: 1,
-      },
-    ]);
-
-    expect(merged.effects).toEqual([
-      { type: "work.allow_asserted", criterionIds: ["criterion:late", "criterion:early"] },
-      { type: "audit.annotate", annotation: "between" },
-    ]);
-  });
-
-  test("merges asserted-result allowances into one stable criterion list", () => {
-    const later = PolicyDecision.allow({
-      policyId: "later-asserted-allowance",
-      priority: 10,
-      effects: [
-        {
-          type: "work.allow_asserted",
-          criterionIds: ["criterion:a", "criterion:c", "criterion:b"],
-        },
-      ],
-    });
-    const first = PolicyDecision.allow({
-      policyId: "first-asserted-allowance",
-      priority: 0,
-      effects: [
-        {
-          type: "work.allow_asserted",
-          criterionIds: ["criterion:b", "criterion:a"],
-        },
-      ],
-    });
-
-    const composed = composeEffects([later, first]);
-
-    expect(composed.verdict).toBe("allow");
-    expect(composed.mergedEffects).toEqual([
-      {
-        type: "work.allow_asserted",
-        criterionIds: ["criterion:b", "criterion:a", "criterion:c"],
-      },
     ]);
   });
 });

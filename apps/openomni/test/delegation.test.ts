@@ -2,12 +2,11 @@ import { describe, expect, test, vi } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DelegationStore, SqliteStorageAdapter, Storage, WorkItemStore } from "@openomni/ledger";
+import { DelegationStore, SqliteStorageAdapter, Storage } from "@openomni/ledger";
 import { admit, type AdmissionLimits } from "../src/delegation/admission";
 import { createChannelDriver } from "../src/delegation/channel-driver";
 import { createDelegationKernel } from "../src/delegation/kernel";
 import { delegationTraceId } from "../src/delegation/trace";
-import { createWorkItemLinkage } from "../src/delegation/work-item-linkage";
 import {
   AWAIT_DELEGATION_TOOL_NAME,
   CANCEL_DELEGATION_TOOL_NAME,
@@ -310,46 +309,6 @@ describe("durable kernel", () => {
     kernel.stop();
   });
 
-  test("refuses and cancels an assign when its parent settles during transport preparation", async () => {
-    const { kernel, entered, releasePreparation } = parentSettlingHarness(
-      "assign-parent",
-      "assign-child",
-      {
-        workItems: createWorkItemLinkage({
-          model: { provider: "fake", id: "parent-settled-test" },
-          now: () => 1_000,
-        }),
-      },
-    );
-    const delegated = kernel.delegate(
-      ask({
-        operation: "assign",
-        address: { kind: "core", scope: "independent" },
-        acceptanceCriteria: ["result is verified"],
-      }),
-      { ...RESIDENT, parentDelegationId: "assign-parent", rootDelegationId: "assign-parent" },
-    );
-
-    await entered;
-    await kernel.cancelDelegation("assign-parent");
-    releasePreparation();
-
-    await expect(delegated).resolves.toMatchObject({
-      error: { data: { code: "parent_settled" } },
-    });
-    expect(DelegationStore.get("assign-child")).toBeUndefined();
-    const commissioned = WorkItemStore.list().filter(
-      (item) => item.sourceChannel === "delegation" && item.sourceMessageId === "assign-child",
-    );
-    expect(commissioned).toHaveLength(1);
-    expect(commissioned[0]?.timestamps.cancelled).toEqual(expect.any(Number));
-    kernel.stop();
-  });
-
-  /**
-   * A root delegation one child short of the fanout cap, plus a prepare gate
-   * that holds every candidate until two of them are racing for the last slot.
-   */
   function saturatedFanoutRoot(rootId: string, prefix: string) {
     DelegationStore.create({
       delegationId: rootId,
@@ -372,11 +331,7 @@ describe("durable kernel", () => {
         deadline: 10_000,
         parentDelegationId: rootId,
         rootDelegationId: rootId,
-        origin: {
-          ...WORKER,
-          parentDelegationId: rootId,
-          rootDelegationId: rootId,
-        },
+        origin: { ...WORKER, parentDelegationId: rootId, rootDelegationId: rootId },
         instruction: "existing child",
         status: "open",
         createdAt: index + 1,
@@ -425,174 +380,6 @@ describe("durable kernel", () => {
     ]);
 
     expect(results.filter((result) => "refused" in result)).toHaveLength(1);
-    kernel.stop();
-  });
-
-  test("cancels the commissioned WorkItem when a concurrent assign loses the final fanout claim", async () => {
-    const { gatedPrepare } = saturatedFanoutRoot("assign-root", "assign-existing-");
-    let nextId = 0;
-    const kernel = createDelegationKernel({
-      store: DelegationStore,
-      drivers: {
-        process: {
-          prepare: gatedPrepare,
-          run: () => new Promise(() => undefined),
-        },
-      },
-      workItems: createWorkItemLinkage({
-        model: { provider: "fake", id: "fanout-test" },
-        now: () => 1_000,
-      }),
-      now: () => 1_000,
-      newDelegationId: () => `assign-candidate-${++nextId}`,
-      wake: () => undefined,
-      bootSweep: false,
-      limits: LIMITS,
-    });
-    const origin = {
-      ...RESIDENT,
-      parentDelegationId: "assign-root",
-      rootDelegationId: "assign-root",
-    };
-    const request = ask({
-      operation: "assign",
-      address: { kind: "core", scope: "independent" },
-      acceptanceCriteria: ["result is verified"],
-    });
-
-    const results = await Promise.all([
-      kernel.delegate(request, origin),
-      kernel.delegate(request, origin),
-    ]);
-
-    expect(results.filter((result) => "refused" in result)).toHaveLength(1);
-    const commissioned = WorkItemStore.list().filter(
-      (item) =>
-        item.sourceChannel === "delegation" && item.sourceMessageId.startsWith("assign-candidate-"),
-    );
-    expect(commissioned).toHaveLength(2);
-    expect(commissioned.filter((item) => item.timestamps.cancelled !== undefined)).toHaveLength(1);
-    kernel.stop();
-  });
-
-  test("returns fanout refusal and reports an operational error when assign rollback fails", async () => {
-    DelegationStore.create({
-      delegationId: "rollback-root",
-      operation: "ask",
-      address: { kind: "core", scope: "independent" },
-      transport: "process",
-      deadline: 10_000,
-      rootDelegationId: "rollback-root",
-      origin: RESIDENT,
-      instruction: "root",
-      status: "open",
-      createdAt: 1,
-    });
-    for (let index = 1; index <= 6; index += 1) {
-      DelegationStore.create({
-        delegationId: `rollback-existing-${index}`,
-        operation: "ask",
-        address: { kind: "core", scope: "inline" },
-        transport: "inline",
-        deadline: 10_000,
-        parentDelegationId: "rollback-root",
-        rootDelegationId: "rollback-root",
-        origin: {
-          ...WORKER,
-          parentDelegationId: "rollback-root",
-          rootDelegationId: "rollback-root",
-        },
-        instruction: "existing child",
-        status: "open",
-        createdAt: index + 1,
-      });
-    }
-    let prepared = 0;
-    let releasePreparation!: () => void;
-    const bothPreparing = new Promise<void>((resolve) => {
-      releasePreparation = resolve;
-    });
-    let nextId = 0;
-    let cancelledWorkItemId: string | undefined;
-    const commissioned = new Map<string, string>();
-    const events = eventCollector();
-    const kernel = createDelegationKernel({
-      store: DelegationStore,
-      drivers: {
-        process: {
-          prepare: async () => {
-            prepared += 1;
-            if (prepared === 2) releasePreparation();
-            await bothPreparing;
-            return {};
-          },
-          run: () => new Promise(() => undefined),
-        },
-      },
-      workItems: {
-        openAssign: (input) => {
-          const workItemId = `wi-${input.delegationId}`;
-          commissioned.set(workItemId, input.delegationId);
-          return Promise.resolve(workItemId);
-        },
-        cancelAssign: (workItemId) => {
-          cancelledWorkItemId = workItemId;
-          return Promise.reject(new Error("cancel failed"));
-        },
-        closeAttempt: () => Promise.resolve(),
-        recoverAttempts: () => Promise.resolve(),
-      },
-      now: () => 1_000,
-      newDelegationId: () => `rollback-candidate-${++nextId}`,
-      wake: () => undefined,
-      events,
-      bootSweep: false,
-      limits: LIMITS,
-    });
-    const request = ask({
-      operation: "assign",
-      address: { kind: "core", scope: "independent" },
-      acceptanceCriteria: ["result is verified"],
-    });
-    const origin = {
-      ...RESIDENT,
-      parentDelegationId: "rollback-root",
-      rootDelegationId: "rollback-root",
-    };
-
-    const results = await Promise.allSettled([
-      kernel.delegate(request, origin),
-      kernel.delegate(request, origin),
-    ]);
-
-    expect(results.filter((result) => result.status === "rejected")).toHaveLength(0);
-    const refusals = results.filter(
-      (result) => result.status === "fulfilled" && "refused" in result.value,
-    );
-    expect(refusals).toHaveLength(1);
-    expect(refusals[0]).toMatchObject({
-      value: { error: { data: { code: "fanout_cap" } } },
-    });
-    expect(cancelledWorkItemId).toBeDefined();
-    const delegationId = commissioned.get(cancelledWorkItemId ?? "");
-    expect(events.events.filter((event) => event.name === "operational.error")).toEqual([
-      {
-        name: "operational.error",
-        data: {
-          traceId: delegationTraceId(delegationId ?? ""),
-          sessionId: "session-origin",
-          time: 1_000,
-          component: "delegation",
-          msg: `WorkItem rollback failed for ${delegationId}`,
-          error: "cancel failed",
-          context: {
-            delegationId,
-            workItemId: cancelledWorkItemId,
-            refusal: "fanout_cap",
-          },
-        },
-      },
-    ]);
     kernel.stop();
   });
 
@@ -1086,7 +873,6 @@ describe("delegation controls and tool surface", () => {
     DelegationStore.create({
       delegationId: "d-expired-channel",
       operation: "assign",
-      workItemId: "wi-expired-channel",
       address: { kind: "actor", actorId: "alice" },
       transport: "channel",
       deadline: 1_000,

@@ -106,7 +106,7 @@ test("a cell batches delegation into one turn", async () => {
 
   // The machine was attached, so the machine-placed tool was offered.
   expect(answer).toContain(
-    "offered=[approval,await_delegation,cancel_delegation,converse,delegate,provision,run_code,work_items]",
+    "offered=[approval,await_delegation,cancel_delegation,converse,delegate,provision,run_code]",
   );
   // Three workers ran and their answers came back inside the cell. The value
   // is the cell's final expression as Python rendered it, quotes included.
@@ -162,7 +162,6 @@ test("the machine tool is not offered while nothing is attached", async () => {
     "approval",
     "provision",
     "run_code",
-    "work_items",
   ]);
   // All tools are host-projected; the local default host reports live attachment failure.
   expect(answer).toContain("the default kernel host is not attached right now");

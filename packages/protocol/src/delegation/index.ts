@@ -1,4 +1,3 @@
-import { settlementToAttemptOutcome as settlementToAttemptOutcomeFold } from "./attempt-linkage.js";
 import { Events as EventDescriptors } from "./events.js";
 import * as Schema from "./schema.js";
 
@@ -37,6 +36,4 @@ export namespace Delegation {
   export type Record = Schema.Record;
 
   export const Events = EventDescriptors;
-
-  export const settlementToAttemptOutcome = settlementToAttemptOutcomeFold;
 }

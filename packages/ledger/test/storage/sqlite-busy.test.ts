@@ -3,8 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { isSqliteBusyError, StorageUnavailableError } from "../../src/storage/sqlite-busy";
-import { runWorkItemTransaction } from "../../src/work-item/facts";
+import { isSqliteBusyError } from "../../src/storage/sqlite-busy";
 
 describe("isSqliteBusyError", () => {
   test("matches a real bun:sqlite SQLITE_BUSY (pins how the driver surfaces it)", () => {
@@ -57,56 +56,5 @@ describe("isSqliteBusyError", () => {
     );
     expect(isSqliteBusyError({ code: "SQLITE_BUSY" })).toBe(false);
     expect(isSqliteBusyError(undefined)).toBe(false);
-  });
-});
-
-describe("StorageUnavailableError", () => {
-  test.each([0, "", undefined])("retains an explicitly provided storage cause: %p", (cause) => {
-    const error = new StorageUnavailableError("work-item", "wi-falsy", cause);
-
-    expect(Object.getOwnPropertyDescriptor(error, "cause") !== undefined).toBe(true);
-    expect(Reflect.get(error, "cause")).toBe(cause);
-  });
-});
-
-describe("runWorkItemTransaction", () => {
-  test("maps SQLITE_BUSY to the shared typed storage error; other errors pass through", () => {
-    const busyStorage = {
-      transaction<T>(_operation: () => T): T {
-        throw Object.assign(new Error("database is locked"), { code: "SQLITE_BUSY", errno: 5 });
-      },
-    };
-
-    let thrown: unknown;
-    try {
-      runWorkItemTransaction(busyStorage, "wi-busy", () => "unreachable");
-    } catch (error) {
-      thrown = error;
-    }
-    expect(thrown).toBeInstanceOf(StorageUnavailableError);
-    expect((thrown as StorageUnavailableError).code).toBe("unavailable");
-    expect((thrown as StorageUnavailableError).store).toBe("work-item");
-    expect((thrown as StorageUnavailableError).resourceId).toBe("wi-busy");
-    expect(StorageUnavailableError.isInstance(thrown)).toBe(true);
-    expect((thrown as StorageUnavailableError).toObject()).toMatchObject({
-      name: "StorageUnavailableError",
-      data: { code: "unavailable", store: "work-item", resourceId: "wi-busy" },
-    });
-
-    const failingStorage = {
-      transaction<T>(_operation: () => T): T {
-        throw new Error("unrelated failure");
-      },
-    };
-    expect(() => runWorkItemTransaction(failingStorage, "wi-other", () => "unreachable")).toThrow(
-      "unrelated failure",
-    );
-
-    const passthrough = {
-      transaction<T>(operation: () => T): T {
-        return operation();
-      },
-    };
-    expect(runWorkItemTransaction(passthrough, "wi-ok", () => 42)).toBe(42);
   });
 });

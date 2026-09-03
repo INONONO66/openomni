@@ -31,7 +31,7 @@ describe("Storage.initialize", () => {
 
   test("refuses an incomplete production sqlite adapter before first use", () => {
     const adapter = new SqliteStorageAdapter(":memory:");
-    Object.defineProperty(adapter, "workItem", { configurable: true, value: undefined });
+    Object.defineProperty(adapter, "wait", { configurable: true, value: undefined });
 
     let refusal: unknown;
     try {
@@ -43,9 +43,9 @@ describe("Storage.initialize", () => {
     }
 
     expect((refusal as Error).name).toBe("IncompleteAdapterError");
-    expect(refusal).toMatchObject({ code: "incomplete_adapter", capability: "workItem" });
+    expect(refusal).toMatchObject({ code: "incomplete_adapter", capability: "wait" });
     expect((refusal as Error).message).toBe(
-      "Production storage adapter is missing required capability: workItem",
+      "Production storage adapter is missing required capability: wait",
     );
     expect(() => Storage.get()).toThrow("Storage.get() called before initialize()");
   });

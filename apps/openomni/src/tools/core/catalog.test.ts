@@ -10,7 +10,6 @@ const EXPECTED = [
   "approval",
   "provision",
   "run_code",
-  "work_items",
   "llm",
 ];
 

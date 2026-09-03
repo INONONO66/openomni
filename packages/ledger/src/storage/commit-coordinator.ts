@@ -3,8 +3,8 @@ import { isSqliteBusyError } from "./sqlite-busy.js";
 
 /**
  * Single owner of decision-class COMMIT MECHANICS (#510; semantic-audit
- * sem-lifecycle.md section 4). WorkItem, Wait, and Engagement each used to
- * spell this sequence themselves:
+ * sem-lifecycle.md section 4). Wait and Engagement each used to spell this
+ * sequence themselves:
  *
  *   1. append the decision fact to the owner stream at
  *      `expectedHead = the pre-transition revision`;
@@ -22,8 +22,8 @@ import { isSqliteBusyError } from "./sqlite-busy.js";
  * ruling: the state machine (the fold), typed fact construction, the conflict
  * error TAXONOMY, and the adoption GENESIS payload. Engagement has no
  * adoption path at all (its stream class was born with the table); Wait
- * adopts identity fields only, for erasability; WorkItem adopts a full
- * snapshot. Those are persisted-fact baselines, not mechanics, so the
+ * adopts identity fields only, for erasability. Those are persisted-fact
+ * baselines, not mechanics, so the
  * coordinator takes the genesis as an input and never invents one.
  *
  * This module owns ordering. It does not own meaning.
@@ -45,7 +45,7 @@ type CommitAdoption = Readonly<{
 }>;
 
 export type CommitRequest = Readonly<{
-  /** Owner stream for this resource, e.g. `wait:<id>` or `work:<hash>`. */
+  /** Owner stream for this resource, e.g. `wait:<id>`. */
   streamId: string;
   /** The projection's revision BEFORE this transition. */
   expectedHead: number;

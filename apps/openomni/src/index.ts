@@ -55,8 +55,6 @@ import {
 } from "./delegation/kernel";
 import { delegationTraceId } from "./delegation/trace";
 import { createWakeDeliveryQueue } from "./delegation/wake-delivery";
-import { createWorkItemLinkage } from "./delegation/work-item-linkage";
-import { createCompletionPort } from "./work-item/completion";
 import { createProcessDriver } from "./delegation/process-driver";
 import { createInlineWorkerRunner } from "./delegation/worker-loop";
 import { createMountedChannelGrantRegistrar, createResidentGateway } from "./gateway";
@@ -268,9 +266,8 @@ export async function startOpenOmni(options: StartOptions = {}) {
   const composer = createComposer();
   let kernel: DelegationKernel | undefined;
   try {
-    let completionWriter!: Storage.WorkItemCompletionWriter;
     await composer.mount("journal", (ctx) => {
-      completionWriter = initialize({ dbPath: config.dbPath });
+      initialize({ dbPath: config.dbPath });
       const stopBusPersistence = BusPersistence.start();
       // Journal shutdown contract: every accepted event row is committed
       // before the observer detaches and storage closes.
@@ -403,10 +400,6 @@ export async function startOpenOmni(options: StartOptions = {}) {
       // §3.5 lease linkage: live-lease facts admit a worker's channel
       // delegation, and every settlement durably closes the holder's leases.
       leases: createLeaseLinkage(),
-      workItems: createWorkItemLinkage({
-        model: { provider: config.model.provider, id: config.model.id },
-        now: () => Date.now(),
-      }),
       wake: (wake) => wakeDelivery.deliver(wake),
       bootSweep: false,
       drivers: driverRegistry.drivers,
@@ -442,10 +435,6 @@ export async function startOpenOmni(options: StartOptions = {}) {
     // Self-referential: a cell's catalog is the same one that dispatches cells,
     // and placement subtracts what a cell cannot reach.
     const machineHost = host;
-    const completionPort = createCompletionPort({
-      writer: completionWriter,
-      now: () => Date.now(),
-    });
     const llmPort = createLlmToolPort(
       { ...config.model, ...(transport === undefined ? {} : { transport }) },
       options.llm ?? {},
@@ -490,7 +479,6 @@ export async function startOpenOmni(options: StartOptions = {}) {
       tools: {
         delegation: delegationKernel,
         ...(cells === undefined ? {} : { cells }),
-        workItems: completionPort,
         llm: llmPort,
         conversations: conversePort,
         leases: leasePort,

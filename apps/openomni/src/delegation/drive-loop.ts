@@ -2,8 +2,7 @@
  * Goal-style drive policy for native worker runs (inline/process transports
  * only — a channel counterpart merely delivers and waits, it is never driven).
  * Pure: the transport driver feeds one observation per completed agent run
- * and acts on the decision. The policy lives here, never in the WorkItem
- * schema — the contract stays executor-agnostic.
+ * and acts on the decision. The contract stays executor-agnostic.
  */
 
 import { RunReasonCode } from "@openomni/agent";

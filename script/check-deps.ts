@@ -234,7 +234,7 @@ const CHANNELS_JUDGMENT_ONLY_DEPS = new Set(["@openomni/policy", "@openomni/ledg
  * channel grants, waits, the surface↔session map, and the SCOPED append
  * port (append + headFact — never the master
  * `Storage` entry, whose adapter reaches every brain surface). Brain
- * surfaces (Session, WorkItem*, transcript, artifact, worker-run/grant,
+ * surfaces (Session, transcript, artifact, worker-run/grant,
  * effect, …) are NOT reachable from the router — the gateway selects
  * sessions but never reads or writes session content (S1), and domain
  * isolation inside the one DB is by store surface (S2).
@@ -729,7 +729,7 @@ function selfTest(): void {
       "S8: a type-only brain-surface import is still pinned",
       channelsRouterLedgerViolations(
         "packages/channels/src/router/authority.ts",
-        'import type { WorkItemStore } from "@openomni/ledger";',
+        'import type { TranscriptStore } from "@openomni/ledger";',
       ).length === 1,
     ],
     [

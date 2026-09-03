@@ -124,7 +124,7 @@ export type Origin = z.infer<typeof Origin>;
  * the operation, the resolved transport, the effective deadline (admission
  * clamps the requested deadline to the parent's when a parent exists), and
  * the tree ids the settlement will arrive under. Never the worker's state —
- * progress is observed through Wait/WorkItem, not polled through the handle.
+ * progress is observed through the returned letter, not polled through the handle.
  */
 export const Handle = z
   .object({
@@ -135,7 +135,6 @@ export const Handle = z
     /** Effective deadline (epoch ms): min(requested, parentDeadline) computed at admission. */
     deadline: EpochMs.int().positive(),
     waitId: z.string().min(1).optional(),
-    workItemId: z.string().min(1).optional(),
     parentDelegationId: z.string().min(1).optional(),
     /** Every delegation names its tree root; a root delegation names itself. */
     rootDelegationId: z.string().min(1),
@@ -149,9 +148,7 @@ export type Handle = z.infer<typeof Handle>;
  * DISTINCT terminals: unknown-outcome must never be read as did-not-happen.
  *
  * `completed` means the worker/actor REPORTED completion (or replied) —
- * nothing more. Acceptance-criteria enforcement is deliberately OUT of this
- * terminal; completion authority over assigned work is a future WorkItem
- * integration, not a schema claim.
+ * nothing more. The caller reading the returned result judges satisfaction.
  *
  * `interrupted` is set only by the boot sweep: the host restarted while
  * volatile (inline/process) transport work was still open.
@@ -160,6 +157,17 @@ export type Handle = z.infer<typeof Handle>;
  * That rule is pinned where operation meets settlement (`Record`), because
  * a bare terminal carries no operation to check itself against.
  */
+const settledReason = (status: "cancelled" | "delivery_failed") =>
+  z
+    .object({
+      status: z.literal(status),
+      delegationId: z.string().min(1),
+      workerRunId: z.string().min(1).optional(),
+      reason: z.string().min(1),
+      at: EpochMs,
+    })
+    .strict();
+
 const SettledUnion = z.discriminatedUnion("status", [
   z
     .object({
@@ -181,24 +189,8 @@ const SettledUnion = z.discriminatedUnion("status", [
       at: EpochMs,
     })
     .strict(),
-  z
-    .object({
-      status: z.literal("cancelled"),
-      delegationId: z.string().min(1),
-      workerRunId: z.string().min(1).optional(),
-      reason: z.string().min(1),
-      at: EpochMs,
-    })
-    .strict(),
-  z
-    .object({
-      status: z.literal("delivery_failed"),
-      delegationId: z.string().min(1),
-      workerRunId: z.string().min(1).optional(),
-      reason: z.string().min(1),
-      at: EpochMs,
-    })
-    .strict(),
+  settledReason("cancelled"),
+  settledReason("delivery_failed"),
   z
     .object({
       status: z.literal("no_response"),
@@ -293,20 +285,6 @@ export const Record = RecordBase.superRefine((record, ctx) => {
       code: "custom",
       message: "settlement payload belongs to a different delegation",
       path: ["settled"],
-    });
-  }
-  if (record.operation === "assign" && record.workItemId === undefined) {
-    ctx.addIssue({
-      code: "custom",
-      message: "an assign record carries the WorkItem it commissioned",
-      path: ["workItemId"],
-    });
-  }
-  if (record.operation !== "assign" && record.workItemId !== undefined) {
-    ctx.addIssue({
-      code: "custom",
-      message: "only assign commissions a WorkItem",
-      path: ["workItemId"],
     });
   }
   if (record.settled?.status === "sent" && record.operation !== "notify") {
