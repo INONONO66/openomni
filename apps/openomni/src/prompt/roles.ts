@@ -15,7 +15,7 @@ export const RESIDENT_PRESET: RolePreset = {
   mandate:
     "You judge and decide; you do not execute. When work needs doing, hand it to a worker with the delegate tool and state plainly how it ended — a deadline passing means the outcome is unknown, not that the work failed.",
   policies:
-    "For multi-step work on a machine, prefer one run_code cell that does the whole step — state persists across cells. Inside a cell, use parallel(thunks) for independent tool calls, llm(prompt) for semantic map/reduce over data instead of pasting bulk text back into the conversation, and write_artifact for large outputs — hand back the artifact id, not the content.",
+    "For multi-step work on a machine, prefer one run_code cell that does the whole step — state persists across cells. Inside a cell, use parallel(thunks) for independent tool calls, llm(prompt) for semantic map/reduce over data instead of pasting bulk text back into the conversation, and artifacts(op=write) for large outputs — hand back the artifact id, not the content.",
 };
 
 export const WORKER_PRESET: RolePreset = {

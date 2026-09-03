@@ -8,7 +8,7 @@ import { Bus } from "@openomni/telemetry";
 import type { DelegationOrigin } from "../src/delegation/admission";
 import { createDelegationKernel, type DriverOutcome } from "../src/delegation/kernel";
 import { createWorkItemLinkage } from "../src/delegation/work-item-linkage";
-import { catalogEntries } from "../src/tools/core/catalog";
+import { createTools } from "../src/tools/core/catalog";
 import { dispatchModelTool } from "./helpers/tool-dispatch";
 import { createCompletionPort, type CompletionPort } from "../src/work-item/completion";
 import { validateCompletionTerminalLinkage } from "../src/work-item/terminal-linkage";
@@ -596,17 +596,31 @@ test("work item tool adapters cover validation, list, inspect, and both completi
       );
     },
   };
-  const inspect = dispatchModelTool("work_items", { workItems: port }, RESIDENT);
-  expect(await inspect({ extra: true })).toMatchObject({ isError: true, errorClass: "invalid_input" });
+  const inspectRaw = dispatchModelTool("work_items", { workItems: port }, RESIDENT);
+  const inspect = (input: Record<string, unknown>) =>
+    inspectRaw({ op: input.workItemId === undefined ? "list" : "get", ...input });
+  expect(await inspect({ extra: true })).toMatchObject({
+    isError: true,
+    errorClass: "invalid_input",
+  });
   expect(JSON.parse(String((await inspect({})).output))).toHaveLength(1);
-  expect(await inspect({ workItemId: "missing" })).toMatchObject({ isError: true, errorClass: "precondition_failed" });
-  expect(JSON.parse(String((await inspect({ workItemId: "wi-1" })).output))).toMatchObject({ workItemId: "wi-1" });
+  expect(await inspect({ workItemId: "missing" })).toMatchObject({
+    isError: true,
+    errorClass: "precondition_failed",
+  });
+  expect(JSON.parse(String((await inspect({ workItemId: "wi-1" })).output))).toMatchObject({
+    workItemId: "wi-1",
+  });
 
-  const complete = dispatchModelTool("complete_work", { workItems: port }, RESIDENT);
+  const completeRaw = dispatchModelTool("work_items", { workItems: port }, RESIDENT);
+  const complete = (input: Record<string, unknown>) => completeRaw({ op: "complete", ...input });
   expect(await complete({})).toMatchObject({ isError: true, errorClass: "invalid_input" });
   const judgments = [{ criterionId: "criterion", value: "asserted" as const }];
   expect((await complete({ workItemId: "wi-1", judgments })).isError).toBeUndefined();
-  expect(await complete({ workItemId: "wi-2", judgments })).toMatchObject({ isError: true, errorClass: "precondition_failed" });
+  expect(await complete({ workItemId: "wi-2", judgments })).toMatchObject({
+    isError: true,
+    errorClass: "precondition_failed",
+  });
   expect(calls).toHaveLength(2);
 });
 
@@ -615,16 +629,14 @@ test("work_items and complete_work are a Resident-only catalog surface", () => {
   const ports = {
     workItems: createCompletionPort({ writer: () => true, now: () => Date.now() }),
   };
-  const residentNames = catalogEntries(ports, RESIDENT).map((entry) => entry.spec.name);
+  const residentNames = createTools(ports, RESIDENT).map((entry) => entry.name);
   expect(residentNames).toContain("work_items");
-  expect(residentNames).toContain("complete_work");
-  const workerNames = catalogEntries(ports, {
+  const workerNames = createTools(ports, {
     role: "worker",
     depth: 1,
     sessionId: "sess-worker",
-  }).map((entry) => entry.spec.name);
+  }).map((entry) => entry.name);
   expect(workerNames).not.toContain("work_items");
-  expect(workerNames).not.toContain("complete_work");
 });
 
 test("a crash between settlement and closure loses nothing: the sweep rebuilds the terminal with its tokens", async () => {

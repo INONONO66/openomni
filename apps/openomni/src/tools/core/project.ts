@@ -1,8 +1,6 @@
 import type { Tool } from "@openomni/protocol";
 import { z } from "zod";
-import type { AnyToolDefinition, ToolDefinition } from "./define";
-
-export const TOOL_PROJECTOR_VERSION = 1;
+import { toolIsSafe, type AnyToolDefinition, type ToolDefinition } from "./define";
 
 function withoutDialect(schema: Record<string, unknown>): Record<string, unknown> {
   const { $schema: _dialect, ...projected } = schema;
@@ -12,36 +10,23 @@ function withoutDialect(schema: Record<string, unknown>): Record<string, unknown
 export function toolInputSchema(
   definition: AnyToolDefinition | ToolDefinition<z.ZodType, z.ZodType>,
 ): Record<string, unknown> {
-  const projected = definition.wireProjection ?? withoutDialect(
+  const projected = withoutDialect(
     z.toJSONSchema(definition.input, { io: "input", target: "draft-7" }) as Record<string, unknown>,
   );
   if (projected.type !== "object") {
     throw new Error(`${definition.name} input schema root must be an object`);
   }
-
-  if (definition.wireProjection !== undefined || definition.execution.kind !== "machine") return projected;
-  const properties = projected.properties;
-  if (typeof properties !== "object" || properties === null || Array.isArray(properties)) {
-    throw new Error(`${definition.name} input schema properties must be an object`);
-  }
-  if ("machineId" in properties || "machine" in properties) return projected;
-  return {
-    ...projected,
-    properties: { ...properties, machine: { type: "string" } },
-  };
+  return projected;
 }
 
 export function toolSpec(
   definition: AnyToolDefinition | ToolDefinition<z.ZodType, z.ZodType>,
 ): Tool.Spec {
-  const placement = definition.placement
-    ?? (definition.execution.kind === "machine" ? "machine" : undefined);
   return {
     name: definition.name,
     description: definition.description,
     inputSchema: toolInputSchema(definition),
-    safe: definition.safe,
-    ...(placement === undefined ? {} : { placement }),
-    ...(definition.requires === undefined ? {} : { requires: [...definition.requires] }),
+    safe: toolIsSafe(definition.category),
+    placement: "host",
   };
 }

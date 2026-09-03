@@ -25,7 +25,13 @@ import {
 
 import { createMachineHost, type MachineHost } from "@openomni/machines";
 import type { Placement } from "@openomni/placement";
-import { type BusEvent, type Channel, Gateway, type Ingress, type Machine } from "@openomni/protocol";
+import {
+  type BusEvent,
+  type Channel,
+  Gateway,
+  type Ingress,
+  type Machine,
+} from "@openomni/protocol";
 import { Bus, newTraceId } from "@openomni/telemetry";
 import { desiredChannels, materializePersons } from "./provisioning/declared";
 import { type ChannelSupervisor, createChannelSupervisor } from "./provisioning/supervisor";
@@ -41,7 +47,6 @@ import {
 import type { ArtifactsPort } from "./tools/mutation/artifacts";
 import { createLlmToolPort, type LlmIo } from "./tools/execution/llm";
 import { createCompactionSummarizer } from "./compaction/summarizer";
-import type { MachinesPort } from "./tools/query/machines";
 import { createChannelDriver } from "./delegation/channel-driver";
 import { createInlineDriver } from "./delegation/inline-driver";
 import {
@@ -63,8 +68,6 @@ import { createDriverRegistry } from "./composition/driver-registry";
 import { openCuratedMemory } from "./memory/store";
 import { buildInboundEvent } from "./inbound";
 import { createResident } from "./resident";
-import { createMachineVfs, scopeMachineVfs, type MachineVfs } from "./machines/vfs";
-import { catalogEntries } from "./tools/core/catalog";
 import { HOST_TARGET } from "./tools/core/dispatch";
 import { createCellRegistry } from "./tools/cell-registry";
 import type { CellPorts } from "./tools/execution/run-code";
@@ -139,23 +142,13 @@ function registerActors(actors: readonly RegisteredActor[]): void {
   }
 }
 
-/**
- * The Resident's view of its body: every enrolled machine, attached or not,
- * reduced to the effective (enrollment∩offer) capability fold the host
- * attachment table holds.
- */
-export function createLeaseLinkage(): LeaseLinkage {
-  return {
-    listLiveByHolder: (holderDelegationId, now) =>
-      LeaseStore.listLiveByHolder(holderDelegationId, now).map((lease) => ({
-        id: lease.id,
-        conversationId: lease.conversationId,
-        holderDelegationId: lease.holderDelegationId,
-        contactId: lease.contactId,
-      })),
-    closeByHolder: LeaseStore.closeByHolder,
-  };
+export interface MachineStatus {
+  readonly machineId: string;
+  readonly attached: boolean;
+  readonly capabilities: readonly string[];
+  readonly effectiveExports?: readonly string[];
 }
+export type MachinesPort = () => readonly MachineStatus[];
 
 export function createMachinesPort(
   host: Pick<MachineHost, "attached" | "attachedExports"> | undefined,
@@ -176,12 +169,22 @@ export function createMachinesPort(
             machineId: enrollment.machineId,
             attached: true,
             capabilities: [...capabilities],
-            // The host's fold, never the enrollment's wish: an export the
-            // Owner allowed but the daemon never offered reaches nothing, so
-            // reporting it would invite a read that can only refuse.
             effectiveExports: [...(host.attachedExports(enrollment.machineId) ?? [])],
           };
     });
+}
+
+export function createLeaseLinkage(): LeaseLinkage {
+  return {
+    listLiveByHolder: (holderDelegationId, now) =>
+      LeaseStore.listLiveByHolder(holderDelegationId, now).map((lease) => ({
+        id: lease.id,
+        conversationId: lease.conversationId,
+        holderDelegationId: lease.holderDelegationId,
+        contactId: lease.contactId,
+      })),
+    closeByHolder: LeaseStore.closeByHolder,
+  };
 }
 
 /**
@@ -286,6 +289,8 @@ export async function startOpenOmni(options: StartOptions = {}) {
     // idempotent identity upserts; the provisioning store is the durable one.
     materializePersons();
 
+    const artifactsPort: ArtifactsPort = { store: Artifact.store, get: Artifact.get };
+
     // A worker loop holds the same delegate tool the Resident does, so the
     // runner needs the kernel that the kernel needs the runner to build. The
     // cycle is closed by handing the runner a getter rather than a value.
@@ -298,6 +303,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
     const runner = createInlineWorkerRunner({
       model: config.model,
       apiKey: config.model.apiKey,
+      artifacts: artifactsPort,
       ...(transport === undefined ? {} : { transport }),
       kernel: () => {
         if (kernel === undefined)
@@ -428,12 +434,12 @@ export async function startOpenOmni(options: StartOptions = {}) {
       machines === undefined
         ? undefined
         : await createMachineHost({
-          socketPath: machines.socketPath,
-          enrollment: (machineId) => machines.enrolled.find((e) => e.machineId === machineId),
-          events: Bus,
-          now: () => Date.now(),
-          callTool: registry.callTool,
-        });
+            socketPath: machines.socketPath,
+            enrollment: (machineId) => machines.enrolled.find((e) => e.machineId === machineId),
+            events: Bus,
+            now: () => Date.now(),
+            callTool: registry.callTool,
+          });
     if (host !== undefined) {
       const attachedHost = host;
       await composer.mount("machines", (ctx) => ctx.effect(() => attachedHost.close()));
@@ -446,19 +452,6 @@ export async function startOpenOmni(options: StartOptions = {}) {
     const memory = openCuratedMemory(config.memoryPath);
 
     const machineHost = host;
-    const machinesPort = createMachinesPort(machineHost, machines);
-    // The read-only machine filesystem as one flat namespace, wired only when
-    // the Owner has published at least one export to reach. Fail-closed on
-    // CONFIG rather than on live attachment: an enrollment naming no export
-    // can never yield a readable path, so the tools stay out of the catalog
-    // entirely instead of being offered and always refusing. Which machine is
-    // readable right now stays a per-call answer — the host owns that.
-    const machineFs: MachineVfs | undefined =
-      machineHost === undefined ||
-      !(machines?.enrolled ?? []).some((enrollment) => (enrollment.allowedExports ?? []).length > 0)
-        ? undefined
-        : createMachineVfs((machineId, request) => machineHost.fsOp(machineId, request));
-
     const completionPort = createCompletionPort({
       writer: completionWriter,
       now: () => Date.now(),
@@ -467,38 +460,22 @@ export async function startOpenOmni(options: StartOptions = {}) {
       { ...config.model, ...(transport === undefined ? {} : { transport }) },
       options.llm ?? {},
     );
-    const artifactsPort: ArtifactsPort = { store: Artifact.store, get: Artifact.get };
+    const defaultMachineId = machines?.enrolled[0]?.machineId;
+    const sessionTools = new Map<
+      string,
+      readonly import("./tools/core/define").AnyToolDefinition[]
+    >();
     const cells: CellPorts | undefined =
-      machineHost === undefined
+      machineHost === undefined || defaultMachineId === undefined
         ? undefined
         : {
             registry,
+            defaultMachineId,
             runCell: (machineId, request) => machineHost.runCell(machineId, request),
-            // The cell door's fs reach is the EXECUTING machine's, not the
-            // Owner's whole namespace: `run_code` knows which machine it is
-            // dispatching to, so the catalog that cell will call back into is
-            // built against a vfs scoped to exactly that machine. The Resident
-            // catalog below keeps the unscoped port — that door is the Owner's.
-            toolsFor: (origin, machineId) =>
-              catalogEntries(
-                {
-                  delegation: delegationKernel,
-                  cells,
-                  ...(machinesPort === undefined ? {} : { machines: machinesPort }),
-                  ...(machineFs === undefined
-                    ? {}
-                    : { machineFs: scopeMachineVfs(machineFs, machineId) }),
-                  memory,
-                  workItems: completionPort,
-                  llm: llmPort,
-                  artifacts: artifactsPort,
-                  conversations: conversePort,
-                  leases: leasePort,
-                  approvals: approvalPort,
-                  provisioning: provisioningPort,
-                },
-                origin,
-              ),
+            bindTools: (sessionId, tools) => {
+              sessionTools.set(sessionId, tools);
+            },
+            tools: (sessionId) => sessionTools.get(sessionId) ?? [],
             newCellId: () => crypto.randomUUID(),
           };
 
@@ -523,8 +500,6 @@ export async function startOpenOmni(options: StartOptions = {}) {
       tools: {
         delegation: delegationKernel,
         ...(cells === undefined ? {} : { cells }),
-        ...(machinesPort === undefined ? {} : { machines: machinesPort }),
-        ...(machineFs === undefined ? {} : { machineFs }),
         memory,
         workItems: completionPort,
         llm: llmPort,
@@ -605,16 +580,16 @@ export async function startOpenOmni(options: StartOptions = {}) {
       actors.length === 0
         ? undefined
         : {
-          deliveryRoutes,
-          grants: () =>
-            actors.map((actor) => ({
-              id: `resident->${actor.actorId}`,
-              senderId: "resident",
-              targetActorId: actor.actorId,
-              operations: ["awaited" as const, "fire_and_forget" as const],
-            })),
-          budgets: () => config.socialBudgets ?? [],
-        },
+            deliveryRoutes,
+            grants: () =>
+              actors.map((actor) => ({
+                id: `resident->${actor.actorId}`,
+                senderId: "resident",
+                targetActorId: actor.actorId,
+                operations: ["awaited" as const, "fire_and_forget" as const],
+              })),
+            budgets: () => config.socialBudgets ?? [],
+          },
     );
     // Recovery is deliberately after the Resident and gateway exist: boot
     // settlements must be able to deliver their one owner-session wake.

@@ -1,4 +1,4 @@
-import { initialize, Storage } from "@openomni/ledger";
+import { Artifact, initialize, Storage } from "@openomni/ledger";
 import { Delegation, Model } from "@openomni/protocol";
 import { z } from "zod";
 import { createDelegationKernel, type DelegationKernel } from "./kernel";
@@ -46,7 +46,9 @@ export const ProcessWorkerResult = z.discriminatedUnion("status", [
       usage: z.object({ tokens: z.number().int().nonnegative() }).strict().optional(),
     })
     .strict(),
-  z.object({ status: z.literal("failed"), error: z.string(), workerRunId: z.string().min(1) }).strict(),
+  z
+    .object({ status: z.literal("failed"), error: z.string(), workerRunId: z.string().min(1) })
+    .strict(),
 ]);
 export type ProcessWorkerResult = z.infer<typeof ProcessWorkerResult>;
 
@@ -108,6 +110,7 @@ function processWorkerRun(
   const runner = createInlineWorkerRunner({
     model: request.model,
     apiKey: request.apiKey,
+    artifacts: { store: Artifact.store, get: Artifact.get },
     ...(request.transport === undefined ? {} : { transport: request.transport }),
     kernel: () => kernel,
   });

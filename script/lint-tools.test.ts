@@ -17,12 +17,8 @@ function definition(
     description: `${name} description`,
     input: {} as never,
     output: {} as never,
-    safe: category === "query",
-    execution: category === "execution"
-      ? { kind: "machine", capability: "kernel.py" }
-      : { kind: "host" },
     visibility: { model: ["resident"], cell: ["resident"] },
-    bind: () => undefined,
+    execute: async () => undefined,
     render: () => "",
     ...overrides,
   };
@@ -35,7 +31,10 @@ function located(item: AnyToolDefinition, directory = item.category): LocatedDef
   };
 }
 
-function messages(definitions: readonly AnyToolDefinition[], locations: readonly LocatedDefinition[]) {
+function messages(
+  definitions: readonly AnyToolDefinition[],
+  locations: readonly LocatedDefinition[],
+) {
   return definitionInvariantViolations(definitions, locations).map(({ message }) => message);
 }
 
@@ -52,24 +51,19 @@ describe("lint-tools definition invariants", () => {
     );
   });
 
-  test("queries must be safe", () => {
-    const item = definition("unsafe_query", "query", { safe: false });
-    expect(messages([item], [located(item)])).toContain("[query-safe] query tools must be safe");
-  });
-
-  test("execution tools must have a machine locus", () => {
-    const item = definition("host_execution", "execution", { execution: { kind: "host" } });
-    expect(messages([item], [located(item)])).toContain(
-      "[execution-locus] execution tools must execute on a machine",
-    );
+  test("every catalog definition must map to a source file", () => {
+    const item = definition("unlocated_query");
+    expect(messages([item], [])).toContainEqual(expect.stringContaining("[tool-source-location]"));
   });
 
   test("tool names must be unique", () => {
     const first = definition("duplicate_name");
     const second = definition("duplicate_name", "mutation");
-    expect(messages([first, second], [located(first), located(second)]).filter((message) =>
-      message.includes("[tool-name-unique]"),
-    )).toHaveLength(2);
+    expect(
+      messages([first, second], [located(first), located(second)]).filter((message) =>
+        message.includes("[tool-name-unique]"),
+      ),
+    ).toHaveLength(2);
   });
 
   test("derived snapshot drift fails and identical snapshots pass", () => {

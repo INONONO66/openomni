@@ -3,7 +3,7 @@ import type { Delegation, Gateway } from "@openomni/protocol";
 import { admit, type AdmissionLease } from "../src/delegation/admission";
 import { createChannelDriver } from "../src/delegation/channel-driver";
 import { createDelegationKernel, type LeaseLinkage } from "../src/delegation/kernel";
-import type { LeasePort } from "../src/tools/mutation/lease";
+import type { ConversePort, LeasePort } from "../src/tools/mutation/converse";
 import { RESIDENT, useDelegationStore } from "./helpers/delegation";
 import { dispatchModelTool, modelToolOutput } from "./helpers/tool-dispatch";
 
@@ -13,8 +13,15 @@ const NOW = 1_000_000;
 const DEADLINE = NOW + 5_000;
 const LIMITS = { maxInlineDepth: 2, maxFanout: 8 } as const;
 
-const leaseOpen = (port: LeasePort, now?: () => number) =>
-  modelToolOutput("lease_open", { leases: port }, RESIDENT, now);
+const leaseOpen = (port: LeasePort, now?: () => number) => {
+  const run = modelToolOutput(
+    "converse",
+    { leases: port, conversations: {} as ConversePort },
+    RESIDENT,
+    now,
+  );
+  return (input: Record<string, unknown>) => run({ operation: { op: "lease", ...input } });
+};
 
 const LEASE: AdmissionLease = {
   id: "lease-1",
@@ -137,10 +144,9 @@ describe("lease-pinned channel dispatch", () => {
         get: () => undefined,
       },
     });
-    const decision = admitWorker(
-      { ...channelAsk(), operation: "notify" } as Delegation.Request,
-      [LEASE],
-    );
+    const decision = admitWorker({ ...channelAsk(), operation: "notify" } as Delegation.Request, [
+      LEASE,
+    ]);
     if (!decision.ok) throw new Error(decision.reason);
     const outcome = await driver.run(
       decision,
@@ -369,22 +375,25 @@ describe("lease_open tool", () => {
     };
     const missing = leaseOpen({ issue: never as never, getDelegation: () => undefined });
     expect(await missing({ delegationId: "d-x", conversationId: "c", maxOutbound: 1 })).toBe(
-      "lease_open refused: delegation d-x does not exist",
+      "converse refused: delegation d-x does not exist",
     );
     const settled = leaseOpen({
       issue: never as never,
       getDelegation: () => ({ ...openDelegation, status: "settled" }) as Delegation.Record,
     });
     expect(await settled({ delegationId: "d-parent", conversationId: "c", maxOutbound: 1 })).toBe(
-      "lease_open refused: delegation d-parent is already settled",
+      "converse refused: delegation d-parent is already settled",
     );
     const invalid = await dispatchModelTool(
-      "lease_open",
-      { leases: { issue: never as never, getDelegation: () => openDelegation } },
+      "converse",
+      {
+        conversations: {} as ConversePort,
+        leases: { issue: never as never, getDelegation: () => openDelegation },
+      },
       RESIDENT,
-    )({ maxOutbound: 0 });
+    )({ operation: { op: "lease", maxOutbound: 0 } });
     expect(invalid).toMatchObject({ isError: true, errorClass: "invalid_input" });
-    expect(invalid.output).toStartWith("\nlease_open refused:");
+    expect(invalid.output).toStartWith("converse refused:");
   });
 
   test("a store refusal surfaces as the tool's typed refusal text", async () => {
@@ -395,7 +404,7 @@ describe("lease_open tool", () => {
       getDelegation: () => openDelegation,
     });
     expect(await run({ delegationId: "d-parent", conversationId: "c", maxOutbound: 2 })).toBe(
-      "lease_open refused: carve bound exceeded",
+      "converse refused: carve bound exceeded",
     );
   });
 });

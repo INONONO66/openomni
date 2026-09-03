@@ -16,9 +16,7 @@ describe("buildAgentPrompt", () => {
   test("is deterministic for the same preset and input", () => {
     const input = { memorySnapshot: "remember this" };
 
-    expect(buildAgentPrompt(RESIDENT_PRESET, input)).toBe(
-      buildAgentPrompt(RESIDENT_PRESET, input),
-    );
+    expect(buildAgentPrompt(RESIDENT_PRESET, input)).toBe(buildAgentPrompt(RESIDENT_PRESET, input));
   });
 
   test("the resident prompt steers code-mode usage", () => {
@@ -27,18 +25,14 @@ describe("buildAgentPrompt", () => {
     expect(prompt).toContain("one run_code cell");
     expect(prompt).toContain("parallel(thunks)");
     expect(prompt).toContain("llm(prompt)");
-    expect(prompt).toContain("write_artifact");
+    expect(prompt).toContain("artifacts(op=write)");
   });
 
   test("keeps the base prefix stable across memory snapshots", () => {
     const base = buildAgentPrompt(RESIDENT_PRESET, {});
 
-    expect(buildAgentPrompt(RESIDENT_PRESET, { memorySnapshot: "A" })).toStartWith(
-      `${base}\n\n`,
-    );
-    expect(buildAgentPrompt(RESIDENT_PRESET, { memorySnapshot: "B" })).toStartWith(
-      `${base}\n\n`,
-    );
+    expect(buildAgentPrompt(RESIDENT_PRESET, { memorySnapshot: "A" })).toStartWith(`${base}\n\n`);
+    expect(buildAgentPrompt(RESIDENT_PRESET, { memorySnapshot: "B" })).toStartWith(`${base}\n\n`);
   });
 
   test("omits empty and undefined memory snapshots without a trailing separator", () => {

@@ -2,14 +2,12 @@ import { expect, test } from "bun:test";
 import { Bus } from "@openomni/telemetry";
 import type { RunInput, Sink } from "@openomni/llm";
 import { attachMachineDaemon, createMachineHost, type MachineDaemon } from "@openomni/machines";
-import { Placement } from "@openomni/placement";
 import type { Artifact, Machine } from "@openomni/protocol";
 import type { DelegationOrigin } from "../src/delegation/admission";
-import type { DelegationKernel } from "../src/delegation/kernel";
 import type { ArtifactsPort } from "../src/tools/mutation/artifacts";
-import { catalogEntries, type CatalogPorts } from "../src/tools/core/catalog";
+import type { CatalogPorts } from "../src/tools/core/catalog";
+import type { AnyToolDefinition } from "../src/tools/core/define";
 import { createCellRegistry } from "../src/tools/cell-registry";
-import { createDispatcher, HOST_TARGET } from "../src/tools/core/dispatch";
 import type { CellPorts } from "../src/tools/execution/run-code";
 import { modelToolOutput } from "./helpers/tool-dispatch";
 import { assistantMessage } from "./helpers/assistant-message";
@@ -67,13 +65,12 @@ test("a cell batches delegation into one turn", async () => {
           id: "call-1",
           tool: "run_code",
           input: {
-            machineId: MACHINE_ID,
             code: [
               "answers = [",
-              "  tool.delegate(instruction=f'check {name}', mode='ask', scope='inline', timeoutMs=5000)",
+              "  tool.delegate(instruction=f'check {name}', operation='ask', scope='inline', timeoutMs=5000)['settlement']['output']",
               "  for name in ('lint', 'types', 'tests')",
               "]",
-              "'; '.join(answers) + ' | body: ' + tool.machines()",
+              "'; '.join(answers)",
             ].join("\n"),
             timeoutMs: 20_000,
           },
@@ -109,16 +106,15 @@ test("a cell batches delegation into one turn", async () => {
   ws.close();
 
   // The machine was attached, so the machine-placed tool was offered.
-  expect(answer).toContain("offered=[approval_decide,approval_request,await_delegation,cancel_delegation,channel_declare,channel_disable,channel_enable,complete_work,contact_promote,converse_close,converse_open,delegate,endpoint_merge,lease_open,llm,machines,memory,person_declare,person_remove,provision_status,read_artifact,run_code,secret_rotate,work_items,write_artifact]");
+  expect(answer).toContain(
+    "offered=[approval,artifacts,await_delegation,cancel_delegation,converse,delegate,memory,provision,run_code,work_items]",
+  );
   // Three workers ran and their answers came back inside the cell. The value
   // is the cell's final expression as Python rendered it, quotes included.
   expect(answer).toContain("done(check lint); done(check types); done(check tests)");
   // One Resident turn, not three: that is what code mode bought.
   expect(residentTurns).toHaveLength(1);
-  // The composed machines port read the live attachment table, not a snapshot.
-  expect(answer).toContain(`machines=${MACHINE_ID} — attached, may: kernel.py`);
-  // The cell door offers the same discovery tool — production wiring, not a test-built catalog.
-  expect(answer).toContain(`| body: ${MACHINE_ID} — attached, may: kernel.py`);
+  expect(answer).toContain("machines=unknown tool: machines");
 }, 60_000);
 
 test("the machine tool is not offered while nothing is attached", async () => {
@@ -139,7 +135,7 @@ test("the machine tool is not offered while nothing is attached", async () => {
         const forced = await input.toolExecutor?.({
           id: "call-1",
           tool: "run_code",
-          input: { machineId: MACHINE_ID, code: "1", timeoutMs: 1000 },
+          input: { code: "1", timeoutMs: 1000 },
         });
         const listed = await input.toolExecutor?.({ id: "call-2", tool: "machines", input: {} });
         sink.onMessage(
@@ -159,11 +155,21 @@ test("the machine tool is not offered while nothing is attached", async () => {
   const answer = (JSON.parse(String((await reply).data)) as { text: string }).text;
   ws.close();
 
-  expect(offered).toEqual(["delegate", "await_delegation", "cancel_delegation", "converse_open", "converse_close", "lease_open", "approval_request", "approval_decide", "contact_promote", "endpoint_merge", "person_declare", "person_remove", "channel_declare", "channel_enable", "channel_disable", "secret_rotate", "provision_status", "machines", "memory", "work_items", "complete_work", "llm", "write_artifact", "read_artifact"]);
-  // Refused by the one gate that owns this refusal, naming what was missing.
-  expect(answer).toContain('tool "run_code" requires capabilities no attached target holds: kernel.py');
-  // Enrolled-but-detached is honestly reported, so the model knows why run_code is absent.
-  expect(answer).toContain(`machines=${MACHINE_ID} — enrolled, not attached right now`);
+  expect(offered).toEqual([
+    "delegate",
+    "await_delegation",
+    "cancel_delegation",
+    "converse",
+    "approval",
+    "provision",
+    "run_code",
+    "memory",
+    "work_items",
+    "artifacts",
+  ]);
+  // All tools are host-projected; the local default host reports live attachment failure.
+  expect(answer).toContain("the default kernel host is not attached right now");
+  expect(answer).toContain("machines=unknown tool: machines");
 }, 30_000);
 
 /**
@@ -258,18 +264,23 @@ async function startCellHarness(ports: CatalogPorts) {
     },
   });
   expect(daemon.attachment.status).toBe("attached");
+  const sessionTools = new Map<string, readonly AnyToolDefinition[]>();
   const cells: CellPorts = {
     registry,
+    defaultMachineId: MACHINE_ID,
     runCell: (machineId, request) => host.runCell(machineId, request),
-    toolsFor: (origin) => catalogEntries(ports, origin),
+    bindTools: (sessionId, tools) => {
+      sessionTools.set(sessionId, tools);
+    },
+    tools: (sessionId) => sessionTools.get(sessionId) ?? [],
     newCellId: () => crypto.randomUUID(),
   };
-  const execute = modelToolOutput("run_code", { cells }, CELL_ORIGIN);
+  const execute = modelToolOutput("run_code", { ...ports, cells }, CELL_ORIGIN);
   return {
     host,
-    run: (code: string) => execute({ machineId: MACHINE_ID, code, timeoutMs: 15_000 }),
+    run: (code: string) => execute({ code, timeoutMs: 15_000 }),
     runWith: (origin: DelegationOrigin, code: string) =>
-      modelToolOutput("run_code", { cells }, origin)({ machineId: MACHINE_ID, code, timeoutMs: 15_000 }),
+      modelToolOutput("run_code", { ...ports, cells }, origin)({ code, timeoutMs: 15_000 }),
   };
 }
 
@@ -290,7 +301,7 @@ test("cells from different sessions never share interpreter state", async () => 
   expect(otherSession).toContain("NameError");
 }, 40_000);
 
-test("a cell's llm(prompt) is answered by the LlmPort wired into the catalog", async () => {
+test("a cell rejects legacy scalar llm input and preserves canonical arrays", async () => {
   const prompts: string[] = [];
   const { host, run } = await startCellHarness({
     llm: async (prompt) => {
@@ -299,12 +310,22 @@ test("a cell's llm(prompt) is answered by the LlmPort wired into the catalog", a
     },
   });
 
-  const output = await run("llm(prompt='summarize the ledger in one word')");
+  const output = await run(
+    [
+      "try:",
+      "    tool.llm(prompt='x')",
+      "    legacy = 'accepted'",
+      "except ToolError:",
+      "    legacy = 'invalid_input'",
+      "canonical = tool.llm(prompts=['x'])",
+      "{'legacy': legacy, 'canonical': canonical}",
+    ].join("\n"),
+  );
   host.close();
 
-  expect(prompts).toEqual(["summarize the ledger in one word"]);
-  // The cell's final expression is repr'd by the driver, quotes included.
-  expect(output).toContain("answered: summarize the ledger in one word");
+  // The cell sees the dispatcher refusal as ToolError and does not invoke the port.
+  expect(output).toBe("{'legacy': 'invalid_input', 'canonical': ['answered: x']}");
+  expect(prompts).toEqual(["x"]);
 }, 40_000);
 
 test("a failing llm call raises ToolError inside the cell instead of returning failure text", async () => {
@@ -317,7 +338,7 @@ test("a failing llm call raises ToolError inside the cell instead of returning f
   const output = await run(
     [
       "try:",
-      "    llm(prompt='doomed')",
+      "    llm(['doomed'])",
       "    outcome = 'returned as data'",
       "except ToolError as error:",
       "    outcome = 'raised: ' + str(error)",
@@ -359,8 +380,8 @@ test("parallel() runs independent tool calls concurrently and returns both resul
   const output = await run(
     [
       "results = parallel([",
-      "  lambda: tool.llm(prompt='first'),",
-      "  lambda: tool.llm(prompt='second'),",
+      "  lambda: llm(['first'])[0],",
+      "  lambda: llm(['second'])[0],",
       "])",
       "'; '.join(results)",
     ].join("\n"),
@@ -371,35 +392,6 @@ test("parallel() runs independent tool calls concurrently and returns both resul
   expect(maxInFlight).toBe(2);
   expect(output).toContain("answered(first); answered(second)");
 }, 40_000);
-
-test("the cell door offers host-placed delegate and machines, folding out machine-placed run_code", () => {
-  const ports: CatalogPorts = {
-    delegation: {} as DelegationKernel,
-    cells: {} as CellPorts,
-    machines: () => [],
-  };
-  // The exact fold run-code.ts's cellDoor performs: the whole catalog,
-  // resolved against the brain alone.
-  const offerable = Placement.resolveTools(
-    createDispatcher(catalogEntries(ports, CELL_ORIGIN)).specs,
-    [HOST_TARGET],
-  )
-    .filter((decision) => decision.offerable)
-    .map((decision) => decision.tool.name);
-
-  expect(offerable).toContain("delegate");
-  expect(offerable).toContain("machines");
-  // A cell already runs on a machine, so the machine-placed tool drops out.
-  expect(offerable).not.toContain("run_code");
-
-  // Without its port the machines tool is absent from the catalog entirely,
-  // not merely unofferable.
-  const withoutPort = catalogEntries({ delegation: {} as DelegationKernel }, CELL_ORIGIN).map(
-    (entry) => entry.spec.name,
-  );
-  expect(withoutPort).toContain("delegate");
-  expect(withoutPort).not.toContain("machines");
-});
 
 test("write_artifact stores from inside a cell and read_artifact fetches it back by id", async () => {
   const rows = new Map<string, { meta: Artifact.Meta; content: string }>();
@@ -413,10 +405,10 @@ test("write_artifact stores from inside a cell and read_artifact fetches it back
 
   const output = await run(
     [
-      "stored = tool.write_artifact(name='dataset', content='x' * 4000)",
-      "artifact_id = stored.split(': ', 1)[1]",
-      "fetched = tool.read_artifact(artifactId=artifact_id)",
-      "stored + ' | fetched_len=' + str(len(fetched)) + ' | match=' + str(fetched == 'x' * 4000)",
+      "stored = tool.artifacts(op='write', name='dataset', content='x' * 4000)",
+      "artifact_id = stored['id']",
+      "fetched = tool.artifacts(op='read', artifactId=artifact_id)['content']",
+      "'artifact stored: ' + artifact_id + ' | fetched_len=' + str(len(fetched)) + ' | match=' + str(fetched == 'x' * 4000)",
     ].join("\n"),
   );
   host.close();

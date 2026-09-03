@@ -27,7 +27,15 @@ function reply(input: RunInput, text: string): Message.WithParts {
     },
     parts: [
       { id: `${id}-text`, sessionID, messageID: id, type: "text", text } as never,
-      { id: `${id}-finish`, sessionID, messageID: id, type: "step-finish", reason: "stop", cost: 0, tokens },
+      {
+        id: `${id}-finish`,
+        sessionID,
+        messageID: id,
+        type: "step-finish",
+        reason: "stop",
+        cost: 0,
+        tokens,
+      },
     ],
   };
 }
@@ -37,8 +45,13 @@ function bootRunner(run: (input: RunInput, sink: Sink) => Promise<{ type: "stop"
   const runner = createInlineWorkerRunner({
     model: { provider: "fake", id: "drive-test" },
     apiKey: "test-key",
+    artifacts: { store: () => undefined, get: () => null },
     llm: {
-      resolveProviderModel: async (model) => ({ id: model.id, name: model.id, providerID: model.provider }),
+      resolveProviderModel: async (model) => ({
+        id: model.id,
+        name: model.id,
+        providerID: model.provider,
+      }),
       run,
     },
     kernel: () => kernel,

@@ -1,48 +1,79 @@
 import type { Artifact } from "@openomni/protocol";
 import { z } from "zod";
-import { defineTool } from "../core/define";
+import { defineTool, ToolRefused } from "../core/define";
 
 export interface ArtifactsPort {
   store(sessionId: string, meta: Artifact.Meta, content: string): void;
   get(artifactId: string): { meta: Artifact.Meta; content: string } | null;
 }
 
-const Input = z.object({
-  name: z.string().min(1).describe("A short title for the artifact."),
-  content: z.string().min(1).describe("The full text to store."),
-}).strict();
+const Input = z
+  .object({
+    op: z.union([z.literal("write"), z.literal("read")]),
+    name: z.string().min(1).optional().describe("Write only: a short title for the artifact."),
+    content: z.string().min(1).optional().describe("Write only: the full text to store."),
+    artifactId: z.string().min(1).optional().describe("Read only: the artifact id."),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.op === "write" && (value.name === undefined || value.content === undefined)) {
+      ctx.addIssue({ code: "custom", message: "write requires name and content" });
+    }
+    if (value.op === "read" && value.artifactId === undefined) {
+      ctx.addIssue({ code: "custom", message: "read requires artifactId" });
+    }
+  });
+const Output = z.discriminatedUnion("op", [
+  z.object({ op: z.literal("write"), id: z.string().min(1) }).strict(),
+  z.object({ op: z.literal("read"), content: z.string() }).strict(),
+]);
 
-const Output = z.object({ id: z.string().min(1) }).strict();
+export const ARTIFACTS_TOOL_NAME = "artifacts";
 
-export const WRITE_ARTIFACT_TOOL_NAME = "write_artifact";
+export function storeTextArtifact(
+  artifacts: ArtifactsPort,
+  sessionId: string,
+  title: string,
+  content: string,
+): string {
+  const id = crypto.randomUUID();
+  const meta: Artifact.Meta = {
+    id,
+    sessionId,
+    mimeType: "text/plain",
+    title,
+    version: 1,
+    createdAt: new Date().toISOString(),
+  };
+  artifacts.store(sessionId, meta, content);
+  return id;
+}
 
-export const writeArtifactTool = defineTool({
-  name: WRITE_ARTIFACT_TOOL_NAME,
-  category: "mutation",
-  description:
-    "Store text too large to keep quoting in the conversation — a cell's fetched dataset, a long report — under the current session. Returns the artifact id; the content is never echoed back.",
-  input: Input,
-  output: Output,
-  safe: false,
-  execution: { kind: "host" },
-  placement: "host",
-  visibility: { model: ["resident", "worker"], cell: ["resident", "worker"] },
-  bind: (ports, origin) => {
-    if (ports.artifacts === undefined) return undefined;
-    const artifacts = ports.artifacts;
-    return async ({ name, content }) => {
-      const id = crypto.randomUUID();
-      const meta: Artifact.Meta = {
-        id,
-        sessionId: origin.sessionId,
-        mimeType: "text/plain",
-        title: name,
-        version: 1,
-        createdAt: new Date().toISOString(),
-      };
-      artifacts.store(origin.sessionId, meta, content);
-      return { id };
-    };
-  },
-  render: (_args, value) => `artifact stored: ${value.id}`,
-});
+export function createArtifactsTool(artifacts: ArtifactsPort) {
+  return defineTool({
+    name: ARTIFACTS_TOOL_NAME,
+    category: "mutation",
+    description:
+      "Write large text under the current session or read it back by artifact id. Use op=write or op=read.",
+    input: Input,
+    output: Output,
+    visibility: { model: ["resident", "worker"], cell: ["resident", "worker"] },
+    execute: async (input, ctx) => {
+      if (input.op === "read") {
+        const found = artifacts.get(input.artifactId as string);
+        if (found === null)
+          throw new ToolRefused(ARTIFACTS_TOOL_NAME, `no artifact with id ${input.artifactId}`);
+        return { op: "read" as const, content: found.content };
+      }
+      const id = storeTextArtifact(
+        artifacts,
+        ctx.sessionId,
+        input.name as string,
+        input.content as string,
+      );
+      return { op: "write" as const, id };
+    },
+    render: (_args, value) =>
+      value.op === "read" ? value.content : `artifact stored: ${value.id}`,
+  });
+}

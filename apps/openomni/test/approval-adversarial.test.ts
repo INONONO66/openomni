@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { ActorRegistry, ApprovalStore, Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
-import type { ApprovalPort } from "../src/tools/authority/approval";
-import { catalogEntries } from "../src/tools/core/catalog";
+import { createApprovalTool, type ApprovalPort } from "../src/tools/authority/approval";
+import { createTools } from "../src/tools/core/catalog";
+import { eraseTool } from "../src/tools/core/define";
+import { createDispatcher } from "../src/tools/core/dispatch";
 import { dispatchModelTool, modelToolOutput } from "./helpers/tool-dispatch";
 
 /**
@@ -28,14 +30,25 @@ const T0 = 1_000;
 const TIMEOUT = 60_000;
 const RESIDENT = { role: "resident", depth: 0, sessionId: "approval-test" } as const;
 
+const approvalOp = (
+  op: "request" | "decide" | "contact_promote" | "endpoint_merge",
+  approvalPort: ApprovalPort,
+  now: () => number,
+) => {
+  const run = modelToolOutput("approval", { approvals: approvalPort }, RESIDENT, now);
+  return (input: Record<string, unknown>) =>
+    run({
+      operation: op === "request" ? { op, request: input } : { op, ...input },
+    });
+};
 const approvalRequest = (approvalPort: ApprovalPort, now: () => number = Date.now) =>
-  modelToolOutput("approval_request", { approvals: approvalPort }, RESIDENT, now);
+  approvalOp("request", approvalPort, now);
 const approvalDecide = (approvalPort: ApprovalPort, now: () => number = Date.now) =>
-  modelToolOutput("approval_decide", { approvals: approvalPort }, RESIDENT, now);
+  approvalOp("decide", approvalPort, now);
 const contactPromote = (approvalPort: ApprovalPort, now: () => number = Date.now) =>
-  modelToolOutput("contact_promote", { approvals: approvalPort }, RESIDENT, now);
+  approvalOp("contact_promote", approvalPort, now);
 const endpointMerge = (approvalPort: ApprovalPort, now: () => number = Date.now) =>
-  modelToolOutput("endpoint_merge", { approvals: approvalPort }, RESIDENT, now);
+  approvalOp("endpoint_merge", approvalPort, now);
 
 beforeEach(() => {
   Bus.reset();
@@ -81,6 +94,30 @@ async function requestPromotion(at = T0): Promise<string> {
   });
   return approvalIdFrom(text);
 }
+
+describe("approval output boundary", () => {
+  it("rejects malformed output through the dispatcher", async () => {
+    const tool = eraseTool(createApprovalTool(port));
+    const result = await createDispatcher([
+      { ...tool, execute: async () => ({ op: "request" }) },
+    ]).execute({
+      id: "approval-invalid-output",
+      tool: "approval",
+      input: {
+        operation: { op: "decide", approvalId: "approval:1", decision: "approved" },
+      },
+    });
+
+    expect(result).toEqual({
+      toolCallId: "approval-invalid-output",
+      id: "approval-invalid-output",
+      toolName: "approval",
+      output: "approval produced invalid output",
+      isError: true,
+      errorClass: "invalid_output",
+    });
+  });
+});
 
 describe("§8.13 — the approval lane fails closed", () => {
   it("an unanswered request refuses the act after its deadline", async () => {
@@ -226,8 +263,12 @@ describe("§8.4 — cross-channel merging is an explicit Owner act", () => {
 
 describe("approval tool boundary failures", () => {
   it("rejects malformed calls, invalid merge subjects, repeated decisions, and store failures", async () => {
-    for (const name of ["approval_request", "approval_decide", "contact_promote", "endpoint_merge"]) {
-      const result = await dispatchModelTool(name, { approvals: port }, RESIDENT)({});
+    for (const op of ["request", "decide", "contact_promote", "endpoint_merge"] as const) {
+      const result = await dispatchModelTool(
+        "approval",
+        { approvals: port },
+        RESIDENT,
+      )({ op, args: {} });
       expect(result).toMatchObject({ isError: true, errorClass: "invalid_input" });
       expect(result.output).toBeString();
     }
@@ -277,9 +318,7 @@ describe("approval tool boundary failures", () => {
         timeoutMs: 1,
       }),
     ).toBeString();
-    expect(
-      await approvalDecide(failing)({ approvalId, decision: "approved" }),
-    ).toBeString();
+    expect(await approvalDecide(failing)({ approvalId, decision: "approved" })).toBeString();
     expect(await contactPromote(failing)({ approvalId })).toBeString();
 
     const mergeText = await approvalRequest(
@@ -292,10 +331,7 @@ describe("approval tool boundary failures", () => {
       timeoutMs: TIMEOUT,
     });
     const mergeId = approvalIdFrom(mergeText);
-    await approvalDecide(
-      port,
-      () => T0 + 3,
-    )({ approvalId: mergeId, decision: "approved" });
+    await approvalDecide(port, () => T0 + 3)({ approvalId: mergeId, decision: "approved" });
     expect(await endpointMerge(failing)({ approvalId: mergeId })).toBeString();
   });
 });
@@ -303,17 +339,12 @@ describe("approval tool boundary failures", () => {
 describe("catalog gate — the approval lane is the Resident's alone", () => {
   it("workers see none of the approval tools", () => {
     const ports = { approvals: port };
-    const resident = catalogEntries(ports, { role: "resident", depth: 0, sessionId: "s" });
-    const worker = catalogEntries(ports, { role: "worker", depth: 1, sessionId: "s" });
-    const approvalTools = [
-      "approval_request",
-      "approval_decide",
-      "contact_promote",
-      "endpoint_merge",
-    ];
+    const resident = createTools(ports, { role: "resident", depth: 0, sessionId: "s" });
+    const worker = createTools(ports, { role: "worker", depth: 1, sessionId: "s" });
+    const approvalTools = ["approval"];
 
-    expect(resident.map((entry) => entry.spec.name)).toEqual(expect.arrayContaining(approvalTools));
-    const workerNames = worker.map((entry) => entry.spec.name);
+    expect(resident.map((entry) => entry.name)).toEqual(expect.arrayContaining(approvalTools));
+    const workerNames = worker.map((entry) => entry.name);
     for (const name of approvalTools) {
       expect(workerNames).not.toContain(name);
     }

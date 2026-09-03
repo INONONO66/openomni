@@ -124,21 +124,21 @@ describe("code-mode tool bridge", () => {
     expect(arrivals).toBe(2);
   });
 
-  test("llm sugar calls the llm tool with a prompt", async () => {
+  test("llm calls the canonical batched tool and returns its value unchanged", async () => {
     await withBridge(
       async ({ host, calls }) => {
         const result = await host.runCell("m-1", {
           cellId: "llm-sugar",
-          code: "llm('summarize this')",
+          code: "llm(['summarize this'])",
           timeoutMs: 15_000,
         });
 
-        expect(result).toMatchObject({ status: "completed", value: "'summary'" });
+        expect(result).toMatchObject({ status: "completed", value: "['summary']" });
         expect(calls).toEqual([
-          { cellId: "llm-sugar", name: "llm", arguments: { prompt: "summarize this" } },
+          { cellId: "llm-sugar", name: "llm", arguments: { prompts: ["summarize this"] } },
         ]);
       },
-      () => Promise.resolve({ status: "completed", value: "summary" }),
+      () => Promise.resolve({ status: "completed", value: ["summary"] }),
     );
   });
 
@@ -155,14 +155,18 @@ describe("code-mode tool bridge", () => {
           status: "completed",
           value: "['summary:first', 'summary:second']",
         });
-        expect(calls).toHaveLength(2);
-        expect(calls.every((call) => call.name === "llm")).toBe(true);
-        expect(calls.map((call) => call.arguments.prompt).sort()).toEqual(["first", "second"]);
+        expect(calls).toEqual([
+          {
+            cellId: "llm-batched",
+            name: "llm",
+            arguments: { prompts: ["first", "second"] },
+          },
+        ]);
       },
-      (call) =>
+      () =>
         Promise.resolve({
           status: "completed",
-          value: `summary:${String(call.arguments.prompt)}`,
+          value: ["summary:first", "summary:second"],
         }),
     );
   });

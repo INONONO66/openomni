@@ -4,11 +4,12 @@ import type { Model } from "@openomni/protocol";
 import { observeComponent } from "../observation/component";
 import { buildAgentPrompt } from "../prompt/build";
 import { WORKER_PRESET } from "../prompt/roles";
-import { catalogEntries } from "../tools/core/catalog";
+import { createTools } from "../tools/core/catalog";
 import { createDispatcher, HOST_TARGET } from "../tools/core/dispatch";
 import { decideDrive, initialDriveState, type DriveState } from "./drive-loop";
 import { renderInstruction } from "./instruction";
 import type { DelegationKernel } from "./kernel";
+import type { ArtifactsPort } from "../tools/mutation/artifacts";
 import type { InlineWorkerRunner } from "./inline-driver";
 
 export class WorkerRunError extends Error {
@@ -27,6 +28,7 @@ export interface WorkerLoopOptions {
   /** Operator-configured provider endpoint and headers; absent uses the catalog's. */
   readonly transport?: ChatAgentConfig["transport"];
   readonly llm?: ChatAgentConfig["llm"];
+  readonly artifacts: ArtifactsPort;
   /** Resolved late: the kernel needs the runner this factory produces. */
   readonly kernel: () => DelegationKernel;
 }
@@ -40,7 +42,12 @@ export interface WorkerLoopOptions {
  */
 export function createInlineWorkerRunner(options: WorkerLoopOptions): InlineWorkerRunner {
   return async (input) => {
-    const catalog = createDispatcher(catalogEntries({ delegation: options.kernel() }, input.origin));
+    const sessionId = `delegation-${input.delegationId}`;
+    const catalog = createDispatcher(
+      createTools({ delegation: options.kernel() }, input.origin),
+      sessionId,
+      options.artifacts,
+    );
 
     const messages: Array<{ role: "user" | "assistant"; content: string; time: number }> = [
       {
@@ -50,7 +57,6 @@ export function createInlineWorkerRunner(options: WorkerLoopOptions): InlineWork
       },
     ];
     const traceId = newTraceId();
-    const sessionId = `delegation-${input.delegationId}`;
 
     // Assigned work is driven goal-style (drive-loop.ts); ask/notify runs
     // once — a question is answered, never nannied.
@@ -61,7 +67,8 @@ export function createInlineWorkerRunner(options: WorkerLoopOptions): InlineWork
       // The initial run identity is allocated during admission and recorded
       // on the commissioned WorkItem. Driven follow-ups remain distinct runs
       // for telemetry, while the attempt remains correlated to its first run.
-      const runId = firstRun && input.workerRunId !== undefined ? input.workerRunId : crypto.randomUUID();
+      const runId =
+        firstRun && input.workerRunId !== undefined ? input.workerRunId : crypto.randomUUID();
       firstRun = false;
       const observation = observeComponent({
         traceId,

@@ -76,7 +76,7 @@ describe("delegation tool boundaries", () => {
     expect(calls).toBe(0);
   });
 
-  test("supports the legacy mode boundary and every kernel result arm", async () => {
+  test("supports every kernel result arm", async () => {
     let request: unknown;
     const accepted = delegate(
       kernel({
@@ -88,7 +88,12 @@ describe("delegation tool boundaries", () => {
       ORIGIN,
     );
     expect(
-      await accepted({ instruction: "work", mode: "ask", scope: "independent", timeoutMs: 10 }),
+      await accepted({
+        instruction: "work",
+        operation: "ask",
+        scope: "independent",
+        timeoutMs: 10,
+      }),
     ).toBeString();
     expect(request).toMatchObject({ operation: "ask", deadline: 10 });
 
@@ -115,19 +120,14 @@ describe("delegation tool boundaries", () => {
 
   test("renders structured, ordinary, and primitive refusals", async () => {
     for (const error of [{ data: { message: "structured" } }, new Error("ordinary"), "primitive"]) {
-      const execute = delegate(
-        kernel({ delegate: () => Promise.reject(error) }),
-        ORIGIN,
-      );
+      const execute = delegate(kernel({ delegate: () => Promise.reject(error) }), ORIGIN);
       expect(await execute(valid)).toBeString();
     }
   });
 
   test("await and cancel cover malformed, timeout, settlement, and failure results", async () => {
     expect(await awaitDelegation(kernel({}))({})).toBeString();
-    expect(
-      await awaitDelegation(kernel({}))({ delegationId: "d-1", timeoutMs: 1 }),
-    ).toBeString();
+    expect(await awaitDelegation(kernel({}))({ delegationId: "d-1", timeoutMs: 1 })).toBeString();
     expect(
       await awaitDelegation(
         kernel({
@@ -148,9 +148,9 @@ describe("delegation tool boundaries", () => {
     expect(await cancelDelegation(kernel({}))({})).toBeString();
     expect(await cancelDelegation(kernel({}))({ delegationId: "d-1" })).toBeString();
     expect(
-      await cancelDelegation(
-        kernel({ cancelDelegation: () => Promise.reject(new Error("no")) }),
-      )({ delegationId: "d-1" }),
+      await cancelDelegation(kernel({ cancelDelegation: () => Promise.reject(new Error("no")) }))({
+        delegationId: "d-1",
+      }),
     ).toBeString();
   });
 

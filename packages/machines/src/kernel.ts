@@ -117,12 +117,12 @@ def parallel(thunks, max_workers=8):
         return [_future.result() for _future in _futures]
 
 
-def llm(prompt, **kw):
-    return tool.llm(prompt=prompt, **kw)
+def llm(prompts):
+    return tool.llm(prompts=prompts)
 
 
 def llm_batched(prompts):
-    return parallel([lambda _prompt=_prompt: llm(_prompt) for _prompt in prompts])
+    return llm(prompts)
 
 
 tool = _Tools()

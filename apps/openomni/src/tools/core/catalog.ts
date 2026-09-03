@@ -1,33 +1,21 @@
 import type { Tool } from "@openomni/protocol";
 import type { DelegationOrigin } from "../../delegation/admission";
 import type { DelegationKernel } from "../../delegation/kernel";
-import { awaitDelegationTool, cancelDelegationTool, delegateTool } from "../authority/delegation";
 import type { CuratedMemory } from "../../memory/store";
-import type { ArtifactsPort } from "../mutation/artifacts";
-import type { ConversePort } from "../mutation/converse";
-import { converseCloseTool, converseOpenTool } from "../mutation/converse";
-import { writeArtifactTool } from "../mutation/artifacts";
-import { memoryTool } from "../mutation/memory";
-import { readArtifactTool } from "../query/artifacts";
-import type { ApprovalPort } from "../authority/approval";
-import { approvalDecideTool, approvalRequestTool, contactPromoteTool, endpointMergeTool } from "../authority/approval";
-import type { CatalogEntry } from "./dispatch";
-import type { MachineVfs } from "../../machines/vfs";
-import { fsListTool, fsReadTool, fsStatTool } from "../query/machine-fs";
-import type { LeasePort } from "../mutation/lease";
-import { leaseOpenTool } from "../mutation/lease";
-import type { LlmPort } from "../execution/llm";
-import { llmTool } from "../execution/llm";
-import type { MachinesPort } from "../query/machines";
-import { machinesTool } from "../query/machines";
-import type { ProvisionPort } from "../mutation/provision";
-import { channelDeclareTool, channelDisableTool, channelEnableTool, personDeclareTool, personRemoveTool, secretRotateTool } from "../mutation/provision";
-import { provisionStatusTool } from "../query/provision";
-import type { CellPorts } from "../execution/run-code";
-import { runCodeTool } from "../execution/run-code";
 import type { CompletionPort } from "../../work-item/completion";
-import { completeWorkTool } from "../mutation/work-items";
-import { workItemsTool } from "../query/work-items";
+import { createApprovalTool, type ApprovalPort } from "../authority/approval";
+import {
+  createAwaitDelegationTool,
+  createCancelDelegationTool,
+  createDelegateTool,
+} from "../authority/delegation";
+import { createLlmTool, type LlmPort } from "../execution/llm";
+import { createRunCodeTool, type CellPorts } from "../execution/run-code";
+import { createArtifactsTool, type ArtifactsPort } from "../mutation/artifacts";
+import { createConverseTool, type ConversePort, type LeasePort } from "../mutation/converse";
+import { createMemoryTool } from "../mutation/memory";
+import { createProvisionTool, type ProvisionPort } from "../mutation/provision";
+import { createWorkItemsTool } from "../mutation/work-items";
 import { eraseTool, type AnyToolDefinition } from "./define";
 import { toolSpec } from "./project";
 
@@ -37,14 +25,6 @@ export interface CatalogPorts {
   readonly leases?: LeasePort;
   readonly approvals?: ApprovalPort;
   readonly cells?: CellPorts;
-  readonly machines?: MachinesPort;
-  /**
-   * The read-only machine filesystem as one flat namespace. Separate from
-   * `machines` because the two answer different questions — which machines
-   * exist, versus what one of them holds — and a host wired without an fs
-   * door must offer no fs tool rather than one that always refuses.
-   */
-  readonly machineFs?: MachineVfs;
   readonly memory?: CuratedMemory;
   readonly workItems?: CompletionPort;
   readonly llm?: LlmPort;
@@ -52,64 +32,48 @@ export interface CatalogPorts {
   readonly provisioning?: ProvisionPort;
 }
 
-/**
- * Every tool this app could offer, before placement has an opinion — the one
- * list both the catalog and the repository lint read, so a spec cannot exist
- * here without being wireable, or ship without being linted.
- */
-export const TOOL_DEFINITIONS: readonly AnyToolDefinition[] = [
-  eraseTool(delegateTool),
-  eraseTool(awaitDelegationTool),
-  eraseTool(cancelDelegationTool),
-  eraseTool(converseOpenTool),
-  eraseTool(converseCloseTool),
-  eraseTool(leaseOpenTool),
-  eraseTool(approvalRequestTool),
-  eraseTool(approvalDecideTool),
-  eraseTool(contactPromoteTool),
-  eraseTool(endpointMergeTool),
-  eraseTool(personDeclareTool),
-  eraseTool(personRemoveTool),
-  eraseTool(channelDeclareTool),
-  eraseTool(channelEnableTool),
-  eraseTool(channelDisableTool),
-  eraseTool(secretRotateTool),
-  eraseTool(provisionStatusTool),
-  eraseTool(runCodeTool),
-  eraseTool(machinesTool),
-  eraseTool(fsReadTool),
-  eraseTool(fsListTool),
-  eraseTool(fsStatTool),
-  eraseTool(memoryTool),
-  eraseTool(workItemsTool),
-  eraseTool(completeWorkTool),
-  eraseTool(llmTool),
-  eraseTool(writeArtifactTool),
-  eraseTool(readArtifactTool),
-];
-
-/** Every spec the app can ship, as data — no ports, no origin: the repository lint's seam. */
-export function collectToolSpecs(): readonly Tool.Spec[] {
-  return TOOL_DEFINITIONS.map(toolSpec);
-}
-
-/**
- * Every tool this app could offer, before placement has an opinion.
- *
- * Entries are built per originator because a tool is bound to who is running
- * it — the same reason the delegate tool takes an origin.
- */
-export function catalogEntries(
+/** Construct the immutable tool set once for a session. */
+export function createTools(
   ports: CatalogPorts,
   origin: DelegationOrigin,
-): readonly CatalogEntry[] {
-  const entries: CatalogEntry[] = [];
-  for (const tool of TOOL_DEFINITIONS) {
-    const visible = tool.visibility.model.includes(origin.role)
-      || tool.visibility.cell.includes(origin.role);
-    if (!visible) continue;
-    const run = tool.bind(ports, origin);
-    if (run !== undefined) entries.push({ spec: toolSpec(tool), definition: tool, run });
+): readonly AnyToolDefinition[] {
+  const tools: AnyToolDefinition[] = [];
+  if (ports.delegation !== undefined) {
+    tools.push(
+      eraseTool(createDelegateTool(ports.delegation, origin.role, origin.depth)),
+      eraseTool(createAwaitDelegationTool(ports.delegation)),
+      eraseTool(createCancelDelegationTool(ports.delegation)),
+    );
   }
-  return entries;
+  if (ports.conversations !== undefined && ports.leases !== undefined)
+    tools.push(eraseTool(createConverseTool(ports.conversations, ports.leases)));
+  if (ports.approvals !== undefined) tools.push(eraseTool(createApprovalTool(ports.approvals)));
+  if (ports.provisioning !== undefined)
+    tools.push(eraseTool(createProvisionTool(ports.provisioning)));
+  if (ports.cells !== undefined) tools.push(eraseTool(createRunCodeTool(ports.cells)));
+  if (ports.memory !== undefined) tools.push(eraseTool(createMemoryTool(ports.memory)));
+  if (ports.workItems !== undefined) tools.push(eraseTool(createWorkItemsTool(ports.workItems)));
+  if (ports.llm !== undefined) tools.push(eraseTool(createLlmTool(ports.llm)));
+  if (ports.artifacts !== undefined) tools.push(eraseTool(createArtifactsTool(ports.artifacts)));
+  const visible = tools.filter(
+    (tool) =>
+      tool.visibility.model.includes(origin.role) || tool.visibility.cell.includes(origin.role),
+  );
+  ports.cells?.bindTools(origin.sessionId, visible);
+  return visible;
+}
+
+const ALL_PORTS = new Proxy(
+  {},
+  { get: () => new Proxy(() => undefined, { get: () => () => undefined }) },
+) as CatalogPorts;
+const CATALOG_ORIGIN: DelegationOrigin = { role: "resident", depth: 0, sessionId: "catalog" };
+/** Schema-only exhaustive list used by repository conformance tooling. */
+export const TOOL_DEFINITIONS: readonly AnyToolDefinition[] = createTools(
+  ALL_PORTS,
+  CATALOG_ORIGIN,
+);
+
+export function collectToolSpecs(): readonly Tool.Spec[] {
+  return TOOL_DEFINITIONS.map(toolSpec);
 }

@@ -4,29 +4,67 @@ import { defineTool, ToolRefused } from "../core/define";
 
 const Judgment = z.discriminatedUnion("value", [
   z.object({ criterionId: z.string().min(1), value: z.literal("asserted") }).strict(),
-  z.object({
-    criterionId: z.string().min(1), value: z.enum(["verified", "refuted"]),
-    checkedPredicate: z.string().min(1).describe("What you actually checked."),
-    evidenceIds: z.array(z.string().min(1)).min(1).describe("Evidence ids the check consumed."),
-  }).strict(),
-]).describe("One judgment per criterion. Only verified admits.");
-const Input = z.object({ workItemId: z.string().min(1), judgments: z.array(Judgment).min(1) }).strict();
-const Output = z.object({ admitted: z.literal(true), workItemId: z.string() }).strict();
-const COMPLETE_WORK_TOOL_NAME = "complete_work";
-function executeCompleteWork(port: CompletionPort) {
-  return async (input: z.output<typeof Input>): Promise<z.output<typeof Output>> => {
-    const outcome = await port.complete({ workItemId: input.workItemId, judgments: input.judgments as readonly CompletionJudgment[] });
-    if (!outcome.admitted) throw new ToolRefused(COMPLETE_WORK_TOOL_NAME, outcome.reason);
-    return outcome;
-  };
+  z
+    .object({
+      criterionId: z.string().min(1),
+      value: z.enum(["verified", "refuted"]),
+      checkedPredicate: z.string().min(1),
+      evidenceIds: z.array(z.string().min(1)).min(1),
+    })
+    .strict(),
+]);
+const Input = z
+  .object({
+    op: z.union([z.literal("list"), z.literal("get"), z.literal("complete")]),
+    workItemId: z.string().min(1).optional(),
+    judgments: z.array(Judgment).min(1).optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.op !== "list" && value.workItemId === undefined) {
+      ctx.addIssue({ code: "custom", message: `${value.op} requires workItemId` });
+    }
+    if (value.op === "complete" && value.judgments === undefined) {
+      ctx.addIssue({ code: "custom", message: "complete requires judgments" });
+    }
+  });
+const Summary = z.custom<object>((value) => typeof value === "object" && value !== null);
+const Output = z.discriminatedUnion("op", [
+  z.object({ op: z.literal("list"), items: z.array(Summary) }).strict(),
+  z.object({ op: z.literal("get"), item: Summary }).strict(),
+  z
+    .object({ op: z.literal("complete"), admitted: z.literal(true), workItemId: z.string() })
+    .strict(),
+]);
+const WORK_ITEMS_TOOL_NAME = "work_items";
+
+export function createWorkItemsTool(port: CompletionPort) {
+  return defineTool({
+    name: WORK_ITEMS_TOOL_NAME,
+    category: "mutation",
+    description:
+      "List or inspect commissioned WorkItems, or complete one with verified evidence-backed judgments. Use op=list|get|complete.",
+    input: Input,
+    output: Output,
+    visibility: { model: ["resident"], cell: ["resident"] },
+    execute: async (input) => {
+      if (input.op === "list") return { op: "list" as const, items: port.list() };
+      if (input.op === "get") {
+        const item = port.inspect(input.workItemId as string);
+        if (item === undefined)
+          throw new ToolRefused(WORK_ITEMS_TOOL_NAME, `unknown WorkItem ${input.workItemId}`);
+        return { op: "get" as const, item };
+      }
+      const outcome = await port.complete({
+        workItemId: input.workItemId as string,
+        judgments: input.judgments as readonly CompletionJudgment[],
+      });
+      if (!outcome.admitted) throw new ToolRefused(WORK_ITEMS_TOOL_NAME, outcome.reason);
+      return { op: "complete" as const, admitted: true as const, workItemId: outcome.workItemId };
+    },
+    render: (_args, value) =>
+      value.op === "complete"
+        ? `WorkItem ${value.workItemId} completed: admission recorded and terminal receipt written.`
+        : JSON.stringify(value.op === "list" ? value.items : value.item, null, 2),
+  });
 }
-export const completeWorkTool = defineTool({
-  name: COMPLETE_WORK_TOOL_NAME, category: "mutation",
-  description: "Judge a WorkItem's acceptance criteria for completion admission. Only verified judgments (with the predicate you checked and the evidence ids consumed) admit; asserted or refuted judgments record a durable block and refuse.",
-  input: Input,
-  inputExamples: [{ workItemId: "work-item-id", judgments: [{ criterionId: "criterion-id", value: "verified", checkedPredicate: "the expected behavior was exercised", evidenceIds: ["evidence-id"] }] }],
-  output: Output, safe: false, execution: { kind: "host" }, placement: "host",
-  visibility: { model: ["resident"], cell: ["resident"] },
-  bind: (ports) => ports.workItems === undefined ? undefined : executeCompleteWork(ports.workItems),
-  render: (_args, value) => `WorkItem ${value.workItemId} completed: admission recorded and terminal receipt written.`,
-});

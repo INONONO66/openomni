@@ -328,7 +328,7 @@ function looksLikeToolDefinition(value: unknown): value is AnyToolDefinition {
     typeof candidate.name === "string" &&
     typeof candidate.category === "string" &&
     typeof candidate.description === "string" &&
-    typeof candidate.bind === "function" &&
+    typeof candidate.execute === "function" &&
     typeof candidate.render === "function"
   );
 }
@@ -338,17 +338,30 @@ export interface LocatedDefinition {
   readonly filePath: string;
 }
 
-async function locateExportedDefinitions(): Promise<LocatedDefinition[]> {
-  const located: LocatedDefinition[] = [];
+async function locateExportedDefinitions(
+  definitions: readonly AnyToolDefinition[],
+): Promise<LocatedDefinition[]> {
+  const located = new Map<AnyToolDefinition, string>();
   const glob = new Bun.Glob(TOOL_SOURCE_GLOB);
   for await (const filePath of glob.scan({ cwd: ".", onlyFiles: true })) {
     if (TEST_SUFFIXES.some((suffix) => filePath.endsWith(suffix))) continue;
+    const source = await Bun.file(filePath).text();
     const module = (await import(`../${filePath}`)) as Record<string, unknown>;
     for (const value of Object.values(module)) {
-      if (looksLikeToolDefinition(value)) located.push({ definition: value, filePath });
+      if (looksLikeToolDefinition(value)) located.set(value, filePath);
+    }
+    for (const definition of definitions) {
+      const escaped = definition.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const declaration = new RegExp(`(?:name\\s*:|=)\\s*["']${escaped}["']`);
+      if (!declaration.test(source)) continue;
+      const previous = located.get(definition);
+      if (previous !== undefined && previous !== filePath) {
+        throw new Error(`tool ${definition.name} has ambiguous source: ${previous}, ${filePath}`);
+      }
+      located.set(definition, filePath);
     }
   }
-  return located;
+  return Array.from(located, ([definition, filePath]) => ({ definition, filePath }));
 }
 
 export function definitionInvariantViolations(
@@ -376,9 +389,9 @@ export function definitionInvariantViolations(
     const filePath = locations.get(definition);
     if (filePath === undefined) {
       violations.push({
-        check: "earned-check",
+        check: "tool-lint",
         subject: definition.name,
-        message: "catalog definition has no exported source declaration",
+        message: "[tool-source-location] catalog definition has no verifiable source file",
       });
     } else {
       const directory = filePath.match(/\/tools\/(query|mutation|authority|execution)\//)?.[1];
@@ -395,20 +408,6 @@ export function definitionInvariantViolations(
         check: "tool-lint",
         subject: definition.name,
         message: `[tool-category] unknown category ${definition.category}`,
-      });
-    }
-    if (definition.category === "query" && !definition.safe) {
-      violations.push({
-        check: "tool-lint",
-        subject: definition.name,
-        message: "[query-safe] query tools must be safe",
-      });
-    }
-    if (definition.category === "execution" && definition.execution.kind !== "machine") {
-      violations.push({
-        check: "tool-lint",
-        subject: definition.name,
-        message: "[execution-locus] execution tools must execute on a machine",
       });
     }
     if (definition.name.trim() === "") {
@@ -437,7 +436,10 @@ export function definitionInvariantViolations(
 }
 
 async function checkEarned(): Promise<Violation[]> {
-  return definitionInvariantViolations(TOOL_DEFINITIONS, await locateExportedDefinitions());
+  return definitionInvariantViolations(
+    TOOL_DEFINITIONS,
+    await locateExportedDefinitions(TOOL_DEFINITIONS),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -647,15 +649,11 @@ function selfTest(): void {
       ...exemplar,
       name: "unsafe_query",
       category: "query",
-      safe: false,
     } as AnyToolDefinition;
     const invariantViolations = definitionInvariantViolations(
       [unsafeQuery],
       [{ definition: unsafeQuery, filePath: "apps/openomni/src/tools/mutation/unsafe.ts" }],
     );
-    if (!invariantViolations.some(({ message }) => message.includes("[query-safe]"))) {
-      failures.push("definition invariants did not flag an unsafe query");
-    }
     if (!invariantViolations.some(({ message }) => message.includes("[tool-category-directory]"))) {
       failures.push("definition invariants did not flag a category-directory mismatch");
     }

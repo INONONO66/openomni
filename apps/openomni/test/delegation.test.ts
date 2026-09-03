@@ -12,8 +12,8 @@ import {
   AWAIT_DELEGATION_TOOL_NAME,
   CANCEL_DELEGATION_TOOL_NAME,
   DELEGATE_TOOL_NAME,
-  delegateTool,
 } from "../src/tools/authority/delegation";
+import { createTools } from "../src/tools/core/catalog";
 import { toolSpec } from "../src/tools/core/project";
 import { modelToolOutput } from "./helpers/tool-dispatch";
 import {
@@ -42,12 +42,7 @@ describe("admission fold", () => {
   test("a worker may open only an inline child and the depth cap is typed", () => {
     expect(admit(ask(), WORKER, 1_000, LIMITS)).toMatchObject({ ok: true, transport: "inline" });
     expect(
-      admit(
-        ask({ address: { kind: "core", scope: "independent" } }),
-        WORKER,
-        1_000,
-        LIMITS,
-      ),
+      admit(ask({ address: { kind: "core", scope: "independent" } }), WORKER, 1_000, LIMITS),
     ).toMatchObject({ ok: false, error: { data: { code: "worker_transport" } } });
     expect(admit(ask(), { ...WORKER, depth: 2 }, 1_000, LIMITS)).toMatchObject({
       ok: false,
@@ -294,11 +289,15 @@ describe("durable kernel", () => {
   }
 
   test("refuses an ask when its parent settles during transport preparation", async () => {
-    const { kernel, entered, releasePreparation } = parentSettlingHarness("ask-parent", "ask-child");
-    const delegated = kernel.delegate(
-      ask({ address: { kind: "core", scope: "independent" } }),
-      { ...RESIDENT, parentDelegationId: "ask-parent", rootDelegationId: "ask-parent" },
+    const { kernel, entered, releasePreparation } = parentSettlingHarness(
+      "ask-parent",
+      "ask-child",
     );
+    const delegated = kernel.delegate(ask({ address: { kind: "core", scope: "independent" } }), {
+      ...RESIDENT,
+      parentDelegationId: "ask-parent",
+      rootDelegationId: "ask-parent",
+    });
 
     await entered;
     await kernel.cancelDelegation("ask-parent");
@@ -420,7 +419,10 @@ describe("durable kernel", () => {
       rootDelegationId: "root",
     };
 
-    const results = await Promise.all([kernel.delegate(ask(), origin), kernel.delegate(ask(), origin)]);
+    const results = await Promise.all([
+      kernel.delegate(ask(), origin),
+      kernel.delegate(ask(), origin),
+    ]);
 
     expect(results.filter((result) => "refused" in result)).toHaveLength(1);
     kernel.stop();
@@ -465,7 +467,8 @@ describe("durable kernel", () => {
 
     expect(results.filter((result) => "refused" in result)).toHaveLength(1);
     const commissioned = WorkItemStore.list().filter(
-      (item) => item.sourceChannel === "delegation" && item.sourceMessageId.startsWith("assign-candidate-"),
+      (item) =>
+        item.sourceChannel === "delegation" && item.sourceMessageId.startsWith("assign-candidate-"),
     );
     expect(commissioned).toHaveLength(2);
     expect(commissioned.filter((item) => item.timestamps.cancelled !== undefined)).toHaveLength(1);
@@ -494,7 +497,11 @@ describe("durable kernel", () => {
         deadline: 10_000,
         parentDelegationId: "rollback-root",
         rootDelegationId: "rollback-root",
-        origin: { ...WORKER, parentDelegationId: "rollback-root", rootDelegationId: "rollback-root" },
+        origin: {
+          ...WORKER,
+          parentDelegationId: "rollback-root",
+          rootDelegationId: "rollback-root",
+        },
         instruction: "existing child",
         status: "open",
         createdAt: index + 1,
@@ -547,7 +554,11 @@ describe("durable kernel", () => {
       address: { kind: "core", scope: "independent" },
       acceptanceCriteria: ["result is verified"],
     });
-    const origin = { ...RESIDENT, parentDelegationId: "rollback-root", rootDelegationId: "rollback-root" };
+    const origin = {
+      ...RESIDENT,
+      parentDelegationId: "rollback-root",
+      rootDelegationId: "rollback-root",
+    };
 
     const results = await Promise.allSettled([
       kernel.delegate(request, origin),
@@ -616,12 +627,16 @@ describe("durable kernel", () => {
       RESIDENT,
     );
     expect(started).toMatchObject({ handle: { transport: "process" } });
-    if ("refused" in started || started.settled !== undefined) throw new Error("background work blocked the caller");
+    if ("refused" in started || started.settled !== undefined)
+      throw new Error("background work blocked the caller");
 
     const awaiting = kernel.awaitDelegation(started.handle.delegationId);
     finish({ status: "completed", output: "audited" });
     const settled = await awaiting;
-    expect(settled).toEqual({ kind: "settled", settlement: expect.objectContaining({ status: "completed", output: "audited" }) });
+    expect(settled).toEqual({
+      kind: "settled",
+      settlement: expect.objectContaining({ status: "completed", output: "audited" }),
+    });
     expect(events.events.map((event) => event.name)).toContain("delegation.settled");
   });
 
@@ -656,9 +671,13 @@ describe("durable kernel", () => {
       RESIDENT,
     );
     if ("refused" in started) throw new Error(started.refused);
-    await expect(kernel.cancelDelegation(started.handle.delegationId)).resolves.toMatchObject({ status: "cancelled" });
+    await expect(kernel.cancelDelegation(started.handle.delegationId)).resolves.toMatchObject({
+      status: "cancelled",
+    });
     expect(aborted).toBe(true);
-    await expect(kernel.cancelDelegation(started.handle.delegationId)).resolves.toMatchObject({ status: "cancelled" });
+    await expect(kernel.cancelDelegation(started.handle.delegationId)).resolves.toMatchObject({
+      status: "cancelled",
+    });
   });
 
   /** A kernel with one never-finishing delegation already started. */
@@ -740,7 +759,11 @@ describe("durable kernel", () => {
       drivers: {
         inline: {
           run: (_admitted, _handle, signal) =>
-            new Promise((resolve) => signal.addEventListener("abort", () => resolve({ status: "cancelled", reason: "stopped" }))),
+            new Promise((resolve) =>
+              signal.addEventListener("abort", () =>
+                resolve({ status: "cancelled", reason: "stopped" }),
+              ),
+            ),
         },
       },
       now: () => Date.now(),
@@ -822,7 +845,11 @@ describe("delegation controls and tool surface", () => {
       events,
       limits: LIMITS,
     });
-    const spec = toolSpec(delegateTool);
+    const definition = createTools({ delegation: kernel }, RESIDENT).find(
+      (tool) => tool.name === DELEGATE_TOOL_NAME,
+    );
+    if (definition === undefined) throw new Error("delegate definition missing");
+    const spec = toolSpec(definition);
     expect(spec.name).toBe(DELEGATE_TOOL_NAME);
     const schema = spec.inputSchema as {
       type: string;
@@ -834,7 +861,11 @@ describe("delegation controls and tool surface", () => {
     expect(schema.properties.operation?.enum).toEqual(["notify", "ask", "assign"]);
     expect(Object.keys(schema.properties)).toContain("scope");
     expect(Object.keys(schema.properties)).toContain("actorId");
-    const answer = await modelToolOutput("delegate", { delegation: kernel }, RESIDENT)({
+    const answer = await modelToolOutput(
+      "delegate",
+      { delegation: kernel },
+      RESIDENT,
+    )({
       instruction: "send it",
       operation: "ask",
       scope: "independent",
@@ -862,7 +893,12 @@ describe("delegation controls and tool surface", () => {
             send: async (input) => awaitedReceipt(input),
             now: () => 2_000,
             newWaitId: () => "wait-restart",
-            conversations: { open: () => { throw new Error("not reached"); }, get: () => undefined },
+            conversations: {
+              open: () => {
+                throw new Error("not reached");
+              },
+              get: () => undefined,
+            },
           }),
         },
         now: () => 2_000,
@@ -929,8 +965,12 @@ describe("delegation controls and tool surface", () => {
 
       expect(DelegationStore.get("d-channel-restart")?.status).toBe("open");
       expect(DelegationStore.get("d-channel-restart")?.settled).toBeUndefined();
-      expect(DelegationStore.get("d-inline-restart")?.settled).toMatchObject({ status: "interrupted" });
-      expect(DelegationStore.get("d-process-restart")?.settled).toMatchObject({ status: "interrupted" });
+      expect(DelegationStore.get("d-inline-restart")?.settled).toMatchObject({
+        status: "interrupted",
+      });
+      expect(DelegationStore.get("d-process-restart")?.settled).toMatchObject({
+        status: "interrupted",
+      });
       expect(wakes).toEqual([{ delegationId: "d-process-restart", sessionId: "volatile-process" }]);
 
       expect(kernelB.settleFromReply("wait-restart", "replied after restart")).toBe(true);
@@ -940,7 +980,9 @@ describe("delegation controls and tool surface", () => {
       });
       expect(
         events.events.filter(
-          (event) => event.name === "delegation.settled" && (event.data as { delegationId: string }).delegationId === "d-channel-restart",
+          (event) =>
+            event.name === "delegation.settled" &&
+            (event.data as { delegationId: string }).delegationId === "d-channel-restart",
         ),
       ).toHaveLength(1);
       expect(wakes.filter((wake) => wake.delegationId === "d-channel-restart")).toEqual([
@@ -1090,7 +1132,10 @@ describe("delegation controls and tool surface", () => {
       },
       RESIDENT,
     );
-    expect(result).toMatchObject({ handle: { delegationId: "d-notify" }, settled: { status: "sent" } });
+    expect(result).toMatchObject({
+      handle: { delegationId: "d-notify" },
+      settled: { status: "sent" },
+    });
     notify.stop();
   });
 

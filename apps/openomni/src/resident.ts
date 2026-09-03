@@ -1,4 +1,9 @@
-import { ChatAgent, failureFacts, type ChatAgentConfig, type ChatAgentInput } from "@openomni/agent";
+import {
+  ChatAgent,
+  failureFacts,
+  type ChatAgentConfig,
+  type ChatAgentInput,
+} from "@openomni/agent";
 import { Session } from "@openomni/ledger";
 import type { Placement } from "@openomni/placement";
 import type { Gateway, Ingress, Message, Model } from "@openomni/protocol";
@@ -8,7 +13,7 @@ import { observeComponent } from "./observation/component";
 import { buildAgentPrompt } from "./prompt/build";
 import { RESIDENT_PRESET } from "./prompt/roles";
 import type { CatalogPorts } from "./tools/core/catalog";
-import { catalogEntries } from "./tools/core/catalog";
+import { createTools } from "./tools/core/catalog";
 import { createDispatcher } from "./tools/core/dispatch";
 import { classifyTurnFailure } from "./observation/llm-failure";
 
@@ -257,15 +262,23 @@ export function createResident(options: ResidentOptions) {
     addTextPart(sessionId, assistantId, result.text);
   }
 
+  const catalogs = new Map<string, ReturnType<typeof createDispatcher>>();
+
   return async function deliver(delivery: Gateway.Deliver): Promise<Ingress.IngressResult> {
     const turn = classifyDelivery(delivery);
     const { sessionId, evidenceOnly } = turn;
 
-    // Built per delivery because the origin carries THIS session: a Wait a
-    // delegation opens must be owned by the session that asked for the work.
     const origin: DelegationOrigin = { role: "resident", depth: 0, sessionId };
     const targets = options.targets();
-    const catalog = createDispatcher(catalogEntries(options.tools, origin));
+    let catalog = catalogs.get(sessionId);
+    if (catalog === undefined) {
+      catalog = createDispatcher(
+        createTools(options.tools, origin),
+        sessionId,
+        options.tools.artifacts,
+      );
+      catalogs.set(sessionId, catalog);
+    }
     // An evidence-only turn gets no execution surface: the model is offered
     // no tools, and the executor it could still reach refuses every call.
     const tools = evidenceOnly ? [] : catalog.specs;
