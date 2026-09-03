@@ -198,7 +198,7 @@ async function runRestartQuorumScenario(): Promise<ScenarioReceipt> {
   let ok = false;
   try {
     Bus.reset();
-    adapter = new SqliteStorageAdapter(databasePath);
+    adapter = new SqliteStorageAdapter(databasePath, Bus);
     Storage.configure(adapter);
     registerDriverActors();
     const baseline = allocationCount();
@@ -242,7 +242,7 @@ async function runRestartQuorumScenario(): Promise<ScenarioReceipt> {
     adapter.close();
     adapter = undefined;
     Storage.reset();
-    adapter = new SqliteStorageAdapter(databasePath);
+    adapter = new SqliteStorageAdapter(databasePath, Bus);
     Storage.configure(adapter);
 
     const resumeReceipts: Array<Record<string, unknown>> = [];
