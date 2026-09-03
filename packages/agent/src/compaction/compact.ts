@@ -5,7 +5,7 @@ import { resolveCompactionGeometry, type CompactionYield } from "./geometry";
 import { elideToolOutputs, type ToolOutputElision } from "./reduce";
 import type { CompactionCandidate } from "./speculate";
 
-export interface SummarizationBudget {
+interface SummarizationBudget {
   readonly maxInputTokens: number;
   readonly maxOutputTokens: number;
   readonly contextWindowTokens: number;
