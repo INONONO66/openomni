@@ -1,12 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  type ChannelProvider,
-  ChannelProviders as RealProviders,
-  type DiscordCredentials,
-  type GitHubCredentials,
-  type SlackCredentials,
-  type TelegramCredentials,
-} from "@openomni/channels";
+import { type ChannelProvider, ChannelProviders as RealProviders } from "@openomni/channels";
 import type { Channel } from "@openomni/protocol";
 import { type BuiltChannel, channelProfile } from "../src/channels";
 import type { OpenOmniConfig } from "../src/config";
@@ -136,6 +129,11 @@ const handler: Channel.MessageHandler = () => Promise.resolve(null);
 function build(config: OpenOmniConfig, fakes: FakeBuild): BuiltChannel[] {
   return channelProfile(config, fakes.providers).map((row) => row.build(handler));
 }
+
+type TelegramCredentials = Readonly<{ token: string }>;
+type DiscordCredentials = Readonly<{ token: string }>;
+type GitHubCredentials = Readonly<{ secret: string; token?: string; botUsername?: string }>;
+type SlackCredentials = Readonly<{ botToken: string; appToken: string }>;
 
 describe("channelProfile", () => {
   test("no channel config produces no rows", () => {

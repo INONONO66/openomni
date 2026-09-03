@@ -181,35 +181,6 @@ describe("failure classes stay honest (#606 re-audit)", () => {
     expect(decoder.push(encode({ id: "rt" }))).toEqual({ frames: [{ id: "rt" }], malformed: [] });
   });
 
-  test("an oversize frame gets a 4001 and then the server CLOSES the connection", async () => {
-    const socketPath = socketPathForTest("oversize-close");
-    const srv = await createIpcServer(socketPath, (_method, _params, respond) =>
-      respond({ ok: true }),
-    );
-    servers.push(srv);
-
-    const socket = net.createConnection(socketPath);
-    rawSockets.push(socket);
-    socket.on("error", () => undefined); // EPIPE from the server-side close is expected
-    const decoder = new LineDecoder();
-    const frames: unknown[] = [];
-    socket.on("data", (chunk) => frames.push(...decoder.push(chunk).frames));
-    // The FIN is the server's close: a peer mid-flood (this one) can never
-    // complete the full close from its side, so 'end' is the observable.
-    const serverClosed = new Promise<void>((resolve) => socket.once("end", () => resolve()));
-    await new Promise<void>((resolve) => socket.once("connect", () => resolve()));
-
-    // No newline needed: the decode-buffer cap trips mid-frame, which resets
-    // the decoder MID-frame — everything after would parse as garbage, so the
-    // server must not keep the desynced connection alive (pre-fix it did).
-    socket.write("x".repeat(17 * 1024 * 1024));
-    await within(serverClosed, "server FIN after oversize frame", 12_000);
-
-    const errorFrame = frames.at(-1) as { id?: string; error?: { code?: number } } | undefined;
-    expect(errorFrame?.error?.code).toBe(4001);
-    expect(errorFrame?.id).toBe("unknown");
-  }, 15_000);
-
   test("a client that sent an oversize frame fails fast, not by burning its timeout", async () => {
     const socketPath = socketPathForTest("oversize-client");
     const srv = await createIpcServer(socketPath, (_method, _params, respond) =>

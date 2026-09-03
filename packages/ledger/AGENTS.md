@@ -20,7 +20,6 @@ src/
 │   ├── events.ts         # Session bus event descriptors
 │   ├── lifecycle.ts      # Session CRUD/children; pure expiry-filtering reads + explicit sweepExpired deletion
 │   ├── messages.ts       # Message/part writes and reads, message status
-│   ├── transcript.ts     # TranscriptStore (#547 C3) — append-only transcript_fact recording; message/part tables are fold projections
 │   └── info.ts           # SessionInfo schema (leaf — breaks session ↔ storage cycle)
 ├── storage/
 │   ├── index.ts          # Barrel

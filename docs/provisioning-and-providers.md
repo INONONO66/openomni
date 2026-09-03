@@ -183,7 +183,7 @@ ChannelProvider {
   id                  "telegram" | "discord" | "github" | "ws" | "slack" | ...
   credentials         zod schema for the secret payload
   settings            zod schema for non-secret instance settings
-  ingest              "poll" | "socket" | "webhook" | "bridge"
+  ingest              "poll" | "socket" | "webhook"
   capabilities        { deliver: boolean, webhook: boolean, render: Format.Surface,
                         outboundRate?: TokenBucketPolicy }
   preconditions?      operator checklist items provision_status can only report,
@@ -208,13 +208,11 @@ https://hermes-agent.nousresearch.com/docs/user-guide/messaging):
   Discord is one token plus portal-side gateway intents (a precondition, not a
   credential); Slack is *two* tokens (`botToken` xoxb- + `appToken` xapp- for
   Socket Mode); GitHub is `webhookSecret + token? + botUsername?`; Email is
-  six fields (IMAP/SMTP hosts+ports, address, password); Signal fronts an
-  external bridge (`httpUrl + account`); WhatsApp's "credential" is a QR-paired
-  session blob — the vault stores bytes, not only strings.
-- **Ingest reduces to four modes**: `poll` (telegram default, email),
-  `socket` (discord gateway, slack Socket Mode), `webhook` (github, telegram
-  optional), `bridge` (signal/whatsapp external daemon, health-checked by the
-  provider). The runner owns all four lifecycles uniformly.
+  six fields (IMAP/SMTP hosts+ports, address, password). The vault stores bytes,
+  not only strings.
+- **Ingest reduces to three modes**: `poll` (telegram default, email),
+  `socket` (discord gateway, slack Socket Mode), and `webhook` (github,
+  telegram optional). The runner owns all three lifecycles uniformly.
 - **Settings core shared across providers**: `homeChannel?` (destination for
   operator notices and scheduled delivery), scoped sender allowances (DM vs
   group are separate lists), and `triggers` extended beyond today's

@@ -11,7 +11,6 @@ const MachineCellErrorData = Machine.CellRequest.pick({ cellId: true }).extend({
 
 export const MachineCellError = NamedError.create("MachineCellError", MachineCellErrorData);
 
-export type MachineCellFailure = InstanceType<typeof MachineCellError>;
 
 const MachineDaemonProtocolErrorData = z.object({
   reason: z.literal("capability_not_offered"),
@@ -23,5 +22,3 @@ export const MachineDaemonProtocolError = NamedError.create(
   "MachineDaemonProtocolError",
   MachineDaemonProtocolErrorData,
 );
-
-export type MachineDaemonProtocolFailure = InstanceType<typeof MachineDaemonProtocolError>;

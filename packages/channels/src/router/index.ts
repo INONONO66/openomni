@@ -79,16 +79,6 @@ export interface GatewayRouter {
   ingest(event: unknown): Promise<Ingress.IngressResult>;
   /** The existing-agent send kernel (#215); fail-closed when unconfigured. */
   readonly messaging: ExistingAgentMessaging;
-  /**
-   * Gateway port for the brain's INTERNAL-mode surface↔session stickiness
-   * claims (#708, closing the #707 residue): the brain injects this at
-   * composition instead of writing the perimeter surface directly, making
-   * the gateway the literal sole writer of the surface↔session map. CAS
-   * semantics: with `expectedSessionId` the claim replaces only that owner;
-   * without it, it inserts only when absent. The returned session id is the
-   * owner AFTER the attempt — the CAS receipt.
-   */
-  claimSurface(surfaceKey: string, sessionId: string, expectedSessionId?: string): string;
 }
 
 /**
@@ -410,27 +400,5 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
       return messaging;
     },
 
-    // #708 residue closure: internal-mode (cron stickiness) claims cross this
-    // port instead of a brain-side SurfaceKey write — the gateway is now the
-    // literal sole writer of the surface↔session map. Same CAS semantics as
-    // the router's own resident claim above.
-    claimSurface(surfaceKey: string, sessionId: string, expectedSessionId?: string): string {
-      const ownerSessionId = SurfaceKey.claim(surfaceKey, sessionId, expectedSessionId);
-      // audit A T3: every internal stickiness claim crossing this port emits a
-      // user-audit-class observation through the injected sink — reusing the
-      // Operational log vocabulary (no new frozen descriptor). The receipt is
-      // the CAS outcome: the owner AFTER the attempt, and whether this claim
-      // won or yielded to a concurrent owner.
-      // Namespace scoping for this claim is tracked in #837.
-      publishSurfaceStickinessClaim(
-        ports.sink,
-        surfaceKey,
-        sessionId,
-        ownerSessionId,
-        "internal_claim_port",
-        expectedSessionId,
-      );
-      return ownerSessionId;
-    },
   };
 }

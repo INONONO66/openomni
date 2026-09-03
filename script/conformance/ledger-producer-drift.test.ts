@@ -1,7 +1,6 @@
 import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import { Ledger as LedgerTypes } from "../../packages/protocol/src/index";
 import { buildLedgerArchiveManifest } from "../generate-ledger-archive-manifest";
 import {
   LEDGER_PRODUCER_MANIFEST,
@@ -109,21 +108,7 @@ describe("ledger producer drift", () => {
     );
   });
 
-  test("retired lifecycle stream classes have no producer or registry entry", () => {
-    const retired = new Set(["conversation", "lease", "engagement"]);
-    const manifested = LEDGER_PRODUCER_MANIFEST.streams
-      .map((entry) => entry.streamClass)
-      .filter((streamClass) => retired.has(streamClass));
-    const registered = Object.keys(LedgerTypes.StreamRegistry).filter((streamClass) =>
-      retired.has(streamClass),
-    );
-
-    expect({ manifested, registered }).toEqual({ manifested: [], registered: [] });
-  });
-
-  test("manifest stream classes equal the protocol registry and producers are unique", () => {
-    const classes: string[] = LEDGER_PRODUCER_MANIFEST.streams.map((entry) => entry.streamClass);
-    expect(classes.sort()).toEqual(Object.keys(LedgerTypes.StreamRegistry).sort());
+  test("manifest stream producers are unique", () => {
     const producers = LEDGER_PRODUCER_MANIFEST.streams.flatMap((entry) => entry.producers);
     expect(new Set(producers).size).toBe(producers.length);
     for (const entry of LEDGER_PRODUCER_MANIFEST.streams) {

@@ -142,9 +142,14 @@ function verifyKnipWorkspaceInventory(): void {
   }
 }
 
-async function runKnip(): Promise<KnipReport> {
-  verifyKnipWorkspaceInventory();
-  const proc = Bun.spawn({ cmd: KNIP_CMD, stdout: "pipe", stderr: "pipe" });
+export async function runKnip(
+  cwd = ".",
+  verifyInventory = true,
+  includeEntryExports = false,
+): Promise<KnipReport> {
+  if (verifyInventory) verifyKnipWorkspaceInventory();
+  const cmd = includeEntryExports ? [...KNIP_CMD, "--include-entry-exports"] : KNIP_CMD;
+  const proc = Bun.spawn({ cmd, cwd, stdout: "pipe", stderr: "pipe" });
   const [stdout, stderr, exitCode] = await Promise.all([
     new Response(proc.stdout).text(),
     new Response(proc.stderr).text(),
@@ -249,7 +254,16 @@ async function main(): Promise<void> {
     return;
   }
 
-  const currentKeys = normalizeKnipIssues(await runKnip());
+  const [standardReport, entryExportReport] = await Promise.all([runKnip(), runKnip(".", true, true)]);
+  const packageEntries = new Set(
+    knipWorkspaces().map((workspace) => `${workspace.dir}/src/index.ts`),
+  );
+  const currentKeys = normalizeKnipIssues({
+    issues: [
+      ...standardReport.issues,
+      ...entryExportReport.issues.filter((record) => packageEntries.has(record.file)),
+    ],
+  });
 
   if (args.has("--update")) {
     const baseline: DeadExportBaseline = { grandfathered: currentKeys };

@@ -26,9 +26,7 @@
 //
 // Four write surfaces are manifested:
 //   - streams: the ONE producer module per decision-class stream family
-//     (`wait:` / `work:` / `route:` — the class vocabulary is protocol
-//     `Ledger.StreamRegistry`). A retained protocol class may have zero
-//     producers after its owning product path is removed.
+//     (`wait:` / `work:` / `route:`).
 //   - appendCore: the modules allowed to touch `ledger_event`/`ledger_head`
 //     rows directly (raw prepared statements) plus the storage-adapter
 //     binding that exposes them as the ledger sub-adapter.
@@ -54,7 +52,7 @@ import { Glob } from "bun";
 import { join } from "node:path";
 
 interface LedgerStreamProducer {
-  /** Stream class key — must match `Ledger.StreamRegistry`. */
+  /** Stream class key owned by this producer manifest. */
   readonly streamClass:
     | "wait"
     | "work"
@@ -63,8 +61,7 @@ interface LedgerStreamProducer {
     | "gateway_send"
     | "approval";
   /**
-   * Repo-relative paths of the enumerated modules that append this class's
-   * facts. A retained protocol class may have no current producer.
+   * Repo-relative paths of the enumerated modules that append this class's facts.
    */
   readonly producers: readonly string[];
   /** Which ledger write APIs the producers use. */

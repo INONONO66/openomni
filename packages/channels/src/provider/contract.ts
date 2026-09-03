@@ -27,10 +27,8 @@ export type ProviderDeliveryRoute = (
  *               through (discord gateway, slack Socket Mode).
  * - `webhook` — the platform calls into `ProviderRuntime.webhookHandler`
  *               (github).
- * - `bridge`  — an external daemon fronts the platform and the surface talks
- *               to the daemon (signal, whatsapp; none shipped yet).
  */
-export type IngestMode = "poll" | "socket" | "webhook" | "bridge";
+type IngestMode = "poll" | "socket" | "webhook";
 
 /**
  * Outbound text policy the provider's surface applies before sending: the
@@ -58,7 +56,7 @@ export interface RenderPolicy {
  * duck-typing the constructed object (the `DeliveringSurface` casts this
  * replaces).
  */
-export interface ProviderCapabilities {
+interface ProviderCapabilities {
   /** The runtime exposes `deliveryRoute` — the Resident can message into it. */
   readonly deliver: boolean;
   /** The runtime exposes `webhookHandler` — ingress arrives over HTTP. */

@@ -5,7 +5,7 @@ import { resolveCompactionGeometry, type CompactionYield } from "./geometry";
 import { elideToolOutputs, type ToolOutputElision } from "./reduce";
 import type { CompactionCandidate } from "./speculate";
 
-export interface SummarizationBudget {
+interface SummarizationBudget {
   readonly maxInputTokens: number;
   readonly maxOutputTokens: number;
   readonly contextWindowTokens: number;
@@ -121,7 +121,7 @@ const TIME_MARKER_RE = /^\[recorded \d{4}-\d{2}-\d{2}\]$/;
  * AND the closed grammar. A part wearing the tags around free text is NOT a
  * marker — it stays plain user speech and fails the byte check if new.
  */
-export function isTimeCarriageMarkerPart(part: Message.Part): boolean {
+function isTimeCarriageMarkerPart(part: Message.Part): boolean {
   return (
     part.type === "text" &&
     part.metadata?.timeCarriage === true &&

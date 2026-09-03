@@ -46,19 +46,6 @@ describe("rollback to cause", () => {
 });
 
 describe("composition substrate", () => {
-  test("mounted stages report active with their owned effect counts", async () => {
-    const composer = createComposer();
-    await composer.mount("a", (ctx) => {
-      ctx.effect(noop);
-      ctx.effect(noop);
-    });
-    await composer.mount("b", noop);
-    expect(composer.snapshot()).toEqual([
-      { id: "a", state: "active", effects: 2 },
-      { id: "b", state: "active", effects: 0 },
-    ]);
-  });
-
   test("dispose releases effects newest-first across and within fibers", async () => {
     const composer = createComposer();
     const order: string[] = [];
@@ -77,7 +64,6 @@ describe("composition substrate", () => {
     });
     await composer.dispose();
     expect(order).toEqual(["second.1", "first.2", "first.1"]);
-    expect(composer.snapshot().map((fiber) => fiber.state)).toEqual(["disposed", "disposed"]);
   });
 
   test("a failed mount releases its own effects and rethrows the cause", async () => {
@@ -99,10 +85,6 @@ describe("composition substrate", () => {
     ).rejects.toBe(boom);
     // Only the failed fiber unwound; the earlier fiber still owns its effect.
     expect(order).toEqual(["bad.release"]);
-    expect(composer.snapshot()).toEqual([
-      { id: "ok", state: "active", effects: 1 },
-      { id: "bad", state: "failed", effects: 0 },
-    ]);
   });
 
   test("a failed mount whose rollback also fails reports both causes", async () => {

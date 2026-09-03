@@ -18,7 +18,7 @@ import {
   decisionOption,
 } from "../../channel-authn";
 
-export interface GitHubAuthOptions {
+interface GitHubAuthOptions {
   readonly onDecision?: ChannelAuthnDecisionObserver;
 }
 
@@ -206,7 +206,7 @@ export class GitHubAdapter implements Channel.Surface {
   /** The run-and-reply frame: a handler throw or comment failure releases the delivery claim and returns 500 so GitHub retries. */
   private async dispatchWebhook(prepared: PreparedWebhook): Promise<Response> {
     try {
-      const outbound = await this.getHandler()(prepared.inbound);
+      const outbound = await (this.handler as Channel.MessageHandler)(prepared.inbound);
       if (outbound?.text) {
         await this.client.postComment(
           prepared.content.repo,
@@ -236,12 +236,5 @@ export class GitHubAdapter implements Channel.Surface {
     }
 
     return new Response("OK", { status: 200 });
-  }
-
-  private getHandler(): Channel.MessageHandler {
-    if (!this.handler) {
-      throw new Error(`[${this.id}] No handler registered. Call onMessage() before processing.`);
-    }
-    return this.handler;
   }
 }

@@ -41,11 +41,6 @@ export namespace Ledger {
   export const AdoptError = Schema.AdoptError;
   export type AdoptError = InstanceType<typeof Schema.AdoptError>;
 
-  export const StreamRegistry = Streams.StreamRegistry;
-
-  export const RouteDecided = Streams.RouteDecided;
-  export type RouteDecided = Streams.RouteDecided;
-
   export const RouteNotDelivered = Streams.RouteNotDelivered;
   export type RouteNotDelivered = Streams.RouteNotDelivered;
 }

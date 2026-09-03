@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, statSync } from "node:fs";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { statSync } from "node:fs";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -8,7 +8,6 @@ import {
   ChannelInstanceStore,
   PersonStore,
   SecretStore,
-  SqliteStorageAdapter,
   Storage,
   Vault,
 } from "@openomni/ledger";
@@ -17,7 +16,6 @@ import { declaredChannelProfile, validateProviderCredential } from "../src/chann
 import type { OpenOmniConfig } from "../src/config";
 import { MOUNTED_CHANNEL_DEFAULT_TIER } from "../src/gateway";
 import { desiredChannels, materializePersons, vaultCredentialReader } from "../src/provisioning/declared";
-import { runProvisioningInit } from "../src/provisioning/init";
 import { ensureVaultKeyFile, resolveKek, vaultKeyPath } from "../src/provisioning/vault-key";
 
 const NOW = 1_756_000_000_000;
@@ -327,100 +325,6 @@ describe("materializePersons", () => {
     expect(resolved?.endpoint.actorId).toBe("person:ino");
     const discord = ActorRegistry.resolveEndpoint("discord", "9876", "guild-1");
     expect(discord?.endpoint.workspace).toBe("guild-1");
-  });
-});
-
-describe("openomni init (§6)", () => {
-  let home: string;
-  let dbPath: string;
-
-  beforeEach(async () => {
-    home = await mkdtemp(join(tmpdir(), "init-test-"));
-    dbPath = join(home, "openomni.db");
-  });
-
-  afterEach(async () => {
-    await rm(home, { recursive: true });
-  });
-
-  function runInit(): string[] {
-    return runProvisioningInit({
-      config: baseConfig({
-        dbPath,
-        channels: {
-          telegram: { token: "tg-plain" },
-          discord: { token: "dc-plain" },
-          github: { secret: "gh-webhook-secret", token: "gh-token" },
-        },
-      }),
-      env: {},
-      home,
-      now: () => NOW,
-    });
-  }
-
-  function withStore<T>(fn: () => T): T {
-    Storage.initialize({ dbPath: ":memory:" });
-    Storage.configure(new SqliteStorageAdapter(dbPath));
-    try {
-      return fn();
-    } finally {
-      Storage.reset();
-    }
-  }
-
-  test("mints the key file, seals env credentials, and declares instances", async () => {
-    const lines = runInit();
-    expect(lines[0]).toContain("minted vault key file");
-    expect(lines).toHaveLength(4);
-    expect(existsSync(vaultKeyPath(home))).toBe(true);
-
-    const kekResolution = resolveKek({}, home);
-    if (kekResolution.kind !== "ok") throw new Error("expected the minted key to resolve");
-    withStore(() => {
-      const declared = ChannelInstanceStore.list().map((row) => row.id);
-      expect(declared.sort()).toEqual([
-        "channel:discord:main",
-        "channel:github:main",
-        "channel:telegram:main",
-      ]);
-      const secret = SecretStore.get("secret:channel-telegram-main");
-      if (secret === undefined) throw new Error("expected a sealed telegram credential");
-      expect(Vault.open(secret, kekResolution.kek).revealText()).toBe('{"token":"tg-plain"}');
-    });
-    const fileBytes = await readFile(dbPath);
-    expect(fileBytes.includes("tg-plain")).toBe(false);
-    expect(fileBytes.includes("gh-webhook-secret")).toBe(false);
-  });
-
-  test("re-running init leaves existing declarations untouched", () => {
-    runInit();
-    const second = runInit();
-    expect(second.filter((line) => line.includes("left untouched"))).toHaveLength(3);
-    withStore(() => {
-      expect(SecretStore.list()).toHaveLength(3);
-    });
-  });
-
-  test("with no channel env config init reports nothing to import", () => {
-    const lines = runProvisioningInit({
-      config: baseConfig({ dbPath }),
-      env: {},
-      home,
-      now: () => NOW,
-    });
-    expect(lines.at(-1)).toBe("no channel credentials in env config; nothing to import");
-  });
-
-  test("a corrupt env KEK is a fail-closed refusal, not a silent skip", () => {
-    expect(() =>
-      runProvisioningInit({
-        config: baseConfig({ dbPath }),
-        env: { OPENOMNI_VAULT_KEY: "%%%not-base64%%%" },
-        home,
-        now: () => NOW,
-      }),
-    ).toThrow(/vault is locked/);
   });
 });
 

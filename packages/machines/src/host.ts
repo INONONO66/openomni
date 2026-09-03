@@ -31,7 +31,7 @@ export interface MachineHostOptions {
  */
 const CELL_REPLY_GRACE_MS = 1000;
 
-export type RunCellOutcome =
+type RunCellOutcome =
   | Machine.CellResult
   | {
       readonly status: "refused";
@@ -223,10 +223,10 @@ export async function createMachineHost(options: MachineHostOptions): Promise<Ma
     },
     async fsOp(machineId, request) {
       const connectionId = connectionByMachine.get(machineId);
+      const attachment = connectionId === undefined ? undefined : attachments.get(connectionId);
       if (connectionId === undefined) {
         return { status: "refused", reason: "machine_not_attached" };
       }
-      const attachment = attachments.get(connectionId);
       if (!attachment?.capabilities.includes(Machine.WellKnownCapability.fsRead)) {
         return { status: "refused", reason: "fs_not_available" };
       }
