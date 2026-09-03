@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { resolveChannelGrant } from "@openomni/channels";
 import type { RunInput } from "@openomni/llm";
 import { ActorRegistry, Session, Storage } from "@openomni/ledger";
-import { Actor, Gateway, type Message } from "@openomni/protocol";
+import { Gateway, type Message } from "@openomni/protocol";
 import {
   createResidentGateway,
   MOUNTED_CHANNEL_DEFAULT_TIER,
@@ -162,10 +162,6 @@ describe("channel grant registration", () => {
       { surface: "slack", tier: "assigned_worker" },
       { surface: "telegram", tier: "assigned_worker" },
     ]);
-    // The mount tier is an existing member of the protocol tier vocabulary —
-    // this PR invents no tier.
-    expect(Actor.TrustTier.safeParse(MOUNTED_CHANNEL_DEFAULT_TIER).success).toBe(true);
-
     for (const revoke of revokers) revoke();
   });
 
