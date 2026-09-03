@@ -479,6 +479,28 @@ describe("Processor", () => {
         expect(processor.message.tokens.output).toBe(2);
       });
 
+      test("counts reasoning and tool-call emission in the estimated output", async () => {
+        // Default estimator (ceil(chars/4)). The step emits no text: 8 chars of
+        // reasoning plus a tool call serialized as name + JSON input
+        // ("read" + '{"path":"a"}' = 16 chars). Provider reports nothing usable,
+        // so the estimate must be ceil(24/4) = 6 - dropping either contribution
+        // yields 2 or 4 and fails here.
+        const processor = createProcessor({
+          createStream: streamOf([
+            { type: "reasoning-start", id: "r1", providerMetadata: {} },
+            { type: "reasoning-delta", id: "r1", text: "01234567" },
+            { type: "reasoning-end", id: "r1", providerMetadata: {} },
+            { type: "tool-call", toolCallId: "call-1", toolName: "read", input: { path: "a" } },
+            { type: "step-finish", finishReason: "tool_use", usage: {} },
+            { type: "finish" },
+          ]),
+        });
+
+        await processor.process({ system: "", promptText: "" });
+
+        expect(processor.message.tokens.output).toBe(6);
+      });
+
       test("estimates each step's output from that step's emission only", async () => {
         // Default estimator, so the output estimate reads the step's own
         // emitted assistant text. Step 1 emits 8 chars and reports usable
