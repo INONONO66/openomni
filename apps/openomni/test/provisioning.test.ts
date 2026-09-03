@@ -12,9 +12,10 @@ import {
   Storage,
   Vault,
 } from "@openomni/ledger";
-import type { Provisioning } from "@openomni/protocol";
+import { Actor, type Provisioning } from "@openomni/protocol";
 import { declaredChannelProfile, validateProviderCredential } from "../src/channels";
 import type { OpenOmniConfig } from "../src/config";
+import { MOUNTED_CHANNEL_DEFAULT_TIER } from "../src/gateway";
 import { desiredChannels, materializePersons, vaultCredentialReader } from "../src/provisioning/declared";
 import { runProvisioningInit } from "../src/provisioning/init";
 import { ensureVaultKeyFile, resolveKek, vaultKeyPath } from "../src/provisioning/vault-key";
@@ -210,7 +211,38 @@ describe("boot profile selection (§8.1, §8.4)", () => {
     // Env rows carry a constant bounce key: only process restart re-reads env.
     expect(selection.rows[0]?.instanceId).toBe("env:telegram");
     expect(selection.rows[0]?.key).toBe("env");
+    // #931: env config declares no tier, so the row mounts at the mount tier.
+    expect(selection.rows[0]?.defaultTier).toBe(MOUNTED_CHANNEL_DEFAULT_TIER);
     expect(selection.statuses).toEqual([]);
+  });
+
+  // #931: the ChannelInstance grant block is the Owner's tier decision; a
+  // declaration without one mounts at the mount tier, never owner.
+  test("a declared row carries its grant tier, and an undeclared grant mounts at the mount tier", () => {
+    const envelope = Vault.seal(
+      new TextEncoder().encode('{"token":"tg"}'),
+      Vault.kekOf(new Uint8Array(32).fill(7)),
+    );
+    SecretStore.put({
+      id: "secret:channel-telegram-main",
+      ciphertext: envelope.ciphertext,
+      wrappedDek: envelope.wrappedDek,
+      kekId: envelope.kekId,
+      purpose: "channel_credential",
+      createdAt: NOW,
+    });
+
+    // Every declared tier threads through exactly: a remap of any single tier
+    // (e.g. observer -> owner) fails here rather than surviving on one literal.
+    for (const tier of Actor.TrustTier.options) {
+      ChannelInstanceStore.put(instance({ grant: { defaultTier: tier } }));
+      const declaredTier = desiredChannels(envConfig, { OPENOMNI_VAULT_KEY: KEY_B64 }, home);
+      expect(declaredTier.rows[0]?.defaultTier).toBe(tier);
+    }
+
+    ChannelInstanceStore.put(instance({ grant: { allowedSenders: ["tg:1"] } }));
+    const noTier = desiredChannels(envConfig, { OPENOMNI_VAULT_KEY: KEY_B64 }, home);
+    expect(noTier.rows[0]?.defaultTier).toBe(MOUNTED_CHANNEL_DEFAULT_TIER);
   });
 
   test("§8.1 env ghost law: one disabled declaration shadows a live env token", () => {
