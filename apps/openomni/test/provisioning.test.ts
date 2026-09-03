@@ -12,7 +12,7 @@ import {
   Storage,
   Vault,
 } from "@openomni/ledger";
-import type { Provisioning } from "@openomni/protocol";
+import { Actor, type Provisioning } from "@openomni/protocol";
 import { declaredChannelProfile, validateProviderCredential } from "../src/channels";
 import type { OpenOmniConfig } from "../src/config";
 import { MOUNTED_CHANNEL_DEFAULT_TIER } from "../src/gateway";
@@ -232,9 +232,13 @@ describe("boot profile selection (§8.1, §8.4)", () => {
       createdAt: NOW,
     });
 
-    ChannelInstanceStore.put(instance({ grant: { defaultTier: "collaborator" } }));
-    const declaredTier = desiredChannels(envConfig, { OPENOMNI_VAULT_KEY: KEY_B64 }, home);
-    expect(declaredTier.rows[0]?.defaultTier).toBe("collaborator");
+    // Every declared tier threads through exactly: a remap of any single tier
+    // (e.g. observer -> owner) fails here rather than surviving on one literal.
+    for (const tier of Actor.TrustTier.options) {
+      ChannelInstanceStore.put(instance({ grant: { defaultTier: tier } }));
+      const declaredTier = desiredChannels(envConfig, { OPENOMNI_VAULT_KEY: KEY_B64 }, home);
+      expect(declaredTier.rows[0]?.defaultTier).toBe(tier);
+    }
 
     ChannelInstanceStore.put(instance({ grant: { allowedSenders: ["tg:1"] } }));
     const noTier = desiredChannels(envConfig, { OPENOMNI_VAULT_KEY: KEY_B64 }, home);
