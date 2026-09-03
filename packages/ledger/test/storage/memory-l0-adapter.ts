@@ -6,6 +6,7 @@ import {
   PolicyRow,
   type Storage as ProtocolStorage,
 } from "@openomni/protocol";
+import { alarmAction, inboxAction } from "../../src/storage/l0-action-builders.js";
 
 export interface MemoryL0Adapter {
   transaction<T>(operation: () => T): T;
@@ -97,20 +98,7 @@ export function createMemoryL0Adapter(): MemoryL0Adapter {
         const parsed = Alarm.Arm.parse(input);
         const session = sessions.get(parsed.sessionId);
         if (session === undefined || alarmRows.has(parsed.id) || actions.has(parsed.id)) return undefined;
-        const action = LedgerAction.Node.parse({
-          id: parsed.id,
-          parentId: null,
-          sessionId: parsed.sessionId,
-          kind: "alarm.arm",
-          intent: { encodingVersion: 1, value: { kind: parsed.kind, fireAt: parsed.fireAt } },
-          effect: {
-            encodingVersion: 1,
-            value: parsed.spec === undefined ? { status: "armed" } : { status: "armed", spec: parsed.spec.value },
-          },
-          irreversible: true,
-          ts: parsed.fireAt,
-          ordinal: session.revision + 1,
-        });
+        const action = alarmAction(parsed, session.revision + 1);
         const row = Alarm.Row.parse({
           ...parsed,
           status: "armed",
@@ -167,17 +155,7 @@ function appendInboxAction(
 ): LedgerAction.Node | undefined {
   const session = sessions.get(row.sessionId);
   if (session === undefined) return undefined;
-  const action = LedgerAction.Node.parse({
-    id: row.id,
-    parentId: null,
-    sessionId: row.sessionId,
-    kind: "prompt",
-    intent: row.origin,
-    effect: { encodingVersion: 1, value: { inboxKind: row.kind, content: row.content } },
-    irreversible: true,
-    ts: row.createdAt,
-    ordinal: session.revision + 1,
-  });
+  const action = inboxAction(row, session.revision + 1);
   actions.set(action.id, action);
   sessions.set(session.id, { ...session, revision: session.revision + 1 });
   return action;

@@ -392,7 +392,7 @@ describe("SqliteStorageAdapter", () => {
       upgraded.close();
     });
 
-    test("0030 constraints and fresh/reopen schema-data digest are stable", () => {
+    test("0031 constraints and fresh/reopen schema-data digest are stable", () => {
       const db = storageDb(adapter);
       const digest = () => ({
         schema: db

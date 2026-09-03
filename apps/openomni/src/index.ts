@@ -10,7 +10,6 @@ import { homedir } from "node:os";
 import {
   ActorRegistry,
   ApprovalStore,
-  Artifact,
   ChannelInstanceStore,
   initialize,
   PersonStore,

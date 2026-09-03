@@ -9,6 +9,7 @@ import {
   type ObservationSink,
   type Storage as ProtocolStorage,
 } from "@openomni/protocol";
+import { alarmAction, inboxAction } from "./l0-action-builders.js";
 
 const actionRowSchema = LedgerAction.Node;
 const inboxRowSchema = Inbox.Row;
@@ -246,19 +247,7 @@ function createInbox(
         if (session === null) return undefined;
         const receipt = appendAction(
           db,
-          LedgerAction.Append.parse({
-            id: row.id,
-            parentId: null,
-            sessionId: row.sessionId,
-            kind: "prompt",
-            intent: row.origin,
-            effect: {
-              encodingVersion: 1,
-              value: { inboxKind: row.kind, content: row.content },
-            },
-            irreversible: true,
-            ts: row.createdAt,
-          }),
+          inboxAction(row, session.revision + 1),
           session.revision,
         );
         if (receipt === undefined) return undefined;
@@ -344,19 +333,7 @@ function createAlarms(
         if (session === null) return undefined;
         const receipt = appendAction(
           db,
-          LedgerAction.Append.parse({
-            id: parsed.id,
-            parentId: null,
-            sessionId: parsed.sessionId,
-            kind: "alarm.arm",
-            intent: { encodingVersion: 1, value: { kind: parsed.kind, fireAt: parsed.fireAt } },
-            effect: {
-              encodingVersion: 1,
-              value: parsed.spec === undefined ? { status: "armed" } : { status: "armed", spec: parsed.spec.value },
-            },
-            irreversible: true,
-            ts: parsed.fireAt,
-          }),
+          alarmAction(parsed, session.revision + 1),
           session.revision,
         );
         if (receipt === undefined) return undefined;
