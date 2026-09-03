@@ -57,7 +57,7 @@ function openSession(prefix: string): string {
   }).id;
 }
 
-function delivery(sessionId: string, meta?: Readonly<Record<string, unknown>>): Gateway.Deliver {
+function delivery(sessionId: string, meta?: Gateway.Deliver["event"]["meta"]): Gateway.Deliver {
   const traceId = "0af7651916cd43dd8448eb211c80319c";
   return {
     sessionId,
