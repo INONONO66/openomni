@@ -11,16 +11,16 @@ surface event
   -> packages/channels driver
   -> packages/channels router (block -> wait -> channel -> actor -> surface)
   -> apps/openomni delivery port
-  -> Resident / delegation / response
+  -> session.prompt() -> durable inbox -> fenced runner -> response
 ```
 
-The same-domain inline delegation driver is the only deliberate in-process shortcut. Process and channel delegations still pass through durable admission and the single settlement fold.
+Resident and native workers enter the same session machine. The same-domain inline delegation driver remains the only deliberate in-process transport shortcut, but its worker is a normal parent-linked session with its own lease and revision. Process and channel delegations still pass through durable admission and the single settlement fold.
 
 ## Ledger
 
-`packages/ledger` owns the one durable database and typed store surfaces. It stores facts but does not decide product meaning. Perimeter stores are consumed by the channels router; session, delegation, memory-adjacent, and transcript stores are composed by the app. Cross-domain coupling happens through protocol IDs, not direct store reach-through.
+`packages/ledger` owns the one durable database and typed store surfaces. It stores facts but does not decide product meaning. A session's row, action tree, inbox, revision, lease fence, and generation pointers are durable; its live runner/controller is disposable `packages/agent` runtime state. Perimeter stores are consumed by the channels router, while the app composes delegation and session consumers. Cross-domain coupling happens through protocol IDs, not direct store reach-through.
 
-`bus.publish` remains observation, not authorization or persistence. L0 action append commits before its injected observation sink is called. Record-before-act paths must commit through a durable store or append surface before the external action. The frozen WorkerRun table remains a read-only compatibility surface.
+`bus.publish` remains observation, not authorization or persistence. L0 action append commits before its injected observation sink is called. Record-before-act paths must commit through a durable store or append surface before the external action. `session.get()` reads authoritative state without waking a runner; `session.watch()` is at-most-once notification, and a revision gap requires a fresh `get()`.
 
 ## Policy
 
@@ -38,7 +38,7 @@ ring 1  @openomni/telemetry       observation
         @openomni/placement       pure target selection
 ring 2  @openomni/llm             model access
         @openomni/ipc             thin transport
-ring 3  @openomni/agent           stateless LLM loop
+ring 3  @openomni/agent           session lifecycle and stateless LLM loop
 
 lateral driver/gateway band:
         @openomni/machines        machine attach and cell execution
@@ -60,7 +60,7 @@ Delegation addresses WHO:
 - `process`: independent local process through the app's process driver;
 - `channel`: registered external actor through the gateway send/Wait path.
 
-The removed local worker manager is not part of the final topology. Process delegation in `apps/openomni/src/delegation/` is the live process path.
+The removed local worker manager is not part of the final topology. Process delegation in `apps/openomni/src/delegation/` is the live process path. Native Resident and worker execution is assembled once behind `@openomni/agent` session handles; app adapters provide role-specific tools, system text, and runner configuration.
 
 Band rules:
 
@@ -82,17 +82,18 @@ Band rules:
 
 `apps/openomni` owns:
 
-- Resident context and conduct;
+- Resident and worker role configuration;
 - delegation admission and settlement;
-- tool catalog and placement consumption;
-- memory and session writeback;
+- tool definitions and placement consumption;
 - channel registration and injected gateway ports.
+
+`packages/agent` owns the common session assembly path: lease acquisition/heartbeat, durable inbox drain, turn envelopes, generation pinning, crash resume, and hibernation. The app never calls `ChatAgent.create` or rebuilds persisted history at a delivery boundary.
 
 The gateway never reads transcript content. The app does not re-derive platform identity or bypass perimeter decisions.
 
-## Work and Completion Contracts
+## Session and Completion Contracts
 
-`WorkItem` schemas and durable ledger surfaces remain core contracts. Terminal completion has one normative authority: current basis plus durable facts, Policy/Stakes/result/Owner authority, and a record-before-terminal admission. Every consumer must inherit it rather than adding a raw ledger completion shortcut. [Implementation Status](implementation-status.md) alone records current consumers.
+A native worker is represented by a normal session row with role `worker` and its parent Resident/worker session in `parentId`; there is no WorkItem/Attempt ownership layer. A turn records its intent and pre-minted result ID before runner entry, then seals exactly one `result | interrupted | error` terminal under the current fence. Cross-session terminal delivery remains delegated to the messaging slice; this session layer only establishes durable identity and execution.
 
 ## Historical Reconciliation
 

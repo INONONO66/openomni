@@ -40,7 +40,7 @@ Read `X <- Y` as Y may depend on X.
 protocol <- telemetry, ipc, ledger, policy, llm, placement, agent, machines, channels, apps/openomni, apps/desktop
 telemetry <- ledger, llm, agent, channels, apps/openomni
 ipc <- machines, apps/openomni
-ledger <- channels, apps/openomni
+ledger <- agent, channels, apps/openomni
 policy <- agent, channels, apps/openomni
 llm <- agent, apps/openomni
 placement <- agent, apps/openomni
@@ -58,7 +58,7 @@ channels <- apps/openomni
 | `policy` | protocol |
 | `llm` | protocol, telemetry; `src/` may depend on protocol |
 | `placement` | protocol |
-| `agent` | protocol, policy, placement, llm, telemetry; `src/` may depend on protocol, policy, placement, llm |
+| `agent` | protocol, ledger, policy, placement, llm, telemetry; `src/` may depend on protocol, ledger, policy, placement, llm |
 | `machines` | protocol, ipc |
 | `channels` | protocol, policy, ledger, telemetry; `src/` may depend on protocol, policy, ledger |
 | `apps/openomni` | protocol, channels, ipc, agent, llm, ledger, telemetry, policy, placement, machines |
