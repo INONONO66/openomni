@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS lease;
+DROP TABLE IF EXISTS conversation;
+DROP TABLE IF EXISTS engagement;

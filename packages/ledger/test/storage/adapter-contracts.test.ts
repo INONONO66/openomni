@@ -3,9 +3,8 @@ import type { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Engagement, Wait } from "@openomni/protocol";
+import { Wait } from "@openomni/protocol";
 import { DelegationStore } from "../../src/delegation/index.js";
-import { EngagementStore } from "../../src/engagement/index.js";
 import { SessionInfo } from "../../src/session/info.js";
 import { Migration } from "../../src/storage/migration-runner.js";
 import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage.js";
@@ -35,6 +34,16 @@ afterEach(() => {
 });
 
 describe("SQLite adapter contract guards", () => {
+  test("fresh schemas omit retired lifecycle tables", () => {
+    const rows = database()
+      .query(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('conversation', 'lease', 'engagement') ORDER BY name",
+      )
+      .all();
+
+    expect(rows).toEqual([]);
+  });
+
   test("delegation reads reject a row whose key disagrees with its payload", () => {
     const record = DelegationStore.create(buildDelegationRecord());
     database()
@@ -55,29 +64,6 @@ describe("SQLite adapter contract guards", () => {
       "Delegation already exists",
     );
     expect(DelegationStore.get(conflicting.delegationId)).toBeUndefined();
-  });
-
-  test("engagement compare-and-set enforces key and one-step revision", () => {
-    const record = EngagementStore.open(
-      {
-        id: "eng-adapter-guard",
-        ownerSessionId: "session-owner",
-        title: "adapter guard",
-        terms: {},
-      },
-      "trace-adapter",
-      100,
-    );
-    const subAdapter = adapter.engagement;
-    if (!subAdapter) throw new Error("engagement adapter missing");
-    const next = Engagement.Record.parse({ ...record, revision: record.revision + 1, updatedAt: 101 });
-
-    expect(() => subAdapter.compareAndSet("eng-foreign", record.revision, next)).toThrow(
-      "Engagement id mismatch",
-    );
-    expect(() =>
-      subAdapter.compareAndSet(record.id, record.revision, { ...next, revision: record.revision + 2 }),
-    ).toThrow("Engagement revision must advance exactly once");
   });
 
   test("wait correlation and compare-and-set fail closed on malformed calls", () => {

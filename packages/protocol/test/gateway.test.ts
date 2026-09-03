@@ -49,7 +49,7 @@ describe("Gateway.Deliver", () => {
     const parsed = Gateway.Deliver.parse({
       sessionId: "s-1",
       actorContext: { ...actorContext, actorId: "a-7", trustTier: "collaborator" },
-      waitContext: { waitId: "w-1", allowedAction: "report_result", engagementId: "e-1" },
+      waitContext: { waitId: "w-1", allowedAction: "report_result" },
       event,
       decision,
     });
@@ -197,25 +197,6 @@ describe("Gateway.SendInput (re-homed #215 vocabulary)", () => {
   test("class is additive-optional: absent parses (defaults from operation downstream)", () => {
     const parsed = Gateway.SendInput.parse({ ...base, operation: "fire_and_forget" });
     expect(parsed.class).toBeUndefined();
-  });
-
-  test("conversation and lease pins reject an explicit notify class", () => {
-    expect(
-      Gateway.SendInput.safeParse({
-        ...base,
-        operation: "fire_and_forget",
-        class: "notify",
-        conversationId: "conversation-1",
-      }).success,
-    ).toBe(false);
-    expect(
-      Gateway.SendInput.safeParse({
-        ...base,
-        operation: "fire_and_forget",
-        class: "notify",
-        leaseId: "lease-1",
-      }).success,
-    ).toBe(false);
   });
 
   test("class coherence: converse ⟺ awaited, notify ⟺ fire_and_forget", () => {

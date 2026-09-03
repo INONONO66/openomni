@@ -60,10 +60,7 @@ interface LedgerStreamProducer {
     | "work"
     | "route"
     | "route_correction"
-    | "engagement"
     | "gateway_send"
-    | "conversation"
-    | "lease"
     | "approval";
   /**
    * Repo-relative paths of the enumerated modules that append this class's
@@ -114,35 +111,11 @@ export const LEDGER_PRODUCER_MANIFEST: LedgerProducerManifest = {
       writes: "append",
     },
     {
-      // #P1 conversation window (docs/conversation-and-message-io.md §3.4) —
-      // one producer: the ledger ConversationStore (append-before-CAS, no
-      // adoption path — the stream class is born with the table).
-      streamClass: "conversation",
-      producers: ["packages/ledger/src/conversation/index.ts"],
-      writes: "append",
-    },
-    {
-      // #P2 lease (docs/conversation-and-message-io.md §3.5) — one producer:
-      // the ledger LeaseStore (append-before-CAS, no adoption path — the
-      // stream class is born with the table).
-      streamClass: "lease",
-      producers: ["packages/ledger/src/lease/index.ts"],
-      writes: "append",
-    },
-    {
       // #P3 approval (docs/conversation-and-message-io.md §6) — one producer:
       // the ledger ApprovalStore (append-before-CAS, no adoption path — the
       // stream class is born with the table).
       streamClass: "approval",
       producers: ["packages/ledger/src/approval/index.ts"],
-      writes: "append",
-    },
-    {
-      // #709 engagement machine (gateway-design §5) — brain-domain surface,
-      // one producer: the ledger EngagementStore (append-before-CAS, no
-      // adoption path — the stream class is born with the table).
-      streamClass: "engagement",
-      producers: ["packages/ledger/src/engagement/index.ts"],
       writes: "append",
     },
     {
@@ -162,7 +135,7 @@ export const LEDGER_PRODUCER_MANIFEST: LedgerProducerManifest = {
   ],
   // Decision-class commit sequencing (append at expectedHead → pre-cutover
   // adoption → projection compare-and-set, in one transaction) has one owner.
-  // The wait/work/engagement producers below supply their own facts, adoption
+  // The wait/work producers below supply their own facts, adoption
   // genesis, and conflict taxonomy through it.
   sharedAppendExecutor: "packages/ledger/src/storage/commit-coordinator.ts",
   frozenTableWriters: [

@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { z } from "zod";
 
-export type SqliteJsonDataTable = "wait" | "conversation" | "lease" | "approval";
+export type SqliteJsonDataTable = "wait" | "approval";
 
 export type SqliteStringEqualityColumn =
   | "endpoint_id"

@@ -33,14 +33,6 @@ export const Correlation = z
     threadId: z.string().min(1).optional(),
     tokenHash: z.string().min(1).optional(),
     externalConversationId: z.string().min(1).optional(),
-    /**
-     * Engagement resumption context (#709): stamped by an engagement-scoped
-     * awaited send and copied into `Gateway.WaitContext.engagementId` at
-     * delivery. NEVER a matching key — `CorrelationQuery` has no slot for it,
-     * so it cannot influence which wait an inbound message resumes
-     * (gateway-design §5: authority is independent of engagement matching).
-     */
-    engagementId: z.string().min(1).optional(),
   })
   .strict();
 export type Correlation = z.infer<typeof Correlation>;
@@ -164,9 +156,7 @@ export const Create = RecordBase.omit({
 });
 export type Create = z.infer<typeof Create>;
 
-// Derived from the single owner of the correlation fields; omitting
-// engagementId is the load-bearing part (it must never become a matching key).
-export const CorrelationQuery = Correlation.omit({ engagementId: true })
+export const CorrelationQuery = Correlation
   .strict()
   .refine((query) => Object.values(query).some((value) => value !== undefined), {
     message: "At least one correlation field is required",

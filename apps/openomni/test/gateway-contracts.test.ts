@@ -1,9 +1,9 @@
-import { newTraceId } from "@openomni/telemetry";
+import { Bus, newTraceId } from "@openomni/telemetry";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { resolveChannelGrant } from "@openomni/channels";
 import type { RunInput } from "@openomni/llm";
 import { ActorRegistry, Session, Storage } from "@openomni/ledger";
-import { Gateway, type Message } from "@openomni/protocol";
+import { Gateway, MessagingEvents, type Message } from "@openomni/protocol";
 import {
   createMountedChannelGrantRegistrar,
   createResidentGateway,
@@ -357,7 +357,19 @@ describe("Resident active-egress composition", () => {
     expect(deliveries).toHaveLength(0);
 
     grants = [replyGrant];
-    const reply = await gateway.messaging.send({
+    const accepted = new Promise<string>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        unsubscribe();
+        reject(new Error("timed out waiting for messaging.sent"));
+      }, 1_000);
+      const unsubscribe = Bus.subscribe(MessagingEvents.Sent, (event) => {
+        if (event.messageId !== "message:reply") return;
+        clearTimeout(timer);
+        unsubscribe();
+        resolve(event.grantId);
+      });
+    });
+    const send = gateway.messaging.send({
       messageId: "message:reply",
       senderId: "resident",
       target: { actorId: "alice" },
@@ -366,7 +378,10 @@ describe("Resident active-egress composition", () => {
       at: NOW,
       traceId: "trace:reply",
     });
+    const [reply, acceptedGrant] = await Promise.all([send, accepted]);
+
     expect(reply.kind).toBe("sent");
+    expect(acceptedGrant).toBe("reply:resident->alice");
     expect(deliveries).toEqual(["warm reply"]);
   });
 });

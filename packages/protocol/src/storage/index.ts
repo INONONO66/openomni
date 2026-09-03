@@ -4,11 +4,9 @@ import type { Actor } from "../actor/index.js";
 import type { AppConnector } from "../app-connector/index.js";
 import type { Ledger } from "../ledger/index.js";
 import type { Delegation } from "../delegation/index.js";
-import type { Engagement } from "../engagement/index.js";
-import type { Conversation } from "../conversation/index.js";
 import type { Approval } from "../approval/index.js";
-import type { Lease } from "../lease/index.js";
 import type { Wait } from "../wait/index.js";
+import type { WorkItem } from "../work-item/index.js";
 import type { Gateway } from "../gateway/index.js";
 import type { Provisioning } from "../provisioning/index.js";
 
@@ -109,23 +107,19 @@ export namespace Storage {
     factsByType(type: string): Ledger.RecordedFact[];
   }
 
-  export interface EngagementListFilter {
-    ownerSessionId?: string;
-    states?: Engagement.State[];
+  export interface WorkItemListFilter {
+    status?: WorkItem.Status[];
+    assigneeId?: string;
+    sessionId?: string;
+    parentId?: string;
   }
 
-  /**
-   * Engagement rows (brain surface, #709): the brain is their sole writer.
-   * Same discipline as Wait: INSERT receipt on create, revision
-   * compare-and-set on every transition write.
-   */
-  export interface EngagementSubAdapter {
-    /** INSERT receipt: false when the id already exists. */
-    create(record: Engagement.Record): boolean;
-    get(id: string): Engagement.Record | undefined;
-    list(filter?: EngagementListFilter): Engagement.Record[];
-    /** Revision compare-and-set (UPDATE ... WHERE id AND revision): changes===1 receipt. */
-    compareAndSet(id: string, expectedRevision: number, record: Engagement.Record): boolean;
+  export interface WorkItemSubAdapter {
+    create(hash: string, item: WorkItem.Info): boolean;
+    get(hash: string): WorkItem.Info | undefined;
+    compareAndSet(hash: string, expectedHead: number, item: WorkItem.Info): boolean;
+    list(filter?: WorkItemListFilter): WorkItem.Info[];
+    remove(hash: string): boolean;
   }
 
   /**
@@ -172,17 +166,6 @@ export namespace Storage {
     compareAndSet(id: string, expectedRevision: number, record: Wait.Record): boolean;
   }
 
-  export interface ConversationSubAdapter {
-    /** INSERT receipt: false when the id already exists. */
-    create(record: Conversation.Record): boolean;
-    get(id: string): Conversation.Record | undefined;
-    list(state?: Conversation.State[]): Conversation.Record[];
-    /** Open windows pinned to one endpoint — the router's inbound correlation read. */
-    findOpenByEndpoint(endpointId: string): Conversation.Record[];
-    /** Revision compare-and-set (UPDATE ... WHERE id AND revision): changes===1 receipt. */
-    compareAndSet(id: string, expectedRevision: number, record: Conversation.Record): boolean;
-  }
-
   export interface ApprovalSubAdapter {
     /** INSERT receipt: false when the id already exists. */
     create(record: Approval.Record): boolean;
@@ -192,19 +175,6 @@ export namespace Storage {
     countPendingSince(since: number): number;
     /** Revision compare-and-set (UPDATE ... WHERE id AND revision): changes===1 receipt. */
     compareAndSet(id: string, expectedRevision: number, record: Approval.Record): boolean;
-  }
-
-  export interface LeaseSubAdapter {
-    /** INSERT receipt: false when the id already exists. */
-    create(record: Lease.Record): boolean;
-    get(id: string): Lease.Record | undefined;
-    list(state?: Lease.State[]): Lease.Record[];
-    /** Live leases scoped to one conversation — the carve-sum and revocation reads. */
-    listLiveByConversation(conversationId: string, now: number): Lease.Record[];
-    /** Live leases held by one delegation — the admission-relaxation read. */
-    listLiveByHolder(holderDelegationId: string, now: number): Lease.Record[];
-    /** Revision compare-and-set (UPDATE ... WHERE id AND revision): changes===1 receipt. */
-    compareAndSet(id: string, expectedRevision: number, record: Lease.Record): boolean;
   }
 
   /**

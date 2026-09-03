@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { Engagement, Wait } from "@openomni/protocol";
+import { Wait, WorkItem } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
-import { EngagementStore, Storage, WaitStore } from "../../src/index";
+import { Storage, WaitStore, WorkItemStore } from "../../src/index";
 import { buildWaitCreate, commitCancel, commitReply } from "../helpers/wait";
 
 /**
@@ -17,11 +17,9 @@ import { buildWaitCreate, commitCancel, commitReply } from "../helpers/wait";
  *      rolls the appended fact back, so head === revision always);
  *   4. Bus publishes fire only AFTER the transaction committed;
  *   5. a stale head surfaces as the store's OWN typed conflict error
- *      (Wait/Engagement `revision_conflict`) — the taxonomy is per-domain,
- *      the mechanics are not.
+ *      (Wait `revision_conflict`, WorkItem WorkItemRevisionError) — the
+ *      taxonomy is per-domain, the mechanics are not.
  */
-
-const T0 = 1_700_000_000_000;
 
 beforeEach(() => {
   Bus.reset();
@@ -43,21 +41,11 @@ function ledger() {
 }
 
 describe("decision-class commit sequencing (shared contract)", () => {
-  test("head equals the projected revision after the opening fact in every store", () => {
+  test("head equals the projected revision after the opening fact", () => {
     const wait = WaitStore.create(buildWaitCreate(), "trace-w");
-    const engagement = EngagementStore.open(
-      { id: "eng-1", ownerSessionId: "ses-1", title: "t", terms: { spendCeiling: 1 } },
-      "trace-e",
-      T0,
-    );
-
     const waitHead = ledger().headFact(`wait:${wait.id}`);
     expect(waitHead?.type).toBe("wait.opened");
     expect(waitHead?.seq).toBe(wait.revision);
-
-    const engagementHead = ledger().headFact(`engagement:${engagement.id}`);
-    expect(engagementHead?.type).toBe("engagement.opened");
-    expect(engagementHead?.seq).toBe(engagement.revision);
   });
 
   test("each transition appends at the pre-transition revision and advances head with it", () => {
@@ -75,21 +63,6 @@ describe("decision-class commit sequencing (shared contract)", () => {
     expect(ledger().headFact(`wait:${wait.id}`)?.seq).toBe(2);
     expect(ledger().headFact(`wait:${wait.id}`)?.type).toBe("wait.attached");
     expect(WaitStore.get(wait.id)?.revision).toBe(2);
-
-    const engagement = EngagementStore.open(
-      { id: "eng-1", ownerSessionId: "ses-1", title: "t", terms: { spendCeiling: 1 } },
-      "trace-e",
-      T0,
-    );
-    const moved = EngagementStore.transition(
-      engagement.id,
-      { to: "deliberating", at: T0 + 1, reason: "test" },
-      "trace-move",
-    );
-    if (moved.kind !== "transitioned") throw new Error(`expected transitioned, got ${moved.kind}`);
-    expect(moved.record.revision).toBe(2);
-    expect(ledger().headFact(`engagement:${engagement.id}`)?.seq).toBe(2);
-    expect(EngagementStore.get(engagement.id)?.revision).toBe(2);
   });
 
   test("a stale expected head writes nothing and surfaces the domain's typed conflict", () => {
@@ -120,36 +93,6 @@ describe("decision-class commit sequencing (shared contract)", () => {
     expect(WaitStore.get(wait.id)?.revision).toBe(1);
   });
 
-  test("engagement reports its own conflict taxonomy for the same stale-head mechanic", () => {
-    const engagement = EngagementStore.open(
-      { id: "eng-1", ownerSessionId: "ses-1", title: "t", terms: { spendCeiling: 1 } },
-      "trace-e",
-      T0,
-    );
-    const appended = ledger().append(
-      { streamId: `engagement:${engagement.id}`, type: "engagement.probe", data: { revision: 2 } },
-      engagement.revision,
-    );
-    expect(appended.kind).toBe("appended");
-
-    let thrown: unknown;
-    try {
-      EngagementStore.transition(
-        engagement.id,
-        { to: "deliberating", at: T0 + 1, reason: "test" },
-        "trace-move",
-      );
-    } catch (error) {
-      thrown = error;
-    }
-    expect(Engagement.StoreError.isInstance(thrown)).toBe(true);
-    if (!Engagement.StoreError.isInstance(thrown)) throw new Error("unreachable");
-    expect(thrown.data.code).toBe("revision_conflict");
-    expect(thrown.data.engagementId).toBe(engagement.id);
-    expect(EngagementStore.get(engagement.id)?.state).toBe("planning");
-    expect(EngagementStore.get(engagement.id)?.revision).toBe(1);
-  });
-
   test("SQLITE_BUSY at the transaction entry maps to each store's typed unavailable", () => {
     // The store transaction entry is the single mapping point: a busy
     // database means nothing committed, so callers branch on the typed
@@ -171,18 +114,6 @@ describe("decision-class commit sequencing (shared contract)", () => {
       if (!Wait.StoreError.isInstance(waitError)) throw new Error("unreachable");
       expect(waitError.data.code).toBe("unavailable");
       expect(waitError.data.message).toContain("database is locked");
-
-      const engagementError = captureThrown(() =>
-        EngagementStore.open(
-          { id: "eng-1", ownerSessionId: "ses-1", title: "t", terms: { spendCeiling: 1 } },
-          "trace-e",
-          T0,
-        ),
-      );
-      expect(Engagement.StoreError.isInstance(engagementError)).toBe(true);
-      if (!Engagement.StoreError.isInstance(engagementError)) throw new Error("unreachable");
-      expect(engagementError.data.code).toBe("unavailable");
-      expect(engagementError.data.message).toContain("database is locked");
     } finally {
       Object.defineProperty(adapter, "transaction", { configurable: true, value: original });
     }
@@ -191,7 +122,7 @@ describe("decision-class commit sequencing (shared contract)", () => {
   test("Bus publishes land only after the transaction committed", async () => {
     const seen: string[] = [];
     Bus.observe((event) => {
-      if (event.name.startsWith("wait.") || event.name.startsWith("engagement.")) {
+      if (event.name.startsWith("wait.")) {
         // At observation time the durable write is already visible.
         seen.push(event.name);
       }
@@ -221,6 +152,28 @@ describe("decision-class commit sequencing (shared contract)", () => {
     expect(WaitStore.get(wait.id)?.revision).toBe(headAfterCancel?.seq);
   });
 
+  test("work item transitions share the same head-follows-revision binding", async () => {
+    const created = await WorkItemStore.create(
+      {
+        name: "commit-sequencing",
+        sourceMessageId: "msg-commit-seq",
+        sourceChannel: "test",
+        intent: "verify",
+        goal: "pin the shared commit sequence",
+        sessionId: "ses-1",
+        acceptanceCriteria: ["head follows revision"],
+      },
+      "trace-wi",
+    );
+    expect(ledger().headFact(`work:${created.workItemId}`)?.type).toBe("work_item.created");
+    expect(ledger().headFact(`work:${created.workItemId}`)?.seq).toBe(created.revision);
+
+    const started = await WorkItemStore.start(created.workItemId, "trace-start");
+    expect(started?.revision).toBe(created.revision + 1);
+    expect(ledger().headFact(`work:${created.workItemId}`)?.seq).toBe(started?.revision);
+    if (!started) throw new Error("start returned undefined for an existing work item");
+    expect(WorkItem.deriveStatus(started)).toBe("running");
+  });
 });
 
 function captureThrown(fn: () => unknown): unknown {

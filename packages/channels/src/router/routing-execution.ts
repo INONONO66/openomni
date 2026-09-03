@@ -129,18 +129,6 @@ export async function executeWaitRoute<Event extends Gateway.DeliveredEvent>(
   if (wait.kind === "none") {
     return { kind: "continue", event: resolution.event, authority: "required" };
   }
-  if (wait.kind === "conversation") {
-    // Conversation tier (§3.4): the window routes the reply to its owner's
-    // session; the delivery still settles the delegation the window was
-    // opened for, via the WaitContext waitContextOf derives from the
-    // deterministic `conv:<waitId>` id. The wait row itself is settled by
-    // the brain's settleFromReply — the router never writes it here.
-    // The window is the authority (§3.4) — the routed pre-run's trust-tier
-    // ladder must not re-judge a delivery the window already admitted, the
-    // same precedence a wait-correlated reply enjoys.
-    return { kind: "continue", event: resolution.event, authority: "wait_precedence" };
-  }
-
   // The matcher only returns candidates; the protocol fold decides
   // (duplicate / late / unknown / ambiguous / attach / resolve) and the
   // store persists the outcome before the owner session sees the reply.

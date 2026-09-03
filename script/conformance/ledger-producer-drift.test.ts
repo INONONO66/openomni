@@ -109,6 +109,18 @@ describe("ledger producer drift", () => {
     );
   });
 
+  test("retired lifecycle stream classes have no producer or registry entry", () => {
+    const retired = new Set(["conversation", "lease", "engagement"]);
+    const manifested = LEDGER_PRODUCER_MANIFEST.streams
+      .map((entry) => entry.streamClass)
+      .filter((streamClass) => retired.has(streamClass));
+    const registered = Object.keys(LedgerTypes.StreamRegistry).filter((streamClass) =>
+      retired.has(streamClass),
+    );
+
+    expect({ manifested, registered }).toEqual({ manifested: [], registered: [] });
+  });
+
   test("manifest stream classes equal the protocol registry and producers are unique", () => {
     const classes: string[] = LEDGER_PRODUCER_MANIFEST.streams.map((entry) => entry.streamClass);
     expect(classes.sort()).toEqual(Object.keys(LedgerTypes.StreamRegistry).sort());

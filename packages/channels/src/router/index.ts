@@ -292,25 +292,10 @@ function replayReplyGrantAdmissions(): readonly ReplyGrantAdmission[] {
 
 function waitContextOf(resolution: KernelRouteResolution): Gateway.WaitContext | undefined {
   const wait = resolution.waitExecution;
-  if (wait.kind === "conversation") {
-    // The window's deterministic `conv:<waitId>` id names the wait the
-    // window was opened for (§3.4) — the brain settles that delegation from
-    // this context exactly as a wait-tier delivery would.
-    return { waitId: wait.waitId, allowedAction: "report_result" };
-  }
   if (wait.kind !== "wait") return undefined;
   const allowedAction = Wait.AllowedAction.safeParse(wait.requestedAction);
   if (!allowedAction.success) return undefined;
-  // #709: engagement resumption context, carried OPAQUELY from the wait row's
-  // correlation to the brain (gateway-design §4 id bridge). The router never
-  // reads engagement state — matching stayed correlation-only (engagementId
-  // is not a CorrelationQuery key), so this can never redirect a delivery.
-  const engagementId = wait.record.correlation.engagementId;
-  return {
-    waitId: wait.record.id,
-    allowedAction: allowedAction.data,
-    ...(engagementId === undefined ? {} : { engagementId }),
-  };
+  return { waitId: wait.record.id, allowedAction: allowedAction.data };
 }
 
 export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
