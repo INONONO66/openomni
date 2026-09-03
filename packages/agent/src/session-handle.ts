@@ -58,9 +58,26 @@ export interface SessionBoundaryResult {
 }
 
 export type SessionRunnerResult =
-  | { readonly kind: "result"; readonly text: string }
+  | {
+      readonly kind: "result";
+      readonly text: string;
+      readonly finishReason?: "stop" | "max-steps" | "stalled";
+      readonly usage?: {
+        readonly inputTokens: number;
+        readonly outputTokens: number;
+        readonly totalTokens: number;
+        readonly reasoningTokens?: number;
+        readonly cacheReadTokens?: number;
+        readonly cacheWriteTokens?: number;
+      };
+    }
   | { readonly kind: "interrupted"; readonly text?: string }
-  | { readonly kind: "error"; readonly text: string };
+  | {
+      readonly kind: "error";
+      readonly text: string;
+      readonly cause?: Error;
+      readonly reported?: true;
+    };
 
 export type SessionRunner = (input: SessionRunnerInput) => Promise<SessionRunnerResult>;
 
@@ -89,7 +106,7 @@ export interface SessionHandle {
   readonly id: string;
   readonly tools: SessionToolsHandle;
   readonly system: { readonly blocks: SessionSystemBlocksHandle };
-  prompt(content: string, origin?: Inbox.Origin): Promise<void>;
+  prompt(content: string, origin?: Inbox.Origin): Promise<SessionRunnerResult | undefined>;
   interrupt(origin?: Inbox.Origin): Promise<void>;
   resume(origin?: Inbox.Origin): Promise<void>;
   get(options?: SessionGetOptions): SessionTurn.Snapshot;
@@ -114,7 +131,7 @@ export class SessionCommitError extends Error {
 interface SessionController {
   readonly handle: SessionHandle;
   readonly owner: string;
-  reconcile(): Promise<void>;
+  reconcile(): Promise<SessionRunnerResult | undefined>;
   isRunning(): boolean;
 }
 
@@ -225,7 +242,7 @@ function createController(
   const entropy = runtime.entropy ?? crypto.randomUUID;
   const owner = `${runtime.processId ?? String(process.pid)}:${entropy()}`;
   const scheduleHeartbeat = runtime.scheduleHeartbeat ?? defaultHeartbeat;
-  let active: Promise<void> | undefined;
+  let active: Promise<SessionRunnerResult | undefined> | undefined;
   let controller: AbortController | undefined;
   let fence = SessionHandleStore.row(sessionId).leaseFence;
   let closed = false;
@@ -266,8 +283,12 @@ function createController(
     tools,
     system: { blocks },
     prompt: (content, origin = internalOrigin(sessionId)) => enqueue("prompt", content, origin),
-    interrupt: (origin = internalOrigin(sessionId)) => enqueue("interrupt", "", origin),
-    resume: (origin = internalOrigin(sessionId)) => enqueue("resume", "", origin),
+    interrupt: async (origin = internalOrigin(sessionId)) => {
+      await enqueue("interrupt", "", origin);
+    },
+    resume: async (origin = internalOrigin(sessionId)) => {
+      await enqueue("resume", "", origin);
+    },
     get: (options = {}) => SessionHandleStore.getSnapshot(sessionId, options.turns ?? 1),
     watch: (options = {}) =>
       SessionHandleStore.watchSnapshot(sessionId, options.turns ?? 1, runtime.observations),
@@ -279,7 +300,11 @@ function createController(
     },
   };
 
-  async function enqueue(kind: Inbox.Kind, content: string, origin: Inbox.Origin): Promise<void> {
+  async function enqueue(
+    kind: Inbox.Kind,
+    content: string,
+    origin: Inbox.Origin,
+  ): Promise<SessionRunnerResult | undefined> {
     if (closed) throw new Error(`session handle is closed: ${sessionId}`);
     const current = SessionHandleStore.row(sessionId);
     const actions = SessionHandleStore.tree(sessionId);
@@ -293,11 +318,11 @@ function createController(
       parentActionId: actions.at(-1)?.id ?? null,
     });
     if (kind === "interrupt" && current.state === "running") controller?.abort();
-    if (kind === "resume" && current.state === "running") return;
-    await reconcile();
+    if (kind === "resume" && current.state === "running") return undefined;
+    return reconcile();
   }
 
-  async function reconcile(): Promise<void> {
+  async function reconcile(): Promise<SessionRunnerResult | undefined> {
     if (closed || active !== undefined) return active;
     const work = driveAvailable().finally(() => {
       active = undefined;
@@ -306,34 +331,35 @@ function createController(
     return work;
   }
 
-  async function driveAvailable(): Promise<void> {
+  async function driveAvailable(): Promise<SessionRunnerResult | undefined> {
+    let result: SessionRunnerResult | undefined;
     for (;;) {
-      if (closed) return;
+      if (closed) return result;
       const actions = SessionHandleStore.tree(sessionId);
       const open = SessionHandleStore.openTurns(actions).at(-1);
       if (open !== undefined) {
-        await resumeTurn(open);
+        result = await resumeTurn(open);
         continue;
       }
       const pending = SessionHandleStore.pendingInbox(sessionId);
-      if (pending.length === 0) return;
+      if (pending.length === 0) return result;
       const current = SessionHandleStore.row(sessionId);
       if (current.state === "interrupted") {
         const resume = pending.find((item) => item.kind === "resume");
-        if (resume === undefined) return;
-        await resumeInterrupted(resume);
+        if (resume === undefined) return result;
+        result = await resumeInterrupted(resume);
         continue;
       }
       const prompts = pending.filter((item) => item.kind === "prompt");
       if (prompts.length > 0) {
-        await startTurn();
+        result = await startTurn();
         continue;
       }
       await consumeNoopInbox(pending);
     }
   }
 
-  async function startTurn(): Promise<void> {
+  async function startTurn(): Promise<SessionRunnerResult | undefined> {
     const current = SessionHandleStore.row(sessionId);
     fence = acquire(current.leaseFence);
     const actions = SessionHandleStore.tree(sessionId);
@@ -368,9 +394,9 @@ function createController(
     const row = requireCommit(committed);
     if (pending.some((item) => item.kind === "interrupt")) {
       await hibernate(row);
-      return;
+      return { kind: "interrupted" };
     }
-    await runTurn({
+    return runTurn({
       turnId,
       resultId,
       parentActionId: envelope.id,
@@ -381,11 +407,12 @@ function createController(
     });
   }
 
-  async function resumeTurn(open: SessionHandleStore.OpenTurn): Promise<void> {
+  async function resumeTurn(open: SessionHandleStore.OpenTurn): Promise<SessionRunnerResult> {
     if (open.resumeCount >= SessionHandleStore.RESUME_BUDGET) {
       fence = acquire(SessionHandleStore.row(sessionId).leaseFence);
-      await seal(open, { kind: "error", text: "session resume budget exhausted" });
-      return;
+      const exhausted = { kind: "error" as const, text: "session resume budget exhausted" };
+      await seal(open, exhausted);
+      return exhausted;
     }
     const current = SessionHandleStore.row(sessionId);
     fence = acquire(current.leaseFence);
@@ -416,7 +443,7 @@ function createController(
       releaseLease: false,
     });
     requireCommit(committed);
-    await runTurn({
+    return runTurn({
       turnId: open.turnId,
       resultId,
       parentActionId: resumeId,
@@ -427,11 +454,11 @@ function createController(
     });
   }
 
-  async function resumeInterrupted(item: Inbox.Row): Promise<void> {
+  async function resumeInterrupted(item: Inbox.Row): Promise<SessionRunnerResult | undefined> {
     const terminal = latestTerminal(SessionHandleStore.tree(sessionId));
     if (terminal === undefined) {
       await consumeNoopInbox([item]);
-      return;
+      return undefined;
     }
     const current = SessionHandleStore.row(sessionId);
     fence = acquire(current.leaseFence);
@@ -463,7 +490,7 @@ function createController(
       releaseLease: false,
     });
     requireCommit(committed);
-    await runTurn({
+    return runTurn({
       turnId,
       resultId,
       parentActionId: resume.id,
@@ -482,9 +509,10 @@ function createController(
     readonly resumeCount: number;
     readonly generation: SessionGeneration.Snapshot;
     readonly resume: boolean;
-  }): Promise<void> {
+  }): Promise<SessionRunnerResult> {
     const row = SessionHandleStore.row(sessionId);
-    controller = new AbortController();
+    const turnController = new AbortController();
+    controller = turnController;
     stopHeartbeat = scheduleHeartbeat(() => {
       const now = clock();
       const renewed = SessionHandleStore.renewLease({
@@ -494,7 +522,7 @@ function createController(
         now,
         expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
       });
-      if (!renewed) controller?.abort();
+      if (!renewed) turnController.abort();
     }, SessionHandleStore.HEARTBEAT_INTERVAL_MS);
     let parentActionId = input.parentActionId;
     let boundaryActionId = input.boundaryActionId;
@@ -509,18 +537,25 @@ function createController(
       );
       parentActionId = drained.parentActionId;
       boundaryActionId = drained.boundaryActionId;
-      if (drained.interrupted) controller?.abort();
+      if (drained.interrupted) turnController.abort();
       return { messages: drained.messages, interrupted: drained.interrupted };
     };
     try {
-      result = await runner({
+      const aborted = new Promise<SessionRunnerResult>((resolve) => {
+        turnController.signal.addEventListener(
+          "abort",
+          () => resolve({ kind: "interrupted", text: "" }),
+          { once: true },
+        );
+      });
+      const running = runner({
         sessionId,
         role: row.role,
         turnId: input.turnId,
         resultId: input.resultId,
         parentActionId,
         boundaryActionId,
-        messages: messagesForTurn(SessionHandleStore.tree(sessionId), input.turnId),
+        messages: sessionMessages(SessionHandleStore.tree(sessionId)),
         tools: input.generation.tools,
         toolsGeneration: input.generation.generation,
         toolsHash: input.generation.toolsHash,
@@ -528,20 +563,25 @@ function createController(
         systemHash: input.generation.systemHash,
         policyGeneration: input.generation.policyGeneration,
         resumeCount: input.resumeCount,
-        signal: controller.signal,
+        signal: turnController.signal,
         boundary,
       });
-      if (controller.signal.aborted && result.kind !== "interrupted") {
+      result = await Promise.race([running, aborted]);
+      if (turnController.signal.aborted && result.kind !== "interrupted") {
         result = { kind: "interrupted", text: "" };
       }
     } catch (error) {
-      result = controller.signal.aborted
+      result = turnController.signal.aborted
         ? { kind: "interrupted", text: "" }
-        : { kind: "error", text: error instanceof Error ? error.message : String(error) };
+        : {
+            kind: "error",
+            text: error instanceof Error ? error.message : String(error),
+            ...(error instanceof Error ? { cause: error } : {}),
+          };
     } finally {
       stopHeartbeat?.();
       stopHeartbeat = undefined;
-      controller = undefined;
+      if (controller === turnController) controller = undefined;
     }
     const latestAction = SessionHandleStore.tree(sessionId).at(-1);
     if (latestAction === undefined) throw new Error(`session tree is empty: ${sessionId}`);
@@ -559,6 +599,7 @@ function createController(
       },
       result,
     );
+    return result;
   }
 
   async function drainBoundary(
@@ -814,18 +855,15 @@ function latestTerminal(
   return undefined;
 }
 
-function messagesForTurn(
-  actions: readonly LedgerAction.Node[],
-  turnId: string,
-): SessionTurn.Message[] {
+function sessionMessages(actions: readonly LedgerAction.Node[]): SessionTurn.Message[] {
   const messages: SessionTurn.Message[] = [];
   for (const action of actions) {
     const delivered = SessionHandleStore.delivery(action);
-    if (delivered?.turnId === turnId && delivered.kind === "prompt") {
+    if (delivered?.kind === "prompt") {
       messages.push({ role: "user", text: delivered.content });
     }
     const terminal = SessionHandleStore.turnTerminal(action);
-    if (terminal?.turnId === turnId && terminal.text.length > 0) {
+    if (terminal !== undefined && terminal.text.length > 0) {
       messages.push({ role: "assistant", text: terminal.text });
     }
   }

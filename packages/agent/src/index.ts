@@ -37,6 +37,8 @@ export type {
   CompactionYield,
   SummarizationBudget,
 } from "./compaction";
+export { createSessionChatRunner } from "./session-chat-runner";
+export type { SessionChatRun, SessionChatRunnerOptions } from "./session-chat-runner";
 export {
   closeSessions,
   session,
