@@ -2,16 +2,20 @@ import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { createServer } from "node:net";
 import {
+  closeSync,
+  constants,
+  fstatSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   renameSync,
   rmSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Machine } from "@openomni/protocol";
 import { createFsDriver } from "../src/fs";
@@ -25,6 +29,52 @@ function withFixture(
   mkdirSync(root);
   mkdirSync(outside);
   return run({ base, root, outside }).finally(() => rmSync(base, { recursive: true, force: true }));
+}
+
+type DescriptorLedger = {
+  readonly hooks: {
+    onRootDescriptorAcquired: (fd: number) => void;
+    closeRootDescriptor: (fd: number) => void;
+  };
+  /** Acquisitions in order, each recording how often that acquisition was closed. */
+  readonly closesPerAcquisition: () => number[];
+  readonly liveCount: () => number;
+};
+
+/**
+ * Accounts for every descriptor the root walk acquires, per ACQUISITION rather
+ * than per fd number: the kernel reuses a released fd number immediately, so
+ * counting by number alone cannot distinguish a second close of a released
+ * descriptor from the first close of its replacement. A close is attributed to
+ * the newest live acquisition of that number and counted again if it arrives
+ * when no acquisition of that number is live.
+ */
+type Acquisition = { fd: number; closes: number; live: boolean };
+
+function descriptorLedger(): DescriptorLedger {
+  const acquisitions: Acquisition[] = [];
+  const newest = (fd: number, liveOnly: boolean): Acquisition | undefined => {
+    for (let index = acquisitions.length - 1; index >= 0; index -= 1) {
+      const entry = acquisitions[index] as Acquisition;
+      if (entry.fd === fd && (entry.live || !liveOnly)) return entry;
+    }
+    return undefined;
+  };
+  return {
+    hooks: {
+      onRootDescriptorAcquired: (fd) => acquisitions.push({ fd, closes: 0, live: true }),
+      closeRootDescriptor: (fd) => {
+        const target = newest(fd, true) ?? newest(fd, false);
+        if (target !== undefined) {
+          target.closes += 1;
+          target.live = false;
+        }
+        closeSync(fd);
+      },
+    },
+    closesPerAcquisition: () => acquisitions.map((entry) => entry.closes),
+    liveCount: () => acquisitions.filter((entry) => entry.live).length,
+  };
 }
 
 function runFifoRequest(root: string, request: Machine.FsRequest): string {
@@ -186,12 +236,75 @@ describe("daemon filesystem driver", () => {
       writeFileSync(join(root, "note.txt"), "inside");
       const rootAlias = join(base, "root-alias");
       symlinkSync(root, rootAlias);
-      const fsOp = createFsDriver(new Map([["docs", rootAlias]]));
+      const ledger = descriptorLedger();
+      const fsOp = createFsDriver(new Map([["docs", rootAlias]]), ledger.hooks);
 
       await expect(fsOp({ op: "read", export: "docs", path: "note.txt" })).resolves.toMatchObject({
         status: "completed",
         value: { op: "read", data: "inside" },
       });
+
+      // Invariant 3: the symlink restart leaves exactly one live descriptor —
+      // the pinned root — and driver disposal closes it, each exactly once.
+      expect(ledger.liveCount()).toBe(1);
+      fsOp.close();
+      expect(ledger.liveCount()).toBe(0);
+      const closes = ledger.closesPerAcquisition();
+      expect(closes.length).toBeGreaterThan(1);
+      expect(closes).toEqual(closes.map(() => 1));
+    });
+  });
+
+  // D1 regression. The restart branch releases the walk descriptor and then
+  // reopens "/"; when that reopen throws, the failure path must not close the
+  // released descriptor a second time (a reused fd number would belong to an
+  // unrelated open) and must propagate the reopen failure itself.
+  test("closes each root descriptor exactly once when a restart reopen throws", async () => {
+    await withFixture(async ({ base, root }) => {
+      const rootAlias = join(base, "root-alias");
+      symlinkSync(root, rootAlias);
+      const reopenFailure = new Error("injected restart reopen failure");
+      const ledger = descriptorLedger();
+      const bystanderPath = join(base, "bystander.txt");
+      writeFileSync(bystanderPath, "bystander");
+      let rootDirectoryOpens = 0;
+      let bystander: number | undefined;
+
+      let thrown: Error | undefined;
+      try {
+        createFsDriver(new Map([["docs", rootAlias]]), {
+          ...ledger.hooks,
+          openRootDirectory: () => {
+            rootDirectoryOpens += 1;
+            // The first open starts the walk; the second is the restart reopen
+            // that follows the export-root symlink expansion.
+            if (rootDirectoryOpens < 2) {
+              return openSync(sep, constants.O_RDONLY | constants.O_DIRECTORY);
+            }
+            // The restart already released its descriptor, so this unrelated
+            // open takes the freed fd NUMBER. A stale close in the failure
+            // path would land on this descriptor instead of raising EBADF.
+            bystander = openSync(bystanderPath, constants.O_RDONLY);
+            throw reopenFailure;
+          },
+        });
+      } catch (error) {
+        thrown = error instanceof Error ? error : new Error("non-Error failure");
+      }
+
+      // Invariant 2: the reopen failure itself reaches the caller, by identity.
+      expect(thrown).toBe(reopenFailure);
+      expect(rootDirectoryOpens).toBe(2);
+      // Invariant 1: every acquisition is closed exactly once and none leaks.
+      const closes = ledger.closesPerAcquisition();
+      expect(closes.length).toBeGreaterThan(0);
+      expect(closes).toEqual(closes.map(() => 1));
+      expect(ledger.liveCount()).toBe(0);
+      // The bystander that inherited the released fd number is untouched: it is
+      // still open on its own inode, which a stale close would have closed.
+      if (bystander === undefined) throw new Error("expected the injected reopen to run");
+      expect(fstatSync(bystander).ino).toBe(lstatSync(bystanderPath).ino);
+      closeSync(bystander);
     });
   });
 

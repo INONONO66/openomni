@@ -70,7 +70,11 @@ Attached machines appear as ONE flat namespace,
   an in-root link is expanded lexically and re-walked under the root fd; a link
   resolving outside refuses. Thus every root-acquisition and request component
   is opened by the decision that pins it, rather than checked by one pathname
-  resolution and used by another.
+  resolution and used by another. **Exactly one owner holds each descriptor**
+  the walk acquires: the owning state is cleared before the close, so a failed
+  root reopen closes each acquired descriptor once, never a reused fd number
+  belonging to an unrelated open, and the reopen failure itself propagates
+  instead of a secondary close error.
 - **Outside-root refusals are uniform, deliberately.** ANY resolution landing
   outside the export root refuses as `path_escapes_export`, regardless of
   whether the outside target exists. Classifying an escaping link before its
