@@ -308,6 +308,38 @@ describe("daemon filesystem driver", () => {
     });
   });
 
+  // D1 regression, walk-failure half. A non-reopen walk failure (here: an
+  // export-root component that is a regular file) unwinds while the walk still
+  // owns a live descriptor, so the failure path must close it — a leak would
+  // pin the descriptor for the process lifetime.
+  test("closes the live walk descriptor when the export root is not a directory", async () => {
+    await withFixture(async ({ root }) => {
+      const file = join(root, "note.txt");
+      writeFileSync(file, "inside");
+      const ledger = descriptorLedger();
+
+      let threw = false;
+      try {
+        // "note.txt" is a regular file, so its openat(O_DIRECTORY) fails and it
+        // is not a symlink either: the walk throws while holding the descriptor
+        // for the parent directory it already opened. No hook throws here, so
+        // the unwind can only originate in the walk body — not in the injected
+        // reopen the sibling regression covers.
+        createFsDriver(new Map([["docs", join(file, "child")]]), ledger.hooks);
+      } catch (error) {
+        threw = error instanceof Error;
+      }
+
+      expect(threw).toBe(true);
+      // Invariant 1: the descriptor held when the walk threw is closed exactly
+      // once by the failure path, and nothing stays live.
+      const closes = ledger.closesPerAcquisition();
+      expect(closes.length).toBeGreaterThan(1);
+      expect(closes).toEqual(closes.map(() => 1));
+      expect(ledger.liveCount()).toBe(0);
+    });
+  });
+
   test("re-evaluates a component replaced by an outside symlink between calls", async () => {
     await withFixture(async ({ root, outside }) => {
       const victim = join(root, "victim.txt");
