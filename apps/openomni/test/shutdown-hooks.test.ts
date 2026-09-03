@@ -28,8 +28,7 @@ describe("entry-point shutdown handlers", () => {
 
     sigint();
     expect(stopCalls).toBe(1);
-    // The shutdown contract: exit never precedes the full async stop
-    // (BusPersistence.flush, observer detach, storage reset).
+    // The shutdown contract: exit never precedes the full async stop.
     expect(exits).toEqual([]);
 
     resolveStop();

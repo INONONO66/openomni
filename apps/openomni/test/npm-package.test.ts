@@ -2,7 +2,7 @@ import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BusPersistence, Storage } from "@openomni/ledger";
+import { Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { PROCESS_WORKER_NO_REQUEST_EXIT } from "../src/delegation/process-entry";
 import { startOpenOmni } from "../src/index";
@@ -16,7 +16,6 @@ let stopApp: (() => Promise<void>) | undefined;
 afterEach(async () => {
   await stopApp?.();
   stopApp = undefined;
-  BusPersistence.stop();
   Bus.reset();
   Storage.reset();
   for (const directory of directories.splice(0)) {
