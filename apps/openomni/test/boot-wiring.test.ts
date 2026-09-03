@@ -8,7 +8,7 @@ import { LeaseStore, Storage } from "@openomni/ledger";
 import type { Channel } from "@openomni/protocol";
 import type { BuiltChannel, ChannelComponent } from "../src/channels";
 import { createComposer } from "../src/composition/composer";
-import { registerTrustedChannelGrant } from "../src/gateway";
+import { MOUNTED_CHANNEL_DEFAULT_TIER, registerTrustedChannelGrant } from "../src/gateway";
 import { createLeaseLinkage, createMachinesPort, replyText } from "../src/index";
 import {
   type ChannelSupervisor,
@@ -182,7 +182,7 @@ describe("channel supervisor", () => {
     const supervisor = createChannelSupervisor({
       desired,
       build: (component) => component.build(async () => null),
-      grant: registerTrustedChannelGrant,
+      grant: (surface, defaultTier) => registerTrustedChannelGrant({ surface, defaultTier }),
       deliveryRoutes,
       webhookHandlers,
       traceId: () => "00-11111111111111111111111111111111-2222222222222222-01",
@@ -194,6 +194,7 @@ describe("channel supervisor", () => {
     instanceId: instanceId ?? `channel:${channel.component.id}:main`,
     key,
     component: channel.component,
+    defaultTier: MOUNTED_CHANNEL_DEFAULT_TIER,
   });
 
   test("a stage owns its grant, route, and webhook; stopAll revokes all of them", async () => {
@@ -217,6 +218,14 @@ describe("channel supervisor", () => {
     expect(deliveryRoutes.has("github")).toBe(false);
     expect(webhookHandlers.has("github")).toBe(true);
     expect(resolveChannelGrant({ surface: "telegram" })?.grant.kind).toBe("trusted_channel");
+    // #931: the mounted stage's grant carries the row's declared tier — a
+    // named surface never materializes owner authority by mounting.
+    expect(resolveChannelGrant({ surface: "telegram" })?.grant.defaultTier).toBe(
+      MOUNTED_CHANNEL_DEFAULT_TIER,
+    );
+    expect(resolveChannelGrant({ surface: "github" })?.grant.defaultTier).toBe(
+      MOUNTED_CHANNEL_DEFAULT_TIER,
+    );
     expect(supervisor.source()).toBe("declared");
 
     await supervisor.stopAll();
@@ -226,6 +235,27 @@ describe("channel supervisor", () => {
     expect(webhookHandlers.has("github")).toBe(false);
     expect(resolveChannelGrant({ surface: "telegram" })).toBeUndefined();
     expect(resolveChannelGrant({ surface: "github" })).toBeUndefined();
+  });
+
+  // #931 done-means 5: the grant row is observable immediately after the
+  // synchronous part of reconcile resolves, at the row's exact tier, and the
+  // disposal path removes it.
+  test("a row's declared tier is the mounted grant's tier and disposal removes the row", async () => {
+    const calls: string[] = [];
+    const declared = fakeChannel("discord", calls);
+    const { supervisor } = supervisorFor(() => ({
+      source: "declared",
+      rows: [{ ...row(declared, "0:0"), defaultTier: "observer" }],
+      statuses: [],
+    }));
+
+    await supervisor.reconcile();
+
+    expect(resolveChannelGrant({ surface: "discord" })?.grant.defaultTier).toBe("observer");
+
+    await supervisor.stopAll();
+
+    expect(resolveChannelGrant({ surface: "discord" })).toBeUndefined();
   });
 
   test("§8.7 rotation bounces exactly the changed stage, stop before start", async () => {
@@ -359,7 +389,7 @@ describe("supervisor status passthrough", () => {
       build: () => {
         throw new Error("nothing to build");
       },
-      grant: registerTrustedChannelGrant,
+      grant: (surface, defaultTier) => registerTrustedChannelGrant({ surface, defaultTier }),
       deliveryRoutes,
       webhookHandlers,
       traceId: () => "00-11111111111111111111111111111111-2222222222222222-01",

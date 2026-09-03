@@ -91,10 +91,12 @@ Person {
 
 - **This is where the Owner is defined.** Exactly one Person row may carry
   `trustTier: "owner"` per installation (enforced at the store, typed error on
-  a second). The current implicit owner — "whoever reaches a
-  `defaultTier: "owner"` channel grant" — narrows to: the ws loopback bootstrap
-  grant remains (first-contact path), but named channels stop defaulting to
-  owner tier once an Owner Person with endpoints on that channel exists.
+  a second). The implicit owner is gone (#931): owner tier is named at exactly
+  one call site, the ws loopback bootstrap grant (first-contact path). A named
+  channel mounts at the tier its declaration's `grant.defaultTier` states, and
+  with no such statement it mounts at the mount tier — `assigned_worker`, the
+  least authority the tier vocabulary carries — so mounting a surface grants
+  nothing beyond existing.
 - **Reconcile at boot:** each Person materializes `ActorRegistry` identity +
   endpoint rows (upsert, same idempotence contract `registerActors` has today).
   Removing an endpoint from a Person removes the endpoint row; deletions are
@@ -123,9 +125,11 @@ ChannelInstance {
 
 - One provider may have multiple instances (two Telegram bots, N Slack
   workspaces) — today's "one channel per kind" assumption dissolves.
-- The `grant` block replaces the hardcoded `registerTrustedChannelGrant(surface)`
-  call: boot materializes the ChannelGrant row from the declaration. Owner-tier
-  defaults become an explicit Owner choice per instance, not app code.
+- The `grant` block is the Owner's per-instance perimeter policy: boot threads
+  `grant.defaultTier` into the surface's ChannelGrant row through the channel
+  supervisor (`DesiredChannelRow.defaultTier` → `registerTrustedChannelGrant`).
+  A declaration without a tier mounts at `assigned_worker`; raising a surface
+  is always an explicit declaration, never app code (#931).
 - `enabled: false` unmounts the stage (dispose path already exists in the
   channel profile composition) without deleting the declaration.
 
@@ -290,8 +294,10 @@ declaration. Resolution — `openomni init` (CLI, local filesystem trust):
 3. Writes the Owner Person row (interactive or flag-driven).
 
 Until an Owner Person exists, the loopback ws bootstrap grant behaves as today
-(`defaultTier: "owner"` on loopback only, token-gated off loopback) — the
-existing single enforcement layer in `assertWsExposure` is unchanged.
+(owner tier on loopback only, named at that one call site in
+`apps/openomni/src/gateway.ts` and token-gated off loopback) — the existing
+single enforcement layer in `assertWsExposure` is unchanged. No named channel
+inherits that tier (#931).
 
 ## 7. Explicit non-goals
 
