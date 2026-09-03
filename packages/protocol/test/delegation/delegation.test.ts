@@ -276,6 +276,16 @@ describe("Delegation.Handle returned at admission", () => {
       );
     }
   });
+
+  test("refuses the deleted WorkItem linkage field", () => {
+    const result = Delegation.Handle.safeParse({ ...handle, workItemId: "wi-retired" });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues).toContainEqual(
+        expect.objectContaining({ code: "unrecognized_keys", keys: ["workItemId"] }),
+      );
+    }
+  });
 });
 
 describe("Delegation.Origin lineage", () => {

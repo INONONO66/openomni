@@ -18,9 +18,7 @@
   },
   "naming": {
     "grandfathered": [
-      "packages/protocol/src/policy/policy-point.ts:PolicyPointModule",
-      "packages/protocol/src/work-item/index.ts:ReadBackRequestEnvelope",
-      "packages/protocol/src/work-item/schemas.ts:ReadBackRequestEnvelope"
+      "packages/protocol/src/policy/policy-point.ts:PolicyPointModule"
     ]
   }
 }
