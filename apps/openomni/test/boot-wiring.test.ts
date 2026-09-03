@@ -24,8 +24,9 @@ import { nextMessage, openSocket } from "./helpers/ws";
 const suite = residentSuite();
 
 describe("boot catalog", () => {
-  test("boots without memory configuration or a memory tool", async () => {
+  test("boots without memory configuration, injection, or a memory tool", async () => {
     let offered: readonly string[] = [];
+    let system: string | undefined;
     const config = suite.config("openomni-no-memory-", { wsToken: "boot-memory-absence" });
     const app = await suite.boot({
       config,
@@ -33,6 +34,7 @@ describe("boot catalog", () => {
         resolveProviderModel: fakeProviderModel,
         run: async (input, sink: Sink) => {
           offered = (input.tools ?? []).map((tool) => tool.name);
+          system = input.system;
           sink.onMessage(assistantMessage(input, { text: "ready" }));
           return { type: "stop" };
         },
@@ -48,6 +50,7 @@ describe("boot catalog", () => {
     expect(frame).toEqual({ type: "response", text: "ready" });
     expect("memoryPath" in config).toBe(false);
     expect(offered).not.toContain("memory");
+    expect(system).not.toContain("\n\n# Memory\n");
   });
 });
 
