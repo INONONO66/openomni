@@ -18,8 +18,15 @@ function required<K extends "sessions" | "actions" | "inbox" | "alarms" | "polic
 
 export const sessions = {
   create: (row: LedgerSession.Row): boolean => required("sessions").create(row),
+  materialize: (input: LedgerSession.Materialize): LedgerSession.MaterializeResult | undefined =>
+    required("sessions").materialize(input),
   get: (id: string): LedgerSession.Row | undefined => required("sessions").get(id),
   list: (): LedgerSession.Row[] => required("sessions").list(),
+  acquireLease: (input: LedgerSession.AcquireLease): LedgerSession.LeaseResult | undefined =>
+    required("sessions").acquireLease(input),
+  renewLease: (input: LedgerSession.RenewLease): boolean => required("sessions").renewLease(input),
+  commit: (input: LedgerSession.Commit): LedgerSession.CommitResult | undefined =>
+    required("sessions").commit(input),
 } satisfies ProtocolStorage.SessionLedgerSubAdapter;
 
 export const actions = {
@@ -38,8 +45,6 @@ export const inbox = {
   commit: (row: Inbox.Commit): Inbox.Row | undefined => required("inbox").commit(row),
   list: (sessionId: string, status?: Inbox.Status): Inbox.Row[] =>
     required("inbox").list(sessionId, status),
-  claim: (sessionId: string, claimant: string, claimedAt: number): Inbox.Row[] =>
-    required("inbox").claim(sessionId, claimant, claimedAt),
 } satisfies ProtocolStorage.InboxSubAdapter;
 
 export const alarms = {
