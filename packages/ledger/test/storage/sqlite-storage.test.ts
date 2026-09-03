@@ -203,7 +203,7 @@ describe("SqliteStorageAdapter", () => {
       const legacyDb = new Database(dbPath);
       legacyDb
         .query("DELETE FROM _migrations WHERE name = ?")
-        .run("0030_drop_conversation_lease_engagement/migration.sql");
+        .run("0030_drop_retired_tables/migration.sql");
       legacyDb.exec(
         "CREATE TABLE conversation (id TEXT); CREATE TABLE lease (id TEXT); CREATE TABLE engagement (id TEXT);",
       );
@@ -221,8 +221,8 @@ describe("SqliteStorageAdapter", () => {
       expect(
         upgradedDb
           .query<{ name: string }, [string]>("SELECT name FROM _migrations WHERE name = ?")
-          .get("0030_drop_conversation_lease_engagement/migration.sql"),
-      ).toEqual({ name: "0030_drop_conversation_lease_engagement/migration.sql" });
+          .get("0030_drop_retired_tables/migration.sql"),
+      ).toEqual({ name: "0030_drop_retired_tables/migration.sql" });
       upgradedAdapter.close();
     });
 

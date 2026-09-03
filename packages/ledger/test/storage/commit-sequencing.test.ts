@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { Wait, WorkItem } from "@openomni/protocol";
+import { Wait } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
-import { Storage, WaitStore, WorkItemStore } from "../../src/index";
+import { Storage, WaitStore } from "../../src/index";
 import { buildWaitCreate, commitCancel, commitReply } from "../helpers/wait";
 
 /**
@@ -17,8 +17,7 @@ import { buildWaitCreate, commitCancel, commitReply } from "../helpers/wait";
  *      rolls the appended fact back, so head === revision always);
  *   4. Bus publishes fire only AFTER the transaction committed;
  *   5. a stale head surfaces as the store's OWN typed conflict error
- *      (Wait `revision_conflict`, WorkItem WorkItemRevisionError) — the
- *      taxonomy is per-domain, the mechanics are not.
+ *      (Wait `revision_conflict`) — the taxonomy is per-domain, the mechanics are not.
  */
 
 beforeEach(() => {
@@ -152,28 +151,7 @@ describe("decision-class commit sequencing (shared contract)", () => {
     expect(WaitStore.get(wait.id)?.revision).toBe(headAfterCancel?.seq);
   });
 
-  test("work item transitions share the same head-follows-revision binding", async () => {
-    const created = await WorkItemStore.create(
-      {
-        name: "commit-sequencing",
-        sourceMessageId: "msg-commit-seq",
-        sourceChannel: "test",
-        intent: "verify",
-        goal: "pin the shared commit sequence",
-        sessionId: "ses-1",
-        acceptanceCriteria: ["head follows revision"],
-      },
-      "trace-wi",
-    );
-    expect(ledger().headFact(`work:${created.workItemId}`)?.type).toBe("work_item.created");
-    expect(ledger().headFact(`work:${created.workItemId}`)?.seq).toBe(created.revision);
 
-    const started = await WorkItemStore.start(created.workItemId, "trace-start");
-    expect(started?.revision).toBe(created.revision + 1);
-    expect(ledger().headFact(`work:${created.workItemId}`)?.seq).toBe(started?.revision);
-    if (!started) throw new Error("start returned undefined for an existing work item");
-    expect(WorkItem.deriveStatus(started)).toBe("running");
-  });
 });
 
 function captureThrown(fn: () => unknown): unknown {

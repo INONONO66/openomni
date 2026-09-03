@@ -1,5 +1,13 @@
 # Conversation and Message IO — Target Contract (Proposal)
 
+> **Update (2026-09-03, #943):** partially withdrawn. The Conversation and Lease
+> lifecycles (§3.4/§3.5, the correlation stage in §4.1, the conversational rows
+> in §5/§8, phases P1/P2) were deleted without replacement in #943 and are
+> superseded by the kernel `sendMessage` + session inbox contract (KERNEL.md
+> §10). Only §3.1 Contact, §3.3 Budget, §4.3 Rendering and §6 Approval lane
+> remain live proposals; the rest is historical context only.
+
+
 Status: **proposed target contract — nothing in this document is shipped.**
 Shipped-state truth remains [implementation-status.md](implementation-status.md).
 This document extends [Gateway Design](gateway-design.md) and
@@ -113,79 +121,15 @@ child allocation whose caps debit the parent atomically (`sum(children) <=
 parent`, enforced at carve time, fail-closed). Carving exists so a Lease can
 hold real, bounded spend rather than a reference to the Resident's budget.
 
-### 3.4 Conversation
+### 3.4 Conversation and 3.5 Lease — withdrawn (#943)
 
-```
-Conversation {
-  conversationId,
-  contact: actorId,                 // one counterparty; groups: §7.3
-  endpointId,                       // channel binding — pinned at open
-  ownerRef: { kind: "session", id },// the session that owns the exchange
-  policy: {
-    expiresAt,                      // hard bound, admission-clamped
-    maxOutbound, maxInbound,        // hard caps, both directions
-    quietHours: "defer",            // conversational sends queue, never deny
-    onInboundCapBreach: "demote",   // -> evidence_only delivery, wake owner
-  },
-  state: "open" | "closed",
-  openedBy,                         // delegationId or resident act
-}
-```
-
-Mount effects (both recorded before act):
-
-1. **Inbound correlation rule** — every message from `endpointId` routes to
-   `ownerRef` as a conversation turn (full authority for the owner's next
-   run), placed in the router fold order *after* blacklist, *before* wait
-   correlation. First-reply Waits inside a conversation still settle
-   delegations; the conversation catches what the Wait no longer needs.
-2. **Conversational send right** — outbound from the owner (or a lease
-   holder) to `contact` bypasses the cold-outreach gate, debits
-   `maxOutbound` instead. DNC is still absolute: a DNC'd contact refuses
-   conversational sends too (§8.8).
-
-Inverse: close/expiry removes both effects. Subsequent inbound from the
-contact falls back to today's surface-default routing. Closing is idempotent
-and is itself a recorded settlement (`closed_by: owner | expiry | cap_breach |
-dependency_revoked`).
-
-Opening paths:
-- `delegate(channel, ask)` **auto-opens** a Conversation whose expiry equals
-  the Wait deadline (replaces `followUpWindow: 0` semantics with a real
-  container). The cold send that opens it passes grant + social budget as
-  today.
-- An explicit `converse_open` Resident tool for exchanges that start inbound
-  (e.g. adopting a support thread).
-- An inbound-initiated exchange the Resident chooses to continue: replying
-  through a reply-scoped grant may promote the container to a Conversation.
-
-### 3.5 Lease
-
-```
-Lease {
-  leaseId,
-  conversationId,                   // scope — exactly one conversation
-  holder: delegationId,             // the worker attempt holding it
-  budget: carvedAllocation,         // §3.3, non-transferable
-  expiresAt = min(conversation.expiresAt, delegation.deadline),
-}
-```
-
-- Admission change (the only relaxation): worker→actor delegation is admitted
-  **iff** a live lease names that worker's delegation chain and the target
-  actor. Everything else about worker admission stays refused.
-- **Non-transferable**: a lease never flows to inline children. A child
-  worker returns text; the lease holder sends. (One speaking identity per
-  conversation side; §8.5.)
-- Outbound sent under a lease is stamped `onBehalfOf: residentId, via:
-  leaseId` in the egress record. External identity remains the Resident's
-  (`senderId: "resident"`), because the counterparty is dealing with the
-  Owner's agent, not with an anonymous subprocess.
-- Inverse rides the delegation lifecycle: settle/cancel/deadline kills the
-  lease in the same fold that closes the attempt. A revoked conversation
-  reactively kills its leases (spatial law) — the worker's next send is
-  refused at admission, mid-flight sends are not clawed back (egress is
-  already recorded).
+The Conversation and Lease lifecycles proposed here (protocol schemas, ledger
+`conversation`/`lease`/`engagement` stores, `converse_open`/`converse_close`/
+`lease_open` tools) were deleted in #943 without replacement. Multi-turn
+exchange between sessions and actors is the kernel `sendMessage` + session
+inbox contract (KERNEL.md §10); worker outbound authority is a gateway rule
+table decision, not a carved lease. Nothing in this section describes shipped
+or planned code.
 
 ## 4. Message IO pipeline (final form)
 
@@ -232,14 +176,14 @@ rendering nicety — plain text is the universal floor.
 | --- | --- |
 | Owner chat on any surface | shipped path, + renderers |
 | Reminder / alert to Owner | notify class (shipped) + renderers |
-| Marketplace negotiation (중고나라, eBay) | provisional Contact -> promotion -> ask auto-opens Conversation -> multi-turn via correlation -> caps/expiry bound the exchange |
-| Delegated negotiation | same + Lease to a worker; Resident sets caps, worker haggles, settlement closes lease |
-| Scheduling with a third party | ask Conversation, low caps, calendar tool on the owner side |
-| Customer support triage | inbound on broadcast channel (evidence_only) -> Resident adopts thread via converse_open -> leases to triage workers |
+| Marketplace negotiation (중고나라, eBay) | provisional Contact -> promotion -> multi-turn via `sendMessage` reply correlation -> caps/expiry bound the exchange |
+| Delegated negotiation | same + a worker session addressed through the gateway rule table; Resident sets caps, worker haggles, child terminal returns as an inbox message |
+| Scheduling with a third party | `sendMessage` ask, low caps, calendar tool on the owner side |
+| Customer support triage | inbound on broadcast channel (evidence_only) -> Resident replies through a reply-scoped grant -> delegates triage to worker sessions |
 | Standup / status broadcast | notify to a group target (§7.3) |
-| Escalation chain (CI failed twice) | clawhip-shaped route policy: notify; unanswered conversation expiry wakes owner; Resident escalates to next contact |
-| GitHub PR/issue thread work | github surface already keys channelId per issue — a thread adopts naturally as a Conversation; lease = review worker replying in-thread; public repos stay evidence_only inbound (§8.11) |
-| Cross-agent (A2A) traffic | Contact kind "agent"; conversations and leases compose unchanged — a peer agent is just a counterparty with a tier |
+| Escalation chain (CI failed twice) | clawhip-shaped route policy: notify; unanswered ask deadline (alarm) wakes owner; Resident escalates to next contact |
+| GitHub PR/issue thread work | github surface already keys channelId per issue — a review worker replies in-thread through the gateway rule table |
+| Cross-agent (A2A) traffic | Contact kind "agent"; a peer agent is just a counterparty with a tier riding the same perimeter |
 | Email / Slack / new surfaces | new drivers mount as channel components; every primitive above composes onto them with zero kernel change (spatial composability is the point) |
 
 ## 6. Approval lane
@@ -330,8 +274,8 @@ Each attack, the holding invariant, and the residual.
 | Phase | Contents | Gate |
 | --- | --- | --- |
 | P0 | Per-surface renderers + format-aware chunking (agreed prior work) | golden tests per surface |
-| P1 | Conversation: protocol schema, ledger store, router correlation fold, delegate(ask) auto-open, converse_open/close tools | conformance: fold purity, cap/expiry admission clamps, close idempotency |
-| P2 | Lease: budget carving, admission relaxation (worker→actor iff lease), egress stamping | adversarial tests §8.1/.5/.6 as executable cases |
+| P1 | ~~Conversation lifecycle~~ — withdrawn by #943; superseded by KERNEL.md §10 `sendMessage` + inbox | n/a |
+| P2 | ~~Lease lifecycle~~ — withdrawn by #943; worker→actor authority is a gateway rule-table decision | n/a |
 | P3 | Provisional contacts + approval lane + promotion acts | §8.4/.12/.13 executable |
 | P4 | Slack driver, group targets, email driver, A2A contact kind | per-surface re-run of §8 |
 
