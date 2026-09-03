@@ -40,7 +40,6 @@ function instance(overrides: Partial<Provisioning.ChannelInstance>): Provisionin
 function baseConfig(overrides: Partial<OpenOmniConfig> = {}): OpenOmniConfig {
   return {
     dbPath: ":memory:",
-    memoryPath: "/tmp/unused-memory.md",
     host: "127.0.0.1",
     wsPort: 0,
     model: { provider: "anthropic", id: "claude", apiKey: "unused" },

@@ -14,7 +14,7 @@ const residentBase = [
 
 describe("buildAgentPrompt", () => {
   test("is deterministic for the same preset and input", () => {
-    const input = { memorySnapshot: "remember this" };
+    const input = { model: { provider: "x", id: "model" } };
 
     expect(buildAgentPrompt(RESIDENT_PRESET, input)).toBe(buildAgentPrompt(RESIDENT_PRESET, input));
   });
@@ -27,26 +27,12 @@ describe("buildAgentPrompt", () => {
     expect(prompt).toContain("llm(prompt)");
   });
 
-  test("keeps the base prefix stable across memory snapshots", () => {
-    const base = buildAgentPrompt(RESIDENT_PRESET, {});
-
-    expect(buildAgentPrompt(RESIDENT_PRESET, { memorySnapshot: "A" })).toStartWith(`${base}\n\n`);
-    expect(buildAgentPrompt(RESIDENT_PRESET, { memorySnapshot: "B" })).toStartWith(`${base}\n\n`);
-  });
-
-  test("omits empty and undefined memory snapshots without a trailing separator", () => {
+  test("omits unavailable optional sections without a trailing separator", () => {
     const base = buildAgentPrompt(RESIDENT_PRESET);
 
     expect(base).toBe(residentBase);
-    expect(buildAgentPrompt(RESIDENT_PRESET, { memorySnapshot: "" })).toBe(base);
-    expect(buildAgentPrompt(RESIDENT_PRESET, { memorySnapshot: undefined })).toBe(base);
     expect(base.endsWith("\n")).toBe(false);
-  });
-
-  test("does not create empty paragraphs when optional sections are absent", () => {
-    for (const memorySnapshot of [undefined, "memory"]) {
-      expect(buildAgentPrompt(RESIDENT_PRESET, { memorySnapshot })).not.toContain("\n\n\n");
-    }
+    expect(base).not.toContain("\n\n\n");
   });
 
   test("assembles every populated section in stable-to-volatile order", () => {
@@ -62,12 +48,11 @@ describe("buildAgentPrompt", () => {
     expect(
       buildAgentPrompt(preset, {
         model: { provider: "x", id: "model" },
-        memorySnapshot: "MEMORY",
       }),
-    ).toBe("IDENTITY\n\nMANDATE\n\nPOLICIES\n\nSTYLE\n\nTUNING\n\nMEMORY");
+    ).toBe("IDENTITY\n\nMANDATE\n\nPOLICIES\n\nSTYLE\n\nTUNING");
   });
 
-  test("places model tuning before memory and omits unavailable tuning", () => {
+  test("includes model tuning when available and omits it otherwise", () => {
     const preset: RolePreset = {
       name: "tuned",
       identity: "identity",
@@ -77,11 +62,11 @@ describe("buildAgentPrompt", () => {
     const xModel: Model.Ref = { provider: "x", id: "model" };
     const yModel: Model.Ref = { provider: "y", id: "model" };
 
-    expect(buildAgentPrompt(preset, { model: xModel, memorySnapshot: "memory" })).toBe(
-      [preset.identity, preset.mandate, preset.tuning?.(xModel), "memory"].join("\n\n"),
+    expect(buildAgentPrompt(preset, { model: xModel })).toBe(
+      [preset.identity, preset.mandate, preset.tuning?.(xModel)].join("\n\n"),
     );
-    expect(buildAgentPrompt(preset, { model: yModel, memorySnapshot: "memory" })).toBe(
-      [preset.identity, preset.mandate, "memory"].join("\n\n"),
+    expect(buildAgentPrompt(preset, { model: yModel })).toBe(
+      [preset.identity, preset.mandate].join("\n\n"),
     );
   });
 });

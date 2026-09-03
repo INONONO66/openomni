@@ -5,6 +5,7 @@ import {
   resolveChannelGrant,
 } from "@openomni/channels";
 import { LeaseStore, Storage } from "@openomni/ledger";
+import type { Sink } from "@openomni/llm";
 import type { Channel } from "@openomni/protocol";
 import type { BuiltChannel, ChannelComponent } from "../src/channels";
 import { createComposer } from "../src/composition/composer";
@@ -16,6 +17,42 @@ import {
   type DesiredChannelRow,
   type DesiredChannels,
 } from "../src/provisioning/supervisor";
+import { assistantMessage } from "./helpers/assistant-message";
+import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
+import { nextMessage, openSocket } from "./helpers/ws";
+
+const suite = residentSuite();
+
+describe("boot catalog", () => {
+  test("boots without memory configuration, injection, or a memory tool", async () => {
+    let offered: readonly string[] = [];
+    let system: string | undefined;
+    const config = suite.config("openomni-no-memory-", { wsToken: "boot-memory-absence" });
+    const app = await suite.boot({
+      config,
+      llm: {
+        resolveProviderModel: fakeProviderModel,
+        run: async (input, sink: Sink) => {
+          offered = (input.tools ?? []).map((tool) => tool.name);
+          system = input.system;
+          sink.onMessage(assistantMessage(input, { text: "ready" }));
+          return { type: "stop" };
+        },
+      },
+    });
+
+    const ws = await openSocket(`ws://127.0.0.1:${app.port}/ws?token=boot-memory-absence`);
+    const result = nextMessage(ws);
+    ws.send(JSON.stringify({ type: "message", text: "report readiness" }));
+    const frame = JSON.parse(String((await result).data)) as { text: string; type: string };
+    ws.close();
+
+    expect(frame).toEqual({ type: "response", text: "ready" });
+    expect("memoryPath" in config).toBe(false);
+    expect(offered).not.toContain("memory");
+    expect(system).not.toContain("\n\n# Memory\n");
+  });
+});
 
 describe("replyText", () => {
   test("hands a string payload back verbatim and serializes anything else", () => {

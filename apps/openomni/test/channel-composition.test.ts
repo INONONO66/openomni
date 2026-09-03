@@ -23,7 +23,6 @@ import type { OpenOmniConfig } from "../src/config";
 function baseConfig(channels?: OpenOmniConfig["channels"]): OpenOmniConfig {
   return {
     dbPath: ":memory:",
-    memoryPath: "/tmp/unused-memory.json",
     host: "127.0.0.1",
     wsPort: 0,
     model: { provider: "anthropic", id: "claude", apiKey: "k" },

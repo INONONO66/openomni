@@ -75,11 +75,3 @@ export function nextFrame(
     ws.addEventListener("message", listener);
   });
 }
-
-/** One Resident turn over the ws channel: send text, return the reply text. */
-export async function ask(ws: WebSocket, text: string, timeoutMs = 2000): Promise<string> {
-  const reply = nextMessage(ws, timeoutMs);
-  ws.send(JSON.stringify({ type: "message", text }));
-  const event = await reply;
-  return (JSON.parse(String(event.data)) as { text: string }).text;
-}

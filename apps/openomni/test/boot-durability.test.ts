@@ -32,7 +32,6 @@ function bounded<T>(promise: Promise<T>, ms: number, label: string): Promise<T> 
 function testConfig(dbPath: string) {
   return {
     dbPath,
-    memoryPath: join(dbPath, "..", "memory.json"),
     host: "127.0.0.1",
     wsPort: 0,
     model: { provider: "fake", id: "boot-test", apiKey: "test-key" },
