@@ -1,7 +1,7 @@
 import type { Message, Transcript } from "@openomni/protocol";
 import type { Sink } from "../sink";
 import { stringifyToolOutput } from "../message";
-import { TokenTracker } from "../token";
+import { TokenTracker, type EstimateUsage } from "../token";
 
 export interface StreamEvent {
   type: string;
@@ -28,6 +28,13 @@ export type StreamEventContext = {
    * record the name verbatim.
    */
   readonly toolNames?: ReadonlyMap<string, string>;
+  /**
+   * The step's prompt text as it crossed to the provider. The local estimator's
+   * input-token source when the provider's own input count is unusable (#933).
+   */
+  readonly promptText: string;
+  /** Local usage estimator for steps whose provider accounting is unusable (#933). */
+  readonly estimateUsage: EstimateUsage;
 };
 
 function resolveToolName(wireName: string, context: StreamEventContext): string {
@@ -45,6 +52,12 @@ export type StreamEventState = {
   reasoning: Map<string, OpenBlock>;
   pendingTools: Map<string, string>;
   usage: Transcript.Usage;
+  /**
+   * Assistant output this step emitted — text, reasoning, and tool-call JSON —
+   * the local estimator's output-token source. Reset at each step-finish so
+   * per-step estimates stay additive with the per-step provider counts (#933).
+   */
+  stepEmittedAssistant: string;
   finishReason?: string;
 };
 
@@ -53,6 +66,7 @@ export function createStreamEventState(): StreamEventState {
     reasoning: new Map(),
     pendingTools: new Map(),
     usage: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    stepEmittedAssistant: "",
   };
 }
 
@@ -149,8 +163,10 @@ function applyStreamEvent(
     }
     case "text-delta": {
       // Per-token cost is O(1): the delta only grows an internal buffer.
+      const text = String(event.text || "");
+      state.stepEmittedAssistant += text;
       if (state.currentText) {
-        state.currentText.text += String(event.text || "");
+        state.currentText.text += text;
       }
       break;
     }
@@ -277,7 +293,11 @@ function startReasoning(
 function appendReasoning(event: StreamEvent, state: StreamEventState): void {
   const open = state.reasoning.get(String(event.id));
   if (open === undefined) return;
-  open.text += String(event.text || "");
+  const text = String(event.text || "");
+  // Reasoning is billed inside the provider's output count, so the estimator's
+  // output source includes it (`reasoningTokens` stays the auxiliary split).
+  state.stepEmittedAssistant += text;
+  open.text += text;
   const signature = extractSignature(event.providerMetadata);
   if (signature !== undefined) open.signature = signature;
 }
@@ -327,6 +347,9 @@ function handleToolCall(
   // ai v6 tool-call chunks carry `input`; the v4 `args` leg fed only tests.
   const input = (event.input as Record<string, unknown>) || {};
   const callID = String(event.toolCallId);
+  // A tool call is billed assistant output too: the model emitted the name and
+  // the serialized arguments, so the estimator must see them (#933).
+  state.stepEmittedAssistant += `${String(event.toolName)}${JSON.stringify(input)}`;
   const part: Message.ToolPart = {
     id: crypto.randomUUID(),
     sessionID: context.sessionID,
@@ -413,12 +436,25 @@ function handleStepFinish(
   context: StreamEventContext,
 ): void {
   const finishReason = String(event.finishReason || "end_turn");
-  const usage = TokenTracker.extractUsage({
+  const provider = TokenTracker.extractUsage({
     usage: event.usage,
     providerMetadata: event.providerMetadata,
   });
+  // KERNEL §5.3: provider accounting combined with a local estimate. A usable
+  // provider count stays authoritative (a reported 0 included); an unusable one
+  // — absent, wrong-typed, or outside the count domain — is replaced field-wise
+  // by the local estimate, so a real model step never folds to a trusted zero.
+  const estimate = context.estimateUsage(context.promptText, state.stepEmittedAssistant);
+  const usage = {
+    inputTokens: provider.inputTokens ?? estimate.inputTokens,
+    outputTokens: provider.outputTokens ?? estimate.outputTokens,
+    reasoningTokens: provider.reasoningTokens,
+    cacheReadTokens: provider.cacheReadTokens,
+    cacheWriteTokens: provider.cacheWriteTokens,
+  };
 
   state.finishReason = finishReason;
+  state.stepEmittedAssistant = "";
   state.usage = {
     input: state.usage.input + usage.inputTokens,
     output: state.usage.output + usage.outputTokens,

@@ -1,8 +1,11 @@
 import type { Message } from "@openomni/protocol";
 
 /**
- * The context the turn's final model call actually consumed, as the provider
- * measured it: the last step-finish part's input tokens.
+ * The context the turn's final model call actually consumed: the last
+ * step-finish part's input tokens. Provider-measured when the provider's own
+ * count is usable, and llm's local `ceil(chars / 4)` estimate when it is not
+ * (absent, wrong-typed, or outside the count domain) — so an unaccounted step
+ * reads as its real size here instead of as an unmeasured zero (#933).
  *
  * Two shapes that look usable here are not. `message.info.tokens` sums every
  * step of the turn — a tool-using turn resends the conversation per step, so

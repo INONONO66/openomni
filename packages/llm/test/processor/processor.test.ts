@@ -3,8 +3,9 @@ import { LlmCall, Operational, type Message, type Tool } from "@openomni/protoco
 import type { Sink } from "../../src/sink";
 import { collector } from "@openomni/telemetry";
 import { Processor } from "../../src/processor";
-import { APIError, InvalidUsageError } from "../../src/error";
+import { APIError } from "../../src/error";
 import type { Provider } from "../../src/provider";
+import type { EstimateUsage, UsageEstimate } from "../../src/token";
 
 type OperationalInfoPayload = {
   traceId: string;
@@ -175,7 +176,7 @@ describe("Processor", () => {
           ]),
         });
 
-        await expect(processor.process({ system: "" })).rejects.toThrow(
+        await expect(processor.process({ system: "", promptText: "" })).rejects.toThrow(
           "transcript recording defect",
         );
       } finally {
@@ -195,7 +196,7 @@ describe("Processor", () => {
         ]),
       });
 
-      await processor.process({ system: "" });
+      await processor.process({ system: "", promptText: "" });
 
       const textPart = capture
         .finalParts()
@@ -216,7 +217,7 @@ describe("Processor", () => {
         ]),
       });
 
-      await processor.process({ system: "" });
+      await processor.process({ system: "", promptText: "" });
 
       expect(capture.finalParts()).toEqual([]);
       expect(processor.message.time.completed).toBeNumber();
@@ -236,7 +237,7 @@ describe("Processor", () => {
         ]),
       });
 
-      await processor.process({ system: "" });
+      await processor.process({ system: "", promptText: "" });
 
       // Boundary snapshots only (#545 T2): open part, completed part with the
       // full text, message.finished. Deltas emit nothing through onMessage.
@@ -257,7 +258,7 @@ describe("Processor", () => {
         ]),
       });
 
-      await processor.process({ system: "" });
+      await processor.process({ system: "", promptText: "" });
 
       const reasoningPart = capture
         .finalParts()
@@ -289,7 +290,7 @@ describe("Processor", () => {
         ]),
       });
 
-      await processor.process({ system: "" });
+      await processor.process({ system: "", promptText: "" });
 
       const types = capture.finalParts().map((part) => part.type);
       expect(types).toEqual(["step-start", "step-finish"]);
@@ -308,34 +309,175 @@ describe("Processor", () => {
       });
     });
 
-    test("fails on invalid step-finish usage without fabricated totals", async () => {
-      const capture = capturingSink();
-      const processor = createProcessor({
-        sink: capture.sink,
-        createStream: streamOf([
-          {
-            type: "step-finish",
-            finishReason: "end_turn",
-            usage: { inputTokens: -1 },
-            providerMetadata: {},
-          },
-          { type: "finish" },
-        ]),
+    /**
+     * #933: unusable required provider accounting (absent, wrong-typed, or
+     * invalid-numeric) is replaced by the injected local estimate, so a
+     * non-empty model step can never fold to a trusted zero. A reported
+     * numeric zero stays authoritative.
+     */
+    describe("unusable provider accounting", () => {
+      const SENTINEL: UsageEstimate = { inputTokens: 13, outputTokens: 17 };
+      const sentinelEstimator: EstimateUsage = () => SENTINEL;
+
+      /**
+       * What a provider can actually put in a usage slot: a count, a
+       * stringified count, an explicit null, or a boolean. Concrete on purpose
+       * — the malformed values under test are enumerated, not erased.
+       */
+      type ReportedCount = number | string | null | boolean;
+      type ReportedUsage = Partial<
+        Record<
+          "inputTokens" | "input_tokens" | "outputTokens" | "output_tokens",
+          ReportedCount
+        >
+      >;
+
+      function processStep(usage: ReportedUsage | undefined) {
+        return createProcessor({
+          estimateUsage: sentinelEstimator,
+          createStream: streamOf([
+            { type: "step-start" },
+            {
+              type: "step-finish",
+              finishReason: "end_turn",
+              ...(usage === undefined ? {} : { usage }),
+              providerMetadata: {},
+            },
+            { type: "finish" },
+          ]),
+        });
+      }
+
+      test("substitutes the estimate when provider usage is absent", async () => {
+        const processor = processStep(undefined);
+
+        await processor.process({ system: "", promptText: "prompt" });
+
+        expect(processor.message.tokens).toEqual({
+          input: SENTINEL.inputTokens,
+          output: SENTINEL.outputTokens,
+          reasoning: 0,
+          cache: { read: 0, write: 0 },
+        });
+        expect(processor.usageTotals).toEqual({
+          input: SENTINEL.inputTokens,
+          output: SENTINEL.outputTokens,
+          reasoning: 0,
+          cache: { read: 0, write: 0 },
+        });
       });
 
-      try {
-        await processor.process({ system: "" });
-        throw new Error("expected InvalidUsageError");
-      } catch (error) {
-        expect(InvalidUsageError.isInstance(error)).toBe(true);
-      }
-      expect(processor.usageTotals).toEqual({
-        input: 0,
-        output: 0,
-        reasoning: 0,
-        cache: { read: 0, write: 0 },
+      test.each([
+        ["string", { inputTokens: "100", outputTokens: "50" }],
+        ["null", { inputTokens: null, outputTokens: null }],
+        ["boolean", { inputTokens: false, outputTokens: true }],
+      ])("substitutes the estimate for wrong-typed (%s) provider usage", async (_name, usage) => {
+        const processor = processStep(usage);
+
+        await processor.process({ system: "", promptText: "prompt" });
+
+        expect(processor.message.tokens.input).toBe(SENTINEL.inputTokens);
+        expect(processor.message.tokens.output).toBe(SENTINEL.outputTokens);
       });
-      expect(capture.finalParts().some((part) => part.type === "step-finish")).toBe(false);
+
+      test.each([
+        ["negative", -1],
+        ["NaN", Number.NaN],
+        ["infinite", Number.POSITIVE_INFINITY],
+        ["fractional", 1.5],
+        ["unsafe", Number.MAX_SAFE_INTEGER + 1],
+      ])(
+        "substitutes the estimate for invalid numeric (%s) provider usage",
+        async (_name, value) => {
+          const capture = capturingSink();
+          const processor = createProcessor({
+            sink: capture.sink,
+            estimateUsage: sentinelEstimator,
+            createStream: streamOf([
+              { type: "step-start" },
+              {
+                type: "step-finish",
+                finishReason: "end_turn",
+                usage: { inputTokens: value, outputTokens: value },
+                providerMetadata: {},
+              },
+              { type: "finish" },
+            ]),
+          });
+
+          await processor.process({ system: "", promptText: "prompt" });
+
+          expect(processor.message.tokens.input).toBe(SENTINEL.inputTokens);
+          expect(processor.message.tokens.output).toBe(SENTINEL.outputTokens);
+          // The fold completes: invalid accounting no longer aborts the step.
+          expect(capture.finalParts().some((part) => part.type === "step-finish")).toBe(true);
+        },
+      );
+
+      test("keeps a reported zero authoritative instead of estimating", async () => {
+        const processor = processStep({
+          inputTokens: 0,
+          input_tokens: 11,
+          outputTokens: 0,
+          output_tokens: 10,
+        });
+
+        await processor.process({ system: "", promptText: "prompt" });
+
+        expect(processor.message.tokens).toEqual({
+          input: 0,
+          output: 0,
+          reasoning: 0,
+          cache: { read: 0, write: 0 },
+        });
+      });
+
+      test("substitutes per required field, keeping the usable one", async () => {
+        const processor = processStep({ inputTokens: 7, outputTokens: "nope" });
+
+        await processor.process({ system: "", promptText: "prompt" });
+
+        expect(processor.message.tokens.input).toBe(7);
+        expect(processor.message.tokens.output).toBe(SENTINEL.outputTokens);
+      });
+
+      test("keeps multi-step totals additive across estimated and reported steps", async () => {
+        const processor = createProcessor({
+          estimateUsage: sentinelEstimator,
+          createStream: streamOf([
+            { type: "step-finish", finishReason: "tool_use", usage: {} },
+            {
+              type: "step-finish",
+              finishReason: "end_turn",
+              usage: { inputTokens: 1000, outputTokens: 500 },
+            },
+            { type: "finish" },
+          ]),
+        });
+
+        await processor.process({ system: "", promptText: "prompt" });
+
+        expect(processor.message.tokens.input).toBe(1000 + SENTINEL.inputTokens);
+        expect(processor.message.tokens.output).toBe(500 + SENTINEL.outputTokens);
+      });
+
+      test("defaults to the ceil(chars/4) estimator when none is injected", async () => {
+        const promptText = "0123456789"; // 10 chars → ceil(10/4) = 3
+        const processor = createProcessor({
+          createStream: streamOf([
+            { type: "text-start", providerMetadata: {} },
+            { type: "text-delta", text: "01234" }, // 5 chars → ceil(5/4) = 2
+            { type: "text-end", providerMetadata: {} },
+            { type: "step-finish", finishReason: "end_turn", usage: {} },
+            { type: "finish" },
+          ]),
+        });
+
+        await processor.process({ system: "", promptText });
+
+        expect(processor.message.tokens.input).toBe(3);
+        expect(processor.message.tokens.output).toBe(2);
+      });
     });
 
     test("trims trailing whitespace from text and reasoning at block end", async () => {
@@ -353,7 +495,7 @@ describe("Processor", () => {
         ]),
       });
 
-      await processor.process({ system: "" });
+      await processor.process({ system: "", promptText: "" });
 
       const parts = capture.finalParts();
       const textPart = parts.find((part): part is Message.TextPart => part.type === "text");
@@ -379,7 +521,7 @@ describe("Processor", () => {
         ]),
       });
 
-      await processor.process({ system: "" });
+      await processor.process({ system: "", promptText: "" });
 
       const textParts = capture
         .finalParts()
@@ -400,7 +542,7 @@ describe("Processor", () => {
         ]),
       });
 
-      await processor.process({ system: "" });
+      await processor.process({ system: "", promptText: "" });
 
       const reasoningParts = capture
         .finalParts()
@@ -421,7 +563,7 @@ describe("Processor", () => {
         ]),
       });
 
-      await processor.process({ system: "" });
+      await processor.process({ system: "", promptText: "" });
 
       const toolPart = capture
         .finalParts()
@@ -461,7 +603,7 @@ describe("Processor", () => {
         }),
       });
 
-      await processor.process({ system: "" });
+      await processor.process({ system: "", promptText: "" });
 
       expect(attemptCount).toBe(2);
       // The failed attempt's tool part settles as error inside that attempt's
@@ -482,7 +624,7 @@ describe("Processor", () => {
     test("publishes exactly one busy and one idle status on success", async () => {
       const processor = createProcessor();
 
-      await processor.process({ system: "" });
+      await processor.process({ system: "", promptText: "" });
       await new Promise((resolve) => queueMicrotask(resolve));
 
       expect(statusStates(events)).toEqual(["busy", "idle"]);
@@ -512,7 +654,7 @@ describe("Processor", () => {
         },
       });
 
-      await processor.process({ system: "" });
+      await processor.process({ system: "", promptText: "" });
 
       expect(order).toEqual(["finish", "idle", "queued"]);
     });
@@ -540,7 +682,7 @@ describe("Processor", () => {
           },
         });
 
-        const processing = processor.process({ system: "" });
+        const processing = processor.process({ system: "", promptText: "" });
         await Promise.resolve();
         expect(attempts).toBe(1);
         let hop = 0;
@@ -596,7 +738,7 @@ describe("Processor", () => {
         ]),
       });
 
-      await processor.process({ system: "" });
+      await processor.process({ system: "", promptText: "" });
       await new Promise((resolve) => queueMicrotask(resolve));
 
       expect(sinkEvents).toContain("message");
@@ -638,7 +780,7 @@ describe("Processor", () => {
       abortController.abort();
 
       try {
-        await processor.process({ system: "" });
+        await processor.process({ system: "", promptText: "" });
         expect.unreachable("Should have thrown AbortError");
       } catch (e) {
         expect(e).toBeInstanceOf(DOMException);
@@ -677,7 +819,7 @@ describe("Processor", () => {
       });
 
       try {
-        await processor.process({ system: "" });
+        await processor.process({ system: "", promptText: "" });
         expect.unreachable("Should have thrown the abort reason");
       } catch (e) {
         expect(e).toBe(reason);
@@ -732,7 +874,7 @@ describe("Processor", () => {
         }
       };
 
-      const settled = processor.process({ system: "" }).then(
+      const settled = processor.process({ system: "", promptText: "" }).then(
         () => undefined,
         (error: unknown) => error,
       );
@@ -779,7 +921,7 @@ describe("Processor", () => {
         }),
       });
 
-      await processor.process({ system: "" });
+      await processor.process({ system: "", promptText: "" });
 
       expect(attemptCount).toBe(2);
     });
@@ -805,7 +947,7 @@ describe("Processor", () => {
         ]),
       });
 
-      await processor.process({ system: "" });
+      await processor.process({ system: "", promptText: "" });
 
       const textAt = (index: number) =>
         snapshots[index]?.parts.find((part): part is Message.TextPart => part.type === "text")
@@ -837,7 +979,7 @@ describe("Processor", () => {
         }),
       });
 
-      await processor.process({ system: "" });
+      await processor.process({ system: "", promptText: "" });
 
       expect(attemptCount).toBe(2);
     });
@@ -871,7 +1013,7 @@ describe("Processor", () => {
         }),
       });
 
-      await processor.process({ system: "" });
+      await processor.process({ system: "", promptText: "" });
       retries.push(
         ...events.named(LlmCall.Events.RetryDecided.name).map((event) => event as never),
       );
@@ -932,7 +1074,7 @@ describe("Processor", () => {
         }),
       });
 
-      await processor.process({ system: "" });
+      await processor.process({ system: "", promptText: "" });
       rateLimits.push(
         ...events.named(LlmCall.Events.RateLimited.name).map((event) => event as never),
       );
@@ -962,7 +1104,7 @@ describe("Processor", () => {
       });
 
       try {
-        await processor.process({ system: "" });
+        await processor.process({ system: "", promptText: "" });
         expect.unreachable("Should have thrown");
       } catch (e) {
         expect(e).toBe(errorInstance);
@@ -1004,7 +1146,7 @@ describe("Processor", () => {
         ]),
       });
 
-      await processor.process({ system: "" });
+      await processor.process({ system: "", promptText: "" });
 
       expect(processor.message.cost).toBe(0);
       expect(processor.message.providerID).toBe("anthropic");
@@ -1032,7 +1174,7 @@ describe("Processor", () => {
         ]),
       });
 
-      await processor.process({ system: "" });
+      await processor.process({ system: "", promptText: "" });
 
       expect(processor.message.cost).toBe(0);
       expect(processor.message.tokens.input).toBe(10000);
@@ -1072,7 +1214,7 @@ describe("Processor", () => {
         }),
       });
 
-      await processor.process({ system: "" });
+      await processor.process({ system: "", promptText: "" });
 
       expect(attemptCount).toBe(2);
       // message.tokens reflects only the final attempt's fold...
@@ -1111,7 +1253,7 @@ describe("Processor", () => {
         ]),
       });
 
-      await processor.process({ system: "" });
+      await processor.process({ system: "", promptText: "" });
 
       expect(processor.message.cost).toBe(0);
       expect(processor.message.tokens.input).toBe(3000);
