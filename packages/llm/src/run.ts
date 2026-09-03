@@ -167,6 +167,25 @@ function assignWireToolNames(tools: Tool.Spec[]): {
   return { wireNames, originalByWire };
 }
 
+/**
+ * The call's prompt as one text blob, for the local usage estimator (#933).
+ * Everything the provider is charged input tokens for: the system message, the
+ * model-shaped conversation, and the advertised tool schemas. Serialization
+ * shape only has to be deterministic and proportional to the real prompt — the
+ * estimate is a substitute for missing provider accounting, not a tokenizer.
+ */
+function serializePrompt(system: string, input: RunInput, model: Provider.Model): string {
+  return JSON.stringify({
+    system,
+    messages: toModelMessages(input.messages, model),
+    tools: input.tools.map((spec) => ({
+      name: spec.name,
+      description: spec.description,
+      inputSchema: spec.inputSchema,
+    })),
+  });
+}
+
 export async function run(
   input: RunInput,
   sink: Sink,
@@ -382,7 +401,7 @@ export async function run(
   const startMs = Date.now();
 
   try {
-    await processor.process({ system });
+    await processor.process({ system, promptText: serializePrompt(system, input, model) });
 
     const durationMs = Date.now() - startMs;
     // Billed usage across every attempt: retried attempts' tokens were billed
