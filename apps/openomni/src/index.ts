@@ -249,7 +249,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
   let kernel: DelegationKernel | undefined;
   try {
     await composer.mount("journal", (ctx) => {
-      completionWriter = initialize({ dbPath: config.dbPath, observationSink: Bus });
+      initialize({ dbPath: config.dbPath, observationSink: Bus });
       ctx.effect(() => Storage.reset());
     });
     const actors: readonly RegisteredActor[] = config.actors ?? [];

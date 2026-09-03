@@ -30,14 +30,6 @@ export namespace Storage {
      * close followed by reset is a supported teardown order.
      */
     close?(): void;
-    /**
-     * #510 D1: the telemetry connection (NORMAL/group-commit) that
-     * bus-persistence reads and writes ride — the sanctioned accessor for the
-     * underlying SQLite handle so consumers never cast past `private` fields
-     * to reach it. Returns the primary connection when no split exists
-     * (`:memory:`). Absent on non-SQLite adapters; BusPersistence fails closed
-     * (getDatabase throws) or degrades to a no-op (getOptionalDatabase).
-     */
     session: {
       get(id: string): SessionInfo | undefined;
       set(id: string, info: SessionInfo): void;
@@ -116,6 +108,11 @@ export namespace Storage {
     // (typed adapter_absent) when it is missing; production adapters wire it
     // as required (SqliteStorageAdapter).
     provisioning?: ProtocolStorage.ProvisioningSubAdapter;
+    sessions?: ProtocolStorage.SessionLedgerSubAdapter;
+    actions?: ProtocolStorage.ActionSubAdapter;
+    inbox?: ProtocolStorage.InboxSubAdapter;
+    alarms?: ProtocolStorage.AlarmSubAdapter;
+    policies?: ProtocolStorage.PolicyRowSubAdapter;
   }
 }
 
@@ -145,6 +142,11 @@ export namespace Storage {
     "channelGrant",
     "appConnectorInstallation",
     "provisioning",
+    "sessions",
+    "actions",
+    "inbox",
+    "alarms",
+    "policies",
   ] as const satisfies readonly (keyof Adapter)[];
 
   export type ProductionCapability = (typeof requiredProductionCapabilities)[number];
