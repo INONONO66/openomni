@@ -8,6 +8,7 @@ import type { RunInput } from "@openomni/llm";
 import { ActorRegistry, Session, Storage } from "@openomni/ledger";
 import { Gateway, type Message } from "@openomni/protocol";
 import {
+  createMountedChannelGrantRegistrar,
   createResidentGateway,
   MOUNTED_CHANNEL_DEFAULT_TIER,
   registerTrustedChannelGrant,
@@ -163,6 +164,36 @@ describe("channel grant registration", () => {
       { surface: "telegram", tier: "assigned_worker" },
     ]);
     for (const revoke of revokers) revoke();
+  });
+
+  // #931 invariant 1 at the composition root: the registrar `startOpenOmni`
+  // hands the supervisor IS this function, so a composition that ignores the
+  // row's tier (or hardcodes owner there) dies here rather than shipping.
+  test("the composition-root registrar materializes the row's tier and the configured allowlist", () => {
+    const grant = createMountedChannelGrantRegistrar({ telegram: ["tg:1"] });
+
+    const revokeDiscord = grant("discord", MOUNTED_CHANNEL_DEFAULT_TIER);
+    const revokeTelegram = grant("telegram", "collaborator");
+
+    // The tier travels from the row, unmodified in either direction: the
+    // mount tier stays the mount tier and a raised declaration stays raised.
+    expect(resolveChannelGrant({ surface: "discord" })?.grant.defaultTier).toBe(
+      MOUNTED_CHANNEL_DEFAULT_TIER,
+    );
+    const listed = resolveChannelGrant({ surface: "telegram", sender: "tg:1" });
+    expect(listed?.grant.defaultTier).toBe("collaborator");
+    expect(listed?.grant.allowedSenders).toEqual(["tg:1"]);
+    // Allowlisted surface: an unlisted sender finds no grant; an unlisted
+    // surface keeps the open posture.
+    expect(resolveChannelGrant({ surface: "telegram", sender: "tg:2" })).toBeUndefined();
+    expect(resolveChannelGrant({ surface: "discord", sender: "anyone" })?.grant.kind).toBe(
+      "trusted_channel",
+    );
+
+    revokeDiscord();
+    revokeTelegram();
+    expect(resolveChannelGrant({ surface: "discord" })).toBeUndefined();
+    expect(resolveChannelGrant({ surface: "telegram", sender: "tg:1" })).toBeUndefined();
   });
 
   // Invariant 3: allowlisting still scopes the grant to listed senders only,

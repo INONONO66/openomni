@@ -61,6 +61,26 @@ export function registerTrustedChannelGrant(grant: TrustedChannelGrant): () => v
   };
 }
 
+/**
+ * THE grant seam the composition root hands the channel supervisor (#931):
+ * the surface's tier is whatever its desired row declared, and the configured
+ * allowlist pins the grant to its listed senders (an unlisted surface keeps
+ * the open posture). Owner authority cannot enter here — this function names
+ * no tier of its own, so no mounted named surface can acquire one.
+ */
+export function createMountedChannelGrantRegistrar(
+  allowedSendersBySurface: Readonly<Record<string, readonly string[]>> | undefined,
+): (surfaceId: string, defaultTier: Actor.TrustTier) => () => void {
+  return (surfaceId, defaultTier) => {
+    const allowedSenders = allowedSendersBySurface?.[surfaceId];
+    return registerTrustedChannelGrant({
+      surface: surfaceId,
+      defaultTier,
+      ...(allowedSenders === undefined ? {} : { allowedSenders }),
+    });
+  };
+}
+
 export interface OutboundMessaging {
   readonly deliveryRoutes: ReadonlyMap<string, ChannelDeliveryRoute>;
   readonly grants: () => readonly Gateway.SenderTargetGrant[];

@@ -61,7 +61,7 @@ import { createWorkItemLinkage } from "./delegation/work-item-linkage";
 import { createCompletionPort } from "./work-item/completion";
 import { createProcessDriver } from "./delegation/process-driver";
 import { createInlineWorkerRunner } from "./delegation/worker-loop";
-import { createResidentGateway, registerTrustedChannelGrant } from "./gateway";
+import { createMountedChannelGrantRegistrar, createResidentGateway } from "./gateway";
 import { createComposer, rollbackToCause } from "./composition/composer";
 import { createPolicyRegistry } from "./composition/policy-registry";
 import { createDriverRegistry } from "./composition/driver-registry";
@@ -566,18 +566,9 @@ export async function startOpenOmni(options: StartOptions = {}) {
     const supervisor = createChannelSupervisor({
       desired: () => desiredChannels(config),
       build: (component) => component.build(routingHandler),
-      // The env allowlist pins each mounted surface's grant to its listed
-      // senders; unlisted surfaces keep the open posture (loopback-ws right).
       // The tier is the row's, never this call site's: mounting a named
       // surface materializes no owner authority (#931).
-      grant: (surfaceId, defaultTier) => {
-        const allowedSenders = config.channelAllowedSenders?.[surfaceId];
-        return registerTrustedChannelGrant({
-          surface: surfaceId,
-          defaultTier,
-          ...(allowedSenders === undefined ? {} : { allowedSenders }),
-        });
-      },
+      grant: createMountedChannelGrantRegistrar(config.channelAllowedSenders),
       deliveryRoutes,
       webhookHandlers,
       traceId: newTraceId,
