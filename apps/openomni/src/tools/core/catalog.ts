@@ -9,7 +9,6 @@ import {
 } from "../authority/delegation";
 import { createLlmTool, type LlmPort } from "../execution/llm";
 import { createRunCodeTool, type CellPorts } from "../execution/run-code";
-import { createMemoryTool } from "../mutation/memory";
 import { createProvisionTool, type ProvisionPort } from "../mutation/provision";
 import { eraseTool, type AnyToolDefinition } from "./define";
 import { toolSpec } from "./project";

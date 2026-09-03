@@ -1,16 +1,16 @@
-import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   type ChannelDeliveryRoute,
   type ProviderDeliveryRoute,
   resolveChannelGrant,
 } from "@openomni/channels";
-import { LeaseStore, Storage } from "@openomni/ledger";
-import type { RunInput, Sink } from "@openomni/llm";
+import { Storage } from "@openomni/ledger";
+import type { Sink } from "@openomni/llm";
 import type { Channel } from "@openomni/protocol";
 import type { BuiltChannel, ChannelComponent } from "../src/channels";
 import { createComposer } from "../src/composition/composer";
 import { MOUNTED_CHANNEL_DEFAULT_TIER, registerTrustedChannelGrant } from "../src/gateway";
-import { createLeaseLinkage, createMachinesPort, replyText } from "../src/index";
+import { createMachinesPort, replyText } from "../src/index";
 import {
   type ChannelSupervisor,
   createChannelSupervisor,
@@ -19,38 +19,38 @@ import {
 } from "../src/provisioning/supervisor";
 import { assistantMessage } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
-import { nextMessage, opened } from "./helpers/ws";
+import { nextMessage, openSocket } from "./helpers/ws";
 
 const suite = residentSuite();
 
-describe("boot tool catalog", () => {
-  test("boots ready without legacy work tools in the Resident catalog", async () => {
-    let resolveToolNames!: (names: readonly string[]) => void;
-    const toolNames = new Promise<readonly string[]>((resolve) => {
-      resolveToolNames = resolve;
-    });
+describe("boot catalog", () => {
+  test("boots without memory configuration, injection, or a memory tool", async () => {
+    let offered: readonly string[] = [];
+    let system: string | undefined;
+    const config = suite.config("openomni-no-memory-", { wsToken: "boot-memory-absence" });
     const app = await suite.boot({
-      config: suite.config("openomni-boot-catalog-", { wsToken: "boot-catalog-token" }),
+      config,
       llm: {
         resolveProviderModel: fakeProviderModel,
-        run: async (input: RunInput, sink: Sink) => {
-          resolveToolNames(input.tools.map((tool) => tool.name));
-          sink.onMessage(assistantMessage(input, { id: "boot-catalog-reply", text: "ready" }));
+        run: async (input, sink: Sink) => {
+          offered = (input.tools ?? []).map((tool) => tool.name);
+          system = input.system;
+          sink.onMessage(assistantMessage(input, { text: "ready" }));
           return { type: "stop" };
         },
       },
     });
 
-    const ws = new WebSocket(`ws://127.0.0.1:${app.port}/ws?token=boot-catalog-token`);
-    const ready = opened(ws);
-    await ready;
-    const reply = nextMessage(ws);
-    ws.send(JSON.stringify({ type: "message", text: "catalog" }));
-
-    expect(JSON.parse(String((await reply).data))).toEqual({ type: "response", text: "ready" });
-    expect(await toolNames).not.toContain("work_items");
-    expect(await toolNames).not.toContain("complete_work");
+    const ws = await openSocket(`ws://127.0.0.1:${app.port}/ws?token=boot-memory-absence`);
+    const result = nextMessage(ws);
+    ws.send(JSON.stringify({ type: "message", text: "report readiness" }));
+    const frame = JSON.parse(String((await result).data)) as { text: string; type: string };
     ws.close();
+
+    expect(frame).toEqual({ type: "response", text: "ready" });
+    expect("memoryPath" in config).toBe(false);
+    expect(offered).not.toContain("memory");
+    expect(system).not.toContain("\n\n# Memory\n");
   });
 });
 
@@ -58,31 +58,6 @@ describe("replyText", () => {
   test("hands a string payload back verbatim and serializes anything else", () => {
     expect(replyText("done")).toBe("done");
     expect(replyText({ status: "done", count: 2 })).toBe('{"status":"done","count":2}');
-  });
-});
-
-describe("createLeaseLinkage", () => {
-  test("projects the live store row onto admission's narrow lease facts", () => {
-    const list = spyOn(LeaseStore, "listLiveByHolder").mockReturnValue([
-      {
-        id: "lease-1",
-        conversationId: "conversation-1",
-        holderDelegationId: "delegation-1",
-        contactId: "actor-1",
-      } as never,
-    ]);
-    try {
-      expect(createLeaseLinkage().listLiveByHolder("delegation-1", 1)).toEqual([
-        {
-          id: "lease-1",
-          conversationId: "conversation-1",
-          holderDelegationId: "delegation-1",
-          contactId: "actor-1",
-        },
-      ]);
-    } finally {
-      list.mockRestore();
-    }
   });
 });
 

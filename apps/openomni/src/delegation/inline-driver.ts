@@ -24,17 +24,16 @@ export type InlineWorkerRunner = (
  */
 export function createInlineDriver(run: InlineWorkerRunner): DelegationDriver {
   return {
-    async run(
+    run: async (
       admitted: Admitted,
       handle: Delegation.Handle,
       signal: AbortSignal,
       report?: DriverReport,
-    ): Promise<DriverOutcome> {
+    ): Promise<DriverOutcome> => {
       if (signal.aborted) return { status: "cancelled", reason: "delegation stopped" };
       report?.delivered();
       let output: Awaited<ReturnType<InlineWorkerRunner>>;
-      try {
-        output = await run({
+      const input = {
         delegationId: handle.delegationId,
         ...(admitted.workerRunId === undefined ? {} : { workerRunId: admitted.workerRunId }),
         operation: admitted.request.operation,
@@ -42,7 +41,9 @@ export function createInlineDriver(run: InlineWorkerRunner): DelegationDriver {
         acceptanceCriteria: admitted.request.acceptanceCriteria ?? [],
         origin: admitted.childOrigin,
         signal,
-        });
+      };
+      try {
+        output = await run(input);
       } catch (error) {
         if (error instanceof WorkerRunError) return { status: "failed", error: error.message, workerRunId: error.runId };
         throw error;
