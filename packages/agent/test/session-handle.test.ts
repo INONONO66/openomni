@@ -201,17 +201,24 @@ describe("durable session handle", () => {
     const first = handle.prompt("first prompt");
     const firstInput = await bounded(entered.promise, "runner entry");
     const second = handle.prompt("second prompt");
+    const third = handle.prompt("third prompt");
     releaseBoundary.resolve();
-    await bounded(Promise.all([first, second]), "serialized prompt completion");
+    await bounded(Promise.all([first, second, third]), "serialized prompt completion");
 
     expect(runs).toBe(1);
     expect(maximumActive).toBe(1);
     expect(firstInput.messages).toEqual([{ role: "user", text: "first prompt" }]);
-    expect(drained).toEqual([[{ role: "user", text: "second prompt" }]]);
+    expect(drained).toEqual([
+      [
+        { role: "user", text: "second prompt" },
+        { role: "user", text: "third prompt" },
+      ],
+    ]);
     expect(SessionHandleStore.inboxRows(handle.id).map((row) => [row.content, row.status])).toEqual(
       [
         ["first prompt", "consumed"],
         ["second prompt", "consumed"],
+        ["third prompt", "consumed"],
       ],
     );
     expect(
