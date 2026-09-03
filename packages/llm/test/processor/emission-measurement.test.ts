@@ -73,7 +73,7 @@ describe("Processor emission measurement (#545 T2)", () => {
       }),
     });
 
-    await processor.process({ system: "" });
+    await processor.process({ system: "", promptText: "" });
 
     console.log(
       `[measurement] onMessage calls: ${onMessageCalls}, serialized bytes: ${serializedBytes}`,

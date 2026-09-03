@@ -10,6 +10,7 @@ import type { Sink } from "../sink";
 import { coerceApiError } from "../error";
 import { Retry } from "../retry";
 import type { Provider } from "../provider";
+import { estimateUsage as defaultEstimateUsage, type EstimateUsage } from "../token";
 import {
   createStreamEventState,
   drainToolSettlements,
@@ -26,6 +27,13 @@ export namespace Processor {
 
   interface StreamInput {
     system: string;
+    /**
+     * The prompt text this call sends to the provider, serialized. The caller
+     * owns it (only the caller holds the messages and tool specs), and the
+     * step-finish fold reads it as the local estimator's input-token source
+     * when the provider's own input count is unusable (#933).
+     */
+    promptText: string;
   }
 
   interface Stream {
@@ -38,6 +46,12 @@ export namespace Processor {
     model: Provider.Model;
     abort: AbortSignal;
     maxRetryAttempts?: number;
+    /**
+     * Local usage estimator (#933). Substituted field-wise for unusable
+     * required provider counts at step finish. Absent keeps the package
+     * default (`ceil(chars / 4)`).
+     */
+    estimateUsage?: EstimateUsage;
     sink?: Sink;
     /**
      * Where observation goes. A port, not `Bus`, so that what sits behind it
@@ -95,6 +109,7 @@ export namespace Processor {
       createStream,
       toolNames,
       maxRetryAttempts = DEFAULT_MAX_RETRY_ATTEMPTS,
+      estimateUsage = defaultEstimateUsage,
       trace,
     } = options;
 
@@ -210,6 +225,8 @@ export namespace Processor {
             sink,
             record,
             note: debugNote,
+            promptText: streamInput.promptText,
+            estimateUsage,
             ...(toolNames !== undefined && { toolNames }),
           };
 

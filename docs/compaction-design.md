@@ -43,6 +43,7 @@ Run memory (volatile):
 ## Lifecycle
 
 **Turn settlement (`run.turn.post` timing, per-run policy-factory state):**
+- The measured window is the turn's last `step-finish` input-token count. That count is the provider's own when the provider reports a usable one, and llm's local `ceil(chars / 4)` estimate when it does not (absent, wrong-typed, or numerically out of domain) — so a step the provider failed to account for reads as its real size instead of as a zero window that never trips a threshold (`packages/llm/src/token/index.ts`, kernel §5.3).
 - One geometry resolver owns the base threshold (0.45/0.50/0.55/0.60/0.70/0.80 by window tier), previous-yield feedback (±0.05, clamped to 0.40–0.85), reserve, lead, prepare, and grace boundaries. At `threshold - lead`, `prepare()` starts in the background.
 - `prepare()` input = the would-be cut span **minus user messages minus prior summary renders**, deterministically bounded to half the context window. The summarizer receives `{maxInputTokens, maxOutputTokens, contextWindowTokens}`. Output candidates pin the summarized prefix, first-kept anchor, and latest compaction anchor.
 

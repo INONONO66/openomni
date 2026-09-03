@@ -78,7 +78,7 @@ describe("Processor fold-based emission (#545 T2)", () => {
       ]),
     });
 
-    await processor.process({ system: "" });
+    await processor.process({ system: "", promptText: "" });
 
     // Boundaries only: part.appended (open, empty), part.advanced (completed
     // with the full text), message.finished. Deltas emit nothing.
@@ -107,7 +107,7 @@ describe("Processor fold-based emission (#545 T2)", () => {
       ]),
     });
 
-    await processor.process({ system: "" });
+    await processor.process({ system: "", promptText: "" });
 
     // The snapshot captured when the text part completed must still describe
     // that instant: no finish reason, no token totals stamped afterwards.
@@ -134,7 +134,7 @@ describe("Processor fold-based emission (#545 T2)", () => {
       ]),
     });
 
-    await processor.process({ system: "" });
+    await processor.process({ system: "", promptText: "" });
 
     expect(cap.facts.map((fact) => fact.type)).toEqual([
       "message.created",
@@ -175,7 +175,7 @@ describe("Processor fold-based emission (#545 T2)", () => {
       }),
     });
 
-    await processor.process({ system: "" });
+    await processor.process({ system: "", promptText: "" });
 
     expect(attemptCount).toBe(2);
     const finalParts = cap.messages.at(-1)?.parts ?? [];
@@ -201,7 +201,7 @@ describe("Processor fold-based emission (#545 T2)", () => {
       }),
     });
 
-    await processor.process({ system: "" });
+    await processor.process({ system: "", promptText: "" });
 
     const kinds = cap.facts.map((fact) => `${fact.type}@${fact.attemptId}`);
     const created = cap.facts.filter((fact) => fact.type === "message.created");
@@ -235,7 +235,7 @@ describe("Processor fold-based emission (#545 T2)", () => {
       ]),
     });
 
-    await processor.process({ system: "" });
+    await processor.process({ system: "", promptText: "" });
 
     const toolPart = cap.messages
       .at(-1)
@@ -259,7 +259,7 @@ describe("Processor fold-based emission (#545 T2)", () => {
       ]),
     });
 
-    await processor.process({ system: "" });
+    await processor.process({ system: "", promptText: "" });
 
     const texts = (cap.messages.at(-1)?.parts ?? [])
       .filter((part): part is Message.TextPart => part.type === "text")
@@ -279,7 +279,7 @@ describe("Processor fold-based emission (#545 T2)", () => {
       ]),
     });
 
-    await processor.process({ system: "" });
+    await processor.process({ system: "", promptText: "" });
 
     const texts = (cap.messages.at(-1)?.parts ?? [])
       .filter((part): part is Message.TextPart => part.type === "text")
@@ -300,7 +300,7 @@ describe("Processor fold-based emission (#545 T2)", () => {
       ]),
     });
 
-    await processor.process({ system: "" });
+    await processor.process({ system: "", promptText: "" });
 
     const texts = (cap.messages.at(-1)?.parts ?? [])
       .filter((part): part is Message.TextPart => part.type === "text")
@@ -317,7 +317,7 @@ describe("Processor fold-based emission (#545 T2)", () => {
       ]),
     });
 
-    await processor.process({ system: "" });
+    await processor.process({ system: "", promptText: "" });
 
     const reasoning = cap.messages
       .at(-1)
@@ -338,7 +338,7 @@ describe("Processor fold-based emission (#545 T2)", () => {
       ]),
     });
 
-    await processor.process({ system: "" });
+    await processor.process({ system: "", promptText: "" });
 
     const reasoning = (cap.messages.at(-1)?.parts ?? []).filter(
       (part): part is Message.ReasoningPart => part.type === "reasoning",
@@ -364,7 +364,7 @@ describe("Processor fold-based emission (#545 T2)", () => {
       ]),
     });
 
-    await processor.process({ system: "" });
+    await processor.process({ system: "", promptText: "" });
 
     const reasoning = cap.messages
       .at(-1)

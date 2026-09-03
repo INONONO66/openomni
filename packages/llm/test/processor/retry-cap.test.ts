@@ -49,7 +49,7 @@ describe("Processor retry cap", () => {
     });
 
     try {
-      const processing = processor.process({ system: "" });
+      const processing = processor.process({ system: "", promptText: "" });
       const rejection = processing.catch((error) => error);
       expect(facts.map((fact) => fact.type)).toEqual(["message.created", "message.finished"]);
       expect(facts[1]).toMatchObject({ type: "message.finished", finish: "error" });
@@ -87,7 +87,7 @@ describe("Processor retry cap", () => {
     });
 
     try {
-      const processing = processor.process({ system: "" });
+      const processing = processor.process({ system: "", promptText: "" });
       const rejection = processing.catch((error) => error);
       await Promise.resolve();
       expect(facts.map((fact) => fact.type)).toEqual(["message.created", "message.finished"]);
@@ -140,7 +140,7 @@ describe("Processor retry cap", () => {
       trace: { traceId: "trace-sync-retry", sessionId: "session-sync-retry" },
     });
 
-    const processing = processor.process({ system: "" });
+    const processing = processor.process({ system: "", promptText: "" });
     try {
       expect(statusStates()).toEqual(["busy", "retry"]);
       await secondAttemptStarted;
@@ -191,7 +191,7 @@ describe("Processor retry cap", () => {
     });
 
     try {
-      await processor.process({ system: "" });
+      await processor.process({ system: "", promptText: "" });
       expect.unreachable("Should have thrown the retry error that exceeded the cap");
     } catch (e) {
       expect(e).toBe(retryErrors[2]);
@@ -257,7 +257,7 @@ describe("Processor retry header-delay cap (#532 candidate 3)", () => {
       }),
     });
 
-    await expect(processor.process({ system: "" })).rejects.toBe(serverError);
+    await expect(processor.process({ system: "", promptText: "" })).rejects.toBe(serverError);
 
     const decisions = (
       events.named(Operational.Events.Error.name) as Array<{
@@ -326,7 +326,7 @@ describe("Processor instant transport-failure streak", () => {
     });
 
     try {
-      await expect(processor.process({ system: "" })).rejects.toBeDefined();
+      await expect(processor.process({ system: "", promptText: "" })).rejects.toBeDefined();
 
       // The streak declines on the third instant failure: exactly three
       // attempts, and the two waits between them are probe delays, not the
