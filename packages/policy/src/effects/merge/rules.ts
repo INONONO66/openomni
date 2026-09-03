@@ -29,7 +29,6 @@ type Family =
   | "delegation"
   | "writeback"
   | "runtime"
-  | "work"
   | "audit";
 
 const EFFECT_FAMILY = {
@@ -51,7 +50,6 @@ const EFFECT_FAMILY = {
   "writeback.rewrite": "writeback",
   "writeback.suppress": "writeback",
   "runtime.workspace_lock": "runtime",
-  "work.allow_asserted": "work",
   "audit.annotate": "audit",
 } as const satisfies Record<PolicyEffect["type"], Family>;
 
@@ -73,17 +71,11 @@ interface MergeAccumulators {
   writebackRewrite?: MergedEffect;
   writebackSuppress?: PriorityApprovalAccumulator;
   workspaceLock?: { readonly required: boolean; readonly order: number };
-  allowAsserted?: {
-    readonly criterionIds: string[];
-    readonly order: number;
-    readonly priority: number;
-  };
 }
 
 export function mergeEntries(entries: readonly EffectEntry[]): MergeResult {
   const state: MergeAccumulators = { merged: [], toolFilters: new Map() };
   for (const entry of entries) mergeEntry(state, entry);
-  appendAllowAsserted(state);
   appendMergedEffects(state.merged, state);
   return {
     effects: state.merged
@@ -116,9 +108,6 @@ function mergeEntry(state: MergeAccumulators, entry: EffectEntry): void {
       return;
     case "runtime":
       mergeRuntimeEffect(state, entry as EffectEntry & { effect: EffectFamily<"runtime"> });
-      return;
-    case "work":
-      mergeWorkEffect(state, entry as EffectEntry & { effect: EffectFamily<"work"> });
       return;
     case "audit":
       appendImmediate(state, entry);
@@ -245,37 +234,4 @@ function mergeRuntimeEffect(
     required: (state.workspaceLock?.required ?? false) || effect.required,
     order: Math.min(state.workspaceLock?.order ?? entry.order, entry.order),
   };
-}
-
-function mergeWorkEffect(
-  state: MergeAccumulators,
-  entry: EffectEntry & { effect: EffectFamily<"work"> },
-): void {
-  const { effect } = entry;
-  state.allowAsserted = {
-    ...(state.allowAsserted ?? {
-      criterionIds: [],
-      order: entry.order,
-      priority: entry.priority,
-    }),
-    order: Math.min(state.allowAsserted?.order ?? entry.order, entry.order),
-    priority: Math.max(state.allowAsserted?.priority ?? entry.priority, entry.priority),
-  };
-  for (const criterionId of effect.criterionIds) {
-    if (!state.allowAsserted.criterionIds.includes(criterionId)) {
-      state.allowAsserted.criterionIds.push(criterionId);
-    }
-  }
-}
-
-function appendAllowAsserted(state: MergeAccumulators): void {
-  if (state.allowAsserted === undefined) return;
-  state.merged.push({
-    effect: {
-      type: "work.allow_asserted",
-      criterionIds: state.allowAsserted.criterionIds,
-    },
-    order: state.allowAsserted.order,
-    priority: state.allowAsserted.priority,
-  });
 }

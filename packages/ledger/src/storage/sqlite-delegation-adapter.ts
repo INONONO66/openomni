@@ -119,14 +119,8 @@ function decodeRow(row: DelegationRow): Delegation.Record {
   const stored = JSON.parse(row.data) as Record<string, unknown>;
   // The additive receipt column is authoritative. Old JSON payloads omit it,
   // which intentionally upcasts to unwoken while the column remains NULL.
-  // Assign rows written before WorkItem linkage carry no workItemId; reads
-  // normalize them to a sentinel that resolves to no WorkItem, so the boot
-  // sweep can still settle them instead of dying on the whole table.
   const record = Delegation.Record.parse({
     ...stored,
-    ...(stored.operation === "assign" && stored.workItemId === undefined
-      ? { workItemId: "legacy:pre-work-item-linkage" }
-      : {}),
     ...(row.woken_at === null ? {} : { wokenAt: row.woken_at }),
   });
   if (record.delegationId !== row.delegation_id) {

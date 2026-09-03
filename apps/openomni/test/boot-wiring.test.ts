@@ -5,7 +5,7 @@ import {
   resolveChannelGrant,
 } from "@openomni/channels";
 import { LeaseStore, Storage } from "@openomni/ledger";
-import type { Sink } from "@openomni/llm";
+import type { RunInput, Sink } from "@openomni/llm";
 import type { Channel } from "@openomni/protocol";
 import type { BuiltChannel, ChannelComponent } from "../src/channels";
 import { createComposer } from "../src/composition/composer";
@@ -19,38 +19,38 @@ import {
 } from "../src/provisioning/supervisor";
 import { assistantMessage } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
-import { nextMessage, openSocket } from "./helpers/ws";
+import { nextMessage, opened } from "./helpers/ws";
 
 const suite = residentSuite();
 
-describe("boot catalog", () => {
-  test("boots without memory configuration, injection, or a memory tool", async () => {
-    let offered: readonly string[] = [];
-    let system: string | undefined;
-    const config = suite.config("openomni-no-memory-", { wsToken: "boot-memory-absence" });
+describe("boot tool catalog", () => {
+  test("boots ready without legacy work tools in the Resident catalog", async () => {
+    let resolveToolNames!: (names: readonly string[]) => void;
+    const toolNames = new Promise<readonly string[]>((resolve) => {
+      resolveToolNames = resolve;
+    });
     const app = await suite.boot({
-      config,
+      config: suite.config("openomni-boot-catalog-", { wsToken: "boot-catalog-token" }),
       llm: {
         resolveProviderModel: fakeProviderModel,
-        run: async (input, sink: Sink) => {
-          offered = (input.tools ?? []).map((tool) => tool.name);
-          system = input.system;
-          sink.onMessage(assistantMessage(input, { text: "ready" }));
+        run: async (input: RunInput, sink: Sink) => {
+          resolveToolNames(input.tools.map((tool) => tool.name));
+          sink.onMessage(assistantMessage(input, { id: "boot-catalog-reply", text: "ready" }));
           return { type: "stop" };
         },
       },
     });
 
-    const ws = await openSocket(`ws://127.0.0.1:${app.port}/ws?token=boot-memory-absence`);
-    const result = nextMessage(ws);
-    ws.send(JSON.stringify({ type: "message", text: "report readiness" }));
-    const frame = JSON.parse(String((await result).data)) as { text: string; type: string };
-    ws.close();
+    const ws = new WebSocket(`ws://127.0.0.1:${app.port}/ws?token=boot-catalog-token`);
+    const ready = opened(ws);
+    await ready;
+    const reply = nextMessage(ws);
+    ws.send(JSON.stringify({ type: "message", text: "catalog" }));
 
-    expect(frame).toEqual({ type: "response", text: "ready" });
-    expect("memoryPath" in config).toBe(false);
-    expect(offered).not.toContain("memory");
-    expect(system).not.toContain("\n\n# Memory\n");
+    expect(JSON.parse(String((await reply).data))).toEqual({ type: "response", text: "ready" });
+    expect(await toolNames).not.toContain("work_items");
+    expect(await toolNames).not.toContain("complete_work");
+    ws.close();
   });
 });
 

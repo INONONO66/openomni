@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
+  canonicalDigest,
   canonicalKey,
   isPlainValue,
   PlainValueSchema,
-  WorkItem,
 } from "../src/index.js";
 
 describe("plain JSON owner", () => {
@@ -35,11 +35,11 @@ describe("plain JSON owner", () => {
   });
 
   test("canonical digest rejects values outside the JSON grammar", () => {
-    expect(() => WorkItem.canonicalDigest(undefined)).toThrow();
+    expect(() => canonicalDigest(undefined)).toThrow();
   });
 
   test("canonical digest bytes remain pinned independently of object key order", () => {
-    expect(WorkItem.canonicalDigest({ z: false, a: [2, "y"] })).toBe(
+    expect(canonicalDigest({ z: false, a: [2, "y"] })).toBe(
       "sha256:e53828d05df6b85481c1747214a1f672d2873303857ac4f335de3affe9ed8b50",
     );
   });

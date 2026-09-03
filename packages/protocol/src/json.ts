@@ -5,7 +5,7 @@ import { z } from "zod";
  * Internal single owner for plain-JSON validation and canonical JSON
  * serialization. Not exported from the package barrel: protocol modules
  * import it relatively; external packages consume the domains built on it
- * (policy effects, work-item attempt identity).
+ * (policy effects and stable archive hashing).
  */
 
 export type PlainObject = { [key: string]: PlainValue };
@@ -73,10 +73,10 @@ export function isPlainValue(value: unknown): value is PlainValue {
 }
 
 /**
- * Persisted-fact profile (work-item attempt identity): identical structural
+ * Persisted-fact profile: identical structural
  * guard, but own keys named __proto__/constructor/prototype are ACCEPTED.
  * Pre-hardening schemas admitted such keys into immutable persisted facts
- * (e.g. attempt fingerprint parameters inside work_item.attempt_allocated),
+ * before hardening,
  * so a read schema that refused them would invalidate historical bytes (era
  * law). Values are only ever READ through data-property descriptors and
  * canonically rendered — never assigned onto another object — so accepting

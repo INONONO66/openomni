@@ -47,7 +47,7 @@ The rest of the tree has not caught up — see D11 in the archived agent-core re
 
 - **No singletons beyond `Bus`.** An emitter is a value you hold, not a global you reach for. Consumers receive a `BusEvent.Sink` (declared in `@openomni/protocol`), and the composition root decides what is behind it.
 - **Event descriptors live in `@openomni/protocol`**, not here. This package moves events; it does not define the vocabulary.
-- **Storage lives in `@openomni/ledger`.** `BusPersistence` subscribes through `Bus.observe` and owns the durable journal. It stays there because it resolves a SQLite handle through the storage adapter and reads the `work_item` projection for session attribution — untangling that is a separate change.
+- **Storage lives in `@openomni/ledger`.** `BusPersistence` subscribes through `Bus.observe` and owns the durable journal. It stays there because it resolves a SQLite handle through the storage adapter for session attribution — untangling that is a separate change.
 
 ## ANTI-PATTERNS
 

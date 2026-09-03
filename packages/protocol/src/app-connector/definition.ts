@@ -103,7 +103,6 @@ export const QuestionBridge = z.discriminatedUnion("kind", [
 ]);
 export type QuestionBridge = z.infer<typeof QuestionBridge>;
 
-// #498 K3 dictionary rule: "CompletionReport" is WorkItem-only vocabulary.
 // This connector-side schema describes WHERE the connector's completion
 // report material comes from (final message channel, artifact globs,
 // read-back templates), so the TS symbol is ReportSource. The persisted/wire
@@ -114,10 +113,8 @@ export const ReportSource = z
   .object({
     finalMessage: z.enum(["stdout", "stderr", "log", "artifact"]),
     artifactGlobs: z.array(nonEmptyString).optional(),
-    // Deliberately NOT unified with WorkItem.ReadBackRequest
-    // (work-item/schemas.ts): targets here are templates that the server-side
-    // read-back builder renders into the resolved http(s) URLs that schema
-    // validates.
+    // Targets are templates that the server-side read-back builder renders
+    // into resolved http(s) URLs.
     readBackRequests: z
       .array(
         z

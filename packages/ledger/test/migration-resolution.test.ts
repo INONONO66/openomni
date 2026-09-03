@@ -67,7 +67,25 @@ describe("moved migration resolution (#502)", () => {
         .map((row) => row.name);
       expect(tables).toContain("ledger_event");
       expect(tables).toContain("session");
-      expect(tables).toContain("work_item");
+      expect(tables).not.toContain("work_item");
+    } finally {
+      db.close();
+    }
+  });
+
+  test("forward migration drops WorkItem tables from an upgraded database", () => {
+    const db = new Database(join(tmpDir, "upgraded.db"), { create: true });
+    try {
+      initializeSqliteDatabase(db);
+      db.exec("CREATE TABLE work_item (id TEXT PRIMARY KEY)");
+      db.exec("CREATE INDEX idx_work_item_status ON work_item(id)");
+      db.query("DELETE FROM _migrations WHERE name = ?").run(
+        "0030_drop_retired_tables/migration.sql",
+      );
+      initializeSqliteDatabase(db);
+      expect(
+        db.query<{ name: string }, []>("SELECT name FROM sqlite_master WHERE name = 'work_item'").get(),
+      ).toBeNull();
     } finally {
       db.close();
     }

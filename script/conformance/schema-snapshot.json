@@ -10,6 +10,7 @@
     "value"
   ],
   "Actor.ChannelGrant": [
+    "allowedSenders",
     "channel",
     "createdAt",
     "createdBy",
@@ -17,6 +18,7 @@
     "id",
     "inboundTreatment",
     "kind",
+    "provisionalMint",
     "surface",
     "updatedAt",
     "workspace"
@@ -39,6 +41,7 @@
     "id",
     "kind",
     "metadata",
+    "standing",
     "trustTier",
     "updatedAt"
   ],
@@ -51,6 +54,7 @@
     "tools",
     "trustTier"
   ],
+  "Actor.ProvisionalMintPolicy": ["max", "windowMs"],
   "Actor.ResolvedEndpoint": ["endpoint", "identity"],
   "AppConnector.Consent": [
     "capabilities",
@@ -130,6 +134,28 @@
     "stallTimeoutMs",
     "timeoutMs"
   ],
+  "Approval.Create": ["deadline", "id", "subject"],
+  "Approval.Record": [
+    "createdAt",
+    "deadline",
+    "decidedAt",
+    "decidedBy",
+    "id",
+    "requestedBy",
+    "revision",
+    "state",
+    "subject",
+    "updatedAt"
+  ],
+  "Approval.Subject#contact_promotion": ["actorId", "kind"],
+  "Approval.Subject#endpoint_merge": [
+    "endpointId",
+    "fromActorId",
+    "kind",
+    "toActorId"
+  ],
+  "Approval.Subject#person_mutation": ["kind", "manifestDigest", "personId"],
+
   "BusEvent.Metadata": [
     "actorId",
     "agentName",
@@ -187,8 +213,7 @@
     "parentDelegationId",
     "rootDelegationId",
     "transport",
-    "waitId",
-    "workItemId"
+    "waitId"
   ],
   "Delegation.Origin": [
     "depth",
@@ -212,8 +237,7 @@
     "status",
     "transport",
     "waitId",
-    "wokenAt",
-    "workItemId"
+    "wokenAt"
   ],
   "Delegation.Request": [
     "acceptanceCriteria",
@@ -222,6 +246,49 @@
     "operation",
     "payload"
   ],
+  "Delegation.Settled#cancelled": [
+    "at",
+    "delegationId",
+    "reason",
+    "status",
+    "workerRunId"
+  ],
+  "Delegation.Settled#completed": [
+    "at",
+    "delegationId",
+    "output",
+    "status",
+    "usage",
+    "workerRunId"
+  ],
+  "Delegation.Settled#delivery_failed": [
+    "at",
+    "delegationId",
+    "reason",
+    "status",
+    "workerRunId"
+  ],
+  "Delegation.Settled#failed": [
+    "at",
+    "delegationId",
+    "error",
+    "status",
+    "workerRunId"
+  ],
+  "Delegation.Settled#interrupted": [
+    "at",
+    "delegationId",
+    "status",
+    "workerRunId"
+  ],
+  "Delegation.Settled#no_response": [
+    "at",
+    "deadline",
+    "delegationId",
+    "status",
+    "workerRunId"
+  ],
+  "Delegation.Settled#sent": ["at", "delegationId", "status"],
   "Delegation.WorkerAddress#actor": ["actorId", "kind"],
   "Delegation.WorkerAddress#core": ["kind", "scope"],
   "Engagement.Create": ["createdAt", "id", "ownerSessionId", "terms", "title"],
@@ -318,6 +385,7 @@
     "body",
     "class",
     "conversationId",
+    "leaseId",
     "messageId",
     "operation",
     "senderId",
@@ -350,6 +418,7 @@
     "role",
     "runId",
     "sessionId",
+    "standing",
     "trustTier",
     "type",
     "workerId"
@@ -409,6 +478,29 @@
   "Ipc.Notification": ["id", "method", "params", "type", "v"],
   "Ipc.Request": ["id", "method", "params", "type", "v"],
   "Ipc.Response": ["error", "id", "result", "type", "v"],
+  "Lease.Budget": ["maxOutbound", "outboundUsed"],
+  "Lease.Create": [
+    "contactId",
+    "conversationId",
+    "expiresAt",
+    "holderDelegationId",
+    "id",
+    "maxOutbound"
+  ],
+  "Lease.Record": [
+    "budget",
+    "closedAt",
+    "closedBy",
+    "contactId",
+    "conversationId",
+    "createdAt",
+    "expiresAt",
+    "holderDelegationId",
+    "id",
+    "revision",
+    "state",
+    "updatedAt"
+  ],
   "Ledger.AdoptGenesis": ["data", "timeCreated", "type"],
   "Ledger.ChainBreak": [
     "actual",
@@ -553,7 +645,11 @@
     "trustTier"
   ],
   "Ledger.RouteNotDelivered": ["inboundId", "reason"],
-  "Machine.AttachResult#attached": ["effectiveCapabilities", "status"],
+  "Machine.AttachResult#attached": [
+    "effectiveCapabilities",
+    "effectiveExports",
+    "status"
+  ],
   "Machine.AttachResult#refused": ["reason", "status"],
   "Machine.CellRequest": ["cellId", "code", "tenant", "timeoutMs"],
   "Machine.CellResult#completed": ["cellId", "output", "status", "value"],
@@ -561,12 +657,19 @@
   "Machine.CellResult#timed_out": ["cellId", "status"],
   "Machine.Enrollment": [
     "allowedCapabilities",
+    "allowedExports",
     "enrolledAt",
     "machineId",
     "name"
   ],
+  "Machine.FsRequest#list": ["export", "op", "path"],
+  "Machine.FsRequest#read": ["export", "limit", "offset", "op", "path"],
+  "Machine.FsRequest#stat": ["export", "op", "path"],
+  "Machine.FsResult#completed": ["status", "value"],
+  "Machine.FsResult#refused": ["message", "reason", "status"],
   "Machine.Offer": [
     "daemonVersion",
+    "exports",
     "machineId",
     "offeredAt",
     "offeredCapabilities",
@@ -798,7 +901,6 @@
   "Policy.PolicyEffect#tool.rewrite_input": ["input", "type"],
   "Policy.PolicyEffect#tool.rewrite_output": ["output", "type"],
   "Policy.PolicyEffect#tool.skip_invocation": ["reason", "type"],
-  "Policy.PolicyEffect#work.allow_asserted": ["criterionIds", "type"],
   "Policy.PolicyEffect#writeback.rewrite": ["output", "type"],
   "Policy.PolicyEffect#writeback.suppress": ["reason", "type"],
   "Policy.PolicyObligation": [
@@ -845,6 +947,42 @@
     "inputRules",
     "requireApproval",
     "requireApprovalLabels"
+  ],
+  "Provisioning.ChannelInstance": [
+    "createdBy",
+    "credentialRef",
+    "enabled",
+    "grant",
+    "id",
+    "provider",
+    "revision",
+    "settings",
+    "updatedAt"
+  ],
+  "Provisioning.GrantPolicy": [
+    "allowedSenders",
+    "defaultTier",
+    "provisionalMint"
+  ],
+  "Provisioning.Person": [
+    "createdBy",
+    "displayName",
+    "endpoints",
+    "id",
+    "kind",
+    "revision",
+    "trustTier",
+    "updatedAt"
+  ],
+  "Provisioning.PersonEndpoint": ["channel", "externalId", "workspace"],
+  "Provisioning.Secret": [
+    "ciphertext",
+    "createdAt",
+    "id",
+    "kekId",
+    "purpose",
+    "rotatedAt",
+    "wrappedDek"
   ],
   "Token.AgentUsage": [
     "cacheReadTokens",
@@ -992,265 +1130,5 @@
     "updatedAt"
   ],
   "Wait.Reply": ["messageId", "receivedAt", "replyKey", "responderId"],
-  "Wait.ReplyInput": ["at", "messageId", "replyKey", "responderCandidates"],
-  "WorkItem.Attempt": [
-    "attemptId",
-    "attemptSeq",
-    "contentFingerprint",
-    "environmentFingerprint",
-    "retryOf",
-    "reusedFromAttemptId"
-  ],
-  "WorkItem.AttemptTerminal": [
-    "attemptId",
-    "endedAt",
-    "error",
-    "outcome",
-    "usage"
-  ],
-  "WorkItem.AttemptUsage": ["seconds", "tokens"],
-  "WorkItem.Blocker": ["createdAt", "description", "id", "kind", "resolvedAt"],
-  "WorkItem.Claim": [
-    "basisRef",
-    "createdAt",
-    "criterionId",
-    "id",
-    "observationIds",
-    "statement"
-  ],
-  "WorkItem.CompletionAdmission": [
-    "basisRef",
-    "completionReportRef",
-    "completionReportSnapshot",
-    "contractRevision",
-    "createdAt",
-    "decision",
-    "effectiveResultIds",
-    "expectedHead",
-    "id",
-    "origin",
-    "ownerOverrideReceiptRef",
-    "policyRef",
-    "proposedFactIds",
-    "reasonCodes",
-    "recordedHead",
-    "requestId",
-    "requestRoot",
-    "residualRisks",
-    "sourceIdentity",
-    "stakesRef",
-    "unresolvedCriterionIds",
-    "version",
-    "workItemHash"
-  ],
-  "WorkItem.CompletionFacts": [
-    "admissions",
-    "claims",
-    "criteria",
-    "effects",
-    "invalidations",
-    "observations",
-    "requestReservations",
-    "results",
-    "revision",
-    "verificationErrors",
-    "version"
-  ],
-  "WorkItem.CompletionReport": ["caveats", "claims", "followUps", "summary"],
-  "WorkItem.CompletionRequest": [
-    "basisRef",
-    "claims",
-    "contractRevision",
-    "effects",
-    "expectedHead",
-    "id",
-    "invalidations",
-    "observations",
-    "origin",
-    "ownerOverrideReceiptRef",
-    "results",
-    "sourceIdentity",
-    "verificationErrors",
-    "version",
-    "workItemHash"
-  ],
-  "WorkItem.CompletionRequestReservation": [
-    "attempt",
-    "basisRef",
-    "createdAt",
-    "envelopeDigest",
-    "expectedHead",
-    "fence",
-    "id",
-    "leaseExpiresAt",
-    "ownerId",
-    "recordedHead",
-    "requestId",
-    "requestRoot",
-    "version"
-  ],
-  "WorkItem.CompletionSourceIdentity": ["identity", "source"],
-  "WorkItem.CompletionSourceOrigin": ["identity", "source"],
-  "WorkItem.CompletionTerminalReceipt": [
-    "admissionId",
-    "basisRef",
-    "completionReportRef",
-    "contractRevision",
-    "hash",
-    "recordedHead",
-    "requestId",
-    "version"
-  ],
-  "WorkItem.ContentFingerprint": ["digest", "inputs"],
-  "WorkItem.ContentFingerprintInputs": [
-    "dependencyLock",
-    "handlerCodeRef",
-    "handlerKind",
-    "model",
-    "upstreamFingerprints",
-    "workInput"
-  ],
-  "WorkItem.Criterion": ["id", "required", "revision", "statement"],
-  "WorkItem.CriterionResult#1": [
-    "assumptions",
-    "basisRef",
-    "checkedPredicate",
-    "createdAt",
-    "criterionId",
-    "id",
-    "observationIds",
-    "residualRisks",
-    "scope",
-    "value",
-    "verifierRef"
-  ],
-  "WorkItem.CriterionResult#asserted": [
-    "assumptions",
-    "basisRef",
-    "createdAt",
-    "criterionId",
-    "id",
-    "observationIds",
-    "residualRisks",
-    "scope",
-    "value",
-    "verifierRef"
-  ],
-  "WorkItem.EffectRecord": [
-    "attempt",
-    "createdAt",
-    "id",
-    "intentRef",
-    "outcome"
-  ],
-  "WorkItem.EnvironmentFingerprint": ["digest", "inputs"],
-  "WorkItem.EnvironmentFingerprintInputs": [
-    "arch",
-    "bunVersion",
-    "configRef",
-    "os",
-    "policy",
-    "providerParameters",
-    "schemaVersions",
-    "toolVersions",
-    "verifierVersions",
-    "workspaceRoot"
-  ],
-  "WorkItem.Evidence": [
-    "attempt",
-    "basisRef",
-    "createdAt",
-    "criterionId",
-    "description",
-    "detail",
-    "id",
-    "kind",
-    "passed",
-    "readBack"
-  ],
-  "WorkItem.Info": [
-    "acceptanceCriteria",
-    "assigneeId",
-    "attempt",
-    "attemptTerminal",
-    "blockers",
-    "changedFiles",
-    "completionContract",
-    "completionFacts",
-    "completionReport",
-    "completionTerminalReceipt",
-    "constraints",
-    "context",
-    "currentAttemptId",
-    "evidence",
-    "executorKind",
-    "failureReason",
-    "goal",
-    "intent",
-    "lastAttemptSeq",
-    "maxAttempts",
-    "name",
-    "originSessionId",
-    "outcome",
-    "relations",
-    "revision",
-    "sessionId",
-    "sourceChannel",
-    "sourceMessageId",
-    "timestamps",
-    "workerRunId",
-    "workItemId",
-    "workSessionId"
-  ],
-  "WorkItem.Observation": [
-    "ancestryRefs",
-    "artifactRefs",
-    "basisRef",
-    "id",
-    "observedAt",
-    "producer",
-    "provenanceRef",
-    "subjectRef"
-  ],
-  "WorkItem.ReadBackRequest#api_query": [
-    "kind",
-    "maxBodyBytes",
-    "method",
-    "target",
-    "timeoutMs"
-  ],
-  "WorkItem.ReadBackRequest#citation_match": [
-    "kind",
-    "maxBodyBytes",
-    "quotedText",
-    "target",
-    "timeoutMs"
-  ],
-  "WorkItem.ReadBackRequest#url_fetch": [
-    "kind",
-    "maxBodyBytes",
-    "target",
-    "timeoutMs"
-  ],
-  "WorkItem.ReadBackRequestEnvelope": [
-    "claimIndex",
-    "criterionIndex",
-    "request"
-  ],
-  "WorkItem.ResultInvalidation": [
-    "basisRef",
-    "createdAt",
-    "id",
-    "reason",
-    "resultId"
-  ],
-  "WorkItem.VerificationErrorFact": [
-    "basisRef",
-    "code",
-    "createdAt",
-    "criterionId",
-    "detail",
-    "id",
-    "verifierRef"
-  ]
+  "Wait.ReplyInput": ["at", "messageId", "replyKey", "responderCandidates"]
 }

@@ -8,7 +8,6 @@ import {
   SqliteStorageAdapter,
   Storage,
   WaitStore,
-  WorkItemStore,
 } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { WaitService, findWaitCandidates, targetsOfWait } from "../../src/router/wait/index.js";
@@ -115,9 +114,9 @@ function registerDriverActors(): void {
 
 // Frozen worker_run_state archive statuses (#510 D2b / #498 K1) — counted at
 // the adapter layer; the store surface is session-internal.
-/** WorkItem + Worker/session census: messaging must never move this number. */
+/** Session census: messaging must never allocate a session. */
 function allocationCount(): number {
-  return Session.list().length + WorkItemStore.list().length;
+  return Session.list().length;
 }
 
 function awaitedWaitSpec() {

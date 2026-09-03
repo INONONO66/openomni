@@ -97,11 +97,6 @@ export const LEDGER_PRODUCER_MANIFEST: LedgerProducerManifest = {
       writes: "append+adoptStream",
     },
     {
-      streamClass: "work",
-      producers: ["packages/ledger/src/work-item/facts.ts"],
-      writes: "append+adoptStream",
-    },
-    {
       streamClass: "route",
       // The gateway router records channel-admitted route decisions before
       // anything acts. The removed product kernel's internal arm is gone.

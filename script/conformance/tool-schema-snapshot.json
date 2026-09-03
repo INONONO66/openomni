@@ -620,88 +620,32 @@
     "placement": "host"
   },
   {
-    "name": "work_items",
-    "description": "List or inspect commissioned WorkItems, or complete one with verified evidence-backed judgments. Use op=list|get|complete.",
+    "name": "memory",
+    "description": "Curate durable memory: add, replace, or remove an entry in the system or owner store. What memory holds is already in your context under # Memory — there is no read. Budgets are hard: when a store is full, curate instead of appending. Writes render from the NEXT session, not this one.",
     "inputSchema": {
       "type": "object",
       "properties": {
-        "op": {
-          "anyOf": [
-            {
-              "type": "string",
-              "const": "list"
-            },
-            {
-              "type": "string",
-              "const": "get"
-            },
-            {
-              "type": "string",
-              "const": "complete"
-            }
-          ]
+        "action": {
+          "type": "string",
+          "enum": ["add", "replace", "remove"]
         },
-        "workItemId": {
+        "store": {
+          "type": "string",
+          "enum": ["system", "owner"],
+          "description": "system = durable operating notes; owner = the Owner's profile."
+        },
+        "id": {
+          "description": "Which entry (replace and remove only).",
           "type": "string",
           "minLength": 1
         },
-        "judgments": {
-          "minItems": 1,
-          "type": "array",
-          "items": {
-            "oneOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "criterionId": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "value": {
-                    "type": "string",
-                    "const": "asserted"
-                  }
-                },
-                "required": ["criterionId", "value"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "criterionId": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "value": {
-                    "type": "string",
-                    "enum": ["verified", "refuted"]
-                  },
-                  "checkedPredicate": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "evidenceIds": {
-                    "minItems": 1,
-                    "type": "array",
-                    "items": {
-                      "type": "string",
-                      "minLength": 1
-                    }
-                  }
-                },
-                "required": [
-                  "criterionId",
-                  "value",
-                  "checkedPredicate",
-                  "evidenceIds"
-                ],
-                "additionalProperties": false
-              }
-            ]
-          }
+        "content": {
+          "description": "The entry text (add and replace only).",
+          "type": "string",
+          "minLength": 1
         }
       },
-      "required": ["op"],
+      "required": ["action", "store"],
       "additionalProperties": false
     },
     "safe": false,

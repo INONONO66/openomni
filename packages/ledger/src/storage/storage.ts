@@ -1,7 +1,6 @@
 import type { Database } from "bun:sqlite";
-import type { Message, Storage as ProtocolStorage, WorkItem } from "@openomni/protocol";
+import type { Message, Storage as ProtocolStorage } from "@openomni/protocol";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { createWorkItemCompletionWriter } from "../work-item/completion-writer.js";
 import type { SessionInfo } from "../session/info";
 import type { WorkerRunStateStore } from "../worker-run/state-store";
 
@@ -10,12 +9,6 @@ export const productionStorageAdapterBrand: unique symbol = Symbol("productionSt
 // Same-process application modules are trusted composition-root code. The completion writer
 // prevents accidental bypass through ordinary store APIs; it is not an OS isolation boundary.
 export namespace Storage {
-  export type WorkItemCompletionWriter = (
-    hash: string,
-    expectedHead: number,
-    item: WorkItem.Info,
-  ) => boolean;
-
   /** One stored transcript fact in immutable session-stream order. */
   export type TranscriptFactRow = {
     sessionID: string;
@@ -95,7 +88,7 @@ export namespace Storage {
     // (requireSubAdapter throw) when it is missing; production adapters wire
     // it as required (SqliteStorageAdapter).
     surfaceKey?: ProtocolStorage.SurfaceKeySubAdapter;
-    workItem?: ProtocolStorage.WorkItemSubAdapter;
+
     // Optional here for test fakes only — WaitStore fails closed (typed
     // adapter_absent error) when it is missing; production adapters wire it
     // as required (SqliteStorageAdapter).
@@ -154,7 +147,7 @@ export namespace Storage {
     "part",
     "transcriptFact",
     "surfaceKey",
-    "workItem",
+
     "wait",
     "conversation",
     "lease",
@@ -193,7 +186,7 @@ export namespace Storage {
   let adapter: Adapter | null = null;
   let initializedDbPathValue: string | null = null;
 
-  export function configure(newAdapter: Adapter): WorkItemCompletionWriter {
+  export function configure(newAdapter: Adapter): void {
     if (newAdapter[productionStorageAdapterBrand] === true) {
       assertComplete(newAdapter);
     }
@@ -202,11 +195,10 @@ export namespace Storage {
     if (scope) {
       scope.adapter = newAdapter;
       scope.initializedDbPath = "__configured__";
-      return createWorkItemCompletionWriter(() => Storage.get());
+      return;
     }
     adapter = newAdapter;
     initializedDbPathValue = "__configured__";
-    return createWorkItemCompletionWriter(() => Storage.get());
   }
 
   export function getInitializedDbPath(): string | null {

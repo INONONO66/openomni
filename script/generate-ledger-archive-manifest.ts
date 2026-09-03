@@ -14,7 +14,7 @@
 //     at generation time — the schema the frozen rows were persisted under;
 //   - rowCount + idRange (first/last id in id order): range identity;
 //   - integrityHash: sha256 over the canonical JSON of ALL rows in id order
-//     (protocol `WorkItem.canonicalDigest` — the one exported digest owner).
+//     (protocol `canonicalDigest` — the one exported digest owner).
 //     This is a table-level range hash, NOT the bus/ledger event chain.
 //
 // Artifact path convention: `ledger-archive-manifest.json` NEXT TO the
@@ -30,7 +30,7 @@ import { Database } from "bun:sqlite";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { replaceFileAtomically } from "../packages/ledger/src/index";
-import { WorkItem } from "../packages/protocol/src/index";
+import { canonicalDigest } from "../packages/protocol/src/index";
 
 /** Frozen legacy tables enumerated by the manifest (grows as writers freeze). */
 const FROZEN_TABLES: readonly { table: string; idColumn: string }[] = [
@@ -81,7 +81,7 @@ function buildTableEntry(
       first && last
         ? { first: String(first[spec.idColumn]), last: String(last[spec.idColumn]) }
         : null,
-    integrityHash: WorkItem.canonicalDigest(rows),
+    integrityHash: canonicalDigest(rows),
   };
 }
 

@@ -23,7 +23,6 @@ import { createSqliteConversationAdapter } from "./sqlite-conversation-adapter";
 import { createSqliteApprovalAdapter } from "./sqlite-approval-adapter";
 import { createSqliteLeaseAdapter } from "./sqlite-lease-adapter";
 import { createSqliteWaitAdapter } from "./sqlite-wait-adapter";
-import { createSqliteWorkItemAdapter } from "./sqlite-work-item-adapter";
 import { createSqliteWorkerRunStateAdapter } from "./sqlite-worker-run-state-adapter";
 import { productionStorageAdapterBrand, type Storage } from "./storage";
 
@@ -48,7 +47,6 @@ export class SqliteStorageAdapter implements Storage.Adapter {
   readonly transcriptFact: NonNullable<Storage.Adapter["transcriptFact"]>;
   readonly surfaceKey: NonNullable<Storage.Adapter["surfaceKey"]>;
   readonly workerRunState: WorkerRunStateStore.Adapter;
-  readonly workItem: NonNullable<Storage.Adapter["workItem"]>;
   readonly wait: NonNullable<Storage.Adapter["wait"]>;
   readonly conversation: NonNullable<Storage.Adapter["conversation"]>;
   readonly lease: NonNullable<Storage.Adapter["lease"]>;
@@ -93,7 +91,6 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     this.transcriptFact = createSqliteTranscriptFactAdapter(this.db);
     this.surfaceKey = createSqliteSurfaceKeyAdapter(this.db);
     this.workerRunState = createSqliteWorkerRunStateAdapter(this.db);
-    this.workItem = createSqliteWorkItemAdapter(this.db);
     this.wait = createSqliteWaitAdapter(this.db);
     this.conversation = createSqliteConversationAdapter(this.db);
     this.lease = createSqliteLeaseAdapter(this.db);

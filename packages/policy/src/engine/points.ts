@@ -24,7 +24,6 @@ const canonicalTimingEntries = {
   "delegation.worker.post": Policy.Timing.INVOKE_RESULT,
   "run.turn.post": Policy.Timing.TURN_FINISH,
   "run.completion.pre": Policy.Timing.COMPLETION_PREPARE,
-  "work.complete.pre": Policy.Timing.COMPLETION_PREPARE,
   "run.lifecycle.post": Policy.Timing.RUN_FINISH,
   "run.error.error": Policy.Timing.ERROR,
 } satisfies Readonly<Record<PolicyPointId, Policy.Timing>>;

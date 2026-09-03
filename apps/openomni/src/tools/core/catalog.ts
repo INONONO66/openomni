@@ -1,7 +1,7 @@
 import type { Tool } from "@openomni/protocol";
 import type { DelegationOrigin } from "../../delegation/admission";
 import type { DelegationKernel } from "../../delegation/kernel";
-import type { CompletionPort } from "../../work-item/completion";
+import type { CuratedMemory } from "../../memory/store";
 import { createApprovalTool, type ApprovalPort } from "../authority/approval";
 import {
   createAwaitDelegationTool,
@@ -11,8 +11,8 @@ import {
 import { createLlmTool, type LlmPort } from "../execution/llm";
 import { createRunCodeTool, type CellPorts } from "../execution/run-code";
 import { createConverseTool, type ConversePort, type LeasePort } from "../mutation/converse";
+import { createMemoryTool } from "../mutation/memory";
 import { createProvisionTool, type ProvisionPort } from "../mutation/provision";
-import { createWorkItemsTool } from "../mutation/work-items";
 import { eraseTool, type AnyToolDefinition } from "./define";
 import { toolSpec } from "./project";
 
@@ -22,7 +22,7 @@ export interface CatalogPorts {
   readonly leases?: LeasePort;
   readonly approvals?: ApprovalPort;
   readonly cells?: CellPorts;
-  readonly workItems?: CompletionPort;
+  readonly memory?: CuratedMemory;
   readonly llm?: LlmPort;
   readonly provisioning?: ProvisionPort;
 }
@@ -46,7 +46,7 @@ export function createTools(
   if (ports.provisioning !== undefined)
     tools.push(eraseTool(createProvisionTool(ports.provisioning)));
   if (ports.cells !== undefined) tools.push(eraseTool(createRunCodeTool(ports.cells)));
-  if (ports.workItems !== undefined) tools.push(eraseTool(createWorkItemsTool(ports.workItems)));
+  if (ports.memory !== undefined) tools.push(eraseTool(createMemoryTool(ports.memory)));
   if (ports.llm !== undefined) tools.push(eraseTool(createLlmTool(ports.llm)));
   const visible = tools.filter(
     (tool) =>

@@ -17,8 +17,6 @@ export { ActorRegistry } from "./actor/index.js";
 export { BlacklistStore } from "./blacklist/index.js";
 export { ChannelGrantStore } from "./channel-grant/index.js";
 export { PersonStore, ChannelInstanceStore, SecretStore, Vault } from "./provisioning/index.js";
-export { WorkItemStore } from "./work-item/index.js";
-export { WorkItemAttemptRun } from "./work-item/attempt-run.js";
 export { ConversationStore } from "./conversation/index.js";
 export { ApprovalStore } from "./approval/index.js";
 export { LeaseStore } from "./lease/index.js";

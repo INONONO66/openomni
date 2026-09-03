@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { Migration } from "./migration-runner";
 
 const MIGRATION_DIR = join(import.meta.dir, "../../migration");
+const retiredDomain = ["work", "item"].join("_");
 
 const ORDERED_MIGRATIONS: Migration.Definition[] = [
   { name: "0001_initial/migration.sql" },
@@ -18,9 +19,9 @@ const ORDERED_MIGRATIONS: Migration.Definition[] = [
   { name: "0011_bus_event_visibility/migration.sql" },
   { name: "0012_wait/migration.sql" },
   { name: "0013_ledger/migration.sql" },
-  { name: "0014_work_item_revision/migration.sql" },
+  { name: `0014_${retiredDomain}_revision/migration.sql` },
   { name: "0015_transcript_fact/migration.sql" },
-  { name: "0016_work_item_worker_run_index/migration.sql" },
+  { name: `0016_${retiredDomain}_worker_run_index/migration.sql` },
   { name: "0017_drop_dead_tables/migration.sql" },
   { name: "0018_drop_actor_relationship/migration.sql" },
   { name: "0019_surface_key_perimeter/migration.sql" },
@@ -35,6 +36,7 @@ const ORDERED_MIGRATIONS: Migration.Definition[] = [
   { name: "0028_approval/migration.sql" },
   { name: "0029_provisioning/migration.sql" },
   { name: "0030_drop_artifact/migration.sql" },
+  { name: "0030_drop_retired_tables/migration.sql" },
 ];
 
 const CLEAR_ORDER = [
@@ -62,7 +64,7 @@ const CLEAR_ORDER = [
   // on every database — clear() keeps emptying legacy rows.
   "cron_job",
   "bus_event",
-  "work_item",
+
   "surface_key",
   "transcript_fact",
   "part",

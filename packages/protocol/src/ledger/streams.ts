@@ -9,7 +9,7 @@ import { Events as IngressEvents, type RoutingDecisionPayload } from "../event/i
  * CLASS (phase B ruling 1) and is recorded on each entry.
  *
  * Head discipline comes in two shapes:
- *   - revision-bound streams (wait/work): fact seq N is the append that
+ *   - revision-bound streams: fact seq N is the append that
  *     produced projected revision N, so `expectedHead` is the pre-transition
  *     revision and the stream head always equals the committed row's
  *     revision;
@@ -64,35 +64,6 @@ export const StreamRegistry = {
     heads: "revision-bound (expectedHead = revision before the transition)",
     conflictMeans: "duplicate create (id reuse impossible) or stale revision — typed store error",
     factTypes: ["lease.issued", "lease.debited", "lease.closed"],
-    status: "shipped",
-  },
-  // SHIPPED — ledger WorkItem fact writers publish; SQLite ledger append/projection consumes.
-  work: {
-    stream: "work:<workItemId>",
-    heads: "revision-bound (expectedHead = revision before the transition)",
-    conflictMeans:
-      "duplicate create = stream exists = typed duplicate; stale head = typed stale_revision",
-    factTypes: [
-      "work_item.created",
-      "work_item.adopted",
-      "work_item.started",
-      "work_item.completed",
-      "work_item.failed",
-      "work_item.cancelled",
-      "work_item.updated",
-      "work_item.removed",
-      "work_item.execution_assigned",
-      "work_item.blocker_added",
-      "work_item.blocker_resolved",
-      "work_item.evidence_appended",
-      "work_item.outcome_recorded",
-      "work_item.completion_request_reserved",
-      "work_item.completion_reservation_released",
-      "work_item.admission_accepted",
-      "work_item.admission_refused",
-      "work_item.attempt_allocated",
-      "work_item.attempt_finished",
-    ],
     status: "shipped",
   },
   // SHIPPED — channels routing resolution publishes and its replay gate consumes via headFact.

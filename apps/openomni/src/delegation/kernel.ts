@@ -1,7 +1,5 @@
-import { newTraceId } from "@openomni/telemetry";
 import { Deadline, Delegation, NamedError, Operational, type BusEvent } from "@openomni/protocol";
 import { DelegationStore } from "@openomni/ledger";
-import type { WorkItemLinkage } from "./work-item-linkage";
 import { delegationTraceId } from "./trace";
 import { z } from "zod";
 import {
@@ -95,12 +93,6 @@ export interface DelegationKernelOptions {
   readonly wake: (wake: DelegationWake) => void | Promise<void>;
   /** Tests and composition roots may defer recovery until the wake target exists. */
   readonly bootSweep?: boolean;
-  /**
-   * WorkItem commissioning for assign. A kernel without this port refuses
-   * assign at admission — an assign without a WorkItem violates the record
-   * schema, so the door stays closed rather than half-open.
-   */
-  readonly workItems?: WorkItemLinkage;
   /**
    * Lease linkage (§3.5): live-lease facts feed the admission fold's worker
    * relaxation, and every settlement closes the settled delegation's leases
@@ -380,31 +372,6 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
       controller.abort();
     }
 
-    // Settlement closes the commissioned attempt: the worker's report is
-    // demoted to Evidence and the attempt records its outcome. The fold stays
-    // synchronous, so the ledger write runs behind it and reports its own
-    // failure instead of blocking settlement.
-    const workItems = options.workItems;
-    if (
-      persisted.operation === "assign" &&
-      persisted.workItemId !== undefined &&
-      workItems !== undefined
-    ) {
-      void Promise.resolve()
-        .then(() => workItems.closeAttempt({ record: persisted, settlement: winner }))
-        .catch((error: unknown) => {
-          events.publish(Operational.Events.Error, {
-            traceId: delegationTraceId(delegationId),
-            sessionId: persisted.origin.sessionId,
-            time: options.now(),
-            component: "delegation",
-            msg: `WorkItem attempt close failed for ${delegationId}`,
-            error: error instanceof Error ? error.message : String(error),
-            context: { delegationId, workItemId: persisted.workItemId ?? "" },
-          });
-        });
-    }
-
     if (persisted.transport !== "inline") deliverWake(persisted, winner);
     return winner;
   }
@@ -472,23 +439,6 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
   function recover(): void {
     if (recovered || stopped) return;
     recovered = true;
-    const workItems = options.workItems;
-    if (workItems !== undefined) {
-      // Re-close attempts whose settlement committed but whose ledger write
-      // was lost before the restart (closeAttempt is idempotent).
-      void workItems
-        .recoverAttempts((delegationId) => store.get(delegationId))
-        .catch((error: unknown) => {
-          events.publish(Operational.Events.Error, {
-            traceId: newTraceId(),
-            time: options.now(),
-            component: "delegation",
-            msg: "WorkItem attempt recovery sweep failed",
-            error: error instanceof Error ? error.message : String(error),
-            context: {},
-          });
-        });
-    }
     for (const record of store.listSettledUnwoken()) {
       if (record.transport !== "inline" && record.settled !== undefined) {
         deliverWake(record, record.settled);
@@ -625,56 +575,11 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
     return refuseDelegation("prepare_failed", message);
   }
 
-  function workItemCommissionRefusal(error: unknown): DelegationRefusal {
-    const message = `WorkItem commissioning failed: ${error instanceof Error ? error.message : String(error)}`;
-    return refuseDelegation("work_item_failed", message);
-  }
-
-  function commissionWorkItem(
-    decision: Admitted,
-    handle: Delegation.Handle,
-    origin: DelegationOrigin,
-  ):
-    | { readonly workItemId?: string }
-    | DelegationRefusal
-    | Promise<{ readonly workItemId?: string } | DelegationRefusal> {
-    if (decision.request.operation !== "assign") return {};
-    if (options.workItems === undefined) {
-      return refuseDelegation(
-        "work_item_failed",
-        "assign requires the WorkItem linkage and this kernel carries none",
-      );
-    }
-    try {
-      return options.workItems
-        .openAssign({
-          delegationId: handle.delegationId,
-          ...(decision.workerRunId === undefined && handle.waitId === undefined
-            ? {}
-            : { workerRunId: decision.workerRunId ?? handle.waitId }),
-          transport: decision.transport,
-          instruction: decision.request.payload.text,
-          acceptanceCriteria: decision.request.acceptanceCriteria ?? [],
-          sessionId:
-            decision.transport === "process"
-              ? `delegation-${handle.delegationId}`
-              : origin.sessionId,
-        })
-        .then(
-          (workItemId) => ({ workItemId }),
-          (error: unknown) => workItemCommissionRefusal(error),
-        );
-    } catch (error) {
-      return workItemCommissionRefusal(error);
-    }
-  }
-
   function delegationRecord(
     decision: Admitted,
     handle: Delegation.Handle,
     origin: DelegationOrigin,
     now: number,
-    workItemId: string | undefined,
   ): Delegation.Record {
     const recordOrigin: DelegationOrigin = {
       role: origin.role,
@@ -693,7 +598,6 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
       instruction: decision.request.payload.text,
       status: "open",
       createdAt: now,
-      ...(workItemId === undefined ? {} : { workItemId }),
     });
   }
 
@@ -708,37 +612,13 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
     return refuseDelegation(reason, message);
   }
 
-  function claimDelegationRecord(
-    record: Delegation.Record,
-    workItemId: string | undefined,
-  ): DelegationRefusal | undefined | Promise<DelegationRefusal> {
+  function claimDelegationRecord(record: Delegation.Record): DelegationRefusal | undefined {
     const claim = store.claimOpenWithinRoot(record, limits.maxFanout, {
       ...(record.parentDelegationId === undefined
         ? {}
         : { requireOpenParent: record.parentDelegationId }),
     });
-    if (claim.claimed) return undefined;
-    if (workItemId === undefined) return claimRefusal(record, claim.reason);
-    return (async () => {
-      try {
-        await options.workItems?.cancelAssign(workItemId);
-      } catch (error) {
-        events.publish(Operational.Events.Error, {
-          traceId: delegationTraceId(record.delegationId),
-          sessionId: record.origin.sessionId,
-          time: options.now(),
-          component: "delegation",
-          msg: `WorkItem rollback failed for ${record.delegationId}`,
-          error: error instanceof Error ? error.message : String(error),
-          context: {
-            delegationId: record.delegationId,
-            workItemId,
-            refusal: claim.reason,
-          },
-        });
-      }
-      return claimRefusal(record, claim.reason);
-    })();
+    return claim.claimed ? undefined : claimRefusal(record, claim.reason);
   }
 
   async function awaitImmediate(handle: Delegation.Handle): Promise<DelegationResult> {
@@ -766,21 +646,6 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
     return { handle };
   }
 
-  function completeDelegationAdmission(
-    admission: Admitted,
-    handle: Delegation.Handle,
-    origin: DelegationOrigin,
-    now: number,
-    commission: { readonly workItemId?: string } | DelegationRefusal,
-  ): DelegationResult | Promise<DelegationResult> {
-    if ("refused" in commission) return commission;
-    const record = delegationRecord(admission, handle, origin, now, commission.workItemId);
-    const refusal = claimDelegationRecord(record, commission.workItemId);
-    if (refusal instanceof Promise) return refusal;
-    if (refusal !== undefined) return refusal;
-    return startDelegation(admission, handle, record);
-  }
-
   async function delegate(candidate: unknown, origin: DelegationOrigin): Promise<DelegationResult> {
     if (stopped) throw stoppedKernelError();
     const now = options.now();
@@ -803,10 +668,10 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
         return preparationRefusal(error);
       }
     }
-    const pendingCommission = commissionWorkItem(admission, handle, origin);
-    const commission =
-      pendingCommission instanceof Promise ? await pendingCommission : pendingCommission;
-    return completeDelegationAdmission(admission, handle, origin, now, commission);
+    const record = delegationRecord(admission, handle, origin, now);
+    const refusal = claimDelegationRecord(record);
+    if (refusal !== undefined) return refusal;
+    return startDelegation(admission, handle, record);
   }
 
   function awaitDelegation(

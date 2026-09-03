@@ -9,7 +9,6 @@ import type { Conversation } from "../conversation/index.js";
 import type { Approval } from "../approval/index.js";
 import type { Lease } from "../lease/index.js";
 import type { Wait } from "../wait/index.js";
-import type { WorkItem } from "../work-item/index.js";
 import type { Gateway } from "../gateway/index.js";
 import type { Provisioning } from "../provisioning/index.js";
 
@@ -108,21 +107,6 @@ export namespace Storage {
      * through {@link headFact} on the owner stream.
      */
     factsByType(type: string): Ledger.RecordedFact[];
-  }
-
-  export interface WorkItemListFilter {
-    status?: WorkItem.Status[];
-    assigneeId?: string;
-    sessionId?: string;
-    parentId?: string;
-  }
-
-  export interface WorkItemSubAdapter {
-    create(hash: string, item: WorkItem.Info): boolean;
-    get(hash: string): WorkItem.Info | undefined;
-    compareAndSet(hash: string, expectedHead: number, item: WorkItem.Info): boolean;
-    list(filter?: WorkItemListFilter): WorkItem.Info[];
-    remove(hash: string): boolean;
   }
 
   export interface EngagementListFilter {

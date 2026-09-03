@@ -1,12 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { Gateway } from "@openomni/protocol";
-import { DelegationStore, WorkItemStore } from "@openomni/ledger";
+import { DelegationStore } from "@openomni/ledger";
 import { admit, type Admitted } from "../src/delegation/admission";
 import { createChannelDriver } from "../src/delegation/channel-driver";
 import { createDelegationKernel } from "../src/delegation/kernel";
 import { eventCollector, awaitedReceipt, RESIDENT, useDelegationStore } from "./helpers/delegation";
-import { fakeWorkItemLinkage } from "./helpers/fake-work-items";
-import { createWorkItemLinkage } from "../src/delegation/work-item-linkage";
 
 useDelegationStore();
 
@@ -143,32 +141,6 @@ describe("channel delegation driver", () => {
     });
   });
 
-  test("durable channel assignment correlates its attempt to the prepared wait id", async () => {
-    const driver = createChannelDriver({
-      send: async (input) => awaitedReceipt(input),
-      now: () => NOW,
-      newWaitId: () => "wait-durable",
-      conversations: { open: () => { throw new Error("not reached"); }, get: () => undefined },
-    });
-    const kernel = createDelegationKernel({
-      drivers: { channel: driver },
-      now: () => NOW,
-      newDelegationId: () => "delegation-durable",
-      wake: () => undefined,
-      workItems: createWorkItemLinkage({ model: { provider: "test", id: "model" }, now: () => NOW }),
-    });
-    const started = await kernel.delegate({
-      address: { kind: "actor", actorId: "alice" }, operation: "assign",
-      payload: { text: "review" }, acceptanceCriteria: ["read"], deadline: DEADLINE,
-    }, RESIDENT);
-    if ("refused" in started) throw new Error(started.refused);
-    const workItemId = DelegationStore.get("delegation-durable")?.workItemId;
-    const item = await WorkItemStore.get(workItemId ?? "");
-    expect(item?.workerRunId).toBe("wait-durable");
-    expect(item?.workerRunId).not.toMatch(/^[0-9a-f-]{36}$/);
-    kernel.stop();
-  });
-
   test("the kernel resolves a correlated reply from the durable record", async () => {
     const events = eventCollector();
     const driver = createChannelDriver({
@@ -183,7 +155,6 @@ describe("channel delegation driver", () => {
       newDelegationId: () => "delegation-1",
       wake: () => undefined,
       events,
-      workItems: fakeWorkItemLinkage(),
     });
     const started = await kernel.delegate(
       {

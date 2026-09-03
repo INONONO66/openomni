@@ -27,7 +27,6 @@ const policyPointIds = [
   "delegation.worker.post",
   "run.turn.post",
   "run.completion.pre",
-  "work.complete.pre",
   "run.lifecycle.post",
   "run.error.error",
 ] as const;
@@ -46,7 +45,7 @@ type RegisteredPolicyPointId = (typeof policyPointIds)[number];
 const PolicyPointId = z
   .string()
   .regex(
-    /^(tool|prompt|delegation|session|credential|connection|run|dispatch|work)\.[a-z][a-z0-9-]*\.(pre|post|error)$/,
+    /^(tool|prompt|delegation|session|credential|connection|run|dispatch)\.[a-z][a-z0-9-]*\.(pre|post|error)$/,
   );
 const PolicyPointContract = z.object({
   id: PolicyPointId,
@@ -252,22 +251,6 @@ const PolicyPointRegistry = Object.freeze({
     ["run"],
     ["sessionId", "runId", "completionCandidate"],
     ["audit.annotate", "run.abort", "prompt.append_context", "run.replace_messages"],
-    ...preBoundary,
-  ),
-  "work.complete.pre": contract(
-    "work.complete.pre",
-    "pre",
-    ["work"],
-    [
-      "workItemHash",
-      "requestId",
-      "contractRevision",
-      "basisRef",
-      "expectedHead",
-      "completionCandidate",
-      "unresolvedBlockerIds",
-    ],
-    ["audit.annotate", "run.abort", "work.allow_asserted"],
     ...preBoundary,
   ),
   "run.lifecycle.post": contract(
@@ -481,19 +464,6 @@ const policyPointInputSchemas = Object.freeze({
   ),
   "run.completion.pre": validator(
     z.object({ sessionId: id, runId: id, completionCandidate: requiredValue }).passthrough(),
-  ),
-  "work.complete.pre": validator(
-    z
-      .object({
-        workItemHash: id,
-        requestId: id,
-        contractRevision: id,
-        basisRef: id,
-        expectedHead: z.number().int().nonnegative(),
-        completionCandidate: requiredValue,
-        unresolvedBlockerIds: z.array(id),
-      })
-      .passthrough(),
   ),
   "run.lifecycle.post": validator(
     z.object({ sessionId: id, runId: id, runOutcome: lifecycleRunOutcome }).passthrough(),

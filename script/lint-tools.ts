@@ -605,13 +605,13 @@ function selfTest(): void {
   const failures: string[] = [];
 
   const nouns = extractTierNouns(
-    "**Tier 1 (philosophy):** Actor, Ledger.\n**Tier 2 (specification):** Wait, WorkItem.",
+    "**Tier 1 (philosophy):** Actor, Ledger.\n**Tier 2 (specification):** Wait.",
   );
   if (unmappedNamespaces(["actor", "totally-new-thing"], nouns).join() !== "totally-new-thing") {
     failures.push("vocab-ratchet did not flag an unmapped namespace");
   }
-  if (unmappedNamespaces(["work-item"], nouns).length !== 0) {
-    failures.push("vocab-ratchet flagged a mapped namespace (work-item→WorkItem)");
+  if (unmappedNamespaces(["wait"], nouns).length !== 0) {
+    failures.push("vocab-ratchet flagged a mapped namespace (wait→Wait)");
   }
 
   const badTool: ToolSurface = {

@@ -48,7 +48,7 @@ function sendClassOf(input: SendInput): MessageClass {
  * grant first, then target resolution, then delivery. Awaited delivery
  * appends exactly one Wait via WaitService.open; fire-and-forget records the
  * audit event only. This module allocates nothing: it never touches
- * WorkItem/Worker/session/executor/budget stores, and the driver's
+ * worker/session/executor/budget stores, and the driver's
  * `allocationDelta: 0` receipt plus the messaging test suite pin that.
  */
 

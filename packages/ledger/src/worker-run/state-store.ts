@@ -1,4 +1,4 @@
-import { NamedError, type WorkItem } from "@openomni/protocol";
+import { NamedError } from "@openomni/protocol";
 import { z } from "zod";
 import { frozenWriteRefusal } from "../storage/frozen";
 import { Storage } from "../storage/storage";
@@ -8,14 +8,13 @@ import { requireSubAdapter } from "../storage/timestamped-store";
  * #510 D2b / #498 K1 — WorkerRunStateStore is FROZEN and session-internal:
  * every write surface throws the typed `WorkerRunFrozenError` and persists
  * nothing (the worker-run transition table died with the writes — run
- * transition legality lives in the WorkItem fold). Reads keep serving the
- * immutable historical `worker_run_state` rows for the upcast-on-read
- * attempt-run view and the archive manifest. Historical rows are seeded in
+ * transition legality has no live owner). Reads keep serving immutable
+ * historical `worker_run_state` rows for the archive manifest. Historical rows are seeded in
  * tests at the adapter layer, exactly as pre-freeze rows persist on disk.
  *
  * The frozen vocabulary (Status/WriteMethod/FrozenError) lives HERE — the
- * protocol `worker-run` namespace was retired with #498 (absorption into
- * WorkItem attempts); this module is the archive's one owner.
+ * protocol `worker-run` namespace was retired with #498; this module is the
+ * archive's one owner.
  */
 
 function requireAdapter(): WorkerRunStateStore.Adapter {
@@ -44,8 +43,7 @@ export namespace WorkerRunStateStore {
 
   /**
    * #510 D2b — worker-run is a frozen legacy writer. Its live production
-   * consumers cut over to WorkItem attempt facts (`work_item.attempt_*` on
-   * the `work:<workItemId>` owner stream), so every worker-run store write
+   * consumers retired, so every worker-run store write
    * method throws this typed error. Callers branch on `data.code`, never
    * message text. Historical `worker_run_state` rows stay readable through
    * the store's read methods and the upcast-on-read attempt-run view; the
@@ -68,7 +66,12 @@ export namespace WorkerRunStateStore {
     readonly parentSessionId?: string;
     readonly agentName: string;
     readonly status: Status;
-    readonly executorKind?: WorkItem.ExecutorKind;
+    readonly executorKind?:
+      | "internal_chat_agent"
+      | "connector_endpoint"
+      | "external_api"
+      | "a2a"
+      | "human_channel";
     readonly title: string;
     readonly prompt: string;
     readonly resumeCount: number;
