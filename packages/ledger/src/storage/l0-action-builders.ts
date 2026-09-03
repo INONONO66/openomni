@@ -13,10 +13,6 @@ export function inboxAppend(row: Inbox.Commit): LedgerAction.Append {
   });
 }
 
-export function inboxAction(row: Inbox.Commit, ordinal: number): LedgerAction.Node {
-  return LedgerAction.Node.parse({ ...inboxAppend(row), ordinal });
-}
-
 export function alarmAppend(input: Alarm.Arm): LedgerAction.Append {
   return LedgerAction.Append.parse({
     id: input.id,
@@ -34,8 +30,4 @@ export function alarmAppend(input: Alarm.Arm): LedgerAction.Append {
     irreversible: true,
     ts: input.fireAt,
   });
-}
-
-export function alarmAction(input: Alarm.Arm, ordinal: number): LedgerAction.Node {
-  return LedgerAction.Node.parse({ ...alarmAppend(input), ordinal });
 }
