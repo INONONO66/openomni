@@ -1,4 +1,6 @@
-import { expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, test } from "bun:test";
+import { SessionHandleStore, Storage } from "@openomni/ledger";
+import { Bus } from "@openomni/telemetry";
 import type { RunInput, Sink } from "@openomni/llm";
 import type { Message } from "@openomni/protocol";
 import type { DelegationKernel } from "../src/delegation/kernel";
@@ -6,6 +8,25 @@ import { createChildKernel } from "../src/delegation/process-entry";
 import { createInlineWorkerRunner, WorkerRunError } from "../src/delegation/worker-loop";
 
 const ORIGIN = { role: "worker", depth: 1, sessionId: "session-drive" } as const;
+
+beforeEach(() => {
+  Storage.initialize({ dbPath: ":memory:", observationSink: Bus });
+  SessionHandleStore.materialize({
+    id: ORIGIN.sessionId,
+    parentId: null,
+    role: "resident",
+    tools: [],
+    system: { preset: "", blocks: [] },
+    policyGeneration: 0,
+    actionId: "session-drive:configure",
+    at: 1,
+  });
+});
+
+afterEach(() => {
+  Storage.reset();
+  Bus.reset();
+});
 
 function reply(input: RunInput, text: string): Message.WithParts {
   const id = `fake-${input.messages.length}`;
@@ -80,6 +101,13 @@ test("an assigned worker claiming BLOCKED is re-driven and believed only on the 
   expect(output.text).toBe("[drive stopped: blocked]\nBLOCKED: the registry is unreachable");
   // Spend accumulates across driven runs: 9 tokens per stubbed run.
   expect(output.tokens).toBe(27);
+  expect(SessionHandleStore.row("d-drive-1")).toMatchObject({
+    parentId: ORIGIN.sessionId,
+    role: "worker",
+    leaseOwner: null,
+    leaseFence: 3,
+  });
+  expect(SessionHandleStore.row(ORIGIN.sessionId).leaseFence).toBe(0);
 });
 
 test("an ask run is answered once, never driven — even when the answer says BLOCKED", async () => {

@@ -1,15 +1,24 @@
-import { newTraceId } from "@openomni/telemetry";
-import { ChatAgent, type ChatAgentConfig } from "@openomni/agent";
-import type { Model } from "@openomni/protocol";
+import {
+  createSessionChatRunner,
+  session,
+  type ChatAgentConfig,
+  type SessionHandle,
+  type SessionRunner,
+  type SessionRunnerInput,
+  type SessionRuntime,
+} from "@openomni/agent";
+import { type LedgerSession, type Model, SessionGeneration } from "@openomni/protocol";
+import { Bus, newTraceId } from "@openomni/telemetry";
 import { observeComponent } from "../observation/component";
 import { buildAgentPrompt } from "../prompt/build";
 import { WORKER_PRESET } from "../prompt/roles";
 import { createTools } from "../tools/core/catalog";
 import { createDispatcher, HOST_TARGET } from "../tools/core/dispatch";
+import { toolInputSchema } from "../tools/core/project";
 import { decideDrive, initialDriveState, type DriveState } from "./drive-loop";
 import { renderInstruction } from "./instruction";
-import type { DelegationKernel } from "./kernel";
 import type { InlineWorkerRunner } from "./inline-driver";
+import type { DelegationKernel } from "./kernel";
 
 export class WorkerRunError extends Error {
   constructor(
@@ -24,94 +33,140 @@ export class WorkerRunError extends Error {
 export interface WorkerLoopOptions {
   readonly model: Model.Ref;
   readonly apiKey: string;
-  /** Operator-configured provider endpoint and headers; absent uses the catalog's. */
   readonly transport?: ChatAgentConfig["transport"];
   readonly llm?: ChatAgentConfig["llm"];
-  /** Resolved late: the kernel needs the runner this factory produces. */
   readonly kernel: () => DelegationKernel;
+  readonly sessionRuntime?: SessionRuntime;
 }
 
-/**
- * A worker turn: its own loop, its own transcript, and the same delegate tool
- * the Resident holds — bound to a worker origin, so the depth rule applies to
- * it without the catalog having to know the rule. It is handed no machines:
- * code mode is the Resident's for now, and an unwired port is simply absent
- * from a worker's catalog.
- */
-export function createInlineWorkerRunner(options: WorkerLoopOptions): InlineWorkerRunner {
-  return async (input) => {
-    const sessionId = `delegation-${input.delegationId}`;
-    const catalog = createDispatcher(createTools({ delegation: options.kernel() }, input.origin), sessionId);
+export interface SessionInlineWorkerRunner extends InlineWorkerRunner {
+  runnerFor(row: LedgerSession.Row): SessionRunner;
+}
 
-    const messages: Array<{ role: "user" | "assistant"; content: string; time: number }> = [
-      {
-        role: "user",
-        content: renderInstruction(input.instruction, input.acceptanceCriteria),
-        time: Date.now(),
+interface WorkerBinding {
+  readonly handle: SessionHandle;
+  readonly runner: SessionRunner;
+}
+
+export function createInlineWorkerRunner(options: WorkerLoopOptions): SessionInlineWorkerRunner {
+  const bindings = new Map<string, WorkerBinding>();
+  const runtime = options.sessionRuntime ?? { observations: Bus };
+
+  function bindingFor(sessionId: string, parentId: string | null, depth: number): WorkerBinding {
+    const existing = bindings.get(sessionId);
+    if (existing !== undefined) return existing;
+
+    const definitions = createTools(
+      { delegation: options.kernel() },
+      { role: "worker", depth, sessionId },
+    );
+    const dispatcher = createDispatcher(definitions, sessionId);
+    const runner = createSessionChatRunner({
+      prepare(input: SessionRunnerInput) {
+        const toolNames = new Set(input.tools.map((tool) => tool.name));
+        const tools = dispatcher.specs.filter((tool) => toolNames.has(tool.name));
+        const traceId = newTraceId();
+        const runId = input.resultId;
+        const observation = observeComponent({
+          traceId,
+          sessionId: input.sessionId,
+          runId,
+          actorId: "worker",
+          agentName: "worker",
+          componentId: "worker.agent",
+          componentGeneration: input.resumeCount + 1,
+          pluginName: "builtin.worker",
+        });
+        return {
+          config: {
+            events: observation.events,
+            systemPrompt: input.system,
+            tools,
+            toolTargets: [HOST_TARGET],
+            toolChoice: tools.length === 0 ? "none" : "auto",
+            toolExecutor: dispatcher.execute,
+            model: options.model,
+            auth: { type: "api", key: options.apiKey },
+            ...(options.transport === undefined ? {} : { transport: options.transport }),
+            ...(options.llm === undefined ? {} : { llm: options.llm }),
+          },
+          traceContext: { traceId, sessionId: input.sessionId, runId, agentName: "worker" },
+          around: (operation) => observation.run(operation),
+        };
       },
-    ];
-    const traceId = newTraceId();
+    });
+    const handle = session(
+      {
+        id: sessionId,
+        parentId,
+        role: "worker",
+        runner,
+        tools: definitions.map((definition) =>
+          SessionGeneration.Tool.parse({
+            name: definition.name,
+            inputSchema: toolInputSchema(definition),
+            category: definition.category,
+          }),
+        ),
+        system: { preset: buildAgentPrompt(WORKER_PRESET), blocks: [] },
+      },
+      runtime,
+    );
+    const created = { handle, runner };
+    bindings.set(sessionId, created);
+    return created;
+  }
 
-    // Assign runs are driven goal-style (drive-loop.ts); ask/notify runs
-    // once — a question is answered, never nannied.
+  const run: InlineWorkerRunner = async (input) => {
+    const binding = bindingFor(input.delegationId, input.origin.sessionId, input.origin.depth);
     let tokens = 0;
     let state: DriveState = initialDriveState();
-    let firstRun = true;
-    for (;;) {
-      // The initial run identity is allocated during admission and recorded
-      // during admission. Driven follow-ups remain distinct runs for telemetry,
-      // while the request remains correlated to its first run.
-      const runId =
-        firstRun && input.workerRunId !== undefined ? input.workerRunId : crypto.randomUUID();
-      firstRun = false;
-      const observation = observeComponent({
-        traceId,
-        sessionId,
-        runId,
-        actorId: "worker",
-        agentName: "worker",
-        componentId: "worker.agent",
-        componentGeneration: state.runs + 1,
-        pluginName: "builtin.worker",
-      });
-      const agent = ChatAgent.create({
-        events: observation.events,
-        systemPrompt: buildAgentPrompt(WORKER_PRESET),
-        tools: catalog.specs,
-        toolTargets: [HOST_TARGET],
-        toolExecutor: catalog.execute,
-        model: options.model,
-        auth: { type: "api", key: options.apiKey },
-        ...(options.transport === undefined ? {} : { transport: options.transport }),
-        signal: input.signal,
-        ...(options.llm === undefined ? {} : { llm: options.llm }),
-      });
-      let result: Awaited<ReturnType<typeof agent.run>>;
-      try {
-        result = await observation.run(() =>
-          agent.run({
-            messages,
-            traceContext: { traceId, sessionId, runId, agentName: "worker" },
-          }),
-        );
-      } catch (error) {
-        throw new WorkerRunError(error instanceof Error ? error.message : String(error), runId);
+    let prompt = renderInstruction(input.instruction, input.acceptanceCriteria);
+    let lastRunId = input.workerRunId ?? input.delegationId;
+    const interrupt = (): void => {
+      void binding.handle.interrupt();
+    };
+    input.signal.addEventListener("abort", interrupt, { once: true });
+    try {
+      for (;;) {
+        if (input.signal.aborted) throw new WorkerRunError("worker run aborted", lastRunId);
+        const result = await binding.handle.prompt(prompt);
+        const actionId = binding.handle.get().turns.at(-1)?.terminal?.actionId;
+        if (actionId !== undefined) lastRunId = actionId;
+        if (result === undefined) {
+          throw new WorkerRunError("worker session produced no terminal result", lastRunId);
+        }
+        if (result.kind === "interrupted") {
+          throw new WorkerRunError("worker run aborted", lastRunId);
+        }
+        if (result.kind === "error") {
+          throw new WorkerRunError(result.cause?.message ?? result.text, lastRunId);
+        }
+        tokens += result.usage?.totalTokens ?? 0;
+        if (input.operation !== "assign") {
+          return { text: result.text, tokens, runId: lastRunId };
+        }
+        const decision = decideDrive(state, {
+          text: result.text,
+          finishReason: result.finishReason ?? "stop",
+        });
+        if (decision.action === "done") return { text: result.text, tokens, runId: lastRunId };
+        if (decision.action === "stop") {
+          return {
+            text: `[drive stopped: ${decision.reason}]\n${result.text}`,
+            tokens,
+            runId: lastRunId,
+          };
+        }
+        state = decision.state;
+        prompt = decision.prompt;
       }
-      tokens += result.usage.totalTokens;
-      if (input.operation !== "assign") return { text: result.text, tokens, runId };
-      const decision = decideDrive(state, {
-        text: result.text,
-        finishReason: result.finishReason,
-      });
-      if (decision.action === "done") return { text: result.text, tokens, runId };
-      if (decision.action === "stop") {
-        return { text: `[drive stopped: ${decision.reason}]\n${result.text}`, tokens, runId };
-      }
-      state = decision.state;
-      messages.push(
-        { role: "assistant", content: result.text, time: Date.now() },
-        { role: "user", content: decision.prompt, time: Date.now() },
-      );
+    } finally {
+      input.signal.removeEventListener("abort", interrupt);
     }
   };
+
+  return Object.assign(run, {
+    runnerFor: (row: LedgerSession.Row) => bindingFor(row.id, row.parentId, 1).runner,
+  });
 }

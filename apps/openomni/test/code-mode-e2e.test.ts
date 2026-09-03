@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { SessionHandleStore } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import type { RunInput, Sink } from "@openomni/llm";
 import { attachMachineDaemon, createMachineHost, type MachineDaemon } from "@openomni/machines";
@@ -48,7 +49,7 @@ test("a cell batches delegation into one turn", async () => {
     llm: {
       resolveProviderModel: fakeProviderModel,
       run: async (input: RunInput, sink: Sink) => {
-        if (input.trace.sessionId.startsWith("delegation-")) {
+        if (SessionHandleStore.row(input.trace.sessionId).role === "worker") {
           // Each worker answers with the instruction it was actually given, so
           // a cell that dropped or duplicated one would be visible.
           const asked = (input.messages.at(-1)?.parts ?? [])

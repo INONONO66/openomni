@@ -2,7 +2,7 @@ import { Bus, newTraceId } from "@openomni/telemetry";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { resolveChannelGrant } from "@openomni/channels";
 import type { RunInput } from "@openomni/llm";
-import { ActorRegistry, Session, Storage } from "@openomni/ledger";
+import { ActorRegistry, SessionHandleStore, Storage } from "@openomni/ledger";
 import { Gateway, MessagingEvents, type Message } from "@openomni/protocol";
 import {
   createMountedChannelGrantRegistrar,
@@ -214,7 +214,9 @@ describe("Resident delivery contract", () => {
     });
 
     const unrouted = Gateway.Deliver.parse({ ...evidenceDelivery("hi"), sessionId: undefined });
-    await expect(resident(unrouted)).rejects.toThrow("Resident delivery requires a routed sessionId");
+    await expect(resident(unrouted)).rejects.toThrow(
+      "Resident delivery requires a routed sessionId",
+    );
 
     // The same fail-closed classification refuses a non-text payload: the
     // Resident's turn contract is text in, text out.
@@ -244,10 +246,13 @@ describe("Resident inbound treatment", () => {
     expect(text).toContain(raw);
     expect(text).not.toBe(raw);
 
-    const recorded = Session.getMessages("session:evidence").find(({ role }) => role === "user");
-    if (recorded?.role !== "user") throw new Error("Evidence message was not persisted");
-    expect(recorded.agent).toBe("system");
-    expect(recorded.system).toBe("evidence_only");
+    const recorded = SessionHandleStore.getSnapshot("session:evidence").turns.at(-1)?.messages[0];
+    expect(recorded).toMatchObject({ role: "user" });
+    expect(recorded?.text).toContain("EVIDENCE ONLY");
+    const delivery = SessionHandleStore.tree("session:evidence")
+      .map(SessionHandleStore.delivery)
+      .find((item) => item?.kind === "prompt");
+    expect(delivery?.origin.value).toMatchObject({ systemKind: "evidence_only" });
   });
 
   test("refuses tool execution during an evidence-only turn", async () => {
