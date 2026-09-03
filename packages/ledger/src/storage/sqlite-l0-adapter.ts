@@ -192,8 +192,7 @@ function appendAction(
     .run(revision, action.sessionId, expectedRevision);
   if (updated.changes !== 1) return undefined;
   const revert = "revert" in action ? action.revert : undefined;
-  try {
-    db.query(
+  db.query(
       `INSERT INTO action (
          id, parent_id, session_id, kind, intent, effect, revert, irreversible,
          encoding_version, ts, ordinal
@@ -211,9 +210,6 @@ function appendAction(
       action.ts,
       revision,
     );
-  } catch (error) {
-    throw error;
-  }
   const node = LedgerAction.Node.parse({ ...action, ordinal: revision });
   return { action: node, revision };
 }

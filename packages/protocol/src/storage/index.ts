@@ -8,7 +8,7 @@ import type { Approval } from "../approval/index.js";
 import type { Wait } from "../wait/index.js";
 import type { Gateway } from "../gateway/index.js";
 import type { Provisioning } from "../provisioning/index.js";
-import type { Alarm, Inbox, LedgerAction, LedgerSession, PolicyRow } from "../l0/index.js";
+import type { Alarm, Inbox, LedgerAction, LedgerSession, PolicyRow } from "../ledger/l0.js";
 
 export namespace Storage {
   export interface ActionSubAdapter {
