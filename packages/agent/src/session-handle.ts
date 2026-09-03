@@ -277,12 +277,7 @@ function createController(
     resume: (origin = internalOrigin(sessionId)) => enqueue("resume", "", origin),
     get: (options = {}) => SessionHandleStore.getSnapshot(sessionId, options.turns ?? 1),
     watch: (options = {}) =>
-      SessionHandleStore.watchSnapshot(
-        sessionId,
-        options.turns ?? 1,
-        runtime.observations,
-        () => undefined,
-      ),
+      SessionHandleStore.watchSnapshot(sessionId, options.turns ?? 1, runtime.observations),
     async close() {
       closed = true;
       controller?.abort();
@@ -517,7 +512,6 @@ function createController(
         input.resultId,
         kind,
         input.resumeCount,
-        boundaryActionId,
         parentActionId,
       );
       parentActionId = drained.parentActionId;
@@ -577,7 +571,6 @@ function createController(
     resultId: string,
     boundary: SessionTurn.Boundary,
     resumeCount: number,
-    previousBoundaryActionId: string | null,
     parentActionId: string,
   ): Promise<{
     readonly messages: SessionTurn.Message[];

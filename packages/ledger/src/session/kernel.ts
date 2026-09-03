@@ -363,7 +363,7 @@ export function watchSnapshot(
     revision = snapshot.revision;
     return {
       snapshot,
-      subscribe(handler) {
+      subscribe(handler: (observation: SessionTurn.Observation) => void) {
         if (closed) throw new Error("session watch is unsubscribed");
         handlers.add(handler);
         return () => handlers.delete(handler);
