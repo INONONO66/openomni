@@ -568,8 +568,16 @@ export async function startOpenOmni(options: StartOptions = {}) {
       build: (component) => component.build(routingHandler),
       // The env allowlist pins each mounted surface's grant to its listed
       // senders; unlisted surfaces keep the open posture (loopback-ws right).
-      grant: (surfaceId) =>
-        registerTrustedChannelGrant(surfaceId, config.channelAllowedSenders?.[surfaceId]),
+      // The tier is the row's, never this call site's: mounting a named
+      // surface materializes no owner authority (#931).
+      grant: (surfaceId, defaultTier) => {
+        const allowedSenders = config.channelAllowedSenders?.[surfaceId];
+        return registerTrustedChannelGrant({
+          surface: surfaceId,
+          defaultTier,
+          ...(allowedSenders === undefined ? {} : { allowedSenders }),
+        });
+      },
       deliveryRoutes,
       webhookHandlers,
       traceId: newTraceId,

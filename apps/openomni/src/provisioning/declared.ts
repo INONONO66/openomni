@@ -2,6 +2,7 @@ import { homedir } from "node:os";
 import { ActorRegistry, ChannelInstanceStore, PersonStore, SecretStore, Vault } from "@openomni/ledger";
 import { type CredentialReader, channelProfile, declaredChannelProfile } from "../channels";
 import type { OpenOmniConfig } from "../config";
+import { MOUNTED_CHANNEL_DEFAULT_TIER } from "../gateway";
 import type { DesiredChannels } from "./supervisor";
 import { type KekResolution, resolveKek } from "./vault-key";
 
@@ -51,6 +52,9 @@ export function desiredChannels(
         instanceId: `env:${component.id}`,
         key: "env",
         component,
+        // Env channel config declares credentials only — it carries no Owner
+        // tier decision, so env rows mount at the mount tier (#931).
+        defaultTier: MOUNTED_CHANNEL_DEFAULT_TIER,
       })),
       statuses: [],
     };
@@ -69,6 +73,9 @@ export function desiredChannels(
         instanceId: row.instanceId,
         key: `${instance?.revision ?? 0}:${rotation}`,
         component: row.component,
+        // §3.2 grant block: the declaration is where the Owner raises a
+        // surface's tier; absent, the row mounts at the mount tier (#931).
+        defaultTier: instance?.grant?.defaultTier ?? MOUNTED_CHANNEL_DEFAULT_TIER,
       };
     }),
     statuses,

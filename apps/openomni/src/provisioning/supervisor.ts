@@ -1,4 +1,5 @@
 import type { ChannelDeliveryRoute } from "@openomni/channels";
+import type { Actor } from "@openomni/protocol";
 import type { BuiltChannel, ChannelComponent, DeclaredChannelStatus } from "../channels";
 
 /**
@@ -18,6 +19,12 @@ export interface DesiredChannelRow {
   /** Bounce key: revision + rotation epoch — any difference restarts the stage. */
   readonly key: string;
   readonly component: ChannelComponent;
+  /**
+   * The tier this row's trusted-channel grant materializes (#931): the
+   * declaration's `grant.defaultTier` when the Owner named one, otherwise the
+   * mount tier. Mounting never synthesizes authority on its own.
+   */
+  readonly defaultTier: Actor.TrustTier;
 }
 
 export interface DesiredChannels {
@@ -43,8 +50,8 @@ export interface ChannelRuntimeStatus {
 export interface SupervisorDeps {
   readonly desired: () => DesiredChannels;
   readonly build: (component: ChannelComponent) => BuiltChannel;
-  /** Registers the surface's trusted grant; returns its revoker. */
-  readonly grant: (surfaceId: string) => () => void;
+  /** Registers the surface's trusted grant at the row's declared tier; returns its revoker. */
+  readonly grant: (surfaceId: string, defaultTier: Actor.TrustTier) => () => void;
   readonly deliveryRoutes: Map<string, ChannelDeliveryRoute>;
   readonly webhookHandlers: Map<string, (request: Request) => Promise<Response>>;
   readonly traceId: () => string;
@@ -83,7 +90,7 @@ export function createChannelSupervisor(deps: SupervisorDeps): ChannelSupervisor
   async function mountRow(row: DesiredChannelRow): Promise<void> {
     const built = deps.build(row.component);
     const surfaceId = built.surface.id;
-    const revokeGrant = deps.grant(surfaceId);
+    const revokeGrant = deps.grant(surfaceId, row.defaultTier);
     if (built.deliveryRoute !== undefined) {
       deps.deliveryRoutes.set(surfaceId, built.deliveryRoute);
     }

@@ -4,8 +4,37 @@ import {
   type GatewayRouter,
 } from "@openomni/channels";
 import { ChannelGrantStore } from "@openomni/ledger";
-import type { Gateway, Ingress } from "@openomni/protocol";
+import type { Actor, Gateway, Ingress } from "@openomni/protocol";
 import { Bus } from "@openomni/telemetry";
+
+/**
+ * The tier a named channel surface mounts with when no Owner decision
+ * declares one (#931): the least authority the protocol tier vocabulary
+ * carries. Mounting is not an authority decision — a surface that merely
+ * exists grants the weakest standing there is, and every raise above it is
+ * an explicit declaration (`ChannelInstance.grant.defaultTier`).
+ */
+export const MOUNTED_CHANNEL_DEFAULT_TIER: Actor.TrustTier = "assigned_worker";
+
+/**
+ * The one owner-tier decision this app makes (#931): the loopback `ws`
+ * bootstrap surface (docs/provisioning-and-providers.md §6), token-gated off
+ * loopback by `assertWsExposure`. It is named here so the single call site
+ * that holds it is greppable and no other caller can inherit it.
+ */
+const LOOPBACK_BOOTSTRAP_TIER: Actor.TrustTier = "owner";
+
+/** The authority one surface's trusted-channel grant materializes. */
+export interface TrustedChannelGrant {
+  readonly surface: string;
+  /**
+   * The tier senders on this surface resolve to when they carry no registered
+   * identity. Always explicit: owner authority exists only where a call site
+   * names it (the loopback `ws` bootstrap).
+   */
+  readonly defaultTier: Actor.TrustTier;
+  readonly allowedSenders?: readonly string[];
+}
 
 /**
  * Registers the Resident's trusted-channel authority for one surface and
@@ -15,19 +44,16 @@ import { Bus } from "@openomni/telemetry";
  * the perimeter refuses it fail-closed. Grants are current authority, not
  * history — revoking one erases no recorded fact.
  */
-export function registerTrustedChannelGrant(
-  surface: string,
-  allowedSenders?: readonly string[],
-): () => void {
-  const id = `openomni-resident-${surface}`;
+export function registerTrustedChannelGrant(grant: TrustedChannelGrant): () => void {
+  const id = `openomni-resident-${grant.surface}`;
   ChannelGrantStore.put({
     id,
-    surface,
+    surface: grant.surface,
     kind: "trusted_channel",
-    defaultTier: "owner",
-    // An allowlisted grant materializes owner tier for the listed senders
+    defaultTier: grant.defaultTier,
+    // An allowlisted grant materializes this tier for the listed senders
     // alone — everyone else on the surface finds no grant and is blocked.
-    ...(allowedSenders === undefined ? {} : { allowedSenders: [...allowedSenders] }),
+    ...(grant.allowedSenders === undefined ? {} : { allowedSenders: [...grant.allowedSenders] }),
     createdBy: "local-owner",
   });
   return () => {
@@ -47,7 +73,9 @@ export function createResidentGateway(
 ): GatewayRouter {
   // The gateway owns only its own perimeter surface; external channel
   // components register (and revoke) their own authority when they mount.
-  registerTrustedChannelGrant("ws");
+  // The loopback ws bootstrap is the only surface that names owner tier; no
+  // sibling surface inherits it.
+  registerTrustedChannelGrant({ surface: "ws", defaultTier: LOOPBACK_BOOTSTRAP_TIER });
   return createGatewayRouter({
     sink: Bus.publish,
     deliver,
