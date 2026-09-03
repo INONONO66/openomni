@@ -34,6 +34,7 @@ const ORDERED_MIGRATIONS: Migration.Definition[] = [
   { name: "0027_lease/migration.sql" },
   { name: "0028_approval/migration.sql" },
   { name: "0029_provisioning/migration.sql" },
+  { name: "0030_drop_artifact/migration.sql" },
 ];
 
 const CLEAR_ORDER = [
@@ -62,7 +63,6 @@ const CLEAR_ORDER = [
   "cron_job",
   "bus_event",
   "work_item",
-  "artifact",
   "surface_key",
   "transcript_fact",
   "part",

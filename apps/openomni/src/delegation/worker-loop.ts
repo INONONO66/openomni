@@ -9,7 +9,6 @@ import { createDispatcher, HOST_TARGET } from "../tools/core/dispatch";
 import { decideDrive, initialDriveState, type DriveState } from "./drive-loop";
 import { renderInstruction } from "./instruction";
 import type { DelegationKernel } from "./kernel";
-import type { ArtifactsPort } from "../tools/mutation/artifacts";
 import type { InlineWorkerRunner } from "./inline-driver";
 
 export class WorkerRunError extends Error {
@@ -28,7 +27,6 @@ export interface WorkerLoopOptions {
   /** Operator-configured provider endpoint and headers; absent uses the catalog's. */
   readonly transport?: ChatAgentConfig["transport"];
   readonly llm?: ChatAgentConfig["llm"];
-  readonly artifacts: ArtifactsPort;
   /** Resolved late: the kernel needs the runner this factory produces. */
   readonly kernel: () => DelegationKernel;
 }
@@ -43,11 +41,7 @@ export interface WorkerLoopOptions {
 export function createInlineWorkerRunner(options: WorkerLoopOptions): InlineWorkerRunner {
   return async (input) => {
     const sessionId = `delegation-${input.delegationId}`;
-    const catalog = createDispatcher(
-      createTools({ delegation: options.kernel() }, input.origin),
-      sessionId,
-      options.artifacts,
-    );
+    const catalog = createDispatcher(createTools({ delegation: options.kernel() }, input.origin), sessionId);
 
     const messages: Array<{ role: "user" | "assistant"; content: string; time: number }> = [
       {

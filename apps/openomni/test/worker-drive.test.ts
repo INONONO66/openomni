@@ -45,7 +45,6 @@ function bootRunner(run: (input: RunInput, sink: Sink) => Promise<{ type: "stop"
   const runner = createInlineWorkerRunner({
     model: { provider: "fake", id: "drive-test" },
     apiKey: "test-key",
-    artifacts: { store: () => undefined, get: () => null },
     llm: {
       resolveProviderModel: async (model) => ({
         id: model.id,

@@ -14,11 +14,10 @@ const EXPECTED = [
   "memory",
   "work_items",
   "llm",
-  "artifacts",
 ];
 
 describe("tool catalog", () => {
-  it("has the consolidated eleven-tool surface", () => {
+  it("has the consolidated ten-tool surface", () => {
     expect(TOOL_DEFINITIONS.map((tool) => tool.name)).toEqual(EXPECTED);
     expect(collectToolSpecs().map((tool) => tool.name)).toEqual(EXPECTED);
   });

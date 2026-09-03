@@ -1,7 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import type { Artifact } from "@openomni/protocol";
 import { z } from "zod";
-import type { ArtifactsPort } from "../mutation/artifacts";
 import { defineTool, eraseTool, ToolRefused } from "./define";
 import { createDispatcher, MODEL_OUTPUT_MAX_CHARS } from "./dispatch";
 
@@ -63,21 +61,16 @@ describe("the core tool dispatcher", () => {
       await createDispatcher([]).execute({ id: "u", tool: "missing", input: {} }),
     ).toMatchObject({ isError: true, errorClass: "unknown_tool" });
   });
-  it("keeps the model preview within its cap, spills the full output, and leaves cell values raw", async () => {
-    const rows = new Map<string, { meta: Artifact.Meta; content: string }>();
-    const artifacts: ArtifactsPort = {
-      store: (_sessionId, meta, content) => rows.set(meta.id, { meta, content }),
-      get: (id) => rows.get(id) ?? null,
-    };
-    const dispatcher = createDispatcher([definition()], "session", artifacts);
+  it("caps model output with truncation facts and leaves the cell value untruncated", async () => {
+    const dispatcher = createDispatcher([definition()]);
     const text = "x".repeat(MODEL_OUTPUT_MAX_CHARS + 5);
     const call = { id: "long", tool: "example", input: { value: text } };
+
     const model = await dispatcher.execute(call);
     expect(model.output.length).toBeLessThanOrEqual(MODEL_OUTPUT_MAX_CHARS);
-    const artifactId = model.output.match(/artifact ([^;\]]+)/)?.[1];
-    expect(artifactId).toBeString();
-    expect(rows.get(artifactId ?? "")?.content).toBe(text);
-    expect(rows.get(artifactId ?? "")?.meta.sessionId).toBe("session");
+    expect(model.output).toEndWith(`\n[truncated: ${text.length} chars]`);
+    expect(model.output).not.toContain("artifact");
+
     const cell = await dispatcher.executeCell(call);
     expect(cell.output).toEqual({ rendered: text });
   });

@@ -11,7 +11,6 @@ import {
 } from "../authority/delegation";
 import { createLlmTool, type LlmPort } from "../execution/llm";
 import { createRunCodeTool, type CellPorts } from "../execution/run-code";
-import { createArtifactsTool, type ArtifactsPort } from "../mutation/artifacts";
 import { createConverseTool, type ConversePort, type LeasePort } from "../mutation/converse";
 import { createMemoryTool } from "../mutation/memory";
 import { createProvisionTool, type ProvisionPort } from "../mutation/provision";
@@ -28,7 +27,6 @@ export interface CatalogPorts {
   readonly memory?: CuratedMemory;
   readonly workItems?: CompletionPort;
   readonly llm?: LlmPort;
-  readonly artifacts?: ArtifactsPort;
   readonly provisioning?: ProvisionPort;
 }
 
@@ -54,7 +52,6 @@ export function createTools(
   if (ports.memory !== undefined) tools.push(eraseTool(createMemoryTool(ports.memory)));
   if (ports.workItems !== undefined) tools.push(eraseTool(createWorkItemsTool(ports.workItems)));
   if (ports.llm !== undefined) tools.push(eraseTool(createLlmTool(ports.llm)));
-  if (ports.artifacts !== undefined) tools.push(eraseTool(createArtifactsTool(ports.artifacts)));
   const visible = tools.filter(
     (tool) =>
       tool.visibility.model.includes(origin.role) || tool.visibility.cell.includes(origin.role),

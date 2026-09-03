@@ -12,7 +12,6 @@ export { LedgerAppend } from "./storage/append-port";
 export { Session } from "./session";
 export { TranscriptStore } from "./session/transcript";
 export { SurfaceKey } from "./surface-key";
-export { Artifact } from "./artifact/index";
 export { AppConnectorInstallationStore } from "./app-connector/index.js";
 export { ActorRegistry } from "./actor/index.js";
 export { BlacklistStore } from "./blacklist/index.js";

@@ -1,4 +1,4 @@
-import { Artifact, initialize, Storage } from "@openomni/ledger";
+import { initialize, Storage } from "@openomni/ledger";
 import { Delegation, Model } from "@openomni/protocol";
 import { z } from "zod";
 import { createDelegationKernel, type DelegationKernel } from "./kernel";
@@ -110,7 +110,6 @@ function processWorkerRun(
   const runner = createInlineWorkerRunner({
     model: request.model,
     apiKey: request.apiKey,
-    artifacts: { store: Artifact.store, get: Artifact.get },
     ...(request.transport === undefined ? {} : { transport: request.transport }),
     kernel: () => kernel,
   });

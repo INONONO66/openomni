@@ -105,7 +105,6 @@ describe("operator transport reaches every model caller", () => {
     const runner = createInlineWorkerRunner({
       model: { provider: "fake", id: "worker-test" },
       apiKey: "test-key",
-      artifacts: { store: () => undefined, get: () => null },
       transport: OPERATOR_TRANSPORT,
       llm: {
         resolveProviderModel,

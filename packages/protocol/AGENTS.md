@@ -11,7 +11,6 @@ src/
 ├── index.ts              # Package barrel: all public domains
 ├── actor/                # Actor.Identity / Endpoint, TrustTier, blacklist schemas
 ├── app-connector/        # Connector definition, consent, installation, and lifecycle schemas
-├── artifact/             # Artifact.Meta (positive version and non-empty mimeType/createdAt)
 ├── bus/                  # BusEvent.define() + injected BusEvent.Sink contract
 ├── channel/              # Channel surfaces, messages, config, and surface-key codec
 ├── cron/                 # Cron job schemas

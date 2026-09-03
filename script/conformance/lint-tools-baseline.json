@@ -3,7 +3,6 @@
   "vocab": {
     "unmappedNamespaces": [
       "app-connector",
-      "artifact",
       "bus",
       "error",
       "ingress",

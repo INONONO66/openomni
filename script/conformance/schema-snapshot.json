@@ -130,14 +130,6 @@
     "stallTimeoutMs",
     "timeoutMs"
   ],
-  "Artifact.Meta": [
-    "createdAt",
-    "id",
-    "mimeType",
-    "sessionId",
-    "title",
-    "version"
-  ],
   "BusEvent.Metadata": [
     "actorId",
     "agentName",
