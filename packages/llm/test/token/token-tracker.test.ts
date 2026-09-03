@@ -162,10 +162,14 @@ describe("estimateUsage", () => {
     expect(estimateUsage("a", "b")).toEqual({ inputTokens: 1, outputTokens: 1 });
   });
 
-  it("is additive-stable: the same input always yields the same counts", () => {
-    const first = estimateUsage("prompt text", "assistant text");
-    const second = estimateUsage("prompt text", "assistant text");
-
-    expect(first).toEqual(second);
+  it("counts each argument independently at exact boundaries", () => {
+    // 11 chars -> 3, 14 chars -> 4: input and output read their own argument,
+    // so swapping the sources or summing them changes these exact counts.
+    expect(estimateUsage("prompt text", "assistant text")).toEqual({
+      inputTokens: 3,
+      outputTokens: 4,
+    });
+    // Exact multiples of 4 do not round up.
+    expect(estimateUsage("1234", "12345678")).toEqual({ inputTokens: 1, outputTokens: 2 });
   });
 });
