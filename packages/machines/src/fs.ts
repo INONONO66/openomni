@@ -14,6 +14,16 @@ export type FsDriver = ((request: Machine.FsRequest) => Promise<Machine.FsResult
 
 type FsDriverTestHooks = {
   readonly afterRootPathResolution?: (canonicalPath: string) => void;
+  /**
+   * Seams over the root descriptor lifecycle. A test substitutes the open of
+   * the filesystem root to force the restart reopen to fail, and observes
+   * acquisition and release of every descriptor the root walk owns, so the
+   * close-exactly-once invariant is asserted without depending on permissions,
+   * fd exhaustion, or timing.
+   */
+  readonly openRootDirectory?: () => number;
+  readonly onRootDescriptorAcquired?: (fd: number) => void;
+  readonly closeRootDescriptor?: (fd: number) => void;
 };
 
 type RootWalk = { readonly canonicalPath: string; readonly fd: number };
@@ -249,6 +259,11 @@ function walk(
   }
 }
 
+function closeRootDescriptor(testHooks: FsDriverTestHooks, fd: number): void {
+  if (testHooks.closeRootDescriptor === undefined) closeSync(fd);
+  else testHooks.closeRootDescriptor(fd);
+}
+
 /**
  * Resolve an Owner-configured export root into a pinned descriptor by walking
  * its components with openat(O_NOFOLLOW) from the filesystem root, expanding
@@ -261,8 +276,36 @@ function openRoot(configuredRoot: string, testHooks: FsDriverTestHooks): RootWal
   const absolute = resolve(configuredRoot);
   let pending = absolute.split(sep).filter((segment) => segment.length > 0);
   let traversed: string[] = [];
-  let dirfd = openSync(sep, constants.O_RDONLY | O_DIRECTORY | O_CLOEXEC);
   let expansions = 0;
+  /**
+   * `owned` is the sole owner of the walk descriptor: it holds an fd only
+   * while that fd is open, and `release()` clears it BEFORE closing. No
+   * failure path can therefore close a released fd a second time — by then a
+   * reused fd number belongs to an unrelated open, and the secondary close
+   * would also mask the failure that caused the unwind. The walk reads the
+   * held fd through `dirfd`, which every acquisition rebinds in the same step.
+   */
+  let owned: number | undefined;
+
+  const acquire = (fd: number): number => {
+    testHooks.onRootDescriptorAcquired?.(fd);
+    owned = fd;
+    return fd;
+  };
+  const openFilesystemRoot = () =>
+    acquire(
+      testHooks.openRootDirectory === undefined
+        ? openSync(sep, constants.O_RDONLY | O_DIRECTORY | O_CLOEXEC)
+        : testHooks.openRootDirectory(),
+    );
+  const release = () => {
+    if (owned === undefined) return;
+    const fd = owned;
+    owned = undefined;
+    closeRootDescriptor(testHooks, fd);
+  };
+
+  let dirfd = openFilesystemRoot();
 
   try {
     while (pending.length > 0) {
@@ -273,8 +316,8 @@ function openRoot(configuredRoot: string, testHooks: FsDriverTestHooks): RootWal
         constants.O_RDONLY | O_NOFOLLOW | O_DIRECTORY | O_CLOEXEC,
       );
       if ("fd" in opened) {
-        closeSync(dirfd);
-        dirfd = opened.fd;
+        release();
+        dirfd = acquire(opened.fd);
         traversed.push(segment);
         pending.shift();
         continue;
@@ -301,16 +344,18 @@ function openRoot(configuredRoot: string, testHooks: FsDriverTestHooks): RootWal
         ...pending.slice(1),
       ];
       traversed = [];
-      closeSync(dirfd);
-      dirfd = openSync(sep, constants.O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+      release();
+      dirfd = openFilesystemRoot();
     }
   } catch (error) {
-    closeSync(dirfd);
+    release();
     throw error;
   }
 
   const canonicalPath = sep + traversed.join(sep);
   testHooks.afterRootPathResolution?.(canonicalPath);
+  // Past the walk, ownership of the pinned descriptor belongs to the returned
+  // root: the driver closes it on disposal, and `release()` is out of reach.
   return { canonicalPath, fd: dirfd };
 }
 
@@ -379,7 +424,7 @@ export function createFsDriver(
       roots.set(name, openRoot(configuredRoot, testHooks));
     }
   } catch (error) {
-    for (const root of roots.values()) closeSync(root.fd);
+    for (const root of roots.values()) closeRootDescriptor(testHooks, root.fd);
     throw error;
   }
 
@@ -455,7 +500,7 @@ export function createFsDriver(
   driver.close = () => {
     if (closed) return;
     closed = true;
-    for (const root of roots.values()) closeSync(root.fd);
+    for (const root of roots.values()) closeRootDescriptor(testHooks, root.fd);
     roots.clear();
   };
   return driver;
