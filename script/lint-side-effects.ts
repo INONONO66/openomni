@@ -43,7 +43,7 @@ const rules: readonly SideEffectRule[] = [
     scopeStart: /export function addMessage\(/g,
     scopeEnd: /\nexport function /g,
     requiredBefore: [],
-    requiredAfter: ["Bus.publish(Event.Updated, { info: updated })"],
+    requiredAfter: ["Storage.publishObservation(Event.Updated, { info: updated })"],
     message: "Session.addMessage must publish Event.Updated after adapter.message.set",
   },
   {
@@ -53,7 +53,7 @@ const rules: readonly SideEffectRule[] = [
     scopeStart: /export function addMessage\(/g,
     scopeEnd: /\nexport function /g,
     requiredBefore: [],
-    requiredAfter: ["Bus.publish(Event.Updated, { info: updated })"],
+    requiredAfter: ["Storage.publishObservation(Event.Updated, { info: updated })"],
     message: "Session.addMessage must publish Event.Updated after adapter.session.set",
   },
   {
@@ -63,7 +63,7 @@ const rules: readonly SideEffectRule[] = [
     scopeStart: /export function addPart\(/g,
     scopeEnd: /\nexport function /g,
     requiredBefore: [],
-    requiredAfter: ["Bus.publish(Event.Updated, { info:"],
+    requiredAfter: ["Storage.publishObservation(Event.Updated, { info:"],
     message: "Session.addPart must publish Event.Updated after adapter.part.set",
   },
 ];

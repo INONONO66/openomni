@@ -1,5 +1,4 @@
 import type { Message } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
 import { Storage } from "../storage/storage";
 import { Event } from "./events";
 
@@ -52,7 +51,7 @@ export function addMessage(
   // Published after the top-level commit. Do not wrap addMessage in an outer
   // transaction: this publish would fire at savepoint release, announcing a
   // write the outer transaction can still roll back.
-  Bus.publish(Event.Updated, { info: updated });
+  Storage.publishObservation(Event.Updated, { info: updated });
 }
 
 // Publishes nothing: status flips are recovery bookkeeping, not the
@@ -80,7 +79,7 @@ export function addPart(messageID: string, part: Message.Part): void {
     throw new Error(`addPart: session not found: ${part.sessionID}`);
   }
   adapter.part.set(messageID, part);
-  Bus.publish(Event.Updated, { info: session });
+  Storage.publishObservation(Event.Updated, { info: session });
 }
 
 export function getParts(messageID: string): Message.Part[] {

@@ -68,7 +68,7 @@ async function observerDrained(): Promise<void> {
 
 beforeEach(() => {
   Storage.reset();
-  Storage.initialize({ dbPath: ":memory:" });
+  Storage.initialize({ dbPath: ":memory:", observationSink: Bus });
   Bus.reset();
   seedSession("sess-frozen");
 });

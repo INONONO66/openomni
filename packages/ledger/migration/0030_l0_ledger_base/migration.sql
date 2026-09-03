@@ -7,8 +7,7 @@ INSERT INTO _session_l0_guard
 SELECT COUNT(*)
 FROM session
 WHERE json_valid(data) = 0
-   OR json_extract(data, '$.id') IS NOT id
-   OR json_extract(data, '$.agent.id') NOT IN ('resident', 'worker');
+   OR json_extract(data, '$.id') IS NOT id;
 DROP TABLE _session_l0_guard;
 
 ALTER TABLE session ADD COLUMN parent_id TEXT;
@@ -20,8 +19,7 @@ ALTER TABLE session ADD COLUMN revision INTEGER NOT NULL DEFAULT 0 CHECK (revisi
 ALTER TABLE session ADD COLUMN state TEXT NOT NULL DEFAULT 'idle'
   CHECK (state IN ('idle', 'running', 'interrupted'));
 UPDATE session
-SET parent_id = json_extract(data, '$.parentSessionId'),
-    role = json_extract(data, '$.agent.id');
+SET parent_id = json_extract(data, '$.parentSessionId');
 CREATE UNIQUE INDEX idx_session_role_not_null ON session(id) WHERE role IS NOT NULL;
 
 CREATE TABLE action (

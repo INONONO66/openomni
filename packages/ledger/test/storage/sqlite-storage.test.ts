@@ -1,9 +1,10 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
 import type { Message } from "@openomni/protocol";
 import type { SessionInfo } from "../../src/session/info";
+import { Migration } from "../../src/storage/migration-runner";
 import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage";
 import { removeSqliteFiles, tempDbPath } from "../helpers/sqlite";
 
@@ -182,6 +183,7 @@ describe("SqliteStorageAdapter", () => {
       expect(tables).not.toContain("artifact");
       expect(tables).toContain("bus_event");
       expect(tables).toContain("worker_run_state");
+      expect(tables).toEqual(expect.arrayContaining(["action", "inbox", "alarm", "policy"]));
       expect(tables).toContain("_migrations");
       // #606: dead tables (zero readers/writers) dropped by migration 0017.
       for (const dead of [
@@ -360,13 +362,84 @@ describe("SqliteStorageAdapter", () => {
       upgradedAdapter.close();
     });
 
-    test("migrations are idempotent — second adapter open does not throw", () => {
-      adapter.session.set("s1", makeSession("s1"));
+    test("0031 preserves a valid 0029 session whose agent id is not a role", () => {
       adapter.close();
+      removeSqliteFiles(dbPath);
+      const legacyDb = new Database(dbPath, { create: true });
+      const migrationRoot = join(import.meta.dir, "../../migration");
+      const through0029 = readdirSync(migrationRoot, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory() && /^00(?:0[1-9]|1[0-9]|2[0-9])_/.test(entry.name))
+        .map((entry) => ({ name: `${entry.name}/migration.sql` }))
+        .sort((left, right) => left.name.localeCompare(right.name));
+      Migration.applyOrdered(legacyDb, migrationRoot, through0029);
+      const legacy = {
+        ...makeSession("legacy-agent", 1),
+        agent: { id: "agent-1", name: "Research Agent" },
+      };
+      legacyDb
+        .query("INSERT INTO session (id, data, time_created, time_updated) VALUES (?, ?, ?, ?)")
+        .run(legacy.id, JSON.stringify(legacy), 1, 1);
+      legacyDb.close();
 
-      const adapter2 = new SqliteStorageAdapter(dbPath);
-      expect(adapter2.session.get("s1")).toBeDefined();
-      adapter2.close();
+      const upgraded = new SqliteStorageAdapter(dbPath);
+      expect(upgraded.session.get(legacy.id)).toEqual(legacy);
+      expect(
+        storageDb(upgraded)
+          .query("SELECT role, revision, state FROM session WHERE id = ?")
+          .get(legacy.id),
+      ).toEqual({ role: null, revision: 0, state: "idle" });
+      expect(upgraded.sessions.list()).toEqual([]);
+      upgraded.close();
+    });
+
+    test("0030 constraints and fresh/reopen schema-data digest are stable", () => {
+      const db = storageDb(adapter);
+      const digest = () => ({
+        schema: db
+          .query("SELECT type, name, tbl_name, sql FROM sqlite_master ORDER BY type, name")
+          .all(),
+        receipts: db.query("SELECT name FROM _migrations ORDER BY name").all(),
+        sessions: db.query("SELECT * FROM session ORDER BY id").all(),
+      });
+      adapter.sessions.create({
+        id: "l0-digest",
+        parentId: null,
+        role: "resident",
+        leaseOwner: null,
+        leaseFence: 0,
+        leaseExpiresAt: null,
+        revision: 0,
+        state: "idle",
+      });
+      expect(() =>
+        db.query(
+          `INSERT INTO action (
+             id, parent_id, session_id, kind, intent, effect, revert, irreversible,
+             encoding_version, ts, ordinal
+           ) VALUES ('bad', NULL, 'l0-digest', 'invalid', '{}', '{}', NULL, 1, 1, 0, 1)`,
+        ).run(),
+      ).toThrow();
+      expect(() =>
+        db.query(
+          `INSERT INTO inbox (
+             id, session_id, kind, content, origin, encoding_version, status,
+             claimed_by, claimed_at, time_created, ordinal
+           ) VALUES ('bad', 'l0-digest', 'prompt', '', '{}', 1, 'claimed', NULL, NULL, 0, 1)`,
+        ).run(),
+      ).toThrow();
+      const before = digest();
+      adapter.close();
+      const reopened = new SqliteStorageAdapter(dbPath);
+      const reopenedDb = storageDb(reopened);
+      const after = {
+        schema: reopenedDb
+          .query("SELECT type, name, tbl_name, sql FROM sqlite_master ORDER BY type, name")
+          .all(),
+        receipts: reopenedDb.query("SELECT name FROM _migrations ORDER BY name").all(),
+        sessions: reopenedDb.query("SELECT * FROM session ORDER BY id").all(),
+      };
+      expect(after).toEqual(before);
+      reopened.close();
     });
 
     test("failed migration does not leave partially applied schema behind", () => {

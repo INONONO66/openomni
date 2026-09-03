@@ -92,12 +92,12 @@ export function createSqliteL0Adapters(
 ): SqliteL0Adapters {
   const sessions = createSessions(db);
   const actions = createActions(db, transaction, observationSink);
-  const inbox = createInbox(db, transaction);
+  const inbox = createInbox(db, transaction, observationSink);
   return {
     sessions,
     actions,
     inbox,
-    alarms: createAlarms(db),
+    alarms: createAlarms(db, transaction, observationSink),
     policies: createPolicies(db),
   };
 }
@@ -182,6 +182,7 @@ function appendAction(
   action: LedgerAction.Append,
   expectedRevision: number,
 ): LedgerAction.Receipt | undefined {
+  if (actionExists(db, action.id)) return undefined;
   if (!parentBelongsToSession(db, action.parentId, action.sessionId)) return undefined;
   const revision = expectedRevision + 1;
   const updated = db
@@ -214,6 +215,10 @@ function appendAction(
   return { action: node, revision };
 }
 
+function actionExists(db: Database, id: string): boolean {
+  return db.query("SELECT 1 FROM action WHERE id = ?").get(id) !== null;
+}
+
 function parentBelongsToSession(
   db: Database,
   parentId: string | null,
@@ -229,11 +234,12 @@ function parentBelongsToSession(
 function createInbox(
   db: Database,
   transaction: <T>(operation: () => T) => T,
+  observationSink: ObservationSink,
 ): ProtocolStorage.InboxSubAdapter {
   return {
     commit(input) {
       const row = Inbox.Commit.parse(input);
-      return transaction(() => {
+      const result = transaction(() => {
         const session = db.query("SELECT revision FROM session WHERE id = ?").get(row.sessionId) as {
           revision: number;
         } | null;
@@ -284,8 +290,11 @@ function createInbox(
           committed.createdAt,
           committed.ordinal,
         );
-        return committed;
+        return { committed, receipt };
       });
+      if (result === undefined) return undefined;
+      publishCommitted(observationSink, result.receipt);
+      return result.committed;
     },
     list(sessionId, status) {
       const rows = (
@@ -320,24 +329,49 @@ function createInbox(
   };
 }
 
-function createAlarms(db: Database): ProtocolStorage.AlarmSubAdapter {
+function createAlarms(
+  db: Database,
+  transaction: <T>(operation: () => T) => T,
+  observationSink: ObservationSink,
+): ProtocolStorage.AlarmSubAdapter {
   return {
     arm(input) {
       const parsed = Alarm.Arm.parse(input);
-      const row = Alarm.Row.parse({
-        ...parsed,
-        status: "armed",
-        createdAt: parsed.fireAt,
-        updatedAt: parsed.fireAt,
-      });
-      const result = db
-        .query(
+      const result = transaction(() => {
+        const session = db
+          .query("SELECT revision FROM session WHERE id = ? AND role IS NOT NULL")
+          .get(parsed.sessionId) as { revision: number } | null;
+        if (session === null) return undefined;
+        const receipt = appendAction(
+          db,
+          LedgerAction.Append.parse({
+            id: parsed.id,
+            parentId: null,
+            sessionId: parsed.sessionId,
+            kind: "alarm.arm",
+            intent: { encodingVersion: 1, value: { kind: parsed.kind, fireAt: parsed.fireAt } },
+            effect: {
+              encodingVersion: 1,
+              value: parsed.spec === undefined ? { status: "armed" } : { status: "armed", spec: parsed.spec.value },
+            },
+            irreversible: true,
+            ts: parsed.fireAt,
+          }),
+          session.revision,
+        );
+        if (receipt === undefined) return undefined;
+        const row = Alarm.Row.parse({
+          ...parsed,
+          status: "armed",
+          createdAt: parsed.fireAt,
+          updatedAt: parsed.fireAt,
+        });
+        db.query(
           `INSERT INTO alarm (
              id, session_id, kind, fire_at, spec, encoding_version, status,
              time_created, time_updated
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING`,
-        )
-        .run(
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).run(
           row.id,
           row.sessionId,
           row.kind,
@@ -348,7 +382,11 @@ function createAlarms(db: Database): ProtocolStorage.AlarmSubAdapter {
           row.createdAt,
           row.updatedAt,
         );
-      return result.changes === 1 ? row : undefined;
+        return { receipt, row };
+      });
+      if (result === undefined) return undefined;
+      publishCommitted(observationSink, result.receipt);
+      return result.row;
     },
     cancel(id, updatedAt) {
       const result = db

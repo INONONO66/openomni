@@ -55,7 +55,9 @@ export function createMemoryL0Adapter(): MemoryL0Adapter {
     inbox: {
       commit(row) {
         const parsed = Inbox.Commit.parse(row);
-        if (!sessions.has(parsed.sessionId) || inboxRows.has(parsed.id)) return undefined;
+        if (!sessions.has(parsed.sessionId) || inboxRows.has(parsed.id) || actions.has(parsed.id)) {
+          return undefined;
+        }
         const action = appendInboxAction(actions, sessions, parsed);
         if (action === undefined) return undefined;
         const committed = Inbox.Row.parse({
@@ -93,13 +95,30 @@ export function createMemoryL0Adapter(): MemoryL0Adapter {
     alarms: {
       arm(input) {
         const parsed = Alarm.Arm.parse(input);
-        if (!sessions.has(parsed.sessionId) || alarmRows.has(parsed.id)) return undefined;
+        const session = sessions.get(parsed.sessionId);
+        if (session === undefined || alarmRows.has(parsed.id) || actions.has(parsed.id)) return undefined;
+        const action = LedgerAction.Node.parse({
+          id: parsed.id,
+          parentId: null,
+          sessionId: parsed.sessionId,
+          kind: "alarm.arm",
+          intent: { encodingVersion: 1, value: { kind: parsed.kind, fireAt: parsed.fireAt } },
+          effect: {
+            encodingVersion: 1,
+            value: parsed.spec === undefined ? { status: "armed" } : { status: "armed", spec: parsed.spec.value },
+          },
+          irreversible: true,
+          ts: parsed.fireAt,
+          ordinal: session.revision + 1,
+        });
         const row = Alarm.Row.parse({
           ...parsed,
           status: "armed",
           createdAt: parsed.fireAt,
           updatedAt: parsed.fireAt,
         });
+        actions.set(action.id, action);
+        sessions.set(session.id, { ...session, revision: session.revision + 1 });
         alarmRows.set(row.id, row);
         return row;
       },

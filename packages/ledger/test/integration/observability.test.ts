@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { LedgerAction, LedgerSession, L0Observation, type ObservationSink } from "@openomni/protocol";
+import {
+  Alarm,
+  Inbox,
+  LedgerAction,
+  LedgerSession,
+  L0Observation,
+  type ObservationSink,
+} from "@openomni/protocol";
 import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage.js";
 
 const encoded = (value: string) => ({ encodingVersion: 1 as const, value: { value } });
@@ -55,6 +62,53 @@ describe("ledger-first observations", () => {
     expect(receipt?.revision).toBe(1);
     expect(observations).toEqual([
       { id: "action-observed", sessionId: "session-observed", revision: 1, kind: "turn" },
+    ]);
+  });
+
+  test("inbox commit and alarm arm each publish their committed action", () => {
+    const observations: L0Observation.ActionCommitted[] = [];
+    const sink: ObservationSink = {
+      publish(descriptor, data) {
+        if (descriptor.name === L0Observation.ActionCommittedEvent.name) {
+          observations.push(L0Observation.ActionCommitted.parse(data));
+        }
+      },
+    };
+    const adapter = new SqliteStorageAdapter(":memory:", sink);
+    adapters.push(adapter);
+    adapter.sessions.create(session("session-surfaces"));
+
+    expect(
+      adapter.inbox.commit(
+        Inbox.Commit.parse({
+          id: "inbox-observed",
+          sessionId: "session-surfaces",
+          kind: "prompt",
+          content: "go",
+          origin: encoded("owner"),
+          createdAt: 101,
+        }),
+      ),
+    ).toBeDefined();
+    expect(
+      adapter.alarms.arm(
+        Alarm.Arm.parse({
+          id: "alarm-observed",
+          sessionId: "session-surfaces",
+          kind: "at",
+          fireAt: 102,
+        }),
+      ),
+    ).toBeDefined();
+
+    expect(observations).toEqual([
+      { id: "inbox-observed", sessionId: "session-surfaces", revision: 1, kind: "prompt" },
+      { id: "alarm-observed", sessionId: "session-surfaces", revision: 2, kind: "alarm.arm" },
+    ]);
+    expect(adapter.sessions.get("session-surfaces")?.revision).toBe(2);
+    expect(adapter.actions.tree("session-surfaces").map((node) => node.id)).toEqual([
+      "inbox-observed",
+      "alarm-observed",
     ]);
   });
 

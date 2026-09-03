@@ -23,7 +23,7 @@ import { buildWaitCreate, commitCancel, commitReply } from "../helpers/wait";
 beforeEach(() => {
   Bus.reset();
   Storage.reset();
-  Storage.initialize({ dbPath: ":memory:" });
+  Storage.initialize({ dbPath: ":memory:", observationSink: Bus });
 });
 
 afterEach(() => {

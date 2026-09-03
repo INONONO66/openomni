@@ -24,6 +24,7 @@ import { productionStorageAdapterBrand, type Storage } from "./storage";
 export class SqliteStorageAdapter implements Storage.Adapter {
   declare readonly [productionStorageAdapterBrand]: true;
   private readonly db: Database;
+  readonly observationSink: ObservationSink;
   private closed = false;
 
   readonly session: Storage.Adapter["session"];
@@ -49,6 +50,7 @@ export class SqliteStorageAdapter implements Storage.Adapter {
   readonly policies: NonNullable<Storage.Adapter["policies"]>;
 
   constructor(dbPath: string, observationSink: ObservationSink = { publish: () => undefined }) {
+    this.observationSink = observationSink;
     this.db = new Database(dbPath);
     try {
       initializeSqliteDatabase(this.db);

@@ -23,7 +23,7 @@ function flushBus(): Promise<void> {
 describe("Session TTL", () => {
   beforeEach(() => {
     Storage.reset();
-    Storage.initialize({ dbPath: ":memory:" });
+    Storage.initialize({ dbPath: ":memory:", observationSink: Bus });
   });
 
   describe("create with ttlMs", () => {

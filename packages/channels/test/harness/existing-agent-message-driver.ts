@@ -353,7 +353,7 @@ function quorumSnapshot(waitId: string) {
 
 async function runDuplicateAmbiguousScenario(): Promise<ScenarioReceipt> {
   const deliveries: OutboundMessage[] = [];
-  Storage.initialize({ dbPath: ":memory:" });
+  Storage.initialize({ dbPath: ":memory:", observationSink: Bus });
   registerDriverActors();
   registerAgent(MultiEndpointActor, [
     { id: "endpoint:qa-multi-a", externalId: "multi-a" },

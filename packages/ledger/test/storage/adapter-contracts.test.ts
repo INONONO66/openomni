@@ -69,6 +69,24 @@ function exerciseL0Contracts(storage: L0Adapter) {
   );
   expect(root?.revision).toBe(1);
 
+  expect(storage.sessions.create(sessionRow("session-other"))).toBe(true);
+  expect(
+    storage.actions.append(
+      LedgerAction.Append.parse({
+        id: "action-foreign-parent",
+        parentId: "action-root",
+        sessionId: "session-other",
+        kind: "tool",
+        intent: encoded("foreign"),
+        effect: encoded("foreign"),
+        irreversible: true,
+        ts: 100,
+      }),
+      0,
+    ),
+  ).toBeUndefined();
+  expect(storage.sessions.get("session-other")?.revision).toBe(0);
+
   const stale = storage.actions.append(
     LedgerAction.Append.parse({
       id: "action-stale",
@@ -152,6 +170,7 @@ function exerciseL0Contracts(storage: L0Adapter) {
   ).toMatchObject({ status: "armed" });
   expect(storage.alarms.cancel("alarm-later", 450)).toMatchObject({ status: "cancelled" });
   expect(storage.alarms.due(450).map((row) => row.id)).toEqual(["alarm-now"]);
+  expect(storage.sessions.get(session.id)?.revision).toBe(6);
 
   const policy = PolicyRow.Row.parse({
     name: "allow-tool",
@@ -165,7 +184,7 @@ function exerciseL0Contracts(storage: L0Adapter) {
   expect(storage.policies.append(policy)).toBe(true);
   expect(storage.policies.append(policy)).toBe(false);
   expect(storage.policies.rows()).toEqual([policy]);
-  expect(storage.sessions.get(session.id)?.revision).toBe(4);
+  expect(storage.sessions.get(session.id)?.revision).toBe(6);
 
   return {
     session: storage.sessions.get(session.id),
@@ -194,9 +213,8 @@ afterEach(() => {
 });
 
 describe("L0 adapter contracts", () => {
-  test("memory and SQLite produce identical action/session/inbox/alarm/policy state", () => {
-    const memory = createMemoryL0Adapter();
-    const sqlite: L0Adapter = {
+  function sqliteAdapter(): L0Adapter {
+    return {
       transaction: (operation) => adapter.transaction(operation),
       sessions: adapter.sessions,
       actions: adapter.actions,
@@ -204,8 +222,54 @@ describe("L0 adapter contracts", () => {
       alarms: adapter.alarms,
       policies: adapter.policies,
     };
+  }
 
-    expect(exerciseL0Contracts(memory)).toEqual(exerciseL0Contracts(sqlite));
+  test("memory and SQLite produce identical action/session/inbox/alarm/policy state", () => {
+    expect(exerciseL0Contracts(createMemoryL0Adapter())).toEqual(exerciseL0Contracts(sqliteAdapter()));
+  });
+
+  test.each([
+    ["memory", () => createMemoryL0Adapter()],
+    ["SQLite", sqliteAdapter],
+  ])("%s refuses orphan alarms and inbox/action id collisions without mutation", (_name, create) => {
+    const storage = create();
+    const row = sessionRow("session-boundary");
+    expect(storage.sessions.create(row)).toBe(true);
+    expect(
+      storage.alarms.arm(
+        Alarm.Arm.parse({ id: "orphan", sessionId: "missing", kind: "at", fireAt: 10 }),
+      ),
+    ).toBeUndefined();
+    expect(
+      storage.actions.append(
+        LedgerAction.Append.parse({
+          id: "collision",
+          parentId: null,
+          sessionId: row.id,
+          kind: "turn",
+          intent: encoded("intent"),
+          effect: encoded("effect"),
+          irreversible: true,
+          ts: 10,
+        }),
+        0,
+      ),
+    ).toBeDefined();
+    expect(
+      storage.inbox.commit(
+        Inbox.Commit.parse({
+          id: "collision",
+          sessionId: row.id,
+          kind: "prompt",
+          content: "content",
+          origin: encoded("origin"),
+          createdAt: 11,
+        }),
+      ),
+    ).toBeUndefined();
+    expect(storage.sessions.get(row.id)?.revision).toBe(1);
+    expect(storage.actions.tree(row.id).map((action) => action.kind)).toEqual(["turn"]);
+    expect(storage.inbox.list(row.id)).toEqual([]);
   });
 });
 
@@ -218,6 +282,57 @@ describe("SQLite adapter contract guards", () => {
       .all();
 
     expect(rows).toEqual([]);
+  });
+
+  test("action revision rolls back when the append insert fails", () => {
+    const row = sessionRow("session-action-rollback");
+    expect(adapter.sessions.create(row)).toBe(true);
+    database().exec(`
+      CREATE TRIGGER refuse_action BEFORE INSERT ON action
+      BEGIN SELECT RAISE(ABORT, 'refuse action'); END
+    `);
+
+    expect(() =>
+      adapter.actions.append(
+        LedgerAction.Append.parse({
+          id: "action-rollback",
+          parentId: null,
+          sessionId: row.id,
+          kind: "turn",
+          intent: encoded("intent"),
+          effect: encoded("effect"),
+          irreversible: true,
+          ts: 11,
+        }),
+        0,
+      ),
+    ).toThrow("refuse action");
+    expect(adapter.sessions.get(row.id)?.revision).toBe(0);
+    expect(adapter.actions.tree(row.id)).toEqual([]);
+  });
+
+  test("inbox action and row roll back together when the row insert fails", () => {
+    const row = sessionRow("session-rollback");
+    expect(adapter.sessions.create(row)).toBe(true);
+    database().exec(`
+      CREATE TRIGGER refuse_inbox BEFORE INSERT ON inbox
+      BEGIN SELECT RAISE(ABORT, 'refuse inbox'); END
+    `);
+
+    expect(() =>
+      adapter.inbox.commit(
+        Inbox.Commit.parse({
+          id: "inbox-rollback",
+          sessionId: row.id,
+          kind: "prompt",
+          content: "content",
+          origin: encoded("origin"),
+          createdAt: 12,
+        }),
+      ),
+    ).toThrow("refuse inbox");
+    expect(adapter.sessions.get(row.id)?.revision).toBe(0);
+    expect(adapter.actions.tree(row.id)).toEqual([]);
   });
 
   test("delegation reads reject a row whose key disagrees with its payload", () => {
