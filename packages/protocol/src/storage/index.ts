@@ -8,8 +8,37 @@ import type { Approval } from "../approval/index.js";
 import type { Wait } from "../wait/index.js";
 import type { Gateway } from "../gateway/index.js";
 import type { Provisioning } from "../provisioning/index.js";
+import type { Alarm, Inbox, LedgerAction, LedgerSession, PolicyRow } from "../ledger/l0.js";
 
 export namespace Storage {
+  export interface ActionSubAdapter {
+    append(input: LedgerAction.Append, expectedRevision: number): LedgerAction.Receipt | undefined;
+    tree(sessionId: string): LedgerAction.Node[];
+  }
+
+  export interface SessionLedgerSubAdapter {
+    create(row: LedgerSession.Row): boolean;
+    get(id: string): LedgerSession.Row | undefined;
+    list(): LedgerSession.Row[];
+  }
+
+  export interface InboxSubAdapter {
+    commit(row: Inbox.Commit): Inbox.Row | undefined;
+    list(sessionId: string, status?: Inbox.Status): Inbox.Row[];
+    claim(sessionId: string, claimant: string, claimedAt: number): Inbox.Row[];
+  }
+
+  export interface AlarmSubAdapter {
+    arm(row: Alarm.Arm): Alarm.Row | undefined;
+    cancel(id: string, updatedAt: number): Alarm.Row | undefined;
+    due(at: number): Alarm.Row[];
+  }
+
+  export interface PolicyRowSubAdapter {
+    append(row: PolicyRow.Row): boolean;
+    rows(generation?: number): PolicyRow.Row[];
+  }
+
   export interface ActorRegistrySubAdapter {
     getIdentity(id: string): Actor.Identity | undefined;
     setIdentity(identity: Actor.Identity): void;

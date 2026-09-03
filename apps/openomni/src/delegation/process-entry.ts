@@ -1,5 +1,6 @@
 import { initialize, Storage } from "@openomni/ledger";
 import { Delegation, Model } from "@openomni/protocol";
+import { Bus } from "@openomni/telemetry";
 import { z } from "zod";
 import { createDelegationKernel, type DelegationKernel } from "./kernel";
 import { createInlineDriver, type InlineWorkerRunner } from "./inline-driver";
@@ -104,7 +105,7 @@ function processWorkerRun(
   request: ProcessWorkerRequest,
 ): Promise<{ readonly text: string; readonly tokens: number; readonly runId?: string }> {
   if (request.dbPath !== undefined && Storage.getInitializedDbPath() === null) {
-    initialize({ dbPath: request.dbPath });
+    initialize({ dbPath: request.dbPath, observationSink: Bus });
   }
   let kernel: DelegationKernel;
   const runner = createInlineWorkerRunner({

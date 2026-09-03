@@ -37,6 +37,7 @@ const ORDERED_MIGRATIONS: Migration.Definition[] = [
   { name: "0029_provisioning/migration.sql" },
   { name: "0030_drop_artifact/migration.sql" },
   { name: "0030_drop_retired_tables/migration.sql" },
+  { name: "0031_l0_ledger_base/migration.sql" },
 ];
 
 const CLEAR_ORDER = [
@@ -76,18 +77,6 @@ export function initializeSqliteDatabase(db: Database): void {
   // action" durably means (#510 D1).
   applyConnectionPragmas(db, "FULL");
   Migration.applyOrdered(db, MIGRATION_DIR, ORDERED_MIGRATIONS);
-}
-
-/**
- * Telemetry connection setup (#510 D1 durability split): a SECOND connection
- * on the SAME database file, synchronous=NORMAL with group-commit batching
- * (bus-persistence). `synchronous` is a per-connection setting, so the split
- * costs nothing on the decision path; every other pragma is re-applied
- * because busy_timeout/cache/mmap/foreign_keys are per-connection too.
- * No migrations here — the primary connection owns the schema.
- */
-export function initializeTelemetryConnection(db: Database): void {
-  applyConnectionPragmas(db, "NORMAL");
 }
 
 /** @internal Test-only fixture reset (Adapter.clear) — no production caller. */

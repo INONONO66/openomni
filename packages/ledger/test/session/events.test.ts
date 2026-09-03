@@ -20,7 +20,7 @@ function flushBus(): Promise<void> {
 describe("Session events carry the caller's trace (D11)", () => {
   beforeEach(() => {
     Storage.reset();
-    Storage.initialize({ dbPath: ":memory:" });
+    Storage.initialize({ dbPath: ":memory:", observationSink: Bus });
   });
 
   test("created and deleted inherit the input trace — no mint in the store", async () => {

@@ -21,7 +21,7 @@ export function setupIngressActorResolverTest(): void {
   beforeEach(() => {
     Storage.reset();
     Bus.reset();
-    Storage.initialize({ dbPath: ":memory:" });
+    Storage.initialize({ dbPath: ":memory:", observationSink: Bus });
     deliveries.length = 0;
     ChannelGrantStore.put({
       id: "grant-discord-guild-dev",

@@ -10,7 +10,7 @@ export function addMessage() {
 }
 export function addPart() {
   adapter.part.set(messageID, part);
-  Bus.publish(Event.Updated, { info: updated });
+  Storage.publishObservation(Event.Updated, { info: updated });
 }
 export function nextFunction() {}
 `;
@@ -21,12 +21,12 @@ describe("side-effect ordering gate", () => {
     const valid = sessionMessageSource(`
       adapter.message.set(sessionID, message);
       adapter.session.set(sessionID, updated);
-      Bus.publish(Event.Updated, { info: updated });
+      Storage.publishObservation(Event.Updated, { info: updated });
     `);
     expect(validateSideEffectRules(sessionMessagesPath, valid)).toEqual([]);
 
     const inverted = sessionMessageSource(`
-      Bus.publish(Event.Updated, { info: updated });
+      Storage.publishObservation(Event.Updated, { info: updated });
       adapter.message.set(sessionID, message);
       adapter.session.set(sessionID, updated);
     `);

@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Ledger as LedgerTypes } from "@openomni/protocol";
-import { GENESIS_SEED } from "../../src/bus-persistence/hash";
+import { GENESIS_SEED } from "../../src/ledger-core/hash";
 import { Ledger } from "../../src/ledger-core/index";
 import { appendChain, openLedgerDatabase } from "../helpers/ledger";
 

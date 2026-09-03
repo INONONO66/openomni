@@ -1,6 +1,5 @@
 import type { SessionInfo } from "./info";
 import { Operational } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
 import { Storage } from "../storage/storage";
 import { Event } from "./events";
 
@@ -32,7 +31,7 @@ type UpdateInput = Partial<Omit<SessionInfo, "id" | "time">> & {
  */
 function admit(session: SessionInfo, traceId: string): SessionInfo {
   Storage.get().session.set(session.id, session);
-  Bus.publish(Event.Created, { traceId, info: session });
+  Storage.publishObservation(Event.Created, { traceId, info: session });
   return session;
 }
 
@@ -149,7 +148,7 @@ export function sweepExpired(traceId: string, now = Date.now()): SessionInfo[] {
       remove(session.id, traceId);
       swept.push(session);
     } catch (error) {
-      Bus.publish(Operational.Events.Error, {
+      Storage.publishObservation(Operational.Events.Error, {
         traceId,
         sessionId: session.id,
         time: Date.now(),
@@ -184,7 +183,7 @@ export function update(id: string, input: UpdateInput): SessionInfo | undefined 
   };
 
   Storage.get().session.set(id, updated);
-  Bus.publish(Event.Updated, { info: updated });
+  Storage.publishObservation(Event.Updated, { info: updated });
   return updated;
 }
 
@@ -204,7 +203,7 @@ export function remove(id: string, traceId: string): boolean {
       }
       adapter.session.remove(id);
     });
-    Bus.publish(Event.Deleted, { traceId, id });
+    Storage.publishObservation(Event.Deleted, { traceId, id });
   }
   return exists;
 }

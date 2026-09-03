@@ -61,7 +61,7 @@ let router: GatewayRouter | undefined;
 export function resetStores(): void {
   Storage.reset();
   Bus.reset();
-  Storage.initialize({ dbPath: ":memory:" });
+  Storage.initialize({ dbPath: ":memory:", observationSink: Bus });
 }
 
 export function resetRouterState(): void {

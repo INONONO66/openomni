@@ -59,7 +59,7 @@ function makeTextPart(sessionID: string, messageID: string): Message.TextPart {
 describe("Session.addMessage metadata hooks", () => {
   beforeEach(() => {
     Storage.reset();
-    Storage.initialize({ dbPath: ":memory:" });
+    Storage.initialize({ dbPath: ":memory:", observationSink: Bus });
   });
 
   describe("messageCount", () => {

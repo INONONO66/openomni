@@ -120,6 +120,29 @@ describe("moved migration resolution (#502)", () => {
     }
   });
 
+  test("0031 L0 ships and applies exactly once, with an identical reopen receipt", () => {
+    const shipped = readdirSync(MIGRATION_DIR, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && entry.name.startsWith("0031_"))
+      .map((entry) => `${entry.name}/migration.sql`);
+    expect(shipped).toEqual(["0031_l0_ledger_base/migration.sql"]);
+
+    const path = join(tmpDir, "l0.db");
+    const first = new Database(path, { create: true });
+    initializeSqliteDatabase(first);
+    const receipt = first
+      .query<{ name: string }, []>("SELECT name FROM _migrations WHERE name LIKE '0031_%'")
+      .all();
+    first.close();
+    const reopened = new Database(path);
+    try {
+      initializeSqliteDatabase(reopened);
+      expect(reopened.query<{ name: string }, []>("SELECT name FROM _migrations WHERE name LIKE '0031_%'").all()).toEqual(receipt);
+      expect(receipt).toEqual([{ name: "0031_l0_ledger_base/migration.sql" }]);
+    } finally {
+      reopened.close();
+    }
+  });
+
   test("bootstrap is idempotent on an already-migrated database", () => {
     const db = new Database(join(tmpDir, "storage.db"), { create: true });
     try {

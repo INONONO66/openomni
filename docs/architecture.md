@@ -4,7 +4,7 @@ This document maps [Core Model](core-model.md) onto the post-#792 codebase. [Imp
 
 ## Communication
 
-External traffic enters through channel drivers and the channels gateway. The gateway resolves perimeter authority and physical context, records its route decision, then calls the `Gateway.Deliver` port injected by the sole app. Product execution and response rendering stay in the app. Observation uses `Bus.publish`; durable decisions use ledger store/append surfaces.
+External traffic enters through channel drivers and the channels gateway. The gateway resolves perimeter authority and physical context, records its route decision, then calls the `Gateway.Deliver` port injected by the sole app. Product execution and response rendering stay in the app. Observation is downstream of durable L0 action commits through an injected sink; the volatile bus is observation-only. Durable decisions use ledger store/append surfaces.
 
 ```text
 surface event
@@ -20,7 +20,7 @@ The same-domain inline delegation driver is the only deliberate in-process short
 
 `packages/ledger` owns the one durable database and typed store surfaces. It stores facts but does not decide product meaning. Perimeter stores are consumed by the channels router; session, delegation, memory-adjacent, and transcript stores are composed by the app. Cross-domain coupling happens through protocol IDs, not direct store reach-through.
 
-`bus.publish` remains observation, not authorization. Record-before-act paths must commit through a durable store or append surface before the external action. The frozen WorkerRun table remains a read-only compatibility surface.
+`bus.publish` remains observation, not authorization or persistence. L0 action append commits before its injected observation sink is called. Record-before-act paths must commit through a durable store or append surface before the external action. The frozen WorkerRun table remains a read-only compatibility surface.
 
 ## Policy
 
@@ -101,7 +101,7 @@ The repository previously split product behavior across a reusable-looking produ
 Historical design decisions still explain the surviving extractions:
 
 - PolicyEngine moved to `packages/policy`.
-- Bus moved to `packages/telemetry`; persistence stayed in ledger.
+- Bus moved to `packages/telemetry` as volatile observation; reverse persistence was removed. L0 observation sink contracts live in protocol.
 - IPC became the standalone `packages/ipc` transport.
 - Channel drivers and perimeter judgment consolidated in `packages/channels`.
 - Machine execution became the lateral `packages/machines` band.

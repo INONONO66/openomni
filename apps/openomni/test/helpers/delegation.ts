@@ -1,6 +1,7 @@
 import { afterEach, beforeEach } from "bun:test";
 import { SqliteStorageAdapter, Storage } from "@openomni/ledger";
 import type { BusEvent, Delegation, Gateway } from "@openomni/protocol";
+import { Bus } from "@openomni/telemetry";
 
 export const RESIDENT: Delegation.Origin = {
   role: "resident",
@@ -16,7 +17,7 @@ export const WORKER: Delegation.Origin = {
 export function useDelegationStore(): void {
   beforeEach(() => {
     Storage.reset();
-    Storage.configure(new SqliteStorageAdapter(":memory:"));
+    Storage.configure(new SqliteStorageAdapter(":memory:", Bus));
   });
   afterEach(() => {
     Storage.reset();

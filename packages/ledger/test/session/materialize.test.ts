@@ -23,7 +23,7 @@ import { Session, Storage } from "../../src/index";
 beforeEach(() => {
   Bus.reset();
   Storage.reset();
-  Storage.initialize({ dbPath: ":memory:" });
+  Storage.initialize({ dbPath: ":memory:", observationSink: Bus });
 });
 
 afterEach(() => {

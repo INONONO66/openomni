@@ -1,3 +1,4 @@
+import type { ObservationSink } from "@openomni/protocol";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { Storage } from "./storage";
@@ -5,6 +6,7 @@ import { SqliteStorageAdapter } from "./sqlite-storage";
 
 export interface InitializeOptions {
   dbPath?: string;
+  observationSink?: ObservationSink;
 }
 
 export function initialize(options?: InitializeOptions): void {
@@ -24,7 +26,7 @@ export function initialize(options?: InitializeOptions): void {
   if (dbPath !== ":memory:") {
     mkdirSync(dirname(dbPath), { recursive: true });
   }
-  Storage.configure(new SqliteStorageAdapter(dbPath));
+Storage.configure(new SqliteStorageAdapter(dbPath, options?.observationSink));
   Storage.setInitializedDbPath(dbPath);
 }
 

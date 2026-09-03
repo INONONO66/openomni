@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto";
 
+export const GENESIS_SEED = "openomni:genesis:v1";
+
 /**
  * Ledger event hash for the #510 clean baseline chain.
  *
- * Same conventions as the legacy bus_event chain (sha256 hex, shared
- * GENESIS_SEED from bus-persistence/hash.ts — that file stays the owner of
- * the genesis constant and of the legacy field set we must remain able to
- * read). Two deliberate differences for the new chain:
+ * Same conventions as the historical bus_event chain (sha256 hex and the
+ * preserved genesis seed). Two deliberate differences for the new chain:
  *   - the payload is a JSON-array framing instead of pipe-joins, so a `|`
  *     inside `data` can never alias another field boundary;
  *   - streamId and seq are hashed in, binding each event to its stream

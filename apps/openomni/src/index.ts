@@ -10,7 +10,6 @@ import { homedir } from "node:os";
 import {
   ActorRegistry,
   ApprovalStore,
-  BusPersistence,
   ChannelInstanceStore,
   initialize,
   PersonStore,
@@ -250,15 +249,8 @@ export async function startOpenOmni(options: StartOptions = {}) {
   let kernel: DelegationKernel | undefined;
   try {
     await composer.mount("journal", (ctx) => {
-      initialize({ dbPath: config.dbPath });
-      const stopBusPersistence = BusPersistence.start();
-      // Journal shutdown contract: every accepted event row is committed
-      // before the observer detaches and storage closes.
-      ctx.effect(async () => {
-        await BusPersistence.flush();
-        stopBusPersistence();
-        Storage.reset();
-      });
+      initialize({ dbPath: config.dbPath, observationSink: Bus });
+      ctx.effect(() => Storage.reset());
     });
     const actors: readonly RegisteredActor[] = config.actors ?? [];
     registerActors(actors);
@@ -582,18 +574,15 @@ export async function startOpenOmni(options: StartOptions = {}) {
       stop: () => composer.dispose(),
     };
   } catch (error) {
-    // Fail-closed boot rollback: a failure after the journal started leaves
-    // no leaked Bus observer, no armed kernel timer, and no configured
-    // storage behind — a later boot starts clean.
+    // Fail-closed boot rollback leaves no armed kernel timer or configured
+    // storage behind, so a later boot starts clean.
     return rollbackToCause(composer, error instanceof Error ? error : new Error(String(error)));
   }
 }
 
 /**
  * Entry-point shutdown wiring, extracted behind seams so tests can drive it
- * deterministically. The handler awaits the full async stop (journal flush,
- * observer detach, storage reset) before any exit — exiting earlier can
- * precede BusPersistence.flush() and lose accepted journal rows.
+ * deterministically. The handler awaits the full async stop before any exit.
  */
 export function installShutdownHandlers(deps: {
   readonly stop: () => Promise<void>;

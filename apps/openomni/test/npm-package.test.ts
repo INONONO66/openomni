@@ -2,7 +2,7 @@ import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BusPersistence, Storage } from "@openomni/ledger";
+import { Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/telemetry";
 import { PROCESS_WORKER_NO_REQUEST_EXIT } from "../src/delegation/process-entry";
 import { startOpenOmni } from "../src/index";
@@ -16,7 +16,6 @@ let stopApp: (() => Promise<void>) | undefined;
 afterEach(async () => {
   await stopApp?.();
   stopApp = undefined;
-  BusPersistence.stop();
   Bus.reset();
   Storage.reset();
   for (const directory of directories.splice(0)) {
@@ -107,7 +106,7 @@ describe("npm package staging", () => {
     // closed it must reach its own request-line guard and exit with the
     // dedicated sentinel code — load errors and top-level exceptions exit 1
     // and cannot fake this.
-    const worker = Bun.spawnSync(["bun", join(staging, "dist", "app", "process-entry.js")], {
+    const worker = Bun.spawnSync([process.execPath, join(staging, "dist", "app", "process-entry.js")], {
       cwd: staging,
       stdin: new Uint8Array(),
       stdout: "pipe",
