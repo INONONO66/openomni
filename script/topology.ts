@@ -191,6 +191,18 @@ export const TOPOLOGY = [
     knipWorkspace: true,
     tsconfigVerify: true,
   },
+  {
+    key: "desktopApp",
+    displayName: "desktop app",
+    dir: "apps/desktop",
+    packageName: "@openomni/desktop",
+    allowedDeps: ["@openomni/protocol"],
+    testLane: true,
+    // Deliberate: Electron scaffold has no approved coverage baseline yet.
+    coverageLane: false,
+    knipWorkspace: true,
+    tsconfigVerify: true,
+  },
 ] as const satisfies readonly WorkspaceTopology[];
 
 interface WorkspaceInventoryDrift {

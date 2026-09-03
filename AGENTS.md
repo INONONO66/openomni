@@ -1,17 +1,18 @@
 # PROJECT KNOWLEDGE BASE
 
-Last verified against `feat/compaction-hardening`: 2026-09-02 (production compaction strategy path added; dependency topology and shipped-state pointers re-checked; keep this stamp current when editing - doc-state sync law).
+Last verified against `feat/desktop-electron-setup`: 2026-09-03 (apps/desktop Electron skeleton added to structure, ownership, topology, and commands; keep this stamp current when editing - doc-state sync law).
 
 ## OVERVIEW
 
-OpenOmni is a single-Owner Agent OS: one Resident delegates through durable contracts and evidence, not self-report. The repository now contains core packages and one deployable app. Target contracts live in `docs/core-model.md`, `docs/kernel-contract.md`, and `docs/machines-and-delegation.md`; `docs/implementation-status.md` is authoritative for current wiring.
+OpenOmni is a single-Owner Agent OS: one Resident delegates through durable contracts and evidence, not self-report. The repository now contains core packages, one deployable app, and an Electron console skeleton (`apps/desktop`, build infrastructure only). Target contracts live in `docs/core-model.md`, `docs/kernel-contract.md`, and `docs/machines-and-delegation.md`; `docs/implementation-status.md` is authoritative for current wiring.
 
 ## STRUCTURE
 
 ```text
 openomni/
 ├── apps/
-│   └── openomni/        # sole deployable app: Resident, gateway composition, machines, delegation, memory
+│   ├── openomni/        # sole deployable app: Resident, gateway composition, machines, delegation, memory
+│   └── desktop/         # Electron console skeleton (setup + build infra only; no product features yet)
 ├── packages/
 │   ├── protocol/        # Zod schemas and cross-package contracts
 │   ├── policy/          # pure policy engine and effect composition
@@ -36,7 +37,7 @@ openomni/
 Read `X <- Y` as Y may depend on X.
 
 ```text
-protocol <- telemetry, ipc, ledger, policy, llm, placement, agent, machines, channels, apps/openomni
+protocol <- telemetry, ipc, ledger, policy, llm, placement, agent, machines, channels, apps/openomni, apps/desktop
 telemetry <- ledger, llm, agent, channels, apps/openomni
 ipc <- machines, apps/openomni
 ledger <- channels, apps/openomni
@@ -61,6 +62,7 @@ channels <- apps/openomni
 | `machines` | protocol, ipc |
 | `channels` | protocol, policy, ledger, telemetry; `src/` may depend on protocol, policy, ledger |
 | `apps/openomni` | protocol, channels, ipc, agent, llm, ledger, telemetry, policy, placement, machines |
+| `apps/desktop` | protocol |
 <!-- END GENERATED TOPOLOGY -->
 
 `script/check-deps.ts` is the executable contract. Product meaning is composed in `apps/openomni`; core packages remain independently consumable primitives.
@@ -80,6 +82,7 @@ channels <- apps/openomni
 | `packages/machines` | Machine attach and cell execution driver | Enrollment policy or product judgment |
 | `packages/channels` | Drivers plus perimeter routing, waits, and admission | Session content or product execution |
 | `apps/openomni` | Product composition: Resident, gateway, delegation, memory, code mode, boot/shutdown | Reimplementation of package primitives |
+| `apps/desktop` | Electron shell: main/preload/renderer build pipeline, window security defaults | Kernel logic; anything beyond protocol contracts |
 
 ## WHERE TO LOOK
 
@@ -129,15 +132,18 @@ bun test --timeout 15000
 # After the coverage-producing package test commands used by CI:
 bun run script/check-coverage-ratchet.ts
 
-# Sole app
+# Sole deployable app
 bun run --cwd apps/openomni dev
+
+# Desktop console skeleton (Electron)
+bun run --cwd apps/desktop dev
 ```
 
 Coverage baselines are updated after coverage-producing test runs with `bun run script/check-coverage-ratchet.ts --update`. Dead-export shrinkage uses `bun run script/check-dead-exports.ts --update`.
 
 ## NOTES
 
-- `apps/openomni` is the only deployable composition and production entry point.
+- `apps/openomni` is the only deployable composition and production entry point. `apps/desktop` is a build-infrastructure skeleton: the topology permits `protocol` only, it imports no workspace package yet, and it ships no product features.
 - `packages/channels` is the perimeter gateway; `apps/openomni` injects delivery and observation ports.
 - `packages/agent` owns no durable state. `packages/ledger` stores facts but does not decide product meaning.
 - Shipped-state claims, including WorkItem completion, Stakes, effective authority, and connector consumers, belong only in `docs/implementation-status.md`; other docs define target contracts or historical context and defer to it.

@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": true,
+    "jsx": "react-jsx",
+    "lib": ["ES2021", "DOM", "DOM.Iterable"],
+    "types": []
+  },
+  "include": ["src/renderer", "src/preload/api.ts"]
+}
