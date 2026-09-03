@@ -101,6 +101,52 @@ function terminalAction(sessionId: string): LedgerAction.Append {
 }
 
 describe("fenced session write discipline", () => {
+  test("memory and SQLite reject an old fence even when the owner id is unchanged", () => {
+    for (const [name, adapter] of kernelStores()) {
+      const { sessions } = adapter;
+      const sessionId = `session-same-owner-fence-${name}`;
+      expect(sessions.create(l0Session(sessionId))).toBe(true);
+
+      expect(
+        sessions.acquireLease({
+          sessionId,
+          owner: "same-owner",
+          expectedFence: 0,
+          now: 0,
+          expiresAt: 30_000,
+        }),
+      ).toEqual({ ok: true, fence: 1 });
+      expect(
+        sessions.acquireLease({
+          sessionId,
+          owner: "same-owner",
+          expectedFence: 1,
+          now: 1,
+          expiresAt: 30_001,
+        }),
+      ).toEqual({ ok: true, fence: 2 });
+
+      expect(
+        sessions.commit({
+          sessionId,
+          owner: "same-owner",
+          fence: 1,
+          now: 2,
+          expectedRevision: 0,
+          actions: [terminalAction(sessionId)],
+          consumeInboxIds: [],
+          state: "idle",
+          releaseLease: true,
+        }),
+      ).toEqual({
+        ok: false,
+        reason: "stale",
+        currentFence: 2,
+        currentRevision: 0,
+      });
+    }
+  });
+
   test("memory and SQLite reject a stale owner after an inclusive-expiry steal", () => {
     for (const [name, adapter] of kernelStores()) {
       const { sessions } = adapter;

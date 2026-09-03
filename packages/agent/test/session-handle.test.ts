@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   closeSessions,
   session,
+  SessionCommitError,
   type SessionCreateOptions,
   type SessionRunner,
   type SessionRunnerInput,
@@ -182,6 +183,10 @@ describe("durable session handle", () => {
     let runs = 0;
     const drained: SessionTurn.Message[][] = [];
     const runner: SessionRunner = async (input) => {
+      const treeAtEntry = SessionHandleStore.tree(input.sessionId);
+      const intent = treeAtEntry.find((action) => action.id === input.turnId);
+      expect(SessionHandleStore.turnIntent(intent)?.resultId).toBe(input.resultId);
+      expect(treeAtEntry.some((action) => action.id === input.resultId)).toBe(false);
       runs += 1;
       active += 1;
       maximumActive = Math.max(maximumActive, active);
@@ -251,6 +256,47 @@ describe("durable session handle", () => {
     expect(terminals).toHaveLength(1);
     expect(terminals[0]?.kind).toBe("interrupted");
     expect(handle.get().state).toBe("interrupted");
+  });
+
+  test("heartbeat loss aborts the runner and the stale fence cannot seal its result", async () => {
+    const entered = signal<SessionRunnerInput>();
+    const aborted = signal<void>();
+    let heartbeat: (() => void) | undefined;
+    runtime = {
+      ...runtime,
+      scheduleHeartbeat: (callback) => {
+        heartbeat = callback;
+        return () => undefined;
+      },
+    };
+    const runner: SessionRunner = async (input) => {
+      input.signal.addEventListener("abort", () => aborted.resolve(), { once: true });
+      entered.resolve(input);
+      await aborted.promise;
+      return { kind: "result", text: "stale completion" };
+    };
+    const handle = session(residentOptions("heartbeat-loss", runner), runtime);
+
+    const running = handle.prompt("start");
+    await bounded(entered.promise, "heartbeat runner entry");
+    now += SessionHandleStore.LEASE_TTL_MS;
+    const stolen = SessionHandleStore.acquireLease({
+      sessionId: handle.id,
+      owner: "replacement-owner",
+      expectedFence: handle.get().lease.fence,
+      now,
+      expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
+    });
+    expect(stolen.ok).toBe(true);
+    if (heartbeat === undefined) throw new Error("heartbeat was not scheduled");
+    heartbeat();
+
+    await bounded(aborted.promise, "heartbeat abort");
+    await expect(running).rejects.toBeInstanceOf(SessionCommitError);
+    expect(SessionHandleStore.openTurns(SessionHandleStore.tree(handle.id))).toHaveLength(1);
+    expect(
+      SessionHandleStore.tree(handle.id).some((action) => SessionHandleStore.turnTerminal(action)),
+    ).toBe(false);
   });
 
   test("pins generation N while configure commits generation N+1", async () => {
@@ -336,6 +382,43 @@ describe("durable session handle", () => {
     expect(hibernations).toBe(2);
   });
 
+  test("resume after interruption carries no prompt content into the runner", async () => {
+    const firstEntered = signal<SessionRunnerInput>();
+    const firstAborted = signal<void>();
+    const resumed = signal<SessionRunnerInput>();
+    let entries = 0;
+    const runner: SessionRunner = async (input) => {
+      entries += 1;
+      if (entries === 1) {
+        firstEntered.resolve(input);
+        input.signal.addEventListener("abort", () => firstAborted.resolve(), { once: true });
+        await firstAborted.promise;
+        return { kind: "interrupted" };
+      }
+      resumed.resolve(input);
+      return { kind: "result", text: "resumed" };
+    };
+    const handle = session(residentOptions("content-free-resume", runner), runtime);
+
+    const first = handle.prompt("original prompt");
+    const firstInput = await bounded(firstEntered.promise, "initial runner entry");
+    await handle.interrupt();
+    await bounded(first, "interrupted turn");
+    const resume = handle.resume();
+    const resumedInput = await bounded(resumed.promise, "resumed runner entry");
+    await bounded(resume, "resumed turn");
+
+    expect(resumedInput.messages).toEqual(firstInput.messages);
+    expect(resumedInput.resumeCount).toBe(1);
+    expect(
+      SessionHandleStore.tree(handle.id)
+        .map(SessionHandleStore.delivery)
+        .filter((item): item is SessionTurn.Delivery => item !== undefined)
+        .filter((item) => item.kind === "resume")
+        .map((item) => item.content),
+    ).toEqual([""]);
+  });
+
   test("materializes a worker as a parent-linked session with an independent lease", async () => {
     const runner: SessionRunner = async () => ({ kind: "result", text: "done" });
     const parent = session(residentOptions("resident-parent", runner), runtime);
@@ -403,6 +486,44 @@ describe("session crash recovery and observation", () => {
       kind: "error",
       resumeCount: 10,
     });
+  });
+
+  test("watch installs its subscription before reading the initial snapshot", () => {
+    SessionHandleStore.materialize({
+      id: "watch-order",
+      parentId: null,
+      role: "resident",
+      tools: [],
+      system: { preset: "", blocks: [] },
+      policyGeneration: 0,
+      actionId: "watch-order:configure",
+      at: now,
+    });
+    let subscribed = false;
+    const adapter = Storage.get();
+    const sessions = adapter.sessions;
+    if (sessions === undefined) throw new Error("session adapter is unavailable");
+    const get = sessions.get.bind(sessions);
+    Storage.configure({
+      ...adapter,
+      transaction: adapter.transaction.bind(adapter),
+      sessions: {
+        ...sessions,
+        get: (id) => {
+          expect(subscribed).toBe(true);
+          return get(id);
+        },
+      },
+    });
+    const watch = SessionHandleStore.watchSnapshot("watch-order", 1, {
+      publish: () => undefined,
+      subscribe: () => {
+        subscribed = true;
+        return () => undefined;
+      },
+    });
+
+    watch.unsubscribe();
   });
 
   test("watch reports a revision gap and get replaces state after a dropped observation", async () => {
