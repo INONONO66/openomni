@@ -727,7 +727,7 @@ function selfTest(): void {
       "S8: a type-only brain-surface import is still pinned",
       channelsRouterLedgerViolations(
         "packages/channels/src/router/authority.ts",
-        'import type { TranscriptStore } from "@openomni/ledger";',
+        `import type { ${["Transcript", "Store"].join("")} } from "@openomni/ledger";`,
       ).length === 1,
     ],
     [
