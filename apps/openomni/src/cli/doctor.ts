@@ -1,3 +1,5 @@
+import { ConfigurationError, parseWsPort } from "../config";
+
 /**
  * Read-only diagnostics. Every fact arrives through `DoctorPorts` so the
  * verdict mapping is deterministic and testable; the CLI wires real probes.
@@ -30,6 +32,38 @@ const REQUIRED_KEYS = [
   "OPENOMNI_MODEL_ID",
   "OPENOMNI_MODEL_API_KEY",
 ] as const;
+
+/**
+ * The daemon binds whatever `parseWsPort` returns, so the probe asks that
+ * one owner instead of deriving a port `start` would never have used.
+ */
+async function healthCheck(ports: DoctorPorts): Promise<DoctorCheck> {
+  let port: number;
+  try {
+    port = parseWsPort(ports.effectiveEnv.get("OPENOMNI_WS_PORT"));
+  } catch (error) {
+    if (!ConfigurationError.isInstance(error)) throw error;
+    // A value that would make `start` throw is the operator's real problem;
+    // probing some substituted port would hide that boot failure.
+    return { name: "health", status: "fail", detail: error.data.message };
+  }
+  if (port === 0) {
+    // An ephemeral bind has no port known before the daemon picks one;
+    // guessing one resurrects the false failure this check exists to avoid.
+    return {
+      name: "health",
+      status: "warn",
+      detail: "ephemeral WS port (OPENOMNI_WS_PORT=0) — health probe skipped",
+    };
+  }
+  const url = `http://127.0.0.1:${port}/health`;
+  if (await ports.probeHealth(port)) return { name: "health", status: "pass", detail: `${url} ok` };
+  return {
+    name: "health",
+    status: ports.daemonActive ? "fail" : "warn",
+    detail: `no response on ${url}`,
+  };
+}
 
 export async function runDoctor(ports: DoctorPorts): Promise<DoctorReport> {
   const checks: DoctorCheck[] = [{ name: "bun", status: "pass", detail: ports.bunVersion }];
@@ -74,21 +108,7 @@ export async function runDoctor(ports: DoctorPorts): Promise<DoctorReport> {
     });
   }
 
-  const rawPort = ports.effectiveEnv.get("OPENOMNI_WS_PORT");
-  const port =
-    rawPort !== undefined && /^\d+$/.test(rawPort) && Number(rawPort) >= 1 && Number(rawPort) <= 65_535
-      ? Number(rawPort)
-      : 3000;
-  const healthy = await ports.probeHealth(port);
-  if (healthy) {
-    checks.push({ name: "health", status: "pass", detail: `http://127.0.0.1:${port}/health ok` });
-  } else {
-    checks.push({
-      name: "health",
-      status: ports.daemonActive ? "fail" : "warn",
-      detail: `no response on http://127.0.0.1:${port}/health`,
-    });
-  }
+  checks.push(await healthCheck(ports));
 
   return { checks, ok: checks.every((check) => check.status !== "fail") };
 }

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { assertWsExposure, ConfigurationError, loadConfig } from "../src/config";
+import { assertWsExposure, ConfigurationError, loadConfig, parseWsPort } from "../src/config";
 import { startOpenOmni } from "../src/index";
 
 const ENV_KEYS = [
@@ -63,6 +63,30 @@ describe("compaction summarizer config", () => {
     if (!ConfigurationError.isInstance(error)) throw error;
     expect(error.data.code).toBe("invalid_compaction_summarizer");
   });
+});
+
+describe("ws port parsing", () => {
+  it("is the single owner of the bound port, including the unset default", () => {
+    expect(parseWsPort(undefined)).toBe(loadConfig().wsPort);
+    process.env.OPENOMNI_WS_PORT = "4123";
+    expect(loadConfig().wsPort).toBe(4123);
+  });
+
+  it("accepts 0 as the ephemeral bind the daemon honors", () => {
+    process.env.OPENOMNI_WS_PORT = "0";
+    expect(parseWsPort("0")).toBe(0);
+    expect(loadConfig().wsPort).toBe(0);
+  });
+
+  it.each(["-1", "70000", "8080.5", "not-a-port"])(
+    "refuses %p with a typed configuration code",
+    (raw) => {
+      const error = thrownBy(() => parseWsPort(raw));
+      expect(ConfigurationError.isInstance(error)).toBe(true);
+      if (!ConfigurationError.isInstance(error)) throw error;
+      expect(error.data.code).toBe("invalid_ws_port");
+    },
+  );
 });
 
 describe("ws exposure enforcement", () => {
