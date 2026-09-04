@@ -1,44 +1,66 @@
-import { expect, it } from "bun:test";
-import { atPoint } from "../../helpers/policy-decision";
-import { PolicyDecision, type Tool } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
-import { createToolExecutor } from "../../../src/core/execution/tools";
-import { PolicyEngine } from "../../../src/core/policy";
+import { describe, expect, it, mock } from "bun:test";
+import { createDispatcher, defineTool, type ToolPostPolicy } from "@openomni/agent";
+import { z } from "zod";
 
-/**
- * The agent-side half of what used to be an idle-nudge test: the executor
- * reaches `tool.native.post`, at the `invoke.result` timing, exactly once per
- * native tool call. Which policy sits there is the product's choice (D5), so
- * a stand-in registration is the honest subject.
- */
-it("dispatches at the canonical native tool result point", async () => {
-  let observed = 0;
-  const engine = PolicyEngine.create({ clock: Date.now });
-  engine.register(
-    atPoint("tool.native.post", {
-      name: "test:native-post-observer",
-      priority: 0,
-      fn: (ctx) => {
-        if (ctx.pointId === "tool.native.post" && ctx.timing === "invoke.result") observed++;
-        return PolicyDecision.allow({ policyId: "test.native-post-observer" });
-      },
-    }),
-  );
-
-  const executor = createToolExecutor({
-    events: Bus,
-    traceContext: { traceId: "trace-1", sessionId: "sess-1", runId: "run-1" },
-    engine,
-    toolExecutor: async (call) => ({
-      id: "result-native",
-      toolCallId: call.id,
-      output: "ok",
-      isError: false,
-    }),
+function tool(value: () => Promise<object>) {
+  return defineTool({
+    name: "account",
+    description: "Read an account",
+    category: "query",
+    input: z.object({ id: z.string() }).strict(),
+    output: z.object({ id: z.string(), secret: z.string().optional() }).strict(),
+    visibility: { model: ["resident"], cell: ["resident"] },
+    execute: value,
+    render: (_args, result) => JSON.stringify(result),
   });
-  const call: Tool.Call = { id: "call-native", tool: "bash", input: { command: "ls" } };
+}
 
-  await executor(call);
+const context = {
+  sessionId: "session-1",
+  turnId: "turn-1",
+  callId: "call-1",
+  signal: new AbortController().signal,
+};
 
-  expect(observed).toBe(1);
+function call() {
+  return { id: "call-1", tool: "account", input: { id: "a-1" } };
+}
+
+describe("typed native tool post dispatch", () => {
+  it("does not invoke post policy for invalid raw output", async () => {
+    const post = mock<ToolPostPolicy>(async ({ output }) => output);
+    const dispatcher = createDispatcher([tool(async () => ({ id: 1 }))], { post });
+
+    const result = await dispatcher.execute(call(), context);
+
+    expect(post).toHaveBeenCalledTimes(0);
+    expect(result).toMatchObject({ isError: true, errorKind: "invalid_output" });
+    expect(result.output).toBe("account produced invalid output");
+  });
+
+  it("passes parsed typed output to post policy and splits model/cell returns", async () => {
+    const post = mock<ToolPostPolicy>(async ({ output }) => output);
+    const definition = tool(async () => ({ id: "a-1", secret: "token" }));
+    const dispatcher = createDispatcher([definition], { post });
+
+    const model = await dispatcher.execute(call(), context);
+    const cell = await dispatcher.executeCell(call(), context);
+
+    expect(post).toHaveBeenCalledTimes(2);
+    expect(post.mock.calls[0]?.[0].output).toEqual({ id: "a-1", secret: "token" });
+    expect(model.output).toBe('{"id":"a-1","secret":"token"}');
+    expect(cell.output).toEqual({ id: "a-1", secret: "token" });
+  });
+
+  it("fails invalid_output when a named post transform breaks the output schema", async () => {
+    const post: ToolPostPolicy = async () => ({ transform: "redact", paths: ["id"] });
+    const dispatcher = createDispatcher([tool(async () => ({ id: "a-1", secret: "token" }))], {
+      post,
+    });
+
+    const result = await dispatcher.execute(call(), context);
+
+    expect(result).toMatchObject({ isError: true, errorKind: "invalid_output" });
+    expect(result.output).toBe("account produced invalid output");
+  });
 });

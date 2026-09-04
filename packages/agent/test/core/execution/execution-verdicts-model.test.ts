@@ -1,113 +1,158 @@
 import { describe, expect, it, mock } from "bun:test";
-import { Operational } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
-import {
-  dispatchModelRequest,
-  dispatchModelResponse,
-} from "../../../src/core/execution/lifecycle-dispatch";
-import { PolicyEngine } from "../../../src/core/policy";
-import { atPoint, registerAt, deny } from "../../helpers/policy-decision";
-import { makeAgentBase, makeConfig, makeState } from "./lifecycle-dispatch-fixture";
+import { createExecutor, type ExecutionLedger } from "@openomni/agent";
+import { compilePolicySnapshot } from "@openomni/policy";
+import type { LedgerAction, PlainValue, PolicyRow } from "@openomni/protocol";
 
-type DiagnosticIdentity = {
-  readonly traceId?: unknown;
-  readonly sessionId?: unknown;
+const kinds = ["prompt", "turn", "llm", "tool"] as const;
+
+function row(
+  name: string,
+  kind: (typeof kinds)[number],
+  phase: PolicyRow.Phase,
+  verdict: PlainValue,
+  priority = 0,
+): PolicyRow.Row {
+  return {
+    name,
+    kind,
+    phase,
+    match: { encodingVersion: 1, value: { op: "test" } },
+    verdict: { encodingVersion: 1, value: verdict },
+    priority,
+    generation: 1,
+  };
+}
+
+const mandatory: PolicyRow.Row = {
+  ...row("compaction", "turn", "post", { type: "allow" }),
+  match: { encodingVersion: 1, value: { op: "compaction" } },
 };
 
-describe("model execution deny verdicts", () => {
-  it("fail-closes model.request deny before provider execution", async () => {
-    Bus.reset();
-    const fn = mock(() => deny("test.deny", "provider-blocked"));
-    const engine = PolicyEngine.create({ clock: Date.now });
-    registerAt(engine, "connection.llm.pre", {
-      name: "deny-model-request",
-      effects: ["audit.annotate"],
-      priority: 100,
-      fn,
-    });
-
-    const result = await dispatchModelRequest(
-      makeState(),
-      engine,
-      makeConfig(),
-      makeAgentBase(),
-      "test-model",
-    );
-
-    expect(result.blocked).not.toBeNull();
-    expect(result.blocked?.guardAborted).toBe(true);
-    expect(fn).toHaveBeenCalledTimes(1);
+function harness(rows: readonly PolicyRow.Row[]) {
+  const actions: LedgerAction.Append[] = [];
+  let revision = 0;
+  const ledger: ExecutionLedger = {
+    async append(action) {
+      actions.push(action);
+      revision += 1;
+      return { action: { ...action, ordinal: revision }, revision };
+    },
+  };
+  const executor = createExecutor({
+    policy: compilePolicySnapshot({ generation: 1, rows: [mandatory, ...rows], mandatory: ["compaction"] }),
+    ledger,
+    observations: { publish: () => undefined },
+    identity: { sessionId: "session-1", role: "resident", parentActionId: null },
+    clock: () => 100,
+    entropy: (() => {
+      let value = 0;
+      return () => `action-${++value}`;
+    })(),
   });
+  return { actions, executor };
+}
 
-  it("records a diagnostic and keeps model.response deny fail-open", async () => {
-    const diagnostics = observeInfoEvents();
-    const engine = responseDenyEngine();
+function resultEffects(actions: readonly LedgerAction.Append[], kind: LedgerAction.Kind) {
+  return actions
+    .filter((action) => action.kind === kind)
+    .map((action) => action.effect.value)
+    .filter((effect) =>
+      typeof effect === "object" && effect !== null && !Array.isArray(effect)
+        ? effect.phase === "result"
+        : false,
+    );
+}
 
-    try {
-      const result = await dispatchModelResponse(
-        makeState(),
-        engine,
-        makeConfig(),
-        { outcome: { type: "stop" }, responseTokens: 0 },
-        makeAgentBase(),
-        "test-model",
+describe("the single L2 executor's four-kind verdict model", () => {
+  for (const kind of kinds) {
+    it(`${kind}: pre deny commits no intent/result and never calls body`, async () => {
+      const { actions, executor } = harness([
+        row(`deny-${kind}-pre`, kind, "pre", { type: "deny", reason: "pre blocked" }),
+      ]);
+      const body = mock(async () => ({ ok: true }));
+
+      const result = await executor.run(
+        { kind, op: "test", intent: { requested: true }, effect: { completed: true } },
+        body,
       );
 
-      expect(result).toBeNull();
-      expect(findDenyDiagnostic(diagnostics.payloads, "model.response")).toEqual({
-        traceId: "trace-1",
-        sessionId: "sess-1",
+      expect(result).toMatchObject({ terminal: "blocked_pre", reason: "pre blocked" });
+      expect(body).toHaveBeenCalledTimes(0);
+      expect(actions.filter((action) => action.kind === kind)).toHaveLength(0);
+      expect(resultEffects(actions, kind)).toHaveLength(0);
+    });
+
+    it(`${kind}: allow commits intent/result and calls body exactly once`, async () => {
+      const { actions, executor } = harness([]);
+      const body = mock(async () => ({ ok: true }));
+
+      const result = await executor.run(
+        { kind, op: "test", intent: { requested: true }, effect: { completed: true } },
+        body,
+      );
+
+      expect(result).toMatchObject({ terminal: "executed", value: { ok: true } });
+      expect(body).toHaveBeenCalledTimes(1);
+      expect(actions.filter((action) => action.kind === kind)).toHaveLength(2);
+      expect(resultEffects(actions, kind)).toEqual([
+        expect.objectContaining({ phase: "result", terminal: "executed" }),
+      ]);
+    });
+
+    it(`${kind}: post deny reverts when a reverter exists`, async () => {
+      const { actions, executor } = harness([
+        row(`deny-${kind}-post`, kind, "post", { type: "deny", reason: "post blocked" }),
+      ]);
+      const revert = mock(async () => undefined);
+
+      const result = await executor.run(
+        {
+          kind,
+          op: "test",
+          intent: { requested: true },
+          effect: { completed: true },
+          revert,
+        },
+        async () => ({ ok: true }),
+      );
+
+      expect(result).toMatchObject({
+        terminal: "blocked_post",
+        disposition: "reverted",
+        reason: "post blocked",
       });
-    } finally {
-      diagnostics.unsubscribe();
-    }
-  });
-});
+      expect(revert).toHaveBeenCalledTimes(1);
+      expect(resultEffects(actions, kind)).toEqual([
+        expect.objectContaining({
+          phase: "result",
+          terminal: "blocked_post",
+          disposition: "reverted",
+        }),
+      ]);
+    });
 
-function responseDenyEngine(): ReturnType<typeof PolicyEngine.create> {
-  const engine = PolicyEngine.create({ clock: Date.now });
-  engine.register(
-    atPoint("connection.llm.post", {
-      name: "deny-model-response",
-      effects: ["audit.annotate"],
-      priority: 100,
-      fn: () => deny("test.deny", "after-provider"),
-    }),
-  );
-  return engine;
-}
+    it(`${kind}: post deny records irreversible when no reverter exists`, async () => {
+      const { actions, executor } = harness([
+        row(`deny-${kind}-post`, kind, "post", { type: "deny", reason: "post blocked" }),
+      ]);
 
-function observeInfoEvents(): {
-  readonly payloads: unknown[];
-  readonly unsubscribe: () => void;
-} {
-  Bus.reset();
-  const payloads: unknown[] = [];
-  const unsubscribe = Bus.observe((event, payload) => {
-    if (event.name === Operational.Events.Info.name) payloads.push(payload);
-  });
-  return { payloads, unsubscribe };
-}
+      const result = await executor.run(
+        { kind, op: "test", intent: { requested: true }, effect: { completed: true } },
+        async () => ({ ok: true }),
+      );
 
-function findDenyDiagnostic(
-  diagnostics: readonly unknown[],
-  timing: string,
-): DiagnosticIdentity | undefined {
-  for (const diagnostic of diagnostics) {
-    if (typeof diagnostic !== "object" || diagnostic === null) continue;
-    if (
-      Reflect.get(diagnostic, "component") !== "agent" ||
-      Reflect.get(diagnostic, "msg") !== "agent.policy.deny.diagnostic"
-    ) {
-      continue;
-    }
-    const context = Reflect.get(diagnostic, "context");
-    if (typeof context !== "object" || context === null) continue;
-    if (Reflect.get(context, "timing") !== timing) continue;
-    return {
-      traceId: Reflect.get(diagnostic, "traceId"),
-      sessionId: Reflect.get(diagnostic, "sessionId"),
-    };
+      expect(result).toMatchObject({
+        terminal: "blocked_post",
+        disposition: "irreversible",
+        reason: "post blocked",
+      });
+      expect(resultEffects(actions, kind)).toEqual([
+        expect.objectContaining({
+          phase: "result",
+          terminal: "blocked_post",
+          disposition: "irreversible",
+        }),
+      ]);
+    });
   }
-  return undefined;
-}
+});

@@ -1,109 +1,112 @@
-import { describe, expect, it } from "bun:test";
+import { expect, it } from "bun:test";
+import {
+  createDispatcher,
+  defineTool,
+  type ToolExecutionCommitter,
+  type ToolExecutionObservation,
+} from "@openomni/agent";
 import { Tool } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
-import { createToolExecutor } from "../../../src/core/execution/tools";
-import { PolicyEngine } from "../../../src/core/policy";
+import { z } from "zod";
 
-// #522 defect 2 — sole-emitter pin. The worker-side executor
-// The injected product executor is the SOLE
-// emitter of Tool.Events.Started/Completed. The agent-side wrapper keeps
-// policy dispatch and effect application only; it must not re-emit. This
-// composes the agent wrapper over a base executor that emits the worker
-// executor's event pair and pins exactly ONE Started and ONE Completed per
-// native tool call.
-
-function makeCall(id = "call-1", tool = "bash"): Tool.Call {
-  return { id, tool, input: { command: "ls" } };
+function bounded<T>(promise: Promise<T>, label: string): Promise<T> {
+  const timeout = Promise.withResolvers<T>();
+  const timer = setTimeout(() => timeout.reject(new Error(`timed out waiting for ${label}`)), 1_000);
+  return Promise.race([promise, timeout.promise]).finally(() => clearTimeout(timer));
 }
 
-/** Emits the Tool.Events event pair exactly as the worker executor does. */
-function emittingBaseExecutor(result: {
-  output: string;
-  isError?: boolean;
-  throws?: Error;
-}): (call: Tool.Call, context?: Tool.ExecutionContext) => Promise<Tool.Result> {
-  return async (call, context) => {
-    const base = {
-      traceId: context?.traceContext?.traceId ?? crypto.randomUUID(),
-      sessionId: context?.traceContext?.sessionId ?? "",
-      time: Date.now(),
-      actor: { kind: "agent" },
-    };
-    Bus.publish(Tool.Events.Started, {
-      ...base,
-      toolCallId: call.id,
-      toolName: call.tool,
-    });
-    Bus.publish(Tool.Events.Completed, {
-      ...base,
-      toolCallId: call.id,
-      toolName: call.tool,
-      durationMs: 0,
-      isError: result.throws !== undefined || (result.isError ?? false),
-    });
-    if (result.throws) throw result.throws;
-    return {
-      id: crypto.randomUUID(),
-      toolCallId: call.id,
-      output: result.output,
-      ...(result.isError !== undefined && { isError: result.isError }),
-    };
+it("the dispatcher emits Started/Completed once and only after matching commits", async () => {
+  const intentGate = Promise.withResolvers<void>();
+  const resultGate = Promise.withResolvers<void>();
+  const intentEntered = Promise.withResolvers<void>();
+  const resultEntered = Promise.withResolvers<void>();
+  const events: string[] = [];
+  const committer: ToolExecutionCommitter = {
+    async intent() {
+      intentEntered.resolve();
+      await intentGate.promise;
+    },
+    async result() {
+      resultEntered.resolve();
+      await resultGate.promise;
+    },
   };
-}
+  const observations: ToolExecutionObservation = {
+    publish(event) {
+      events.push(event.name);
+    },
+  };
+  const dispatcher = createDispatcher(
+    [
+      defineTool({
+        name: "echo",
+        description: "Echo text",
+        category: "query",
+        input: z.object({ text: z.string() }).strict(),
+        output: z.string(),
+        visibility: { model: ["resident"], cell: ["resident"] },
+        execute: async ({ text }) => text,
+        render: (_args, value) => value,
+      }),
+    ],
+    { commits: committer, observations, clock: () => 10 },
+  );
 
-describe("sole emitter — worker executor owns Tool.Events events", () => {
-  it("one native tool call emits exactly one Started and one Completed", async () => {
-    Bus.reset();
-    const started: unknown[] = [];
-    const completed: unknown[] = [];
-    Bus.subscribe(Tool.Events.Started, (d) => started.push(d));
-    Bus.subscribe(Tool.Events.Completed, (d) => completed.push(d));
+  const running = dispatcher.execute(
+    { id: "call-1", tool: "echo", input: { text: "ok" } },
+    {
+      sessionId: "session-1",
+      turnId: "turn-1",
+      callId: "call-1",
+      signal: new AbortController().signal,
+    },
+  );
+  await bounded(intentEntered.promise, "intent commit entry");
+  expect(events).toEqual([]);
 
-    const executor = createToolExecutor({
-      events: Bus,
-      toolExecutor: emittingBaseExecutor({ output: "ok" }),
-      engine: PolicyEngine.create({ clock: Date.now }),
-      traceContext: { traceId: "trace-sole", sessionId: "sess-sole", runId: "run-1" },
-    });
+  intentGate.resolve();
+  await bounded(resultEntered.promise, "result commit entry");
+  expect(events).toEqual([Tool.Events.Started.name]);
 
-    await executor(makeCall("call-sole"));
+  resultGate.resolve();
+  await running;
+  expect(events).toEqual([Tool.Events.Started.name, Tool.Events.Completed.name]);
+});
 
-    expect(started).toHaveLength(1);
-    expect(completed).toHaveLength(1);
-  });
+it("emits TimedOut once after the timeout result commit", async () => {
+  const names: string[] = [];
+  const dispatcher = createDispatcher(
+    [
+      defineTool({
+        name: "slow",
+        description: "Wait cooperatively",
+        category: "execution",
+        input: z.object({}).strict(),
+        output: z.string(),
+        visibility: { model: ["resident"], cell: [] },
+        execute: (_args, ctx) =>
+          new Promise((resolve) => {
+            ctx.signal.addEventListener("abort", () => resolve("late"), { once: true });
+          }),
+        render: (_args, value) => value,
+      }),
+    ],
+    {
+      timeoutMs: 1,
+      commits: { intent: async () => undefined, result: async () => undefined },
+      observations: { publish: (event) => names.push(event.name) },
+    },
+  );
 
-  it("one erroring tool call emits exactly one Completed (isError)", async () => {
-    Bus.reset();
-    const completed: unknown[] = [];
-    Bus.subscribe(Tool.Events.Completed, (d) => completed.push(d));
+  const result = await dispatcher.execute(
+    { id: "call-timeout", tool: "slow", input: {} },
+    {
+      sessionId: "session-1",
+      turnId: "turn-1",
+      callId: "call-timeout",
+      signal: new AbortController().signal,
+    },
+  );
 
-    const executor = createToolExecutor({
-      events: Bus,
-      toolExecutor: emittingBaseExecutor({ output: "err", isError: true }),
-      engine: PolicyEngine.create({ clock: Date.now }),
-      traceContext: { traceId: "trace-sole-err", sessionId: "sess-sole-err", runId: "run-1" },
-    });
-
-    await executor(makeCall("call-sole-err"));
-
-    expect(completed).toHaveLength(1);
-    expect((completed[0] as { isError: boolean }).isError).toBe(true);
-  });
-
-  it("a throwing execution emits exactly one Completed", async () => {
-    Bus.reset();
-    const completed: unknown[] = [];
-    Bus.subscribe(Tool.Events.Completed, (d) => completed.push(d));
-
-    const executor = createToolExecutor({
-      events: Bus,
-      toolExecutor: emittingBaseExecutor({ output: "boom", throws: new Error("boom") }),
-      engine: PolicyEngine.create({ clock: Date.now }),
-      traceContext: { traceId: "trace-sole-throw", sessionId: "sess-sole-throw", runId: "run-1" },
-    });
-
-    await expect(executor(makeCall("call-sole-throw"))).rejects.toThrow("boom");
-
-    expect(completed).toHaveLength(1);
-  });
+  expect(result).toMatchObject({ isError: true, errorKind: "execution_failed" });
+  expect(names).toEqual([Tool.Events.Started.name, Tool.Events.TimedOut.name]);
 });
