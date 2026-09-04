@@ -466,6 +466,46 @@ describe("durable session handle", () => {
     expect(maximumActive).toBe(1);
   });
 
+  test("a retained runner whose lease lapsed does not wedge the handle: the next prompt still runs", async () => {
+    const entered = signal<void>();
+    const abortSeen = signal<void>();
+    const releaseRunner = signal<void>();
+    const hibernated = signal<void>();
+    let calls = 0;
+    const runner: SessionRunner = async (input) => {
+      calls += 1;
+      if (calls > 1) return { kind: "result", text: "resumed" };
+      input.signal.addEventListener("abort", () => abortSeen.resolve(), { once: true });
+      entered.resolve();
+      await releaseRunner.promise;
+      return { kind: "result", text: "late" };
+    };
+    const handle = session(residentOptions("retained-lease-lapsed", runner), {
+      ...runtime,
+      onHibernate: () => hibernated.resolve(),
+    });
+
+    const running = handle.prompt("start");
+    await bounded(entered.promise, "runner entry");
+    const interrupted = handle.interrupt();
+    await bounded(abortSeen.promise, "runner abort signal");
+    await bounded(interrupted, "interrupt receipt");
+
+    // The runner outlives its TTL (contract violation) and the lease lapses
+    // before it settles. The retained release must treat the lapsed lease as
+    // nothing-to-release instead of failing a stale commit and wedging every
+    // later turn start behind the detached settlement.
+    now += SessionHandleStore.LEASE_TTL_MS;
+    releaseRunner.resolve();
+    await bounded(Promise.all([running, hibernated.promise]), "retained settlement");
+
+    const leaseBefore = SessionHandleStore.row(handle.id).leaseFence;
+    await bounded(handle.resume(), "resume after retained settlement");
+    expect(calls).toBe(2);
+    expect(handle.get().state).toBe("idle");
+    expect(SessionHandleStore.row(handle.id).leaseFence).toBe(leaseBefore + 1);
+  });
+
   test("configure during the ignored-abort window keeps the lease held by the live runner", async () => {
     const entered = signal<void>();
     const abortSeen = signal<void>();

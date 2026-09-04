@@ -1,5 +1,6 @@
 import { SessionHandleStore } from "@openomni/ledger";
 import {
+  Deadline,
   type Inbox,
   type LedgerAction,
   type LedgerSession,
@@ -295,6 +296,8 @@ function createController(
   // Detached ownership maintenance for that runner (heartbeat + release once
   // it settles). No turn starts while it is pending.
   let retainedRunner: Promise<void> | undefined;
+  // Release failure of that retained lease, re-thrown by the next turn start.
+  let retainedFailure: Error | undefined;
 
   function replacement(): SessionHandle | undefined {
     if (closed) throw new Error(`session handle is closed: ${sessionId}`);
@@ -763,8 +766,16 @@ function createController(
           liveInterruptRunner = undefined;
           stopHeartbeat?.();
           stopHeartbeat = undefined;
-          await releaseHeldLease();
-          retainedRunner = undefined;
+          try {
+            await releaseHeldLease();
+          } catch (error) {
+            // Storage refused/failed the release: never wedge the controller on
+            // a detached promise. Finalize in-memory state here and surface the
+            // failure to the next caller that starts a turn.
+            retainedFailure = error instanceof Error ? error : new Error(String(error));
+          } finally {
+            retainedRunner = undefined;
+          }
           if (active === undefined) await hibernate(SessionHandleStore.row(sessionId));
         });
     }
@@ -773,6 +784,11 @@ function createController(
 
   async function awaitRetainedRunner(): Promise<void> {
     while (retainedRunner !== undefined) await retainedRunner;
+    if (retainedFailure !== undefined) {
+      const failure = retainedFailure;
+      retainedFailure = undefined;
+      throw failure;
+    }
   }
 
   async function drainBoundary(
@@ -868,10 +884,23 @@ function createController(
     requireCommit(committed);
   }
 
+  // Same liveness rule the ledger's fenced commit applies: a lapsed lease is
+  // dead (TTL takeover territory) even while the row still names its owner.
+  function leaseLive(row: LedgerSession.Row): boolean {
+    return (
+      row.leaseOwner !== null &&
+      row.leaseExpiresAt !== null &&
+      !Deadline.isExpired(clock(), row.leaseExpiresAt)
+    );
+  }
+
   async function releaseHeldLease(): Promise<void> {
     const current = SessionHandleStore.row(sessionId);
-    // Lease already stolen or lapsed: nothing of ours left to release.
+    // Lease already stolen or lapsed: nothing of ours left to release. A lapsed
+    // lease is recoverable by TTL takeover; releasing it would be refused as
+    // stale by the fenced kernel.
     if (current.leaseOwner !== owner || current.leaseFence !== fence) return;
+    if (!leaseLive(current)) return;
     const committed = SessionHandleStore.commit({
       sessionId,
       owner,
@@ -993,7 +1022,7 @@ function createController(
 
   async function hibernate(current: LedgerSession.Row): Promise<void> {
     if (released || active !== undefined) return;
-    if (current.leaseOwner !== null) return;
+    if (leaseLive(current)) return;
     if (SessionHandleStore.pendingInbox(sessionId).length > 0) return;
     released = true;
     lifecycle.release();
