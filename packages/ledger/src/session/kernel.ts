@@ -324,7 +324,7 @@ export function getSnapshot(sessionId: string, turns = 1): SessionTurn.Snapshot 
     systemHash: current.systemHash,
     policyGeneration: current.policyGeneration,
     ...(open === undefined ? {} : { openTurnId: open.turnId }),
-    turns: foldTurnTails(actions).slice(-turns),
+    turns: turns === 0 ? [] : foldTurnTails(actions).slice(-turns),
   });
 }
 
