@@ -10,8 +10,9 @@ import {
   type SessionRuntime,
 } from "@openomni/agent";
 import type { Placement } from "@openomni/placement";
-import { SessionGeneration, type Gateway, type Ingress, type Model } from "@openomni/protocol";
+import type { Gateway, Ingress, Model } from "@openomni/protocol";
 import { Bus, newTraceId } from "@openomni/telemetry";
+import { chatProviderConfig } from "./composition/chat-provider";
 import type { PolicyRegistry } from "./composition/policy-registry";
 import type { DelegationOrigin } from "./delegation/admission";
 import { classifyTurnFailure } from "./observation/llm-failure";
@@ -21,7 +22,7 @@ import { RESIDENT_PRESET } from "./prompt/roles";
 import type { CatalogPorts } from "./tools/core/catalog";
 import { createTools } from "./tools/core/catalog";
 import { createDispatcher } from "./tools/core/dispatch";
-import { toolInputSchema } from "./tools/core/project";
+import { sessionTool } from "./tools/core/project";
 
 const EVIDENCE_ONLY_TOOL_REFUSAL =
   "tool execution denied: this turn is evidence-only and may not drive tools";
@@ -164,9 +165,7 @@ export function createResident(options: ResidentOptions): ResidentDelivery {
             ...(options.modelFallbacks === undefined || options.modelFallbacks.length === 0
               ? {}
               : { modelFallbacks: [...options.modelFallbacks] }),
-            auth: { type: "api", key: options.apiKey },
-            ...(options.transport === undefined ? {} : { transport: options.transport }),
-            ...(options.llm === undefined ? {} : { llm: options.llm }),
+            ...chatProviderConfig(options),
           },
           traceContext: { traceId, sessionId: input.sessionId, runId, agentName: "resident" },
           around: (operation) => observation.run(operation),
@@ -182,13 +181,7 @@ export function createResident(options: ResidentOptions): ResidentDelivery {
         id: sessionId,
         role: "resident",
         runner,
-        tools: definitions.map((definition) =>
-          SessionGeneration.Tool.parse({
-            name: definition.name,
-            inputSchema: toolInputSchema(definition),
-            category: definition.category,
-          }),
-        ),
+        tools: definitions.map(sessionTool),
         system: { preset: buildAgentPrompt(RESIDENT_PRESET), blocks: [] },
       },
       runtime,

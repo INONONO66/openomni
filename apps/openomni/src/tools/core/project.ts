@@ -1,4 +1,4 @@
-import type { Tool } from "@openomni/protocol";
+import { SessionGeneration, type Tool } from "@openomni/protocol";
 import { z } from "zod";
 import { toolIsSafe, type AnyToolDefinition, type ToolDefinition } from "./define";
 
@@ -17,6 +17,16 @@ export function toolInputSchema(
     throw new Error(`${definition.name} input schema root must be an object`);
   }
   return projected;
+}
+
+export function sessionTool(
+  definition: AnyToolDefinition | ToolDefinition<z.ZodType, z.ZodType>,
+): SessionGeneration.Tool {
+  return SessionGeneration.Tool.parse({
+    name: definition.name,
+    inputSchema: toolInputSchema(definition),
+    category: definition.category,
+  });
 }
 
 export function toolSpec(

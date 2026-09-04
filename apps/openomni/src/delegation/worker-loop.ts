@@ -7,14 +7,15 @@ import {
   type SessionRunnerInput,
   type SessionRuntime,
 } from "@openomni/agent";
-import { type LedgerSession, type Model, SessionGeneration } from "@openomni/protocol";
+import type { LedgerSession, Model } from "@openomni/protocol";
 import { Bus, newTraceId } from "@openomni/telemetry";
+import { chatProviderConfig } from "../composition/chat-provider";
 import { observeComponent } from "../observation/component";
 import { buildAgentPrompt } from "../prompt/build";
 import { WORKER_PRESET } from "../prompt/roles";
 import { createTools } from "../tools/core/catalog";
 import { createDispatcher, HOST_TARGET } from "../tools/core/dispatch";
-import { toolInputSchema } from "../tools/core/project";
+import { sessionTool } from "../tools/core/project";
 import { decideDrive, initialDriveState, type DriveState } from "./drive-loop";
 import { renderInstruction } from "./instruction";
 import type { InlineWorkerRunner } from "./inline-driver";
@@ -86,9 +87,7 @@ export function createInlineWorkerRunner(options: WorkerLoopOptions): SessionInl
             toolChoice: tools.length === 0 ? "none" : "auto",
             toolExecutor: dispatcher.execute,
             model: options.model,
-            auth: { type: "api", key: options.apiKey },
-            ...(options.transport === undefined ? {} : { transport: options.transport }),
-            ...(options.llm === undefined ? {} : { llm: options.llm }),
+            ...chatProviderConfig(options),
           },
           traceContext: { traceId, sessionId: input.sessionId, runId, agentName: "worker" },
           around: (operation) => observation.run(operation),
@@ -101,13 +100,7 @@ export function createInlineWorkerRunner(options: WorkerLoopOptions): SessionInl
         parentId,
         role: "worker",
         runner,
-        tools: definitions.map((definition) =>
-          SessionGeneration.Tool.parse({
-            name: definition.name,
-            inputSchema: toolInputSchema(definition),
-            category: definition.category,
-          }),
-        ),
+        tools: definitions.map(sessionTool),
         system: { preset: buildAgentPrompt(WORKER_PRESET), blocks: [] },
       },
       runtime,

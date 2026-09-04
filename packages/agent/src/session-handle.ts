@@ -5,7 +5,7 @@ import {
   type LedgerSession,
   type ObservationSink,
   SessionGeneration,
-  type SessionTurn,
+  SessionTurn,
 } from "@openomni/protocol";
 
 export interface SessionTool {
@@ -883,6 +883,49 @@ function requireCommit(result: LedgerSession.CommitResult): LedgerSession.Row {
   return result.row;
 }
 
+interface TurnEnvelopeActionInput {
+  readonly id: string;
+  readonly parentId: string | null;
+  readonly sessionId: string;
+  readonly generation: SessionGeneration.Snapshot;
+  readonly at: number;
+}
+
+interface TurnPinnedInput {
+  readonly generation: SessionGeneration.Snapshot;
+  readonly resultId: string;
+  readonly resumeCount: number;
+  readonly boundaryActionId: string | null;
+}
+
+function pinnedTurn(input: TurnPinnedInput): Omit<SessionTurn.Intent, "phase" | "inboxIds"> {
+  return {
+    resultId: input.resultId,
+    toolsGeneration: input.generation.generation,
+    toolsHash: input.generation.toolsHash,
+    systemHash: input.generation.systemHash,
+    policyGeneration: input.generation.policyGeneration,
+    resumeCount: input.resumeCount,
+    boundaryActionId: input.boundaryActionId,
+  };
+}
+
+function turnEnvelopeAction(
+  input: TurnEnvelopeActionInput,
+  intent: SessionTurn.Intent | SessionTurn.Resume,
+): LedgerAction.Append {
+  return {
+    id: input.id,
+    parentId: input.parentId,
+    sessionId: input.sessionId,
+    kind: "turn",
+    intent: { encodingVersion: 1, value: intent },
+    effect: { encodingVersion: 1, value: SessionTurn.Pending.parse({ phase: "pending" }) },
+    irreversible: true,
+    ts: input.at,
+  };
+}
+
 function turnIntentAction(input: {
   readonly id: string;
   readonly parentId: string | null;
@@ -894,29 +937,14 @@ function turnIntentAction(input: {
   readonly boundaryActionId: string | null;
   readonly at: number;
 }): LedgerAction.Append {
-  return {
-    id: input.id,
-    parentId: input.parentId,
-    sessionId: input.sessionId,
-    kind: "turn",
-    intent: {
-      encodingVersion: 1,
-      value: {
-        phase: "intent",
-        resultId: input.resultId,
-        inboxIds: [...input.inboxIds],
-        toolsGeneration: input.generation.generation,
-        toolsHash: input.generation.toolsHash,
-        systemHash: input.generation.systemHash,
-        policyGeneration: input.generation.policyGeneration,
-        resumeCount: input.resumeCount,
-        boundaryActionId: input.boundaryActionId,
-      },
-    },
-    effect: { encodingVersion: 1, value: { phase: "pending" } },
-    irreversible: true,
-    ts: input.at,
-  };
+  return turnEnvelopeAction(
+    input,
+    SessionTurn.Intent.parse({
+      phase: "intent",
+      inboxIds: [...input.inboxIds],
+      ...pinnedTurn(input),
+    }),
+  );
 }
 
 function turnResumeAction(input: {
@@ -930,29 +958,14 @@ function turnResumeAction(input: {
   readonly boundaryActionId: string | null;
   readonly at: number;
 }): LedgerAction.Append {
-  return {
-    id: input.id,
-    parentId: input.parentId,
-    sessionId: input.sessionId,
-    kind: "turn",
-    intent: {
-      encodingVersion: 1,
-      value: {
-        phase: "resume",
-        turnId: input.turnId,
-        resultId: input.resultId,
-        toolsGeneration: input.generation.generation,
-        toolsHash: input.generation.toolsHash,
-        systemHash: input.generation.systemHash,
-        policyGeneration: input.generation.policyGeneration,
-        resumeCount: input.resumeCount,
-        boundaryActionId: input.boundaryActionId,
-      },
-    },
-    effect: { encodingVersion: 1, value: { phase: "pending" } },
-    irreversible: true,
-    ts: input.at,
-  };
+  return turnEnvelopeAction(
+    input,
+    SessionTurn.Resume.parse({
+      phase: "resume",
+      turnId: input.turnId,
+      ...pinnedTurn(input),
+    }),
+  );
 }
 
 function turnCheckpointAction(input: {

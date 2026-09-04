@@ -365,6 +365,13 @@ export namespace SessionTurn {
     .strict();
   export type Delivery = z.infer<typeof Delivery>;
 
+  export const Pending = z
+    .object({
+      phase: z.literal("pending"),
+    })
+    .strict();
+  export type Pending = z.infer<typeof Pending>;
+
   export const Tail = z
     .object({
       turnId: Identifier,
