@@ -3,6 +3,7 @@ import {
   compilePolicySnapshot,
   createPolicyCompiler,
   PolicyCompileError,
+  SEEDED_POLICY_ROWS,
   type PolicyEvaluationInput,
 } from "../src/index";
 import { atGeneration, compaction, draft, MemoryPolicyRows } from "./row-fixtures";
@@ -95,6 +96,36 @@ describe("policy row compiler enforcement", () => {
     expect(error.code).toBe(code);
     expect(error.generation).toBe(1);
     expect(error.ruleName).toBe(badRow.name);
+  });
+
+  it("ships every kernel limit as seeded policy data", () => {
+    const limits = new Map(
+      SEEDED_POLICY_ROWS.flatMap((row) => {
+        const verdict = row.verdict.value;
+        if (
+          verdict === null ||
+          Array.isArray(verdict) ||
+          typeof verdict !== "object" ||
+          verdict.type !== "obligation" ||
+          typeof verdict.metric !== "string" ||
+          typeof verdict.limit !== "number"
+        ) {
+          return [];
+        }
+        return [[verdict.metric, verdict.limit] as const];
+      }),
+    );
+
+    expect(limits).toEqual(
+      new Map([
+        ["continuation", 8],
+        ["fanout", 8],
+        ["exact_repeat", 3],
+        ["toolless_stall", 3],
+        ["blocked_recurrence", 3],
+        ["resume", 10],
+      ]),
+    );
   });
 
   it("orders by descending priority and deny short-circuits lower rules", () => {
