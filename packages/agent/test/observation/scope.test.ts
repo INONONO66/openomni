@@ -96,7 +96,7 @@ describe("scoped observations", () => {
     console.warn = warn;
     const hostile: ObservationSink = {
       publish() {
-        throw "sink failed";
+        throw new Error("sink failed");
       },
       scope() {
         return hostile;
@@ -125,7 +125,7 @@ describe("scoped observations", () => {
   it("forwards subscriptions when the underlying sink supports them", () => {
     let subscribed = false;
     const sink: ObservationSink = {
-      publish() {},
+      publish: () => undefined,
       scope() {
         return sink;
       },
