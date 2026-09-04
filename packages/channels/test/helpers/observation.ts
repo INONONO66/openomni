@@ -48,7 +48,6 @@ function currentState(): BusState {
 }
 
 export namespace Bus {
-  export type Data = BusData;
 
   export interface PublishedDescriptor {
     readonly name: string;

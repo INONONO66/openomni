@@ -75,7 +75,7 @@ export interface DispatcherOptions {
   readonly timeoutMs?: number;
 }
 
-export interface DispatchContext {
+interface DispatchContext {
   readonly sessionId: string;
   readonly turnId: string;
   readonly signal?: AbortSignal;
