@@ -131,7 +131,7 @@ const ApprovalVerdict = z
 const TransformVerdict = z
   .object({
     type: z.literal("transform"),
-    name: z.string().min(1),
+    name: z.enum(TRANSFORMER_NAMES),
     paths: z.array(z.string().min(1)).default([]),
     replacement: PlainValueSchema.optional(),
   })
@@ -139,7 +139,7 @@ const TransformVerdict = z
 const ObligationVerdict = z
   .object({
     type: z.literal("obligation"),
-    name: z.string().min(1),
+    name: z.enum(OBLIGATION_NAMES),
     metric: z.enum([
       "continuation",
       "fanout",
@@ -217,7 +217,7 @@ interface BucketSet {
 export interface CompilePolicySnapshotOptions {
   readonly generation: number;
   readonly rows: readonly PolicyRow.Row[];
-  readonly mandatory?: readonly string[];
+  readonly mandatory?: readonly RuleName[];
   readonly kinds?: readonly string[];
 }
 
@@ -284,9 +284,23 @@ function parseRow(row: PolicyRow.Row, generation: number, kinds: ReadonlySet<str
     const rawType = rawVerdict?.type;
     const rawName = rawVerdict?.name;
     if (
+      rawType === "transform" &&
+      typeof rawName === "string" &&
+      !TRANSFORMER_NAMES.some((name) => name === rawName)
+    ) {
+      throw new PolicyCompileError({
+        code: "unknown_transformer",
+        generation,
+        ruleName: row.name,
+        kind: row.kind,
+        phase: row.phase,
+        name: rawName,
+      });
+    }
+    if (
       rawType === "obligation" &&
       typeof rawName === "string" &&
-      !OBLIGATION_NAMES.includes(rawName as ObligationName)
+      !OBLIGATION_NAMES.some((name) => name === rawName)
     ) {
       throw new PolicyCompileError({
         code: "unknown_obligation",
@@ -303,32 +317,6 @@ function parseRow(row: PolicyRow.Row, generation: number, kinds: ReadonlySet<str
       ruleName: row.name,
       kind: row.kind,
       phase: row.phase,
-    });
-  }
-  if (
-    verdict.data.type === "transform" &&
-    !TRANSFORMER_NAMES.includes(verdict.data.name as TransformerName)
-  ) {
-    throw new PolicyCompileError({
-      code: "unknown_transformer",
-      generation,
-      ruleName: row.name,
-      kind: row.kind,
-      phase: row.phase,
-      name: verdict.data.name,
-    });
-  }
-  if (
-    verdict.data.type === "obligation" &&
-    !OBLIGATION_NAMES.includes(verdict.data.name as ObligationName)
-  ) {
-    throw new PolicyCompileError({
-      code: "unknown_obligation",
-      generation,
-      ruleName: row.name,
-      kind: row.kind,
-      phase: row.phase,
-      name: verdict.data.name,
     });
   }
   return Object.freeze({
@@ -454,7 +442,7 @@ function evaluateSnapshot(
     if (candidate.type === "obligation") {
       if (verdict === "allow") verdict = "obligation";
       obligations.push({
-        name: candidate.name as ObligationName,
+        name: candidate.name,
         metric: candidate.metric,
         limit: candidate.limit,
       });
@@ -537,7 +525,7 @@ export interface PolicyCompiler {
 
 export function createPolicyCompiler(options: {
   readonly source: Storage.PolicyRowSubAdapter;
-  readonly mandatory?: readonly string[];
+  readonly mandatory?: readonly RuleName[];
   readonly kinds?: readonly string[];
 }): PolicyCompiler {
   const cache = new Map<number, CompiledPolicySnapshot>();
