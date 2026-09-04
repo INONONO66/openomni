@@ -204,7 +204,10 @@ export interface CompiledPolicySnapshot {
 }
 
 interface CompiledRow {
-  readonly row: PolicyRow.Row;
+  readonly name: string;
+  readonly kind: string;
+  readonly phase: PolicyRow.Phase;
+  readonly priority: number;
   readonly match: Match;
   readonly verdict: RowVerdict;
 }
@@ -238,8 +241,7 @@ function publicBucket(kind: string, phase: PolicyRow.Phase, op: string | undefin
 function ordered(rows: readonly CompiledRow[]): readonly CompiledRow[] {
   return Object.freeze(
     [...rows].sort(
-      (left, right) =>
-        right.row.priority - left.row.priority || left.row.name.localeCompare(right.row.name),
+      (left, right) => right.priority - left.priority || left.name.localeCompare(right.name),
     ),
   );
 }
@@ -320,7 +322,10 @@ function parseRow(row: PolicyRow.Row, generation: number, kinds: ReadonlySet<str
     });
   }
   return Object.freeze({
-    row: Object.freeze(row),
+    name: row.name,
+    kind: row.kind,
+    phase: row.phase,
+    priority: row.priority,
     match: Object.freeze(match.data),
     verdict: Object.freeze(verdict.data),
   });
@@ -342,7 +347,7 @@ function contentIdentity(rows: readonly PolicyRow.Row[]): PlainValue {
 function buildBuckets(rows: readonly CompiledRow[]): ReadonlyMap<string, BucketSet> {
   const grouped = new Map<string, CompiledRow[]>();
   for (const row of rows) {
-    const key = pointKey(row.row.kind, row.row.phase);
+    const key = pointKey(row.kind, row.phase);
     const entries = grouped.get(key) ?? [];
     entries.push(row);
     grouped.set(key, entries);
@@ -422,7 +427,7 @@ function evaluateSnapshot(
 
   for (const compiled of selected) {
     if (!matches(compiled, input)) continue;
-    matchedRuleIds.push(compiled.row.name);
+    matchedRuleIds.push(compiled.name);
     const candidate = compiled.verdict;
     if (candidate.type === "deny") {
       verdict = "deny";

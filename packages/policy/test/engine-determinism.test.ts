@@ -81,6 +81,25 @@ describe("compiled policy snapshot determinism", () => {
     expect(forward.evaluate(request)).toEqual(reverse.evaluate(request));
   });
 
+  it("captures immutable row data without freezing caller-owned rows", () => {
+    const rows = initialRows();
+    const snapshot = compilePolicySnapshot({
+      generation: 1,
+      rows,
+      mandatory: ["compaction"],
+    });
+    const before = snapshot.evaluate(request);
+    const readRule = rows.find((row) => row.name === "allow-read");
+    if (readRule === undefined) throw new Error("missing read rule fixture");
+
+    expect(Object.isFrozen(readRule)).toBe(false);
+    readRule.name = "mutated";
+    readRule.priority = 10_000;
+    readRule.match.value = { op: "write" };
+
+    expect(snapshot.evaluate(request)).toEqual(before);
+  });
+
   it("reads exactly one kind/phase/op bucket and never reads storage on the hot path", () => {
     const unrelated = Array.from({ length: 220 }, (_, index) =>
       atGeneration(
