@@ -394,14 +394,23 @@ function redact(value: PlainValue, paths: readonly string[], replacement?: Plain
     const fields = path.split(".");
     const leaf = fields.pop();
     if (leaf === undefined || leaf.length === 0) continue;
-    let parent: PlainValue = output;
+    let parent: PlainValue | undefined = output;
     for (const field of fields) {
-      if (parent === null || Array.isArray(parent) || typeof parent !== "object") break;
-      const next = parent[field];
-      if (next === undefined) break;
-      parent = next;
+      if (parent === null || Array.isArray(parent) || typeof parent !== "object") {
+        parent = undefined;
+        break;
+      }
+      parent = parent[field];
+      if (parent === undefined) break;
     }
-    if (parent === null || Array.isArray(parent) || typeof parent !== "object") continue;
+    if (
+      parent === undefined ||
+      parent === null ||
+      Array.isArray(parent) ||
+      typeof parent !== "object"
+    ) {
+      continue;
+    }
     if (replacement === undefined) delete parent[leaf];
     else parent[leaf] = clonePlain(replacement);
   }

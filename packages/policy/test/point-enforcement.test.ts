@@ -99,33 +99,54 @@ describe("policy row compiler enforcement", () => {
   });
 
   it("ships every kernel limit as seeded policy data", () => {
-    const limits = new Map(
-      SEEDED_POLICY_ROWS.flatMap((row) => {
-        const verdict = row.verdict.value;
-        if (
-          verdict === null ||
-          Array.isArray(verdict) ||
-          typeof verdict !== "object" ||
-          verdict.type !== "obligation" ||
-          typeof verdict.metric !== "string" ||
-          typeof verdict.limit !== "number"
-        ) {
-          return [];
-        }
-        return [[verdict.metric, verdict.limit] as const];
-      }),
-    );
+    const snapshot = compilePolicySnapshot({
+      generation: 1,
+      rows: SEEDED_POLICY_ROWS.map((row) => atGeneration(row, 1)),
+    });
+    const cases = [
+      ["turn", "post", "continue", "continuation", 8],
+      ["tool", "pre", "sendMessage", "fanout", 8],
+      ["turn", "post", "exact_repeat", "exact_repeat", 3],
+      ["turn", "post", "toolless_stall", "toolless_stall", 3],
+      ["turn", "post", "blocked_recurrence", "blocked_recurrence", 3],
+      ["turn", "pre", "resume", "resume", 10],
+    ] as const;
 
-    expect(limits).toEqual(
-      new Map([
-        ["continuation", 8],
-        ["fanout", 8],
-        ["exact_repeat", 3],
-        ["toolless_stall", 3],
-        ["blocked_recurrence", 3],
-        ["resume", 10],
-      ]),
-    );
+    for (const [kind, phase, op, metric, limit] of cases) {
+      expect(snapshot.evaluate({ ...input, kind, phase, op }).obligations).toEqual([
+        { name: "budget_clamp", metric, limit },
+      ]);
+    }
+  });
+
+  it("runs the named redactor only at complete object paths", () => {
+    const snapshot = compilePolicySnapshot({
+      generation: 1,
+      rows: [
+        atGeneration(compaction, 1),
+        atGeneration(
+          draft("redact-token", "tool", "post", {
+            type: "transform",
+            name: "redact",
+            paths: ["secret.token", "missing.token"],
+            replacement: "[redacted]",
+          }),
+          1,
+        ),
+      ],
+    });
+
+    expect(
+      snapshot.evaluate({
+        ...input,
+        phase: "post",
+        value: { token: "keep", secret: { token: "remove" } },
+      }),
+    ).toMatchObject({
+      verdict: "transform",
+      matchedRuleIds: ["redact-token"],
+      value: { token: "keep", secret: { token: "[redacted]" } },
+    });
   });
 
   it("orders by descending priority and deny short-circuits lower rules", () => {
