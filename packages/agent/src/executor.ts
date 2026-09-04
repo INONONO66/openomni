@@ -14,6 +14,22 @@ import type {
 
 const CORE_KINDS = new Set(["prompt", "turn", "llm", "tool"]);
 
+export class UnregisteredExecutionKindError extends Error {
+  readonly code = "unregistered_execution_kind";
+
+  constructor(readonly kind: string) {
+    super(`unregistered execution kind: ${kind}`);
+    this.name = "UnregisteredExecutionKindError";
+  }
+}
+
+export interface ExecutionKindRegistration {
+  readonly kind: string;
+  readonly effect: PlainValue;
+  readonly reversible: boolean;
+  readonly inputSchema: PlainValue;
+}
+
 export interface ExecutionLedger {
   commit(action: LedgerAction.Append): Promise<LedgerAction.Receipt>;
 }
@@ -55,11 +71,14 @@ export interface ExecutorOptions {
   readonly identity: ExecutionIdentity;
   readonly clock: () => number;
   readonly entropy: () => string;
-  readonly registeredKinds?: readonly string[];
+  readonly extensionKinds?: readonly ExecutionKindRegistration[];
 }
 
 export function createExecutor(options: ExecutorOptions): Executor {
-  const kinds = new Set([...CORE_KINDS, ...(options.registeredKinds ?? [])]);
+  const kinds = new Set([
+    ...CORE_KINDS,
+    ...(options.extensionKinds ?? []).map((registration) => registration.kind),
+  ]);
 
   async function commit(action: LedgerAction.Append): Promise<LedgerAction.Receipt> {
     const receipt = await options.ledger.commit(action);
@@ -118,7 +137,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
     request: ExecutionRequest,
     body: () => Promise<T>,
   ): Promise<ExecutionResult<T>> {
-    if (!kinds.has(request.kind)) throw new Error(`unregistered execution kind: ${request.kind}`);
+    if (!kinds.has(request.kind)) throw new UnregisteredExecutionKindError(request.kind);
 
     const pre = await decide(request, "pre", request.intent);
     if (blocks(pre)) {

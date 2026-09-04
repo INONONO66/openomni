@@ -1,5 +1,9 @@
 import { describe, expect, it, mock } from "bun:test";
-import { createExecutor, type ExecutionLedger } from "../../../src/index";
+import {
+  createExecutor,
+  type ExecutionLedger,
+  UnregisteredExecutionKindError,
+} from "../../../src/index";
 import { compilePolicySnapshot } from "@openomni/policy";
 import type { LedgerAction, PlainValue, PolicyRow } from "@openomni/protocol";
 
@@ -64,6 +68,62 @@ function resultEffects(actions: readonly LedgerAction.Append[], kind: LedgerActi
 }
 
 describe("the single L2 executor's four-kind verdict model", () => {
+  it("refuses an unregistered kind with a typed error before policy or body", async () => {
+    const { actions, executor } = harness([]);
+    const body = mock(async () => ({ ok: true }));
+
+    expect(
+      executor.run(
+        { kind: "channel.send", op: "test", intent: {}, effect: {} },
+        body,
+      ),
+    ).rejects.toEqual(
+      expect.objectContaining({
+        name: "UnregisteredExecutionKindError",
+        code: "unregistered_execution_kind",
+        kind: "channel.send",
+      }),
+    );
+    expect(body).toHaveBeenCalledTimes(0);
+    expect(actions).toHaveLength(0);
+    expect(new UnregisteredExecutionKindError("x")).toBeInstanceOf(Error);
+  });
+
+  it("registers extension kinds as declarative data", async () => {
+    const actions: LedgerAction.Append[] = [];
+    let revision = 0;
+    const executor = createExecutor({
+      policy: compilePolicySnapshot({ generation: 1, rows: [mandatory], mandatory: ["compaction"] }),
+      ledger: {
+        async commit(action) {
+          actions.push(action);
+          revision += 1;
+          return { action: { ...action, ordinal: revision }, revision };
+        },
+      },
+      observations: { publish: () => undefined },
+      identity: { sessionId: "session-1", role: "resident", parentActionId: null },
+      clock: () => 100,
+      entropy: () => `extension-${revision + 1}`,
+      extensionKinds: [
+        {
+          kind: "channel.send",
+          effect: { grade: "external" },
+          reversible: false,
+          inputSchema: { type: "object" },
+        },
+      ],
+    });
+
+    const result = await executor.run(
+      { kind: "channel.send", op: "test", intent: {}, effect: {} },
+      async () => ({ delivered: true }),
+    );
+
+    expect(result).toMatchObject({ terminal: "executed" });
+    expect(actions).toHaveLength(4);
+  });
+
   for (const kind of kinds) {
     it(`${kind}: pre deny commits no intent/result and never calls body`, async () => {
       const { actions, executor } = harness([

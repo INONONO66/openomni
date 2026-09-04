@@ -7,9 +7,10 @@ export { createCompactionPolicy } from "./compaction";
 export type { CompactionOptions } from "./compaction";
 export { createSessionChatRunner } from "./session-chat-runner";
 export { closeSessions, session, sweepSessions } from "./session-handle";
-export { createExecutor } from "./executor";
+export { createExecutor, UnregisteredExecutionKindError } from "./executor";
 export type {
   ExecutionIdentity,
+  ExecutionKindRegistration,
   ExecutionLedger,
   ExecutionRequest,
   ExecutionResult,
