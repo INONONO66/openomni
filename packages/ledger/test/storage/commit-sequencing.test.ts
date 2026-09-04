@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Wait } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../helpers/observation";
 import { Storage, WaitStore } from "../../src/index";
 import { buildWaitCreate, commitCancel, commitReply } from "../helpers/wait";
 

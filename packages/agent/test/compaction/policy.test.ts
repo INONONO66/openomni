@@ -4,7 +4,7 @@ import type { Message } from "@openomni/protocol";
 import { createCompactionPolicy } from "../../src/compaction";
 import type { PolicyFn } from "../../src/core/policy";
 import { effectOf } from "../helpers/policy-decision";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../../src/index";
 
 function baseCtx(
   overrides?: Partial<Omit<Parameters<PolicyFn>[0], "pointId">>,

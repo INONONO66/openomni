@@ -69,7 +69,7 @@ export namespace BusEvent {
  * different session, turn, call, or agent.
  */
 export interface ObservationSink extends BusEvent.Sink {
-  scope(identity: Readonly<BusEvent.Metadata>): ObservationSink;
+  scope?(identity: Readonly<BusEvent.Metadata>): ObservationSink;
   subscribe?<T>(
     event: BusEvent.Descriptor<T>,
     handler: (data: T) => void,

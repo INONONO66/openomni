@@ -1,6 +1,6 @@
 import { extractSurfaceKey, type Gateway, type Ingress } from "@openomni/protocol";
 import { ActorRegistry, ChannelGrantStore, Storage, SurfaceKey } from "@openomni/ledger";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../helpers/observation";
 import {
   createGatewayRouter,
   type GatewayRouter,

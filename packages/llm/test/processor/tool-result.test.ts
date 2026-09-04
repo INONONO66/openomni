@@ -2,7 +2,7 @@ import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { anthropicModel as model, assistantMessage as buildAssistantMessage } from "../helpers/fixtures";
 import type { Message, Tool } from "@openomni/protocol";
 import type { Sink } from "../../src/sink";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../helpers/observation";
 import { Processor } from "../../src/processor";
 import type { StreamEvent } from "../../src/processor/stream-events";
 

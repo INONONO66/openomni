@@ -12,7 +12,7 @@ import {
 import { abortRun, allow, inject } from "../../helpers/policy-decision";
 import { assistantSnapshot } from "../../helpers/assistant-snapshot";
 import { runInput } from "../../helpers/run-input";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../../../src/index";
 
 let mockRunFn: MockLlmFn = async () => createStopOutcome();
 

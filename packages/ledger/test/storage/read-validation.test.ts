@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { Message } from "@openomni/protocol";
 import { Database } from "bun:sqlite";
 import { Session, Storage } from "../../src/index";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../helpers/observation";
 import { removeSqliteFiles, tempDbPath } from "../helpers/sqlite";
 
 // A corrupt persisted row must fail closed on READ — parse-don't-cast, matching

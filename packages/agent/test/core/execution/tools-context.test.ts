@@ -4,7 +4,7 @@ import { describe, expect, it } from "bun:test";
 import type { Tool } from "@openomni/protocol";
 import { createToolExecutor } from "../../../src/core/execution/tools";
 import { PolicyEngine } from "../../../src/core/policy";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../../../src/index";
 
 describe("createToolExecutor execution context", () => {
   it("forwards the active trace while preserving the per-call cancellation signal", async () => {

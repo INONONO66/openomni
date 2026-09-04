@@ -11,7 +11,7 @@ import {
 } from "@openomni/agent";
 import type { Placement } from "@openomni/placement";
 import type { Gateway, Ingress, Model } from "@openomni/protocol";
-import { Bus, newTraceId } from "@openomni/telemetry";
+import { Bus, newTraceId } from "@openomni/agent";
 import { chatProviderConfig } from "./composition/chat-provider";
 import { SessionBindingCache } from "./composition/session-bindings";
 import type { PolicyRegistry } from "./composition/policy-registry";

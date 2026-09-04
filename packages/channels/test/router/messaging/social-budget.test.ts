@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { Gateway } from "@openomni/protocol";
 import { EgressBudgetStore } from "@openomni/ledger";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../../helpers/observation";
 import { createExistingAgentMessaging } from "../../../src/router/messaging/send.js";
 import { evaluateSocialBudget } from "../../../src/router/messaging/social-budget.js";
 import {

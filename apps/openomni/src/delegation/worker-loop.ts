@@ -8,7 +8,7 @@ import {
   type SessionRuntime,
 } from "@openomni/agent";
 import type { LedgerSession, Model } from "@openomni/protocol";
-import { Bus, newTraceId } from "@openomni/telemetry";
+import { Bus, newTraceId } from "@openomni/agent";
 import { chatProviderConfig } from "../composition/chat-provider";
 import { SessionBindingCache } from "../composition/session-bindings";
 import { observeComponent } from "../observation/component";

@@ -1,14 +1,14 @@
 /// <reference types="bun" />
 
 import { beforeEach, describe, expect, test } from "bun:test";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../helpers/observation";
 import { Session } from "../../src/session";
 import { Storage } from "../../src/storage/storage";
 import "../../src/storage/initialize";
 
 /**
  * `Bus.publish` dispatches every subscriber in exactly one `queueMicrotask`
- * (`packages/telemetry/src/bus.ts:55-64`) with a synchronous handler body, and
+ * (`packages/agent/src/observation/bus.ts:55-64`) with a synchronous handler body, and
  * the microtask queue drains completely before an awaiting continuation
  * resumes. One hop is therefore the exact completion signal for the publishes
  * already made, not a guess at scheduling latency.

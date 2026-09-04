@@ -36,9 +36,14 @@ export type {
   ToolPostResult,
 } from "./tool-dispatcher";
 export {
+  Bus,
+  collector,
   createObservationBus,
+  newTraceId,
   noopObservationSink,
+  noopSink,
   observationCollector,
+  scope,
   scopeObservation,
 } from "./observation/bus";
 export type {

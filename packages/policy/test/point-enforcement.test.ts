@@ -83,7 +83,7 @@ describe("policy row compiler enforcement", () => {
       }),
       "unknown_obligation",
     ],
-  ])("rejects an unknown %s with exact machine fields", (_label, badRow, code) => {
+  ] as const)("rejects an unknown %s with exact machine fields", (_label, badRow, code) => {
     const error = catchCompile(() =>
       compilePolicySnapshot({
         generation: 1,

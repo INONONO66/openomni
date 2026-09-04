@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { Bench } from "tinybench";
 import type { Message } from "@openomni/protocol";
 import { Compaction } from "../src/compaction/compact.ts";
-import { noopSink } from "@openomni/telemetry";
+import { noopSink } from "../src/index";
 
 /** The bench stands in for one run. It measures compaction, not reporting. */
 const BENCH_TRACE = { traceId: "trace-agent-bench", sessionId: "session-agent-bench" };

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { PolicyDecision } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../../../src/index";
 import { advanceRunTurn, createRunState, recordRunTurn } from "../../../src/core/execution/state";
 import { runAgent } from "../../../src/core/execution/run";
 import {

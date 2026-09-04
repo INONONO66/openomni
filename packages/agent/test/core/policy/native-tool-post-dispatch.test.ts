@@ -2,7 +2,7 @@ import { describe, expect, it, mock } from "bun:test";
 import { createDispatcher, defineTool, type ToolPostPolicy } from "../../../src/index";
 import { z } from "zod";
 
-function tool(value: () => Promise<object>) {
+function tool(value: () => Promise<unknown>) {
   return defineTool({
     name: "account",
     description: "Read an account",
@@ -10,7 +10,7 @@ function tool(value: () => Promise<object>) {
     input: z.object({ id: z.string() }).strict(),
     output: z.object({ id: z.string(), secret: z.string().optional() }).strict(),
     visibility: { model: ["resident"], cell: ["resident"] },
-    execute: value,
+    execute: async () => value() as Promise<{ id: string; secret?: string }>,
     render: (_args, result) => JSON.stringify(result),
   });
 }

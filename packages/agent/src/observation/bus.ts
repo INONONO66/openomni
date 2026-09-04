@@ -39,6 +39,11 @@ function isEventData<T, U>(
 }
 
 export interface ObservationBus extends ObservationSink {
+  subscribe<T>(
+    event: BusEvent.Descriptor<T>,
+    handler: (data: T) => void,
+    options?: { match?: Partial<T> },
+  ): () => void;
   observe(handler: Observer): () => void;
   reset(): void;
   withIsolation<T>(operation: () => T): T;
@@ -139,6 +144,8 @@ function matches<T>(data: T, match: Partial<T>): boolean {
   return true;
 }
 
+export const Bus = createObservationBus();
+
 export interface ScopeObservationOptions {
   readonly clock?: () => number;
   readonly entropy?: () => string;
@@ -212,6 +219,13 @@ export function observationCollector(): CollectingObservationSink {
   };
 }
 
+export const scope = scopeObservation;
+export const collector = observationCollector;
+
+export function newTraceId(): string {
+  return crypto.randomUUID().replaceAll("-", "");
+}
+
 export function noopObservationSink(): ObservationSink {
   const sink: ObservationSink = {
     publish: () => undefined,
@@ -219,3 +233,5 @@ export function noopObservationSink(): ObservationSink {
   };
   return sink;
 }
+
+export const noopSink = noopObservationSink;

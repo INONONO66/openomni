@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { RunEvents } from "../../../src/core/execution/events";
-import { Bus, newTraceId } from "@openomni/telemetry";
+import { Bus, newTraceId } from "../../../src/index";
 import { runAgent } from "../../../src/core/execution/run";
 import type { RunTrace } from "../../../src/core/execution/state";
 import {

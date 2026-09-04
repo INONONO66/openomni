@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Storage } from "@openomni/ledger";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "@openomni/agent";
 import { PROCESS_WORKER_NO_REQUEST_EXIT } from "../src/delegation/process-entry";
 import { startOpenOmni } from "../src/index";
 

@@ -1,4 +1,4 @@
-import { Bus, newTraceId } from "@openomni/telemetry";
+import { Bus, newTraceId } from "@openomni/agent";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { resolveChannelGrant } from "@openomni/channels";
 import type { RunInput } from "@openomni/llm";

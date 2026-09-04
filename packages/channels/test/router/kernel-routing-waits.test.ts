@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { extractSurfaceKey, Ingress, type Gateway, type Wait } from "@openomni/protocol";
 import { ActorRegistry, BlacklistStore, Storage, SurfaceKey, WaitStore } from "@openomni/ledger";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../helpers/observation";
 import { IngressRoutingError } from "../../src/router/routing-resolution";
 import { createExistingAgentMessaging } from "../../src/router/messaging/send";
 import { WaitService } from "../../src/router/wait/index";

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { DelegationStore } from "@openomni/ledger";
 import { Delegation, Operational } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "@openomni/agent";
 import { createDelegationKernel } from "../src/delegation/kernel";
 import { createWakeDeliveryQueue } from "../src/delegation/wake-delivery";
 import { eventCollector, useDelegationStore } from "./helpers/delegation";

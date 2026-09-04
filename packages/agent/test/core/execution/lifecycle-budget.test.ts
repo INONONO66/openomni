@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { deny, registerAt } from "../../helpers/policy-decision";
 import { Operational, PolicyDecision } from "@openomni/protocol";
-import { Bus, collector } from "@openomni/telemetry";
+import { Bus, collector } from "../../../src/index";
 import { dispatchBudgetCheck } from "../../../src/core/execution/lifecycle-dispatch";
 import { PolicyEngine, type PolicyContext } from "../../../src/core/policy";
 import { makeAgentBase, makeConfig, makeState } from "./lifecycle-dispatch-fixture";

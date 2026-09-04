@@ -8,7 +8,7 @@ import type { PolicyRegistration } from "../../../src/core/policy";
 import { createErrorOutcome, createStopOutcome, type MockLlmFn } from "../../helpers/mock-llm";
 import { allow, continueWithPrompt } from "../../helpers/policy-decision";
 import { runInput } from "../../helpers/run-input";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../../../src/index";
 
 /**
  * C2 (#546): the model must see its own prior tool use. These tests pin the

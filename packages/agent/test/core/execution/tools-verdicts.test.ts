@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { Operational, PolicyDecision, Tool, type Policy } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../../../src/index";
 import { matchesToolPattern } from "../../../src/core/execution/effects";
 import { createToolExecutor, type BlockedToolResult } from "../../../src/core/execution/tools";
 import { PolicyEngine, type PolicyRegistration } from "../../../src/core/policy";

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "@openomni/agent";
 import { loadConfig } from "../src/config";
 import { createConfiguredCompactionPolicy } from "../src/index";
 

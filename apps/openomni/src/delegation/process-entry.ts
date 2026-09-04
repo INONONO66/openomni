@@ -1,6 +1,6 @@
 import { initialize, Storage } from "@openomni/ledger";
 import { Delegation, Model } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "@openomni/agent";
 import { z } from "zod";
 import { createDelegationKernel, type DelegationKernel } from "./kernel";
 import { createInlineDriver, type InlineWorkerRunner } from "./inline-driver";

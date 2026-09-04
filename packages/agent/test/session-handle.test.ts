@@ -17,7 +17,7 @@ import {
   type SessionGeneration,
   type SessionTurn,
 } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../src/index";
 
 const SIGNAL_TIMEOUT_MS = 1_000;
 

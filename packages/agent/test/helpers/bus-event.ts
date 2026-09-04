@@ -1,5 +1,5 @@
 import type { BusEvent } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../../src/index";
 
 const EVENT_TIMEOUT_MS = 1_000;
 

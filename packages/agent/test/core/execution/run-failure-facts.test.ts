@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { PolicyDecision } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../../../src/index";
 import { runAgent } from "../../../src/core/execution/run";
 import { failureFacts } from "../../../src/core/retry";
 import type { PolicyEngineRegistration } from "../../../src/core/policy";

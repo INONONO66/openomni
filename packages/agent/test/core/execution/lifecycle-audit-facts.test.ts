@@ -8,7 +8,7 @@ import type { PolicyContext } from "../../../src/core/policy/types";
 import type { ChatAgentConfig } from "../../../src/core/types";
 import { createMockLlmConfig, mockProviderData, mockProviderModel } from "../../helpers/mock-llm";
 import { runInput } from "../../helpers/run-input";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../../../src/index";
 
 function assistantMessage(outputTokens: number): Message.WithParts {
   const id = `assistant-${outputTokens}`;

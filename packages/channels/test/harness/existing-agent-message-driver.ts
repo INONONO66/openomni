@@ -9,7 +9,7 @@ import {
   Storage,
   WaitStore,
 } from "@openomni/ledger";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../helpers/observation";
 import { WaitService, findWaitCandidates, targetsOfWait } from "../../src/router/wait/index.js";
 import {
   type OutboundMessage,

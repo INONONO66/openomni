@@ -4,7 +4,7 @@ import { handleStop } from "../../../src/core/execution/turn";
 import { createRunState } from "../../../src/core/execution/state";
 import { registerAt, allow } from "../../helpers/policy-decision";
 import { runInput } from "../../helpers/run-input";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../../../src/index";
 import { makeAgentBase, makeTurnArtifacts } from "./lifecycle-dispatch-fixture";
 
 describe("handleStop prompt injection provenance", () => {

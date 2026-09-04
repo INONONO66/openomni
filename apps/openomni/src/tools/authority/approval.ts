@@ -1,4 +1,4 @@
-import { newTraceId } from "@openomni/telemetry";
+import { newTraceId } from "@openomni/agent";
 import type { ActorRegistry, ApprovalStore } from "@openomni/ledger";
 import type { Approval } from "@openomni/protocol";
 import { z } from "zod";

@@ -1,6 +1,6 @@
 import { describe, expect, it, jest } from "bun:test";
 import type { Message } from "@openomni/protocol";
-import { Bus, collector } from "@openomni/telemetry";
+import { Bus, collector } from "../../src/index";
 import { createCompactionPolicy } from "../../src/compaction/policy";
 import { createSpeculator } from "../../src/compaction/speculate";
 

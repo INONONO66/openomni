@@ -3,7 +3,7 @@ import { anthropicModel as model, assistantMessage as buildAssistantMessage } fr
 import type { Message } from "@openomni/protocol";
 import type { Sink } from "../../src/sink";
 import { Processor } from "../../src/processor";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../helpers/observation";
 
 /**
  * #545 T2 measurement harness: streams a fixed synthetic 2000-delta/3-part

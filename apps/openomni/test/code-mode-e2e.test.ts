@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { SessionHandleStore } from "@openomni/ledger";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "@openomni/agent";
 import type { RunInput, Sink } from "@openomni/llm";
 import { attachMachineDaemon, createMachineHost, type MachineDaemon } from "@openomni/machines";
 import type { Machine } from "@openomni/protocol";

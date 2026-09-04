@@ -541,7 +541,6 @@ const TRACKED_DOCS = [
   "AGENTS.md",
   "packages/protocol/AGENTS.md",
   "packages/ipc/AGENTS.md",
-  "packages/telemetry/AGENTS.md",
   "packages/ledger/AGENTS.md",
   "packages/llm/AGENTS.md",
   "packages/agent/AGENTS.md",
@@ -616,21 +615,21 @@ function selfTest(): void {
     displayName: "self-test",
     packageJsonPath: "",
     packageName: "@openomni/self-test",
-    allowedDeps: new Set(["@openomni/protocol", "@openomni/telemetry"]),
+    allowedDeps: new Set(["@openomni/protocol", "@openomni/agent"]),
     srcAllowedDeps: new Set(["@openomni/protocol"]),
   };
   const oneTier: PackageRule = { ...twoTier, srcAllowedDeps: undefined };
   const cases: Array<[string, boolean]> = [
-    ["manifest permits what the manifest lists", isAllowedDep(twoTier, "@openomni/telemetry")],
+    ["manifest permits what the manifest lists", isAllowedDep(twoTier, "@openomni/agent")],
     [
       "src refuses what only the manifest lists",
-      !isAllowedSourceDep(twoTier, "@openomni/telemetry"),
+      !isAllowedSourceDep(twoTier, "@openomni/agent"),
     ],
     ["src permits its own narrower set", isAllowedSourceDep(twoTier, "@openomni/protocol")],
     ["src refuses what neither lists", !isAllowedSourceDep(twoTier, "@openomni/ledger")],
     [
       "no srcAllowedDeps falls back to the manifest",
-      isAllowedSourceDep(oneTier, "@openomni/telemetry"),
+      isAllowedSourceDep(oneTier, "@openomni/agent"),
     ],
     ["external packages are never layered", isAllowedSourceDep(twoTier, "zod")],
     [

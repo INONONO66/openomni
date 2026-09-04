@@ -1,4 +1,4 @@
-import { newTraceId } from "@openomni/telemetry";
+import { newTraceId } from "../../src/index";
 import type { RunTrace } from "../../src/core/execution/state";
 import type { ChatAgentInput } from "../../src/core/types";
 

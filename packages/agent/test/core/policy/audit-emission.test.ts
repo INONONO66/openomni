@@ -46,7 +46,8 @@ it("awaits policy.decision commit before publishing its observation", async () =
     observations: {
       publish(event, value) {
         if (event.name === L0Observation.ActionCommittedEvent.name) {
-          observations.push(value.id);
+          const committed = L0Observation.ActionCommitted.parse(value);
+          observations.push(committed.id);
         }
       },
     },

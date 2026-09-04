@@ -1,10 +1,10 @@
 # packages/ledger
 
-Durable state substrate: session lifecycle, message/part storage, hash-chained bus persistence, surface-key records, worker-run records, and actor/grant/blacklist stores. Depends on `@openomni/protocol` and `@openomni/telemetry`.
+Durable state substrate: session lifecycle, message/part storage, hash-chained bus persistence, surface-key records, worker-run records, and actor/grant/blacklist stores. Depends on `@openomni/protocol` and `@openomni/agent`.
 
 SSOT directive ([docs/gateway-design.md](../../docs/gateway-design.md) §4, Owner 2026-08-19): "exactly one database, owned by `@openomni/ledger` (the #502 rename of session's storage). No package other than ledger touches the storage engine — every read/write goes through ledger's typed store surfaces." This package is the single storage engine owner; row schemas stay in `protocol`.
 
-`Bus` itself lives in `@openomni/telemetry` (#606) — every consumer imports it from there directly; this package keeps the durable journal that subscribes to it.
+`Bus` itself lives in `@openomni/agent` (#606) — every consumer imports it from there directly; this package keeps the durable journal that subscribes to it.
 
 This package stores facts; the kernel decides their product meaning. Communication routing, actor authority, wait precedence, and writeback belong in product composition.
 

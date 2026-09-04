@@ -32,7 +32,7 @@ The old product-specific dispatch registrations and completion service were remo
 
 ```text
 ring 0  @openomni/protocol        schemas and pure folds
-ring 1  @openomni/telemetry       observation
+ring 1  @openomni/agent       observation
         @openomni/ledger          durable stores
         @openomni/policy          pure policy engine
         @openomni/placement       pure target selection
@@ -102,7 +102,7 @@ The repository previously split product behavior across a reusable-looking produ
 Historical design decisions still explain the surviving extractions:
 
 - PolicyEngine moved to `packages/policy`.
-- Bus moved to `packages/telemetry` as volatile observation; reverse persistence was removed. L0 observation sink contracts live in protocol.
+- Bus moved to `packages/agent/src/observation` as volatile observation; reverse persistence was removed. L0 observation sink contracts live in protocol.
 - IPC became the standalone `packages/ipc` transport.
 - Channel drivers and perimeter judgment consolidated in `packages/channels`.
 - Machine execution became the lateral `packages/machines` band.

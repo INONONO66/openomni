@@ -1,7 +1,7 @@
 import { buildTurn, handleStop } from "../../../src/core/execution/turn";
 import { describe, expect, it } from "bun:test";
 import { Operational } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../../../src/index";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { AgentResult } from "../../../src/core/types";
 import { runAgent } from "../../../src/core/execution/run";

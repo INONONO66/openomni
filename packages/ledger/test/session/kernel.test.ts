@@ -8,7 +8,7 @@ import {
   type SessionGeneration,
   SessionTurn,
 } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../helpers/observation";
 import { SessionHandleStore, Storage } from "../../src/index";
 import { bareStorageAdapter } from "../helpers/wait";
 

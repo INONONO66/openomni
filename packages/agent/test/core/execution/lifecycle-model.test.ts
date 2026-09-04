@@ -1,5 +1,5 @@
 import { describe, expect, it, mock } from "bun:test";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../../../src/index";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { PolicyContext } from "../../../src/core/policy/types";
 import { registerAt, allow, inject, replaceMessages } from "../../helpers/policy-decision";

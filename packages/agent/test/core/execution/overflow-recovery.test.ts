@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../../../src/index";
 import { PolicyEngine } from "../../../src/core/policy";
 import { createCompactionPolicy } from "../../../src/compaction";
 import { isContextOverflow } from "../../../src/core/retry";

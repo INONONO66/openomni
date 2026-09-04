@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { ActorRegistry, ApprovalStore, Storage } from "@openomni/ledger";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "@openomni/agent";
 import { createApprovalTool, type ApprovalPort } from "../src/tools/authority/approval";
 import { createTools } from "../src/tools/core/catalog";
 import { eraseTool } from "../src/tools/core/define";

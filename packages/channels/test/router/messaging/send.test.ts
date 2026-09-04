@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { Gateway } from "@openomni/protocol";
 import { ActorRegistry, EgressBudgetStore, Storage, WaitStore } from "@openomni/ledger";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../../helpers/observation";
 import {
   createExistingAgentMessaging,
   type DeliveryReceipt,

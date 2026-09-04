@@ -9,7 +9,7 @@ import {
   type MockLlmFn,
 } from "../helpers/mock-llm";
 import { runInput } from "../helpers/run-input";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../../src/index";
 
 let mockRunFn: MockLlmFn = async () => createStopOutcome();
 

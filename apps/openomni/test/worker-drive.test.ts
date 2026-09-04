@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "@openomni/agent";
 import type { RunInput, Sink } from "@openomni/llm";
 import type { Message } from "@openomni/protocol";
 import type { DelegationKernel } from "../src/delegation/kernel";

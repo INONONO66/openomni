@@ -20,7 +20,6 @@
     "@openomni/ledger": "workspace:*",
     "@openomni/llm": "workspace:*",
     "@openomni/protocol": "workspace:*",
-    "@openomni/telemetry": "workspace:*",
     "zod": "^4.5.4",
     "@openomni/placement": "workspace:*",
     "@openomni/machines": "workspace:*"

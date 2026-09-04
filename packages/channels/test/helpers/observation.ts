@@ -183,3 +183,27 @@ export namespace Bus {
     return true;
   }
 }
+
+export interface Collector extends BusEvent.Sink {
+  readonly events: readonly { readonly name: string; readonly data: Bus.Data }[];
+  named(name: string): readonly Bus.Data[];
+  reset(): void;
+}
+
+export function collector(): Collector {
+  const events: Array<{ readonly name: string; readonly data: Bus.Data }> = [];
+  return {
+    publish(event, data) {
+      events.push({ name: event.name, data: toBusData(data) });
+    },
+    events,
+    named: (name) => events.filter((event) => event.name === name).map((event) => event.data),
+    reset: () => {
+      events.length = 0;
+    },
+  };
+}
+
+export function newTraceId(): string {
+  return crypto.randomUUID().replaceAll("-", "");
+}

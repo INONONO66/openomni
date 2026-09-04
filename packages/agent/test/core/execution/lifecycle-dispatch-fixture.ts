@@ -8,7 +8,7 @@ import {
 } from "../../../src/core/execution/state";
 import { runInput } from "../../helpers/run-input";
 import { testProviderModel } from "../../helpers/provider-model";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../../../src/index";
 
 function makeInput() {
   return runInput([{ role: "user", content: "hello" }]);

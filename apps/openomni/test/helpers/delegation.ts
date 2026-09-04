@@ -1,7 +1,7 @@
 import { afterEach, beforeEach } from "bun:test";
 import { SqliteStorageAdapter, Storage } from "@openomni/ledger";
 import type { BusEvent, Delegation, Gateway } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "@openomni/agent";
 
 export const RESIDENT: Delegation.Origin = {
   role: "resident",

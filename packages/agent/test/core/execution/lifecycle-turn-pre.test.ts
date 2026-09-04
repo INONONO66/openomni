@@ -3,7 +3,7 @@ import { testProviderModel } from "../../helpers/provider-model";
 import type { CanonicalAuditDispatchContextGeneric } from "@openomni/policy";
 import type { Policy, Tool } from "@openomni/protocol";
 import { RunEvents } from "../../../src/core/execution/events";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../../../src/index";
 import { PolicyEngine } from "../../../src/core/policy";
 import type { PolicyContext } from "../../../src/core/policy/types";
 import { registerAt, abortRun, allow, appendContext } from "../../helpers/policy-decision";

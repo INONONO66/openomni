@@ -1,7 +1,7 @@
 import { afterEach, beforeAll, describe, expect, it, test } from "bun:test";
 import { Run, type run } from "@openomni/llm";
 import type { Model } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../../src/index";
 import { abortRun, allow } from "../helpers/policy-decision";
 import { createMockLlmConfig, mockProviderData, mockProviderModel } from "../helpers/mock-llm";
 import { runAgent } from "../../src/core/execution/run";

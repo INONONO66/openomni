@@ -1,6 +1,6 @@
 import { describe, expect, it, mock } from "bun:test";
 import type { Policy, Tool } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../../../src/index";
 import { createToolExecutor } from "../../../src/core/execution/tools";
 import { PolicyEngine, type PolicyContext, type PolicyFn } from "../../../src/core/policy";
 import {

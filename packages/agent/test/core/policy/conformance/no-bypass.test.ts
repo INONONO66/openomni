@@ -6,7 +6,7 @@ import {
   type PolicyContext,
   type PolicyRegistration,
 } from "../../../../src/core/policy";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../../../../src/index";
 
 /**
  * Canonical equivalent of the legacy `invoke.prepare` deny-all: one

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { PolicyDecision, type Tool } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../../../src/index";
 import { createToolExecutor } from "../../../src/core/execution/tools";
 import { PolicyEngine, type CanonicalPolicyRegistration } from "../../../src/core/policy";
 import { ChatAgent } from "../../../src/core/chat-agent";

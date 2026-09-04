@@ -12,7 +12,7 @@ import {
 } from "./helpers/mock-llm";
 import { allow, continueWithPrompt } from "./helpers/policy-decision";
 import { runInput } from "./helpers/run-input";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../src/index";
 
 let mockRunFn: MockLlmFn = async () => createStopOutcome();
 
