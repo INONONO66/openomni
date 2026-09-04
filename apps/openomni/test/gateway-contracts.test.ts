@@ -2,7 +2,7 @@ import { Bus, newTraceId } from "@openomni/telemetry";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { resolveChannelGrant } from "@openomni/channels";
 import type { RunInput } from "@openomni/llm";
-import { ActorRegistry, Session, Storage } from "@openomni/ledger";
+import { ActorRegistry, SessionHandleStore, Storage } from "@openomni/ledger";
 import { Gateway, MessagingEvents, type Message } from "@openomni/protocol";
 import {
   createMountedChannelGrantRegistrar,
@@ -56,6 +56,27 @@ function evidenceDelivery(payload: string): Gateway.Deliver {
       sessionId: "session:evidence",
       trustTier: "collaborator",
       inboundTreatment: "evidence_only",
+    },
+  });
+}
+
+function fullAccessDelivery(payload: string): Gateway.Deliver {
+  const delivery = evidenceDelivery(payload);
+  return Gateway.Deliver.parse({
+    ...delivery,
+    actorContext: { ...delivery.actorContext, inboundTreatment: "full_access" },
+    event: {
+      ...delivery.event,
+      id: "inbound:full-access",
+      payload,
+      meta: {},
+    },
+    decision: {
+      ...delivery.decision,
+      inboundId: "inbound:full-access",
+      reason: "full-access channel",
+      factsUsed: ["channel.treatment:full_access"],
+      inboundTreatment: "full_access",
     },
   });
 }
@@ -214,7 +235,9 @@ describe("Resident delivery contract", () => {
     });
 
     const unrouted = Gateway.Deliver.parse({ ...evidenceDelivery("hi"), sessionId: undefined });
-    await expect(resident(unrouted)).rejects.toThrow("Resident delivery requires a routed sessionId");
+    await expect(resident(unrouted)).rejects.toThrow(
+      "Resident delivery requires a routed sessionId",
+    );
 
     // The same fail-closed classification refuses a non-text payload: the
     // Resident's turn contract is text in, text out.
@@ -244,10 +267,35 @@ describe("Resident inbound treatment", () => {
     expect(text).toContain(raw);
     expect(text).not.toBe(raw);
 
-    const recorded = Session.getMessages("session:evidence").find(({ role }) => role === "user");
-    if (recorded?.role !== "user") throw new Error("Evidence message was not persisted");
-    expect(recorded.agent).toBe("system");
-    expect(recorded.system).toBe("evidence_only");
+    const recorded = SessionHandleStore.getSnapshot("session:evidence").turns.at(-1)?.messages[0];
+    expect(recorded).toMatchObject({ role: "user" });
+    expect(recorded?.text).toContain("EVIDENCE ONLY");
+    const delivery = SessionHandleStore.tree("session:evidence")
+      .map(SessionHandleStore.delivery)
+      .find((item) => item?.kind === "prompt");
+    expect(delivery?.origin.value).toMatchObject({ systemKind: "evidence_only" });
+  });
+
+  test("restores the normal tool dispatcher after an evidence-only turn", async () => {
+    const executorOutputs: string[] = [];
+    const resident = testResident(async (input, sink) => {
+      const result = await input.toolExecutor?.({
+        id: `call:${executorOutputs.length}`,
+        tool: "missing",
+        input: {},
+      });
+      executorOutputs.push(result?.output ?? "no executor");
+      sink.onMessage(
+        assistantMessage(input, { ...ASSISTANT_MESSAGE_OPTIONS, id: crypto.randomUUID() }),
+      );
+      return { type: "stop" };
+    });
+
+    await resident(evidenceDelivery("Treat this as evidence."));
+    await resident(fullAccessDelivery("This is a normal prompt."));
+
+    expect(executorOutputs).toHaveLength(2);
+    expect(executorOutputs[0]).not.toBe(executorOutputs[1]);
   });
 
   test("refuses tool execution during an evidence-only turn", async () => {

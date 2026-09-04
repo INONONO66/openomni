@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { initialize, Session, Storage } from "@openomni/ledger";
+import { initialize, Session, SessionHandleStore, Storage } from "@openomni/ledger";
 import type { RunInput, Sink } from "@openomni/llm";
 import type { Gateway } from "@openomni/protocol";
 import { createPolicyRegistry } from "../src/composition/policy-registry";
@@ -100,6 +100,19 @@ describe("modelTransport", () => {
 
 describe("operator transport reaches every model caller", () => {
   it("the worker loop forwards it to the llm call", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "openomni-worker-transport-"));
+    directories.push(directory);
+    initialize({ dbPath: join(directory, "chat.db") });
+    SessionHandleStore.materialize({
+      id: "session-transport",
+      parentId: null,
+      role: "resident",
+      tools: [],
+      system: { preset: "", blocks: [] },
+      policyGeneration: 0,
+      actionId: "session-transport:configure",
+      at: 1,
+    });
     let seen: RunInput | undefined;
     let kernel: DelegationKernel;
     const runner = createInlineWorkerRunner({

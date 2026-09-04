@@ -140,8 +140,9 @@ gates correctly permit it, because the missing check was never B's to make.
 ## 3. Delegation contracts (`protocol/src/delegation/`)
 
 - `Delegation.WorkerAddress` — `core` (internal loop; scope `inline` =
-  same-context child, `independent` = isolated session/process) or `actor`
-  (an already-registered external actor). The address says WHO, never HOW.
+  same-process child, `independent` = isolated process) or `actor`
+  (an already-registered external actor). The address says WHO, never HOW;
+  transport selection does not define session identity.
 - `Delegation.Operation`: `notify` (fire-and-forget message; no Wait, no
   reply expected; terminal `sent` at transport acceptance; actor addresses
   only), `ask` (a question; the reply settles it; core inline|independent or
@@ -158,8 +159,9 @@ gates correctly permit it, because the missing check was never B's to make.
   before the work runs: the resolved `Transport` (`inline` | `process` |
   `channel`), the effective deadline (admission clamps the requested deadline
   to the parent's when a parent exists), the channel `waitId` when one was
-  prepared, and the tree ids settlement arrives under. Progress is observed
-  through Wait/WorkItem, never polled through the handle.
+  prepared, and the tree ids settlement arrives under. The delegation handle
+  is not a polling surface; native worker state is read from its durable child
+  session snapshot, while transport settlement remains on the delegation record.
 - `Delegation.Settled`: seven terminals: `completed`, `failed`, `cancelled`,
   `delivery_failed`, `no_response`, `interrupted`, `sent`.
   `delivery_failed` (never reached the worker) and `no_response` (delivered,
@@ -206,9 +208,9 @@ reaches it only through tools in its catalog (`delegate`, `await_delegation`,
   and returns Handle plus settlement.
 - **Owner-session wake.** When a non-inline delegation settles, the kernel
   synthesizes an internal delivery into the origin session: a system-authored
-  message `delegation <id> settled: <status>: <summary>` that runs a Resident
-  turn and is persisted to the transcript. The settle CAS makes the wake
-  exactly-once.
+  message `delegation <id> settled: <status>: <summary>` that commits a prompt
+  to the Resident session inbox and runs through its handle. The settle CAS
+  makes the wake exactly-once.
 - **Re-invocable await and cancel.** `await_delegation(delegationId)` returns
   the settlement if settled, else subscribes until settlement or the await's
   own timeout, never past the delegation deadline. `cancel_delegation` aborts
@@ -230,13 +232,27 @@ reaches it only through tools in its catalog (`delegate`, `await_delegation`,
   and enforces a fanout cap of open records per `rootDelegationId` (default
   8), counted from the durable store at admission. Both live in the admission
   fold only. Exceeding the cap, a missing parent, a lineage mismatch, or a
-  passed deadline is a typed `AdmissionRefusal`. The worker-origin
-  restriction stands: a Worker may open only a same-domain inline child
-  (therefore ask only), `maxInlineDepth` 2.
+  passed deadline is a typed `AdmissionRefusal`. A native worker is also
+  materialized as a normal role=`worker` session whose `parentId` is the
+  origin session; it owns a separate lease, revision, and configuration
+  generation. The worker-origin restriction stands: a Worker may open only a
+  same-domain inline child (therefore ask only), `maxInlineDepth` 2.
 - **Grants stay separate.** `may_contact` (the #215 send kernel's
   sender-target grants) is not `may_commission` (admission). The channel
   driver rides the send kernel for every actor contact; admission decides
   whether the delegation may exist at all. Neither grant implies the other.
+
+### Session identity boundary
+
+Resident and native worker execution share `@openomni/agent`'s session handle.
+The delegation id is reused as the durable worker session id; no
+`delegation-<id>` alias, WorkItem row, or Attempt row is created. The worker
+adapter supplies role-specific tools and system text, while lease acquisition,
+inbox drain, turn envelopes, crash recovery, and hibernation stay in the
+common session machine. Parent/child terminal mail is intentionally not
+specified here: the cross-session `sendMessage` contract belongs to I06; the
+existing delegation settlement wake remains until that slice removes the
+parallel lifecycle.
 
 ### Vocabulary fences
 
@@ -317,5 +333,8 @@ The machine axis of `@openomni/placement` folds candidate machines against
    The kernel's lifecycle is now async-first and durable (§3 "Async
    lifecycle"): record-before-act into the ledger delegation store, the
    Handle returned at admission for process/channel work, one kernel-owned
-   settlement fold, owner-session wakes, and a tested restart matrix.
+   settlement fold, owner-session wakes, and a tested restart matrix. Native
+   worker execution enters the shared fenced session handle as a parent-linked
+   role=`worker` row; cross-session mail and removal of the delegation lifecycle
+   remain assigned to I06.
 8. Memory, last, referencing existing implementations.

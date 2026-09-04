@@ -141,11 +141,10 @@ function exerciseL0Contracts(storage: L0Adapter) {
       }),
     ),
   ).toMatchObject({ ordinal: 2, status: "pending" });
-  expect(storage.inbox.claim(session.id, "owner-1", 300).map((row) => row.id)).toEqual([
+  expect(storage.inbox.list(session.id, "pending").map((row) => row.id)).toEqual([
     "inbox-2",
     "inbox-1",
   ]);
-  expect(storage.inbox.claim(session.id, "owner-2", 301)).toEqual([]);
 
   expect(
     storage.alarms.arm(
@@ -225,7 +224,9 @@ describe("L0 adapter contracts", () => {
   }
 
   test("memory and SQLite produce identical action/session/inbox/alarm/policy state", () => {
-    expect(exerciseL0Contracts(createMemoryL0Adapter())).toEqual(exerciseL0Contracts(sqliteAdapter()));
+    expect(exerciseL0Contracts(createMemoryL0Adapter())).toEqual(
+      exerciseL0Contracts(sqliteAdapter()),
+    );
   });
 
   test.each([
@@ -345,7 +346,9 @@ describe("SQLite adapter contract guards", () => {
   });
 
   test("delegation claims fail closed when the wait id is already stored", () => {
-    DelegationStore.create(buildDelegationRecord({ delegationId: "delegation-a", waitId: "wait-shared" }));
+    DelegationStore.create(
+      buildDelegationRecord({ delegationId: "delegation-a", waitId: "wait-shared" }),
+    );
     const conflicting = buildDelegationRecord({
       delegationId: "delegation-b",
       waitId: "wait-shared",
@@ -370,7 +373,10 @@ describe("SQLite adapter contract guards", () => {
       "Wait id mismatch",
     );
     expect(() =>
-      subAdapter.compareAndSet(record.id, record.revision, { ...next, revision: record.revision + 2 }),
+      subAdapter.compareAndSet(record.id, record.revision, {
+        ...next,
+        revision: record.revision + 2,
+      }),
     ).toThrow("Wait revision must advance exactly once");
   });
 

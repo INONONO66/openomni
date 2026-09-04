@@ -413,22 +413,29 @@ describe("SqliteStorageAdapter", () => {
         leaseExpiresAt: null,
         revision: 0,
         state: "idle",
+        toolsGeneration: 0,
+        systemHash: "",
+        policyGeneration: 0,
       });
       expect(() =>
-        db.query(
-          `INSERT INTO action (
+        db
+          .query(
+            `INSERT INTO action (
              id, parent_id, session_id, kind, intent, effect, revert, irreversible,
              encoding_version, ts, ordinal
            ) VALUES ('bad', NULL, 'l0-digest', 'invalid', '{}', '{}', NULL, 1, 1, 0, 1)`,
-        ).run(),
+          )
+          .run(),
       ).toThrow();
       expect(() =>
-        db.query(
-          `INSERT INTO inbox (
+        db
+          .query(
+            `INSERT INTO inbox (
              id, session_id, kind, content, origin, encoding_version, status,
-             claimed_by, claimed_at, time_created, ordinal
+             consumed_by, consumed_at, time_created, ordinal
            ) VALUES ('bad', 'l0-digest', 'prompt', '', '{}', 1, 'claimed', NULL, NULL, 0, 1)`,
-        ).run(),
+          )
+          .run(),
       ).toThrow();
       const before = digest();
       adapter.close();

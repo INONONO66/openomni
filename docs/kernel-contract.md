@@ -1,6 +1,6 @@
 # Kernel Contract
 
-This document carries the normative contract detail behind [Core Model](core-model.md): the guarantee split, the authority evaluation, the work-item and evidence contracts, the Governor's operating rules, and the memory port. It absorbs ADR-009 through ADR-013, which are retired; git history preserves the originals. Like all design docs, it describes targets — implementation truth lives in [Implementation Status](implementation-status.md). It does not sequence delivery or report live issue state; [GitHub #459](https://github.com/INONONO66/openomni/issues/459) is authoritative for that.
+This document carries the normative contract detail behind [Core Model](core-model.md): the guarantee split, authority evaluation, durable session contract, Governor operating rules, and memory port. It absorbs ADR-009 through ADR-013, which are retired; git history preserves the originals. Like all design docs, it describes targets — implementation truth lives in [Implementation Status](implementation-status.md). It does not sequence delivery or report live issue state; [epic #930](https://github.com/INONONO66/openomni/issues/930) is authoritative for that.
 
 ## 1. Kernel and Userland
 
@@ -29,11 +29,11 @@ Subagent vs Worker are different species, not tiers of one thing:
 | OS analogue | thread | process |
 | Context | selectively inherits the parent's | none inherited — task scope only |
 | Identity | none — another angle on the parent's problem | own profile (prompt / tools / model / credentials) |
-| Lifecycle | dies with the parent | durable WorkItem attempt — survives and resumes |
-| Ledger | no ticket — part of the parent's work | always ticketed |
+| Lifecycle | dies with the parent | durable child session — survives runtime release and resumes |
+| Ledger | no ticket — part of the parent's work | normal session row with `parentId`, role, tree, revision, and lease |
 | Verification | exempt — intermediate reasoning the parent digests | gated — an independent deliverable |
 
-Target coordination contract: a subagent is a same-domain, context-sharing extension of a Worker, bounded to the parent grant. The Resident profile receives no subagent lane, and the Worker profile receives no Worker-allocation lane. When a Worker discovers work with independent footing — especially a different domain, permission profile, or verification regime — the target permits either an explicit policy-gated message to an already-existing agent or `resident.ask`; the Resident decides whether to commission a separate Worker. Neither coordination path creates a WorkItem, Worker, executor, or budget.
+Target coordination contract: a subagent is a same-domain, context-sharing extension of a Worker, bounded to the parent grant. The Resident profile receives no subagent lane, and the Worker profile receives no Worker-allocation lane. When a Worker discovers work with independent footing — especially a different domain, permission profile, or verification regime — the target permits either an explicit policy-gated message to an already-existing agent or `resident.ask`; the Resident decides whether to commission a separate Worker. Neither coordination path creates another session, Worker, executor, or budget.
 
 **Target Peek budget.** A Resident per-turn tool-call budget separates light perception from execution. Work that remains unresolved after that budget moves beyond judgment scope, so the target next step is a bounded action or Resident-origin Worker commission rather than a subagent.
 
@@ -115,19 +115,15 @@ Fixed evaluation order for every inbound message:
 
 Ingress always submits a unified `actor.message`. The gateway's routing decision — wait/surface precedence — is authoritative for which session receives the message ([gateway-design.md](gateway-design.md) §8.5). On a Wait correlation match the router delivers into the wait owner's session with `waitContext` attached (wait id plus the matched allowed action) under a transient `assigned_worker` tier; dispatch decides brain-side work placement, never delivery re-routing. Ingress stays channel-agnostic and stateless about lifecycle. Surface routing and the wait store remain separate: the surface answers "what is this endpoint's default session?", the wait store answers "is this a reply to a specific outstanding request?" — merging them would break concurrent task replies on one channel.
 
-### Session ownership
+### Durable session identity and runtime ownership
 
-Every session carries owner, origin, and purpose fields:
+Every native Resident or worker is a normal durable session row. The row carries `id`, nullable `parentId`, role (`resident | worker`), state, revision, generation pointers, and lease owner/fence/expiry. A worker row points to the session that commissioned it and owns an independent lease and revision; there is no WorkItem/Attempt or synthetic `delegation-*` session identity.
 
-- `owner`: `actor` | `work_item` (formerly worker_run — WorkerRun is absorbed into WorkItem attempts) | `system`
-- `origin`: `actor_initiated` | `resident_initiated` | `worker_initiated` | `pending_response`
-- `purpose`: `user_conversation` | `worker_interaction` | `self_loop`
-
-Rules: a human's first message → actor-owned `user_conversation`; the Resident assigning work to an external actor → work-item-owned `worker_interaction` child session; an external actor answering assigned work routes into the existing work session — no new session. "Response sessions" are not a type; they are a routing result via Wait correlation. User-facing sessions stay clean: the Owner never sees the seller's worker-session exchange directly, only the distilled report.
+`session({id, role, runner, tools, system})` is the sole live consumer surface. Durable existence is independent of the in-memory handle: terminal idle with an empty inbox releases runtime immediately, while `get()` and `watch()` read without waking it. A committed prompt or alarm doorbell rehydrates the runner from the tree. Before runner entry the current fence commits a `turn` intent with a pre-minted result ID and pinned tool/system/policy generation; the same ID seals one terminal. Heartbeat loss aborts the runner and prevents a stale late commit. Startup sweeps intent-without-terminal turns before channel binding and resumes from their last completed boundary, with a persisted budget of ten.
 
 ### Wait and existing-agent messaging
 
-Existing-agent messaging requires an explicit grant and targets an already allocated actor/session. It creates no WorkItem, Worker, executor, or budget and cannot convey Worker-allocation authority. Fire-and-forget records its delivery outcome and creates no Wait. The awaited form creates exactly one durable Wait owned by the waiting WorkItem or session. `PendingAsk` and `PendingInteraction` were this primitive's transitional code names; #215 absorbed them and migration 0025 dropped their persisted tables — the durable Wait is the only wait primitive.
+Existing-agent messaging requires an explicit grant and targets an already allocated actor/session. It creates no session, Worker, executor, or budget and cannot convey Worker-allocation authority. Fire-and-forget records its delivery outcome and creates no Wait. The awaited form creates exactly one durable Wait owned by the waiting session. `PendingAsk` and `PendingInteraction` were this primitive's transitional code names; #215 absorbed them and migration 0025 dropped their persisted tables — the durable Wait is the only wait primitive.
 
 - **Suspend and restart**: the Wait is appended before suspension; process exit releases compute while the attempt, session, and Wait remain durable. Boot folds the Wait, and a correlated response resumes execution in a fresh process without creating a replacement Worker.
 - **Deterministic correlation**: explicit reply/message, thread, and nonce-bound token identities take precedence over any single-open fallback. Duplicate response IDs are idempotent. Multiple matches are never guessed: the response is staged and disambiguation is dispatched to the Resident, or to the Owner for an Owner-initiated Wait.
@@ -397,8 +393,8 @@ Normative promotion of the 2026-07-09 determinism/verification round (machine-lo
 
 ### Observability surface
 
-The single source of truth for a run is **one wide, flat, greppable structured event per step** (run id, step, op, model, tokens, deterministic verdict `ok|warn|error` assigned at emit time, state hash, prompt hash). Timelines, trees, diffs, and judgments are derived views. The ledger export is derived JSONL over these events — SQLite remains the primary store; the export is regenerable and rotated, and it is the substrate the Governor (and any coding agent) greps. Failure-step attribution by LLM judges is unreliable; verdicts are attached deterministically at emit, not reconstructed afterward.
+The source of truth for a run is its session action tree and revisioned row; observations are at-most-once notifications, never replay truth. `s.get()` returns the authoritative lease/state/generation/open-turn snapshot and latest-turn tail without waking execution. `s.watch()` atomically opens a snapshot plus session-filtered subscription; a skipped revision emits a gap and the caller replaces state with `get()`. SQLite remains primary storage, and timelines or exports are derived views. Failure-step attribution by LLM judges is unreliable; durable action results are recorded at the boundary, not reconstructed afterward.
 
 ## 7. History
 
-ADR-001 through ADR-008 established the conventions now stated directly in [Architecture](architecture.md) and [Core Model](core-model.md) — package namespacing, Zod-first schemas as the language-agnostic boundary, ring layering, and the stateless-agent substrate (durable sessions, disposable worker processes) that makes suspension and resume nearly free — along with the persona-era workforce model that evolved into the current role model (Resident / Worker / Jester / Governor as actor profiles, not packages). All are retired; git history preserves the full records.
+ADR-001 through ADR-008 established the conventions now stated directly in [Architecture](architecture.md) and [Core Model](core-model.md) — package namespacing, Zod-first schemas as the language-agnostic boundary, ring layering, and the durable-session/disposable-runtime split that makes suspension and resume nearly free — along with the persona-era workforce model that evolved into the current role model (Resident / Worker / Jester / Governor as actor profiles, not packages). All are retired; git history preserves the full records.

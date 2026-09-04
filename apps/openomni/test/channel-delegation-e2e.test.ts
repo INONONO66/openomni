@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { RunInput, Sink } from "@openomni/llm";
-import { Session } from "@openomni/ledger";
+import { SessionHandleStore } from "@openomni/ledger";
 import { assistantMessage } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { nextFrame, openSocket } from "./helpers/ws";
@@ -39,7 +39,10 @@ test("the Resident delegates to an external actor over the channel and reports t
           .map((part) => ("text" in part && typeof part.text === "string" ? part.text : ""))
           .join("");
         residentTexts.push(asked);
-        if (ownerSessionId === undefined && !input.trace.sessionId.startsWith("delegation-")) {
+        if (
+          ownerSessionId === undefined &&
+          SessionHandleStore.row(input.trace.sessionId).role === "resident"
+        ) {
           ownerSessionId = input.trace.sessionId;
         }
 
@@ -109,7 +112,9 @@ test("the Resident delegates to an external actor over the channel and reports t
 
   // The actor's reply settles the waiting delegation instead of opening a turn.
   expect(((await aliceAck) as { text: string }).text).toContain("Reply received");
-  expect(((await ownerAnswer) as { text: string }).text).toContain("settlement will arrive as a message");
+  expect(((await ownerAnswer) as { text: string }).text).toContain(
+    "settlement will arrive as a message",
+  );
 
   // Settlement wakes exactly one Resident turn in the origin session. The
   // wake is internal, so it is observed through the provider and transcript,
@@ -117,9 +122,14 @@ test("the Resident delegates to an external actor over the channel and reports t
   await wakeSeen;
   expect(residentTexts.filter((text) => text.includes("please ask alice"))).toHaveLength(1);
   expect(residentTexts.filter((text) => text.includes("bob butting in"))).toHaveLength(1);
-  expect(residentTexts.filter((text) => text.includes("delegation ") && text.includes(" settled:"))).toHaveLength(1);
+  expect(
+    residentTexts.filter((text) => text.includes("delegation ") && text.includes(" settled:")),
+  ).toHaveLength(1);
   if (ownerSessionId === undefined) throw new Error("owner session was not materialized");
-  expect(Session.getMessages(ownerSessionId).some((entry) => entry.role === "user" && entry.agent === "system")).toBe(true);
+  const wakeDelivery = SessionHandleStore.tree(ownerSessionId)
+    .map(SessionHandleStore.delivery)
+    .find((entry) => entry?.kind === "prompt" && entry.content.includes(" settled:"));
+  expect(wakeDelivery?.origin.value).toMatchObject({ systemKind: "delegation.settled" });
 
   owner.close();
   alice.close();

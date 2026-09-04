@@ -1,4 +1,6 @@
-import { expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, test } from "bun:test";
+import { SessionHandleStore, Storage } from "@openomni/ledger";
+import { Bus } from "@openomni/telemetry";
 import type { RunInput, Sink } from "@openomni/llm";
 import type { Message } from "@openomni/protocol";
 import type { DelegationKernel } from "../src/delegation/kernel";
@@ -6,6 +8,25 @@ import { createChildKernel } from "../src/delegation/process-entry";
 import { createInlineWorkerRunner, WorkerRunError } from "../src/delegation/worker-loop";
 
 const ORIGIN = { role: "worker", depth: 1, sessionId: "session-drive" } as const;
+
+beforeEach(() => {
+  Storage.initialize({ dbPath: ":memory:", observationSink: Bus });
+  SessionHandleStore.materialize({
+    id: ORIGIN.sessionId,
+    parentId: null,
+    role: "resident",
+    tools: [],
+    system: { preset: "", blocks: [] },
+    policyGeneration: 0,
+    actionId: "session-drive:configure",
+    at: 1,
+  });
+});
+
+afterEach(() => {
+  Storage.reset();
+  Bus.reset();
+});
 
 function reply(input: RunInput, text: string): Message.WithParts {
   const id = `fake-${input.messages.length}`;
@@ -42,6 +63,7 @@ function reply(input: RunInput, text: string): Message.WithParts {
 
 function bootRunner(run: (input: RunInput, sink: Sink) => Promise<{ type: "stop" }>) {
   let kernel: DelegationKernel;
+  let kernelLookups = 0;
   const runner = createInlineWorkerRunner({
     model: { provider: "fake", id: "drive-test" },
     apiKey: "test-key",
@@ -53,10 +75,13 @@ function bootRunner(run: (input: RunInput, sink: Sink) => Promise<{ type: "stop"
       }),
       run,
     },
-    kernel: () => kernel,
+    kernel: () => {
+      kernelLookups += 1;
+      return kernel;
+    },
   });
   kernel = createChildKernel(runner);
-  return { runner, stop: () => kernel.stop() };
+  return { runner, stop: () => kernel.stop(), kernelLookups: () => kernelLookups };
 }
 
 test("an assigned worker claiming BLOCKED is re-driven and believed only on the third recurrence", async () => {
@@ -80,6 +105,13 @@ test("an assigned worker claiming BLOCKED is re-driven and believed only on the 
   expect(output.text).toBe("[drive stopped: blocked]\nBLOCKED: the registry is unreachable");
   // Spend accumulates across driven runs: 9 tokens per stubbed run.
   expect(output.tokens).toBe(27);
+  expect(SessionHandleStore.row("d-drive-1")).toMatchObject({
+    parentId: ORIGIN.sessionId,
+    role: "worker",
+    leaseOwner: null,
+    leaseFence: 3,
+  });
+  expect(SessionHandleStore.row(ORIGIN.sessionId).leaseFence).toBe(0);
 });
 
 test("an ask run is answered once, never driven — even when the answer says BLOCKED", async () => {
@@ -123,6 +155,28 @@ test("a later worker-run failure carries the active run id", async () => {
   expect(runIds.length).toBeGreaterThan(1);
   expect(output.runId).toBe(runIds.at(-1));
   expect(output.runId).not.toBe(runIds[0]);
+});
+
+test("a settled worker binding is released before the durable session runs again", async () => {
+  const { runner, stop, kernelLookups } = bootRunner(async (input, sink) => {
+    sink.onMessage(reply(input, "done"));
+    return { type: "stop" };
+  });
+  const input = {
+    delegationId: "d-rehydrate",
+    operation: "ask" as const,
+    instruction: "answer",
+    acceptanceCriteria: [],
+    origin: ORIGIN,
+    signal: new AbortController().signal,
+  };
+
+  await runner(input);
+  await runner(input);
+  stop();
+
+  expect(kernelLookups()).toBe(2);
+  expect(SessionHandleStore.getSnapshot(input.delegationId, 2).turns).toHaveLength(2);
 });
 
 test("an assigned worker that finishes naturally is not nannied", async () => {

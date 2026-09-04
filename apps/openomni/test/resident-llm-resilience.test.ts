@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ChatAgentConfig } from "@openomni/agent";
-import { initialize, Session, Storage } from "@openomni/ledger";
+import { initialize, Session, SessionHandleStore, Storage } from "@openomni/ledger";
 import { type Gateway, type Model, PolicyDecision } from "@openomni/protocol";
 import { createPolicyRegistry } from "../src/composition/policy-registry";
 import { createResidentGateway } from "../src/gateway";
@@ -57,10 +57,7 @@ function openSession(prefix: string): string {
   }).id;
 }
 
-function delivery(
-  sessionId: string,
-  meta?: Readonly<Record<string, unknown>>,
-): Gateway.Deliver {
+function delivery(sessionId: string, meta?: Gateway.Deliver["event"]["meta"]): Gateway.Deliver {
   const traceId = "0af7651916cd43dd8448eb211c80319c";
   return {
     sessionId,
@@ -302,7 +299,9 @@ describe("Resident terminal LLM failure surfacing", () => {
 
     if (result.kind === "dropped") throw new Error("terminal failure was dropped, not answered");
     expect(result.result.output).toContain("rate limited upstream");
-    expect(Session.getMessages(result.sessionId).filter((message) => message.role === "assistant")).toHaveLength(1);
+    expect(SessionHandleStore.getSnapshot(result.sessionId).turns.at(-1)?.terminal?.kind).toBe(
+      "error",
+    );
   });
 
   it("does not convert a configuration failure into a model reply", async () => {
@@ -331,15 +330,9 @@ describe("Resident terminal LLM failure surfacing", () => {
 
     await resident(delivery(sessionId));
 
-    const assistant = Session.getMessages(sessionId).find(
-      (message) => message.role === "assistant",
-    );
-    if (assistant === undefined) throw new Error("no assistant turn was recorded");
-    const text = Session.getParts(assistant.id)
-      .filter((part) => part.type === "text")
-      .map((part) => (part.type === "text" ? part.text : ""))
-      .join("");
-    expect(text).toContain("rate limited upstream");
+    const tail = SessionHandleStore.getSnapshot(sessionId).turns.at(-1);
+    expect(tail?.terminal?.kind).toBe("error");
+    expect(tail?.messages.at(-1)?.text).toContain("rate limited upstream");
   });
 
   it("lets a failed delegation wake keep throwing — the receipt must not be consumed", async () => {
@@ -356,11 +349,9 @@ describe("Resident terminal LLM failure surfacing", () => {
       resident(delivery(sessionId, { kind: "delegation.settled" })),
     ).rejects.toBeInstanceOf(Error);
 
-    // And no reply was fabricated into the session either.
-    const assistant = Session.getMessages(sessionId).filter(
-      (message) => message.role === "assistant",
-    );
-    expect(assistant).toEqual([]);
+    // The failed attempt remains auditable as an error terminal, never a
+    // successful reply that could receipt the wake.
+    expect(SessionHandleStore.getSnapshot(sessionId).turns.at(-1)?.terminal?.kind).toBe("error");
   });
 
   it("lets an abort keep propagating — a stopped run is not a model fault", async () => {

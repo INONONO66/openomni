@@ -1,8 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { join } from "node:path";
 import type { Sink } from "@openomni/llm";
-import { Session, SurfaceKey } from "@openomni/ledger";
-import type { Message } from "@openomni/protocol";
+import { Session, SessionHandleStore, SurfaceKey } from "@openomni/ledger";
 import { loadConfig, type OpenOmniConfig } from "../src/config";
 import { assistantMessage } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
@@ -39,10 +38,7 @@ function bootApp(channels?: NonNullable<OpenOmniConfig["channels"]>): Promise<{ 
  * Runs `fn` with the config env reduced to exactly `env`, restoring every
  * variable afterwards so the parity tests are deterministic in any shell.
  */
-async function withConfigEnv(
-  env: Record<string, string>,
-  fn: () => Promise<void>,
-): Promise<void> {
+async function withConfigEnv(env: Record<string, string>, fn: () => Promise<void>): Promise<void> {
   const saved = new Map<string, string | undefined>();
   for (const name of CONFIG_ENV) saved.set(name, process.env[name]);
   try {
@@ -112,20 +108,12 @@ describe("OpenOmni Resident WebSocket", () => {
     expect(sessions).toHaveLength(1);
     const session = sessions[0];
     if (session === undefined) throw new Error("Expected one persisted session");
-    expect(session.model).toEqual({ providerID: "fake", modelID: "resident-test" });
-
-    const messages = Session.getMessages(session.id);
-    expect(messages.map((message) => message.role)).toEqual(["user", "assistant"]);
-    expect(
-      messages.map((message) => Session.getParts(message.id).map((part) => part.type)),
-    ).toEqual([["text"], ["text"]]);
-    expect(
-      messages.map((message) =>
-        Session.getParts(message.id)
-          .filter((part): part is Message.TextPart => part.type === "text")
-          .map((part) => part.text),
-      ),
-    ).toEqual([["Help me judge this."], [REPLY]]);
+    const snapshot = SessionHandleStore.getSnapshot(session.id);
+    expect(snapshot).toMatchObject({ role: "resident", state: "idle" });
+    expect(snapshot.turns.at(-1)?.messages).toEqual([
+      { role: "user", text: "Help me judge this." },
+      { role: "assistant", text: REPLY },
+    ]);
 
     const surfaceKeys = SurfaceKey.listBySession(session.id);
     expect(surfaceKeys).toHaveLength(1);

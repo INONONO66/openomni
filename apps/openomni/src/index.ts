@@ -1,5 +1,11 @@
 import { processEntryPath } from "./process-entry-path";
-import { type ChatAgentConfig, createCompactionPolicy } from "@openomni/agent";
+import {
+  type ChatAgentConfig,
+  closeSessions,
+  createCompactionPolicy,
+  type SessionRuntime,
+  sweepSessions,
+} from "@openomni/agent";
 import {
   type ChannelDeliveryRoute,
   type GatewayRouter,
@@ -57,7 +63,7 @@ import { createComposer, rollbackToCause } from "./composition/composer";
 import { createPolicyRegistry } from "./composition/policy-registry";
 import { createDriverRegistry } from "./composition/driver-registry";
 import { buildInboundEvent } from "./inbound";
-import { createResident } from "./resident";
+import { createResident, type ResidentDelivery } from "./resident";
 import { HOST_TARGET } from "./tools/core/dispatch";
 import { createCellRegistry } from "./tools/cell-registry";
 import type { CellPorts } from "./tools/execution/run-code";
@@ -252,6 +258,14 @@ export async function startOpenOmni(options: StartOptions = {}) {
       initialize({ dbPath: config.dbPath, observationSink: Bus });
       ctx.effect(() => Storage.reset());
     });
+    const sessionTools = new Map<
+      string,
+      readonly import("./tools/core/define").AnyToolDefinition[]
+    >();
+    const sessionRuntime: SessionRuntime = { observations: Bus };
+    await composer.mount("session.handles", (ctx) => {
+      ctx.effect(() => closeSessions(sessionRuntime));
+    });
     const actors: readonly RegisteredActor[] = config.actors ?? [];
     registerActors(actors);
     // Declared Person manifests materialize alongside env actors — both are
@@ -261,9 +275,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
     // A worker loop holds the same delegate tool the Resident does, so the
     // runner needs the kernel that the kernel needs the runner to build. The
     // cycle is closed by handing the runner a getter rather than a value.
-    let residentDeliver:
-      | ((delivery: Gateway.Deliver) => Promise<Ingress.IngressResult>)
-      | undefined;
+    let residentDeliver: ResidentDelivery | undefined;
     // Boot-rescan wakes arrive before the Resident's deliver chain can be
     // bound; they wait in this queue until the arm call below.
     const wakeDelivery = createWakeDeliveryQueue();
@@ -276,6 +288,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
           throw new Error("delegation kernel used before composition finished");
         return kernel;
       },
+      sessionRuntime,
       ...(options.llm === undefined ? {} : { llm: options.llm }),
     });
     // The gateway owns the send kernel the channel driver speaks through, and
@@ -399,10 +412,6 @@ export async function startOpenOmni(options: StartOptions = {}) {
       options.llm ?? {},
     );
     const defaultMachineId = machines?.enrolled[0]?.machineId;
-    const sessionTools = new Map<
-      string,
-      readonly import("./tools/core/define").AnyToolDefinition[]
-    >();
     const cells: CellPorts | undefined =
       machineHost === undefined || defaultMachineId === undefined
         ? undefined
@@ -443,8 +452,15 @@ export async function startOpenOmni(options: StartOptions = {}) {
         provisioning: provisioningPort,
       },
       targets: () => attachedTargets(host, machines?.enrolled ?? []),
+      sessionRuntime,
       ...(options.llm === undefined ? {} : { llm: options.llm }),
     });
+
+    await sweepSessions(
+      (row) =>
+        row.role === "resident" ? residentDeliver.runnerFor(row.id) : runner.runnerFor(row),
+      sessionRuntime,
+    );
 
     // A delivery the perimeter correlated to an open Wait is an actor's answer
     // to a delegation, not a message for the Resident: it settles the waiting

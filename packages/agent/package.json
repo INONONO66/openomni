@@ -13,6 +13,7 @@
     "test:ci": "bun test --timeout 15000 --coverage --coverage-reporter=lcov --coverage-dir=coverage"
   },
   "dependencies": {
+    "@openomni/ledger": "workspace:*",
     "@openomni/llm": "workspace:*",
     "@openomni/placement": "workspace:*",
     "@openomni/policy": "workspace:*",

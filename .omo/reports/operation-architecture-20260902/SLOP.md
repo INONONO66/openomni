@@ -37,10 +37,10 @@
 | B5 | policy `stableStringify` | protocol json.ts와 두 번째 캐논 문법 | 🗑 |
 | B6 | 두 정책 기계 위험: 기존 콜백 미들웨어 등록(registration/dispatch) vs 커널 선언 행 | 이관 중 둘 공존 금지 | 🔁 결정됨: 기존 엔진 유지, 행 → 등록 컴파일, 콜백 직접 등록 공개 표면 삭제, transform은 이름 있는 변환기 표 참조 |
 | B7 | ledger channel-grant 정규화 + channels 재정규화 | 이중 정규화 | 🔁 channels 단일 소유 |
-| B8 | resident 결과 ID 사후 발급 | 크래시 흔적 0 | 🔁 turn 봉투 선발급 |
-| B9 | `messages.ts` 단일 writer 주석 + blind upsert | 배포 운으로 지켜지는 불변식 | 🔁 fenced lease |
+| ~~B8~~ | resident 결과 ID 사후 발급 | 크래시 흔적 0 | ✅ CLOSED #935 — turn intent/result ID 선기록 + 열린 turn boot resume |
+| ~~B9~~ | `messages.ts` 단일 writer 주석 + blind upsert | 배포 운으로 지켜지는 불변식 | ✅ CLOSED #935 — owner/fence/expiry CAS + heartbeat abort + stale terminal 거부 |
 | B10 | 채널 send 실패 일괄 처리 | not-sent/ambiguous/accepted/rejected 미구분 | 🔁 4분류 |
-| B11 | `bind(ports, origin)` → 배달별 카탈로그 재조립 (resident.ts:268,277) | оpencode 턴별 registry 재계산과 같은 슬롭; §3.1 세대 스냅샷과 양립 불가 | 🔁 `execute(args, ctx)` + 생성 시 포트 주입, 슬라이스 1 |
+| ~~B11~~ | `bind(ports, origin)` → 배달별 카탈로그 재조립 (resident.ts:268,277) | оpencode 턴별 registry 재계산과 같은 슬롭; §3.1 세대 스냅샷과 양립 불가 | ✅ CLOSED #935 — 세션 생성 시 tool/system generation 기록, 턴별 고정 스냅샷 |
 | B12 | dispatch bare 경로 (dispatch.ts:55-70) | 정의 있는 경로와 이중 | 🗑 한 경로, 슬라이스 1 |
 | B13 | `/machines/<id>/<export>/` VfsRouter + `fs_read/fs_list/fs_stat` + `machines` 발견 툴 + 툴별 3층 capability 검사 | 6동사 `machineId:/path` 접두 + `parseLocus()` 하나 + codemode 객체 핸들(`listMachines/getMachine/findMachine`)로 대체(KERNEL.md §3.2.1, Owner 2026-09-03 두 문 확정) | 🔁 packages/machines fs.ts·wire는 생존, fs.write/exec 추가; export 조회 표면 없음(거절만) |
 | B14 | code-mode가 apps/openomni 안에 위치(셀 런타임·kernel.py·머신 핸들이 앱 코드) | 패키지 자격 — 앱 없이도 SDK로 소비 가능해야 | 🔁 `packages/codemode`로 이관(이름 확정 2026-09-03), 포트 주입; `run_code`는 앱 어댑터 1개 |
@@ -67,9 +67,9 @@
 | # | 대상 | 처분 |
 |---|---|---|
 | D1 | `packages/machines/src/fs.ts:304-309` openRoot 재시작 분기 close→open throw 시 dirfd 이중 close | ✅ 닫힘 #932 — 단일 소유(`owned` 클리어 후 close), 주입 reopen 실패 회귀 테스트 |
-| D2 | 동시 메시지 = 동시 LLM 턴 (세션 직렬화 없음) | 🔁 L1 |
+| ~~D2~~ | 동시 메시지 = 동시 LLM 턴 (세션 직렬화 없음) | ✅ CLOSED #935 — 세션별 fenced single-flight + durable inbox boundary drain |
 | D3 | 부팅 reply-grant 재생이 route.decided 전체 스캔 O(history) | 🐛 |
-| D4 | `history()` 턴마다 전체 재구성 + getParts N+1 | 🐛 |
+| ~~D4~~ | `history()` 턴마다 전체 재구성 + getParts N+1 | ✅ CLOSED #935 — authoritative `s.get()` latest-turn tail + revision-gap `s.watch()` |
 | ~~D5~~ | llm `extractUsage` 부재/타입오류 → 0 (fail-open 계정) | ✅ 닫힘 #933 (PR #954) — KERNEL §5.3대로 provider usage + 로컬 추정 결합. `extractUsage`의 필수 input/output은 `number \| undefined`: 부재·타입오류·도메인 이탈(NaN/Infinity/음수/소수/unsafe) 전부 unusable, 보고된 숫자 `0`만 authoritative. alias 해석은 값이 아니라 **키 존재**로 결정 → 정당한 `0`도, provider가 자기모순한 필드도 하위 alias로 흘러내리지 않는다. step-finish fold가 unusable 필드만 주입형 `estimateUsage` 포트로 필드 단위 대체(기본값 = 결정적 `ceil(chars/4)`, input=직렬화 프롬프트 / output=tool-call JSON 포함 assistant 텍스트; `run()`이 `promptText`로 전달). 출력 소스는 step마다 리셋 → 다중 step 합계 가산성 유지. `InvalidUsageError`는 소비자 0 → 분류기까지 삭제(grep-zero), 잘못된 계정이 fold를 중단시키지 않는다. 필수 `?? 0` 2개 grep-zero, 추가 라인 `any`/`unknown` 0, mutation 3종 확인. 옵션 reasoning/cache 0 기본값은 유지(삭제 대상 아님) |
 | ~~D6~~ | `cli/doctor.ts:77-81` — `OPENOMNI_WS_PORT` 두 번째 파서(`>=1`, 불일치 시 3000 대입) vs `config.ts:120` (0..65535 허용). 포트 0(ephemeral)이면 3000을 찔러 daemon active 시 거짓 `fail` | ✅ 닫힘 #951 (PR #953) — 파서는 `config.ts` `parseWsPort` 하나뿐(`portFromEnv` grep-zero, 타입 코드 `invalid_ws_port`); doctor는 이를 소비만 한다: 0 → `warn` 스킵(네트워크 호출 0), unset → 파서 자신의 기본값, invalid → 파서 판정으로 `fail`. `rg -n '3000' cli/doctor.ts` 0 hits |
 

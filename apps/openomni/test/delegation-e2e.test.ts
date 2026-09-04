@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { SessionHandleStore } from "@openomni/ledger";
 import type { RunInput, Sink } from "@openomni/llm";
 import { assistantMessage } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
@@ -20,7 +21,7 @@ test("a Resident turn hands work to an inline worker and reports what came back"
     llm: {
       resolveProviderModel: fakeProviderModel,
       run: async (input: RunInput, sink: Sink) => {
-        const isWorker = input.trace.sessionId.startsWith("delegation-");
+        const isWorker = SessionHandleStore.row(input.trace.sessionId).role === "worker";
         seen.push(isWorker ? "worker" : "resident");
 
         if (isWorker) {

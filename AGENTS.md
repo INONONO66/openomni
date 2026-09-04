@@ -20,7 +20,7 @@ openomni/
 │   ├── telemetry/       # observation channel
 │   ├── ledger/          # durable stores and journal persistence
 │   ├── llm/             # provider I/O, transforms, retry, token/cost accounting
-│   ├── agent/           # stateless ChatAgent loop and compaction
+│   ├── agent/           # generic durable-session mechanics, stateless ChatAgent loop, compaction
 │   ├── ipc/             # protocol-only bidirectional IPC transport
 │   ├── machines/        # attached-machine driver band
 │   └── channels/        # channel drivers and perimeter gateway router
@@ -40,7 +40,7 @@ Read `X <- Y` as Y may depend on X.
 protocol <- telemetry, ipc, ledger, policy, llm, placement, agent, machines, channels, apps/openomni, apps/desktop
 telemetry <- ledger, llm, agent, channels, apps/openomni
 ipc <- machines, apps/openomni
-ledger <- channels, apps/openomni
+ledger <- agent, channels, apps/openomni
 policy <- agent, channels, apps/openomni
 llm <- agent, apps/openomni
 placement <- agent, apps/openomni
@@ -58,7 +58,7 @@ channels <- apps/openomni
 | `policy` | protocol |
 | `llm` | protocol, telemetry; `src/` may depend on protocol |
 | `placement` | protocol |
-| `agent` | protocol, policy, placement, llm, telemetry; `src/` may depend on protocol, policy, placement, llm |
+| `agent` | protocol, ledger, policy, placement, llm, telemetry; `src/` may depend on protocol, ledger, policy, placement, llm |
 | `machines` | protocol, ipc |
 | `channels` | protocol, policy, ledger, telemetry; `src/` may depend on protocol, policy, ledger |
 | `apps/openomni` | protocol, channels, ipc, agent, llm, ledger, telemetry, policy, placement, machines |
@@ -77,7 +77,7 @@ channels <- apps/openomni
 | `packages/telemetry` | Bus and scoped observation | Durable or decision state |
 | `packages/ledger` | Durable state and typed store surfaces | Routing and authority decisions |
 | `packages/llm` | Provider behavior and model accounting | Product routing or tools |
-| `packages/agent` | Stateless loop and compaction | Durable session/product lifecycle |
+| `packages/agent` | Generic durable-session mechanics over ledger facts, stateless loop, and compaction | Product-specific session identity, routing, or lifecycle policy |
 | `packages/ipc` | Framing and bidirectional transport | Run semantics or authorization |
 | `packages/machines` | Machine attach and cell execution driver | Enrollment policy or product judgment |
 | `packages/channels` | Drivers plus perimeter routing, waits, and admission | Session content or product execution |
@@ -145,6 +145,6 @@ Coverage baselines are updated after coverage-producing test runs with `bun run 
 
 - `apps/openomni` is the only deployable composition and production entry point. `apps/desktop` is a build-infrastructure skeleton: the topology permits `protocol` only, it imports no workspace package yet, and it ships no product features.
 - `packages/channels` is the perimeter gateway; `apps/openomni` injects delivery and observation ports. Conversation windows, send leases, and engagement lifecycles were removed in issue #943; ordinary sends use grants, egress budgets, idempotency, and Wait correlation.
-- `packages/agent` owns no durable state. `packages/ledger` stores facts but does not decide product meaning.
+- `packages/agent` coordinates generic session handles through `SessionHandleStore`; `packages/ledger` owns the durable facts, while product-specific session identity, routing, and lifecycle policy remain in `apps/openomni`.
 - Shipped-state claims, including Stakes, effective authority, and connector consumers, belong only in `docs/implementation-status.md`; other docs define target contracts or historical context and defer to it.
 - CI lives in `.github/workflows/ci.yml`; whole-repository formatting is always `bunx ultracite check --formatter-enabled=false .`.

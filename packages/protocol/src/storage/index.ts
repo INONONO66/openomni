@@ -17,14 +17,17 @@ export namespace Storage {
 
   export interface SessionLedgerSubAdapter {
     create(row: LedgerSession.Row): boolean;
+    materialize(input: LedgerSession.Materialize): LedgerSession.MaterializeResult | undefined;
     get(id: string): LedgerSession.Row | undefined;
     list(): LedgerSession.Row[];
+    acquireLease(input: LedgerSession.AcquireLease): LedgerSession.LeaseResult | undefined;
+    renewLease(input: LedgerSession.RenewLease): boolean;
+    commit(input: LedgerSession.Commit): LedgerSession.CommitResult | undefined;
   }
 
   export interface InboxSubAdapter {
     commit(row: Inbox.Commit): Inbox.Row | undefined;
     list(sessionId: string, status?: Inbox.Status): Inbox.Row[];
-    claim(sessionId: string, claimant: string, claimedAt: number): Inbox.Row[];
   }
 
   export interface AlarmSubAdapter {
@@ -211,5 +214,4 @@ export namespace Storage {
       canClaim: (state: Gateway.EgressDebitState) => boolean,
     ): "claimed" | "refused";
   }
-
 }

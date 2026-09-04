@@ -1,6 +1,7 @@
 export { initialize, replaceFileAtomically, SqliteStorageAdapter, Storage } from "./storage";
 export { LedgerAppend } from "./storage/append-port";
 export { Session } from "./session";
+export * as SessionHandleStore from "./session/kernel.js";
 export { SurfaceKey } from "./surface-key";
 export { ActorRegistry } from "./actor/index.js";
 export { BlacklistStore } from "./blacklist/index.js";
