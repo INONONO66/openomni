@@ -1,5 +1,5 @@
 import { describe, expect, it, mock } from "bun:test";
-import { createDispatcher, defineTool, type ToolPostPolicy } from "@openomni/agent";
+import { createDispatcher, defineTool, type ToolPostPolicy } from "../../../src/index";
 import { z } from "zod";
 
 function tool(value: () => Promise<object>) {

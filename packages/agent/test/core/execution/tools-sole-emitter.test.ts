@@ -4,7 +4,7 @@ import {
   defineTool,
   type ToolExecutionCommitter,
   type ToolExecutionObservation,
-} from "@openomni/agent";
+} from "../../../src/index";
 import { Tool } from "@openomni/protocol";
 import { z } from "zod";
 

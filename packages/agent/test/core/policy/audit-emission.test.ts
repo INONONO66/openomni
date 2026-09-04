@@ -1,5 +1,5 @@
 import { expect, it } from "bun:test";
-import { createExecutor, type ExecutionLedger } from "@openomni/agent";
+import { createExecutor, type ExecutionLedger } from "../../../src/index";
 import { compilePolicySnapshot } from "@openomni/policy";
 import { L0Observation, type LedgerAction, type PolicyRow } from "@openomni/protocol";
 
