@@ -1,5 +1,4 @@
 import { describe, expect, it } from "bun:test";
-import { Bus } from "@openomni/telemetry";
 import type { Gateway, Ingress } from "@openomni/protocol";
 import { createGatewayRouter } from "../../src/router/index.js";
 import {
@@ -101,31 +100,6 @@ describe("surface stickiness claim observations (audit A T3)", () => {
       surfaceKey: "discord:guild:dev",
       ownerSessionId: expect.any(String),
       requestedSessionId: expect.any(String),
-      won: true,
-    });
-  });
-
-  it("publishes a user-audit observation carrying the CAS receipt per claim", async () => {
-    const router = getRouter();
-    const observed: Array<{ name: string; payload: Record<string, unknown> }> = [];
-    Bus.observe((event, payload) =>
-      observed.push({ name: event.name, payload: payload as Record<string, unknown> }),
-    );
-
-    const owner = router.claimSurface("telegram:bot:chat:1", "sess-a");
-    // Bus observers fire on a microtask — flush before asserting.
-    await new Promise<void>((resolve) => queueMicrotask(() => resolve()));
-
-    expect(owner).toBe("sess-a");
-    const obs = observed.find(
-      (e) => e.name === "operational.info" && String(e.payload.msg) === "surface stickiness claim",
-    );
-    expect(obs).toBeDefined();
-    expect(obs?.payload.context).toMatchObject({
-      mode: "internal_claim_port",
-      surfaceKey: "telegram:bot:chat:1",
-      requestedSessionId: "sess-a",
-      ownerSessionId: "sess-a",
       won: true,
     });
   });

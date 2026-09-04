@@ -26,15 +26,8 @@
  * when a second consumer exists, not before.
  */
 
-/** Where a fiber is in its life. `pending` arrives with reactive injection. */
+/** Where a fiber is in its life. */
 type FiberState = "mounting" | "active" | "failed" | "disposed";
-
-interface FiberSnapshot {
-  readonly id: string;
-  readonly state: FiberState;
-  /** How many disposers this fiber owns right now. */
-  readonly effects: number;
-}
 
 /** Teardown for one acquired thing. Runs at most once, in reverse order. */
 type Disposer = () => void | Promise<void>;
@@ -63,8 +56,6 @@ export interface Composer {
    * share the one release pass — a disposer can never run twice.
    */
   dispose(): Promise<void>;
-  /** What is mounted, in mount order — the inspection seam for tests and diagnostics. */
-  snapshot(): readonly FiberSnapshot[];
 }
 
 interface Fiber {
@@ -168,12 +159,5 @@ export function createComposer(): Composer {
       return disposal;
     },
 
-    snapshot() {
-      return fibers.map((fiber) => ({
-        id: fiber.id,
-        state: fiber.state,
-        effects: fiber.disposers.length,
-      }));
-    },
   };
 }

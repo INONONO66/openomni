@@ -1,11 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { Ingress } from "../../src/ingress/index.js";
-import {
-  extractSurfaceKey,
-  extractText,
-  resolveTarget,
-  targetKey,
-} from "../../src/ingress/index.js";
+import { extractSurfaceKey, resolveTarget, targetKey } from "../../src/ingress/index.js";
 
 describe("ingress target helpers", () => {
   it("defaults events without explicit target to resident", () => {
@@ -71,18 +66,5 @@ describe("ingress target helpers", () => {
         meta: { target: { kind: "worker", workerId: "worker-7" } },
       }),
     ).toBe("cli:ws:ch:target:worker:worker-7");
-  });
-
-  it("normalizes supported payloads and fails safe for unrepresentable values", () => {
-    expect(extractText("plain")).toBe("plain");
-    expect(extractText({ text: "wrapped" })).toBe("wrapped");
-    expect(extractText(null)).toBe("");
-    expect(extractText(undefined)).toBe("");
-    expect(extractText({ value: 3 })).toBe('{"value":3}');
-    expect(extractText(() => undefined)).toBe("");
-    expect(extractText(1n)).toBe("");
-    const circular: { self?: unknown } = {};
-    circular.self = circular;
-    expect(extractText(circular)).toBe("");
   });
 });

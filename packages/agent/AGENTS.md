@@ -1,6 +1,6 @@
 # packages/agent
 
-`ChatAgent` — an invocation-scoped LLM + tool ReAct loop driven by a policy engine — plus the MCP client runtime. Depends on `@openomni/protocol`, `@openomni/policy`, `@openomni/placement` (the #752 pure model-fallback fold), and `@openomni/llm`. It reports through an injected `BusEvent.Sink` on `ChatAgentConfig.events`, so `src/` imports no implementation of the observation channel and reaches no durable storage — `check-deps.ts` carries a `srcAllowedDeps` for this package that rejects both (#606).
+`ChatAgent` — an invocation-scoped LLM + tool ReAct loop driven by a policy engine. Depends on `@openomni/protocol`, `@openomni/policy`, `@openomni/placement` (the #752 pure model-fallback fold), and `@openomni/llm`. It reports through an injected `BusEvent.Sink` on `ChatAgentConfig.events`, so `src/` imports no implementation of the observation channel and reaches no durable storage — `check-deps.ts` carries a `srcAllowedDeps` for this package that rejects both (#606).
 
 ## STRUCTURE
 
@@ -19,7 +19,6 @@ src/
 │       └── types.ts            # PolicyContext, canonical registration types, PolicyEngineRegistration
 ├── compaction/                 # compact/measure/reduce/speculate mechanisms + run.completion.pre policy adapter
 └── runtime/
-    └── mcp/                    # McpClient split across connection, transport, descriptor, conversion, and type modules
 ```
 
 ## PUBLIC API
@@ -49,7 +48,7 @@ Also exported from `@openomni/agent`:
 - Types: `ChatAgentConfig`, `ChatAgentInput`, `AgentResult`
 - Policy: `PolicyEngine`, `PolicyContext`, `PolicyFn`, `CanonicalPolicyRegistration`, `PolicyEngineRegistration`, `PolicyEngineInstance`, `PolicyRegistrationFactory`
 - Budget queries: `checkBudget`, `describeBudgetRemaining`, `BudgetState` — the accounting stays here, what to say about it does not (D5)
-- Reason codes: `RunReasonCode`; compaction: `createCompactionPolicy`, `isTimeCarriageMarkerPart`, `CompactionOptions`; runtime: `McpClient`
+- Reason codes: `RunReasonCode`; compaction: `createCompactionPolicy`, `isTimeCarriageMarkerPart`, `CompactionOptions`
 
 The entry carries what a consumer somewhere actually imports (#647). Types
 reachable through exported signatures (`BudgetStatus`, `AgentStep`, `Sink`, …)
@@ -129,7 +128,6 @@ Allowed here:
 - Invocation-scoped `ChatAgent` execution and streaming.
 - Agent-scoped `PolicyEngine` facade and canonical point dispatch over the generic policy primitive.
 - Generic tool invocation contracts and tool executor wrapping.
-- Generic MCP client primitives when no server/OpenOmni product behavior is embedded.
 
 Not allowed here:
 
@@ -138,13 +136,12 @@ Not allowed here:
 - Looking up `SurfaceKey`, `ChannelGrantStore`, or `BlacklistStore` for routing.
 - Encoding OpenOmni actor trust, channel grants, or external-response lifecycle rules.
 - Persisting durable background task state or owning orchestration/scheduling; those are OpenOmni/ledger and host responsibilities.
-- Owning channel-specific or server-specific MCP/tool wiring.
+- Owning channel-specific or server-specific tool wiring.
 
 When in doubt, keep the agent package as a loop engine and put product semantics in `apps/openomni`.
 
 ## RUNTIME PRIMITIVES
 
-- **McpClient** — wraps the MCP SDK. Connects via stdio / SSE / streamable HTTP. `listTools()` / `callTool()` convert MCP tool specs and results to `Tool.Spec` / `Tool.Result`.
 
 ## KEY PATTERNS
 

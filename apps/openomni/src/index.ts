@@ -138,13 +138,13 @@ function registerActors(actors: readonly RegisteredActor[]): void {
   }
 }
 
-export interface MachineStatus {
+interface MachineStatus {
   readonly machineId: string;
   readonly attached: boolean;
   readonly capabilities: readonly string[];
   readonly effectiveExports?: readonly string[];
 }
-export type MachinesPort = () => readonly MachineStatus[];
+type MachinesPort = () => readonly MachineStatus[];
 
 export function createMachinesPort(
   host: Pick<MachineHost, "attached" | "attachedExports"> | undefined,
@@ -177,7 +177,7 @@ export function createMachinesPort(
  * live from the supervisor's table so a channel_declare landing a GitHub
  * instance mid-run is reachable without rebinding the server.
  */
-export function createHttpRoutes(
+function createHttpRoutes(
   wsHandler: WebSocketHandler,
   githubWebhookHandler: () => ((request: Request) => Promise<Response>) | undefined,
 ) {

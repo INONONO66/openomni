@@ -3,7 +3,7 @@ import { ChatAgent } from "./core/chat-agent";
 import type { AgentResult, ChatAgentConfig } from "./core/types";
 import type { SessionRunner, SessionRunnerInput, SessionRunnerResult } from "./session-handle";
 
-export interface SessionChatRun {
+interface SessionChatRun {
   readonly config: ChatAgentConfig;
   readonly traceContext: TraceContext.Type;
   readonly around?: (operation: () => Promise<AgentResult>) => Promise<AgentResult>;

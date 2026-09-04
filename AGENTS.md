@@ -1,6 +1,6 @@
 # PROJECT KNOWLEDGE BASE
 
-Last verified against `kernel/941`: 2026-09-03 (built-in curated memory removed from app composition, tools, config, and docs; keep this stamp current when editing - doc-state sync law).
+Last verified against `kernel/944`: 2026-09-03 (built-in curated memory plus dormant agent, channel, ledger, protocol, and one-shot provisioning surfaces removed; keep this stamp current when editing - doc-state sync law).
 
 ## OVERVIEW
 
@@ -11,7 +11,7 @@ OpenOmni is a single-Owner Agent OS: one Resident delegates through durable cont
 ```text
 openomni/
 ├── apps/
-│   ├── openomni/        # sole deployable app: Resident, gateway composition, machines, delegation
+│   ├── openomni/        # sole deployable app: Resident, gateway composition, machines, delegation, memory
 │   └── desktop/         # Electron console skeleton (setup + build infra only; no product features yet)
 ├── packages/
 │   ├── protocol/        # Zod schemas and cross-package contracts
@@ -20,7 +20,7 @@ openomni/
 │   ├── telemetry/       # observation channel
 │   ├── ledger/          # durable stores and journal persistence
 │   ├── llm/             # provider I/O, transforms, retry, token/cost accounting
-│   ├── agent/           # stateless ChatAgent loop and MCP client
+│   ├── agent/           # stateless ChatAgent loop and compaction
 │   ├── ipc/             # protocol-only bidirectional IPC transport
 │   ├── machines/        # attached-machine driver band
 │   └── channels/        # channel drivers and perimeter gateway router
@@ -77,11 +77,11 @@ channels <- apps/openomni
 | `packages/telemetry` | Bus and scoped observation | Durable or decision state |
 | `packages/ledger` | Durable state and typed store surfaces | Routing and authority decisions |
 | `packages/llm` | Provider behavior and model accounting | Product routing or tools |
-| `packages/agent` | Stateless loop, compaction, MCP client | Durable session/product lifecycle |
+| `packages/agent` | Stateless loop and compaction | Durable session/product lifecycle |
 | `packages/ipc` | Framing and bidirectional transport | Run semantics or authorization |
 | `packages/machines` | Machine attach and cell execution driver | Enrollment policy or product judgment |
 | `packages/channels` | Drivers plus perimeter routing, waits, and admission | Session content or product execution |
-| `apps/openomni` | Product composition: Resident, gateway, delegation, code mode, boot/shutdown | Reimplementation of package primitives |
+| `apps/openomni` | Product composition: Resident, gateway, delegation, memory, code mode, boot/shutdown | Reimplementation of package primitives |
 | `apps/desktop` | Electron shell: main/preload/renderer build pipeline, window security defaults | Kernel logic; anything beyond protocol contracts |
 
 ## WHERE TO LOOK
@@ -98,7 +98,7 @@ channels <- apps/openomni
 | Production compaction strategy | `apps/openomni/src/compaction/`, `packages/agent/src/compaction/` |
 | Gateway and channel registration | `apps/openomni/src/gateway.ts`, `apps/openomni/src/channels.ts` |
 | Delegation lifecycle and transports | `apps/openomni/src/delegation/` |
-| Product tools | `apps/openomni/src/tools/` |
+| Product tools and memory | `apps/openomni/src/tools/`, `apps/openomni/src/memory/` |
 | Shipped-state truth | `docs/implementation-status.md` |
 | Conformance/ratchets | `script/`, `script/conformance/` |
 

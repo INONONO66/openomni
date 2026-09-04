@@ -320,14 +320,6 @@ inventory above:
   master `Storage` entry is not a router surface, and the S8 pin refuses
   namespace/default imports, wholesale re-exports, dynamic `import()`, and
   `require()` alike (the static named clause is the only road).
-- The brain-side internal `SurfaceKey.claim` residue rides to #708 (a
-  gateway port for internal claims) — Owner-ruled, no concrete breakage,
-  CAS-converged. **Resolved at #708**: the router exposes
-  `claimSurface(surfaceKey, sessionId, expectedSessionId?)` (CAS receipt =
-  the owner after the attempt), the app injects it into the Resident composition
-  engine, and the brain's session resolver fails closed without it — the
-  gateway is now the literal sole WRITER of the surface↔session map
-  (brain-side reads stay recorded residue).
 
 Perimeter stores do NOT move to channels (§4 SSOT): `actor/`, `blacklist/`,
 `channel-grant/`, `wait/` store, `surface-key/`, `pending-ask/`,

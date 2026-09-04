@@ -185,7 +185,7 @@ describe("SqliteStorageAdapter", () => {
       expect(tables).toContain("worker_run_state");
       expect(tables).toEqual(expect.arrayContaining(["action", "inbox", "alarm", "policy"]));
       expect(tables).toContain("_migrations");
-      // #606: dead tables (zero readers/writers) dropped by migration 0017.
+      // Dead tables with no production readers or writers stay absent.
       for (const dead of [
         "event_log",
         "task",
@@ -194,6 +194,9 @@ describe("SqliteStorageAdapter", () => {
         "plan",
         "todo",
         "background_task",
+        "cron_job",
+        "app_connector_installation",
+        "transcript_fact",
       ]) {
         expect(tables).not.toContain(dead);
       }
@@ -854,25 +857,6 @@ describe("SqliteStorageAdapter", () => {
       expect(adapter.message.list("s1")).toEqual([]);
       expect(adapter.part.list("m1")).toEqual([]);
       expect(adapter.surfaceKey?.lookup("channel:1")).toBeUndefined();
-    });
-
-    test("clears legacy cron_job rows left by migration 0004", () => {
-      // The cron adapter is gone, but migration 0004 still creates the table
-      // on every database, so pre-existing deployments can hold rows in it.
-      const db = new Database(dbPath);
-      db.run(
-        "INSERT INTO cron_job (id, data, time_created, time_updated) VALUES ('legacy', '{}', 1, 1)",
-      );
-      db.close();
-
-      adapter.clear();
-
-      const probe = new Database(dbPath);
-      const row = probe.query("SELECT COUNT(*) AS count FROM cron_job").get() as {
-        count: number;
-      };
-      probe.close();
-      expect(row.count).toBe(0);
     });
   });
 

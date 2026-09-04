@@ -2,7 +2,6 @@ import { Database } from "bun:sqlite";
 import { Ledger } from "../ledger-core/index";
 import type { WorkerRunStateStore } from "../worker-run/state-store";
 import { createSqliteActorRegistryAdapter } from "./sqlite-actor-registry-adapter";
-import { createSqliteAppConnectorInstallationAdapter } from "./sqlite-app-connector-installation-adapter";
 import { createSqliteBlacklistAdapter } from "./sqlite-blacklist-adapter";
 import { createSqliteChannelGrantAdapter } from "./sqlite-channel-grant-adapter";
 import { createSqliteProvisioningAdapter } from "./sqlite-provisioning-adapter";
@@ -15,7 +14,6 @@ import { createSqliteL0Adapters } from "./sqlite-l0-adapter";
 import type { ObservationSink } from "@openomni/protocol";
 import { createSqliteSessionAdapter } from "./sqlite-session-adapter";
 import { createSqliteSurfaceKeyAdapter } from "./sqlite-surface-key-adapter";
-import { createSqliteTranscriptFactAdapter } from "./sqlite-transcript-fact-adapter";
 import { createSqliteApprovalAdapter } from "./sqlite-approval-adapter";
 import { createSqliteWaitAdapter } from "./sqlite-wait-adapter";
 import { createSqliteWorkerRunStateAdapter } from "./sqlite-worker-run-state-adapter";
@@ -30,7 +28,6 @@ export class SqliteStorageAdapter implements Storage.Adapter {
   readonly session: Storage.Adapter["session"];
   readonly message: Storage.Adapter["message"];
   readonly part: Storage.Adapter["part"];
-  readonly transcriptFact: NonNullable<Storage.Adapter["transcriptFact"]>;
   readonly surfaceKey: NonNullable<Storage.Adapter["surfaceKey"]>;
   readonly workerRunState: WorkerRunStateStore.Adapter;
   readonly wait: NonNullable<Storage.Adapter["wait"]>;
@@ -41,7 +38,6 @@ export class SqliteStorageAdapter implements Storage.Adapter {
   readonly actorRegistry: NonNullable<Storage.Adapter["actorRegistry"]>;
   readonly blacklist: NonNullable<Storage.Adapter["blacklist"]>;
   readonly channelGrant: NonNullable<Storage.Adapter["channelGrant"]>;
-  readonly appConnectorInstallation: NonNullable<Storage.Adapter["appConnectorInstallation"]>;
   readonly provisioning: NonNullable<Storage.Adapter["provisioning"]>;
   readonly sessions: NonNullable<Storage.Adapter["sessions"]>;
   readonly actions: NonNullable<Storage.Adapter["actions"]>;
@@ -62,9 +58,6 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     this.session = createSqliteSessionAdapter(this.db);
     this.message = createSqliteMessageAdapter(this.db);
     this.part = createSqlitePartAdapter(this.db);
-    // Transcript facts share the primary connection: the record path commits
-    // fact append + message/part projection inside one transaction (#547 C3).
-    this.transcriptFact = createSqliteTranscriptFactAdapter(this.db);
     this.surfaceKey = createSqliteSurfaceKeyAdapter(this.db);
     this.workerRunState = createSqliteWorkerRunStateAdapter(this.db);
     this.wait = createSqliteWaitAdapter(this.db);
@@ -84,7 +77,6 @@ export class SqliteStorageAdapter implements Storage.Adapter {
     this.actorRegistry = createSqliteActorRegistryAdapter(this.db);
     this.blacklist = createSqliteBlacklistAdapter(this.db);
     this.channelGrant = createSqliteChannelGrantAdapter(this.db);
-    this.appConnectorInstallation = createSqliteAppConnectorInstallationAdapter(this.db);
     this.provisioning = createSqliteProvisioningAdapter(this.db);
     const l0 = createSqliteL0Adapters(
       this.db,

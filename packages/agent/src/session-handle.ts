@@ -8,13 +8,13 @@ import {
   SessionTurn,
 } from "@openomni/protocol";
 
-export interface SessionTool {
+interface SessionTool {
   readonly name: string;
   readonly inputSchema: SessionGeneration.Tool["inputSchema"];
   readonly category: SessionGeneration.ToolCategory;
 }
 
-export interface SessionSystem {
+interface SessionSystem {
   readonly preset: string;
   readonly blocks: readonly SessionGeneration.SystemBlock[];
 }
@@ -29,7 +29,7 @@ export interface SessionCreateOptions {
   readonly policyGeneration?: number;
 }
 
-export interface SessionGetOptions {
+interface SessionGetOptions {
   readonly turns?: number;
 }
 
@@ -52,7 +52,7 @@ export interface SessionRunnerInput {
   readonly boundary: (boundary: SessionTurn.Boundary) => Promise<SessionBoundaryResult>;
 }
 
-export interface SessionBoundaryResult {
+interface SessionBoundaryResult {
   readonly messages: readonly SessionTurn.Message[];
   readonly interrupted: boolean;
 }
@@ -91,12 +91,12 @@ export interface SessionRuntime {
   readonly onHibernate?: (sessionId: string) => void | Promise<void>;
 }
 
-export interface SessionToolsHandle {
+interface SessionToolsHandle {
   add(tools: readonly SessionTool[]): Promise<SessionGeneration.ConfigureReceipt>;
   remove(names: readonly string[]): Promise<SessionGeneration.ConfigureReceipt>;
 }
 
-export interface SessionSystemBlocksHandle {
+interface SessionSystemBlocksHandle {
   set(
     blocks: readonly SessionGeneration.SystemBlock[],
   ): Promise<SessionGeneration.ConfigureReceipt>;
@@ -114,7 +114,7 @@ export interface SessionHandle {
   close(): Promise<void>;
 }
 
-export class SessionLeaseError extends Error {
+class SessionLeaseError extends Error {
   constructor(readonly result: Exclude<LedgerSession.LeaseResult, { readonly ok: true }>) {
     super(`session lease ${result.reason}`);
     this.name = "SessionLeaseError";

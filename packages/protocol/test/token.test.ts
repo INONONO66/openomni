@@ -37,7 +37,7 @@ describe("Token usage contracts", () => {
     ).toBe(false);
   });
 
-  test("rejects negative and fractional token counts", () => {
+  test("rejects negative token counts", () => {
     expect(
       Token.AgentUsage.safeParse({
         inputTokens: -1,
@@ -45,15 +45,5 @@ describe("Token usage contracts", () => {
         totalTokens: 49,
       }).success,
     ).toBe(false);
-
-    expect(
-      Token.ExecutionUsage.safeParse({
-        inputTokens: 10.5,
-      }).success,
-    ).toBe(false);
-  });
-
-  test("allows partial execution result usage", () => {
-    expect(Token.ExecutionUsage.parse({ inputTokens: 10 })).toEqual({ inputTokens: 10 });
   });
 });
