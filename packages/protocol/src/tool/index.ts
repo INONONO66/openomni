@@ -4,6 +4,34 @@ import { CapabilityId } from "../machine/schema.js";
 import type { TraceContext } from "../trace/index.js";
 import { EpochMs } from "../time.js";
 
+export type ToolCategory = "query" | "mutation" | "authority" | "execution";
+export type ToolRole = "resident" | "worker";
+
+export interface ToolExecutionContext {
+  readonly sessionId: string;
+  readonly turnId: string;
+  readonly callId: string;
+  readonly signal: AbortSignal;
+}
+
+/** Protocol shape only; definition validation and dispatch live in agent. */
+export interface ToolDefinition<In extends z.ZodType = z.ZodType, Out extends z.ZodType = z.ZodType> {
+  readonly name: string;
+  readonly description: string;
+  readonly category: ToolCategory;
+  readonly input: In;
+  readonly output: Out;
+  readonly visibility: {
+    readonly model: readonly ToolRole[];
+    readonly cell: readonly ToolRole[];
+  };
+  readonly sequential?: true;
+  execute(args: z.output<In>, ctx: ToolExecutionContext): Promise<z.output<Out>>;
+  render(args: z.output<In>, value: z.output<Out>): string;
+}
+
+export type AnyToolDefinition = ToolDefinition<z.ZodType, z.ZodType>;
+
 export namespace Tool {
   /**
    * Compact runtime tool-catalog source discriminator.
