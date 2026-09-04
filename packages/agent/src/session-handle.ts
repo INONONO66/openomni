@@ -467,6 +467,7 @@ function createController(
           action,
         },
         interrupted,
+        true,
       );
       return interrupted;
     }
@@ -485,7 +486,7 @@ function createController(
     if (open.resumeCount >= SessionHandleStore.RESUME_BUDGET) {
       fence = acquire(SessionHandleStore.row(sessionId).leaseFence);
       const exhausted = { kind: "error" as const, text: "session resume budget exhausted" };
-      await seal(open, exhausted);
+      await seal(open, exhausted, true);
       return exhausted;
     }
     const current = SessionHandleStore.row(sessionId);
@@ -655,8 +656,14 @@ function createController(
             ...(error instanceof Error ? { cause: error } : {}),
           };
     } finally {
-      stopHeartbeat?.();
-      stopHeartbeat = undefined;
+      // When the runner ignored the abort and is still alive, keep the heartbeat
+      // renewing the durable lease so that no other runtime can acquire it and
+      // start a resumed runner; the lease and heartbeat are released only after
+      // the runner settles below. Otherwise the runner has settled, so stop now.
+      if (interruptedRunner === undefined) {
+        stopHeartbeat?.();
+        stopHeartbeat = undefined;
+      }
       if (controller === turnController) controller = undefined;
     }
     const latestAction = SessionHandleStore.tree(sessionId).at(-1);
@@ -674,12 +681,20 @@ function createController(
         action: latestAction,
       },
       result,
+      interruptedRunner === undefined,
     );
     if (interruptedRunner !== undefined) {
+      // The abort-ignoring runner is still alive and still holds the durable
+      // lease (renewed by the heartbeat above). Wait for it to settle, then
+      // stop the heartbeat and release the lease so a resume can only start
+      // once this executor is genuinely gone — session-wide single flight.
       await interruptedRunner.then(
         () => undefined,
         () => undefined,
       );
+      stopHeartbeat?.();
+      stopHeartbeat = undefined;
+      await releaseHeldLease();
     }
     return result;
   }
@@ -738,6 +753,7 @@ function createController(
   async function seal(
     open: SessionHandleStore.OpenTurn,
     result: SessionRunnerResult,
+    releaseLease: boolean,
   ): Promise<void> {
     const current = SessionHandleStore.row(sessionId);
     const actions = SessionHandleStore.tree(sessionId);
@@ -771,6 +787,22 @@ function createController(
       actions: [...deliveries, terminal],
       consumeInboxIds: interrupts.map((item) => item.id),
       state: nextState,
+      releaseLease,
+    });
+    requireCommit(committed);
+  }
+
+  async function releaseHeldLease(): Promise<void> {
+    const current = SessionHandleStore.row(sessionId);
+    const committed = SessionHandleStore.commit({
+      sessionId,
+      owner,
+      fence,
+      now: clock(),
+      expectedRevision: current.revision,
+      actions: [],
+      consumeInboxIds: [],
+      state: current.state,
       releaseLease: true,
     });
     requireCommit(committed);
