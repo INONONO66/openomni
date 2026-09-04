@@ -409,6 +409,7 @@ describe("durable session handle", () => {
     const entered = signal<void>();
     const abortSeen = signal<void>();
     const releaseRunner = signal<void>();
+    const hibernated = signal<void>();
     let active = 0;
     let maximumActive = 0;
     const runner: SessionRunner = async (input) => {
@@ -420,7 +421,10 @@ describe("durable session handle", () => {
       active -= 1;
       return { kind: "result", text: "late" };
     };
-    const handle = session(residentOptions("lease-held-through-abort", runner), runtime);
+    const handle = session(residentOptions("lease-held-through-abort", runner), {
+      ...runtime,
+      onHibernate: () => hibernated.resolve(),
+    });
 
     const running = handle.prompt("start");
     await bounded(entered.promise, "runner entry");
@@ -445,8 +449,12 @@ describe("durable session handle", () => {
 
     // Once the runner settles, this owner releases the lease and it becomes
     // acquirable again.
+    // The caller-facing interrupt completes at the sealed terminal, not when
+    // the abort-ignoring runner finally settles.
+    await bounded(interrupted, "interrupt receipt before runner settlement");
+    expect(SessionHandleStore.row(handle.id).leaseOwner).not.toBeNull();
     releaseRunner.resolve();
-    await bounded(Promise.all([running, interrupted]), "interrupted runner settlement");
+    await bounded(Promise.all([running, hibernated.promise]), "runner settlement + lease release");
     const afterSettle = SessionHandleStore.acquireLease({
       sessionId: handle.id,
       owner: "second-runtime",
@@ -462,6 +470,7 @@ describe("durable session handle", () => {
     const entered = signal<void>();
     const abortSeen = signal<void>();
     const releaseRunner = signal<void>();
+    const hibernated = signal<void>();
     let active = 0;
     let maximumActive = 0;
     const runner: SessionRunner = async (input) => {
@@ -473,7 +482,10 @@ describe("durable session handle", () => {
       active -= 1;
       return { kind: "result", text: "late" };
     };
-    const handle = session(residentOptions("configure-in-interrupt-window", runner), runtime);
+    const handle = session(residentOptions("configure-in-interrupt-window", runner), {
+      ...runtime,
+      onHibernate: () => hibernated.resolve(),
+    });
 
     const running = handle.prompt("start");
     await bounded(entered.promise, "runner entry");
@@ -499,8 +511,12 @@ describe("durable session handle", () => {
     expect(contended.ok).toBe(false);
     expect(maximumActive).toBe(1);
 
+    // The caller-facing interrupt completes at the sealed terminal, not when
+    // the abort-ignoring runner finally settles.
+    await bounded(interrupted, "interrupt receipt before runner settlement");
+    expect(SessionHandleStore.row(handle.id).leaseOwner).not.toBeNull();
     releaseRunner.resolve();
-    await bounded(Promise.all([running, interrupted]), "interrupted runner settlement");
+    await bounded(Promise.all([running, hibernated.promise]), "runner settlement + lease release");
     const afterSettle = SessionHandleStore.acquireLease({
       sessionId: handle.id,
       owner: "second-runtime",
@@ -515,6 +531,7 @@ describe("durable session handle", () => {
   test("configure re-entered from the interrupted seal observation still sees the lease as held", async () => {
     const entered = signal<void>();
     const releaseRunner = signal<void>();
+    const hibernated = signal<void>();
     let active = 0;
     let maximumActive = 0;
     const runner: SessionRunner = async () => {
@@ -525,7 +542,10 @@ describe("durable session handle", () => {
       active -= 1;
       return { kind: "result", text: "late" };
     };
-    const handle = session(residentOptions("configure-from-seal-observation", runner), runtime);
+    const handle = session(residentOptions("configure-from-seal-observation", runner), {
+      ...runtime,
+      onHibernate: () => hibernated.resolve(),
+    });
     // Re-enter configure synchronously from the observation of the interrupted
     // terminal seal — the earliest point a subscriber can react to it.
     const reentered = signal<() => Promise<SessionGeneration.ConfigureReceipt>>();
@@ -557,8 +577,12 @@ describe("durable session handle", () => {
     });
     expect(contended.ok).toBe(false);
 
+    // The caller-facing interrupt completes at the sealed terminal, not when
+    // the abort-ignoring runner finally settles.
+    await bounded(interrupted, "interrupt receipt before runner settlement");
+    expect(SessionHandleStore.row(handle.id).leaseOwner).not.toBeNull();
     releaseRunner.resolve();
-    await bounded(Promise.all([running, interrupted]), "interrupted runner settlement");
+    await bounded(Promise.all([running, hibernated.promise]), "runner settlement + lease release");
     expect(SessionHandleStore.row(handle.id).leaseOwner).toBeNull();
     expect(maximumActive).toBe(1);
   });
@@ -566,6 +590,7 @@ describe("durable session handle", () => {
   test("close() returns after the grace window while the lease stays held until the abort-ignoring runner settles", async () => {
     const entered = signal<void>();
     const releaseRunner = signal<void>();
+    const hibernated = signal<void>();
     let active = 0;
     let maximumActive = 0;
     const runner: SessionRunner = async () => {
@@ -579,6 +604,7 @@ describe("durable session handle", () => {
     const handle = session(residentOptions("close-detaches-after-grace", runner), {
       ...runtime,
       closeGraceMs: 0,
+      onHibernate: () => hibernated.resolve(),
     });
 
     const running = handle.prompt("start");
@@ -600,7 +626,7 @@ describe("durable session handle", () => {
 
     // Once the runner settles the turn continuation releases the lease itself.
     releaseRunner.resolve();
-    await bounded(running, "late runner settlement");
+    await bounded(Promise.all([running, hibernated.promise]), "runner settlement + lease release");
     expect(SessionHandleStore.row(handle.id).leaseOwner).toBeNull();
     const afterSettle = SessionHandleStore.acquireLease({
       sessionId: handle.id,

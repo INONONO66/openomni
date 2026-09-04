@@ -292,6 +292,9 @@ function createController(
   // the runner ignored its abort, until that runner settles. It still holds
   // the durable lease, so configure must not rotate or release it.
   let liveInterruptRunner: Promise<SessionRunnerResult> | undefined;
+  // Detached ownership maintenance for that runner (heartbeat + release once
+  // it settles). No turn starts while it is pending.
+  let retainedRunner: Promise<void> | undefined;
 
   function replacement(): SessionHandle | undefined {
     if (closed) throw new Error(`session handle is closed: ${sessionId}`);
@@ -382,15 +385,20 @@ function createController(
         // the turn continuation keeps the heartbeat alive and releases the
         // lease itself once the abort-ignoring runner finally settles, so the
         // lease is never handed off while that runner may still be alive.
-        const settled = active?.then(
+        const settled = Promise.all([active, retainedRunner]).then(
           () => undefined,
           () => undefined,
         );
-        if (settled !== undefined) await Promise.race([settled, grace]);
+        await Promise.race([settled, grace]);
       } finally {
         if (graceTimer !== undefined) clearTimeout(graceTimer);
-        released = true;
-        lifecycle.release();
+        // A still-live turn or retained runner owns the lifecycle release: the
+        // drive loop / retained continuation runs `hibernate()` once the lease
+        // is actually released (see runTurn).
+        if (active === undefined && retainedRunner === undefined) {
+          released = true;
+          lifecycle.release();
+        }
       }
     },
   };
@@ -460,6 +468,7 @@ function createController(
   }
 
   async function startTurn(): Promise<SessionRunnerResult | undefined> {
+    await awaitRetainedRunner();
     const current = SessionHandleStore.row(sessionId);
     fence = acquire(current.leaseFence);
     const actions = SessionHandleStore.tree(sessionId);
@@ -525,6 +534,7 @@ function createController(
   }
 
   async function resumeTurn(open: SessionHandleStore.OpenTurn): Promise<SessionRunnerResult> {
+    await awaitRetainedRunner();
     if (open.resumeCount >= SessionHandleStore.RESUME_BUDGET) {
       fence = acquire(SessionHandleStore.row(sessionId).leaseFence);
       const exhausted = { kind: "error" as const, text: "session resume budget exhausted" };
@@ -572,6 +582,7 @@ function createController(
   }
 
   async function resumeInterrupted(item: Inbox.Row): Promise<SessionRunnerResult | undefined> {
+    await awaitRetainedRunner();
     const terminal = latestTerminal(SessionHandleStore.tree(sessionId));
     if (terminal === undefined) {
       await consumeNoopInbox([item]);
@@ -737,19 +748,31 @@ function createController(
     );
     if (interruptedRunner !== undefined) {
       // The abort-ignoring runner is still alive and still holds the durable
-      // lease (renewed by the heartbeat above). Wait for it to settle, then
-      // stop the heartbeat and release the lease so a resume can only start
-      // once this executor is genuinely gone — session-wide single flight.
-      await interruptedRunner.then(
-        () => undefined,
-        () => undefined,
-      );
-      liveInterruptRunner = undefined;
-      stopHeartbeat?.();
-      stopHeartbeat = undefined;
-      await releaseHeldLease();
+      // lease (renewed by the heartbeat above). The interrupted terminal is
+      // sealed, so the turn - and the caller's interrupt() - completes now;
+      // ownership maintenance detaches into `retainedRunner`: once the runner
+      // settles, stop the heartbeat and release the lease. Every turn start
+      // waits on it, so a resume can only run once this executor is genuinely
+      // gone - session-wide single flight without an unbounded caller wait.
+      retainedRunner = interruptedRunner
+        .then(
+          () => undefined,
+          () => undefined,
+        )
+        .then(async () => {
+          liveInterruptRunner = undefined;
+          stopHeartbeat?.();
+          stopHeartbeat = undefined;
+          await releaseHeldLease();
+          retainedRunner = undefined;
+          if (active === undefined) await hibernate(SessionHandleStore.row(sessionId));
+        });
     }
     return result;
+  }
+
+  async function awaitRetainedRunner(): Promise<void> {
+    while (retainedRunner !== undefined) await retainedRunner;
   }
 
   async function drainBoundary(
