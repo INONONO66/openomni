@@ -14,7 +14,6 @@ import type { Gateway, Ingress, Model } from "@openomni/protocol";
 import { Bus, newTraceId } from "@openomni/agent";
 import { chatProviderConfig } from "./composition/chat-provider";
 import { SessionBindingCache } from "./composition/session-bindings";
-import type { PolicyRegistry } from "./composition/policy-registry";
 import type { DelegationOrigin } from "./delegation/admission";
 import { classifyTurnFailure } from "./observation/llm-failure";
 import { observeComponent } from "./observation/component";
@@ -54,7 +53,7 @@ export interface ResidentOptions {
   readonly llm?: ChatAgentConfig["llm"];
   readonly tools: CatalogPorts;
   readonly targets: () => readonly Placement.ToolTarget[];
-  readonly policies: PolicyRegistry;
+  readonly middleware?: ChatAgentConfig["middleware"];
   readonly sessionRuntime?: SessionRuntime;
 }
 
@@ -157,7 +156,7 @@ export function createResident(options: ResidentOptions): ResidentDelivery {
             toolTargets: options.targets(),
             toolChoice: evidenceOnly || tools.length === 0 ? "none" : "auto",
             toolExecutor: evidenceOnly ? refuseEvidenceOnlyToolCall : dispatcher.execute,
-            middleware: options.policies.middlewareFor({ events: observation.events }),
+            ...(options.middleware === undefined ? {} : { middleware: options.middleware }),
             model: options.model,
             ...(options.modelFallbacks === undefined || options.modelFallbacks.length === 0
               ? {}

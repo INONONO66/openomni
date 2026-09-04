@@ -10,7 +10,6 @@ import {
   MOUNTED_CHANNEL_DEFAULT_TIER,
   registerTrustedChannelGrant,
 } from "../src/gateway";
-import { createPolicyRegistry } from "../src/composition/policy-registry";
 import { createResident } from "../src/resident";
 import { assistantMessage, type AssistantMessageOptions } from "./helpers/assistant-message";
 
@@ -89,7 +88,7 @@ function testResident(run: ResidentRun) {
   return createResident({
     model: MODEL,
     apiKey: "test-key",
-    policies: createPolicyRegistry({ mandatory: [] }),
+    middleware: [],
     tools: {},
     targets: () => [{ kind: "host", id: "brain", capabilities: [] }],
     llm: {

@@ -5,7 +5,6 @@ import { join } from "node:path";
 import { initialize, Session, SessionHandleStore, Storage } from "@openomni/ledger";
 import type { RunInput, Sink } from "@openomni/llm";
 import type { Gateway } from "@openomni/protocol";
-import { createPolicyRegistry } from "../src/composition/policy-registry";
 import { modelTransport, type OpenOmniConfig } from "../src/config";
 import type { DelegationKernel } from "../src/delegation/kernel";
 import { createChildKernel, ProcessWorkerRequest } from "../src/delegation/process-entry";
@@ -157,7 +156,7 @@ describe("operator transport reaches every model caller", () => {
       model: { provider: "fake", id: "resident-test" },
       apiKey: "test-key",
       transport: OPERATOR_TRANSPORT,
-      policies: createPolicyRegistry({ mandatory: [] }),
+      middleware: [],
       tools: {},
       targets: () => [],
       llm: {

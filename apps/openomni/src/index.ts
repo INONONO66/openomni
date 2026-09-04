@@ -60,8 +60,6 @@ import { createProcessDriver } from "./delegation/process-driver";
 import { createInlineWorkerRunner } from "./delegation/worker-loop";
 import { createMountedChannelGrantRegistrar, createResidentGateway } from "./gateway";
 import { createComposer, rollbackToCause } from "./composition/composer";
-import { createPolicyRegistry } from "./composition/policy-registry";
-import { createDriverRegistry } from "./composition/driver-registry";
 import { buildInboundEvent } from "./inbound";
 import { createResident, type ResidentDelivery } from "./resident";
 import { HOST_TARGET } from "@openomni/agent";
@@ -303,33 +301,19 @@ export async function startOpenOmni(options: StartOptions = {}) {
       now: () => Date.now(),
       newWaitId: () => crypto.randomUUID(),
     });
-    // The kernel reads this table at dispatch time, so registrations made
-    // (or replaced) after boot are visible to the very next dispatch. Each
-    // boot registration is a composer-owned effect: disposing revokes the
-    // driver's admission to new work while in-flight runs complete under the
-    // generation that dispatched them.
-    const driverRegistry = createDriverRegistry();
-    await composer.mount("delegation.drivers", (ctx) => {
-      const registrations = [
-        driverRegistry.register("inline", createInlineDriver(runner)),
-        driverRegistry.register("channel", channelDriver),
-        driverRegistry.register(
-          "process",
-          createProcessDriver({
-            command: [process.execPath, processEntryPath(import.meta.url)],
-            worker: {
-              model: { provider: config.model.provider, id: config.model.id },
-              apiKey: config.model.apiKey,
-              ...(transport === undefined ? {} : { transport }),
-            },
-            dbPath: config.dbPath,
-          }),
-        ),
-      ];
-      for (const registration of registrations) {
-        ctx.effect(() => registration.dispose());
-      }
-    });
+    const drivers = {
+      inline: createInlineDriver(runner),
+      channel: channelDriver,
+      process: createProcessDriver({
+        command: [process.execPath, processEntryPath(import.meta.url)],
+        worker: {
+          model: { provider: config.model.provider, id: config.model.id },
+          apiKey: config.model.apiKey,
+          ...(transport === undefined ? {} : { transport }),
+        },
+        dbPath: config.dbPath,
+      }),
+    };
     // The catalog's approval lane (§6): Owner-consent requests plus the two
     // acts they authorize — promotion and cross-channel endpoint merge.
     // Provisioning administration port: the supervisor is created after the
@@ -374,7 +358,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       events: Bus,
       wake: (wake) => wakeDelivery.deliver(wake),
       bootSweep: false,
-      drivers: driverRegistry.drivers,
+      drivers,
       now: () => Date.now(),
       newDelegationId: () => crypto.randomUUID(),
     });
@@ -426,24 +410,14 @@ export async function startOpenOmni(options: StartOptions = {}) {
             newCellId: () => crypto.randomUUID(),
           };
 
-    // The Resident's policy floor: compaction is declared mandatory, so a
-    // run without it is refused fail-closed rather than run unprotected.
-    // The registration is a composer-owned effect — disposing the policy
-    // stage suspends dependent runs instead of silently widening them.
-    const policyRegistry = createPolicyRegistry({ mandatory: ["compaction"] });
-    await composer.mount("policy", (ctx) => {
-      const compaction = policyRegistry.register("compaction", (run) =>
-        createConfiguredCompactionPolicy(config, run.events, options.llm ?? {}),
-      );
-      ctx.effect(() => compaction.dispose());
-    });
+    const middleware = [createConfiguredCompactionPolicy(config, Bus, options.llm ?? {})];
 
     residentDeliver = createResident({
       model: config.model,
       ...(config.model.fallbacks === undefined ? {} : { modelFallbacks: config.model.fallbacks }),
       apiKey: config.model.apiKey,
       ...(transport === undefined ? {} : { transport }),
-      policies: policyRegistry,
+      middleware,
       tools: {
         delegation: delegationKernel,
         ...(cells === undefined ? {} : { cells }),

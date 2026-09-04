@@ -5,7 +5,6 @@ import { join } from "node:path";
 import type { ChatAgentConfig } from "@openomni/agent";
 import { initialize, Session, SessionHandleStore, Storage } from "@openomni/ledger";
 import { type Gateway, type Model, PolicyDecision } from "@openomni/protocol";
-import { createPolicyRegistry } from "../src/composition/policy-registry";
 import { createResidentGateway } from "../src/gateway";
 import { createResident } from "../src/resident";
 import { assistantMessage } from "./helpers/assistant-message";
@@ -41,9 +40,7 @@ const zeroBackoff: NonNullable<ChatAgentConfig["middleware"]>[number] = {
 };
 
 function policies() {
-  const registry = createPolicyRegistry({ mandatory: [] });
-  registry.register("zero-backoff", () => zeroBackoff);
-  return registry;
+  return [zeroBackoff];
 }
 
 function openSession(prefix: string): string {
@@ -98,7 +95,7 @@ describe("Resident model fallback wiring", () => {
       model: PRIMARY,
       modelFallbacks: [FALLBACK],
       apiKey: "test-key",
-      policies: policies(),
+      middleware: policies(),
       tools: {},
       targets: () => [],
       llm: {
@@ -133,7 +130,7 @@ describe("Resident model fallback wiring", () => {
     const resident = createResident({
       model: PRIMARY,
       apiKey: "test-key",
-      policies: policies(),
+      middleware: policies(),
       tools: {},
       targets: () => [],
       llm: {
@@ -194,7 +191,7 @@ describe("Resident terminal LLM failure surfacing", () => {
     return createResident({
       model: PRIMARY,
       apiKey: "test-key",
-      policies: policies(),
+      middleware: policies(),
       tools: {},
       targets: () => [],
       llm: alwaysFailing(error),
@@ -309,7 +306,7 @@ describe("Resident terminal LLM failure surfacing", () => {
     const resident = createResident({
       model: PRIMARY,
       apiKey: "test-key",
-      policies: policies(),
+      middleware: policies(),
       tools: {},
       targets: () => [],
       llm: {

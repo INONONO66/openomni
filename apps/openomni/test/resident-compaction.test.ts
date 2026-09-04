@@ -6,7 +6,6 @@ import { createCompactionPolicy } from "@openomni/agent";
 import type { Sink } from "@openomni/llm";
 import { initialize, Storage } from "@openomni/ledger";
 import type { Gateway } from "@openomni/protocol";
-import { createPolicyRegistry } from "../src/composition/policy-registry";
 import { createResident } from "../src/resident";
 import { assistantMessage } from "./helpers/assistant-message";
 
@@ -49,15 +48,13 @@ function delivery(sessionId: string, payload: string, id: string): Gateway.Deliv
 }
 
 function residentPolicies() {
-  const policies = createPolicyRegistry({ mandatory: ["compaction"] });
-  policies.register("compaction", (run) =>
+  return [
     createCompactionPolicy({
-      events: run.events,
+      events: { publish: () => undefined },
       priority: 900,
       elideToolOutputs: { minOutputChars: 4000, keepHeadChars: 500 },
     }),
-  );
-  return policies;
+  ];
 }
 
 describe("Resident compaction", () => {
@@ -70,7 +67,7 @@ describe("Resident compaction", () => {
     const seed = createResident({
       model: { provider: "fake", id: "resident-test" },
       apiKey: "test-key",
-      policies: createPolicyRegistry({ mandatory: [] }),
+      middleware: [],
       tools: {},
       targets: () => [],
       llm: {
@@ -101,7 +98,7 @@ describe("Resident compaction", () => {
     const resident = createResident({
       model: { provider: "fake", id: "resident-test" },
       apiKey: "test-key",
-      policies: residentPolicies(),
+      middleware: residentPolicies(),
       tools: {},
       targets: () => [],
       llm: {
