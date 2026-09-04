@@ -454,6 +454,104 @@ describe("durable session handle", () => {
     expect(maximumActive).toBe(1);
   });
 
+  test("configure during the ignored-abort window keeps the lease held by the live runner", async () => {
+    const entered = signal<void>();
+    const abortSeen = signal<void>();
+    const releaseRunner = signal<void>();
+    let active = 0;
+    let maximumActive = 0;
+    const runner: SessionRunner = async (input) => {
+      active += 1;
+      maximumActive = Math.max(maximumActive, active);
+      input.signal.addEventListener("abort", () => abortSeen.resolve(), { once: true });
+      entered.resolve();
+      await releaseRunner.promise;
+      active -= 1;
+      return { kind: "result", text: "late" };
+    };
+    const handle = session(residentOptions("configure-in-interrupt-window", runner), runtime);
+
+    const running = handle.prompt("start");
+    await bounded(entered.promise, "runner entry");
+    const interrupted = handle.interrupt();
+    await bounded(abortSeen.promise, "runner abort signal");
+    expect(handle.get().state).toBe("interrupted");
+    const fenceBefore = handle.get().lease.fence;
+
+    // A configure while the abort-ignoring runner is still alive must neither
+    // rotate the fence nor release the lease: the live executor still owns it.
+    const receipt = await bounded(handle.tools.add([tool("search")]), "configure receipt");
+    expect(receipt.generation).toBeGreaterThan(0);
+    const afterConfigure = handle.get();
+    expect(afterConfigure.lease.fence).toBe(fenceBefore);
+    expect(afterConfigure.lease.owner).not.toBeNull();
+    const contended = SessionHandleStore.acquireLease({
+      sessionId: handle.id,
+      owner: "second-runtime",
+      expectedFence: afterConfigure.lease.fence,
+      now,
+      expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
+    });
+    expect(contended.ok).toBe(false);
+    expect(maximumActive).toBe(1);
+
+    releaseRunner.resolve();
+    await bounded(Promise.all([running, interrupted]), "interrupted runner settlement");
+    const afterSettle = SessionHandleStore.acquireLease({
+      sessionId: handle.id,
+      owner: "second-runtime",
+      expectedFence: handle.get().lease.fence,
+      now,
+      expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
+    });
+    expect(afterSettle.ok).toBe(true);
+    expect(maximumActive).toBe(1);
+  });
+
+  test("close() detaches from an abort-ignoring runner after the grace window and leaves the lease to lapse", async () => {
+    const entered = signal<void>();
+    const releaseRunner = signal<void>();
+    const runner: SessionRunner = async () => {
+      entered.resolve();
+      await releaseRunner.promise;
+      return { kind: "result", text: "late" };
+    };
+    const handle = session(
+      residentOptions("close-detaches-after-grace", runner),
+      { ...runtime, closeGraceMs: 0 },
+    );
+
+    const running = handle.prompt("start");
+    await bounded(entered.promise, "runner entry");
+    await bounded(handle.close(), "close with zero grace");
+
+    // Detached: the lease is still recorded for this owner (no hand-off while
+    // the runner may be alive) and lapses by TTL rather than by release.
+    const row = SessionHandleStore.row(handle.id);
+    expect(row.leaseOwner).not.toBeNull();
+    const withinTtl = SessionHandleStore.acquireLease({
+      sessionId: handle.id,
+      owner: "second-runtime",
+      expectedFence: row.leaseFence,
+      now,
+      expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
+    });
+    expect(withinTtl.ok).toBe(false);
+    const afterTtl = SessionHandleStore.acquireLease({
+      sessionId: handle.id,
+      owner: "second-runtime",
+      expectedFence: row.leaseFence,
+      now: now + SessionHandleStore.LEASE_TTL_MS + 1,
+      expiresAt: now + 2 * SessionHandleStore.LEASE_TTL_MS,
+    });
+    expect(afterTtl.ok).toBe(true);
+
+    // The late runner settlement must not disturb the new owner's lease.
+    releaseRunner.resolve();
+    await bounded(running.then(() => undefined, () => undefined), "late runner settlement");
+    expect(SessionHandleStore.row(handle.id).leaseOwner).toBe("second-runtime");
+  });
+
   test("heartbeat loss aborts the runner and the stale fence cannot seal its result", async () => {
     const entered = signal<SessionRunnerInput>();
     const aborted = signal<void>();

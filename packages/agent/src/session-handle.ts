@@ -89,6 +89,13 @@ export interface SessionRuntime {
   readonly authorizeConfigure?: SessionHandleStore.ConfigureAuthority;
   readonly scheduleHeartbeat?: (callback: () => void, intervalMs: number) => () => void;
   readonly onHibernate?: (sessionId: string) => void | Promise<void>;
+  /**
+   * How long `close()` waits for an abort-ignoring runner to settle before
+   * detaching. Defaults to the lease TTL: after detaching, the heartbeat stops
+   * and the durable lease lapses by TTL instead of being handed off while the
+   * runner may still be alive. `0` detaches immediately.
+   */
+  readonly closeGraceMs?: number;
 }
 
 interface SessionToolsHandle {
@@ -268,6 +275,12 @@ function createController(
   let released = false;
   let successor: SessionHandle | undefined;
   let stopHeartbeat: (() => void) | undefined;
+  // Set while a runner that ignored its abort is still alive after the
+  // interrupted terminal was sealed. It still holds the durable lease.
+  let liveInterruptRunner: Promise<SessionRunnerResult> | undefined;
+  // Set when close() gave up waiting for that runner: the lease is left to
+  // lapse by TTL and the runner's eventual settlement must not touch it.
+  let forceDetached = false;
 
   function replacement(): SessionHandle | undefined {
     if (closed) throw new Error(`session handle is closed: ${sessionId}`);
@@ -343,10 +356,27 @@ function createController(
         return;
       }
       controller?.abort();
+      const graceMs = runtime.closeGraceMs ?? SessionHandleStore.LEASE_TTL_MS;
+      let graceTimer: ReturnType<typeof setTimeout> | undefined;
+      const grace = new Promise<"grace">((resolve) => {
+        if (graceMs <= 0) {
+          resolve("grace");
+          return;
+        }
+        graceTimer = setTimeout(() => resolve("grace"), graceMs);
+        graceTimer.unref?.();
+      });
       try {
-        await active;
+        const settled = active?.then(
+          () => "settled" as const,
+          () => "settled" as const,
+        );
+        const outcome = settled === undefined ? "settled" : await Promise.race([settled, grace]);
+        if (outcome === "grace") forceDetached = true;
       } finally {
+        if (graceTimer !== undefined) clearTimeout(graceTimer);
         stopHeartbeat?.();
+        stopHeartbeat = undefined;
         released = true;
         lifecycle.release();
       }
@@ -597,7 +627,13 @@ function createController(
         now,
         expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
       });
-      if (!renewed) turnController.abort();
+      if (!renewed) {
+        // The lease was stolen or lapsed: this executor no longer owns the
+        // session. Stop renewing at once and abort the runner.
+        stopHeartbeat?.();
+        stopHeartbeat = undefined;
+        turnController.abort();
+      }
     }, SessionHandleStore.HEARTBEAT_INTERVAL_MS);
     let parentActionId = input.parentActionId;
     let boundaryActionId = input.boundaryActionId;
@@ -688,13 +724,17 @@ function createController(
       // lease (renewed by the heartbeat above). Wait for it to settle, then
       // stop the heartbeat and release the lease so a resume can only start
       // once this executor is genuinely gone — session-wide single flight.
+      liveInterruptRunner = interruptedRunner;
       await interruptedRunner.then(
         () => undefined,
         () => undefined,
       );
+      liveInterruptRunner = undefined;
       stopHeartbeat?.();
       stopHeartbeat = undefined;
-      await releaseHeldLease();
+      // If close() already detached, the heartbeat is stopped and the lease
+      // lapses by TTL; a release here would race a legitimate new owner.
+      if (!forceDetached) await releaseHeldLease();
     }
     return result;
   }
@@ -794,6 +834,8 @@ function createController(
 
   async function releaseHeldLease(): Promise<void> {
     const current = SessionHandleStore.row(sessionId);
+    // Lease already stolen or lapsed: nothing of ours left to release.
+    if (current.leaseOwner !== owner || current.leaseFence !== fence) return;
     const committed = SessionHandleStore.commit({
       sessionId,
       owner,
@@ -863,7 +905,13 @@ function createController(
       system: nextSystem,
       policyGeneration: previous.policyGeneration,
     });
-    const ownsRunningLease = current.state === "running" && current.leaseOwner === owner;
+    // This executor holds the live lease while a turn is running AND while an
+    // abort-ignoring runner is still alive after its interrupted terminal was
+    // sealed. In both cases keep the existing fence and never release: the
+    // runner's own settlement path owns the release (session-wide single flight).
+    const ownsRunningLease =
+      current.leaseOwner === owner &&
+      (current.state === "running" || liveInterruptRunner !== undefined);
     fence = ownsRunningLease ? current.leaseFence : acquire(current.leaseFence);
     const configured = SessionHandleStore.configureAction({
       id: entropy(),
