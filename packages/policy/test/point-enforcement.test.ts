@@ -98,6 +98,105 @@ describe("policy row compiler enforcement", () => {
     expect(error.ruleName).toBe(badRow.name);
   });
 
+  it.each([
+    ["generation_mismatch", atGeneration(compaction, 2)],
+    [
+      "invalid_match",
+      atGeneration(draft("bad-match", "tool", "pre", { type: "allow" }, { match: { op: "" } }), 1),
+    ],
+    ["invalid_verdict", atGeneration(draft("bad-verdict", "tool", "pre", { type: "unexpected" }), 1)],
+  ] as const)("rejects malformed rows with %s", (code, badRow) => {
+    const error = catchCompile(() =>
+      compilePolicySnapshot({
+        generation: 1,
+        rows: [atGeneration(compaction, 1), badRow],
+        mandatory: ["compaction"],
+      }),
+    );
+
+    expect(error.code).toBe(code);
+  });
+
+  it("requires approval before lower-priority rules can allow", () => {
+    const snapshot = compilePolicySnapshot({
+      generation: 1,
+      rows: [
+        atGeneration(compaction, 1),
+        atGeneration(
+          draft("approval", "tool", "pre", {
+            type: "require_approval",
+            reason: "operator",
+          }, { priority: 100 }),
+          1,
+        ),
+        atGeneration(draft("allow-after", "tool", "pre", { type: "allow" }), 1),
+      ],
+    });
+
+    expect(snapshot.evaluate(input)).toMatchObject({
+      verdict: "require_approval",
+      matchedRuleIds: ["approval"],
+      reason: "operator",
+    });
+  });
+
+  it("skips redaction paths that traverse non-objects", () => {
+    const snapshot = compilePolicySnapshot({
+      generation: 1,
+      rows: [
+        atGeneration(compaction, 1),
+        atGeneration(
+          draft("redact", "tool", "post", {
+            type: "transform",
+            name: "redact",
+            paths: ["secret.token", "list.token", "missing.token"],
+          }),
+          1,
+        ),
+      ],
+    });
+
+    expect(snapshot.evaluate({ ...input, phase: "post", value: { secret: null, list: [] } }).value).toEqual({
+      secret: null,
+      list: [],
+    });
+  });
+
+  it("reports append storage failures with the rejected row identity", async () => {
+    const source = new MemoryPolicyRows([atGeneration(compaction, 1)]);
+    source.append = () => false;
+    const compiler = createPolicyCompiler({ source });
+
+    let error: PolicyCompileError | undefined;
+    try {
+      await compiler.append([]);
+    } catch (caught) {
+      if (PolicyCompileError.isInstance(caught)) error = caught;
+    }
+
+    expect(error).toMatchObject({
+      data: { code: "snapshot_append_failed", generation: 2, ruleName: "compaction" },
+    });
+  });
+
+  it("reports append load failures as typed compile errors", async () => {
+    const source = new MemoryPolicyRows();
+    source.rows = () => {
+      throw new Error("unavailable");
+    };
+    const compiler = createPolicyCompiler({ source });
+
+    let error: PolicyCompileError | undefined;
+    try {
+      await compiler.append([]);
+    } catch (caught) {
+      if (PolicyCompileError.isInstance(caught)) error = caught;
+    }
+
+    expect(error?.code).toBe("snapshot_load_failed");
+    expect(error?.generation).toBe(0);
+  });
+
   it("ships every kernel limit as seeded policy data", () => {
     const snapshot = compilePolicySnapshot({
       generation: 1,

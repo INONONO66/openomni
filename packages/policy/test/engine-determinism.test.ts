@@ -100,6 +100,36 @@ describe("compiled policy snapshot determinism", () => {
     expect(snapshot.evaluate(request)).toEqual(before);
   });
 
+  it("captures verdict data without aliasing caller-owned nested values", () => {
+    const verdict = {
+      type: "transform",
+      name: "redact",
+      paths: ["credentials.password"],
+      replacement: "[redacted]",
+    };
+    const row = draft("redact-credentials", "tool", "post", verdict);
+    const snapshot = compilePolicySnapshot({
+      generation: 1,
+      rows: [atGeneration(compaction, 1), atGeneration(row, 1)],
+      mandatory: ["compaction"],
+    });
+    const requestWithCredentials: PolicyEvaluationInput = {
+      ...request,
+      phase: "post",
+      value: { credentials: { password: "secret", token: "keep" } },
+    };
+    const before = snapshot.evaluate(requestWithCredentials);
+
+    verdict.type = "deny";
+    verdict.paths[0] = "credentials.token";
+
+    expect(snapshot.evaluate(requestWithCredentials)).toEqual(before);
+    expect(snapshot.evaluate(requestWithCredentials)).toMatchObject({
+      verdict: "transform",
+      value: { credentials: { password: "[redacted]", token: "keep" } },
+    });
+  });
+
   it("reads exactly one kind/phase/op bucket and never reads storage on the hot path", () => {
     const unrelated = Array.from({ length: 220 }, (_, index) =>
       atGeneration(
