@@ -1,6 +1,6 @@
 # PROJECT KNOWLEDGE BASE
 
-Last verified against `kernel/944`: 2026-09-03 (built-in curated memory plus dormant agent, channel, ledger, protocol, and one-shot provisioning surfaces removed; keep this stamp current when editing - doc-state sync law).
+Last verified against `kernel/936`: 2026-09-04 (telemetry demoted into `packages/agent/src/observation`, policy rows compiled into immutable generations, tool dispatch centralized in the kernel executor; keep this stamp current when editing - doc-state sync law).
 
 ## OVERVIEW
 
@@ -17,7 +17,6 @@ openomni/
 │   ├── protocol/        # Zod schemas and cross-package contracts
 │   ├── policy/          # pure policy engine and effect composition
 │   ├── placement/       # pure model/tool target selection
-│   ├── telemetry/       # observation channel
 │   ├── ledger/          # durable stores and journal persistence
 │   ├── llm/             # provider I/O, transforms, retry, token/cost accounting
 │   ├── agent/           # generic durable-session mechanics, stateless ChatAgent loop, compaction

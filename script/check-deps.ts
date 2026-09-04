@@ -153,6 +153,31 @@ function parentTraversalDepth(importPath: string): number {
   return depth;
 }
 
+type ScannedSource = { filePath: string; source: string };
+
+/**
+ * Single owner of repository source traversal: one glob walk, one exclusion
+ * rule, one read. Every validator below consumes this instead of repeating the
+ * scan options.
+ */
+async function* scanRepositorySources(pattern: string): AsyncGenerator<ScannedSource> {
+  const sourceGlob = new Glob(pattern);
+
+  for await (const filePath of sourceGlob.scan({
+    cwd: ".",
+    absolute: false,
+    dot: false,
+    onlyFiles: true,
+    followSymlinks: false,
+  })) {
+    if (isExcludedFromScan(filePath)) {
+      continue;
+    }
+
+    yield { filePath, source: await Bun.file(filePath).text() };
+  }
+}
+
 async function validateDependencyDirection(): Promise<string[]> {
   const violations: string[] = [];
 
@@ -189,23 +214,11 @@ async function validateSourceImportDirection(): Promise<string[]> {
     srcPrefix: `${packageDirOf(rule)}/src/`,
   }));
   const importPattern = openomniBarrelImportPattern();
-  const sourceGlob = new Glob("**/*.ts");
 
-  for await (const filePath of sourceGlob.scan({
-    cwd: ".",
-    absolute: false,
-    dot: false,
-    onlyFiles: true,
-    followSymlinks: false,
-  })) {
-    if (isExcludedFromScan(filePath)) {
-      continue;
-    }
-
+  for await (const { filePath, source } of scanRepositorySources("**/*.ts")) {
     const owner = owners.find(({ srcPrefix }) => filePath.startsWith(srcPrefix));
     if (!owner) continue;
 
-    const source = await Bun.file(filePath).text();
     for (const match of source.matchAll(importPattern)) {
       const dep = match[1];
       if (dep && !isAllowedSourceDep(owner.rule, dep)) {
@@ -363,20 +376,10 @@ async function validateChannelsIntraPackageBanding(): Promise<string[]> {
   const violations: string[] = [];
   const importPattern = openomniBarrelImportPattern();
   const relativeImportPattern = /(?:from\s+|import\s+|import\s*\(\s*)["'](\.{1,2}\/[^"']*)["']/g;
-  const sourceGlob = new Glob(`${CHANNELS_SRC_PREFIX}**/*.ts`);
 
-  for await (const filePath of sourceGlob.scan({
-    cwd: ".",
-    absolute: false,
-    dot: false,
-    onlyFiles: true,
-    followSymlinks: false,
-  })) {
-    if (isExcludedFromScan(filePath)) {
-      continue;
-    }
-
-    const source = await Bun.file(filePath).text();
+  for await (const { filePath, source } of scanRepositorySources(
+    `${CHANNELS_SRC_PREFIX}**/*.ts`,
+  )) {
     for (const match of source.matchAll(importPattern)) {
       const dep = match[1];
       if (dep && isChannelsBandingViolation(filePath, dep)) {
@@ -406,20 +409,8 @@ async function validateDeepImports(): Promise<string[]> {
   // Matches both `from "@openomni/.../src/..."` and side-effect `import "@openomni/.../src/..."`
   const importPattern =
     /(?:from\s+|import\s+|import\s*\(\s*)["'](@openomni\/[^"']+\/src\/[^"']*)["']/g;
-  const sourceGlob = new Glob("**/*.ts");
 
-  for await (const filePath of sourceGlob.scan({
-    cwd: ".",
-    absolute: false,
-    dot: false,
-    onlyFiles: true,
-    followSymlinks: false,
-  })) {
-    if (isExcludedFromScan(filePath)) {
-      continue;
-    }
-
-    const source = await Bun.file(filePath).text();
+  for await (const { filePath, source } of scanRepositorySources("**/*.ts")) {
     for (const match of source.matchAll(importPattern)) {
       const importPath = match[1] as string;
       const line = lineNumberForOffset(source, match.index);
@@ -440,20 +431,8 @@ async function validateDeepImports(): Promise<string[]> {
 async function validateDeepRelativeImports(): Promise<string[]> {
   const violations: string[] = [];
   const importPattern = /(?:from\s+|import\s*\(\s*)["'](\.{2}\/[^"']*)["']/g;
-  const sourceGlob = new Glob("**/*.ts");
 
-  for await (const filePath of sourceGlob.scan({
-    cwd: ".",
-    absolute: false,
-    dot: false,
-    onlyFiles: true,
-    followSymlinks: false,
-  })) {
-    if (isExcludedFromScan(filePath)) {
-      continue;
-    }
-
-    const source = await Bun.file(filePath).text();
+  for await (const { filePath, source } of scanRepositorySources("**/*.ts")) {
     for (const match of source.matchAll(importPattern)) {
       const importPath = match[1] as string;
       const line = lineNumberForOffset(source, match.index);
@@ -478,20 +457,8 @@ async function validateDeepRelativeImports(): Promise<string[]> {
 
 async function validateGoldenPrinciples(): Promise<string[]> {
   const violations: string[] = [];
-  const sourceGlob = new Glob("**/*.ts");
 
-  for await (const filePath of sourceGlob.scan({
-    cwd: ".",
-    absolute: false,
-    dot: false,
-    onlyFiles: true,
-    followSymlinks: false,
-  })) {
-    if (isExcludedFromScan(filePath)) {
-      continue;
-    }
-
-    const source = await Bun.file(filePath).text();
+  for await (const { filePath, source } of scanRepositorySources("**/*.ts")) {
     const lines = source.split("\n");
 
     for (const [index, line] of lines.entries()) {

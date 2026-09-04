@@ -309,9 +309,10 @@ inventory above:
   routing in `dispatch/` re-reads the frozen stores via ledger with the
   wait-tier shadow preserved (recorded residue; the canonical lookup is the
   router's).
-- **channels test tier carries telemetry** (manifest devDependency, the
-  llm/agent precedent): ledger internals publish to the real Bus and the
-  moved suites observe it; `src/**` stays sink-injected and machine-checked.
+- **channels tests own their observation double** (no observation-package
+  devDependency exists to carry): the suites assert against an in-package sink
+  typed by `BusEvent` from `@openomni/protocol`, while `src/**` stays
+  sink-injected and machine-checked.
 - **messaging.sent/denied descriptors are protocol vocabulary** (the router
   band defines no zod schemas); names byte-frozen.
 - **The scoped append port is literal**: the router reaches the ledger's
