@@ -21,7 +21,9 @@ export {
   defineTool,
   eraseTool,
   MODEL_OUTPUT_MAX_CHARS,
+  ToolRefused,
   toolInputSchema,
+  toolIsSafe,
 } from "./tool-dispatcher";
 export type {
   CellToolDispatchResult,

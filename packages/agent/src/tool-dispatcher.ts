@@ -9,6 +9,18 @@ import { z } from "zod";
 
 export const MODEL_OUTPUT_MAX_CHARS = 32_000;
 
+export class ToolRefused extends Error {
+  constructor(toolName: string, reason: string) {
+    super(`${toolName} refused: ${reason}`);
+    this.name = "ToolRefused";
+  }
+}
+
+/** The single owner of the replay-safety derivation. */
+export function toolIsSafe(category: ToolDefinition<z.ZodType, z.ZodType>["category"]): boolean {
+  return category === "query";
+}
+
 export type ToolErrorKind =
   | "unknown_tool"
   | "invalid_input"
