@@ -18,6 +18,7 @@ Stage 3 centralizes the L2 execution verdict model and tool dispatch helpers in 
 
 ## Changed files
 
+- `.omo/epic930/936/stage-s3.md`
 - `apps/openomni/src/delegation/worker-loop.ts`
 - `apps/openomni/src/index.ts`
 - `apps/openomni/src/resident.ts`
