@@ -265,7 +265,7 @@ async function executeDefinition(
   if (timeoutMs === undefined) {
     return Promise.resolve(definition.execute(input, context)).then(
       (value) => ({ timedOut: false, value }) as const,
-      (error: unknown) => ({ timedOut: false, error }) as const,
+      (error: Error) => ({ timedOut: false, error }) as const,
     );
   }
 
@@ -275,7 +275,7 @@ async function executeDefinition(
   const scopedContext = { ...context, signal: controller.signal };
   const execution = Promise.resolve(definition.execute(input, scopedContext)).then(
     (value) => ({ timedOut: false, value }) as const,
-    (error: unknown) => ({ timedOut: false, error }) as const,
+    (error: Error) => ({ timedOut: false, error }) as const,
   );
   const timeout = Promise.withResolvers<{ readonly timedOut: true }>();
   const timer = setTimeout(() => {
