@@ -8,9 +8,11 @@ export type { CompactionOptions } from "./compaction";
 export { createSessionChatRunner } from "./session-chat-runner";
 export { closeSessions, session, sweepSessions } from "./session-handle";
 export { createExecutor, UnregisteredExecutionKindError } from "./executor";
-export type { ExecutionLedger } from "./executor";
+export type { ExecutionLedger, Executor } from "./executor";
 export {
   createDispatcher,
+  createTurnDispatcher,
+  currentExecutor,
   defineTool,
   eraseTool,
   HOST_TARGET,
@@ -18,11 +20,6 @@ export {
   ToolRefused,
   toolInputSchema,
   toolSpec,
-} from "./tool-dispatcher";
-export type {
-  ToolExecutionCommitter,
-  ToolExecutionObservation,
-  ToolPostPolicy,
 } from "./tool-dispatcher";
 export {
   Bus,

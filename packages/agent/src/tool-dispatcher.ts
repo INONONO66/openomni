@@ -1,8 +1,11 @@
 import type { Placement } from "@openomni/placement";
 import { AsyncLocalStorage } from "node:async_hooks";
+import type { CompiledPolicySnapshot } from "@openomni/policy";
 import {
   type AnyToolDefinition,
   type BusEvent,
+  type LedgerSession,
+  type ObservationSink,
   type PlainValue,
   PlainValueSchema,
   SessionGeneration,
@@ -13,7 +16,9 @@ import {
 } from "@openomni/protocol";
 import { z } from "zod";
 import {
+  createExecutor,
   createToolExecutionObservationOwner,
+  type ExecutionLedger,
   type Executor,
   type ToolExecutionObservationOwner,
 } from "./executor";
@@ -99,15 +104,32 @@ export function toolInputSchema(definition: AnyToolDefinition): JsonSchemaObject
 
 const activeExecutor = new AsyncLocalStorage<Executor>();
 
+/**
+ * The executor of the enclosing execution, for a consumer that must capture it
+ * synchronously and inject it into a dispatcher invoked later out of context
+ * (the code-mode cell door, whose kernel callbacks arrive after the run_code
+ * turn has returned). Fails closed when called with no active execution.
+ */
+export function currentExecutor(): Executor {
+  const executor = activeExecutor.getStore();
+  if (executor === undefined) {
+    throw new Error("currentExecutor() called outside an active execution");
+  }
+  return executor;
+}
+
 export function createDispatcher(
   definitions: readonly AnyToolDefinition[],
   options?: DispatcherOptions,
 ): Dispatcher {
   /**
    * The cell door builds its dispatcher at tool-definition time, long before any
-   * execution context exists, so the ambient executor must be resolved per
-   * dispatch. Resolving it once here would permanently capture `undefined` and
-   * make every in-cell tool call fail with "requires an executor".
+   * execution context exists, so the ambient executor is resolved per dispatch:
+   * an explicitly injected executor wins, otherwise the enclosing execution's
+   * executor is inherited (nested cell tools), otherwise the dispatch fails
+   * closed. Resolving once at construction would permanently capture
+   * `undefined`; a definition-keyed cache would leak a stale executor from an
+   * unrelated prior session into a context-less cell dispatch.
    */
   const resolveExecutor = (): Executor | undefined =>
     options?.executor ?? activeExecutor.getStore();
@@ -175,11 +197,7 @@ export function createDispatcher(
       return result;
     }
     if (outcome.status === "error") {
-      const result = failed(
-        call,
-        outcome.message,
-        outcome.refused ? "precondition_failed" : "execution_failed",
-      );
+      const result = failed(call, outcome.message, outcome.errorKind);
       executionObservations.completed(call, context, definition.name, startedAt, true);
       return result;
     }
@@ -208,6 +226,55 @@ export function createDispatcher(
     executeCell: (call, context) =>
       dispatch(call, context, "cell") as Promise<CellToolDispatchResult>,
   };
+}
+
+/**
+ * The per-turn identity and lease under which a dispatcher's tools commit.
+ * Mirrors the fields both the resident and worker runners already pin on their
+ * {@link SessionRunnerInput}, so composing the executor+dispatcher has one owner
+ * instead of being copied per role.
+ */
+export interface TurnDispatchInput {
+  readonly sessionId: string;
+  readonly role: LedgerSession.Role;
+  readonly actionId: string;
+  readonly policy: CompiledPolicySnapshot;
+  readonly ledger: ExecutionLedger;
+}
+
+/** The runtime clock/entropy/observation sink shared across a session's turns. */
+export interface TurnDispatchRuntime {
+  readonly observations: ObservationSink | BusEvent.Sink;
+  readonly clock?: () => number;
+  readonly entropy?: () => string;
+}
+
+/**
+ * Compose the per-turn executor and dispatcher for a prepared runner turn. Both
+ * the resident and worker runners build this identically; keeping it here makes
+ * "how a turn's tools commit durably" a single owner.
+ */
+export function createTurnDispatcher(
+  definitions: readonly AnyToolDefinition[],
+  input: TurnDispatchInput,
+  runtime: TurnDispatchRuntime,
+): Dispatcher {
+  return createDispatcher(definitions, {
+    executor: createExecutor({
+      policy: input.policy,
+      ledger: input.ledger,
+      observations: runtime.observations,
+      identity: {
+        sessionId: input.sessionId,
+        role: input.role,
+        parentActionId: input.actionId,
+      },
+      clock: runtime.clock ?? Date.now,
+      entropy: runtime.entropy ?? (() => crypto.randomUUID()),
+    }),
+    observations: runtime.observations,
+    ...(runtime.clock === undefined ? {} : { clock: runtime.clock }),
+  });
 }
 
 export function sessionTool(definition: AnyToolDefinition): SessionGeneration.Tool {
@@ -240,7 +307,11 @@ function executionContext(call: Tool.Call, context: DispatchContext): ToolExecut
 const ToolBodyOutcome = z.discriminatedUnion("status", [
   z.object({ status: z.literal("timed_out") }).strict(),
   z
-    .object({ status: z.literal("error"), message: z.string(), refused: z.boolean() })
+    .object({
+      status: z.literal("error"),
+      message: z.string(),
+      errorKind: z.enum(["precondition_failed", "execution_failed", "invalid_output"]),
+    })
     .strict(),
   z.object({ status: z.literal("success"), output: PlainValueSchema }).strict(),
 ]);
@@ -258,7 +329,7 @@ async function executeToolBody<In extends z.ZodType, Out extends z.ZodType>(
     return {
       status: "error",
       message: outcome.error.message,
-      refused: isToolRefusal(outcome.error),
+      errorKind: isToolRefusal(outcome.error) ? "precondition_failed" : "execution_failed",
     };
   }
   const parsedOutput = definition.output.safeParse(outcome.value);
@@ -267,7 +338,7 @@ async function executeToolBody<In extends z.ZodType, Out extends z.ZodType>(
     return {
       status: "error",
       message: `${definition.name} produced invalid output`,
-      refused: false,
+      errorKind: "invalid_output",
     };
   }
   return { status: "success", output: jsonOutput.data };

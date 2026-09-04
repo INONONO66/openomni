@@ -1,6 +1,9 @@
 import {
   createSessionChatRunner,
+  createTurnDispatcher,
+  HOST_TARGET,
   session,
+  sessionTool,
   type ChatAgentConfig,
   type SessionHandle,
   type SessionRunner,
@@ -15,7 +18,6 @@ import { observeComponent } from "../observation/component";
 import { buildAgentPrompt } from "../prompt/build";
 import { WORKER_PRESET } from "../prompt/roles";
 import { createTools } from "../tools/core/catalog";
-import { createDispatcher, HOST_TARGET, sessionTool } from "@openomni/agent";
 import { decideDrive, initialDriveState, type DriveState } from "./drive-loop";
 import { renderInstruction } from "./instruction";
 import type { InlineWorkerRunner } from "./inline-driver";
@@ -59,9 +61,9 @@ export function createInlineWorkerRunner(options: WorkerLoopOptions): SessionInl
       { delegation: options.kernel() },
       { role: "worker", depth, sessionId },
     );
-    const dispatcher = createDispatcher(definitions);
     const runner = createSessionChatRunner({
       prepare(input: SessionRunnerInput) {
+        const dispatcher = createTurnDispatcher(definitions, input, runtime);
         const toolNames = new Set(input.tools.map((tool) => tool.name));
         const tools = dispatcher.specs.filter((tool) => toolNames.has(tool.name));
         const traceId = newTraceId();
@@ -86,7 +88,7 @@ export function createInlineWorkerRunner(options: WorkerLoopOptions): SessionInl
             toolExecutor: (call, context) =>
               dispatcher.execute(call, {
                 sessionId: input.sessionId,
-                turnId: input.resultId,
+                turnId: input.turnId,
                 ...(context?.signal === undefined ? {} : { signal: context.signal }),
               }),
             model: options.model,

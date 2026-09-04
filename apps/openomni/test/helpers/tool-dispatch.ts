@@ -2,10 +2,15 @@ import { spyOn } from "bun:test";
 import type { Tool } from "@openomni/protocol";
 import type { DelegationOrigin } from "../../src/delegation/admission";
 import { createTools, type CatalogPorts } from "../../src/tools/core/catalog";
-import { createDispatcher } from "@openomni/agent";
+import { createDispatcher, type Executor } from "@openomni/agent";
 
 const RESIDENT: DelegationOrigin = { role: "resident", depth: 0, sessionId: "test" };
 let nextCallId = 0;
+const executor: Executor = {
+  async run(_request, body) {
+    return { terminal: "executed", value: await body() };
+  },
+};
 
 export function dispatchModelTool(
   name: string,
@@ -15,14 +20,14 @@ export function dispatchModelTool(
 ) {
   const persistentDispatcher =
     now === undefined
-      ? createDispatcher(createTools(ports, origin))
+      ? createDispatcher(createTools(ports, origin), { executor })
       : undefined;
   return async (input: unknown) => {
     const clock = now === undefined ? undefined : spyOn(Date, "now").mockImplementation(now);
     try {
       const dispatcher =
         persistentDispatcher ??
-        createDispatcher(createTools(ports, origin));
+        createDispatcher(createTools(ports, origin), { executor });
       return await dispatcher.execute(
         {
           id: `test-tool-call-${nextCallId++}`,

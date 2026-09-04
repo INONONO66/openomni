@@ -15,6 +15,7 @@ import {
   personManifestDigest,
   type ProvisionPort,
 } from "../src/tools/mutation/provision";
+import { executor } from "./helpers/executor";
 import { dispatchModelTool, modelToolOutput } from "./helpers/tool-dispatch";
 
 const NOW = 1_756_000_000_000;
@@ -122,9 +123,10 @@ describe("provision output boundary", () => {
   test("rejects malformed output through the dispatcher", async () => {
     const { port } = portWith();
     const tool = eraseTool(createProvisionTool(port));
-    const result = await createDispatcher([
-      { ...tool, execute: async () => ({ op: "status" }) },
-    ]).execute(
+    const result = await createDispatcher(
+      [{ ...tool, execute: async () => ({ op: "status" }) }],
+      { executor },
+    ).execute(
       {
         id: "provision-invalid-output",
         tool: "provision",

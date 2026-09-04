@@ -1,7 +1,7 @@
-import type { ChatAgentConfig } from "@openomni/agent";
+import type { ChatAgentConfig, Executor } from "@openomni/agent";
 import type { AnyToolDefinition, Machine } from "@openomni/protocol";
 import { z } from "zod";
-import { createDispatcher, defineTool } from "@openomni/agent";
+import { createDispatcher, currentExecutor, defineTool } from "@openomni/agent";
 import type { CellRegistry } from "../cell-registry";
 
 /** What running a cell needs, without knowing how the host is composed. */
@@ -28,11 +28,16 @@ function cellDoor(
   definitions: readonly AnyToolDefinition[],
   sessionId: string,
   cellId: string,
+  executor: Executor,
 ): NonNullable<ChatAgentConfig["toolExecutor"]> {
   const cellTools = definitions.filter(
     (tool) => tool.name !== RUN_CODE_TOOL_NAME && tool.visibility.cell.length > 0,
   );
-  const dispatcher = createDispatcher(cellTools);
+  // The cell door is invoked asynchronously by the kernel over IPC, after this
+  // run_code turn has returned and its ambient execution context is gone, so the
+  // executor must be captured now (while run_code itself is executing) and
+  // injected explicitly rather than inherited at call time.
+  const dispatcher = createDispatcher(cellTools, { executor });
   return async (call, context) =>
     dispatcher.executeCell(call, {
       sessionId,
@@ -84,7 +89,7 @@ export function createRunCodeTool(ports: CellPorts) {
       const cellId = ports.newCellId();
       ports.registry.bind(
         cellId,
-        cellDoor(ports.tools(ctx.sessionId), ctx.sessionId, cellId),
+        cellDoor(ports.tools(ctx.sessionId), ctx.sessionId, cellId, currentExecutor()),
         ctx,
       );
       try {

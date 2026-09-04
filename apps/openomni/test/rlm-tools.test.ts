@@ -11,6 +11,7 @@ import {
 } from "../src/tools/execution/llm";
 import type { RunInput } from "@openomni/llm";
 import { assistantMessage } from "./helpers/assistant-message";
+import { executor } from "./helpers/executor";
 import { dispatchModelTool, modelToolOutput } from "./helpers/tool-dispatch";
 
 const RESIDENT = { role: "resident", depth: 0, sessionId: "session-origin" } as const;
@@ -87,7 +88,7 @@ describe("the llm tool", () => {
       },
       RESIDENT,
     );
-    const dispatcher = createDispatcher(entries);
+    const dispatcher = createDispatcher(entries, { executor });
 
     const result = await dispatcher.execute(
       { id: "1", tool: LLM_TOOL_NAME, input: { prompts: ["hi"] } },
@@ -130,7 +131,7 @@ describe("the llm tool", () => {
 
   it("is host-placed: it survives the cell-door fold against the brain alone", async () => {
     const entries = createTools({ llm: async () => "ok" }, RESIDENT);
-    const dispatcher = createDispatcher(entries);
+    const dispatcher = createDispatcher(entries, { executor });
     // The exact fold run-code.ts's cellDoor performs: resolve against the
     // host target only, then gate execution on the offerable set.
     const door = placementGatedExecutor(

@@ -1,7 +1,9 @@
 import {
   createSessionChatRunner,
+  createTurnDispatcher,
   failureFacts,
   session,
+  sessionTool,
   type ChatAgentConfig,
   type SessionHandle,
   type SessionRunner,
@@ -21,7 +23,6 @@ import { buildAgentPrompt } from "./prompt/build";
 import { RESIDENT_PRESET } from "./prompt/roles";
 import type { CatalogPorts } from "./tools/core/catalog";
 import { createTools } from "./tools/core/catalog";
-import { createDispatcher, sessionTool } from "@openomni/agent";
 
 const EVIDENCE_ONLY_TOOL_REFUSAL =
   "tool execution denied: this turn is evidence-only and may not drive tools";
@@ -128,9 +129,9 @@ export function createResident(options: ResidentOptions): ResidentDelivery {
   function createBinding(sessionId: string): ResidentBinding {
     const origin: DelegationOrigin = { role: "resident", depth: 0, sessionId };
     const definitions = createTools(options.tools, origin);
-    const dispatcher = createDispatcher(definitions);
     const chatRunner = createSessionChatRunner({
       prepare(input) {
+        const dispatcher = createTurnDispatcher(definitions, input, runtime);
         const evidenceOnly = isEvidenceOnly(input);
         const toolNames = new Set(input.tools.map((tool) => tool.name));
         const tools = evidenceOnly
@@ -160,7 +161,7 @@ export function createResident(options: ResidentOptions): ResidentDelivery {
               : (call, context) =>
                   dispatcher.execute(call, {
                     sessionId: input.sessionId,
-                    turnId: input.resultId,
+                    turnId: input.turnId,
                     ...(context?.signal === undefined ? {} : { signal: context.signal }),
                   }),
             ...(options.middleware === undefined ? {} : { middleware: options.middleware }),

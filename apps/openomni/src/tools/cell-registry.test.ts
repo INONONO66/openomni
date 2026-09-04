@@ -1,9 +1,15 @@
 import { describe, expect, it } from "bun:test";
 import { z } from "zod";
 import { createCellRegistry } from "./cell-registry";
-import { createDispatcher, defineTool, eraseTool } from "@openomni/agent";
+import { createDispatcher, defineTool, eraseTool, type Executor } from "@openomni/agent";
 import type { Tool, ToolExecutionContext } from "@openomni/protocol";
 import { createRunCodeTool, type CellPorts } from "./execution/run-code";
+
+const executor: Executor = {
+  async run(_request, body) {
+    return { terminal: "executed", value: await body() };
+  },
+};
 
 const parent = (signal = new AbortController().signal): ToolExecutionContext => ({
   sessionId: "parent-session",
@@ -57,7 +63,7 @@ describe("cell registry dispatch", () => {
       }),
     );
     const registry = createCellRegistry();
-    const cellDispatcher = createDispatcher([definition]);
+    const cellDispatcher = createDispatcher([definition], { executor });
     registry.bind(
       "cell-a",
       (async (call: Tool.Call, context?: Tool.ExecutionContext) =>
@@ -105,7 +111,7 @@ describe("cell registry dispatch", () => {
       tools: () => [privateTool],
       newCellId: () => "settled-cell",
     };
-    const dispatcher = createDispatcher([eraseTool(createRunCodeTool(ports))]);
+    const dispatcher = createDispatcher([eraseTool(createRunCodeTool(ports))], { executor });
 
     await dispatcher.execute(
       { id: "run-code", tool: "run_code", input: { code: "1", timeoutMs: 1000 } },
@@ -126,10 +132,14 @@ describe("cell registry dispatch", () => {
     const registry = createCellRegistry();
     registry.bind(
       "resident-cell",
-      createDispatcher([valueTool("private", "resident")]).executeCell as never,
+      createDispatcher([valueTool("private", "resident")], { executor }).executeCell as never,
       parent(),
     );
-    registry.bind("worker-cell", createDispatcher([]).executeCell as never, parent());
+    registry.bind(
+      "worker-cell",
+      createDispatcher([], { executor }).executeCell as never,
+      parent(),
+    );
 
     expect(
       await registry.callTool({ cellId: "worker-cell", name: "private", arguments: {} }),

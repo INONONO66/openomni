@@ -1,67 +1,48 @@
-import { describe, expect, it, mock } from "bun:test";
-import { createDispatcher, defineTool, type ToolPostPolicy } from "../../../src/index";
-import type { PlainValue } from "@openomni/protocol";
+import { describe, expect, it } from "bun:test";
+import { createDispatcher, defineTool, type Executor, ToolRefused } from "../../../src/index";
 import { z } from "zod";
 
-function tool(value: () => Promise<PlainValue>) {
-  return defineTool({
-    name: "account",
-    description: "Read an account",
-    category: "query",
-    input: z.object({ id: z.string() }).strict(),
-    output: z.object({ id: z.string(), secret: z.string().optional() }).strict(),
-    visibility: { model: ["resident"], cell: ["resident"] },
-    execute: async () => value() as Promise<{ id: string; secret?: string }>,
-    render: (_args, result) => JSON.stringify(result),
-  });
-}
-
-const context = {
-  sessionId: "session-1",
-  turnId: "turn-1",
-  callId: "call-1",
-  signal: new AbortController().signal,
+const blockedPost: Executor = {
+  async run(_request, body) {
+    await body();
+    return {
+      terminal: "blocked_post",
+      disposition: "irreversible",
+      reason: "output_denied",
+    };
+  },
 };
 
-function call() {
-  return { id: "call-1", tool: "account", input: { id: "a-1" } };
-}
+const definition = defineTool({
+  name: "account",
+  description: "Read an account",
+  category: "query",
+  input: z.object({ id: z.string() }).strict(),
+  output: z.object({ id: z.string() }).strict(),
+  visibility: { model: ["resident"], cell: ["resident"] },
+  execute: async ({ id }) => ({ id }),
+  render: (_input, output) => output.id,
+});
+const call = { id: "call-1", tool: "account", input: { id: "a-1" } };
+const context = { sessionId: "session-1", turnId: "turn-1" };
 
-describe("typed native tool post dispatch", () => {
-  it("does not invoke post policy for invalid raw output", async () => {
-    const post = mock<ToolPostPolicy>(async ({ output }) => output);
-    const dispatcher = createDispatcher([tool(async () => ({ id: 1 }))], { post });
+describe("tool post-policy refusal", () => {
+  it("returns an error result through the model door", async () => {
+    const result = await createDispatcher([definition], { executor: blockedPost }).execute(
+      call,
+      context,
+    );
 
-    const result = await dispatcher.execute(call(), context);
-
-    expect(post).toHaveBeenCalledTimes(0);
-    expect(result).toMatchObject({ isError: true, errorKind: "invalid_output" });
-    expect(result.output).toBe("account produced invalid output");
+    expect(result).toMatchObject({ isError: true, errorKind: "precondition_failed" });
+    expect(result.output).toContain("output_denied");
   });
 
-  it("passes parsed typed output to post policy and splits model/cell returns", async () => {
-    const post = mock<ToolPostPolicy>(async ({ output }) => output);
-    const definition = tool(async () => ({ id: "a-1", secret: "token" }));
-    const dispatcher = createDispatcher([definition], { post });
+  it("throws through the cell door", () => {
+    const running = createDispatcher([definition], { executor: blockedPost }).executeCell(
+      call,
+      context,
+    );
 
-    const model = await dispatcher.execute(call(), context);
-    const cell = await dispatcher.executeCell(call(), context);
-
-    expect(post).toHaveBeenCalledTimes(2);
-    expect(post.mock.calls[0]?.[0].output).toEqual({ id: "a-1", secret: "token" });
-    expect(model.output).toBe('{"id":"a-1","secret":"token"}');
-    expect(cell.output).toEqual({ id: "a-1", secret: "token" });
-  });
-
-  it("fails invalid_output when a named post transform breaks the output schema", async () => {
-    const post: ToolPostPolicy = async () => ({ transform: "redact", paths: ["id"] });
-    const dispatcher = createDispatcher([tool(async () => ({ id: "a-1", secret: "token" }))], {
-      post,
-    });
-
-    const result = await dispatcher.execute(call(), context);
-
-    expect(result).toMatchObject({ isError: true, errorKind: "invalid_output" });
-    expect(result.output).toBe("account produced invalid output");
+    expect(running).rejects.toBeInstanceOf(ToolRefused);
   });
 });

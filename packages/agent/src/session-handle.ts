@@ -1,4 +1,5 @@
 import { SessionHandleStore } from "@openomni/ledger";
+import { createPolicyCompiler, type CompiledPolicySnapshot } from "@openomni/policy";
 import {
   Deadline,
   type Inbox,
@@ -34,10 +35,17 @@ interface SessionGetOptions {
   readonly turns?: number;
 }
 
+interface SessionActionCommitPort {
+  commit(action: LedgerAction.Append): Promise<LedgerAction.Receipt>;
+}
+
 export interface SessionRunnerInput {
   readonly sessionId: string;
   readonly role: LedgerSession.Role;
   readonly turnId: string;
+  readonly actionId: string;
+  readonly ledger: SessionActionCommitPort;
+  readonly policy: CompiledPolicySnapshot;
   readonly resultId: string;
   readonly parentActionId: string | null;
   readonly boundaryActionId: string | null;
@@ -198,10 +206,34 @@ export async function closeSessions(runtime: SessionRuntime): Promise<void> {
 
 class SessionRegistry {
   private readonly entries = new Map<string, RegistryEntry>();
+  private readonly policies = createPolicyCompiler({
+    source: {
+      append: () => false,
+      rows: (generation) => {
+        const rows = SessionHandleStore.policyRows(generation);
+        if (generation !== 0 || rows.length > 0) return rows;
+        return [
+          {
+            name: "compaction",
+            kind: "turn",
+            phase: "post",
+            match: { encodingVersion: 1, value: { op: "compaction" } },
+            verdict: { encodingVersion: 1, value: { type: "allow" } },
+            priority: 0,
+            generation,
+          },
+        ];
+      },
+    },
+  });
   private swept = false;
   private closed = false;
 
   constructor(private readonly runtime: SessionRuntime) {}
+
+  pinPolicy(generation: number): CompiledPolicySnapshot {
+    return this.policies.pin(generation);
+  }
 
   declare(options: SessionCreateOptions): SessionHandle {
     if (this.closed) throw new Error("session registry is closed");
@@ -265,7 +297,9 @@ class SessionRegistry {
         if (controller !== undefined && entry?.controller === controller) this.entries.delete(id);
       },
     };
-    controller = createController(id, runner, this.runtime, lifecycle);
+    controller = createController(id, runner, this.runtime, lifecycle, (generation) =>
+      this.pinPolicy(generation),
+    );
     const entry = { runner, controller };
     this.entries.set(id, entry);
     return entry;
@@ -277,6 +311,7 @@ function createController(
   runner: SessionRunner,
   runtime: SessionRuntime,
   lifecycle: SessionControllerLifecycle,
+  pinPolicy: (generation: number) => CompiledPolicySnapshot,
 ): SessionController {
   const clock = runtime.clock ?? Date.now;
   const entropy = runtime.entropy ?? (() => crypto.randomUUID());
@@ -686,10 +721,34 @@ function createController(
           { once: true },
         );
       });
+      const ledger: SessionActionCommitPort = {
+        async commit(action) {
+          const current = SessionHandleStore.row(sessionId);
+          const committed = SessionHandleStore.commit({
+            sessionId,
+            owner,
+            fence,
+            now: clock(),
+            expectedRevision: current.revision,
+            actions: [action],
+            consumeInboxIds: [],
+            state: "running",
+            releaseLease: false,
+          });
+          requireCommit(committed);
+          if (!committed.ok) throw new SessionCommitError(committed);
+          const receipt = committed.receipts[0];
+          if (receipt === undefined) throw new Error("single-action commit returned no receipt");
+          return receipt;
+        },
+      };
       const running = runner({
         sessionId,
         role: row.role,
         turnId: input.turnId,
+        actionId: input.parentActionId,
+        ledger,
+        policy: pinPolicy(input.generation.policyGeneration),
         resultId: input.resultId,
         parentActionId,
         boundaryActionId,

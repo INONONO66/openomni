@@ -4,6 +4,7 @@ import { Bus } from "@openomni/agent";
 import { createApprovalTool, type ApprovalPort } from "../src/tools/authority/approval";
 import { createTools } from "../src/tools/core/catalog";
 import { createDispatcher, eraseTool } from "@openomni/agent";
+import { executor } from "./helpers/executor";
 import { dispatchModelTool, modelToolOutput } from "./helpers/tool-dispatch";
 
 /**
@@ -97,9 +98,10 @@ async function requestPromotion(at = T0): Promise<string> {
 describe("approval output boundary", () => {
   it("rejects malformed output through the dispatcher", async () => {
     const tool = eraseTool(createApprovalTool(port));
-    const result = await createDispatcher([
-      { ...tool, execute: async () => ({ op: "request" }) },
-    ]).execute(
+    const result = await createDispatcher(
+      [{ ...tool, execute: async () => ({ op: "request" }) }],
+      { executor },
+    ).execute(
       {
         id: "approval-invalid-output",
         tool: "approval",
