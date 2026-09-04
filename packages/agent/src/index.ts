@@ -8,54 +8,29 @@ export type { CompactionOptions } from "./compaction";
 export { createSessionChatRunner } from "./session-chat-runner";
 export { closeSessions, session, sweepSessions } from "./session-handle";
 export { createExecutor, UnregisteredExecutionKindError } from "./executor";
-export type {
-  ExecutionIdentity,
-  ExecutionKindRegistration,
-  ExecutionLedger,
-  ExecutionRequest,
-  ExecutionResult,
-  Executor,
-  ExecutorOptions,
-} from "./executor";
+export type { ExecutionLedger } from "./executor";
 export {
   createDispatcher,
   defineTool,
   eraseTool,
   HOST_TARGET,
-  MODEL_OUTPUT_MAX_CHARS,
   sessionTool,
   ToolRefused,
   toolInputSchema,
-  toolIsSafe,
   toolSpec,
 } from "./tool-dispatcher";
 export type {
-  CellToolDispatchResult,
-  Dispatcher,
-  DispatcherOptions,
-  ToolDispatchResult,
-  ToolErrorKind,
   ToolExecutionCommitter,
   ToolExecutionObservation,
-  ToolPostInput,
   ToolPostPolicy,
-  ToolPostResult,
 } from "./tool-dispatcher";
 export {
   Bus,
   collector,
   createObservationBus,
   newTraceId,
-  noopObservationSink,
   noopSink,
-  observationCollector,
-  scope,
   scopeObservation,
-} from "./observation/bus";
-export type {
-  CollectingObservationSink,
-  ObservationBus,
-  ScopeObservationOptions,
 } from "./observation/bus";
 export type {
   SessionHandle,

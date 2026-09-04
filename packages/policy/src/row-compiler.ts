@@ -10,17 +10,16 @@ import {
 } from "@openomni/protocol";
 import { z } from "zod";
 
-export const MANDATORY_RULE_NAMES = ["compaction"] as const;
+const MANDATORY_RULE_NAMES = ["compaction"] as const;
 export type RuleName = (typeof MANDATORY_RULE_NAMES)[number];
 
-export const TRANSFORMER_NAMES = ["redact"] as const;
-export type TransformerName = (typeof TRANSFORMER_NAMES)[number];
+const TRANSFORMER_NAMES = ["redact"] as const;
+type TransformerName = (typeof TRANSFORMER_NAMES)[number];
 
-export const OBLIGATION_NAMES = ["budget_clamp"] as const;
-export type ObligationName = (typeof OBLIGATION_NAMES)[number];
+const OBLIGATION_NAMES = ["budget_clamp"] as const;
+type ObligationName = (typeof OBLIGATION_NAMES)[number];
 
-export const CORE_ACTION_KINDS = ["prompt", "turn", "llm", "tool"] as const;
-export type CoreActionKind = (typeof CORE_ACTION_KINDS)[number];
+const CORE_ACTION_KINDS = ["prompt", "turn", "llm", "tool"] as const;
 
 const CompileErrorCode = z.enum([
   "generation_mismatch",
@@ -169,13 +168,13 @@ export interface PolicyEvaluationInput {
   readonly value: PlainValue;
 }
 
-export interface CompiledObligation {
+interface CompiledObligation {
   readonly name: ObligationName;
   readonly metric: z.infer<typeof ObligationVerdict>["metric"];
   readonly limit: number;
 }
 
-export type EffectiveRowVerdict =
+type EffectiveRowVerdict =
   | "allow"
   | "deny"
   | "require_approval"

@@ -64,7 +64,7 @@ export namespace Bus {
     readonly visibility?: BusEvent.Visibility;
   }
 
-  export function publish<T>(event: BusEvent.Descriptor<T>, data: T): void {
+  function publish<T>(event: BusEvent.Descriptor<T>, data: T): void {
     const state = currentState();
     const subs = state.subscribers.get(event.name);
     if (state.observers.size > 0) {
@@ -137,7 +137,7 @@ export namespace Bus {
     };
   }
 
-  export function observe(handler: Observer): () => void {
+  function observe(handler: Observer): () => void {
     const state = currentState();
     state.observers.add(handler);
     return () => {
@@ -152,7 +152,7 @@ export namespace Bus {
   }
 
   /** Diagnostic counters for tests; no runtime consumer exists today. Not control-flow state. */
-  export function stats(): {
+  function stats(): {
     readonly subscriberEventCount: number;
     readonly subscriberCount: number;
     readonly observerCount: number;
@@ -170,7 +170,7 @@ export namespace Bus {
     };
   }
 
-  export function withIsolation<T>(operation: () => T): T {
+  function withIsolation<T>(operation: () => T): T {
     return busScope.run(createState(), operation);
   }
 

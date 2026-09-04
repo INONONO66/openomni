@@ -24,7 +24,7 @@ export class UnregisteredExecutionKindError extends Error {
   }
 }
 
-export interface ExecutionKindRegistration {
+interface ExecutionKindRegistration {
   readonly kind: string;
   readonly effect: PlainValue;
   readonly reversible: boolean;
@@ -35,13 +35,13 @@ export interface ExecutionLedger {
   commit(action: LedgerAction.Append): Promise<LedgerAction.Receipt>;
 }
 
-export interface ExecutionIdentity {
+interface ExecutionIdentity {
   readonly sessionId: string;
   readonly role: LedgerSession.Role;
   readonly parentActionId: string | null;
 }
 
-export interface ExecutionRequest {
+interface ExecutionRequest {
   readonly kind: string;
   readonly op: string;
   readonly intent: PlainValue;
@@ -49,7 +49,7 @@ export interface ExecutionRequest {
   readonly revert?: () => void | Promise<void>;
 }
 
-export type ExecutionResult<T> =
+type ExecutionResult<T> =
   | { readonly terminal: "blocked_pre"; readonly reason: string }
   | { readonly terminal: "executed"; readonly value: T }
   | {

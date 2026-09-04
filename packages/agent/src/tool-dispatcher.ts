@@ -14,7 +14,7 @@ import {
   type ToolExecutionObservationOwner,
 } from "./executor";
 
-export const MODEL_OUTPUT_MAX_CHARS = 32_000;
+const MODEL_OUTPUT_MAX_CHARS = 32_000;
 export const HOST_TARGET: Placement.ToolTarget = { kind: "host", capabilities: [] };
 
 export class ToolRefused extends Error {
@@ -25,29 +25,29 @@ export class ToolRefused extends Error {
 }
 
 /** The single owner of the replay-safety derivation. */
-export function toolIsSafe(category: ToolCategory): boolean {
+function toolIsSafe(category: ToolCategory): boolean {
   return category === "query";
 }
 
-export type ToolErrorKind =
+type ToolErrorKind =
   | "unknown_tool"
   | "invalid_input"
   | "precondition_failed"
   | "execution_failed"
   | "invalid_output";
 
-export type ToolDispatchResult = Tool.Result & { readonly errorKind?: ToolErrorKind };
-export type CellToolDispatchResult = Omit<ToolDispatchResult, "output"> & {
+type ToolDispatchResult = Tool.Result & { readonly errorKind?: ToolErrorKind };
+type CellToolDispatchResult = Omit<ToolDispatchResult, "output"> & {
   readonly output: unknown;
 };
 
-export interface ToolPostInput {
+interface ToolPostInput {
   readonly call: Tool.Call;
   readonly output: unknown;
   readonly context: ToolExecutionContext;
 }
 
-export type ToolPostResult =
+type ToolPostResult =
   | unknown
   | { readonly transform: "redact"; readonly paths: readonly string[] };
 export type ToolPostPolicy = (input: ToolPostInput) => Promise<ToolPostResult>;

@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { normalizeKnipIssues, runKnip } from "./check-dead-exports";
-import type { AnyToolDefinition, ToolCategory } from "../apps/openomni/src/tools/core/define";
+import type { AnyToolDefinition, ToolCategory } from "../packages/protocol/src/tool/index";
 import {
   definitionInvariantViolations,
   diffToolSchemaSnapshots,

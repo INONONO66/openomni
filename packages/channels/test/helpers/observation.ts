@@ -108,7 +108,7 @@ export namespace Bus {
     }
   }
 
-  export function subscribe<T>(
+  function subscribe<T>(
     event: BusEvent.Descriptor<T>,
     handler: (data: T) => void,
     options?: { match?: Partial<T> },
@@ -152,7 +152,7 @@ export namespace Bus {
   }
 
   /** Diagnostic counters for tests; no runtime consumer exists today. Not control-flow state. */
-  export function stats(): {
+  function stats(): {
     readonly subscriberEventCount: number;
     readonly subscriberCount: number;
     readonly observerCount: number;
@@ -184,13 +184,13 @@ export namespace Bus {
   }
 }
 
-export interface Collector extends BusEvent.Sink {
+interface Collector extends BusEvent.Sink {
   readonly events: readonly { readonly name: string; readonly data: Bus.Data }[];
   named(name: string): readonly Bus.Data[];
   reset(): void;
 }
 
-export function collector(): Collector {
+function collector(): Collector {
   const events: Array<{ readonly name: string; readonly data: Bus.Data }> = [];
   return {
     publish(event, data) {
@@ -204,6 +204,6 @@ export function collector(): Collector {
   };
 }
 
-export function newTraceId(): string {
+function newTraceId(): string {
   return crypto.randomUUID().replaceAll("-", "");
 }
