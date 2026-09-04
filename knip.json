@@ -1,14 +1,7 @@
 {
   "$schema": "https://unpkg.com/knip/schema.json",
-  "ignoreBinaries": [
-    "lefthook",
-    "mkfifo",
-    "tsc",
-    "turbo"
-  ],
-  "ignore": [
-    "**/*.bench.ts"
-  ],
+  "ignoreBinaries": ["lefthook", "mkfifo", "tsc", "turbo"],
+  "ignore": ["**/*.bench.ts"],
   "ignoreDependencies": [
     "@biomejs/biome",
     "@commitlint/cli",
@@ -24,13 +17,7 @@
         "lefthook.yml",
         "commitlint.config.*"
       ],
-      "project": [
-        "script/**/*.ts",
-        "*.json",
-        "*.jsonc",
-        "*.yml",
-        "*.yaml"
-      ]
+      "project": ["script/**/*.ts", "*.json", "*.jsonc", "*.yml", "*.yaml"]
     },
     "apps/desktop": {
       "entry": [
@@ -40,116 +27,49 @@
         "electron.vite.config.ts",
         "test/**/*.test.ts"
       ],
-      "project": [
-        "src/**/*.{ts,tsx}",
-        "test/**/*.ts"
-      ],
-      "ignoreDependencies": [
-        "tailwindcss"
-      ]
+      "project": ["src/**/*.{ts,tsx}", "test/**/*.ts"],
+      "ignoreDependencies": ["tailwindcss"]
     },
     "apps/openomni": {
-      "entry": [
-        "src/index.ts",
-        "test/**/*.test.ts"
-      ],
-      "project": [
-        "src/**/*.ts",
-        "test/**/*.ts"
-      ]
+      "entry": ["src/index.ts", "test/**/*.test.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts"]
     },
     "packages/agent": {
-      "entry": [
-        "src/index.ts",
-        "test/**/*.test.ts"
-      ],
-      "project": [
-        "src/**/*.ts",
-        "test/**/*.ts"
-      ]
+      "entry": ["src/index.ts", "test/**/*.test.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts"]
     },
     "packages/channels": {
-      "entry": [
-        "src/index.ts",
-        "test/**/*.test.ts"
-      ],
-      "project": [
-        "src/**/*.ts",
-        "test/**/*.ts"
-      ]
+      "entry": ["src/index.ts", "test/**/*.test.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts"]
     },
     "packages/ipc": {
-      "entry": [
-        "src/index.ts",
-        "test/**/*.test.ts"
-      ],
-      "project": [
-        "src/**/*.ts",
-        "test/**/*.ts"
-      ],
-      "ignore": [
-        "test/typed-facade-fixtures/**"
-      ]
+      "entry": ["src/index.ts", "test/**/*.test.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts"],
+      "ignore": ["test/typed-facade-fixtures/**"]
     },
     "packages/ledger": {
-      "entry": [
-        "src/index.ts",
-        "test/**/*.test.ts"
-      ],
-      "project": [
-        "src/**/*.ts",
-        "test/**/*.ts"
-      ]
+      "entry": ["src/index.ts", "test/**/*.test.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts"]
     },
     "packages/llm": {
-      "entry": [
-        "src/index.ts",
-        "test/**/*.test.ts"
-      ],
-      "project": [
-        "src/**/*.ts",
-        "test/**/*.ts"
-      ]
+      "entry": ["src/index.ts", "test/**/*.test.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts"]
     },
     "packages/machines": {
-      "entry": [
-        "src/index.ts",
-        "test/**/*.test.ts"
-      ],
-      "project": [
-        "src/**/*.ts",
-        "test/**/*.ts"
-      ]
+      "entry": ["src/index.ts", "test/**/*.test.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts"]
     },
     "packages/placement": {
-      "entry": [
-        "src/index.ts",
-        "test/**/*.test.ts"
-      ],
-      "project": [
-        "src/**/*.ts",
-        "test/**/*.ts"
-      ]
+      "entry": ["src/index.ts", "test/**/*.test.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts"]
     },
     "packages/policy": {
-      "entry": [
-        "src/index.ts",
-        "test/**/*.test.ts"
-      ],
-      "project": [
-        "src/**/*.ts",
-        "test/**/*.ts"
-      ]
+      "entry": ["src/index.ts", "test/**/*.test.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts"]
     },
     "packages/protocol": {
-      "entry": [
-        "src/index.ts",
-        "test/**/*.test.ts"
-      ],
-      "project": [
-        "src/**/*.ts",
-        "test/**/*.ts"
-      ]
+      "entry": ["src/index.ts", "test/**/*.test.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts"]
     }
   }
 }
