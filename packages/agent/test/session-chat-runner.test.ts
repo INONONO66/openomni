@@ -1,6 +1,18 @@
 import { describe, expect, it } from "bun:test";
+import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "@openomni/policy";
 import { createSessionChatRunner, noopSink, type SessionRunnerInput } from "../src/index";
-import { createMockLlmConfig, createStopOutcome, mockProviderData, mockProviderModel } from "./helpers/mock-llm";
+import {
+  createMockLlmConfig,
+  createStopOutcome,
+  type MockLlmFn,
+  mockProviderData,
+  mockProviderModel,
+} from "./helpers/mock-llm";
+
+const policy = compilePolicySnapshot({
+  generation: 0,
+  rows: SEEDED_POLICY_ROWS.map((row) => ({ ...row, generation: 0 })),
+});
 
 function input(
   boundary: SessionRunnerInput["boundary"],
@@ -10,6 +22,13 @@ function input(
     sessionId: "session-1",
     role: "resident",
     turnId: "turn-1",
+    actionId: "action-1",
+    ledger: {
+      commit: async () => {
+        throw new Error("session runner fixture does not commit ledger actions");
+      },
+    },
+    policy,
     resultId: "result-1",
     parentActionId: null,
     boundaryActionId: null,
@@ -26,7 +45,7 @@ function input(
   };
 }
 
-function config(run: NonNullable<ReturnType<typeof createMockLlmConfig>>["run"]) {
+function config(run: MockLlmFn) {
   return {
     events: noopSink(),
     model: { provider: "anthropic", id: mockProviderModel.id },
