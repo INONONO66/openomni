@@ -8,7 +8,18 @@ import {
   toolInputSchema,
   toolSpec,
 } from "../src/index";
+import type { Executor } from "../src/executor";
 import { z } from "zod";
+
+const executor: Executor = {
+  async run(_request, body) {
+    return { terminal: "executed", value: await body() };
+  },
+};
+
+function dispatcher(definitions: Parameters<typeof createDispatcher>[0]) {
+  return createDispatcher(definitions, { executor });
+}
 
 function definition(options: {
   readonly name?: string;
@@ -72,13 +83,13 @@ describe("tool dispatcher public contract", () => {
 
   it("classifies unknown tools and invalid inputs without invoking a tool", async () => {
     let executions = 0;
-    const dispatcher = createDispatcher([definition({ execute: () => {
+    const dispatch = dispatcher([definition({ execute: () => {
       executions += 1;
       return Promise.resolve("ok");
     } })]);
 
-    const unknown = await dispatcher.execute({ ...call, tool: "missing" }, context);
-    const invalid = await dispatcher.execute({ ...call, input: {} }, context);
+    const unknown = await dispatch.execute({ ...call, tool: "missing" }, context);
+    const invalid = await dispatch.execute({ ...call, input: {} }, context);
 
     expect(unknown).toMatchObject({ isError: true, errorKind: "unregistered_tool" });
     expect(invalid).toMatchObject({ isError: true, errorKind: "invalid_input" });
@@ -86,10 +97,10 @@ describe("tool dispatcher public contract", () => {
   });
 
   it("distinguishes explicit refusal from execution failure", async () => {
-    const refused = createDispatcher([
+    const refused = dispatcher([
       definition({ execute: async () => { throw new ToolRefused("echo", "unavailable"); } }),
     ]);
-    const failed = createDispatcher([
+    const failed = dispatcher([
       definition({ execute: () => Promise.reject(Symbol.for("failure")) }),
     ]);
 
@@ -105,12 +116,12 @@ describe("tool dispatcher public contract", () => {
 
   it("returns typed cell output and truncates oversized model output", async () => {
     const output = "x".repeat(40_000);
-    const dispatcher = createDispatcher([
+    const dispatch = dispatcher([
       definition({ execute: async () => output, render: (value) => value }),
     ]);
 
-    const cell = await dispatcher.executeCell(call, context);
-    const model = await dispatcher.execute(call, context);
+    const cell = await dispatch.executeCell(call, context);
+    const model = await dispatch.execute(call, context);
 
     expect(cell.output).toBe(output);
     expect(typeof model.output).toBe("string");
