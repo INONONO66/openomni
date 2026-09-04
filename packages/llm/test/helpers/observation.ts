@@ -134,41 +134,10 @@ function subscribe<T>(
   };
 }
 
-function observe(handler: Observer): () => void {
-  const state = currentState();
-  state.observers.add(handler);
-  return () => {
-    state.observers.delete(handler);
-  };
-}
-
 function reset(): void {
   const state = currentState();
   state.subscribers.clear();
   state.observers.clear();
-}
-
-/** Diagnostic counters for tests; no runtime consumer exists today. Not control-flow state. */
-function stats(): {
-  readonly subscriberEventCount: number;
-  readonly subscriberCount: number;
-  readonly observerCount: number;
-} {
-  const state = currentState();
-  let subscriberCount = 0;
-  for (const subs of state.subscribers.values()) {
-    subscriberCount += subs.size;
-  }
-
-  return {
-    subscriberEventCount: state.subscribers.size,
-    subscriberCount,
-    observerCount: state.observers.size,
-  };
-}
-
-function withIsolation<T>(operation: () => T): T {
-  return busScope.run(createState(), operation);
 }
 
 function matches<T>(data: T, match: Partial<T>): boolean {

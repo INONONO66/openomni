@@ -151,29 +151,6 @@ export namespace Bus {
     state.observers.clear();
   }
 
-  /** Diagnostic counters for tests; no runtime consumer exists today. Not control-flow state. */
-  function stats(): {
-    readonly subscriberEventCount: number;
-    readonly subscriberCount: number;
-    readonly observerCount: number;
-  } {
-    const state = currentState();
-    let subscriberCount = 0;
-    for (const subs of state.subscribers.values()) {
-      subscriberCount += subs.size;
-    }
-
-    return {
-      subscriberEventCount: state.subscribers.size,
-      subscriberCount,
-      observerCount: state.observers.size,
-    };
-  }
-
-  function withIsolation<T>(operation: () => T): T {
-    return busScope.run(createState(), operation);
-  }
-
   function matches<T>(data: T, match: Partial<T>): boolean {
     if (data === null || typeof data !== "object") return false;
     if (match === null || typeof match !== "object") return true;
@@ -184,26 +161,3 @@ export namespace Bus {
   }
 }
 
-interface Collector extends BusEvent.Sink {
-  readonly events: readonly { readonly name: string; readonly data: Bus.Data }[];
-  named(name: string): readonly Bus.Data[];
-  reset(): void;
-}
-
-function collector(): Collector {
-  const events: Array<{ readonly name: string; readonly data: Bus.Data }> = [];
-  return {
-    publish(event, data) {
-      events.push({ name: event.name, data: toBusData(data) });
-    },
-    events,
-    named: (name) => events.filter((event) => event.name === name).map((event) => event.data),
-    reset: () => {
-      events.length = 0;
-    },
-  };
-}
-
-function newTraceId(): string {
-  return crypto.randomUUID().replaceAll("-", "");
-}

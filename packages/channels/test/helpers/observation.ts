@@ -27,14 +27,6 @@ function toBusData<T>(value: T): BusData {
   return undefined;
 }
 
-function isEventData<T, U>(
-  expected: BusEvent.Descriptor<T>,
-  published: BusEvent.Descriptor<U>,
-  _data: U,
-): _data is U & T {
-  return expected.name === published.name;
-}
-
 interface Subscription {
   handler: Handler;
 }
@@ -108,35 +100,6 @@ export namespace Bus {
     }
   }
 
-  function subscribe<T>(
-    event: BusEvent.Descriptor<T>,
-    handler: (data: T) => void,
-    options?: { match?: Partial<T> },
-  ): () => void {
-    const state = currentState();
-    let subs = state.subscribers.get(event.name);
-    if (!subs) {
-      subs = new Set();
-      state.subscribers.set(event.name, subs);
-    }
-    const subscription: Subscription = {
-      handler: (publishedEvent, data) => {
-        if (!isEventData(event, publishedEvent, data)) return;
-        if (options?.match && !matches(data, options.match)) return;
-        handler(data);
-      },
-    };
-    subs.add(subscription);
-    const captured = subs;
-    const eventName = event.name;
-    return () => {
-      captured.delete(subscription);
-      if (captured.size === 0 && state.subscribers.get(eventName) === captured) {
-        state.subscribers.delete(eventName);
-      }
-    };
-  }
-
   export function observe(handler: Observer): () => void {
     const state = currentState();
     state.observers.add(handler);
@@ -151,59 +114,9 @@ export namespace Bus {
     state.observers.clear();
   }
 
-  /** Diagnostic counters for tests; no runtime consumer exists today. Not control-flow state. */
-  function stats(): {
-    readonly subscriberEventCount: number;
-    readonly subscriberCount: number;
-    readonly observerCount: number;
-  } {
-    const state = currentState();
-    let subscriberCount = 0;
-    for (const subs of state.subscribers.values()) {
-      subscriberCount += subs.size;
-    }
-
-    return {
-      subscriberEventCount: state.subscribers.size,
-      subscriberCount,
-      observerCount: state.observers.size,
-    };
-  }
-
   export function withIsolation<T>(operation: () => T): T {
     return busScope.run(createState(), operation);
   }
 
-  function matches<T>(data: T, match: Partial<T>): boolean {
-    if (data === null || typeof data !== "object") return false;
-    if (match === null || typeof match !== "object") return true;
-    for (const key of Object.keys(match)) {
-      if (Reflect.get(data, key) !== Reflect.get(match, key)) return false;
-    }
-    return true;
-  }
 }
 
-interface Collector extends BusEvent.Sink {
-  readonly events: readonly { readonly name: string; readonly data: Bus.Data }[];
-  named(name: string): readonly Bus.Data[];
-  reset(): void;
-}
-
-function collector(): Collector {
-  const events: Array<{ readonly name: string; readonly data: Bus.Data }> = [];
-  return {
-    publish(event, data) {
-      events.push({ name: event.name, data: toBusData(data) });
-    },
-    events,
-    named: (name) => events.filter((event) => event.name === name).map((event) => event.data),
-    reset: () => {
-      events.length = 0;
-    },
-  };
-}
-
-function newTraceId(): string {
-  return crypto.randomUUID().replaceAll("-", "");
-}
