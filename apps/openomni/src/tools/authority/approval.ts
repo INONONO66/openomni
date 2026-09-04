@@ -2,7 +2,7 @@ import { newTraceId } from "@openomni/agent";
 import type { ActorRegistry, ApprovalStore } from "@openomni/ledger";
 import type { Approval } from "@openomni/protocol";
 import { z } from "zod";
-import { defineTool, ToolRefused } from "../core/define";
+import { defineTool, ToolRefused } from "@openomni/agent";
 
 /**
  * Resident-facing approval lane (#P3, docs/conversation-and-message-io.md

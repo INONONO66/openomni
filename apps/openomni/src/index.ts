@@ -64,7 +64,7 @@ import { createPolicyRegistry } from "./composition/policy-registry";
 import { createDriverRegistry } from "./composition/driver-registry";
 import { buildInboundEvent } from "./inbound";
 import { createResident, type ResidentDelivery } from "./resident";
-import { HOST_TARGET } from "./tools/core/dispatch";
+import { HOST_TARGET } from "@openomni/agent";
 import { createCellRegistry } from "./tools/cell-registry";
 import type { CellPorts } from "./tools/execution/run-code";
 
@@ -260,7 +260,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
     });
     const sessionTools = new Map<
       string,
-      readonly import("./tools/core/define").AnyToolDefinition[]
+      readonly import("@openomni/protocol").AnyToolDefinition[]
     >();
     const sessionRuntime: SessionRuntime = { observations: Bus };
     await composer.mount("session.handles", (ctx) => {

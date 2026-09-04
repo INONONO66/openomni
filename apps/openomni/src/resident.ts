@@ -22,8 +22,7 @@ import { buildAgentPrompt } from "./prompt/build";
 import { RESIDENT_PRESET } from "./prompt/roles";
 import type { CatalogPorts } from "./tools/core/catalog";
 import { createTools } from "./tools/core/catalog";
-import { createDispatcher } from "./tools/core/dispatch";
-import { sessionTool } from "./tools/core/project";
+import { createDispatcher, sessionTool } from "@openomni/agent";
 
 const EVIDENCE_ONLY_TOOL_REFUSAL =
   "tool execution denied: this turn is evidence-only and may not drive tools";
@@ -130,7 +129,7 @@ export function createResident(options: ResidentOptions): ResidentDelivery {
   function createBinding(sessionId: string): ResidentBinding {
     const origin: DelegationOrigin = { role: "resident", depth: 0, sessionId };
     const definitions = createTools(options.tools, origin);
-    const dispatcher = createDispatcher(definitions, sessionId);
+    const dispatcher = createDispatcher(definitions, { sessionId });
     const chatRunner = createSessionChatRunner({
       prepare(input) {
         const evidenceOnly = isEvidenceOnly(input);

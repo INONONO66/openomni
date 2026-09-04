@@ -6,7 +6,7 @@ import { attachMachineDaemon, createMachineHost, type MachineDaemon } from "@ope
 import type { Machine } from "@openomni/protocol";
 import type { DelegationOrigin } from "../src/delegation/admission";
 import type { CatalogPorts } from "../src/tools/core/catalog";
-import type { AnyToolDefinition } from "../src/tools/core/define";
+import type { AnyToolDefinition } from "@openomni/protocol";
 import { createCellRegistry } from "../src/tools/cell-registry";
 import type { CellPorts } from "../src/tools/execution/run-code";
 import { modelToolOutput } from "./helpers/tool-dispatch";

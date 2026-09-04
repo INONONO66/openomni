@@ -1,6 +1,6 @@
 import type { Delegation } from "@openomni/protocol";
 import { z } from "zod";
-import { defineTool, ToolRefused } from "../core/define";
+import { defineTool, ToolRefused } from "@openomni/agent";
 import type { DelegationOrigin } from "../../delegation/admission";
 import { type DelegationKernel, formatSettlement } from "../../delegation/kernel";
 

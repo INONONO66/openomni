@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { z } from "zod";
 import { createCellRegistry } from "./cell-registry";
-import { defineTool, eraseTool, type ToolExecutionContext } from "./core/define";
-import { createDispatcher } from "./core/dispatch";
+import { createDispatcher, defineTool, eraseTool } from "@openomni/agent";
+import type { ToolExecutionContext } from "@openomni/protocol";
 import { createRunCodeTool, type CellPorts } from "./execution/run-code";
 
 const parent = (signal = new AbortController().signal): ToolExecutionContext => ({
@@ -99,7 +99,7 @@ describe("cell registry dispatch", () => {
       tools: () => [privateTool],
       newCellId: () => "settled-cell",
     };
-    const dispatcher = createDispatcher([eraseTool(createRunCodeTool(ports))], "parent-session");
+    const dispatcher = createDispatcher([eraseTool(createRunCodeTool(ports))], { sessionId: "parent-session" });
 
     await dispatcher.execute(
       { id: "run-code", tool: "run_code", input: { code: "1", timeoutMs: 1000 } },

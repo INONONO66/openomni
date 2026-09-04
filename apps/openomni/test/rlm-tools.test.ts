@@ -2,8 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { placementGatedExecutor } from "@openomni/agent";
 import { Placement } from "@openomni/placement";
 import { createTools, collectToolSpecs } from "../src/tools/core/catalog";
-import { createDispatcher, HOST_TARGET } from "../src/tools/core/dispatch";
-import { toolSpec } from "../src/tools/core/project";
+import { createDispatcher, HOST_TARGET, toolSpec } from "@openomni/agent";
 import {
   createLlmToolPort,
   LLM_TOOL_NAME,
@@ -40,11 +39,11 @@ describe("the llm tool", () => {
     );
     expect(await run({ prompts: [""] })).toMatchObject({
       isError: true,
-      errorClass: "invalid_input",
+      errorKind: "invalid_input",
     });
     expect(await run({ prompts: ["ok"], extra: true })).toMatchObject({
       isError: true,
-      errorClass: "invalid_input",
+      errorKind: "invalid_input",
     });
     expect(invoked).toBe(0);
   });
@@ -70,7 +69,7 @@ describe("the llm tool", () => {
 
     expect(await run({ prompts: ["one too many"] })).toMatchObject({
       isError: true,
-      errorClass: "precondition_failed",
+      errorKind: "precondition_failed",
       output: `llm refused: the per-cell budget of ${MAX_LLM_CALLS} sub-model calls is spent`,
     });
     expect(invoked).toBe(MAX_LLM_CALLS);

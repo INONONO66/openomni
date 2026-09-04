@@ -20,10 +20,13 @@ export {
   createDispatcher,
   defineTool,
   eraseTool,
+  HOST_TARGET,
   MODEL_OUTPUT_MAX_CHARS,
+  sessionTool,
   ToolRefused,
   toolInputSchema,
   toolIsSafe,
+  toolSpec,
 } from "./tool-dispatcher";
 export type {
   CellToolDispatchResult,

@@ -3,8 +3,7 @@ import { ActorRegistry, ApprovalStore, Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/agent";
 import { createApprovalTool, type ApprovalPort } from "../src/tools/authority/approval";
 import { createTools } from "../src/tools/core/catalog";
-import { eraseTool } from "../src/tools/core/define";
-import { createDispatcher } from "../src/tools/core/dispatch";
+import { createDispatcher, eraseTool } from "@openomni/agent";
 import { dispatchModelTool, modelToolOutput } from "./helpers/tool-dispatch";
 
 /**
@@ -114,7 +113,7 @@ describe("approval output boundary", () => {
       toolName: "approval",
       output: "approval produced invalid output",
       isError: true,
-      errorClass: "invalid_output",
+      errorKind: "invalid_output",
     });
   });
 });
@@ -269,7 +268,7 @@ describe("approval tool boundary failures", () => {
         { approvals: port },
         RESIDENT,
       )({ op, args: {} });
-      expect(result).toMatchObject({ isError: true, errorClass: "invalid_input" });
+      expect(result).toMatchObject({ isError: true, errorKind: "invalid_input" });
       expect(result.output).toBeString();
     }
 

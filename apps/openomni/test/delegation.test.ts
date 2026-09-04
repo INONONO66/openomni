@@ -2,6 +2,7 @@ import { describe, expect, test, vi } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { toolSpec } from "@openomni/agent";
 import { DelegationStore, SqliteStorageAdapter, Storage } from "@openomni/ledger";
 import { admit, type AdmissionLimits } from "../src/delegation/admission";
 import { createChannelDriver } from "../src/delegation/channel-driver";
@@ -13,7 +14,6 @@ import {
   DELEGATE_TOOL_NAME,
 } from "../src/tools/authority/delegation";
 import { createTools } from "../src/tools/core/catalog";
-import { toolSpec } from "../src/tools/core/project";
 import { modelToolOutput } from "./helpers/tool-dispatch";
 import {
   awaitedReceipt,

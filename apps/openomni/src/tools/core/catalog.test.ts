@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { collectToolSpecs, TOOL_DEFINITIONS } from "./catalog";
-import { toolInputSchema } from "./project";
+import { toolInputSchema } from "@openomni/agent";
 
 const EXPECTED = [
   "delegate",

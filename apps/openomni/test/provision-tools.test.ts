@@ -9,8 +9,7 @@ import {
 } from "@openomni/ledger";
 import type { ChannelRuntimeStatus } from "../src/provisioning/supervisor";
 import { createTools } from "../src/tools/core/catalog";
-import { eraseTool } from "../src/tools/core/define";
-import { createDispatcher } from "../src/tools/core/dispatch";
+import { createDispatcher, eraseTool } from "@openomni/agent";
 import {
   createProvisionTool,
   personManifestDigest,
@@ -137,7 +136,7 @@ describe("provision output boundary", () => {
       toolName: "provision",
       output: "provision produced invalid output",
       isError: true,
-      errorClass: "invalid_output",
+      errorKind: "invalid_output",
     });
   });
 });
@@ -579,7 +578,7 @@ describe("refusal branches", () => {
         RESIDENT,
         () => NOW,
       )(typeof input === "object" ? { op: name, args: input } : input);
-      expect(result).toMatchObject({ isError: true, errorClass: "invalid_input" });
+      expect(result).toMatchObject({ isError: true, errorKind: "invalid_input" });
       expect(result.output).toContain("provision refused");
     }
   });

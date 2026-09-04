@@ -1,13 +1,17 @@
+import type { Placement } from "@openomni/placement";
 import {
   type AnyToolDefinition,
   type BusEvent,
+  SessionGeneration,
   Tool,
+  type ToolCategory,
   type ToolDefinition,
   type ToolExecutionContext,
 } from "@openomni/protocol";
 import { z } from "zod";
 
 export const MODEL_OUTPUT_MAX_CHARS = 32_000;
+export const HOST_TARGET: Placement.ToolTarget = { kind: "host", capabilities: [] };
 
 export class ToolRefused extends Error {
   constructor(toolName: string, reason: string) {
@@ -17,7 +21,7 @@ export class ToolRefused extends Error {
 }
 
 /** The single owner of the replay-safety derivation. */
-export function toolIsSafe(category: ToolDefinition<z.ZodType, z.ZodType>["category"]): boolean {
+export function toolIsSafe(category: ToolCategory): boolean {
   return category === "query";
 }
 
@@ -61,12 +65,15 @@ export interface DispatcherOptions {
   readonly observations?: ToolExecutionObservation;
   readonly clock?: () => number;
   readonly timeoutMs?: number;
+  readonly sessionId?: string;
 }
+
+type DispatchContext = ToolExecutionContext | Tool.ExecutionContext | undefined;
 
 export interface Dispatcher {
   readonly specs: readonly Tool.Spec[];
-  execute(call: Tool.Call, context: ToolExecutionContext): Promise<ToolDispatchResult>;
-  executeCell(call: Tool.Call, context: ToolExecutionContext): Promise<CellToolDispatchResult>;
+  execute(call: Tool.Call, context?: DispatchContext): Promise<ToolDispatchResult>;
+  executeCell(call: Tool.Call, context?: DispatchContext): Promise<CellToolDispatchResult>;
 }
 
 export function defineTool<In extends z.ZodType, Out extends z.ZodType>(
@@ -106,9 +113,10 @@ export function createDispatcher(
 
   async function dispatch(
     call: Tool.Call,
-    context: ToolExecutionContext,
+    providedContext: DispatchContext,
     door: "model" | "cell",
   ): Promise<ToolDispatchResult | CellToolDispatchResult> {
+    const context = executionContext(call, providedContext, options.sessionId);
     const definition = known.get(call.tool);
     if (definition === undefined) return failed(call, `unknown tool: ${call.tool}`, "unknown_tool");
     const parsedInput = definition.input.safeParse(call.input);
@@ -211,11 +219,46 @@ export function createDispatcher(
         name: definition.name,
         description: definition.description,
         inputSchema: toolInputSchema(definition),
-        safe: definition.category === "query",
+        safe: toolIsSafe(definition.category),
+        placement: "host",
       })),
     execute: (call, context) => dispatch(call, context, "model") as Promise<ToolDispatchResult>,
     executeCell: (call, context) =>
       dispatch(call, context, "cell") as Promise<CellToolDispatchResult>,
+  };
+}
+
+export function sessionTool(definition: AnyToolDefinition): SessionGeneration.Tool {
+  return SessionGeneration.Tool.parse({
+    name: definition.name,
+    inputSchema: toolInputSchema(definition),
+    category: definition.category,
+  });
+}
+
+export function toolSpec(definition: AnyToolDefinition): Tool.Spec {
+  return {
+    name: definition.name,
+    description: definition.description,
+    inputSchema: toolInputSchema(definition),
+    safe: toolIsSafe(definition.category),
+    placement: "host",
+  };
+}
+
+function executionContext(
+  call: Tool.Call,
+  context: DispatchContext,
+  sessionId: string | undefined,
+): ToolExecutionContext {
+  if (context !== undefined && "sessionId" in context) {
+    return { ...context, callId: call.id };
+  }
+  return {
+    sessionId: context?.traceContext?.sessionId ?? sessionId ?? "unknown-session",
+    turnId: context?.traceContext?.runId ?? "unknown-turn",
+    callId: call.id,
+    signal: context?.signal ?? new AbortController().signal,
   };
 }
 
@@ -225,6 +268,13 @@ async function executeDefinition(
   context: ToolExecutionContext,
   timeoutMs: number | undefined,
 ): Promise<{ readonly timedOut: boolean; readonly value?: unknown; readonly error?: unknown }> {
+  if (timeoutMs === undefined) {
+    return Promise.resolve(definition.execute(input, context)).then(
+      (value) => ({ timedOut: false, value }) as const,
+      (error: unknown) => ({ timedOut: false, error }) as const,
+    );
+  }
+
   const controller = new AbortController();
   const forwardAbort = () => controller.abort(context.signal.reason);
   context.signal.addEventListener("abort", forwardAbort, { once: true });
@@ -233,7 +283,6 @@ async function executeDefinition(
     (value) => ({ timedOut: false, value }) as const,
     (error: unknown) => ({ timedOut: false, error }) as const,
   );
-  if (timeoutMs === undefined) return execution.finally(() => context.signal.removeEventListener("abort", forwardAbort));
   const timeout = Promise.withResolvers<{ readonly timedOut: true }>();
   const timer = setTimeout(() => {
     controller.abort(new Error(`tool timed out after ${timeoutMs}ms`));

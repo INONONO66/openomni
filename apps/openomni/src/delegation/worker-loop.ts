@@ -15,8 +15,7 @@ import { observeComponent } from "../observation/component";
 import { buildAgentPrompt } from "../prompt/build";
 import { WORKER_PRESET } from "../prompt/roles";
 import { createTools } from "../tools/core/catalog";
-import { createDispatcher, HOST_TARGET } from "../tools/core/dispatch";
-import { sessionTool } from "../tools/core/project";
+import { createDispatcher, HOST_TARGET, sessionTool } from "@openomni/agent";
 import { decideDrive, initialDriveState, type DriveState } from "./drive-loop";
 import { renderInstruction } from "./instruction";
 import type { InlineWorkerRunner } from "./inline-driver";
@@ -60,7 +59,7 @@ export function createInlineWorkerRunner(options: WorkerLoopOptions): SessionInl
       { delegation: options.kernel() },
       { role: "worker", depth, sessionId },
     );
-    const dispatcher = createDispatcher(definitions, sessionId);
+    const dispatcher = createDispatcher(definitions, { sessionId });
     const runner = createSessionChatRunner({
       prepare(input: SessionRunnerInput) {
         const toolNames = new Set(input.tools.map((tool) => tool.name));

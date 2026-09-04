@@ -1,6 +1,6 @@
 import type { Machine } from "@openomni/protocol";
 import type { ChatAgentConfig } from "@openomni/agent";
-import type { ToolExecutionContext } from "./core/define";
+import type { ToolExecutionContext } from "@openomni/protocol";
 
 /**
  * Which tools a running cell may reach back for.

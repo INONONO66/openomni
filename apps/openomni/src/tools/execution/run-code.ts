@@ -1,8 +1,7 @@
 import type { ChatAgentConfig } from "@openomni/agent";
-import type { Machine } from "@openomni/protocol";
+import type { AnyToolDefinition, Machine } from "@openomni/protocol";
 import { z } from "zod";
-import { defineTool, type AnyToolDefinition } from "../core/define";
-import { createDispatcher } from "../core/dispatch";
+import { createDispatcher, defineTool } from "@openomni/agent";
 import type { CellRegistry } from "../cell-registry";
 
 /** What running a cell needs, without knowing how the host is composed. */
@@ -32,7 +31,7 @@ function cellDoor(
   const cellTools = definitions.filter(
     (tool) => tool.name !== RUN_CODE_TOOL_NAME && tool.visibility.cell.length > 0,
   );
-  const dispatcher = createDispatcher(cellTools, sessionId);
+  const dispatcher = createDispatcher(cellTools, { sessionId });
   return async (call, context) =>
     dispatcher.executeCell(call, context) as Promise<
       Awaited<ReturnType<NonNullable<ChatAgentConfig["toolExecutor"]>>>
