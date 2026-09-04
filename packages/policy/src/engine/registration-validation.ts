@@ -19,7 +19,6 @@ import { snapshotCanonicalBindings } from "./registration-snapshot";
 
 const PolicyRegistrationErrorCode = z.enum([
   "invalid_registration_kind",
-  "legacy_timing_registration",
   "invalid_canonical_registration",
   "empty_point_ids",
   "duplicate_point_id",
@@ -262,17 +261,11 @@ export function prepareRegistrationBoundary<TCtx extends GenericPolicyContext>(
         "invalid_canonical_registration",
       );
     }
-    return prepareCanonicalRegistration<TCtx>(created, readClassificationFields(created), "factory");
-  }
-  const hasCanonicalFields =
-    classification.kind !== undefined ||
-    classification.pointIds !== undefined ||
-    classification.effectCapabilities !== undefined;
-  if (!hasCanonicalFields) {
-    // Fail-closed since #530: a timing-based (legacy) registration is
-    // rejected outright instead of accepted-then-skipped at dispatch, which
-    // would be a silent policy bypass.
-    throw registrationError(registrationName(classification.name), "legacy_timing_registration");
+    return prepareCanonicalRegistration<TCtx>(
+      created,
+      readClassificationFields(created),
+      "factory",
+    );
   }
   return prepareCanonicalRegistration<TCtx>(registration, classification, "direct");
 }

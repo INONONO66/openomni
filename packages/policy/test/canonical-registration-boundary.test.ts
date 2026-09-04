@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { PolicyDecision } from "@openomni/protocol";
-import { PolicyEngine, PolicyRegistrationError } from "@openomni/policy";
-import { createPolicyRegistrationStore } from "../src/engine/registration";
+import { createPolicyEngine } from "../src/engine/dispatch";
+import { createPolicyRegistrationStore, PolicyRegistrationError } from "../src/engine/registration";
+
+const PolicyEngine = { create: createPolicyEngine };
 import { dispatchContext } from "./point-test-fixtures";
 
 const allow = () => PolicyDecision.allow({ policyId: "canonical.boundary.test" });
@@ -196,7 +198,7 @@ test("rejects a legacy-shaped proxy fail-closed without reclassifying its later 
   // boundary from a single classification read, so the later canonical proxy
   // view never registers or dispatches.
   expect(rejection).toBeInstanceOf(PolicyRegistrationError);
-  expect((rejection as PolicyRegistrationError).code).toBe("legacy_timing_registration");
+  expect((rejection as PolicyRegistrationError).code).toBe("invalid_canonical_registration");
   expect(decision.verdict).toBe("allow");
   expect(canonicalInvocations).toBe(0);
   expect(hasProbes).toBe(0);
@@ -227,7 +229,7 @@ test("rejects legacy timing snapshot registrations fail-closed without storing t
   }
 
   expect(rejection).toBeInstanceOf(PolicyRegistrationError);
-  expect((rejection as PolicyRegistrationError).code).toBe("legacy_timing_registration");
+  expect((rejection as PolicyRegistrationError).code).toBe("invalid_canonical_registration");
   expect((rejection as PolicyRegistrationError).registrationName).toBe("legacy-snapshot");
   // "turn.start" maps to run.turn.pre; nothing may be stored for it.
   expect(store.selectPoint("run.turn.pre", "resident")).toHaveLength(0);

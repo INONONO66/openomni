@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { Policy, PolicyDecision } from "@openomni/protocol";
-import { PolicyEngine } from "@openomni/policy";
+import { createPolicyEngine } from "../src/engine/dispatch";
+
+const PolicyEngine = { create: createPolicyEngine };
 
 /**
  * A point with no registration is unguarded. Nothing will read its context, so

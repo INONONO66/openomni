@@ -111,7 +111,9 @@ const AllowVerdict = z
     type: z.literal("allow"),
     reason: z.string().optional(),
     reasonCodes: z.array(z.string()).optional(),
-    effects: z.array(z.custom<Policy.PolicyEffect>((value) => Policy.PolicyEffect.safeParse(value).success)).optional(),
+    effects: z
+      .array(z.custom<Policy.PolicyEffect>((value) => Policy.PolicyEffect.safeParse(value).success))
+      .optional(),
   })
   .strict();
 const DenyVerdict = z
@@ -281,7 +283,11 @@ function parseRow(row: PolicyRow.Row, generation: number, kinds: ReadonlySet<str
         : undefined;
     const rawType = rawVerdict?.type;
     const rawName = rawVerdict?.name;
-    if (rawType === "obligation" && typeof rawName === "string" && !OBLIGATION_NAMES.includes(rawName as ObligationName)) {
+    if (
+      rawType === "obligation" &&
+      typeof rawName === "string" &&
+      !OBLIGATION_NAMES.includes(rawName as ObligationName)
+    ) {
       throw new PolicyCompileError({
         code: "unknown_obligation",
         generation,
@@ -299,7 +305,10 @@ function parseRow(row: PolicyRow.Row, generation: number, kinds: ReadonlySet<str
       phase: row.phase,
     });
   }
-  if (verdict.data.type === "transform" && !TRANSFORMER_NAMES.includes(verdict.data.name as TransformerName)) {
+  if (
+    verdict.data.type === "transform" &&
+    !TRANSFORMER_NAMES.includes(verdict.data.name as TransformerName)
+  ) {
     throw new PolicyCompileError({
       code: "unknown_transformer",
       generation,
@@ -309,7 +318,10 @@ function parseRow(row: PolicyRow.Row, generation: number, kinds: ReadonlySet<str
       name: verdict.data.name,
     });
   }
-  if (verdict.data.type === "obligation" && !OBLIGATION_NAMES.includes(verdict.data.name as ObligationName)) {
+  if (
+    verdict.data.type === "obligation" &&
+    !OBLIGATION_NAMES.includes(verdict.data.name as ObligationName)
+  ) {
     throw new PolicyCompileError({
       code: "unknown_obligation",
       generation,
@@ -319,7 +331,11 @@ function parseRow(row: PolicyRow.Row, generation: number, kinds: ReadonlySet<str
       name: verdict.data.name,
     });
   }
-  return Object.freeze({ row: Object.freeze(row), match: Object.freeze(match.data), verdict: Object.freeze(verdict.data) });
+  return Object.freeze({
+    row: Object.freeze(row),
+    match: Object.freeze(match.data),
+    verdict: Object.freeze(verdict.data),
+  });
 }
 
 function contentIdentity(rows: readonly PolicyRow.Row[]): PlainValue {
@@ -354,7 +370,9 @@ function buildBuckets(rows: readonly CompiledRow[]): ReadonlyMap<string, BucketS
     for (const operation of operationNames) {
       operations.set(
         operation,
-        ordered(entries.filter((entry) => entry.match.op === undefined || entry.match.op === operation)),
+        ordered(
+          entries.filter((entry) => entry.match.op === undefined || entry.match.op === operation),
+        ),
       );
     }
     buckets.set(key, Object.freeze({ wildcard: ordered(wildcard), operations }));
@@ -404,7 +422,8 @@ function evaluateSnapshot(
   input: PolicyEvaluationInput,
 ): PolicyEvaluation {
   const point = buckets.get(pointKey(input.kind, input.phase));
-  const bucket = input.op === undefined ? point?.wildcard : (point?.operations.get(input.op) ?? point?.wildcard);
+  const bucket =
+    input.op === undefined ? point?.wildcard : (point?.operations.get(input.op) ?? point?.wildcard);
   const selected = bucket ?? [];
   const matchedRuleIds: string[] = [];
   const effects: Policy.PolicyEffect[] = [];
@@ -460,7 +479,9 @@ function evaluateSnapshot(
   });
 }
 
-export function compilePolicySnapshot(options: CompilePolicySnapshotOptions): CompiledPolicySnapshot {
+export function compilePolicySnapshot(
+  options: CompilePolicySnapshotOptions,
+): CompiledPolicySnapshot {
   const mandatory = options.mandatory ?? MANDATORY_RULE_NAMES;
   for (const name of mandatory) {
     if (!options.rows.some((row) => row.name === name)) {
@@ -534,14 +555,13 @@ export function createPolicyCompiler(options: {
         ...(options.kinds === undefined ? {} : { kinds: options.kinds }),
       });
     } catch (error) {
-      const failure =
-        PolicyCompileError.isInstance(error)
-          ? error
-          : new PolicyCompileError({
-              code: "snapshot_load_failed",
-              generation,
-              message: "policy snapshot load failed",
-            });
+      const failure = PolicyCompileError.isInstance(error)
+        ? error
+        : new PolicyCompileError({
+            code: "snapshot_load_failed",
+            generation,
+            message: "policy snapshot load failed",
+          });
       compiled = failedSnapshot(failure);
     }
     cache.set(generation, compiled);
@@ -610,10 +630,52 @@ function seeded(
 /** Kernel-owned initial data; the numeric limits are read from these rows. */
 export const SEEDED_POLICY_ROWS: readonly PolicyRowDraft[] = Object.freeze([
   seeded("compaction", "turn", "post", { op: "compaction" }, { type: "allow" }, 1_000),
-  seeded("continuation-cap", "turn", "post", { op: "continue" }, { type: "obligation", name: "budget_clamp", metric: "continuation", limit: 8 }, 900),
-  seeded("fanout-cap", "tool", "pre", { op: "sendMessage" }, { type: "obligation", name: "budget_clamp", metric: "fanout", limit: 8 }, 900),
-  seeded("exact-repeat-cap", "turn", "post", { op: "exact_repeat" }, { type: "obligation", name: "budget_clamp", metric: "exact_repeat", limit: 3 }, 900),
-  seeded("toolless-stall-cap", "turn", "post", { op: "toolless_stall" }, { type: "obligation", name: "budget_clamp", metric: "toolless_stall", limit: 3 }, 900),
-  seeded("blocked-recurrence-cap", "turn", "post", { op: "blocked_recurrence" }, { type: "obligation", name: "budget_clamp", metric: "blocked_recurrence", limit: 3 }, 900),
-  seeded("resume-budget", "turn", "pre", { op: "resume" }, { type: "obligation", name: "budget_clamp", metric: "resume", limit: 10 }, 900),
+  seeded(
+    "continuation-cap",
+    "turn",
+    "post",
+    { op: "continue" },
+    { type: "obligation", name: "budget_clamp", metric: "continuation", limit: 8 },
+    900,
+  ),
+  seeded(
+    "fanout-cap",
+    "tool",
+    "pre",
+    { op: "sendMessage" },
+    { type: "obligation", name: "budget_clamp", metric: "fanout", limit: 8 },
+    900,
+  ),
+  seeded(
+    "exact-repeat-cap",
+    "turn",
+    "post",
+    { op: "exact_repeat" },
+    { type: "obligation", name: "budget_clamp", metric: "exact_repeat", limit: 3 },
+    900,
+  ),
+  seeded(
+    "toolless-stall-cap",
+    "turn",
+    "post",
+    { op: "toolless_stall" },
+    { type: "obligation", name: "budget_clamp", metric: "toolless_stall", limit: 3 },
+    900,
+  ),
+  seeded(
+    "blocked-recurrence-cap",
+    "turn",
+    "post",
+    { op: "blocked_recurrence" },
+    { type: "obligation", name: "budget_clamp", metric: "blocked_recurrence", limit: 3 },
+    900,
+  ),
+  seeded(
+    "resume-budget",
+    "turn",
+    "pre",
+    { op: "resume" },
+    { type: "obligation", name: "budget_clamp", metric: "resume", limit: 10 },
+    900,
+  ),
 ]);

@@ -1,6 +1,8 @@
 import { describe, expect, it, mock } from "bun:test";
 import { Operational, Policy, PolicyDecision } from "@openomni/protocol";
-import { PolicyEngine } from "@openomni/policy";
+import { createPolicyEngine } from "../src/engine/dispatch";
+
+const PolicyEngine = { create: createPolicyEngine };
 import {
   allow,
   atPoint,

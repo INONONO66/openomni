@@ -79,7 +79,7 @@ test("rejects legacy timing registrations fail-closed before capturing scope", (
   // Fail-closed since #530: legacy shapes are rejected from classification
   // fields alone; caller-owned scope arrays are never read.
   expect(rejection).toBeInstanceOf(PolicyRegistrationError);
-  expect((rejection as PolicyRegistrationError).code).toBe("legacy_timing_registration");
+  expect((rejection as PolicyRegistrationError).code).toBe("invalid_canonical_registration");
   expect(store.selectPoint("run.turn.pre", "resident")).toHaveLength(0);
   expect(scopeReads).toEqual({ length: 0, element: 0 });
 });

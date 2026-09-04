@@ -1,7 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import { Operational, PolicyDecision } from "@openomni/protocol";
-import { PolicyEngine, PolicyRegistrationError } from "@openomni/policy";
-import { createPolicyRegistrationStore } from "../src/engine/registration";
+import { createPolicyEngine } from "../src/engine/dispatch";
+import { createPolicyRegistrationStore, PolicyRegistrationError } from "../src/engine/registration";
+
+const PolicyEngine = { create: createPolicyEngine };
 
 function createDispatchContext() {
   return {
@@ -94,7 +96,7 @@ describe("PolicyEngine portability", () => {
       ]),
     );
 
-    expect(error.code).toBe("legacy_timing_registration");
+    expect(error.code).toBe("invalid_canonical_registration");
     expect(error.registrationName).toBe("legacy-registration");
   });
 

@@ -5,7 +5,7 @@ import type {
   GenericPolicyContext,
   PolicyEngineInstanceGeneric,
   PolicyPointId,
-} from "@openomni/policy";
+} from "../src/engine/types";
 
 export const dispatchContext = {
   actor: { kind: "system", actorId: "system:test" },

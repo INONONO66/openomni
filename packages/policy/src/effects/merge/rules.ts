@@ -73,7 +73,7 @@ interface MergeAccumulators {
   workspaceLock?: { readonly required: boolean; readonly order: number };
 }
 
-export function mergeEntries(entries: readonly EffectEntry[]): MergeResult {
+export function foldEffectEntries(entries: readonly EffectEntry[]): MergeResult {
   const state: MergeAccumulators = { merged: [], toolFilters: new Map() };
   for (const entry of entries) mergeEntry(state, entry);
   appendMergedEffects(state.merged, state);

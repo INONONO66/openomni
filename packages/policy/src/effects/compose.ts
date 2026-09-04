@@ -1,7 +1,7 @@
 import type { Policy } from "@openomni/protocol";
 
 import { collectPreConflicts, conflictDiagnostic } from "./conflicts";
-import { mergeEntries } from "./merge/rules";
+import { foldEffectEntries } from "./merge/rules";
 import {
   collectEffectEntries,
   collectObligations,
@@ -36,7 +36,7 @@ export function composeEffects(decisions: Policy.PolicyDecision[]): Policy.Effec
     };
   }
 
-  const merged = mergeEntries(entries);
+  const merged = foldEffectEntries(entries);
   const verdict = orderedDecisions.some(({ decision }) => decision.verdict === "pending")
     ? "pending"
     : "allow";

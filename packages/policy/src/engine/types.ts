@@ -42,7 +42,6 @@ export type DispatchPointContextGeneric<
   TPointId extends PolicyPointId,
 > = DispatchContextGeneric<TCtx> & Policy.PolicyPointInputMap[TPointId];
 
-
 type AuditEmit = <T>(event: BusEvent.Descriptor<T>, data: T) => void;
 
 export interface PolicyEngineConfig {
@@ -69,9 +68,7 @@ export interface CanonicalPolicyRegistrationGeneric<TCtx extends GenericPolicyCo
   readonly priority: number;
   readonly scope?: Policy.Scope;
   readonly failPolicy?: Policy.FailPolicy;
-  readonly fn: (
-    ctx: Readonly<CanonicalAuditDispatchContextGeneric<TCtx>>,
-  ) => Policy.PolicyDecision;
+  readonly fn: (ctx: Readonly<CanonicalAuditDispatchContextGeneric<TCtx>>) => Policy.PolicyDecision;
 }
 
 /** Internal storage shape for the pre-existing async factory lane. */

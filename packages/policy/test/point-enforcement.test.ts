@@ -103,16 +103,16 @@ describe("policy row compiler enforcement", () => {
       mandatory: ["compaction"],
       rows: [
         atGeneration(compaction, 1),
+        atGeneration(draft("low-allow", "tool", "pre", { type: "allow" }, { priority: 10 }), 1),
+        atGeneration(draft("highest-allow", "tool", "pre", { type: "allow" }, { priority: 30 }), 1),
         atGeneration(
-          draft("low-allow", "tool", "pre", { type: "allow" }, { priority: 10 }),
-          1,
-        ),
-        atGeneration(
-          draft("highest-allow", "tool", "pre", { type: "allow" }, { priority: 30 }),
-          1,
-        ),
-        atGeneration(
-          draft("middle-deny", "tool", "pre", { type: "deny", reason: "blocked" }, { priority: 20 }),
+          draft(
+            "middle-deny",
+            "tool",
+            "pre",
+            { type: "deny", reason: "blocked" },
+            { priority: 20 },
+          ),
           1,
         ),
       ],
@@ -132,12 +132,15 @@ describe("policy row compiler enforcement", () => {
       mandatory: ["compaction"],
       rows: [
         atGeneration(compaction, 1),
+        atGeneration(draft("wildcard", "tool", "pre", { type: "allow" }, { priority: 20 }), 1),
         atGeneration(
-          draft("wildcard", "tool", "pre", { type: "allow" }, { priority: 20 }),
-          1,
-        ),
-        atGeneration(
-          draft("write-only", "tool", "pre", { type: "deny" }, { match: { op: "write" }, priority: 10 }),
+          draft(
+            "write-only",
+            "tool",
+            "pre",
+            { type: "deny" },
+            { match: { op: "write" }, priority: 10 },
+          ),
           1,
         ),
       ],

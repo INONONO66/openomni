@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { PolicyEngine } from "@openomni/policy";
+import { createPolicyEngine } from "../src/engine/dispatch";
+
+const PolicyEngine = { create: createPolicyEngine };
 import { PolicyDecision } from "@openomni/protocol";
 import { dispatchContext } from "./point-test-fixtures";
 

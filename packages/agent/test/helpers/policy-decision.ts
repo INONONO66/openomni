@@ -1,10 +1,5 @@
-import {
-  Policy,
-  PolicyDecision,
-  type Message,
-  type PlainObject,
-} from "@openomni/protocol";
-import type { PolicyPointId } from "@openomni/policy";
+import { Policy, PolicyDecision, type Message, type PlainObject } from "@openomni/protocol";
+import type { PolicyPointId } from "@openomni/policy/src/engine/types";
 import type {
   CanonicalPolicyRegistration,
   PolicyContext,

@@ -1,6 +1,6 @@
 import { describe, expect, it, mock } from "bun:test";
-import type { CanonicalAuditDispatchContextGeneric } from "@openomni/policy";
-import type { CanonicalPolicyRegistrationGeneric } from "@openomni/policy";
+import type { CanonicalAuditDispatchContextGeneric } from "@openomni/policy/src/engine/types";
+import type { CanonicalPolicyRegistrationGeneric } from "@openomni/policy/src/engine/types";
 import { Operational, PolicyDecision } from "@openomni/protocol";
 import { Bus } from "../../../src/index";
 import { createToolExecutor } from "../../../src/core/execution/tools";

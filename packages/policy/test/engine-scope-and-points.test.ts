@@ -1,11 +1,16 @@
 import { describe, expect, it } from "bun:test";
 import { PolicyDecision, type Tool } from "@openomni/protocol";
+import { createPolicyEngine } from "../src/engine/dispatch";
+import type { CanonicalPolicyRegistrationGeneric, GenericPolicyContext } from "../src/engine/types";
+
+const PolicyEngine = { create: createPolicyEngine };
 import {
-  PolicyEngine,
-  type CanonicalPolicyRegistrationGeneric,
-  type GenericPolicyContext,
-} from "@openomni/policy";
-import { allow, atPoint, toolPreContext, turnPostContext, turnPreContext } from "./point-test-fixtures";
+  allow,
+  atPoint,
+  toolPreContext,
+  turnPostContext,
+  turnPreContext,
+} from "./point-test-fixtures";
 
 const deny = (policyId: string, reason: string) =>
   PolicyDecision.deny({

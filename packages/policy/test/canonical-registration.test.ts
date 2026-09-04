@@ -1,13 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { Policy, PolicyDecision } from "@openomni/protocol";
-import {
-  PolicyEngine,
-  PolicyRegistrationError,
-  type PolicyPointId,
-  type GenericPolicyContext,
-  type CanonicalPolicyRegistrationGeneric,
-} from "@openomni/policy";
-import { createPolicyRegistrationStore } from "../src/engine/registration";
+import { createPolicyEngine } from "../src/engine/dispatch";
+import { createPolicyRegistrationStore, PolicyRegistrationError } from "../src/engine/registration";
+import type {
+  CanonicalPolicyRegistrationGeneric,
+  GenericPolicyContext,
+  PolicyPointId,
+} from "../src/engine/types";
+
+const PolicyEngine = { create: createPolicyEngine };
 
 const allow = () => PolicyDecision.allow({ policyId: "canonical.test" });
 const registrationDefaults = { kind: "point", priority: 100, fn: allow } as const;

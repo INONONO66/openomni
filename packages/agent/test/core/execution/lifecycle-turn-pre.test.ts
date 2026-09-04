@@ -1,6 +1,6 @@
 import { describe, expect, it, mock } from "bun:test";
 import { testProviderModel } from "../../helpers/provider-model";
-import type { CanonicalAuditDispatchContextGeneric } from "@openomni/policy";
+import type { CanonicalAuditDispatchContextGeneric } from "@openomni/policy/src/engine/types";
 import type { Policy, Tool } from "@openomni/protocol";
 import { RunEvents } from "../../../src/core/execution/events";
 import { Bus } from "../../../src/index";

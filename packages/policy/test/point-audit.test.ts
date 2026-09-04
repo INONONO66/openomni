@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { Policy, PolicyDecision } from "@openomni/protocol";
-import { PolicyEngine } from "@openomni/policy";
+import { createPolicyEngine } from "../src/engine/dispatch";
+
+const PolicyEngine = { create: createPolicyEngine };
 
 describe("PolicyEngine canonical point audit", () => {
   test("stamps evaluated and composed events with the dispatched point", async () => {
