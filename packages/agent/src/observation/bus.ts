@@ -149,7 +149,7 @@ export const Bus = createObservationBus();
 export interface ScopeObservationOptions {
   readonly clock?: () => number;
   readonly entropy?: () => string;
-  readonly onError?: (error: unknown, eventName: string) => void;
+  readonly onError?: (error: Error, eventName: string) => void;
 }
 
 export function scopeObservation(
@@ -172,7 +172,7 @@ export function scopeObservation(
         sink.publish(event, payload as T);
       } catch (error) {
         try {
-          report(error, event.name);
+          report(error instanceof Error ? error : new Error(String(error)), event.name);
         } catch {
           // Observation failures never alter the observed operation.
         }

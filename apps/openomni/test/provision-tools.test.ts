@@ -124,11 +124,14 @@ describe("provision output boundary", () => {
     const tool = eraseTool(createProvisionTool(port));
     const result = await createDispatcher([
       { ...tool, execute: async () => ({ op: "status" }) },
-    ]).execute({
-      id: "provision-invalid-output",
-      tool: "provision",
-      input: { operation: { op: "status", args: {} } },
-    });
+    ]).execute(
+      {
+        id: "provision-invalid-output",
+        tool: "provision",
+        input: { operation: { op: "status", args: {} } },
+      },
+      { sessionId: "provision-session", turnId: "provision-turn" },
+    );
 
     expect(result).toEqual({
       toolCallId: "provision-invalid-output",

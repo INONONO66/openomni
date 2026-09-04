@@ -128,7 +128,7 @@ export function createResident(options: ResidentOptions): ResidentDelivery {
   function createBinding(sessionId: string): ResidentBinding {
     const origin: DelegationOrigin = { role: "resident", depth: 0, sessionId };
     const definitions = createTools(options.tools, origin);
-    const dispatcher = createDispatcher(definitions, { sessionId });
+    const dispatcher = createDispatcher(definitions);
     const chatRunner = createSessionChatRunner({
       prepare(input) {
         const evidenceOnly = isEvidenceOnly(input);
@@ -155,7 +155,14 @@ export function createResident(options: ResidentOptions): ResidentDelivery {
             tools,
             toolTargets: options.targets(),
             toolChoice: evidenceOnly || tools.length === 0 ? "none" : "auto",
-            toolExecutor: evidenceOnly ? refuseEvidenceOnlyToolCall : dispatcher.execute,
+            toolExecutor: evidenceOnly
+              ? refuseEvidenceOnlyToolCall
+              : (call, context) =>
+                  dispatcher.execute(call, {
+                    sessionId: input.sessionId,
+                    turnId: input.resultId,
+                    ...(context?.signal === undefined ? {} : { signal: context.signal }),
+                  }),
             ...(options.middleware === undefined ? {} : { middleware: options.middleware }),
             model: options.model,
             ...(options.modelFallbacks === undefined || options.modelFallbacks.length === 0

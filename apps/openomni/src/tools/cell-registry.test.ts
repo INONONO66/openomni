@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { z } from "zod";
 import { createCellRegistry } from "./cell-registry";
 import { createDispatcher, defineTool, eraseTool } from "@openomni/agent";
-import type { ToolExecutionContext } from "@openomni/protocol";
+import type { Tool, ToolExecutionContext } from "@openomni/protocol";
 import { createRunCodeTool, type CellPorts } from "./execution/run-code";
 
 const parent = (signal = new AbortController().signal): ToolExecutionContext => ({
@@ -57,9 +57,15 @@ describe("cell registry dispatch", () => {
       }),
     );
     const registry = createCellRegistry();
+    const cellDispatcher = createDispatcher([definition]);
     registry.bind(
       "cell-a",
-      createDispatcher([definition]).executeCell as never,
+      (async (call: Tool.Call, context?: Tool.ExecutionContext) =>
+        await cellDispatcher.executeCell(call, {
+          sessionId: "parent-session",
+          turnId: "parent-turn",
+          ...(context?.signal === undefined ? {} : { signal: context.signal }),
+        })) as never,
       parent(controller.signal),
     );
 
@@ -99,17 +105,14 @@ describe("cell registry dispatch", () => {
       tools: () => [privateTool],
       newCellId: () => "settled-cell",
     };
-    const dispatcher = createDispatcher([eraseTool(createRunCodeTool(ports))], { sessionId: "parent-session" });
+    const dispatcher = createDispatcher([eraseTool(createRunCodeTool(ports))]);
 
     await dispatcher.execute(
       { id: "run-code", tool: "run_code", input: { code: "1", timeoutMs: 1000 } },
       {
         signal: parent().signal,
-        traceContext: {
-          traceId: "parent-trace",
-          sessionId: "parent-session",
-          runId: "parent-turn",
-        },
+        sessionId: "parent-session",
+        turnId: "parent-turn",
       },
     );
 
@@ -130,7 +133,7 @@ describe("cell registry dispatch", () => {
 
     expect(
       await registry.callTool({ cellId: "worker-cell", name: "private", arguments: {} }),
-    ).toEqual({ status: "failed", error: "unknown tool: private" });
+    ).toEqual({ status: "failed", error: "unregistered tool: private" });
     expect(
       await registry.callTool({ cellId: "resident-cell", name: "private", arguments: {} }),
     ).toEqual({ status: "completed", value: { value: "resident" } });

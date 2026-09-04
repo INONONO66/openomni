@@ -56,7 +56,6 @@ it("the dispatcher emits Started/Completed once and only after matching commits"
     {
       sessionId: "session-1",
       turnId: "turn-1",
-      callId: "call-1",
       signal: new AbortController().signal,
     },
   );
@@ -102,7 +101,6 @@ it("emits TimedOut once after the timeout result commit", async () => {
     {
       sessionId: "session-1",
       turnId: "turn-1",
-      callId: "call-timeout",
       signal: new AbortController().signal,
     },
   );

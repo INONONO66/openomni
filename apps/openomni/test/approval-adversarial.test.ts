@@ -99,13 +99,16 @@ describe("approval output boundary", () => {
     const tool = eraseTool(createApprovalTool(port));
     const result = await createDispatcher([
       { ...tool, execute: async () => ({ op: "request" }) },
-    ]).execute({
-      id: "approval-invalid-output",
-      tool: "approval",
-      input: {
-        operation: { op: "decide", approvalId: "approval:1", decision: "approved" },
+    ]).execute(
+      {
+        id: "approval-invalid-output",
+        tool: "approval",
+        input: {
+          operation: { op: "decide", approvalId: "approval:1", decision: "approved" },
+        },
       },
-    });
+      { sessionId: "approval-session", turnId: "approval-turn" },
+    );
 
     expect(result).toEqual({
       toolCallId: "approval-invalid-output",

@@ -59,7 +59,7 @@ export function createInlineWorkerRunner(options: WorkerLoopOptions): SessionInl
       { delegation: options.kernel() },
       { role: "worker", depth, sessionId },
     );
-    const dispatcher = createDispatcher(definitions, { sessionId });
+    const dispatcher = createDispatcher(definitions);
     const runner = createSessionChatRunner({
       prepare(input: SessionRunnerInput) {
         const toolNames = new Set(input.tools.map((tool) => tool.name));
@@ -83,7 +83,12 @@ export function createInlineWorkerRunner(options: WorkerLoopOptions): SessionInl
             tools,
             toolTargets: [HOST_TARGET],
             toolChoice: tools.length === 0 ? "none" : "auto",
-            toolExecutor: dispatcher.execute,
+            toolExecutor: (call, context) =>
+              dispatcher.execute(call, {
+                sessionId: input.sessionId,
+                turnId: input.resultId,
+                ...(context?.signal === undefined ? {} : { signal: context.signal }),
+              }),
             model: options.model,
             ...chatProviderConfig(options),
           },

@@ -14,8 +14,6 @@ const MANDATORY_RULE_NAMES = ["compaction"] as const;
 export type RuleName = (typeof MANDATORY_RULE_NAMES)[number];
 
 const TRANSFORMER_NAMES = ["redact"] as const;
-type TransformerName = (typeof TRANSFORMER_NAMES)[number];
-
 const OBLIGATION_NAMES = ["budget_clamp"] as const;
 type ObligationName = (typeof OBLIGATION_NAMES)[number];
 
@@ -80,15 +78,15 @@ function compileErrorMessage(options: CompileErrorOptions): string {
     case "mandatory_rule_missing":
       return `policy generation ${options.generation} is missing mandatory rule ${options.ruleName ?? "<unnamed>"}`;
     case "unknown_kind":
-      return `policy rule ${options.ruleName ?? "<unnamed>"} references unknown kind ${options.kind ?? "<missing>"}`;
+      return `policy rule ${options.ruleName ?? "<unnamed>"} references unregistered kind ${options.kind ?? "<missing>"}`;
     case "invalid_match":
       return `policy rule ${options.ruleName ?? "<unnamed>"} has an invalid match`;
     case "invalid_verdict":
       return `policy rule ${options.ruleName ?? "<unnamed>"} has an invalid verdict`;
     case "unknown_transformer":
-      return `policy rule ${options.ruleName ?? "<unnamed>"} references unknown transformer ${options.name ?? "<missing>"}`;
+      return `policy rule ${options.ruleName ?? "<unnamed>"} references unregistered transformer ${options.name ?? "<missing>"}`;
     case "unknown_obligation":
-      return `policy rule ${options.ruleName ?? "<unnamed>"} references unknown obligation ${options.name ?? "<missing>"}`;
+      return `policy rule ${options.ruleName ?? "<unnamed>"} references unregistered obligation ${options.name ?? "<missing>"}`;
     case "snapshot_load_failed":
       return `policy generation ${options.generation} could not be loaded`;
     case "snapshot_append_failed":

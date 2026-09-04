@@ -5,7 +5,7 @@ import type {
   CanonicalPolicyRegistrationGeneric,
   GenericPolicyContext,
   PolicyMiddlewareFactoryGeneric,
-} from "@openomni/policy/src/engine/types";
+} from "@openomni/policy";
 
 export interface PolicyContext extends GenericPolicyContext {
   timing: Policy.Timing;

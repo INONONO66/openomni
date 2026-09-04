@@ -2,8 +2,11 @@ import type { Placement } from "@openomni/placement";
 import {
   type AnyToolDefinition,
   type BusEvent,
+  type PlainObject,
+  type PlainValue,
+  PlainValueSchema,
   SessionGeneration,
-  Tool,
+  type Tool,
   type ToolCategory,
   type ToolDefinition,
   type ToolExecutionContext,
@@ -30,7 +33,7 @@ function toolIsSafe(category: ToolCategory): boolean {
 }
 
 type ToolErrorKind =
-  | "unknown_tool"
+  | "unregistered_tool"
   | "invalid_input"
   | "precondition_failed"
   | "execution_failed"
@@ -38,17 +41,17 @@ type ToolErrorKind =
 
 type ToolDispatchResult = Tool.Result & { readonly errorKind?: ToolErrorKind };
 type CellToolDispatchResult = Omit<ToolDispatchResult, "output"> & {
-  readonly output: unknown;
+  readonly output: PlainValue;
 };
 
 interface ToolPostInput {
   readonly call: Tool.Call;
-  readonly output: unknown;
+  readonly output: PlainValue;
   readonly context: ToolExecutionContext;
 }
 
 type ToolPostResult =
-  | unknown
+  | PlainValue
   | { readonly transform: "redact"; readonly paths: readonly string[] };
 export type ToolPostPolicy = (input: ToolPostInput) => Promise<ToolPostResult>;
 
@@ -70,15 +73,18 @@ export interface DispatcherOptions {
   readonly executionObservations?: ToolExecutionObservationOwner;
   readonly clock?: () => number;
   readonly timeoutMs?: number;
-  readonly sessionId?: string;
 }
 
-type DispatchContext = ToolExecutionContext | Tool.ExecutionContext | undefined;
+export interface DispatchContext {
+  readonly sessionId: string;
+  readonly turnId: string;
+  readonly signal?: AbortSignal;
+}
 
 export interface Dispatcher {
   readonly specs: readonly Tool.Spec[];
-  execute(call: Tool.Call, context?: DispatchContext): Promise<ToolDispatchResult>;
-  executeCell(call: Tool.Call, context?: DispatchContext): Promise<CellToolDispatchResult>;
+  execute(call: Tool.Call, context: DispatchContext): Promise<ToolDispatchResult>;
+  executeCell(call: Tool.Call, context: DispatchContext): Promise<CellToolDispatchResult>;
 }
 
 export function defineTool<In extends z.ZodType, Out extends z.ZodType>(
@@ -98,11 +104,13 @@ export function eraseTool<In extends z.ZodType, Out extends z.ZodType>(
   return definition as AnyToolDefinition;
 }
 
-export function toolInputSchema(definition: AnyToolDefinition): Record<string, unknown> {
+type JsonSchemaObject = Record<string, PlainValue>;
+
+export function toolInputSchema(definition: AnyToolDefinition): JsonSchemaObject {
   const { $schema: _dialect, ...projected } = z.toJSONSchema(definition.input, {
     io: "input",
     target: "draft-7",
-  }) as Record<string, unknown>;
+  }) as JsonSchemaObject;
   if (projected.type !== "object") {
     throw new Error(`${definition.name} input schema root must be an object`);
   }
@@ -123,9 +131,11 @@ export function createDispatcher(
     providedContext: DispatchContext,
     door: "model" | "cell",
   ): Promise<ToolDispatchResult | CellToolDispatchResult> {
-    const context = executionContext(call, providedContext, options.sessionId);
+    const context = executionContext(call, providedContext);
     const definition = known.get(call.tool);
-    if (definition === undefined) return failed(call, `unknown tool: ${call.tool}`, "unknown_tool");
+    if (definition === undefined) {
+      return failed(call, `unregistered tool: ${call.tool}`, "unregistered_tool");
+    }
     const parsedInput = definition.input.safeParse(call.input);
     if (!parsedInput.success) {
       const issue = parsedInput.error.issues[0];
@@ -162,14 +172,18 @@ export function createDispatcher(
     }
 
     const parsedOutput = definition.output.safeParse(outcome.value);
-    if (!parsedOutput.success) {
+    const jsonOutput = parsedOutput.success
+      ? PlainValueSchema.safeParse(parsedOutput.data)
+      : parsedOutput;
+    if (!(parsedOutput.success && jsonOutput.success)) {
       const result = failed(call, `${definition.name} produced invalid output`, "invalid_output");
       await complete(call, context, result, startedAt, definition.name);
       return result;
     }
 
-    const transformed = await applyPost(options.post, call, context, parsedOutput.data);
-    const checked = definition.output.safeParse(transformed);
+    const transformed = await applyPost(options.post, call, context, jsonOutput.data);
+    const revalidated = definition.output.safeParse(transformed);
+    const checked = revalidated.success ? PlainValueSchema.safeParse(transformed) : revalidated;
     if (!checked.success) {
       const result = failed(call, `${definition.name} produced invalid output`, "invalid_output");
       await complete(call, context, result, startedAt, definition.name);
@@ -240,32 +254,29 @@ export function toolSpec(definition: AnyToolDefinition): Tool.Spec {
   };
 }
 
-function executionContext(
-  call: Tool.Call,
-  context: DispatchContext,
-  sessionId: string | undefined,
-): ToolExecutionContext {
-  if (context !== undefined && "sessionId" in context) {
-    return { ...context, callId: call.id };
-  }
+function executionContext(call: Tool.Call, context: DispatchContext): ToolExecutionContext {
   return {
-    sessionId: context?.traceContext?.sessionId ?? sessionId ?? "unknown-session",
-    turnId: context?.traceContext?.runId ?? "unknown-turn",
+    sessionId: context.sessionId,
+    turnId: context.turnId,
     callId: call.id,
-    signal: context?.signal ?? new AbortController().signal,
+    signal: context.signal ?? new AbortController().signal,
   };
 }
 
-async function executeDefinition(
-  definition: AnyToolDefinition,
-  input: unknown,
+async function executeDefinition<In extends z.ZodType, Out extends z.ZodType>(
+  definition: ToolDefinition<In, Out>,
+  input: z.output<In>,
   context: ToolExecutionContext,
   timeoutMs: number | undefined,
-): Promise<{ readonly timedOut: boolean; readonly value?: unknown; readonly error?: unknown }> {
+): Promise<{
+  readonly timedOut: boolean;
+  readonly value?: z.output<Out>;
+  readonly error?: Error;
+}> {
   if (timeoutMs === undefined) {
     return Promise.resolve(definition.execute(input, context)).then(
       (value) => ({ timedOut: false, value }) as const,
-      (error: Error) => ({ timedOut: false, error }) as const,
+      (error) => ({ timedOut: false, error: toError(error) }) as const,
     );
   }
 
@@ -275,7 +286,7 @@ async function executeDefinition(
   const scopedContext = { ...context, signal: controller.signal };
   const execution = Promise.resolve(definition.execute(input, scopedContext)).then(
     (value) => ({ timedOut: false, value }) as const,
-    (error: Error) => ({ timedOut: false, error }) as const,
+    (error) => ({ timedOut: false, error: toError(error) }) as const,
   );
   const timeout = Promise.withResolvers<{ readonly timedOut: true }>();
   const timer = setTimeout(() => {
@@ -292,8 +303,8 @@ async function applyPost(
   post: ToolPostPolicy | undefined,
   call: Tool.Call,
   context: ToolExecutionContext,
-  output: unknown,
-): Promise<unknown> {
+  output: PlainValue,
+): Promise<PlainValue> {
   if (post === undefined) return output;
   const decision = await post({ call, context, output });
   if (!isRedactTransform(decision)) return decision;
@@ -301,7 +312,7 @@ async function applyPost(
 }
 
 function isRedactTransform(
-  value: unknown,
+  value: ToolPostResult,
 ): value is { readonly transform: "redact"; readonly paths: readonly string[] } {
   if (value === null || typeof value !== "object") return false;
   const transform = Reflect.get(value, "transform");
@@ -309,10 +320,10 @@ function isRedactTransform(
   return transform === "redact" && Array.isArray(paths) && paths.every((path) => typeof path === "string");
 }
 
-function redact(value: unknown, paths: readonly string[]): unknown {
+function redact(value: PlainValue, paths: readonly string[]): PlainValue {
   const copy = structuredClone(value);
   if (copy === null || typeof copy !== "object" || Array.isArray(copy)) return copy;
-  const record = copy as Record<string, unknown>;
+  const record: PlainObject = copy;
   for (const path of paths) delete record[path];
   return copy;
 }
@@ -328,8 +339,14 @@ function failed(call: Tool.Call, output: string, errorKind: ToolErrorKind): Tool
   };
 }
 
-function isToolRefusal(error: unknown): boolean {
-  return error instanceof Error && error.name === "ToolRefused";
+function isToolRefusal(error: Error): boolean {
+  return error.name === "ToolRefused";
+}
+
+type CaughtValue = PlainValue | Error | bigint | symbol | undefined | ((...args: never[]) => void);
+
+function toError(error: CaughtValue): Error {
+  return error instanceof Error ? error : new Error(String(error));
 }
 
 function truncate(output: string): string {

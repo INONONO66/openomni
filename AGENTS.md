@@ -43,7 +43,7 @@ ledger <- agent, channels, apps/openomni
 policy <- agent, channels, apps/openomni
 llm <- agent, apps/openomni
 placement <- agent, apps/openomni
-agent <- ledger, llm, channels, apps/openomni
+agent <- apps/openomni
 machines <- apps/openomni
 channels <- apps/openomni
 ```
@@ -52,13 +52,13 @@ channels <- apps/openomni
 | --- | --- |
 | `protocol` | none |
 | `ipc` | protocol |
-| `ledger` | protocol, agent; `src/` may depend on protocol |
+| `ledger` | protocol |
 | `policy` | protocol |
-| `llm` | protocol, agent; `src/` may depend on protocol |
+| `llm` | protocol |
 | `placement` | protocol |
 | `agent` | protocol, ledger, policy, placement, llm; `src/` may depend on protocol, ledger, policy, placement, llm |
 | `machines` | protocol, ipc |
-| `channels` | protocol, policy, ledger, agent; `src/` may depend on protocol, policy, ledger |
+| `channels` | protocol, policy, ledger; `src/` may depend on protocol, policy, ledger |
 | `apps/openomni` | protocol, channels, ipc, agent, llm, ledger, policy, placement, machines |
 | `apps/desktop` | protocol |
 <!-- END GENERATED TOPOLOGY -->

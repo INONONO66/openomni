@@ -114,7 +114,7 @@ test("a cell batches delegation into one turn", async () => {
   expect(answer).toContain("done(check lint); done(check types); done(check tests)");
   // One Resident turn, not three: that is what code mode bought.
   expect(residentTurns).toHaveLength(1);
-  expect(answer).toContain("machines=unknown tool: machines");
+  expect(answer).toContain("machines=unregistered tool: machines");
 }, 60_000);
 
 test("the machine tool is not offered while nothing is attached", async () => {
@@ -165,7 +165,7 @@ test("the machine tool is not offered while nothing is attached", async () => {
   ]);
   // All tools are host-projected; the local default host reports live attachment failure.
   expect(answer).toContain("the default kernel host is not attached right now");
-  expect(answer).toContain("machines=unknown tool: machines");
+  expect(answer).toContain("machines=unregistered tool: machines");
 }, 30_000);
 
 /**

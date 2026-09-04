@@ -5,12 +5,12 @@ export type {
   PolicyFn,
   PolicyRegistration,
 } from "./types";
-import { createPolicyEngine } from "@openomni/policy/src/engine/dispatch";
+import { createPolicyEngine } from "@openomni/policy";
 import type {
   DispatchContextGeneric,
   PolicyEngineConfig,
   PolicyEngineInstanceGeneric,
-} from "@openomni/policy/src/engine/types";
+} from "@openomni/policy";
 import type { PolicyContext } from "./types";
 
 /** Agent-scoped convenience alias: dispatch context typed to the full agent PolicyContext. */

@@ -1,8 +1,9 @@
 import { describe, expect, it, mock } from "bun:test";
 import { createDispatcher, defineTool, type ToolPostPolicy } from "../../../src/index";
+import type { PlainValue } from "@openomni/protocol";
 import { z } from "zod";
 
-function tool(value: () => Promise<unknown>) {
+function tool(value: () => Promise<PlainValue>) {
   return defineTool({
     name: "account",
     description: "Read an account",

@@ -27,15 +27,18 @@ export interface CellPorts {
 function cellDoor(
   definitions: readonly AnyToolDefinition[],
   sessionId: string,
+  cellId: string,
 ): NonNullable<ChatAgentConfig["toolExecutor"]> {
   const cellTools = definitions.filter(
     (tool) => tool.name !== RUN_CODE_TOOL_NAME && tool.visibility.cell.length > 0,
   );
-  const dispatcher = createDispatcher(cellTools, { sessionId });
+  const dispatcher = createDispatcher(cellTools);
   return async (call, context) =>
-    dispatcher.executeCell(call, context) as Promise<
-      Awaited<ReturnType<NonNullable<ChatAgentConfig["toolExecutor"]>>>
-    >;
+    dispatcher.executeCell(call, {
+      sessionId,
+      turnId: cellId,
+      ...(context?.signal === undefined ? {} : { signal: context.signal }),
+    }) as Promise<Awaited<ReturnType<NonNullable<ChatAgentConfig["toolExecutor"]>>>>;
 }
 
 const Input = z
@@ -79,7 +82,11 @@ export function createRunCodeTool(ports: CellPorts) {
     visibility: { model: ["resident", "worker"], cell: ["resident", "worker"] },
     execute: async ({ code, timeoutMs }, ctx) => {
       const cellId = ports.newCellId();
-      ports.registry.bind(cellId, cellDoor(ports.tools(ctx.sessionId), ctx.sessionId), ctx);
+      ports.registry.bind(
+        cellId,
+        cellDoor(ports.tools(ctx.sessionId), ctx.sessionId, cellId),
+        ctx,
+      );
       try {
         return await ports.runCell(ports.defaultMachineId, {
           cellId,

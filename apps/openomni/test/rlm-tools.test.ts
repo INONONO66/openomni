@@ -89,11 +89,10 @@ describe("the llm tool", () => {
     );
     const dispatcher = createDispatcher(entries);
 
-    const result = await dispatcher.execute({
-      id: "1",
-      tool: LLM_TOOL_NAME,
-      input: { prompts: ["hi"] },
-    });
+    const result = await dispatcher.execute(
+      { id: "1", tool: LLM_TOOL_NAME, input: { prompts: ["hi"] } },
+      { sessionId: "rlm-session", turnId: "rlm-turn" },
+    );
 
     expect(result.isError).toBe(true);
     expect(result.output).toBe("llm failed: provider on fire");
@@ -136,7 +135,7 @@ describe("the llm tool", () => {
     // host target only, then gate execution on the offerable set.
     const door = placementGatedExecutor(
       Placement.resolveTools(dispatcher.specs, [HOST_TARGET]),
-      dispatcher.execute,
+      (call) => dispatcher.execute(call, { sessionId: "rlm-session", turnId: "rlm-turn" }),
     );
 
     const result = await door({ id: "1", tool: LLM_TOOL_NAME, input: { prompts: ["hi"] } });
