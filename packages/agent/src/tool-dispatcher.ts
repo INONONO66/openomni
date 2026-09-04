@@ -9,6 +9,10 @@ import {
   type ToolExecutionContext,
 } from "@openomni/protocol";
 import { z } from "zod";
+import {
+  createToolExecutionObservationOwner,
+  type ToolExecutionObservationOwner,
+} from "./executor";
 
 export const MODEL_OUTPUT_MAX_CHARS = 32_000;
 export const HOST_TARGET: Placement.ToolTarget = { kind: "host", capabilities: [] };
@@ -63,6 +67,7 @@ export interface DispatcherOptions {
   readonly post?: ToolPostPolicy;
   readonly commits?: ToolExecutionCommitter;
   readonly observations?: ToolExecutionObservation;
+  readonly executionObservations?: ToolExecutionObservationOwner;
   readonly clock?: () => number;
   readonly timeoutMs?: number;
   readonly sessionId?: string;
@@ -110,6 +115,8 @@ export function createDispatcher(
 ): Dispatcher {
   const known = new Map(definitions.map((definition) => [definition.name, definition]));
   const clock = options.clock ?? Date.now;
+  const executionObservations =
+    options.executionObservations ?? createToolExecutionObservationOwner(options.observations, clock);
 
   async function dispatch(
     call: Tool.Call,
@@ -129,29 +136,19 @@ export function createDispatcher(
 
     await options.commits?.intent(call, context);
     const startedAt = clock();
-    options.observations?.publish(Tool.Events.Started, {
-      traceId: context.turnId,
-      sessionId: context.sessionId,
-      runId: context.turnId,
-      toolCallId: context.callId,
-      toolName: definition.name,
-      time: startedAt,
-    });
+    executionObservations.started(call, context, definition.name, startedAt);
 
     const execution = executeDefinition(definition, parsedInput.data, context, options.timeoutMs);
     const outcome = await execution;
     if (outcome.timedOut) {
       const result = failed(call, `${definition.name} timed out`, "execution_failed");
       await options.commits?.result(call, context, result);
-      options.observations?.publish(Tool.Events.TimedOut, {
-        traceId: context.turnId,
-        sessionId: context.sessionId,
-        runId: context.turnId,
-        toolCallId: context.callId,
-        toolName: definition.name,
-        time: clock(),
-        timeoutMs: options.timeoutMs ?? 0,
-      });
+      executionObservations.timedOut(
+        call,
+        context,
+        definition.name,
+        options.timeoutMs ?? 0,
+      );
       return result;
     }
     if (outcome.error !== undefined) {
@@ -200,16 +197,13 @@ export function createDispatcher(
     toolName: string,
   ): Promise<void> {
     await options.commits?.result(call, context, result);
-    options.observations?.publish(Tool.Events.Completed, {
-      traceId: context.turnId,
-      sessionId: context.sessionId,
-      runId: context.turnId,
-      toolCallId: context.callId,
+    executionObservations.completed(
+      call,
+      context,
       toolName,
-      time: clock(),
-      durationMs: Math.max(0, clock() - startedAt),
-      isError: result.isError ?? false,
-    });
+      startedAt,
+      result.isError ?? false,
+    );
   }
 
   return {

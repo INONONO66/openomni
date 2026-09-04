@@ -4,8 +4,9 @@ import type {
   LedgerSession,
   ObservationSink,
   PlainValue,
+  ToolExecutionContext,
 } from "@openomni/protocol";
-import { L0Observation, canonicalDigest } from "@openomni/protocol";
+import { L0Observation, Tool, canonicalDigest } from "@openomni/protocol";
 import type {
   CompiledPolicySnapshot,
   PolicyEvaluation,
@@ -62,6 +63,77 @@ export interface Executor {
     request: ExecutionRequest,
     body: () => Promise<T>,
   ): Promise<ExecutionResult<T>>;
+}
+
+export interface ToolExecutionObservationOwner {
+  started(call: Tool.Call, context: ToolExecutionContext, toolName: string, startedAt: number): void;
+  completed(
+    call: Tool.Call,
+    context: ToolExecutionContext,
+    toolName: string,
+    startedAt: number,
+    isError: boolean,
+  ): void;
+  timedOut(
+    call: Tool.Call,
+    context: ToolExecutionContext,
+    toolName: string,
+    timeoutMs: number,
+  ): void;
+}
+
+export function createToolExecutionObservationOwner(
+  observations: ObservationSink | BusEvent.Sink | undefined,
+  clock: () => number,
+): ToolExecutionObservationOwner {
+  function scoped(context: ToolExecutionContext): ObservationSink | BusEvent.Sink | undefined {
+    if (observations === undefined || !("scope" in observations) || observations.scope === undefined) {
+      return observations;
+    }
+    return observations.scope({
+      traceId: context.turnId,
+      sessionId: context.sessionId,
+      turnId: context.turnId,
+      callId: context.callId,
+    });
+  }
+
+  return {
+    started(call, context, toolName, startedAt) {
+      scoped(context)?.publish(Tool.Events.Started, {
+        traceId: context.turnId,
+        sessionId: context.sessionId,
+        runId: context.turnId,
+        toolCallId: call.id,
+        toolName,
+        time: startedAt,
+      });
+    },
+    completed(call, context, toolName, startedAt, isError) {
+      const time = clock();
+      scoped(context)?.publish(Tool.Events.Completed, {
+        traceId: context.turnId,
+        sessionId: context.sessionId,
+        runId: context.turnId,
+        toolCallId: call.id,
+        toolName,
+        time,
+        durationMs: Math.max(0, time - startedAt),
+        isError,
+      });
+    },
+    timedOut(call, context, toolName, timeoutMs) {
+      scoped(context)?.publish(Tool.Events.TimedOut, {
+        traceId: context.turnId,
+        sessionId: context.sessionId,
+        runId: context.turnId,
+        toolCallId: call.id,
+        toolName,
+        time: clock(),
+        timeoutMs,
+      });
+    },
+  };
 }
 
 export interface ExecutorOptions {
