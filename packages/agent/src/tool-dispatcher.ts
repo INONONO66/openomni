@@ -1,8 +1,8 @@
 import type { Placement } from "@openomni/placement";
+import { AsyncLocalStorage } from "node:async_hooks";
 import {
   type AnyToolDefinition,
   type BusEvent,
-  type PlainObject,
   type PlainValue,
   PlainValueSchema,
   SessionGeneration,
@@ -14,6 +14,7 @@ import {
 import { z } from "zod";
 import {
   createToolExecutionObservationOwner,
+  type Executor,
   type ToolExecutionObservationOwner,
 } from "./executor";
 
@@ -44,31 +45,10 @@ type CellToolDispatchResult = Omit<ToolDispatchResult, "output"> & {
   readonly output: PlainValue;
 };
 
-interface ToolPostInput {
-  readonly call: Tool.Call;
-  readonly output: PlainValue;
-  readonly context: ToolExecutionContext;
-}
-
-type ToolPostResult =
-  | PlainValue
-  | { readonly transform: "redact"; readonly paths: readonly string[] };
-export type ToolPostPolicy = (input: ToolPostInput) => Promise<ToolPostResult>;
-
-export interface ToolExecutionCommitter {
-  intent(call: Tool.Call, context: ToolExecutionContext): Promise<void>;
-  result(
-    call: Tool.Call,
-    context: ToolExecutionContext,
-    result: ToolDispatchResult | CellToolDispatchResult,
-  ): Promise<void>;
-}
-
-export interface ToolExecutionObservation extends BusEvent.Sink {}
+interface ToolExecutionObservation extends BusEvent.Sink {}
 
 export interface DispatcherOptions {
-  readonly post?: ToolPostPolicy;
-  readonly commits?: ToolExecutionCommitter;
+  readonly executor: Executor;
   readonly observations?: ToolExecutionObservation;
   readonly executionObservations?: ToolExecutionObservationOwner;
   readonly clock?: () => number;
@@ -117,14 +97,24 @@ export function toolInputSchema(definition: AnyToolDefinition): JsonSchemaObject
   return projected;
 }
 
+const activeExecutor = new AsyncLocalStorage<Executor>();
+
 export function createDispatcher(
   definitions: readonly AnyToolDefinition[],
-  options: DispatcherOptions = {},
+  options?: DispatcherOptions,
 ): Dispatcher {
+  /**
+   * The cell door builds its dispatcher at tool-definition time, long before any
+   * execution context exists, so the ambient executor must be resolved per
+   * dispatch. Resolving it once here would permanently capture `undefined` and
+   * make every in-cell tool call fail with "requires an executor".
+   */
+  const resolveExecutor = (): Executor | undefined =>
+    options?.executor ?? activeExecutor.getStore();
   const known = new Map(definitions.map((definition) => [definition.name, definition]));
-  const clock = options.clock ?? Date.now;
+  const clock = options?.clock ?? Date.now;
   const executionObservations =
-    options.executionObservations ?? createToolExecutionObservationOwner(options.observations, clock);
+    options?.executionObservations ?? createToolExecutionObservationOwner(options?.observations, clock);
 
   async function dispatch(
     call: Tool.Call,
@@ -144,49 +134,53 @@ export function createDispatcher(
       return failed(call, `${definition.name} refused: ${reason}`, "invalid_input");
     }
 
-    await options.commits?.intent(call, context);
     const startedAt = clock();
     executionObservations.started(call, context, definition.name, startedAt);
+    const executor = resolveExecutor();
+    if (executor === undefined) {
+      throw new Error("tool dispatcher requires an executor");
+    }
+    const execution = await executor
+      .run(
+        {
+          kind: "tool",
+          op: definition.name,
+          intent: PlainValueSchema.parse(call.input),
+          effect: { category: definition.category },
+        },
+        () =>
+          activeExecutor.run(executor, async () =>
+            PlainValueSchema.parse(
+              await executeToolBody(definition, parsedInput.data, context, options?.timeoutMs),
+            ),
+          ),
+      )
+      .catch((error: CaughtValue) => {
+        executionObservations.completed(call, context, definition.name, startedAt, true);
+        throw toError(error);
+      });
 
-    const execution = executeDefinition(definition, parsedInput.data, context, options.timeoutMs);
-    const outcome = await execution;
-    if (outcome.timedOut) {
+    if (execution.terminal !== "executed") {
+      const refusal = new ToolRefused(definition.name, execution.reason);
+      executionObservations.completed(call, context, definition.name, startedAt, true);
+      if (door === "cell") throw refusal;
+      return failed(call, refusal.message, "precondition_failed");
+    }
+
+    const outcome = ToolBodyOutcome.parse(execution.value);
+    if (outcome.status === "timed_out") {
       const result = failed(call, `${definition.name} timed out`, "execution_failed");
-      await options.commits?.result(call, context, result);
-      executionObservations.timedOut(
-        call,
-        context,
-        definition.name,
-        options.timeoutMs ?? 0,
-      );
+      executionObservations.timedOut(call, context, definition.name, options?.timeoutMs ?? 0);
+      executionObservations.completed(call, context, definition.name, startedAt, true);
       return result;
     }
-    if (outcome.error !== undefined) {
+    if (outcome.status === "error") {
       const result = failed(
         call,
-        outcome.error instanceof Error ? outcome.error.message : String(outcome.error),
-        isToolRefusal(outcome.error) ? "precondition_failed" : "execution_failed",
+        outcome.message,
+        outcome.refused ? "precondition_failed" : "execution_failed",
       );
-      await complete(call, context, result, startedAt, definition.name);
-      return result;
-    }
-
-    const parsedOutput = definition.output.safeParse(outcome.value);
-    const jsonOutput = parsedOutput.success
-      ? PlainValueSchema.safeParse(parsedOutput.data)
-      : parsedOutput;
-    if (!(parsedOutput.success && jsonOutput.success)) {
-      const result = failed(call, `${definition.name} produced invalid output`, "invalid_output");
-      await complete(call, context, result, startedAt, definition.name);
-      return result;
-    }
-
-    const transformed = await applyPost(options.post, call, context, jsonOutput.data);
-    const revalidated = definition.output.safeParse(transformed);
-    const checked = revalidated.success ? PlainValueSchema.safeParse(transformed) : revalidated;
-    if (!checked.success) {
-      const result = failed(call, `${definition.name} produced invalid output`, "invalid_output");
-      await complete(call, context, result, startedAt, definition.name);
+      executionObservations.completed(call, context, definition.name, startedAt, true);
       return result;
     }
 
@@ -194,30 +188,10 @@ export function createDispatcher(
       toolCallId: call.id,
       id: call.id,
       toolName: call.tool,
-      output:
-        door === "cell"
-          ? checked.data
-          : truncate(definition.render(parsedInput.data, checked.data)),
+      output: door === "cell" ? outcome.output : truncate(definition.render(parsedInput.data, outcome.output)),
     } satisfies ToolDispatchResult | CellToolDispatchResult;
-    await complete(call, context, result, startedAt, definition.name);
+    executionObservations.completed(call, context, definition.name, startedAt, false);
     return result;
-  }
-
-  async function complete(
-    call: Tool.Call,
-    context: ToolExecutionContext,
-    result: ToolDispatchResult | CellToolDispatchResult,
-    startedAt: number,
-    toolName: string,
-  ): Promise<void> {
-    await options.commits?.result(call, context, result);
-    executionObservations.completed(
-      call,
-      context,
-      toolName,
-      startedAt,
-      result.isError ?? false,
-    );
   }
 
   return {
@@ -263,6 +237,42 @@ function executionContext(call: Tool.Call, context: DispatchContext): ToolExecut
   };
 }
 
+const ToolBodyOutcome = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("timed_out") }).strict(),
+  z
+    .object({ status: z.literal("error"), message: z.string(), refused: z.boolean() })
+    .strict(),
+  z.object({ status: z.literal("success"), output: PlainValueSchema }).strict(),
+]);
+type ToolBodyOutcome = z.infer<typeof ToolBodyOutcome>;
+
+async function executeToolBody<In extends z.ZodType, Out extends z.ZodType>(
+  definition: ToolDefinition<In, Out>,
+  input: z.output<In>,
+  context: ToolExecutionContext,
+  timeoutMs: number | undefined,
+): Promise<ToolBodyOutcome> {
+  const outcome = await executeDefinition(definition, input, context, timeoutMs);
+  if (outcome.timedOut) return { status: "timed_out" };
+  if (outcome.error !== undefined) {
+    return {
+      status: "error",
+      message: outcome.error.message,
+      refused: isToolRefusal(outcome.error),
+    };
+  }
+  const parsedOutput = definition.output.safeParse(outcome.value);
+  const jsonOutput = parsedOutput.success ? PlainValueSchema.safeParse(parsedOutput.data) : parsedOutput;
+  if (!(parsedOutput.success && jsonOutput.success)) {
+    return {
+      status: "error",
+      message: `${definition.name} produced invalid output`,
+      refused: false,
+    };
+  }
+  return { status: "success", output: jsonOutput.data };
+}
+
 async function executeDefinition<In extends z.ZodType, Out extends z.ZodType>(
   definition: ToolDefinition<In, Out>,
   input: z.output<In>,
@@ -297,35 +307,6 @@ async function executeDefinition<In extends z.ZodType, Out extends z.ZodType>(
     clearTimeout(timer);
     context.signal.removeEventListener("abort", forwardAbort);
   });
-}
-
-async function applyPost(
-  post: ToolPostPolicy | undefined,
-  call: Tool.Call,
-  context: ToolExecutionContext,
-  output: PlainValue,
-): Promise<PlainValue> {
-  if (post === undefined) return output;
-  const decision = await post({ call, context, output });
-  if (!isRedactTransform(decision)) return decision;
-  return redact(output, decision.paths);
-}
-
-function isRedactTransform(
-  value: ToolPostResult,
-): value is { readonly transform: "redact"; readonly paths: readonly string[] } {
-  if (value === null || typeof value !== "object") return false;
-  const transform = Reflect.get(value, "transform");
-  const paths = Reflect.get(value, "paths");
-  return transform === "redact" && Array.isArray(paths) && paths.every((path) => typeof path === "string");
-}
-
-function redact(value: PlainValue, paths: readonly string[]): PlainValue {
-  const copy = structuredClone(value);
-  if (copy === null || typeof copy !== "object" || Array.isArray(copy)) return copy;
-  const record: PlainObject = copy;
-  for (const path of paths) delete record[path];
-  return copy;
 }
 
 function failed(call: Tool.Call, output: string, errorKind: ToolErrorKind): ToolDispatchResult {
