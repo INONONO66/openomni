@@ -26,7 +26,7 @@ it("awaits policy.decision commit before publishing its observation", async () =
   const decisionCommit = Promise.withResolvers<void>();
   let revision = 0;
   const ledger: ExecutionLedger = {
-    async append(action) {
+    async commit(action) {
       if (action.kind === "policy.decision") await decisionCommit.promise;
       appended.push(action);
       revision += 1;

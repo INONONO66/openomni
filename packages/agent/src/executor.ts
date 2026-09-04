@@ -15,7 +15,7 @@ import type {
 const CORE_KINDS = new Set(["prompt", "turn", "llm", "tool"]);
 
 export interface ExecutionLedger {
-  append(action: LedgerAction.Append): Promise<LedgerAction.Receipt>;
+  commit(action: LedgerAction.Append): Promise<LedgerAction.Receipt>;
 }
 
 export interface ExecutionIdentity {
@@ -62,7 +62,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
   const kinds = new Set([...CORE_KINDS, ...(options.registeredKinds ?? [])]);
 
   async function commit(action: LedgerAction.Append): Promise<LedgerAction.Receipt> {
-    const receipt = await options.ledger.append(action);
+    const receipt = await options.ledger.commit(action);
     options.observations.publish(L0Observation.ActionCommittedEvent, {
       id: receipt.action.id,
       sessionId: receipt.action.sessionId,

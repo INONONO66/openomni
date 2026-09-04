@@ -32,7 +32,7 @@ function harness(rows: readonly PolicyRow.Row[]) {
   const actions: LedgerAction.Append[] = [];
   let revision = 0;
   const ledger: ExecutionLedger = {
-    async append(action) {
+    async commit(action) {
       actions.push(action);
       revision += 1;
       return { action: { ...action, ordinal: revision }, revision };
