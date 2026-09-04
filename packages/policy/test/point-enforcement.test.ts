@@ -28,9 +28,9 @@ function catchCompile(run: () => void): PolicyCompileError {
 }
 
 describe("policy row compiler enforcement", () => {
-  it("fails closed with exact fields when a mandatory rule is missing", () => {
+  it("cannot disable the mandatory rule and fails closed with exact fields", () => {
     const error = catchCompile(() =>
-      compilePolicySnapshot({ generation: 1, rows: [], mandatory: ["compaction"] }),
+      compilePolicySnapshot({ generation: 1, rows: [], mandatory: [] }),
     );
 
     expect(error.toObject()).toEqual({

@@ -470,7 +470,7 @@ function evaluateSnapshot(
 export function compilePolicySnapshot(
   options: CompilePolicySnapshotOptions,
 ): CompiledPolicySnapshot {
-  const mandatory = options.mandatory ?? MANDATORY_RULE_NAMES;
+  const mandatory = new Set([...MANDATORY_RULE_NAMES, ...(options.mandatory ?? [])]);
   for (const name of mandatory) {
     if (!options.rows.some((row) => row.name === name)) {
       throw new PolicyCompileError({
