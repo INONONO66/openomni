@@ -7,6 +7,45 @@ export { createCompactionPolicy } from "./compaction";
 export type { CompactionOptions } from "./compaction";
 export { createSessionChatRunner } from "./session-chat-runner";
 export { closeSessions, session, sweepSessions } from "./session-handle";
+export { createExecutor } from "./executor";
+export type {
+  ExecutionIdentity,
+  ExecutionLedger,
+  ExecutionRequest,
+  ExecutionResult,
+  Executor,
+  ExecutorOptions,
+} from "./executor";
+export {
+  createDispatcher,
+  defineTool,
+  eraseTool,
+  MODEL_OUTPUT_MAX_CHARS,
+  toolInputSchema,
+} from "./tool-dispatcher";
+export type {
+  CellToolDispatchResult,
+  Dispatcher,
+  DispatcherOptions,
+  ToolDispatchResult,
+  ToolErrorKind,
+  ToolExecutionCommitter,
+  ToolExecutionObservation,
+  ToolPostInput,
+  ToolPostPolicy,
+  ToolPostResult,
+} from "./tool-dispatcher";
+export {
+  createObservationBus,
+  noopObservationSink,
+  observationCollector,
+  scopeObservation,
+} from "./observation/bus";
+export type {
+  CollectingObservationSink,
+  ObservationBus,
+  ScopeObservationOptions,
+} from "./observation/bus";
 export type {
   SessionHandle,
   SessionRunner,
