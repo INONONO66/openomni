@@ -1,12 +1,14 @@
 # packages/agent
 
-`ChatAgent` — an invocation-scoped LLM + tool ReAct loop driven by a policy engine. Depends on `@openomni/protocol`, `@openomni/policy`, `@openomni/placement` (the #752 pure model-fallback fold), and `@openomni/llm`. It reports through an injected `BusEvent.Sink` on `ChatAgentConfig.events`, so `src/` imports no implementation of the observation channel and reaches no durable storage — `check-deps.ts` carries a `srcAllowedDeps` for this package that rejects both (#606).
+`@openomni/agent` contains the invocation-scoped `ChatAgent` LLM/tool loop and the generic durable-session controller. The loop reports through an injected `BusEvent.Sink`; session handles coordinate ledger-owned facts through `SessionHandleStore`. Product-specific session identity, routing, role configuration, and lifecycle policy remain in `apps/openomni`.
 
 ## STRUCTURE
 
 ```
 src/
 ├── index.ts                    # Public API
+├── session-handle.ts           # generic fenced session lifecycle over ledger facts
+├── session-chat-runner.ts      # adapter from durable turns to invocation-scoped ChatAgent runs
 ├── core/
 │   ├── chat-agent.ts           # ChatAgent.create() — provides run()
 │   ├── types.ts                # ChatAgentConfig, ChatAgentInput, AgentResult (+ internal step/budget/usage; streaming Sink is llm-owned)
@@ -45,6 +47,7 @@ const result = await agent.run({
 
 Also exported from `@openomni/agent`:
 
+- Sessions: `session`, `sweepSessions`, `closeSessions`, `SessionHandle`, `SessionRunner`, `SessionRuntime`
 - Types: `ChatAgentConfig`, `ChatAgentInput`, `AgentResult`
 - Policy: `PolicyEngine`, `PolicyContext`, `PolicyFn`, `CanonicalPolicyRegistration`, `PolicyEngineRegistration`, `PolicyEngineInstance`, `PolicyRegistrationFactory`
 - Budget queries: `checkBudget`, `describeBudgetRemaining`, `BudgetState` — the accounting stays here, what to say about it does not (D5)
@@ -126,12 +129,13 @@ run.ts (entry) → Promise<AgentResult>
 Allowed here:
 
 - Invocation-scoped `ChatAgent` execution and streaming.
+- Generic fenced session mechanics over ledger-owned rows, action trees, inboxes, and generations.
 - Agent-scoped `PolicyEngine` facade and canonical point dispatch over the generic policy primitive.
 - Generic tool invocation contracts and tool executor wrapping.
 
 Not allowed here:
 
-- Creating, resolving, or mutating OpenOmni sessions for product orchestration.
+- Choosing OpenOmni session identities, roles, routing, or product lifecycle policy.
 - Choosing whether a message targets Resident, Worker, external actor, schedule, or surface.
 - Looking up `SurfaceKey`, `ChannelGrantStore`, or `BlacklistStore` for routing.
 - Encoding OpenOmni actor trust, channel grants, or external-response lifecycle rules.
@@ -145,7 +149,7 @@ When in doubt, keep the agent package as a loop engine and put product semantics
 
 ## KEY PATTERNS
 
-- **Invocation-scoped core**: Every `ChatAgent.run()` is independent — no session mutation, storage, durable orchestration, or scheduler. Per-run state such as budget and memory lives on the call context. For future replayable execution attempts, the host supplies captured nondeterministic inputs; this package does not discover or persist them. The normative attempt contract lives in the [kernel contract](../../docs/kernel-contract.md).
+- **Invocation-scoped core**: Every `ChatAgent.run()` is independent — the core loop performs no session mutation, storage, durable orchestration, or scheduling. The separate generic session layer owns the ledger coordination around those invocations. Per-run state such as budget and memory lives on the call context.
 - **Sink-driven**: Callers pass the `Sink` owned by `@openomni/llm` to receive streaming output. The agent never creates sessions on its own.
 - **Policy > ad-hoc hooks**: New extensions MUST use canonical point registrations in `middleware: [...]`. `PolicyEngine.create()` is the single extension surface; timing registrations are rejected fail-closed (#530).
 - **Budget check before each turn**: `checkBudget()` runs before `llmRun()`, not after, so budget enforcement blocks the next turn cleanly.
@@ -154,7 +158,7 @@ When in doubt, keep the agent package as a loop engine and put product semantics
 
 ## ANTI-PATTERNS
 
-- Reaching for `@openomni/ledger` or `@openomni/telemetry` from `src/`. The loop owns no durable state and does not choose where its records go: it reports through `config.events`, and orchestration that needs session state lives in the product app. `srcAllowedDeps` rejects both, so this fails the gate rather than review.
+- Reaching for `@openomni/ledger` from the invocation-scoped `core/` loop. Ledger access is confined to the generic session layer; the loop reports through `config.events` and does not choose durable or product meaning.
 - Do NOT extend behavior outside `middleware: [...]`. `PolicyEngine` is the single extension surface.
 - Do NOT bypass the policy engine by returning placeholder tool results in user code; use a `tool.native.pre` / `tool.mcp.pre` policy so behavior is uniform.
 - Do NOT add OpenOmni communication kernel logic here. No actor authority, wait routing, channel grants, worker grants, SurfaceKey routing, or writeback decisions.

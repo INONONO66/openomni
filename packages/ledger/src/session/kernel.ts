@@ -359,7 +359,13 @@ export function watchSnapshot(
       },
       { match: { sessionId } },
     );
-    const snapshot = getSnapshot(sessionId, turns);
+    let snapshot: SessionTurn.Snapshot;
+    try {
+      snapshot = getSnapshot(sessionId, turns);
+    } catch (error) {
+      stop();
+      throw error;
+    }
     revision = snapshot.revision;
     return {
       snapshot,

@@ -229,6 +229,107 @@ describe("durable session handle", () => {
     ).toEqual(SessionHandleStore.inboxRows(handle.id).map((row) => row.id));
   });
 
+  test("records an idle interrupt as a no-op without resuming the next prompt", async () => {
+    const inputs: SessionRunnerInput[] = [];
+    const runner: SessionRunner = async (input) => {
+      inputs.push(input);
+      return { kind: "result", text: "ran once" };
+    };
+    const handle = session(residentOptions("idle-interrupt", runner), runtime);
+    SessionHandleStore.commitInbox({
+      id: "idle-interrupt:interrupt",
+      sessionId: handle.id,
+      kind: "interrupt",
+      content: "",
+      origin: { encodingVersion: 1, value: { source: "test" } },
+      createdAt: now,
+      parentActionId: SessionHandleStore.tree(handle.id).at(-1)?.id ?? null,
+    });
+
+    const result = await handle.prompt("run after the no-op");
+
+    expect(result).toEqual({ kind: "result", text: "ran once" });
+    expect(inputs).toHaveLength(1);
+    expect(inputs[0]?.resumeCount).toBe(0);
+    expect(SessionHandleStore.openTurns(SessionHandleStore.tree(handle.id))).toEqual([]);
+    expect(
+      SessionHandleStore.tree(handle.id).filter(
+        (action) => SessionHandleStore.turnResume(action) !== undefined,
+      ),
+    ).toEqual([]);
+  });
+
+  test("seals a queued prompt followed by an interrupt without entering the runner", async () => {
+    let entries = 0;
+    const runner: SessionRunner = async () => {
+      entries += 1;
+      return { kind: "result", text: "must not run" };
+    };
+    const handle = session(residentOptions("queued-interrupt", runner), runtime);
+    const parentActionId = SessionHandleStore.tree(handle.id).at(-1)?.id ?? null;
+    SessionHandleStore.commitInbox({
+      id: "queued-interrupt:prompt",
+      sessionId: handle.id,
+      kind: "prompt",
+      content: "do not run",
+      origin: { encodingVersion: 1, value: { source: "test" } },
+      createdAt: now,
+      parentActionId,
+    });
+    SessionHandleStore.commitInbox({
+      id: "queued-interrupt:interrupt",
+      sessionId: handle.id,
+      kind: "interrupt",
+      content: "",
+      origin: { encodingVersion: 1, value: { source: "test" } },
+      createdAt: now + 1,
+      parentActionId,
+    });
+
+    await sweepSessions(() => runner, runtime);
+
+    expect(entries).toBe(0);
+    expect(SessionHandleStore.openTurns(SessionHandleStore.tree(handle.id))).toEqual([]);
+    expect(handle.get()).toMatchObject({
+      state: "interrupted",
+      turns: [{ terminal: { kind: "interrupted" } }],
+    });
+  });
+
+  test("a leading idle interrupt is consumed before a later prompt starts", async () => {
+    const inputs: SessionRunnerInput[] = [];
+    const runner: SessionRunner = async (input) => {
+      inputs.push(input);
+      return { kind: "result", text: "ran once" };
+    };
+    const handle = session(residentOptions("leading-idle-interrupt", runner), runtime);
+    const parentActionId = SessionHandleStore.tree(handle.id).at(-1)?.id ?? null;
+    SessionHandleStore.commitInbox({
+      id: "leading-idle-interrupt:interrupt",
+      sessionId: handle.id,
+      kind: "interrupt",
+      content: "",
+      origin: { encodingVersion: 1, value: { source: "test" } },
+      createdAt: now,
+      parentActionId,
+    });
+    SessionHandleStore.commitInbox({
+      id: "leading-idle-interrupt:prompt",
+      sessionId: handle.id,
+      kind: "prompt",
+      content: "run afterward",
+      origin: { encodingVersion: 1, value: { source: "test" } },
+      createdAt: now + 1,
+      parentActionId,
+    });
+
+    await sweepSessions(() => runner, runtime);
+
+    expect(inputs).toHaveLength(1);
+    expect(inputs[0]?.resumeCount).toBe(0);
+    expect(inputs[0]?.messages).toEqual([{ role: "user", text: "run afterward" }]);
+  });
+
   test("consumes a running interrupt and seals interrupted rather than error", async () => {
     const ready = signal<AbortSignal>();
     const aborted = signal<void>();
@@ -263,6 +364,41 @@ describe("durable session handle", () => {
     expect(terminals).toHaveLength(1);
     expect(terminals[0]?.kind).toBe("interrupted");
     expect(handle.get().state).toBe("interrupted");
+  });
+
+  test("does not overlap a resumed runner when the interrupted runner ignores abort", async () => {
+    const firstEntered = signal<void>();
+    const firstAborted = signal<void>();
+    const releaseFirst = signal<void>();
+    let entries = 0;
+    let active = 0;
+    let maximumActive = 0;
+    const runner: SessionRunner = async (input) => {
+      entries += 1;
+      active += 1;
+      maximumActive = Math.max(maximumActive, active);
+      if (entries === 1) {
+        input.signal.addEventListener("abort", () => firstAborted.resolve(), { once: true });
+        firstEntered.resolve();
+        await releaseFirst.promise;
+      }
+      active -= 1;
+      return { kind: "result", text: `run ${entries}` };
+    };
+    const handle = session(residentOptions("non-cooperative-interrupt", runner), runtime);
+
+    const first = handle.prompt("start");
+    await bounded(firstEntered.promise, "first runner entry");
+    const interrupted = handle.interrupt();
+    await bounded(firstAborted.promise, "first runner abort signal");
+    const resumed = handle.resume();
+    expect(entries).toBe(1);
+    expect(maximumActive).toBe(1);
+    releaseFirst.resolve();
+    await bounded(Promise.all([first, interrupted, resumed]), "serialized resume completion");
+
+    expect(entries).toBe(2);
+    expect(maximumActive).toBe(1);
   });
 
   test("heartbeat loss aborts the runner and the stale fence cannot seal its result", async () => {
@@ -356,7 +492,7 @@ describe("durable session handle", () => {
     ).toHaveLength(1);
   });
 
-  test("retains one handle identity across hibernation and get does not wake it", async () => {
+  test("evicts idle runtime state while a retained handle can rehydrate it", async () => {
     let hibernations = 0;
     const hibernated = signal<void>();
     runtime = {
@@ -382,7 +518,7 @@ describe("durable session handle", () => {
       { role: "assistant", text: "complete" },
     ]);
     expect(hibernations).toBe(1);
-    expect(reopened).toBe(first);
+    expect(reopened).not.toBe(first);
     expect(first.get().lease.fence).toBe(fenceBeforeGet);
     await first.prompt("wake again");
     expect(first.get().lease.fence).toBe(fenceBeforeGet + 1);

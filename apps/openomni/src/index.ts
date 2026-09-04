@@ -258,6 +258,10 @@ export async function startOpenOmni(options: StartOptions = {}) {
       initialize({ dbPath: config.dbPath, observationSink: Bus });
       ctx.effect(() => Storage.reset());
     });
+    const sessionTools = new Map<
+      string,
+      readonly import("./tools/core/define").AnyToolDefinition[]
+    >();
     const sessionRuntime: SessionRuntime = { observations: Bus };
     await composer.mount("session.handles", (ctx) => {
       ctx.effect(() => closeSessions(sessionRuntime));
@@ -408,10 +412,6 @@ export async function startOpenOmni(options: StartOptions = {}) {
       options.llm ?? {},
     );
     const defaultMachineId = machines?.enrolled[0]?.machineId;
-    const sessionTools = new Map<
-      string,
-      readonly import("./tools/core/define").AnyToolDefinition[]
-    >();
     const cells: CellPorts | undefined =
       machineHost === undefined || defaultMachineId === undefined
         ? undefined

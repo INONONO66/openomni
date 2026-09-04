@@ -13,6 +13,7 @@ import type { Placement } from "@openomni/placement";
 import type { Gateway, Ingress, Model } from "@openomni/protocol";
 import { Bus, newTraceId } from "@openomni/telemetry";
 import { chatProviderConfig } from "./composition/chat-provider";
+import { SessionBindingCache } from "./composition/session-bindings";
 import type { PolicyRegistry } from "./composition/policy-registry";
 import type { DelegationOrigin } from "./delegation/admission";
 import { classifyTurnFailure } from "./observation/llm-failure";
@@ -68,6 +69,7 @@ interface DeliveryClassification {
 interface ResidentBinding {
   readonly handle: SessionHandle;
   readonly runner: SessionRunner;
+  readonly release: () => void;
 }
 
 export interface ResidentDelivery {
@@ -106,9 +108,8 @@ function evidenceOrigin(delivery: Gateway.Deliver): string {
 }
 
 function isEvidenceOnly(input: SessionRunnerInput): boolean {
-  return [...input.messages]
-    .reverse()
-    .some((message) => message.role === "user" && message.text.startsWith(EVIDENCE_PREFIX));
+  const latest = [...input.messages].reverse().find((message) => message.role === "user");
+  return latest?.text.startsWith(EVIDENCE_PREFIX) === true;
 }
 
 function abortError(): Error {
@@ -123,17 +124,14 @@ function requireResult(result: SessionRunnerResult | undefined): SessionRunnerRe
 }
 
 export function createResident(options: ResidentOptions): ResidentDelivery {
-  const bindings = new Map<string, ResidentBinding>();
+  const bindings = new SessionBindingCache<ResidentBinding>();
   const runtime = options.sessionRuntime ?? { observations: Bus };
 
-  function bindingFor(sessionId: string): ResidentBinding {
-    const existing = bindings.get(sessionId);
-    if (existing !== undefined) return existing;
-
+  function createBinding(sessionId: string): ResidentBinding {
     const origin: DelegationOrigin = { role: "resident", depth: 0, sessionId };
     const definitions = createTools(options.tools, origin);
     const dispatcher = createDispatcher(definitions, sessionId);
-    const runner = createSessionChatRunner({
+    const chatRunner = createSessionChatRunner({
       prepare(input) {
         const evidenceOnly = isEvidenceOnly(input);
         const toolNames = new Set(input.tools.map((tool) => tool.name));
@@ -176,6 +174,14 @@ export function createResident(options: ResidentOptions): ResidentDelivery {
         return failureFacts(error)?.llm === true ? classifyTurnFailure(error).text : undefined;
       },
     });
+    const runner: SessionRunner = async (input) => {
+      options.tools.cells?.bindTools(sessionId, definitions);
+      try {
+        return await chatRunner(input);
+      } finally {
+        options.tools.cells?.bindTools(sessionId, []);
+      }
+    };
     const handle = session(
       {
         id: sessionId,
@@ -186,45 +192,58 @@ export function createResident(options: ResidentOptions): ResidentDelivery {
       },
       runtime,
     );
-    const created = { handle, runner };
-    bindings.set(sessionId, created);
-    return created;
+    return {
+      handle,
+      runner,
+      release: () => {
+        options.tools.cells?.bindTools(sessionId, []);
+      },
+    };
   }
 
   const deliver = async (delivery: Gateway.Deliver): Promise<Ingress.IngressResult> => {
     const turn = classifyDelivery(delivery);
-    const content = turn.evidenceOnly
-      ? frameEvidenceOnlyText(turn.payload, evidenceOrigin(delivery))
-      : turn.payload;
-    const result = requireResult(
-      await bindingFor(turn.sessionId).handle.prompt(content, {
-        encodingVersion: 1,
-        value: {
-          kind: "gateway",
-          id: delivery.event.id,
-          traceId: delivery.event.traceId,
-          surface: delivery.event.surface,
-          ...(turn.systemKind === undefined ? {} : { systemKind: turn.systemKind }),
-        },
-      }),
-    );
+    const lease = await bindings.acquire(turn.sessionId, () => createBinding(turn.sessionId));
+    const { binding } = lease;
+    try {
+      const content = turn.evidenceOnly
+        ? frameEvidenceOnlyText(turn.payload, evidenceOrigin(delivery))
+        : turn.payload;
+      const result = requireResult(
+        await binding.handle.prompt(content, {
+          encodingVersion: 1,
+          value: {
+            kind: "gateway",
+            id: delivery.event.id,
+            traceId: delivery.event.traceId,
+            surface: delivery.event.surface,
+            ...(turn.systemKind === undefined ? {} : { systemKind: turn.systemKind }),
+          },
+        }),
+      );
 
-    if (result.kind === "interrupted") throw abortError();
-    if (result.kind === "error" && (!result.reported || turn.systemKind === "delegation.settled")) {
-      throw result.cause ?? new Error(result.text);
+      if (result.kind === "interrupted") throw abortError();
+      if (
+        result.kind === "error" &&
+        (!result.reported || turn.systemKind === "delegation.settled")
+      ) {
+        throw result.cause ?? new Error(result.text);
+      }
+      return {
+        mode: "direct",
+        target: delivery.event.target ?? { kind: "resident" },
+        sessionId: turn.sessionId,
+        result: {
+          output: result.text ?? "",
+          finishReason: result.kind === "error" ? "error" : (result.finishReason ?? "stop"),
+        },
+      };
+    } finally {
+      await lease.release();
     }
-    return {
-      mode: "direct",
-      target: delivery.event.target ?? { kind: "resident" },
-      sessionId: turn.sessionId,
-      result: {
-        output: result.text ?? "",
-        finishReason: result.kind === "error" ? "error" : (result.finishReason ?? "stop"),
-      },
-    };
   };
 
   return Object.assign(deliver, {
-    runnerFor: (sessionId: string) => bindingFor(sessionId).runner,
+    runnerFor: (sessionId: string) => createBinding(sessionId).runner,
   });
 }

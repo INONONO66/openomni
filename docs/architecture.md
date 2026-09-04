@@ -38,7 +38,7 @@ ring 1  @openomni/telemetry       observation
         @openomni/placement       pure target selection
 ring 2  @openomni/llm             model access
         @openomni/ipc             thin transport
-ring 3  @openomni/agent           session lifecycle and stateless LLM loop
+ring 3  @openomni/agent           generic durable-session mechanics and stateless LLM loop
 
 lateral driver/gateway band:
         @openomni/machines        machine attach and cell execution
@@ -87,7 +87,7 @@ Band rules:
 - tool definitions and placement consumption;
 - channel registration and injected gateway ports.
 
-`packages/agent` owns the common session assembly path: lease acquisition/heartbeat, durable inbox drain, turn envelopes, generation pinning, crash resume, and hibernation. The app never calls `ChatAgent.create` or rebuilds persisted history at a delivery boundary.
+`packages/agent` owns generic session mechanics over ledger-owned durable facts: `SessionHandleStore` coordination, lease acquisition/heartbeat, durable inbox drain, turn envelopes, generation pinning, crash resume, and registry eviction on hibernation. Product-specific session identity, routing, role configuration, lifecycle policy, and ref-counted executable bindings remain in the app. The app never calls `ChatAgent.create` or rebuilds persisted history at a delivery boundary.
 
 The gateway never reads transcript content. The app does not re-derive platform identity or bypass perimeter decisions.
 

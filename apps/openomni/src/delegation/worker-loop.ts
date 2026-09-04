@@ -10,6 +10,7 @@ import {
 import type { LedgerSession, Model } from "@openomni/protocol";
 import { Bus, newTraceId } from "@openomni/telemetry";
 import { chatProviderConfig } from "../composition/chat-provider";
+import { SessionBindingCache } from "../composition/session-bindings";
 import { observeComponent } from "../observation/component";
 import { buildAgentPrompt } from "../prompt/build";
 import { WORKER_PRESET } from "../prompt/roles";
@@ -47,16 +48,14 @@ export interface SessionInlineWorkerRunner extends InlineWorkerRunner {
 interface WorkerBinding {
   readonly handle: SessionHandle;
   readonly runner: SessionRunner;
+  readonly release: () => void;
 }
 
 export function createInlineWorkerRunner(options: WorkerLoopOptions): SessionInlineWorkerRunner {
-  const bindings = new Map<string, WorkerBinding>();
+  const bindings = new SessionBindingCache<WorkerBinding>();
   const runtime = options.sessionRuntime ?? { observations: Bus };
 
-  function bindingFor(sessionId: string, parentId: string | null, depth: number): WorkerBinding {
-    const existing = bindings.get(sessionId);
-    if (existing !== undefined) return existing;
-
+  function createBinding(sessionId: string, parentId: string | null, depth: number): WorkerBinding {
     const definitions = createTools(
       { delegation: options.kernel() },
       { role: "worker", depth, sessionId },
@@ -105,19 +104,22 @@ export function createInlineWorkerRunner(options: WorkerLoopOptions): SessionInl
       },
       runtime,
     );
-    const created = { handle, runner };
-    bindings.set(sessionId, created);
-    return created;
+    return { handle, runner, release: () => undefined };
   }
 
   const run: InlineWorkerRunner = async (input) => {
-    const binding = bindingFor(input.delegationId, input.origin.sessionId, input.origin.depth);
+    const lease = await bindings.acquire(input.delegationId, () =>
+      createBinding(input.delegationId, input.origin.sessionId, input.origin.depth),
+    );
+    const { binding } = lease;
     let tokens = 0;
     let state: DriveState = initialDriveState();
     let prompt = renderInstruction(input.instruction, input.acceptanceCriteria);
     let lastRunId = input.workerRunId ?? input.delegationId;
     const interrupt = (): void => {
-      void binding.handle.interrupt();
+      // The abort signal is authoritative; a simultaneous lease loss or close
+      // must not surface as an unhandled rejection from this best-effort doorbell.
+      void binding.handle.interrupt().catch(() => undefined);
     };
     input.signal.addEventListener("abort", interrupt, { once: true });
     try {
@@ -156,10 +158,11 @@ export function createInlineWorkerRunner(options: WorkerLoopOptions): SessionInl
       }
     } finally {
       input.signal.removeEventListener("abort", interrupt);
+      await lease.release();
     }
   };
 
   return Object.assign(run, {
-    runnerFor: (row: LedgerSession.Row) => bindingFor(row.id, row.parentId, 1).runner,
+    runnerFor: (row: LedgerSession.Row) => createBinding(row.id, row.parentId, 1).runner,
   });
 }

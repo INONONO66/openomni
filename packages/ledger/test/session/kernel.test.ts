@@ -583,6 +583,24 @@ describe("session kernel folds", () => {
     expect(() => watch.subscribe(() => undefined)).toThrow("watch is unsubscribed");
   });
 
+  test("a failed initial watch snapshot releases its observation subscription", () => {
+    let subscriptions = 0;
+    const observations: ObservationSink = {
+      publish: () => undefined,
+      subscribe: () => {
+        subscriptions += 1;
+        return () => {
+          subscriptions -= 1;
+        };
+      },
+    };
+
+    expect(() => SessionHandleStore.watchSnapshot("missing", 1, observations)).toThrow(
+      "session not found",
+    );
+    expect(subscriptions).toBe(0);
+  });
+
   test("wrapper failures stay loud when rows or required capabilities are absent", () => {
     expect(() => SessionHandleStore.row("missing")).toThrow("session not found");
     expect(() =>

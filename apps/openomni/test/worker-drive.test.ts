@@ -63,6 +63,7 @@ function reply(input: RunInput, text: string): Message.WithParts {
 
 function bootRunner(run: (input: RunInput, sink: Sink) => Promise<{ type: "stop" }>) {
   let kernel: DelegationKernel;
+  let kernelLookups = 0;
   const runner = createInlineWorkerRunner({
     model: { provider: "fake", id: "drive-test" },
     apiKey: "test-key",
@@ -74,10 +75,13 @@ function bootRunner(run: (input: RunInput, sink: Sink) => Promise<{ type: "stop"
       }),
       run,
     },
-    kernel: () => kernel,
+    kernel: () => {
+      kernelLookups += 1;
+      return kernel;
+    },
   });
   kernel = createChildKernel(runner);
-  return { runner, stop: () => kernel.stop() };
+  return { runner, stop: () => kernel.stop(), kernelLookups: () => kernelLookups };
 }
 
 test("an assigned worker claiming BLOCKED is re-driven and believed only on the third recurrence", async () => {
@@ -151,6 +155,28 @@ test("a later worker-run failure carries the active run id", async () => {
   expect(runIds.length).toBeGreaterThan(1);
   expect(output.runId).toBe(runIds.at(-1));
   expect(output.runId).not.toBe(runIds[0]);
+});
+
+test("a settled worker binding is released before the durable session runs again", async () => {
+  const { runner, stop, kernelLookups } = bootRunner(async (input, sink) => {
+    sink.onMessage(reply(input, "done"));
+    return { type: "stop" };
+  });
+  const input = {
+    delegationId: "d-rehydrate",
+    operation: "ask" as const,
+    instruction: "answer",
+    acceptanceCriteria: [],
+    origin: ORIGIN,
+    signal: new AbortController().signal,
+  };
+
+  await runner(input);
+  await runner(input);
+  stop();
+
+  expect(kernelLookups()).toBe(2);
+  expect(SessionHandleStore.getSnapshot(input.delegationId, 2).turns).toHaveLength(2);
 });
 
 test("an assigned worker that finishes naturally is not nannied", async () => {

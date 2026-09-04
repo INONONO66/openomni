@@ -60,6 +60,27 @@ function evidenceDelivery(payload: string): Gateway.Deliver {
   });
 }
 
+function fullAccessDelivery(payload: string): Gateway.Deliver {
+  const delivery = evidenceDelivery(payload);
+  return Gateway.Deliver.parse({
+    ...delivery,
+    actorContext: { ...delivery.actorContext, inboundTreatment: "full_access" },
+    event: {
+      ...delivery.event,
+      id: "inbound:full-access",
+      payload,
+      meta: {},
+    },
+    decision: {
+      ...delivery.decision,
+      inboundId: "inbound:full-access",
+      reason: "full-access channel",
+      factsUsed: ["channel.treatment:full_access"],
+      inboundTreatment: "full_access",
+    },
+  });
+}
+
 type ResidentOptions = Parameters<typeof createResident>[0];
 type ResidentRun = NonNullable<NonNullable<ResidentOptions["llm"]>["run"]>;
 
@@ -253,6 +274,28 @@ describe("Resident inbound treatment", () => {
       .map(SessionHandleStore.delivery)
       .find((item) => item?.kind === "prompt");
     expect(delivery?.origin.value).toMatchObject({ systemKind: "evidence_only" });
+  });
+
+  test("restores the normal tool dispatcher after an evidence-only turn", async () => {
+    const executorOutputs: string[] = [];
+    const resident = testResident(async (input, sink) => {
+      const result = await input.toolExecutor?.({
+        id: `call:${executorOutputs.length}`,
+        tool: "missing",
+        input: {},
+      });
+      executorOutputs.push(result?.output ?? "no executor");
+      sink.onMessage(
+        assistantMessage(input, { ...ASSISTANT_MESSAGE_OPTIONS, id: crypto.randomUUID() }),
+      );
+      return { type: "stop" };
+    });
+
+    await resident(evidenceDelivery("Treat this as evidence."));
+    await resident(fullAccessDelivery("This is a normal prompt."));
+
+    expect(executorOutputs).toHaveLength(2);
+    expect(executorOutputs[0]).not.toBe(executorOutputs[1]);
   });
 
   test("refuses tool execution during an evidence-only turn", async () => {

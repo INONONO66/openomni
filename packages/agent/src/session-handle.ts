@@ -140,6 +140,11 @@ interface RegistryEntry {
   readonly controller: SessionController;
 }
 
+interface SessionControllerLifecycle {
+  reactivate(): SessionHandle;
+  release(): void;
+}
+
 const registries = new WeakMap<SessionRuntime, SessionRegistry>();
 
 export function session(options: SessionCreateOptions, runtime: SessionRuntime): SessionHandle {
@@ -173,10 +178,12 @@ export async function closeSessions(runtime: SessionRuntime): Promise<void> {
 class SessionRegistry {
   private readonly entries = new Map<string, RegistryEntry>();
   private swept = false;
+  private closed = false;
 
   constructor(private readonly runtime: SessionRuntime) {}
 
   declare(options: SessionCreateOptions): SessionHandle {
+    if (this.closed) throw new Error("session registry is closed");
     const entropy = this.runtime.entropy ?? (() => crypto.randomUUID());
     const id = options.id ?? entropy();
     const existing = this.entries.get(id);
@@ -219,14 +226,25 @@ class SessionRegistry {
   }
 
   async close(): Promise<void> {
-    await Promise.all([...this.entries.values()].map((entry) => entry.controller.handle.close()));
+    this.closed = true;
+    const entries = [...this.entries.values()];
     this.entries.clear();
+    await Promise.all(entries.map((entry) => entry.controller.handle.close()));
   }
 
   private install(id: string, runner: SessionRunner): RegistryEntry {
+    if (this.closed) throw new Error("session registry is closed");
     const existing = this.entries.get(id);
     if (existing !== undefined) return existing;
-    const controller = createController(id, runner, this.runtime);
+    let controller: SessionController | undefined;
+    const lifecycle: SessionControllerLifecycle = {
+      reactivate: () => this.install(id, runner).controller.handle,
+      release: () => {
+        const entry = this.entries.get(id);
+        if (controller !== undefined && entry?.controller === controller) this.entries.delete(id);
+      },
+    };
+    controller = createController(id, runner, this.runtime, lifecycle);
     const entry = { runner, controller };
     this.entries.set(id, entry);
     return entry;
@@ -237,6 +255,7 @@ function createController(
   sessionId: string,
   runner: SessionRunner,
   runtime: SessionRuntime,
+  lifecycle: SessionControllerLifecycle,
 ): SessionController {
   const clock = runtime.clock ?? Date.now;
   const entropy = runtime.entropy ?? (() => crypto.randomUUID());
@@ -246,10 +265,21 @@ function createController(
   let controller: AbortController | undefined;
   let fence = SessionHandleStore.row(sessionId).leaseFence;
   let closed = false;
+  let released = false;
+  let successor: SessionHandle | undefined;
   let stopHeartbeat: (() => void) | undefined;
+
+  function replacement(): SessionHandle | undefined {
+    if (closed) throw new Error(`session handle is closed: ${sessionId}`);
+    if (!released) return undefined;
+    successor ??= lifecycle.reactivate();
+    return successor;
+  }
 
   const tools: SessionToolsHandle = {
     async add(additions) {
+      const nextHandle = replacement();
+      if (nextHandle !== undefined) return nextHandle.tools.add(additions);
       const current = SessionHandleStore.latestGeneration(SessionHandleStore.tree(sessionId));
       const next = [...current.tools, ...additions.map(toolSnapshot)];
       return configure("tools.add", next, {
@@ -258,6 +288,8 @@ function createController(
       });
     },
     async remove(names) {
+      const nextHandle = replacement();
+      if (nextHandle !== undefined) return nextHandle.tools.remove(names);
       const current = SessionHandleStore.latestGeneration(SessionHandleStore.tree(sessionId));
       const removed = new Set(names);
       return configure(
@@ -270,6 +302,8 @@ function createController(
 
   const blocks: SessionSystemBlocksHandle = {
     async set(nextBlocks) {
+      const nextHandle = replacement();
+      if (nextHandle !== undefined) return nextHandle.system.blocks.set(nextBlocks);
       const current = SessionHandleStore.latestGeneration(SessionHandleStore.tree(sessionId));
       return configure("system.blocks.set", current.tools, {
         preset: current.systemPreset,
@@ -282,21 +316,40 @@ function createController(
     id: sessionId,
     tools,
     system: { blocks },
-    prompt: (content, origin = internalOrigin(sessionId)) => enqueue("prompt", content, origin),
-    interrupt: async (origin = internalOrigin(sessionId)) => {
-      await enqueue("interrupt", "", origin);
+    prompt(content, origin = internalOrigin(sessionId)) {
+      const nextHandle = replacement();
+      return nextHandle === undefined
+        ? enqueue("prompt", content, origin)
+        : nextHandle.prompt(content, origin);
     },
-    resume: async (origin = internalOrigin(sessionId)) => {
-      await enqueue("resume", "", origin);
+    async interrupt(origin = internalOrigin(sessionId)) {
+      const nextHandle = replacement();
+      await (nextHandle === undefined
+        ? enqueue("interrupt", "", origin)
+        : nextHandle.interrupt(origin));
+    },
+    async resume(origin = internalOrigin(sessionId)) {
+      const nextHandle = replacement();
+      await (nextHandle === undefined ? enqueue("resume", "", origin) : nextHandle.resume(origin));
     },
     get: (options = {}) => SessionHandleStore.getSnapshot(sessionId, options.turns ?? 1),
     watch: (options = {}) =>
       SessionHandleStore.watchSnapshot(sessionId, options.turns ?? 1, runtime.observations),
     async close() {
+      if (closed) return;
       closed = true;
+      if (released) {
+        await successor?.close();
+        return;
+      }
       controller?.abort();
-      await active;
-      stopHeartbeat?.();
+      try {
+        await active;
+      } finally {
+        stopHeartbeat?.();
+        released = true;
+        lifecycle.release();
+      }
     },
   };
 
@@ -323,9 +376,10 @@ function createController(
   }
 
   async function reconcile(): Promise<SessionRunnerResult | undefined> {
-    if (closed || active !== undefined) return active;
-    const work = driveAvailable().finally(() => {
+    if (closed || released || active !== undefined) return active;
+    const work = driveAvailable().finally(async () => {
       active = undefined;
+      await hibernate(SessionHandleStore.row(sessionId));
     });
     active = work;
     return work;
@@ -350,8 +404,12 @@ function createController(
         result = await resumeInterrupted(resume);
         continue;
       }
-      const prompts = pending.filter((item) => item.kind === "prompt");
-      if (prompts.length > 0) {
+      const firstPrompt = pending.findIndex((item) => item.kind === "prompt");
+      if (firstPrompt > 0) {
+        await consumeNoopInbox(pending.slice(0, firstPrompt));
+        continue;
+      }
+      if (firstPrompt === 0) {
         result = await startTurn();
         continue;
       }
@@ -388,13 +446,29 @@ function createController(
       expectedRevision: current.revision,
       actions: [...deliveries, envelope],
       consumeInboxIds: pending.map((item) => item.id),
-      state: pending.some((item) => item.kind === "interrupt") ? "interrupted" : "running",
-      releaseLease: pending.some((item) => item.kind === "interrupt"),
+      state: "running",
+      releaseLease: false,
     });
-    const row = requireCommit(committed);
+    requireCommit(committed);
     if (pending.some((item) => item.kind === "interrupt")) {
-      await hibernate(row);
-      return { kind: "interrupted" };
+      const action = SessionHandleStore.tree(sessionId).find((item) => item.id === turnId);
+      if (action === undefined) throw new Error(`committed turn is missing: ${turnId}`);
+      const interrupted = { kind: "interrupted" as const };
+      await seal(
+        {
+          turnId,
+          resultId,
+          resumeCount: 0,
+          boundaryActionId: parentActionId,
+          toolsGeneration: generation.generation,
+          toolsHash: generation.toolsHash,
+          systemHash: generation.systemHash,
+          policyGeneration: generation.policyGeneration,
+          action,
+        },
+        interrupted,
+      );
+      return interrupted;
     }
     return runTurn({
       turnId,
@@ -527,6 +601,7 @@ function createController(
     let parentActionId = input.parentActionId;
     let boundaryActionId = input.boundaryActionId;
     let result: SessionRunnerResult;
+    let interruptedRunner: Promise<SessionRunnerResult> | undefined;
     const boundary = async (kind: SessionTurn.Boundary): Promise<SessionBoundaryResult> => {
       const drained = await drainBoundary(
         input.turnId,
@@ -567,8 +642,9 @@ function createController(
         boundary,
       });
       result = await Promise.race([running, aborted]);
-      if (turnController.signal.aborted && result.kind !== "interrupted") {
-        result = { kind: "interrupted", text: "" };
+      if (turnController.signal.aborted) {
+        interruptedRunner = running;
+        if (result.kind !== "interrupted") result = { kind: "interrupted", text: "" };
       }
     } catch (error) {
       result = turnController.signal.aborted
@@ -599,6 +675,12 @@ function createController(
       },
       result,
     );
+    if (interruptedRunner !== undefined) {
+      await interruptedRunner.then(
+        () => undefined,
+        () => undefined,
+      );
+    }
     return result;
   }
 
@@ -691,8 +773,7 @@ function createController(
       state: nextState,
       releaseLease: true,
     });
-    const sealed = requireCommit(committed);
-    await hibernate(sealed);
+    requireCommit(committed);
   }
 
   async function consumeNoopInbox(items: readonly Inbox.Row[]): Promise<void> {
@@ -712,7 +793,6 @@ function createController(
       releaseLease: true,
     });
     requireCommit(committed);
-    await hibernate(SessionHandleStore.row(sessionId));
   }
 
   async function configure(
@@ -777,7 +857,8 @@ function createController(
       },
       releaseLease: !ownsRunningLease,
     });
-    requireCommit(committed);
+    const configuredRow = requireCommit(committed);
+    await hibernate(configuredRow);
     return { generation: snapshot.generation, revertTo: snapshot.revertTo };
   }
 
@@ -795,8 +876,11 @@ function createController(
   }
 
   async function hibernate(current: LedgerSession.Row): Promise<void> {
+    if (released || active !== undefined) return;
     if (current.leaseOwner !== null) return;
     if (SessionHandleStore.pendingInbox(sessionId).length > 0) return;
+    released = true;
+    lifecycle.release();
     await runtime.onHibernate?.(sessionId);
   }
 
