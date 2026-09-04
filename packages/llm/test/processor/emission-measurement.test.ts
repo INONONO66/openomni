@@ -64,7 +64,7 @@ describe("Processor emission measurement (#545 T2)", () => {
       model,
       abort: new AbortController().signal,
       sink,
-      events: Bus,
+      events: { publish: Bus.publish },
       trace: { traceId: "trace-processor-test", sessionId: "session-measure" },
       createStream: async () => ({
         fullStream: (async function* () {
