@@ -87,13 +87,26 @@ export interface SessionRuntime {
   readonly processId?: string;
   readonly observations: ObservationSink;
   readonly authorizeConfigure?: SessionHandleStore.ConfigureAuthority;
+  /**
+   * Lease contract. The durable lease is a fenced single-writer guarantee:
+   * every commit carries the fence of the executor that owns the lease, so a
+   * stale executor can never write after another one took over. Liveness is
+   * kept by the heartbeat; when renewal is refused (lease stolen after the TTL
+   * elapsed without a heartbeat) the running turn is aborted. A runner MUST
+   * honour that abort promptly - an abort-ignoring runner keeps computing
+   * without authority; its late result is discarded and it never touches the
+   * lease of a later owner. Takeover after an expired TTL is the intended
+   * recovery for a dead or stalled executor, not a hand-off. The default
+   * heartbeat timer is unref'd so a detached runner never pins the process.
+   */
   readonly scheduleHeartbeat?: (callback: () => void, intervalMs: number) => () => void;
   readonly onHibernate?: (sessionId: string) => void | Promise<void>;
   /**
    * How long `close()` waits for an abort-ignoring runner to settle before
-   * detaching. Defaults to the lease TTL: after detaching, the heartbeat stops
-   * and the durable lease lapses by TTL instead of being handed off while the
-   * runner may still be alive. `0` detaches immediately.
+   * detaching the caller. Defaults to the lease TTL. Detaching only bounds the
+   * caller-facing wait: the heartbeat keeps renewing and the lease is released
+   * by the turn continuation once the runner actually settles, never handed
+   * off while it may still be alive. `0` detaches immediately.
    */
   readonly closeGraceMs?: number;
 }
@@ -1233,5 +1246,6 @@ function turnTerminalAction(input: {
 
 function defaultHeartbeat(callback: () => void, intervalMs: number): () => void {
   const timer = setInterval(callback, intervalMs);
+  timer.unref();
   return () => clearInterval(timer);
 }
