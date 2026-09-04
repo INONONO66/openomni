@@ -275,12 +275,10 @@ function createController(
   let released = false;
   let successor: SessionHandle | undefined;
   let stopHeartbeat: (() => void) | undefined;
-  // Set while a runner that ignored its abort is still alive after the
-  // interrupted terminal was sealed. It still holds the durable lease.
+  // Set from the moment an interrupted terminal is about to be sealed while
+  // the runner ignored its abort, until that runner settles. It still holds
+  // the durable lease, so configure must not rotate or release it.
   let liveInterruptRunner: Promise<SessionRunnerResult> | undefined;
-  // Set when close() gave up waiting for that runner: the lease is left to
-  // lapse by TTL and the runner's eventual settlement must not touch it.
-  let forceDetached = false;
 
   function replacement(): SessionHandle | undefined {
     if (closed) throw new Error(`session handle is closed: ${sessionId}`);
@@ -367,16 +365,17 @@ function createController(
         graceTimer.unref?.();
       });
       try {
+        // Only the caller-facing wait is bounded. When the grace window lapses
+        // the turn continuation keeps the heartbeat alive and releases the
+        // lease itself once the abort-ignoring runner finally settles, so the
+        // lease is never handed off while that runner may still be alive.
         const settled = active?.then(
-          () => "settled" as const,
-          () => "settled" as const,
+          () => undefined,
+          () => undefined,
         );
-        const outcome = settled === undefined ? "settled" : await Promise.race([settled, grace]);
-        if (outcome === "grace") forceDetached = true;
+        if (settled !== undefined) await Promise.race([settled, grace]);
       } finally {
         if (graceTimer !== undefined) clearTimeout(graceTimer);
-        stopHeartbeat?.();
-        stopHeartbeat = undefined;
         released = true;
         lifecycle.release();
       }
@@ -681,6 +680,10 @@ function createController(
       result = await Promise.race([running, aborted]);
       if (turnController.signal.aborted) {
         interruptedRunner = running;
+        // Mark the live runner BEFORE the interrupted terminal is sealed: any
+        // configure re-entered from a synchronous observation of that seal
+        // must already see the lease as held by this executor.
+        liveInterruptRunner = running;
         if (result.kind !== "interrupted") result = { kind: "interrupted", text: "" };
       }
     } catch (error) {
@@ -724,7 +727,6 @@ function createController(
       // lease (renewed by the heartbeat above). Wait for it to settle, then
       // stop the heartbeat and release the lease so a resume can only start
       // once this executor is genuinely gone — session-wide single flight.
-      liveInterruptRunner = interruptedRunner;
       await interruptedRunner.then(
         () => undefined,
         () => undefined,
@@ -732,9 +734,7 @@ function createController(
       liveInterruptRunner = undefined;
       stopHeartbeat?.();
       stopHeartbeat = undefined;
-      // If close() already detached, the heartbeat is stopped and the lease
-      // lapses by TTL; a release here would race a legitimate new owner.
-      if (!forceDetached) await releaseHeldLease();
+      await releaseHeldLease();
     }
     return result;
   }

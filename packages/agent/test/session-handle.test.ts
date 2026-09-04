@@ -51,11 +51,15 @@ async function bounded<T>(promise: Promise<T>, label: string): Promise<T> {
 
 class TestObservationSink implements ObservationSink {
   dropNextCommit = false;
+  onCommit: ((committed: L0Observation.ActionCommitted) => void) | undefined;
 
   publish<T>(event: BusEvent.Descriptor<T>, data: T): void {
-    if (this.dropNextCommit && event.name === L0Observation.ActionCommittedEvent.name) {
-      this.dropNextCommit = false;
-      return;
+    if (event.name === L0Observation.ActionCommittedEvent.name) {
+      if (this.dropNextCommit) {
+        this.dropNextCommit = false;
+        return;
+      }
+      this.onCommit?.(L0Observation.ActionCommittedEvent.schema.parse(data));
     }
     Bus.publish(event, data);
   }
@@ -508,48 +512,105 @@ describe("durable session handle", () => {
     expect(maximumActive).toBe(1);
   });
 
-  test("close() detaches from an abort-ignoring runner after the grace window and leaves the lease to lapse", async () => {
+  test("configure re-entered from the interrupted seal observation still sees the lease as held", async () => {
     const entered = signal<void>();
     const releaseRunner = signal<void>();
+    let active = 0;
+    let maximumActive = 0;
     const runner: SessionRunner = async () => {
+      active += 1;
+      maximumActive = Math.max(maximumActive, active);
       entered.resolve();
       await releaseRunner.promise;
+      active -= 1;
       return { kind: "result", text: "late" };
     };
-    const handle = session(
-      residentOptions("close-detaches-after-grace", runner),
-      { ...runtime, closeGraceMs: 0 },
-    );
+    const handle = session(residentOptions("configure-from-seal-observation", runner), runtime);
+    // Re-enter configure synchronously from the observation of the interrupted
+    // terminal seal — the earliest point a subscriber can react to it.
+    const reentered = signal<() => Promise<SessionGeneration.ConfigureReceipt>>();
+    let fenceAtSeal = -1;
+    sink.onCommit = (committed) => {
+      if (committed.kind !== "turn" || fenceAtSeal !== -1) return;
+      const row = SessionHandleStore.row(handle.id);
+      if (row.state !== "interrupted") return;
+      fenceAtSeal = row.leaseFence;
+      const configured = handle.tools.add([tool("search")]);
+      reentered.resolve(() => configured);
+    };
 
     const running = handle.prompt("start");
     await bounded(entered.promise, "runner entry");
-    await bounded(handle.close(), "close with zero grace");
+    const interrupted = handle.interrupt();
+    const reentrant = await bounded(reentered.promise, "seal observation");
+    await bounded(reentrant(), "re-entrant configure");
 
-    // Detached: the lease is still recorded for this owner (no hand-off while
-    // the runner may be alive) and lapses by TTL rather than by release.
     const row = SessionHandleStore.row(handle.id);
+    expect(row.leaseFence).toBe(fenceAtSeal);
     expect(row.leaseOwner).not.toBeNull();
-    const withinTtl = SessionHandleStore.acquireLease({
+    const contended = SessionHandleStore.acquireLease({
       sessionId: handle.id,
       owner: "second-runtime",
       expectedFence: row.leaseFence,
       now,
       expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
     });
-    expect(withinTtl.ok).toBe(false);
-    const afterTtl = SessionHandleStore.acquireLease({
+    expect(contended.ok).toBe(false);
+
+    releaseRunner.resolve();
+    await bounded(Promise.all([running, interrupted]), "interrupted runner settlement");
+    expect(SessionHandleStore.row(handle.id).leaseOwner).toBeNull();
+    expect(maximumActive).toBe(1);
+  });
+
+  test("close() returns after the grace window while the lease stays held until the abort-ignoring runner settles", async () => {
+    const entered = signal<void>();
+    const releaseRunner = signal<void>();
+    let active = 0;
+    let maximumActive = 0;
+    const runner: SessionRunner = async () => {
+      active += 1;
+      maximumActive = Math.max(maximumActive, active);
+      entered.resolve();
+      await releaseRunner.promise;
+      active -= 1;
+      return { kind: "result", text: "late" };
+    };
+    const handle = session(residentOptions("close-detaches-after-grace", runner), {
+      ...runtime,
+      closeGraceMs: 0,
+    });
+
+    const running = handle.prompt("start");
+    await bounded(entered.promise, "runner entry");
+    await bounded(handle.close(), "close with zero grace");
+
+    // Detached from the caller only: the lease is still held by this executor
+    // and its heartbeat keeps renewing, so no second executor can start.
+    const row = SessionHandleStore.row(handle.id);
+    expect(row.leaseOwner).not.toBeNull();
+    const whileAlive = SessionHandleStore.acquireLease({
       sessionId: handle.id,
       owner: "second-runtime",
       expectedFence: row.leaseFence,
-      now: now + SessionHandleStore.LEASE_TTL_MS + 1,
-      expiresAt: now + 2 * SessionHandleStore.LEASE_TTL_MS,
+      now,
+      expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
     });
-    expect(afterTtl.ok).toBe(true);
+    expect(whileAlive.ok).toBe(false);
 
-    // The late runner settlement must not disturb the new owner's lease.
+    // Once the runner settles the turn continuation releases the lease itself.
     releaseRunner.resolve();
-    await bounded(running.then(() => undefined, () => undefined), "late runner settlement");
-    expect(SessionHandleStore.row(handle.id).leaseOwner).toBe("second-runtime");
+    await bounded(running, "late runner settlement");
+    expect(SessionHandleStore.row(handle.id).leaseOwner).toBeNull();
+    const afterSettle = SessionHandleStore.acquireLease({
+      sessionId: handle.id,
+      owner: "second-runtime",
+      expectedFence: SessionHandleStore.row(handle.id).leaseFence,
+      now,
+      expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
+    });
+    expect(afterSettle.ok).toBe(true);
+    expect(maximumActive).toBe(1);
   });
 
   test("heartbeat loss aborts the runner and the stale fence cannot seal its result", async () => {
