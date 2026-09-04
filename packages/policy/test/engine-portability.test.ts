@@ -60,7 +60,7 @@ describe("PolicyEngine portability", () => {
     const engine = PolicyEngine.create({ clock: Date.now });
     let invocationCount = 0;
 
-    engine.register({
+    engine.add({
       kind: "point",
       name: "scoped-canonical",
       pointIds: ["run.turn.pre"],
@@ -86,7 +86,7 @@ describe("PolicyEngine portability", () => {
     const engine = PolicyEngine.create({ clock: Date.now });
 
     const error = capturedRegistrationError(() =>
-      Reflect.apply(engine.register, engine, [
+      Reflect.apply(engine.add, engine, [
         {
           name: "legacy-registration",
           timing: "turn.start",
@@ -140,7 +140,7 @@ describe("PolicyEngine portability", () => {
     const { engine: engine1, events: events1 } = createAuditedEngine();
     const { engine: engine2, events: events2 } = createAuditedEngine();
 
-    engine1.register({
+    engine1.add({
       kind: "point",
       name: "policy-1",
       pointIds: ["run.turn.pre"],
@@ -149,7 +149,7 @@ describe("PolicyEngine portability", () => {
       fn: () => PolicyDecision.allow({ policyId: "engine1.policy" }),
     });
 
-    engine2.register({
+    engine2.add({
       kind: "point",
       name: "policy-2",
       pointIds: ["run.turn.pre"],
@@ -183,7 +183,7 @@ describe("PolicyEngine portability", () => {
   it("dispatches policy and fires audit callback without Bus", async () => {
     const { engine, events } = createAuditedEngine();
 
-    engine.register({
+    engine.add({
       kind: "point",
       name: "test-policy",
       pointIds: ["run.turn.pre"],
@@ -201,7 +201,7 @@ describe("PolicyEngine portability", () => {
   it("denies and fires audit callback on deny verdict", async () => {
     const { engine, events } = createAuditedEngine();
 
-    engine.register({
+    engine.add({
       kind: "point",
       name: "deny-policy",
       pointIds: ["run.turn.pre"],
@@ -222,7 +222,7 @@ describe("PolicyEngine portability", () => {
     let observedAgentType: unknown;
     let observedResourceDescriptor: unknown;
 
-    engine.register({
+    engine.add({
       kind: "point",
       name: "standalone-policy",
       pointIds: ["run.turn.pre"],

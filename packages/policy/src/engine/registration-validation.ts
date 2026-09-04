@@ -3,7 +3,7 @@
  * intentional duplicate of this registration boundary, pinned to the single
  * `dispatch.action.pre` point and surfacing its own error taxonomy
  * (`DispatchPolicyRegistrationError`). It delegates final acceptance to
- * `engine.register()` (this file), so validation added here also guards that
+ * `engine.add()` (this file), so validation added here also guards that
  * path — but keep the two boundaries in sync deliberately; they must not
  * drift apart silently.
  */

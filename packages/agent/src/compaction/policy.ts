@@ -7,6 +7,8 @@ import type { PolicyRegistrationFactory } from "../core/policy/types";
 type CompactionConfig = CompactionOptions & {
   /** Where the compaction record goes. The policy reports; it does not decide. */
   readonly events: BusEvent.Sink;
+  /** Cancellation owned by the invoking session, not a policy lifecycle callback. */
+  readonly signal?: AbortSignal;
   /** Ordering relative to the product's other run.completion.pre policies — the caller's opinion, not the mechanism's. */
   readonly priority: number;
 };
@@ -18,12 +20,11 @@ type CompactionConfig = CompactionOptions & {
  * `create()` at registration).
  */
 type CompactionPolicyRegistration = ReturnType<PolicyRegistrationFactory["create"]> & {
-  readonly onRunEnd?: () => void;
   readonly speculationStarted?: () => Promise<void>;
   readonly speculationSettled?: () => Promise<void>;
 };
 
-export interface CompactionRunBinding {
+interface CompactionRunBinding {
   readonly signal?: AbortSignal;
   readonly getPreviousYield: () => CompactionYield | undefined;
   readonly recordYield: (value: CompactionYield) => void;
@@ -31,7 +32,6 @@ export interface CompactionRunBinding {
 
 type CompactionPolicyFactory = PolicyRegistrationFactory & {
   readonly create: () => CompactionPolicyRegistration;
-  readonly createForRun: (binding: CompactionRunBinding) => CompactionPolicyRegistration;
 };
 
 type CompactionDispatchContext = Parameters<CompactionPolicyRegistration["fn"]>[0];
@@ -41,7 +41,6 @@ export function createCompactionPolicy(config: CompactionConfig): CompactionPoli
     kind: "factory",
     name: "builtin:compaction",
     create: () => buildRegistration(config),
-    createForRun: (binding) => buildRegistration(config, binding),
   };
 }
 
@@ -263,16 +262,14 @@ async function evaluateCompaction(
   return compactionResultDecision(result);
 }
 
-function buildRegistration(
-  config: CompactionConfig,
-  suppliedBinding?: CompactionRunBinding,
-): CompactionPolicyRegistration {
-  const { events, priority, ...configuredCompaction } = config;
-  let standaloneYield: CompactionYield | undefined;
-  const binding: CompactionRunBinding = suppliedBinding ?? {
-    getPreviousYield: () => standaloneYield,
+function buildRegistration(config: CompactionConfig): CompactionPolicyRegistration {
+  const { events, priority, signal, ...configuredCompaction } = config;
+  let previousYield: CompactionYield | undefined;
+  const binding: CompactionRunBinding = {
+    signal,
+    getPreviousYield: () => previousYield,
     recordYield: (value) => {
-      standaloneYield = value;
+      previousYield = value;
     },
   };
   const compaction = {
@@ -309,7 +306,6 @@ function buildRegistration(
       ...(speculator === undefined ? {} : { "run.turn.post": [] }),
     },
     priority,
-    onRunEnd: () => speculator?.abort(),
     speculationStarted: () => speculator?.started() ?? Promise.resolve(),
     speculationSettled: () => speculator?.settled() ?? Promise.resolve(),
     fn: (ctx) => evaluateCompaction(ctx, compaction, speculator, events, state, binding),

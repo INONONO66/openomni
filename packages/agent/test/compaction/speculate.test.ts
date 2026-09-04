@@ -449,10 +449,7 @@ describe("speculative prepare/promote (L4)", () => {
         events,
         priority: 900,
       });
-      const registration = factory.createForRun({
-        getPreviousYield: () => undefined,
-        recordYield: () => undefined,
-      });
+      const registration = factory.create();
       const pending = registration.fn(seamCtx(history(), 17_000));
       await entered;
       jest.advanceTimersByTime(100);
@@ -476,6 +473,7 @@ describe("speculative prepare/promote (L4)", () => {
       contextWindowTokens: 32_000,
       protectRecentMessages: 2,
       speculate: false,
+      signal: controller.signal,
       onSummarize: (_messages, _previous, _budget, signal) => {
         started();
         return new Promise<string>((_resolve, reject) => {
@@ -485,11 +483,7 @@ describe("speculative prepare/promote (L4)", () => {
       events,
       priority: 900,
     });
-    const registration = factory.createForRun({
-      signal: controller.signal,
-      getPreviousYield: () => undefined,
-      recordYield: () => undefined,
-    });
+    const registration = factory.create();
     const pending = registration.fn(seamCtx(history(), 17_000));
     await entered;
     controller.abort();
@@ -593,22 +587,6 @@ describe("speculative prepare/promote (L4)", () => {
     speculator.abort();
     await speculator.settled();
     expect(calls).toBe(0);
-  });
-
-  it("aborts an in-flight candidate when the run ends", async () => {
-    const registration = build(async () => "must-not-promote");
-    const messages = history();
-    await registration.fn(turnPostCtx(messages, 8_000));
-    (registration as { readonly onRunEnd?: () => void }).onRunEnd?.();
-    await settle(registration);
-
-    expect(
-      (registration as { readonly speculationSettled?: () => Promise<void> }).speculationSettled,
-    ).toBeDefined();
-    const decision = await registration.fn(seamCtx(messages, 17_000));
-    expect((decision as { reasonCodes?: string[] }).reasonCodes).not.toContain(
-      "compaction_candidate_promoted",
-    );
   });
 
   it("stops preparing after the failure streak cap, visibly", async () => {

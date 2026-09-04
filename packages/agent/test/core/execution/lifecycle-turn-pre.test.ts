@@ -237,7 +237,7 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
     // Given
     const seen: Array<{ readonly pointId: string; readonly serverId: unknown }> = [];
     const engine = PolicyEngine.create({ clock: Date.now });
-    engine.register({
+    engine.add({
       kind: "point",
       name: "skill-mcp-observer",
       pointIds: ["tool.mcp.pre", "tool.mcp.post"],
@@ -310,7 +310,7 @@ describe("buildTurn (turn.start + context.prepare + resources.prepare)", () => {
     // name.
     const seen: string[] = [];
     const engine = PolicyEngine.create({ clock: Date.now });
-    engine.register({
+    engine.add({
       kind: "point",
       name: "mcp-route-observer",
       pointIds: ["tool.mcp.pre", "tool.mcp.post", "tool.native.pre", "tool.native.post"],

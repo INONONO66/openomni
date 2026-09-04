@@ -56,7 +56,7 @@ describe("PolicyEngine behavior", () => {
   it("dispatches one registration at every declared point", async () => {
     const fn = mock(() => allow("multi"));
     const engine = PolicyEngine.create({ clock: Date.now });
-    engine.register({
+    engine.add({
       kind: "point",
       name: "multi",
       pointIds: ["run.turn.pre", "run.turn.post"],
@@ -247,7 +247,7 @@ describe("PolicyEngine behavior", () => {
   it("continues after an allow without middleware policy metadata", async () => {
     const after = mock(() => allow("after"));
     const engine = PolicyEngine.create({ clock: Date.now });
-    engine.register(
+    engine.add(
       atPoint("tool.native.pre", {
         name: "missing-policy-id",
         priority: 0,

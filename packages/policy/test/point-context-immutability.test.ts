@@ -13,7 +13,7 @@ describe("PolicyEngine canonical point context immutability", () => {
     const engine = PolicyEngine.create({ clock: Date.now });
     const invocations: string[] = [];
     for (const name of ["first-map-policy", "second-map-policy"] as const) {
-      engine.register({
+      engine.add({
         kind: "point",
         name,
         pointIds: ["dispatch.action.pre"],
@@ -41,7 +41,7 @@ describe("PolicyEngine canonical point context immutability", () => {
   test("deeply freezes plain structured records and arrays", async () => {
     const engine = PolicyEngine.create({ clock: Date.now });
     let deeplyFrozen = false;
-    engine.register({
+    engine.add({
       kind: "point",
       name: "plain-structured-context-policy",
       pointIds: ["dispatch.action.pre"],
@@ -81,7 +81,7 @@ describe("PolicyEngine canonical point context immutability", () => {
     test(`returns input-invalid for ${testCase.name} context`, async () => {
       const engine = PolicyEngine.create({ clock: Date.now });
       let invoked = false;
-      engine.register({
+      engine.add({
         kind: "point",
         name: "unsupported-context-policy",
         pointIds: ["dispatch.action.pre"],
@@ -114,7 +114,7 @@ describe("PolicyEngine canonical point context immutability", () => {
   test("returns input-invalid for an eventEmitter-keyed emitter", async () => {
     const engine = PolicyEngine.create({ clock: Date.now });
     let invoked = false;
-    engine.register({
+    engine.add({
       kind: "point",
       name: "event-emitter-context-policy",
       pointIds: ["dispatch.action.pre"],

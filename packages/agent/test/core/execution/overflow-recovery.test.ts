@@ -64,7 +64,7 @@ function bulkyToolMessage(index: number): Message.WithParts {
 
 function engineWithCompaction() {
   const engine = PolicyEngine.create({ clock: Date.now });
-  engine.register(
+  engine.add(
     createCompactionPolicy({
       contextWindowTokens: 100,
       protectRecentMessages: 2,

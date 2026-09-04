@@ -48,7 +48,7 @@ describe("PolicyEngine unguarded point dispatch", () => {
 
   test("descends into the context once a policy is registered at the point", async () => {
     const engine = PolicyEngine.create({ clock: Date.now });
-    engine.register({
+    engine.add({
       kind: "point",
       name: "context-consumer",
       pointIds: ["run.turn.pre"],

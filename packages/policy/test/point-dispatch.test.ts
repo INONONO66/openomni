@@ -14,7 +14,7 @@ describe("PolicyEngine dispatchPoint selection", () => {
     let observedMarker: string | undefined;
     let frozen = false;
 
-    engine.register({
+    engine.add({
       kind: "point",
       name: "dispatch-observer",
       pointIds: ["dispatch.action.pre"],
@@ -50,7 +50,7 @@ describe("PolicyEngine dispatchPoint selection", () => {
       ["second", 10],
       ["later", 20],
     ] as const) {
-      engine.register({
+      engine.add({
         kind: "point",
         name,
         pointIds: ["dispatch.action.pre"],
@@ -62,7 +62,7 @@ describe("PolicyEngine dispatchPoint selection", () => {
         },
       });
     }
-    engine.register({
+    engine.add({
       kind: "point",
       name: "other-point",
       pointIds: ["run.lifecycle.pre"],
@@ -83,7 +83,7 @@ describe("PolicyEngine dispatchPoint selection", () => {
     const engine = PolicyEngine.create({ clock: Date.now });
     let agentTypeReads = 0;
     let observedAgentType: unknown;
-    engine.register({
+    engine.add({
       kind: "point",
       name: "resident-only",
       pointIds: ["dispatch.action.pre"],
@@ -113,7 +113,7 @@ describe("PolicyEngine dispatchPoint selection", () => {
   test("keeps point selection isolated with no legacy dispatch member", async () => {
     const engine = PolicyEngine.create({ clock: Date.now });
     const invocations: string[] = [];
-    engine.register({
+    engine.add({
       kind: "point",
       name: "action-policy",
       pointIds: ["dispatch.action.pre"],
@@ -124,7 +124,7 @@ describe("PolicyEngine dispatchPoint selection", () => {
         return PolicyDecision.allow({ policyId: "action-policy" });
       },
     });
-    engine.register({
+    engine.add({
       kind: "point",
       name: "turn-policy",
       pointIds: ["run.turn.pre"],
@@ -168,7 +168,7 @@ describe("PolicyEngine dispatchPoint selection", () => {
       }),
     );
     const engine = PolicyEngine.create({ clock: Date.now });
-    engine.register(
+    engine.add(
       atPoint("run.error.error", {
         name: "test:error",
         priority: 100,

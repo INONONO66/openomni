@@ -19,7 +19,7 @@ describe("PolicyEngine canonical point audit", () => {
       traceContext,
       auditEmit: (event, data) => events.push({ name: event.name, data }),
     });
-    engine.register({
+    engine.add({
       kind: "point",
       name: "canonical-audit",
       pointIds: [pointId],
@@ -72,7 +72,7 @@ describe("PolicyEngine canonical point audit", () => {
       traceContext: { traceId: "trace-audit-drop" },
       auditEmit: (event, data) => events.push({ name: event.name, data }),
     });
-    engine.register({
+    engine.add({
       kind: "point",
       name: "drop-witness",
       pointIds: ["dispatch.action.pre"],
@@ -120,7 +120,7 @@ describe("PolicyEngine canonical point audit", () => {
     });
     // The snapshot exists to protect a policy from a mutable context, so it is
     // only built for a point that has one. Register here to exercise it.
-    engine.register({
+    engine.add({
       kind: "point",
       name: "snapshot-consumer",
       pointIds: ["dispatch.action.pre"],

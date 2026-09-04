@@ -18,7 +18,7 @@ function expectRegistrationError(
   registration: Readonly<Record<string, unknown>>,
 ): PolicyRegistrationError {
   try {
-    Reflect.apply(engine.register, engine, [registration]);
+    Reflect.apply(engine.add, engine, [registration]);
   } catch (error) {
     expect(error).toBeInstanceOf(PolicyRegistrationError);
     if (error instanceof PolicyRegistrationError) return error;
@@ -32,7 +32,7 @@ describe("PolicyEngine canonical registration", () => {
     const engine = PolicyEngine.create({ clock: Date.now });
 
     expect(() =>
-      engine.register({
+      engine.add({
         ...registrationDefaults,
         name: "effect-free",
         pointIds: ["delegation.worker.post"],
@@ -40,7 +40,7 @@ describe("PolicyEngine canonical registration", () => {
       }),
     ).not.toThrow();
     expect(() =>
-      engine.register({
+      engine.add({
         ...registrationDefaults,
         name: "multi-point",
         pointIds: ["tool.native.pre", "tool.mcp.pre"],
@@ -56,7 +56,7 @@ describe("PolicyEngine canonical registration", () => {
     const engine = PolicyEngine.create({ clock: Date.now });
     let invocationCount = 0;
 
-    engine.register({
+    engine.add({
       ...registrationDefaults,
       name: "canonical-deny",
       pointIds: ["run.turn.pre"],
@@ -273,7 +273,7 @@ describe("PolicyEngine canonical registration", () => {
     try {
       expect(mutated).toBe(false);
       expect(() =>
-        engine.register({
+        engine.add({
           ...registrationDefaults,
           name: "mutated-authority",
           pointIds: ["run.lifecycle.post"],
@@ -291,7 +291,7 @@ describe("PolicyEngine canonical registration", () => {
 test("accepts union-typed registrations through the public engine overload", () => {
   const engine = PolicyEngine.create<GenericPolicyContext>({ clock: Date.now });
   const registerUnion = (registration: CanonicalPolicyRegistrationGeneric<GenericPolicyContext>) =>
-    engine.register(registration);
+    engine.add(registration);
 
   expect(() =>
     registerUnion({

@@ -4,7 +4,7 @@ import type { BudgetState } from "../budget";
 import type {
   CanonicalPolicyRegistrationGeneric,
   GenericPolicyContext,
-  PolicyRegistrationFactoryGeneric,
+  PolicyMiddlewareFactoryGeneric,
 } from "@openomni/policy/src/engine/types";
 
 export interface PolicyContext extends GenericPolicyContext {
@@ -88,6 +88,6 @@ export type PolicyRegistration = CanonicalPolicyRegistration;
  * carried in `ChatAgentConfig.middleware` is shared across every run and
  * across parent/child agents that reuse the middleware array.
  */
-export type PolicyRegistrationFactory = PolicyRegistrationFactoryGeneric<PolicyContext>;
+export type PolicyRegistrationFactory = PolicyMiddlewareFactoryGeneric<PolicyContext>;
 
 export type PolicyEngineRegistration = CanonicalPolicyRegistration | PolicyRegistrationFactory;

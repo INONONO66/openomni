@@ -52,11 +52,11 @@ export function atPoint(
 }
 
 export function registerAt(
-  engine: Pick<PolicyEngineInstanceGeneric<GenericPolicyContext>, "register">,
+  engine: Pick<PolicyEngineInstanceGeneric<GenericPolicyContext>, "add">,
   pointId: PolicyPointId,
   registration: PointRegistration,
 ): void {
-  engine.register(atPoint(pointId, registration));
+  engine.add(atPoint(pointId, registration));
 }
 
 export function allow(policyId = "test.allow"): Policy.PolicyDecision {

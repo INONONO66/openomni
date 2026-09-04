@@ -61,12 +61,12 @@ export function atPoint(
 }
 
 export function registerAt(
-  engine: Pick<PolicyEngineInstance, "register">,
+  engine: Pick<PolicyEngineInstance, "add">,
   pointId: PolicyPointId,
   registration: PointRegistration,
 ): void;
 export function registerAt(
-  engine: Pick<PolicyEngineInstance, "register">,
+  engine: Pick<PolicyEngineInstance, "add">,
   pointId: PolicyPointId,
   name: string,
   priority: number,
@@ -74,7 +74,7 @@ export function registerAt(
   effects?: readonly Policy.PolicyEffectType[],
 ): void;
 export function registerAt(
-  engine: Pick<PolicyEngineInstance, "register">,
+  engine: Pick<PolicyEngineInstance, "add">,
   pointId: PolicyPointId,
   nameOrRegistration: string | PointRegistration,
   priority?: number,
@@ -82,11 +82,11 @@ export function registerAt(
   effects: readonly Policy.PolicyEffectType[] = [],
 ): void {
   if (typeof nameOrRegistration !== "string") {
-    engine.register(atPoint(pointId, nameOrRegistration));
+    engine.add(atPoint(pointId, nameOrRegistration));
     return;
   }
   if (priority === undefined || fn === undefined) throw new Error("incomplete test registration");
-  engine.register(atPoint(pointId, { name: nameOrRegistration, priority, fn, effects }));
+  engine.add(atPoint(pointId, { name: nameOrRegistration, priority, fn, effects }));
 }
 
 export function allow(

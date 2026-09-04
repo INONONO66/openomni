@@ -13,7 +13,7 @@ function registrationErrorFor(
 ): PolicyRegistrationError {
   const engine = PolicyEngine.create({ clock: Date.now });
   try {
-    Reflect.apply(engine.register, engine, [registration]);
+    Reflect.apply(engine.add, engine, [registration]);
   } catch (error) {
     expect(error).toBeInstanceOf(PolicyRegistrationError);
     if (error instanceof PolicyRegistrationError) return error;
@@ -27,7 +27,7 @@ describe("PolicyEngine canonical registration boundary", () => {
     const engine = PolicyEngine.create({ clock: Date.now });
 
     expect(() =>
-      engine.register({
+      engine.add({
         kind: "point",
         name: "complete-canonical",
         pointIds: ["run.lifecycle.post"],
@@ -187,7 +187,7 @@ test("rejects a legacy-shaped proxy fail-closed without reclassifying its later 
 
   let rejection: unknown;
   try {
-    Reflect.apply(engine.register, engine, [registration]);
+    Reflect.apply(engine.add, engine, [registration]);
   } catch (error) {
     rejection = error;
   }
@@ -239,7 +239,7 @@ test("rejects non-object registrations at the public boundary", () => {
   const engine = PolicyEngine.create({ clock: Date.now });
   for (const registration of [null, [], "policy"]) {
     try {
-      Reflect.apply(engine.register, engine, [registration]);
+      Reflect.apply(engine.add, engine, [registration]);
       throw new Error("expected registration rejection");
     } catch (error) {
       expect(error).toBeInstanceOf(PolicyRegistrationError);

@@ -86,7 +86,7 @@ describe("dispatchPreRun (run.start)", () => {
 it("appends run.start context as a user message", async () => {
   Bus.reset();
   const engine = PolicyEngine.create({ clock: Date.now });
-  engine.register(
+  engine.add(
     atPoint("run.lifecycle.pre", {
       name: "test-pre-run-context",
       effects: ["prompt.append_context"],

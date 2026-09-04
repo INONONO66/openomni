@@ -80,7 +80,7 @@ describe("deny-wins point matrix", () => {
 
     for (const { pointId, ctx } of pointCases) {
       const engine = PolicyEngine.create({ clock: Date.now });
-      engine.register({
+      engine.add({
         kind: "point",
         name: "allow",
         pointIds: [pointId],
@@ -88,7 +88,7 @@ describe("deny-wins point matrix", () => {
         priority: 0,
         fn: () => allow(),
       });
-      engine.register({
+      engine.add({
         kind: "point",
         name: "deny",
         pointIds: [pointId],
@@ -109,7 +109,7 @@ describe("scope filtering with 100 policies", () => {
     const engine = PolicyEngine.create({ clock: Date.now });
     let unscopedRuns = 0;
     let scopedRuns = 0;
-    engine.register(
+    engine.add(
       atPoint("run.turn.pre", {
         name: "unscoped",
         priority: 0,
@@ -119,7 +119,7 @@ describe("scope filtering with 100 policies", () => {
         },
       }),
     );
-    engine.register(
+    engine.add(
       atPoint("run.turn.pre", {
         name: "scoped",
         priority: 1,
@@ -174,7 +174,7 @@ describe("scope filtering with 100 policies", () => {
           return allow();
         },
       };
-      engine.register(reg);
+      engine.add(reg);
     }
 
     await engine.dispatchPoint("run.turn.pre", { ...turnPreContext(), agentType: "coder" });
@@ -193,7 +193,7 @@ describe("scope filtering with 100 policies", () => {
     const executed: string[] = [];
 
     for (let i = 0; i < 50; i++) {
-      engine.register(
+      engine.add(
         atPoint("tool.native.pre", {
           name: `scoped-reviewer-${i}`,
           priority: i * 2,
@@ -207,7 +207,7 @@ describe("scope filtering with 100 policies", () => {
     }
 
     for (let i = 0; i < 50; i++) {
-      engine.register(
+      engine.add(
         atPoint("tool.native.pre", {
           name: `unscoped-${i}`,
           priority: i * 2 + 1,
@@ -236,7 +236,7 @@ describe("scope filtering with 100 policies", () => {
     let scopedInvocations = 0;
 
     for (let i = 0; i < 80; i++) {
-      engine.register(
+      engine.add(
         atPoint("run.turn.post", {
           name: `scoped-${i}`,
           priority: i,
@@ -251,7 +251,7 @@ describe("scope filtering with 100 policies", () => {
     }
 
     for (let i = 0; i < 20; i++) {
-      engine.register(
+      engine.add(
         atPoint("run.turn.post", {
           name: `unscoped-${i}`,
           priority: 100 + i,
@@ -281,7 +281,7 @@ describe("scope filtering with 100 policies", () => {
 
     for (let i = 0; i < 100; i++) {
       const scopeTypes = i % 3 === 0 ? ["coder", "reviewer"] : i % 3 === 1 ? ["planner"] : ["ops"];
-      engine.register(
+      engine.add(
         atPoint("run.error.error", {
           name: `policy-${i}`,
           priority: i,

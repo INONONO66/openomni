@@ -10,10 +10,9 @@ import { ModelsDev, Provider, Retry as LlmRetry, type Run, run as llmRun } from 
 import type { Sink } from "@openomni/llm";
 import { Placement } from "@openomni/placement";
 import { resolveCompactionGeometry } from "../../compaction/geometry";
-import type { CompactionRunBinding } from "../../compaction/policy";
 import type { AgentResult, ChatAgentConfig, ChatAgentInput } from "../types";
 import * as Retry from "../retry";
-import { PolicyEngine, type PolicyEngineInstance, type PolicyRegistration } from "../policy";
+import { PolicyEngine, type PolicyEngineInstance } from "../policy";
 import { emitRunCompleted, emitRunFailed, emitRunStarted, emitTurnStart } from "./run-events";
 import {
   dispatchBudgetCheck,
@@ -72,11 +71,15 @@ export async function runAgent(
   assertToolExecutor(config);
   assertUnambiguousToolMetadata(config);
   const state = createRunState({ ...input, traceContext: trace });
-  const engine = buildPolicyEngine(config, agentBase, state);
+  const engine = PolicyEngine.create({
+    clock: Date.now,
+    traceContext: { traceId, sessionId, runId },
+    auditEmit: (descriptor, data) => config.events.publish(descriptor, data),
+  });
+  for (const middleware of config.middleware ?? []) engine.add(middleware);
   emitRunStarted(config.events, trace, config.model.id);
 
   const finish = (result: AgentResult): AgentResult => {
-    engine.endRun();
     emitRunCompleted(config.events, state, agentBase, result.finishReason);
     return result;
   };
@@ -88,7 +91,6 @@ export async function runAgent(
       await runAttempts(state, config, sink, engine, trace, agentBase, retryPolicy, progress),
     );
   } catch (error) {
-    engine.endRun();
     const facts =
       progress.thrownFailure ?? undecidedFailureFacts(error, config, retryPolicy, progress);
     emitRunFailed(
@@ -408,49 +410,4 @@ async function resolveProviderModel(model: {
   throw new Error(`Model not found: ${model.id} for provider ${model.provider}`);
 }
 
-type RunPolicyEngine = PolicyEngineInstance & { readonly endRun: () => void };
-
-export function buildPolicyEngine(
-  config: ChatAgentConfig,
-  agentBase: AgentRunBase,
-  state?: RunState,
-): RunPolicyEngine {
-  const engine = PolicyEngine.create({
-    clock: Date.now,
-    traceContext: {
-      traceId: agentBase.traceId,
-      sessionId: agentBase.sessionId,
-      runId: agentBase.runId,
-    },
-    auditEmit: (descriptor, data) => config.events.publish(descriptor, data),
-  });
-  const onRunEnd: Array<() => void> = [];
-  for (const reg of config.middleware ?? []) {
-    if (reg.kind === "factory") {
-      const runBinding: CompactionRunBinding = {
-        signal: config.signal,
-        getPreviousYield: () => state?.lastCompactionYield,
-        recordYield: (value) => {
-          if (state !== undefined) state.lastCompactionYield = value;
-        },
-      };
-      const created =
-        "createForRun" in reg && typeof reg.createForRun === "function"
-          ? (reg.createForRun as (binding: CompactionRunBinding) => PolicyRegistration)(runBinding)
-          : reg.create();
-      // Re-wrap the already-created registration so the generic engine keeps
-      // its async factory lane while this runner retains its run-end hook.
-      engine.register({ kind: "factory", name: reg.name, create: () => created });
-      const cleanup = (created as { readonly onRunEnd?: () => void }).onRunEnd;
-      if (cleanup !== undefined) onRunEnd.push(cleanup);
-    } else {
-      engine.register(reg);
-    }
-  }
-  return Object.assign(engine, {
-    endRun: () => {
-      for (const cleanup of onRunEnd) cleanup();
-      onRunEnd.length = 0;
-    },
-  });
-}
+type RunPolicyEngine = PolicyEngineInstance;

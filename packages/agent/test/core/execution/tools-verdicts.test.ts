@@ -25,13 +25,13 @@ function verdictPolicy(decision: Policy.PolicyDecision): PolicyRegistration {
 
 function engineWith(decision: Policy.PolicyDecision) {
   const engine = PolicyEngine.create({ clock: Date.now });
-  engine.register(verdictPolicy(decision));
+  engine.add(verdictPolicy(decision));
   return engine;
 }
 
 function engineWithRegistrations(registrations: PolicyRegistration[]) {
   const engine = PolicyEngine.create({ clock: Date.now });
-  for (const registration of registrations) engine.register(registration);
+  for (const registration of registrations) engine.add(registration);
   return engine;
 }
 

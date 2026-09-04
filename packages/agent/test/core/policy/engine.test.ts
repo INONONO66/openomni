@@ -37,7 +37,7 @@ describe("agent policy Bus integration", () => {
         },
         auditEmit: Bus.publish,
       });
-      engine.register(
+      engine.add(
         atPoint("run.turn.post", {
           name: "observer-isolation",
           priority: 100,
@@ -83,7 +83,7 @@ describe("agent policy Bus integration", () => {
         },
         auditEmit: Bus.publish,
       });
-      engine.register(
+      engine.add(
         atPoint("run.turn.post", {
           name: "async-observer-isolation",
           priority: 100,
@@ -127,7 +127,7 @@ describe("agent policy Bus integration", () => {
         },
         auditEmit: Bus.publish,
       });
-      engine.register(
+      engine.add(
         atPoint("tool.native.pre", {
           name: "policy-check",
           effects: ["run.abort"],

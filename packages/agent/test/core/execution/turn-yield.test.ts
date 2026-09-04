@@ -64,7 +64,7 @@ function userMessage(text: string): Message.WithParts {
 
 function seamEngine(decision: () => ReturnType<typeof allow>) {
   const engine = PolicyEngine.create({ clock: Date.now });
-  engine.register(
+  engine.add(
     atPoint("run.completion.pre", {
       name: "test-compaction-seam",
       effects: ["run.replace_messages"],

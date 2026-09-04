@@ -70,7 +70,7 @@ describe("resources.prepare dispatch", () => {
   ] as const)("$name", async ({ toolNames, filtered, expected }) => {
     Bus.reset();
     const engine = PolicyEngine.create({ clock: Date.now });
-    if (filtered !== undefined) engine.register(filterPolicy([...filtered]));
+    if (filtered !== undefined) engine.add(filterPolicy([...filtered]));
     const config = makeConfig({
       tools: makeTools(...toolNames),
       systemPrompt: "test system prompt",
@@ -95,7 +95,7 @@ describe("resources.prepare dispatch", () => {
   it("returns complete result when abort verdict is returned", async () => {
     Bus.reset();
     const engine = PolicyEngine.create({ clock: Date.now });
-    engine.register(abortSelectionPolicy("tools-restricted"));
+    engine.add(abortSelectionPolicy("tools-restricted"));
 
     const tools = makeTools("bash", "read");
     const state = makeState();

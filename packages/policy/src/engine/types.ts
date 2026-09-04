@@ -95,20 +95,20 @@ export type RuntimePolicyRegistrationGeneric<TCtx extends GenericPolicyContext> 
  * agent's blocking compaction seam. Direct registrations do not: their public
  * `fn` surface is synchronous and rejects accidental async callbacks.
  */
-export interface PolicyRegistrationFactoryGeneric<TCtx extends GenericPolicyContext> {
+export interface PolicyMiddlewareFactoryGeneric<TCtx extends GenericPolicyContext> {
   readonly kind: "factory";
   readonly name: string;
   readonly create: () => RuntimePolicyRegistrationGeneric<TCtx>;
 }
 
-/** What an engine accepts: a stateless registration, or a per-engine factory. */
+/** What the internal point engine accepts at construction. */
 export type PolicyEngineMiddlewareGeneric<TCtx extends GenericPolicyContext> =
   | CanonicalPolicyRegistrationGeneric<TCtx>
-  | PolicyRegistrationFactoryGeneric<TCtx>;
+  | PolicyMiddlewareFactoryGeneric<TCtx>;
 
 export interface PolicyEngineInstanceGeneric<TCtx extends GenericPolicyContext> {
-  /** Direct policy callbacks are synchronous; factories retain the existing async compaction lane. */
-  register(reg: PolicyEngineMiddlewareGeneric<TCtx>): void;
+  /** Internal legacy point setup; the package root exposes compiled row snapshots instead. */
+  add(reg: PolicyEngineMiddlewareGeneric<TCtx>): void;
   dispatchPoint<TPointId extends PolicyPointId>(
     pointId: TPointId,
     ctx: DispatchPointContextGeneric<TCtx, TPointId>,
