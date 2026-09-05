@@ -5,7 +5,7 @@ import { existsSync } from "node:fs";
 import { connect } from "node:net";
 import { dirname, join } from "node:path";
 import type { Sink } from "@openomni/llm";
-import { Session, SessionHandleStore, SurfaceKey } from "@openomni/ledger";
+import { SessionHandleStore, SurfaceKey } from "@openomni/ledger";
 import { loadConfig, type OpenOmniConfig } from "../src/config";
 import { assistantMessage } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
@@ -35,11 +35,20 @@ async function upgradeResponse(port: number, path: string) {
         if (raw.length < end + 4 + length) return;
         resolve({ status, raw });
       });
-      socket.once("connect", () => socket.write([
-        `GET ${path} HTTP/1.1`, `Host: 127.0.0.1:${port}`,
-        "Connection: Upgrade", "Upgrade: websocket", "Sec-WebSocket-Version: 13",
-        "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==", "", "",
-      ].join("\r\n")));
+      socket.once("connect", () =>
+        socket.write(
+          [
+            `GET ${path} HTTP/1.1`,
+            `Host: 127.0.0.1:${port}`,
+            "Connection: Upgrade",
+            "Upgrade: websocket",
+            "Sec-WebSocket-Version: 13",
+            "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==",
+            "",
+            "",
+          ].join("\r\n"),
+        ),
+      );
     });
   } finally {
     clearTimeout(timer);
@@ -142,7 +151,16 @@ describe("OpenOmni Resident WebSocket", () => {
     try {
       const refusal = await upgradeResponse(app.port, `/ws?token=${WS_TOKEN}`);
       const before = db.query("SELECT COUNT(*) AS count FROM session").get();
-      console.log("967-U1 HTTP", JSON.stringify({ port: app.port, dbPath: config.dbPath, ...refusal, providerCalls, sessions: before }));
+      console.log(
+        "967-U1 HTTP",
+        JSON.stringify({
+          port: app.port,
+          dbPath: config.dbPath,
+          ...refusal,
+          providerCalls,
+          sessions: before,
+        }),
+      );
       expect(refusal.status).toBe(401);
       expect(providerCalls).toBe(0);
       expect(before).toEqual({ count: 0 });
@@ -155,24 +173,44 @@ describe("OpenOmni Resident WebSocket", () => {
       const reply = JSON.parse(String((await response).data));
       expect(reply).toEqual({ type: "response", text: REPLY });
       expect(providerCalls).toBe(1);
-      expect(Session.list()).toHaveLength(1);
-      const session = Session.list()[0];
+      expect(SessionHandleStore.listRows()).toHaveLength(1);
+      const session = SessionHandleStore.listRows()[0];
       if (session === undefined) throw new Error("resident session was not persisted");
       const snapshot = SessionHandleStore.getSnapshot(session.id);
       expect(snapshot).toMatchObject({ role: "resident", state: "idle" });
       expect(snapshot.turns.at(-1)?.messages).toEqual([
-        { role: "user", text: "967-U1 input" }, { role: "assistant", text: REPLY },
+        { role: "user", text: "967-U1 input" },
+        { role: "assistant", text: REPLY },
       ]);
       const sessions = db.query("SELECT id, role, state, revision FROM session").all();
-      const actions = db.query("SELECT session_id, kind, ordinal FROM action ORDER BY ordinal").all();
+      const actions = db
+        .query("SELECT session_id, kind, ordinal FROM action ORDER BY ordinal")
+        .all();
       expect(sessions).toHaveLength(1);
       expect(actions.length).toBeGreaterThan(0);
-      console.log("967-U1 WS SQLite", JSON.stringify({ protocol: ws.protocol, reply, providerCalls, sessions, actions, turns: snapshot.turns }));
+      console.log(
+        "967-U1 WS SQLite",
+        JSON.stringify({
+          protocol: ws.protocol,
+          reply,
+          providerCalls,
+          sessions,
+          actions,
+          turns: snapshot.turns,
+        }),
+      );
     } finally {
       db.close();
       await suite.cleanup();
       expect(existsSync(dirname(config.dbPath))).toBe(false);
-      console.log("967-U1 cleanup", JSON.stringify({ port: app.port, dbPath: config.dbPath, directoryExists: existsSync(dirname(config.dbPath)) }));
+      console.log(
+        "967-U1 cleanup",
+        JSON.stringify({
+          port: app.port,
+          dbPath: config.dbPath,
+          directoryExists: existsSync(dirname(config.dbPath)),
+        }),
+      );
     }
   });
 
@@ -195,7 +233,14 @@ describe("OpenOmni Resident WebSocket", () => {
     }
     expect(ws.readyState).toBe(WebSocket.CLOSED);
     expect(existsSync(dirname(config.dbPath))).toBe(false);
-    console.log("967-U1 failure cleanup", JSON.stringify({ state: ws.readyState, directoryExists: existsSync(dirname(config.dbPath)), port: app.port }));
+    console.log(
+      "967-U1 failure cleanup",
+      JSON.stringify({
+        state: ws.readyState,
+        directoryExists: existsSync(dirname(config.dbPath)),
+        port: app.port,
+      }),
+    );
   });
 
   it("boots WebSocket-only when no channel credentials are configured", async () => {
@@ -215,7 +260,7 @@ describe("OpenOmni Resident WebSocket", () => {
     const event = await reply;
     expect(JSON.parse(String(event.data))).toEqual({ type: "response", text: REPLY });
 
-    const sessions = Session.list();
+    const sessions = SessionHandleStore.listRows();
     expect(sessions).toHaveLength(1);
     const session = sessions[0];
     if (session === undefined) throw new Error("Expected one persisted session");
@@ -281,9 +326,10 @@ describe("OpenOmni Resident WebSocket", () => {
   it("rejects an upgrade carrying the wrong subprotocol token", async () => {
     const app = await bootApp();
 
-    await expect(suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "wrong-token"]))
-      .rejects.toThrow("WebSocket failed before opening");
-    expect(Session.list()).toHaveLength(0);
+    await expect(
+      suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "wrong-token"]),
+    ).rejects.toThrow("WebSocket failed before opening");
+    expect(SessionHandleStore.listRows()).toHaveLength(0);
   });
 
   it("rolls a failed boot back and leaves the next boot clean", async () => {

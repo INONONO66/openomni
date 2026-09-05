@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { initialize, Session, SessionHandleStore, Storage } from "@openomni/ledger";
+import { initialize, SessionHandleStore, Storage } from "@openomni/ledger";
 import type { Gateway, Model } from "@openomni/protocol";
 import { createResidentGateway } from "../src/gateway";
 import { createResident } from "../src/resident";
@@ -24,11 +24,8 @@ function openSession(prefix: string): string {
   const directory = mkdtempSync(join(tmpdir(), prefix));
   directories.push(directory);
   initialize({ dbPath: join(directory, "chat.db") });
-  return Session.create({
-    traceId: "trace-llm-resilience",
-    title: "resilience session",
-    model: { providerID: PRIMARY.provider, modelID: PRIMARY.id },
-  }).id;
+  // Delivery, not fixture CRUD, owns real handle materialization.
+  return crypto.randomUUID();
 }
 
 function delivery(sessionId: string, meta?: Gateway.Deliver["event"]["meta"]): Gateway.Deliver {

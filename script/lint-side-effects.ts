@@ -1,4 +1,4 @@
-type SideEffectRuleId = "processor-projected-sink" | "session-mutation-publish-after-write";
+type SideEffectRuleId = "processor-projected-sink";
 
 interface SideEffectViolation {
   readonly ruleId: SideEffectRuleId;
@@ -23,7 +23,7 @@ interface SourceMatch {
   readonly text: string;
 }
 
-const hotFiles = ["packages/llm/src/processor/index.ts", "packages/ledger/src/session/messages.ts"];
+const hotFiles = ["packages/llm/src/processor/index.ts"];
 
 const rules: readonly SideEffectRule[] = [
   {
@@ -35,36 +35,6 @@ const rules: readonly SideEffectRule[] = [
     ],
     requiredAfter: [],
     message: "processor sink side effects must flow through createProjectedSink",
-  },
-  {
-    ruleId: "session-mutation-publish-after-write",
-    filePath: "packages/ledger/src/session/messages.ts",
-    sideEffect: /adapter\.message\.set\(sessionID, message\)/g,
-    scopeStart: /export function addMessage\(/g,
-    scopeEnd: /\nexport function /g,
-    requiredBefore: [],
-    requiredAfter: ["Storage.publishObservation(Event.Updated, { info: updated })"],
-    message: "Session.addMessage must publish Event.Updated after adapter.message.set",
-  },
-  {
-    ruleId: "session-mutation-publish-after-write",
-    filePath: "packages/ledger/src/session/messages.ts",
-    sideEffect: /adapter\.session\.set\(sessionID, updated\)/g,
-    scopeStart: /export function addMessage\(/g,
-    scopeEnd: /\nexport function /g,
-    requiredBefore: [],
-    requiredAfter: ["Storage.publishObservation(Event.Updated, { info: updated })"],
-    message: "Session.addMessage must publish Event.Updated after adapter.session.set",
-  },
-  {
-    ruleId: "session-mutation-publish-after-write",
-    filePath: "packages/ledger/src/session/messages.ts",
-    sideEffect: /adapter\.part\.set\(messageID, part\)/g,
-    scopeStart: /export function addPart\(/g,
-    scopeEnd: /\nexport function /g,
-    requiredBefore: [],
-    requiredAfter: ["Storage.publishObservation(Event.Updated, { info:"],
-    message: "Session.addPart must publish Event.Updated after adapter.part.set",
   },
 ];
 
@@ -99,10 +69,7 @@ async function verifyHotFilesExist(): Promise<void> {
   }
 }
 
-export function validateSideEffectRules(
-  filePath: string,
-  source: string,
-): SideEffectViolation[] {
+export function validateSideEffectRules(filePath: string, source: string): SideEffectViolation[] {
   return rules
     .filter((rule) => rule.filePath === filePath)
     .flatMap((rule) => validateRule(rule, source));

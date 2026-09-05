@@ -4,6 +4,7 @@ import { Bus } from "../helpers/observation";
 import { Storage } from "../../src/storage/storage";
 import "../../src/storage/initialize";
 import { WorkerRunStateStore } from "../../src/worker-run/state-store";
+import { materializeSession } from "../helpers/session";
 
 /**
  * #510 D2b pin (a) — the worker-run store is a FROZEN legacy writer
@@ -13,16 +14,6 @@ import { WorkerRunStateStore } from "../../src/worker-run/state-store";
  * the adapter layer, exactly as pre-freeze rows persist on disk — keep
  * answering every read surface.
  */
-
-function seedSession(id: string): void {
-  Storage.get().session.set(id, {
-    id,
-    title: "test",
-    model: { providerID: "test", modelID: "test" },
-    time: { created: Date.now(), updated: Date.now() },
-    spawnDepth: 0,
-  });
-}
 
 function seedFrozenRun(
   sessionId: string,
@@ -70,7 +61,7 @@ beforeEach(() => {
   Storage.reset();
   Storage.initialize({ dbPath: ":memory:", observationSink: Bus });
   Bus.reset();
-  seedSession("sess-frozen");
+  materializeSession("sess-frozen");
 });
 
 afterEach(() => {

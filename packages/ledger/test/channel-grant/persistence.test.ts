@@ -12,8 +12,7 @@ describe("ChannelGrantStore SQLite persistence", () => {
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "channel-grant-test-"));
     dbPath = join(tmpDir, "test.db");
-    Storage.initialize({ dbPath: ":memory:" });
-    Storage.configure(new SqliteStorageAdapter(dbPath));
+    Storage.initialize({ dbPath });
   });
 
   afterEach(async () => {
@@ -59,6 +58,7 @@ describe("ChannelGrantStore SQLite persistence", () => {
       updatedAt: 200,
     });
 
+    Storage.reset();
     Storage.configure(new SqliteStorageAdapter(dbPath));
 
     expect(ChannelGrantStore.get(stored.id)).toEqual(stored);
@@ -82,9 +82,7 @@ describe("ChannelGrantStore SQLite persistence", () => {
     const bare = Storage.get();
     Storage.configure({
       transaction: bare.transaction.bind(bare),
-      session: bare.session,
-      message: bare.message,
-      part: bare.part,
+      close: () => bare.close?.(),
     });
 
     expect(() => ChannelGrantStore.list()).toThrow("does not implement channel grants");

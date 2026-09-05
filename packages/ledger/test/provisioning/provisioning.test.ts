@@ -126,20 +126,16 @@ describe("provisioning stores", () => {
   test("§8.2: the database file never contains credential plaintext", async () => {
     const plaintext = "hunter2-super-secret-token";
     const kek = kekFixture(9);
-    SecretStore.put(secretRow("secret:leak-probe", Vault.seal(new TextEncoder().encode(plaintext), kek)));
+    SecretStore.put(
+      secretRow("secret:leak-probe", Vault.seal(new TextEncoder().encode(plaintext), kek)),
+    );
     const fileBytes = await readFile(dbPath);
     expect(fileBytes.includes(plaintext)).toBe(false);
   });
 
   test("a storage adapter without the provisioning seam fails closed with adapter_absent", () => {
     Storage.reset();
-    Storage.initialize({ dbPath: ":memory:" });
-    Storage.configure({
-      transaction: (fn) => fn(),
-      session: {} as never,
-      message: {} as never,
-      part: {} as never,
-    });
+    Storage.configure({ transaction: (fn) => fn() });
     for (const attempt of [
       () => PersonStore.list(),
       () => ChannelInstanceStore.list(),

@@ -1,79 +1,56 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import type { Message } from "@openomni/protocol";
 import { Database } from "bun:sqlite";
-import { Session, Storage } from "../../src/index";
-import { Bus } from "../helpers/observation";
+import { SessionHandleStore, Storage } from "../../src/index";
+import { materializeSession } from "../helpers/session";
 import { removeSqliteFiles, tempDbPath } from "../helpers/sqlite";
 
-// A corrupt persisted row must fail closed on READ — parse-don't-cast, matching
-// the wait/blacklist precedent. message/part are the same class (blind
-// `JSON.parse(...) as T`), fixed in #584/#585.
-
-/** Overwrite a row's JSON `data` column through a second connection. */
-function corruptRow(dbPath: string, table: string, id: string, data: string): void {
-  const raw = new Database(dbPath);
-  raw.query(`UPDATE ${table} SET data = ? WHERE id = ?`).run(data, id);
+let dbPath: string;
+let raw: Database;
+beforeEach(() => {
+  dbPath = tempDbPath("read-validation");
+  Storage.initialize({ dbPath });
+  raw = new Database(dbPath);
+  // Model damaged persisted bytes, bypassing write-time CHECKs on this fault connection only.
+  raw.exec("PRAGMA ignore_check_constraints = ON");
+  materializeSession("corrupt");
+});
+afterEach(() => {
   raw.close();
-}
+  Storage.reset();
+  removeSqliteFiles(dbPath);
+});
 
-function userMessage(sessionID: string, id: string): Message.Info {
-  return {
-    id,
-    sessionID,
-    role: "user",
-    time: { created: Date.now() },
-    agent: "resident",
-    model: { providerID: "test", modelID: "test" },
-  };
-}
-
-function textPart(sessionID: string, messageID: string, id: string): Message.Part {
-  return { id, sessionID, messageID, type: "text", text: "hello" };
-}
-
-describe("sqlite adapters fail closed on corrupt rows", () => {
-  let dbPath = "";
-
-  beforeEach(() => {
-    Bus.reset();
-    Storage.reset();
-    dbPath = tempDbPath("read-validation");
-    Storage.initialize({ dbPath });
+describe("canonical SQLite reads fail closed", () => {
+  test.each([
+    "{",
+    "undefined",
+    "",
+  ])("corrupt action payload %s rejects tree and snapshot reads", (payload) => {
+    raw.query("UPDATE action SET effect = ? WHERE id = ?").run(payload, "corrupt:configure");
+    expect(() => SessionHandleStore.tree("corrupt")).toThrow();
+    expect(() => SessionHandleStore.getSnapshot("corrupt")).toThrow();
   });
 
-  afterEach(() => {
-    Storage.reset();
-    Bus.reset();
-    removeSqliteFiles(dbPath);
-    dbPath = "";
+  test("invalid canonical session counters reject get and list reads", () => {
+    raw.query("UPDATE session SET tools_generation = -1 WHERE id = ?").run("corrupt");
+    expect(() => SessionHandleStore.row("corrupt")).toThrow();
+    expect(() => SessionHandleStore.listRows()).toThrow();
   });
 
-  test("a corrupt message row rejects on read", () => {
-    const session = Session.create({
-      traceId: "trace-read-validation",
-      title: "s",
-      model: { providerID: "test", modelID: "test" },
+  test("corrupt inbox origin rejects reads without consuming the row", () => {
+    SessionHandleStore.commitInbox({
+      id: "pending",
+      sessionId: "corrupt",
+      kind: "prompt",
+      content: "input",
+      origin: { encodingVersion: 1, value: {} },
+      createdAt: 2,
+      parentActionId: null,
     });
-    Session.addMessage(session.id, userMessage(session.id, "msg-corrupt"));
-
-    corruptRow(dbPath, "message", "msg-corrupt", JSON.stringify({ role: "user" }));
-
-    expect(() => Session.getMessages(session.id)).toThrow();
-    expect(() => Storage.get().message.get(session.id, "msg-corrupt")).toThrow();
-  });
-
-  test("a corrupt part row rejects on read", () => {
-    const session = Session.create({
-      traceId: "trace-read-validation",
-      title: "s",
-      model: { providerID: "test", modelID: "test" },
+    raw.query("UPDATE inbox SET origin = ? WHERE id = ?").run("{", "pending");
+    expect(() => SessionHandleStore.pendingInbox("corrupt")).toThrow();
+    expect(raw.query("SELECT status FROM inbox WHERE id = ?").get("pending")).toEqual({
+      status: "pending",
     });
-    Session.addMessage(session.id, userMessage(session.id, "msg-parts"));
-    Session.addPart("msg-parts", textPart(session.id, "msg-parts", "part-corrupt"));
-
-    corruptRow(dbPath, "part", "part-corrupt", JSON.stringify({ type: "text" }));
-
-    expect(() => Session.getParts("msg-parts")).toThrow();
-    expect(() => Storage.get().part.get("msg-parts", "part-corrupt")).toThrow();
   });
 });

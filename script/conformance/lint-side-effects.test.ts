@@ -1,35 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { validateSideEffectRules } from "../lint-side-effects";
 
-const sessionMessagesPath = "packages/ledger/src/session/messages.ts";
-
-function sessionMessageSource(operations: string): string {
-  return `
-export function addMessage() {
-  ${operations}
-}
-export function addPart() {
-  adapter.part.set(messageID, part);
-  Storage.publishObservation(Event.Updated, { info: updated });
-}
-export function nextFunction() {}
-`;
-}
+const processorPath = "packages/llm/src/processor/index.ts";
 
 describe("side-effect ordering gate", () => {
-  test("requires publication after both addMessage storage writes", () => {
-    const valid = sessionMessageSource(`
-      adapter.message.set(sessionID, message);
-      adapter.session.set(sessionID, updated);
-      Storage.publishObservation(Event.Updated, { info: updated });
-    `);
-    expect(validateSideEffectRules(sessionMessagesPath, valid)).toEqual([]);
-
-    const inverted = sessionMessageSource(`
-      Storage.publishObservation(Event.Updated, { info: updated });
-      adapter.message.set(sessionID, message);
-      adapter.session.set(sessionID, updated);
-    `);
-    expect(validateSideEffectRules(sessionMessagesPath, inverted)).toHaveLength(2);
+  test("requires projected sink binding before processor emission", () => {
+    const bind =
+      "const sink = createProjectedSink(events, configuredSink, sessionID, trace.traceId);";
+    const emit = "sink.onMessage(message);";
+    expect(validateSideEffectRules(processorPath, `${bind}\n${emit}`)).toEqual([]);
+    expect(validateSideEffectRules(processorPath, `${emit}\n${bind}`)).toHaveLength(1);
+    expect(validateSideEffectRules(processorPath, bind)).toHaveLength(1);
   });
 });

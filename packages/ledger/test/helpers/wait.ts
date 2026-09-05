@@ -74,28 +74,5 @@ export function captureStoreError(fn: () => unknown): InstanceType<typeof Wait.S
  * (adapter_absent) proof. Every other surface is unreachable in that test.
  */
 export function bareStorageAdapter(): Storage.Adapter {
-  const notImplemented = (): never => {
-    throw new Error("bare test adapter: not implemented");
-  };
-  return {
-    transaction: <T>(operation: () => T): T => operation(),
-    session: {
-      get: notImplemented,
-      set: notImplemented,
-      list: notImplemented,
-      remove: notImplemented,
-    },
-    message: {
-      get: notImplemented,
-      set: notImplemented,
-      list: notImplemented,
-      remove: notImplemented,
-    },
-    part: {
-      get: notImplemented,
-      set: notImplemented,
-      list: notImplemented,
-      remove: notImplemented,
-    },
-  };
+  return { transaction: <T>(operation: () => T): T => operation() };
 }

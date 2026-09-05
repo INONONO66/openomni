@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { initialize, Session, SessionHandleStore, Storage } from "@openomni/ledger";
+import { initialize, SessionHandleStore, Storage } from "@openomni/ledger";
 import type { RunInput, Sink } from "@openomni/llm";
 import {
   Tool,
@@ -75,11 +75,7 @@ test("a resident tool call is executed and observed through the durable executor
     priority: 1000,
     generation: 1,
   });
-  const sessionId = Session.create({
-    traceId: "trace-tool-wiring",
-    title: "tool wiring",
-    model: { providerID: "fake", modelID: "resident-test" },
-  }).id;
+  const sessionId = "resident-tool-wiring";
   let bodyRuns = 0;
   const resident = createResident({
     model: { provider: "fake", id: "resident-test" },
@@ -146,9 +142,7 @@ test("a resident tool call is executed and observed through the durable executor
   expect(turn).toBeDefined();
   expect(toolIntent?.parentId).toBe(turn?.id);
   expect(toolResult?.parentId).toBe(toolIntent?.id);
-  expect(
-    decisions.map((action) => field(action.intent.value, "hook")).sort(),
-  ).toEqual([
+  expect(decisions.map((action) => field(action.intent.value, "hook")).sort()).toEqual([
     "llm.post",
     "llm.pre",
     "prompt.post",
