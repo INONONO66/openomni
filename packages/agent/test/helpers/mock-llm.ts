@@ -20,7 +20,7 @@ export function createStopOutcome(): Run.Outcome {
   return { type: "stop" };
 }
 
-export function createErrorOutcome(message: string): Run.Outcome {
+function _createErrorOutcome(message: string): Run.Outcome {
   return { type: "error", error: { message, name: "Error", stack: "" } };
 }
 

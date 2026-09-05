@@ -1,6 +1,6 @@
 # PROJECT KNOWLEDGE BASE
 
-Last verified against `kernel/944`: 2026-09-03 (built-in curated memory plus dormant agent, channel, ledger, protocol, and one-shot provisioning surfaces removed; keep this stamp current when editing - doc-state sync law).
+Last verified against `kernel/936`: 2026-09-05 (telemetry demoted into `packages/agent/src/observation`, policy rows compiled into immutable generations, tool dispatch centralized in the kernel executor; keep this stamp current when editing - doc-state sync law).
 
 ## OVERVIEW
 
@@ -17,7 +17,6 @@ openomni/
 │   ├── protocol/        # Zod schemas and cross-package contracts
 │   ├── policy/          # pure policy engine and effect composition
 │   ├── placement/       # pure model/tool target selection
-│   ├── telemetry/       # observation channel
 │   ├── ledger/          # durable stores and journal persistence
 │   ├── llm/             # provider I/O, transforms, retry, token/cost accounting
 │   ├── agent/           # generic durable-session mechanics, stateless ChatAgent loop, compaction
@@ -37,8 +36,7 @@ openomni/
 Read `X <- Y` as Y may depend on X.
 
 ```text
-protocol <- telemetry, ipc, ledger, policy, llm, placement, agent, machines, channels, apps/openomni, apps/desktop
-telemetry <- ledger, llm, agent, channels, apps/openomni
+protocol <- ipc, ledger, policy, llm, placement, agent, machines, channels, apps/openomni, apps/desktop
 ipc <- machines, apps/openomni
 ledger <- agent, channels, apps/openomni
 policy <- agent, channels, apps/openomni
@@ -52,16 +50,15 @@ channels <- apps/openomni
 | Workspace | May depend on |
 | --- | --- |
 | `protocol` | none |
-| `telemetry` | protocol |
 | `ipc` | protocol |
-| `ledger` | protocol, telemetry |
+| `ledger` | protocol |
 | `policy` | protocol |
-| `llm` | protocol, telemetry; `src/` may depend on protocol |
+| `llm` | protocol |
 | `placement` | protocol |
-| `agent` | protocol, ledger, policy, placement, llm, telemetry; `src/` may depend on protocol, ledger, policy, placement, llm |
+| `agent` | protocol, ledger, policy, placement, llm; `src/` may depend on protocol, ledger, policy, placement, llm |
 | `machines` | protocol, ipc |
-| `channels` | protocol, policy, ledger, telemetry; `src/` may depend on protocol, policy, ledger |
-| `apps/openomni` | protocol, channels, ipc, agent, llm, ledger, telemetry, policy, placement, machines |
+| `channels` | protocol, policy, ledger; `src/` may depend on protocol, policy, ledger |
+| `apps/openomni` | protocol, channels, ipc, agent, llm, ledger, policy, placement, machines |
 | `apps/desktop` | protocol |
 <!-- END GENERATED TOPOLOGY -->
 
@@ -74,7 +71,7 @@ channels <- apps/openomni
 | `packages/protocol` | Schemas, wire contracts, pure folds | I/O, storage, product decisions |
 | `packages/policy` | Generic policy evaluation | Product-specific authority |
 | `packages/placement` | Pure target selection | Authorization or execution |
-| `packages/telemetry` | Bus and scoped observation | Durable or decision state |
+| `packages/agent/src/observation` | Bus and scoped observation | Durable or decision state |
 | `packages/ledger` | Durable state and typed store surfaces | Routing and authority decisions |
 | `packages/llm` | Provider behavior and model accounting | Product routing or tools |
 | `packages/agent` | Generic durable-session mechanics over ledger facts, stateless loop, and compaction | Product-specific session identity, routing, or lifecycle policy |

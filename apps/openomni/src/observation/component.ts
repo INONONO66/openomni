@@ -1,45 +1,75 @@
-import { Component } from "@openomni/protocol";
-import { Bus, scope, type TraceScope } from "@openomni/telemetry";
-import type { BusEvent } from "@openomni/protocol";
+import { Bus } from "@openomni/agent";
+import { type BusEvent, Component, type TraceContext } from "@openomni/protocol";
 
 export interface ObservedComponent {
   readonly events: BusEvent.Sink;
   run<T>(operation: () => Promise<T>): Promise<T>;
 }
 
-/**
- * Binds one invocation-scoped component generation to the process Bus.
- *
- * This owns observation only: it neither authorizes the operation nor changes
- * its result. Registration rollback and durable facts remain with their
- * respective composition and ledger owners.
- */
-export function observeComponent(
-  trace: Omit<TraceScope, "spanId"> & { readonly spanId?: string },
-): ObservedComponent {
-  const observation = scope(trace, Bus);
+interface ComponentIdentity extends TraceContext.Type {
+  readonly actorId?: string;
+  readonly pluginName?: string;
+  readonly pluginVersion?: string;
+  readonly configRevision?: number;
+  readonly sessionId: string;
+  readonly runId: string;
+  readonly componentId: string;
+  readonly componentGeneration: number;
+}
+
+/** App-owned component observation sink behind the protocol port. */
+export function observeComponent(trace: ComponentIdentity): ObservedComponent {
+  const events = Bus.scope?.({
+    traceId: trace.traceId,
+    sessionId: trace.sessionId,
+    runId: trace.runId,
+    actorId: trace.actorId,
+    agentName: trace.agentName,
+    componentId: trace.componentId,
+    componentGeneration: trace.componentGeneration,
+    pluginName: trace.pluginName,
+    pluginVersion: trace.pluginVersion,
+    configRevision: trace.configRevision,
+  }) ?? Bus;
 
   return {
-    events: observation.sink,
+    events,
     async run(operation) {
-      observation.emit(Component.Events.Active, {});
+      events.publish(Component.Events.Active, componentPayload(trace));
       try {
         const result = await operation();
-        observation.emit(Component.Events.Disposed, { outcome: "completed" });
+        events.publish(Component.Events.Disposed, {
+          ...componentPayload(trace),
+          outcome: "completed",
+        });
         return result;
       } catch (error) {
-        // Formatting must never mask the operation failure: a hostile Error
-        // subclass can throw from its own `message` getter or toPrimitive.
         let message: string;
         try {
           message = error instanceof Error ? error.message : String(error);
         } catch {
           message = "unprintable error";
         }
-        observation.emit(Component.Events.Failed, { error: message });
-        observation.emit(Component.Events.Disposed, { outcome: "failed" });
+        events.publish(Component.Events.Failed, { ...componentPayload(trace), error: message });
+        events.publish(Component.Events.Disposed, {
+          ...componentPayload(trace),
+          outcome: "failed",
+        });
         throw error;
       }
     },
+  };
+}
+
+function componentPayload(trace: ComponentIdentity) {
+  return {
+    eventId: "scoped",
+    traceId: trace.traceId,
+    spanId: trace.parentSpanId ?? trace.traceId.slice(0, 16),
+    sessionId: trace.sessionId,
+    runId: trace.runId,
+    componentId: trace.componentId,
+    componentGeneration: trace.componentGeneration,
+    time: 0,
   };
 }

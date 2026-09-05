@@ -1,11 +1,33 @@
-import type { Actor, BusEvent, Model, Policy, Token, Tool } from "@openomni/protocol";
+import type {
+  Actor,
+  BusEvent,
+  LedgerAction,
+  Model,
+  PlainValue,
+  Policy,
+  Token,
+  Tool,
+} from "@openomni/protocol";
 import type { Provider, RunInput, Sink } from "@openomni/llm";
 import type { Placement } from "@openomni/placement";
-import type { PolicyEngineRegistration } from "./policy/types";
+import type { CompactionOptions } from "../compaction";
+import type { Executor } from "../executor";
 
 export type TokenUsage = Token.AgentUsage;
 
 export type AgentBudget = Actor.Profile.Budget;
+
+export interface AgentExecutionLifecycle {
+  runAttempt<T extends PlainValue>(
+    parent: LedgerAction.Receipt,
+    request: {
+      readonly op: string;
+      readonly intent: PlainValue;
+      readonly effect: PlainValue;
+    },
+    body: () => Promise<T>,
+  ): Promise<T>;
+}
 
 type AgentToolSpec = Tool.Spec & {
   readonly descriptor?: Policy.Resource.Descriptor;
@@ -18,7 +40,13 @@ export interface ChatAgentConfig {
    * fail-closed ledger append from the lossy bus without touching the loop.
    */
   events: BusEvent.Sink;
+  /** Durable L2 authority for session-owned prompt, turn, model, and tool work. */
+  executor?: Executor;
   systemPrompt?: string;
+  /** Durable child-action recorder, supplied only by the session composition. */
+  execution?: AgentExecutionLifecycle;
+  /** Direct, run-scoped history compaction strategy. */
+  compaction?: CompactionOptions;
   tools?: AgentToolSpec[];
   /**
    * The brain host and any attached machines that may execute catalog tools,
@@ -73,7 +101,6 @@ export interface ChatAgentConfig {
    * step per turn until a budget bound ends the run — never an infinite loop.
    */
   steeringPending?: () => boolean;
-  middleware?: PolicyEngineRegistration[];
   llm?: {
     run?: (input: RunInput, sink: Sink) => Promise<import("@openomni/llm").Run.Outcome>;
     resolveProviderModel?: (model: Model.Ref) => Promise<Provider.Model>;

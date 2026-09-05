@@ -47,6 +47,9 @@ export namespace BusEvent {
     parentSpanId: z.string().min(1).optional(),
     sessionId: z.string().min(1).optional(),
     runId: z.string().min(1).optional(),
+    turnId: z.string().min(1).optional(),
+    callId: z.string().min(1).optional(),
+    role: z.enum(["resident", "worker"]).optional(),
     actorId: z.string().min(1).optional(),
     agentName: z.string().min(1).optional(),
     componentId: z.string().min(1).optional(),
@@ -57,4 +60,19 @@ export namespace BusEvent {
     time: z.number().optional(),
   });
   export type Metadata = z.infer<typeof Metadata>;
+}
+
+/**
+ * Observation is a lossy copy of an already-decided fact. Implementations may
+ * fan out or drop publications, but scoped identity is authoritative: scope
+ * fields are applied after payload fields so an emitter cannot impersonate a
+ * different session, turn, call, or agent.
+ */
+export interface ObservationSink extends BusEvent.Sink {
+  scope?(identity: Readonly<BusEvent.Metadata>): ObservationSink;
+  subscribe?<T>(
+    event: BusEvent.Descriptor<T>,
+    handler: (data: T) => void,
+    options?: { match?: Partial<T> },
+  ): () => void;
 }

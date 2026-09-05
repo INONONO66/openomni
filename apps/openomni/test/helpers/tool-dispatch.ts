@@ -2,11 +2,11 @@ import { spyOn } from "bun:test";
 import type { Tool } from "@openomni/protocol";
 import type { DelegationOrigin } from "../../src/delegation/admission";
 import { createTools, type CatalogPorts } from "../../src/tools/core/catalog";
-import { createDispatcher } from "../../src/tools/core/dispatch";
+import { createDispatcher } from "@openomni/agent";
+import { executor } from "./executor";
 
 const RESIDENT: DelegationOrigin = { role: "resident", depth: 0, sessionId: "test" };
 let nextCallId = 0;
-
 export function dispatchModelTool(
   name: string,
   ports: CatalogPorts,
@@ -15,19 +15,22 @@ export function dispatchModelTool(
 ) {
   const persistentDispatcher =
     now === undefined
-      ? createDispatcher(createTools(ports, origin), origin.sessionId)
+      ? createDispatcher(createTools(ports, origin), { executor })
       : undefined;
   return async (input: unknown) => {
     const clock = now === undefined ? undefined : spyOn(Date, "now").mockImplementation(now);
     try {
       const dispatcher =
         persistentDispatcher ??
-        createDispatcher(createTools(ports, origin), origin.sessionId);
-      return await dispatcher.execute({
-        id: `test-tool-call-${nextCallId++}`,
-        tool: name,
-        input,
-      } as Tool.Call);
+        createDispatcher(createTools(ports, origin), { executor });
+      return await dispatcher.execute(
+        {
+          id: `test-tool-call-${nextCallId++}`,
+          tool: name,
+          input,
+        } as Tool.Call,
+        { sessionId: origin.sessionId, turnId: `test-turn-${nextCallId}` },
+      );
     } finally {
       clock?.mockRestore();
     }

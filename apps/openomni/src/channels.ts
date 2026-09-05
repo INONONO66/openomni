@@ -15,7 +15,7 @@
 import type { ChannelProvider, ProviderDeliveryRoute } from "@openomni/channels";
 import { ChannelProviders } from "@openomni/channels";
 import type { Channel, Provisioning } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "@openomni/agent";
 import type { z } from "zod";
 import type { OpenOmniConfig } from "./config";
 

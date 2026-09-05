@@ -1,109 +1,158 @@
-import { describe, expect, it } from "bun:test";
+import { expect, it, jest } from "bun:test";
 import { Tool } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
-import { createToolExecutor } from "../../../src/core/execution/tools";
-import { PolicyEngine } from "../../../src/core/policy";
+import { createDispatcher, defineTool } from "../../../src/index";
+import { z } from "zod";
+import {
+  actionCommitGate,
+  compiledPolicy,
+  recordingExecutor,
+  recordingToolObservations,
+} from "../../helpers/compiled-policy";
 
-// #522 defect 2 — sole-emitter pin. The worker-side executor
-// The injected product executor is the SOLE
-// emitter of Tool.Events.Started/Completed. The agent-side wrapper keeps
-// policy dispatch and effect application only; it must not re-emit. This
-// composes the agent wrapper over a base executor that emits the worker
-// executor's event pair and pins exactly ONE Started and ONE Completed per
-// native tool call.
-
-function makeCall(id = "call-1", tool = "bash"): Tool.Call {
-  return { id, tool, input: { command: "ls" } };
+function echoTool(execute: (text: string) => Promise<string>) {
+  return defineTool({
+    name: "echo",
+    description: "Echo text",
+    category: "query",
+    input: z.object({ text: z.string() }).strict(),
+    output: z.string(),
+    visibility: { model: ["resident"], cell: ["resident"] },
+    execute: async ({ text }) => execute(text),
+    render: (_input, output) => output,
+  });
 }
 
-/** Emits the Tool.Events event pair exactly as the worker executor does. */
-function emittingBaseExecutor(result: {
-  output: string;
-  isError?: boolean;
-  throws?: Error;
-}): (call: Tool.Call, context?: Tool.ExecutionContext) => Promise<Tool.Result> {
-  return async (call, context) => {
-    const base = {
-      traceId: context?.traceContext?.traceId ?? crypto.randomUUID(),
-      sessionId: context?.traceContext?.sessionId ?? "",
-      time: Date.now(),
-      actor: { kind: "agent" },
-    };
-    Bus.publish(Tool.Events.Started, {
-      ...base,
-      toolCallId: call.id,
-      toolName: call.tool,
-    });
-    Bus.publish(Tool.Events.Completed, {
-      ...base,
-      toolCallId: call.id,
-      toolName: call.tool,
-      durationMs: 0,
-      isError: result.throws !== undefined || (result.isError ?? false),
-    });
-    if (result.throws) throw result.throws;
-    return {
-      id: crypto.randomUUID(),
-      toolCallId: call.id,
-      output: result.output,
-      ...(result.isError !== undefined && { isError: result.isError }),
-    };
-  };
-}
-
-describe("sole emitter — worker executor owns Tool.Events events", () => {
-  it("one native tool call emits exactly one Started and one Completed", async () => {
-    Bus.reset();
-    const started: unknown[] = [];
-    const completed: unknown[] = [];
-    Bus.subscribe(Tool.Events.Started, (d) => started.push(d));
-    Bus.subscribe(Tool.Events.Completed, (d) => completed.push(d));
-
-    const executor = createToolExecutor({
-      events: Bus,
-      toolExecutor: emittingBaseExecutor({ output: "ok" }),
-      engine: PolicyEngine.create({ clock: Date.now }),
-      traceContext: { traceId: "trace-sole", sessionId: "sess-sole", runId: "run-1" },
-    });
-
-    await executor(makeCall("call-sole"));
-
-    expect(started).toHaveLength(1);
-    expect(completed).toHaveLength(1);
+it("publishes no lifecycle event when pre policy blocks before tool intent", async () => {
+  const observations = recordingToolObservations();
+  const recording = recordingExecutor({
+    policy: compiledPolicy([
+      {
+        name: "deny-echo",
+        kind: "tool",
+        phase: "pre",
+        match: { encodingVersion: 1, value: { op: "echo" } },
+        verdict: { encodingVersion: 1, value: { type: "deny", reason: "blocked" } },
+        priority: 1,
+        generation: 1,
+      },
+    ]),
+    onObservation: observations.observe,
+    clock: () => 10,
   });
+  let bodyCalls = 0;
+  const dispatcher = createDispatcher([
+    echoTool(async (text) => {
+      bodyCalls += 1;
+      return text;
+    }),
+  ], { executor: recording.executor });
 
-  it("one erroring tool call emits exactly one Completed (isError)", async () => {
-    Bus.reset();
-    const completed: unknown[] = [];
-    Bus.subscribe(Tool.Events.Completed, (d) => completed.push(d));
+  const result = await dispatcher.execute(
+    { id: "call-1", tool: "echo", input: { text: "blocked" } },
+    { sessionId: "session-1", turnId: "turn-1" },
+  );
 
-    const executor = createToolExecutor({
-      events: Bus,
-      toolExecutor: emittingBaseExecutor({ output: "err", isError: true }),
-      engine: PolicyEngine.create({ clock: Date.now }),
-      traceContext: { traceId: "trace-sole-err", sessionId: "sess-sole-err", runId: "run-1" },
-    });
+  expect(result).toMatchObject({ isError: true, errorKind: "precondition_failed" });
+  expect(bodyCalls).toBe(0);
+  expect(recording.committed.filter((action) => action.kind === "tool")).toEqual([]);
+  expect(observations.names).toEqual([]);
+});
 
-    await executor(makeCall("call-sole-err"));
-
-    expect(completed).toHaveLength(1);
-    expect((completed[0] as { isError: boolean }).isError).toBe(true);
+it("publishes Started after intent commit and Completed after result commit", async () => {
+  const intentCommit = actionCommitGate("echo:intent");
+  const resultCommit = actionCommitGate("echo:result");
+  const startedSeen = Promise.withResolvers<void>();
+  const completedSeen = Promise.withResolvers<void>();
+  const observations = recordingToolObservations((name) => {
+    if (name === Tool.Events.Started.name) startedSeen.resolve();
+    if (name === Tool.Events.Completed.name) completedSeen.resolve();
   });
-
-  it("a throwing execution emits exactly one Completed", async () => {
-    Bus.reset();
-    const completed: unknown[] = [];
-    Bus.subscribe(Tool.Events.Completed, (d) => completed.push(d));
-
-    const executor = createToolExecutor({
-      events: Bus,
-      toolExecutor: emittingBaseExecutor({ output: "boom", throws: new Error("boom") }),
-      engine: PolicyEngine.create({ clock: Date.now }),
-      traceContext: { traceId: "trace-sole-throw", sessionId: "sess-sole-throw", runId: "run-1" },
-    });
-
-    await expect(executor(makeCall("call-sole-throw"))).rejects.toThrow("boom");
-
-    expect(completed).toHaveLength(1);
+  const recording = recordingExecutor({
+    onCommit: async (action) => {
+      await intentCommit.onCommit(action);
+      await resultCommit.onCommit(action);
+    },
+    onObservation: observations.observe,
+    clock: () => 10,
   });
+  const dispatcher = createDispatcher([echoTool(async (text) => text)], { executor: recording.executor });
+
+  const running = dispatcher.execute(
+    { id: "call-1", tool: "echo", input: { text: "ok" } },
+    { sessionId: "session-1", turnId: "turn-1" },
+  );
+  await intentCommit.reached;
+  expect(observations.names).toEqual([]);
+
+  intentCommit.release();
+  await startedSeen.promise;
+  expect(observations.names).toEqual([Tool.Events.Started.name]);
+
+  await resultCommit.reached;
+  expect(observations.names).toEqual([Tool.Events.Started.name]);
+  resultCommit.release();
+  await Promise.all([running, completedSeen.promise]);
+  expect(observations.names).toEqual([Tool.Events.Started.name, Tool.Events.Completed.name]);
+});
+
+it("publishes one error completion after a failed tool result commits", async () => {
+  const observations = recordingToolObservations();
+  const recording = recordingExecutor({
+    onObservation: observations.observe,
+    clock: () => 10,
+  });
+  const dispatcher = createDispatcher(
+    [echoTool(() => Promise.reject(new TypeError("failed")))],
+    { executor: recording.executor },
+  );
+
+  const result = await dispatcher.execute(
+    { id: "call-1", tool: "echo", input: { text: "fail" } },
+    { sessionId: "session-1", turnId: "turn-1" },
+  );
+
+  expect(result).toMatchObject({ isError: true, errorKind: "execution_failed" });
+  expect(recording.committed.filter((action) => action.kind === "tool")).toHaveLength(2);
+  expect(observations.names).toEqual([Tool.Events.Started.name, Tool.Events.Completed.name]);
+});
+
+it("publishes TimedOut and Completed exactly once after the timeout result commits", async () => {
+  jest.useFakeTimers();
+  try {
+    const resultCommit = actionCommitGate("echo:result");
+    const startedSeen = Promise.withResolvers<void>();
+    const observations = recordingToolObservations((name) => {
+      if (name === Tool.Events.Started.name) startedSeen.resolve();
+    });
+    const recording = recordingExecutor({
+      onCommit: resultCommit.onCommit,
+      onObservation: observations.observe,
+      clock: Date.now,
+    });
+    const dispatcher = createDispatcher(
+      [echoTool(() => new Promise<string>(() => undefined))],
+      { executor: recording.executor, timeoutMs: 50 },
+    );
+
+    const running = dispatcher.execute(
+      { id: "call-1", tool: "echo", input: { text: "stall" } },
+      { sessionId: "session-1", turnId: "turn-1" },
+    );
+    await startedSeen.promise;
+    jest.advanceTimersByTime(50);
+    await resultCommit.reached;
+    expect(observations.names).toEqual([Tool.Events.Started.name]);
+    resultCommit.release();
+    const result = await running;
+
+    expect(result).toMatchObject({ isError: true, errorKind: "execution_failed" });
+    expect(recording.committed.filter((action) => action.kind === "tool")).toHaveLength(2);
+    expect(observations.names).toEqual([
+      Tool.Events.Started.name,
+      Tool.Events.TimedOut.name,
+      Tool.Events.Completed.name,
+    ]);
+  } finally {
+    jest.useRealTimers();
+  }
 });

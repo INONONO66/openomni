@@ -1,296 +1,282 @@
 import { describe, expect, it } from "bun:test";
+import type { Sink } from "@openomni/llm";
 import type { Message } from "@openomni/protocol";
-import { PolicyEngine } from "../../../src/core/policy";
-import {
-  atPoint,
-  registerAt,
-  abortRun,
-  allow,
-  inject,
-  replaceMessages,
-} from "../../helpers/policy-decision";
-import { handleStop } from "../../../src/core/execution/turn";
-import {
-  makeAgentBase,
-  makeConfig,
-  makeState,
-  makeTurnArtifacts,
-} from "./lifecycle-dispatch-fixture";
+import { runAgent } from "../../../src/core/execution/run";
+import { collector } from "../../../src/observation/bus";
+import { runInput } from "../../helpers/run-input";
 
-const sessionID = "yield-session";
+function assistant(reason: string, inputTokens = 900): Message.WithParts {
+  return assistantWithReasons([reason], inputTokens);
+}
 
-function assistantWithSteps(reasons: readonly string[]): Message.WithParts {
-  const id = "yield-assistant";
+function assistantWithReasons(reasons: readonly string[], inputTokens = 900): Message.WithParts {
   return {
     info: {
-      id,
-      sessionID,
+      id: "yield-assistant",
+      sessionID: "yield-session",
       role: "assistant",
       time: { created: 1 },
       parentID: "",
-      modelID: "m",
-      providerID: "p",
+      modelID: "model",
+      providerID: "provider",
       agent: "test",
       path: { cwd: "/", root: "/" },
       cost: 0,
-      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      tokens: { input: inputTokens, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
     },
     parts: reasons.map((reason, index) => ({
-      id: `${id}-step-${index}`,
-      sessionID,
-      messageID: id,
+      id: `yield-step-${index}`,
+      sessionID: "yield-session",
+      messageID: "yield-assistant",
       type: "step-finish" as const,
       reason,
       cost: 0,
-      tokens: { input: 100, output: 10, reasoning: 0, cache: { read: 0, write: 0 } },
+      tokens: { input: inputTokens, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
     })),
   };
 }
 
-function userMessage(text: string): Message.WithParts {
-  const id = `yield-user-${text}`;
-  return {
-    info: {
-      id,
-      sessionID,
-      role: "user",
-      time: { created: 1 },
-      agent: "test",
-      model: { providerID: "", modelID: "" },
-    },
-    parts: [{ id: `${id}-t`, sessionID, messageID: id, type: "text", text }],
-  };
-}
-
-function seamEngine(decision: () => ReturnType<typeof allow>) {
-  const engine = PolicyEngine.create({ clock: Date.now });
-  engine.register(
-    atPoint("run.completion.pre", {
-      name: "test-compaction-seam",
-      effects: ["run.replace_messages"],
-      priority: 900,
-      fn: decision,
-    }),
-  );
-  return engine;
-}
-
-describe("window yield (#649 reachability fix)", () => {
-  it("continues with a new turn when the seam reclaimed history", async () => {
-    const state = makeState();
-    state.messages = [userMessage("u0"), userMessage("u1")];
-    const replacement = [userMessage("compacted")];
-    const engine = seamEngine(() => replaceMessages(replacement));
-    const turn = makeTurnArtifacts({
-      windowYieldArmed: true,
-      stepCap: 24,
-      turnAssistant: { message: assistantWithSteps(["tool-calls"]) },
-    });
-    const turnBefore = state.turnIndex;
-
-    const outcome = await handleStop(state, makeConfig(), engine, makeAgentBase(), turn);
-
-    expect(outcome).toBe("continue");
-    expect(state.compactionCount).toBe(1);
-    expect(state.turnIndex).toBe(turnBefore + 1);
-  });
-
-  it("disarms and continues when the seam reclaimed nothing — the headroom is real", async () => {
-    const state = makeState();
-    state.messages = [userMessage("u0")];
-    const engine = seamEngine(() => allow());
-    const turn = makeTurnArtifacts({
-      windowYieldArmed: true,
-      stepCap: 24,
-      turnAssistant: { message: assistantWithSteps(["tool-calls"]) },
-    });
-
-    const outcome = await handleStop(state, makeConfig(), engine, makeAgentBase(), turn);
-
-    expect(outcome).toBe("continue");
-    expect(state.windowYieldDisarmed).toBe(true);
-    expect(state.compactionCount).toBe(0);
-  });
-
-  it("ends honestly at the step cap instead of pretending completion", async () => {
-    const state = makeState();
-    state.messages = [userMessage("u0")];
-    const engine = PolicyEngine.create({ clock: Date.now });
-    const turn = makeTurnArtifacts({
-      windowYieldArmed: true,
-      stepCap: 2,
-      turnAssistant: { message: assistantWithSteps(["tool-calls", "tool-calls"]) },
-    });
-
-    const outcome = await handleStop(state, makeConfig(), engine, makeAgentBase(), turn);
-
-    if (outcome === "continue") throw new Error("expected a terminal result");
-    expect(outcome.finishReason).toBe("max-steps");
-    expect(state.compactionCount).toBe(0);
-  });
-
-  it("treats a model's own stop exactly as before", async () => {
-    const state = makeState();
-    state.messages = [userMessage("u0")];
-    const engine = PolicyEngine.create({ clock: Date.now });
-    const turn = makeTurnArtifacts({
-      windowYieldArmed: true,
-      stepCap: 24,
-      turnAssistant: { message: assistantWithSteps(["tool-calls", "stop"]) },
-    });
-
-    const outcome = await handleStop(state, makeConfig(), engine, makeAgentBase(), turn);
-
-    if (outcome === "continue") throw new Error("expected a terminal result");
-    expect(outcome.finishReason).toBe("stop");
-  });
-
-  it("preserves drained injections over the yield — the continuation path wins", async () => {
-    // #651 review BLOCKER, reproduced as a pin: run.turn.post drains the
-    // injection queue destructively. A yield that early-returned before the
-    // continuation application would eat a child's completion notification.
-    const state = makeState();
-    state.messages = [userMessage("u0")];
-    const engine = PolicyEngine.create({ clock: Date.now });
-    registerAt(engine, "run.turn.post", "test-drain", 100, () => inject("child finished"), [
-      "prompt.inject_message",
-    ]);
-    const turn = makeTurnArtifacts({
-      windowYieldArmed: true,
-      stepCap: 24,
-      turnAssistant: { message: assistantWithSteps(["tool-calls"]) },
-    });
-
-    const outcome = await handleStop(state, makeConfig(), engine, makeAgentBase(), turn);
-
-    expect(outcome).toBe("continue");
-    const texts = state.messages.flatMap((message) =>
-      message.parts.filter((part) => part.type === "text").map((part) => part.text),
-    );
-    expect(texts).toContain("child finished");
-  });
-
-  it("honors maxToolCalls -1 as unlimited — the cap can never call it a steps yield", async () => {
-    const state = makeState();
-    state.messages = [userMessage("u0")];
-    const engine = seamEngine(() => replaceMessages([userMessage("compacted")]));
-    const turn = makeTurnArtifacts({
-      windowYieldArmed: true,
-      stepCap: Number.MAX_SAFE_INTEGER,
-      turnAssistant: {
-        message: assistantWithSteps(Array.from({ length: 30 }, () => "tool-calls")),
+describe("window and steering yield", () => {
+  it("arms the provider call from the resolved model window", async () => {
+    const arms: Array<number | undefined> = [];
+    await runAgent(runInput([{ role: "user", content: "go" }]), {
+      events: collector(),
+      model: { provider: "provider", id: "model" },
+      llm: {
+        resolveProviderModel: async () => ({ id: "model", name: "model", providerID: "provider", limit: { context: 1000, output: 100 } }),
+        run: async (input) => {
+          arms.push(input.yieldAtInputTokens);
+          return { type: "stop" };
+        },
       },
     });
-
-    const outcome = await handleStop(state, makeConfig(), engine, makeAgentBase(), turn);
-
-    expect(outcome).toBe("continue");
-    expect(state.compactionCount).toBe(1);
+    expect(arms).toEqual([450]);
   });
 
-  it("continues on a steering yield with no drained continuation — never max-steps (#751)", async () => {
-    const state = makeState();
-    state.messages = [userMessage("u0")];
-    const engine = PolicyEngine.create({ clock: Date.now });
-    const turn = makeTurnArtifacts({
-      windowYieldArmed: false,
-      stepCap: 24,
-      steering: { requested: true },
-      turnAssistant: { message: assistantWithSteps(["tool-calls"]) },
+  it("continues on a window yield and disarms the next turn after no rewrite", async () => {
+    const arms: Array<number | undefined> = [];
+    let calls = 0;
+    await runAgent(runInput([{ role: "user", content: "go" }]), {
+      events: collector(),
+      model: { provider: "provider", id: "model" },
+      llm: {
+        resolveProviderModel: async () => ({ id: "model", name: "model", providerID: "provider", limit: { context: 1000, output: 100 } }),
+        run: async (input, sink: Sink) => {
+          calls += 1;
+          arms.push(input.yieldAtInputTokens);
+          if (calls === 1) sink.onMessage(assistant("tool-calls"));
+          return { type: "stop" };
+        },
+      },
     });
-    const turnBefore = state.turnIndex;
-
-    const outcome = await handleStop(state, makeConfig(), engine, makeAgentBase(), turn);
-
-    expect(outcome).toBe("continue");
-    expect(state.turnIndex).toBe(turnBefore + 1);
-    expect(state.compactionCount).toBe(0);
+    expect(arms).toEqual([450, undefined]);
   });
 
-  it("routes a steering yield's drained injection through the continuation path (#751)", async () => {
-    const state = makeState();
-    state.messages = [userMessage("u0")];
-    const engine = PolicyEngine.create({ clock: Date.now });
-    registerAt(engine, "run.turn.post", "test-steer-drain", 100, () => inject("steer me"), [
-      "prompt.inject_message",
-    ]);
-    const turn = makeTurnArtifacts({
-      windowYieldArmed: false,
-      stepCap: 24,
-      steering: { requested: true },
-      turnAssistant: { message: assistantWithSteps(["tool-calls"]) },
-    });
-
-    const outcome = await handleStop(state, makeConfig(), engine, makeAgentBase(), turn);
-
-    expect(outcome).toBe("continue");
-    const texts = state.messages.flatMap((message) =>
-      message.parts.filter((part) => part.type === "text").map((part) => part.text),
+  it("applies compaction before continuing a window yield", async () => {
+    const seen: number[] = [];
+    let calls = 0;
+    const bulky = "filler ".repeat(120);
+    const result = await runAgent(
+      runInput([
+        { role: "user", content: "goal" },
+        { role: "assistant", content: `old one ${bulky}` },
+        { role: "assistant", content: `old two ${bulky}` },
+        { role: "user", content: "recent" },
+        { role: "assistant", content: "answer" },
+        { role: "user", content: "continue" },
+      ]),
+      {
+        events: collector(),
+        model: { provider: "provider", id: "model" },
+        compaction: {
+          contextWindowTokens: 1000,
+          protectRecentMessages: 2,
+          speculate: false,
+          onSummarize: async () => "window checkpoint",
+        },
+        llm: {
+          resolveProviderModel: async () => ({ id: "model", name: "model", providerID: "provider", limit: { context: 1000, output: 100 } }),
+          run: async (input, sink: Sink) => {
+            calls += 1;
+            seen.push(input.messages.length);
+            if (calls === 1) sink.onMessage(assistant("tool-calls"));
+            return { type: "stop" };
+          },
+        },
+      },
     );
-    expect(texts).toContain("steer me");
+    expect(seen[1]).toBeLessThan(seen[0] ?? 0);
+    expect(result.compactionCount).toBe(1);
   });
 
-  it("keeps the step cap's honest terminal even when steering also fired (#751)", async () => {
-    const state = makeState();
-    state.messages = [userMessage("u0")];
-    const engine = PolicyEngine.create({ clock: Date.now });
-    const turn = makeTurnArtifacts({
-      windowYieldArmed: false,
-      stepCap: 2,
-      steering: { requested: true },
-      turnAssistant: { message: assistantWithSteps(["tool-calls", "tool-calls"]) },
+  it("aborts active speculative preparation when the run settles", async () => {
+    let aborted = false;
+    let calls = 0;
+    await runAgent(runInput([
+      { role: "user", content: "goal" },
+      { role: "assistant", content: "old answer one" },
+      { role: "assistant", content: "old answer two" },
+      { role: "user", content: "follow-up" },
+      { role: "assistant", content: "recent answer" },
+      { role: "user", content: "continue" },
+    ]), {
+      events: collector(),
+      model: { provider: "provider", id: "model" },
+      compaction: {
+        contextWindowTokens: 100_000,
+        protectRecentMessages: 2,
+        onSummarize: async (_messages, _anchor, _budget, signal) => {
+          calls += 1;
+          await new Promise<void>((resolve) => {
+            signal?.addEventListener("abort", () => {
+              aborted = true;
+              resolve();
+            }, { once: true });
+          });
+          return "unused";
+        },
+      },
+      llm: {
+        resolveProviderModel: async () => ({ id: "model", name: "model", providerID: "provider", limit: { context: 100_000, output: 100 } }),
+        run: async (_input, sink: Sink) => {
+          sink.onMessage(assistant("stop", 55_000));
+          return { type: "stop" };
+        },
+      },
     });
-
-    const outcome = await handleStop(state, makeConfig(), engine, makeAgentBase(), turn);
-
-    if (outcome === "continue") throw new Error("expected a terminal result");
-    expect(outcome.finishReason).toBe("max-steps");
+    expect(calls).toBe(1);
+    expect(aborted).toBe(true);
   });
 
-  it("prefers steering over the window yield — the pending message reaches the model next turn (#751)", async () => {
-    const state = makeState();
-    state.messages = [userMessage("u0")];
-    // A registered compaction seam would record a compaction on the window
-    // path; the steer path must skip it (compactionCount stays 0).
-    const engine = seamEngine(() => replaceMessages([userMessage("compacted")]));
-    const turn = makeTurnArtifacts({
-      windowYieldArmed: true,
-      stepCap: 24,
-      steering: { requested: true },
-      turnAssistant: { message: assistantWithSteps(["tool-calls"]) },
+  it("treats unlimited tool calls as a window yield, never a step-cap terminal", async () => {
+    let calls = 0;
+    const result = await runAgent(runInput([{ role: "user", content: "go" }]), {
+      events: collector(),
+      model: { provider: "provider", id: "model" },
+      budget: { maxToolCalls: -1 },
+      llm: {
+        resolveProviderModel: async () => ({
+          id: "model",
+          name: "model",
+          providerID: "provider",
+          limit: { context: 1000, output: 100 },
+        }),
+        run: async (_input, sink: Sink) => {
+          calls += 1;
+          if (calls === 1) {
+            sink.onMessage(assistantWithReasons(Array.from({ length: 30 }, () => "tool-calls")));
+          }
+          return { type: "stop" };
+        },
+      },
     });
-
-    const outcome = await handleStop(state, makeConfig(), engine, makeAgentBase(), turn);
-
-    expect(outcome).toBe("continue");
-    expect(state.compactionCount).toBe(0);
+    expect(calls).toBe(2);
+    expect(result.finishReason).toBe("stop");
   });
 
-  it("still terminates on an abort-carrying deny before the yield gets a say", async () => {
-    // Re-review observation: the reordering lets a plain (non-abort) deny on a
-    // yielded turn fall through to the yield's continue. Abort-denies must
-    // keep terminating first — that precedence is the pin.
-    const state = makeState();
-    state.messages = [userMessage("u0")];
-    const engine = PolicyEngine.create({ clock: Date.now });
-    registerAt(
-      engine,
-      "run.turn.post",
-      "test-abort-post",
-      100,
-      () => abortRun("policy said stop"),
-      ["run.abort"],
+  it("continues a steering yield instead of reporting max-steps", async () => {
+    let pending = true;
+    let calls = 0;
+    const result = await runAgent(runInput([{ role: "user", content: "go" }]), {
+      events: collector(),
+      model: { provider: "provider", id: "model" },
+      steeringPending: () => pending,
+      llm: {
+        resolveProviderModel: async () => ({ id: "model", name: "model", providerID: "provider" }),
+        run: async (input, sink: Sink) => {
+          calls += 1;
+          if (calls === 1) {
+            input.shouldYield?.();
+            pending = false;
+            sink.onMessage(assistant("tool-calls"));
+          }
+          return { type: "stop" };
+        },
+      },
+    });
+    expect(calls).toBe(2);
+    expect(result.finishReason).toBe("stop");
+  });
+
+  it("keeps the step cap terminal when steering also fired", async () => {
+    let calls = 0;
+    const result = await runAgent(runInput([{ role: "user", content: "go" }]), {
+      events: collector(),
+      model: { provider: "provider", id: "model" },
+      budget: { maxToolCalls: 1 },
+      steeringPending: () => true,
+      llm: {
+        resolveProviderModel: async () => ({ id: "model", name: "model", providerID: "provider" }),
+        run: async (input, sink: Sink) => {
+          calls += 1;
+          input.shouldYield?.();
+          sink.onMessage(assistant("tool-calls"));
+          return { type: "stop" };
+        },
+      },
+    });
+    expect(calls).toBe(1);
+    expect(result.finishReason).toBe("max-steps");
+  });
+
+  it("prefers steering over window compaction", async () => {
+    let pending = true;
+    let calls = 0;
+    const result = await runAgent(
+      runInput([
+        { role: "user", content: "goal" },
+        { role: "assistant", content: `old ${"filler ".repeat(120)}` },
+        { role: "assistant", content: `work ${"filler ".repeat(120)}` },
+        { role: "user", content: "tail" },
+      ]),
+      {
+        events: collector(),
+        model: { provider: "provider", id: "model" },
+        steeringPending: () => pending,
+        compaction: {
+          contextWindowTokens: 1000,
+          protectRecentMessages: 2,
+          speculate: false,
+          onSummarize: async () => "must not run",
+        },
+        llm: {
+          resolveProviderModel: async () => ({
+            id: "model",
+            name: "model",
+            providerID: "provider",
+            limit: { context: 1000, output: 100 },
+          }),
+          run: async (input, sink: Sink) => {
+            calls += 1;
+            if (calls === 1) {
+              input.shouldYield?.();
+              pending = false;
+              sink.onMessage(assistant("tool-calls"));
+            } else {
+              sink.onMessage(assistant("stop", 100));
+            }
+            return { type: "stop" };
+          },
+        },
+      },
     );
-    const turn = makeTurnArtifacts({
-      windowYieldArmed: true,
-      stepCap: 24,
-      turnAssistant: { message: assistantWithSteps(["tool-calls"]) },
+    expect(calls).toBe(2);
+    expect(result.compactionCount).toBeUndefined();
+  });
+
+  it("reports the step cap honestly", async () => {
+    const result = await runAgent(runInput([{ role: "user", content: "go" }]), {
+      events: collector(),
+      model: { provider: "provider", id: "model" },
+      budget: { maxToolCalls: 1 },
+      llm: {
+        resolveProviderModel: async () => ({ id: "model", name: "model", providerID: "provider" }),
+        run: async (_input, sink: Sink) => {
+          sink.onMessage(assistant("tool-calls"));
+          return { type: "stop" };
+        },
+      },
     });
-
-    const outcome = await handleStop(state, makeConfig(), engine, makeAgentBase(), turn);
-
-    if (outcome === "continue") throw new Error("expected a terminal result");
-    expect(outcome.finishReason).toBe("stop");
-    expect(outcome.guardAborted).toBe(true);
+    expect(result.finishReason).toBe("max-steps");
   });
 });

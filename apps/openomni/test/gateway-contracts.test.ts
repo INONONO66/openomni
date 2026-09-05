@@ -1,4 +1,4 @@
-import { Bus, newTraceId } from "@openomni/telemetry";
+import { Bus, newTraceId } from "@openomni/agent";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { resolveChannelGrant } from "@openomni/channels";
 import type { RunInput } from "@openomni/llm";
@@ -10,7 +10,6 @@ import {
   MOUNTED_CHANNEL_DEFAULT_TIER,
   registerTrustedChannelGrant,
 } from "../src/gateway";
-import { createPolicyRegistry } from "../src/composition/policy-registry";
 import { createResident } from "../src/resident";
 import { assistantMessage, type AssistantMessageOptions } from "./helpers/assistant-message";
 
@@ -89,7 +88,6 @@ function testResident(run: ResidentRun) {
   return createResident({
     model: MODEL,
     apiKey: "test-key",
-    policies: createPolicyRegistry({ mandatory: [] }),
     tools: {},
     targets: () => [{ kind: "host", id: "brain", capabilities: [] }],
     llm: {

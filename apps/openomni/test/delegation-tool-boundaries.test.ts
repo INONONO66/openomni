@@ -71,7 +71,7 @@ describe("delegation tool boundaries", () => {
     ];
 
     for (const input of invalid) {
-      expect(await execute(input)).toMatchObject({ isError: true, errorClass: "invalid_input" });
+      expect(await execute(input)).toMatchObject({ isError: true, errorKind: "invalid_input" });
     }
     expect(calls).toBe(0);
   });

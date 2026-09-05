@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Operational } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../helpers/observation";
 import { Storage } from "../../src/storage/storage";
 import "../../src/storage/initialize";
 import { WorkerRunStateStore } from "../../src/worker-run/state-store";
@@ -48,7 +48,7 @@ const OBSERVER_DRAINED = "observer-drained";
 
 /**
  * Positive control for a negative assertion. `Bus.publish` dispatches every
- * observer in exactly one `queueMicrotask` (`packages/telemetry/src/bus.ts:38-49`)
+ * observer in exactly one `queueMicrotask` (`packages/agent/src/observation/bus.ts:38-49`)
  * and the queue drains completely before an awaiting continuation resumes, so
  * publishing a sentinel AFTER the frozen writes and awaiting its arrival in the
  * same observer proves two things a timer cannot: the observer is live, and the

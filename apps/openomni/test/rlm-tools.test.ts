@@ -2,8 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { placementGatedExecutor } from "@openomni/agent";
 import { Placement } from "@openomni/placement";
 import { createTools, collectToolSpecs } from "../src/tools/core/catalog";
-import { createDispatcher, HOST_TARGET } from "../src/tools/core/dispatch";
-import { toolSpec } from "../src/tools/core/project";
+import { createDispatcher, HOST_TARGET, toolSpec } from "@openomni/agent";
 import {
   createLlmToolPort,
   LLM_TOOL_NAME,
@@ -12,6 +11,7 @@ import {
 } from "../src/tools/execution/llm";
 import type { RunInput } from "@openomni/llm";
 import { assistantMessage } from "./helpers/assistant-message";
+import { executor } from "./helpers/executor";
 import { dispatchModelTool, modelToolOutput } from "./helpers/tool-dispatch";
 
 const RESIDENT = { role: "resident", depth: 0, sessionId: "session-origin" } as const;
@@ -40,11 +40,11 @@ describe("the llm tool", () => {
     );
     expect(await run({ prompts: [""] })).toMatchObject({
       isError: true,
-      errorClass: "invalid_input",
+      errorKind: "invalid_input",
     });
     expect(await run({ prompts: ["ok"], extra: true })).toMatchObject({
       isError: true,
-      errorClass: "invalid_input",
+      errorKind: "invalid_input",
     });
     expect(invoked).toBe(0);
   });
@@ -70,7 +70,7 @@ describe("the llm tool", () => {
 
     expect(await run({ prompts: ["one too many"] })).toMatchObject({
       isError: true,
-      errorClass: "precondition_failed",
+      errorKind: "precondition_failed",
       output: `llm refused: the per-cell budget of ${MAX_LLM_CALLS} sub-model calls is spent`,
     });
     expect(invoked).toBe(MAX_LLM_CALLS);
@@ -88,13 +88,12 @@ describe("the llm tool", () => {
       },
       RESIDENT,
     );
-    const dispatcher = createDispatcher(entries);
+    const dispatcher = createDispatcher(entries, { executor });
 
-    const result = await dispatcher.execute({
-      id: "1",
-      tool: LLM_TOOL_NAME,
-      input: { prompts: ["hi"] },
-    });
+    const result = await dispatcher.execute(
+      { id: "1", tool: LLM_TOOL_NAME, input: { prompts: ["hi"] } },
+      { sessionId: "rlm-session", turnId: "rlm-turn" },
+    );
 
     expect(result.isError).toBe(true);
     expect(result.output).toBe("llm failed: provider on fire");
@@ -132,12 +131,12 @@ describe("the llm tool", () => {
 
   it("is host-placed: it survives the cell-door fold against the brain alone", async () => {
     const entries = createTools({ llm: async () => "ok" }, RESIDENT);
-    const dispatcher = createDispatcher(entries);
+    const dispatcher = createDispatcher(entries, { executor });
     // The exact fold run-code.ts's cellDoor performs: resolve against the
     // host target only, then gate execution on the offerable set.
     const door = placementGatedExecutor(
       Placement.resolveTools(dispatcher.specs, [HOST_TARGET]),
-      dispatcher.execute,
+      (call) => dispatcher.execute(call, { sessionId: "rlm-session", turnId: "rlm-turn" }),
     );
 
     const result = await door({ id: "1", tool: LLM_TOOL_NAME, input: { prompts: ["hi"] } });

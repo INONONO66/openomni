@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../../../src/index";
 import { runAgent } from "../../../src/core/execution/run";
 import type { ChatAgentConfig } from "../../../src/core/types";
 import {

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { Wait } from "@openomni/protocol";
 import { Storage, WaitStore } from "@openomni/ledger";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../../helpers/observation";
 import { WaitService } from "../../../src/router/wait/index";
 import { buildWaitCreate } from "../../helpers/wait";
 import { resetStores } from "../_router-fixture";

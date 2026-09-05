@@ -1,7 +1,9 @@
 import {
   createSessionChatRunner,
+  createTurnDispatcher,
   failureFacts,
   session,
+  sessionTool,
   type ChatAgentConfig,
   type SessionHandle,
   type SessionRunner,
@@ -11,19 +13,18 @@ import {
 } from "@openomni/agent";
 import type { Placement } from "@openomni/placement";
 import type { Gateway, Ingress, Model } from "@openomni/protocol";
-import { Bus, newTraceId } from "@openomni/telemetry";
+import { Bus, newTraceId } from "@openomni/agent";
 import { chatProviderConfig } from "./composition/chat-provider";
 import { SessionBindingCache } from "./composition/session-bindings";
-import type { PolicyRegistry } from "./composition/policy-registry";
 import type { DelegationOrigin } from "./delegation/admission";
+import { toolExecutorForTurn } from "./delegation/worker-loop";
 import { classifyTurnFailure } from "./observation/llm-failure";
 import { observeComponent } from "./observation/component";
 import { buildAgentPrompt } from "./prompt/build";
 import { RESIDENT_PRESET } from "./prompt/roles";
 import type { CatalogPorts } from "./tools/core/catalog";
 import { createTools } from "./tools/core/catalog";
-import { createDispatcher } from "./tools/core/dispatch";
-import { sessionTool } from "./tools/core/project";
+import { seedKernelPolicyRows } from "./policy-seed";
 
 const EVIDENCE_ONLY_TOOL_REFUSAL =
   "tool execution denied: this turn is evidence-only and may not drive tools";
@@ -53,9 +54,9 @@ export interface ResidentOptions {
   readonly apiKey: string;
   readonly transport?: ChatAgentConfig["transport"];
   readonly llm?: ChatAgentConfig["llm"];
+  readonly compaction?: ChatAgentConfig["compaction"];
   readonly tools: CatalogPorts;
   readonly targets: () => readonly Placement.ToolTarget[];
-  readonly policies: PolicyRegistry;
   readonly sessionRuntime?: SessionRuntime;
 }
 
@@ -124,15 +125,16 @@ function requireResult(result: SessionRunnerResult | undefined): SessionRunnerRe
 }
 
 export function createResident(options: ResidentOptions): ResidentDelivery {
+  seedKernelPolicyRows();
   const bindings = new SessionBindingCache<ResidentBinding>();
   const runtime = options.sessionRuntime ?? { observations: Bus };
 
   function createBinding(sessionId: string): ResidentBinding {
     const origin: DelegationOrigin = { role: "resident", depth: 0, sessionId };
     const definitions = createTools(options.tools, origin);
-    const dispatcher = createDispatcher(definitions, sessionId);
     const chatRunner = createSessionChatRunner({
       prepare(input) {
+        const dispatcher = createTurnDispatcher(definitions, input, runtime);
         const evidenceOnly = isEvidenceOnly(input);
         const toolNames = new Set(input.tools.map((tool) => tool.name));
         const tools = evidenceOnly
@@ -153,12 +155,15 @@ export function createResident(options: ResidentOptions): ResidentDelivery {
         return {
           config: {
             events: observation.events,
+            executor: dispatcher.executor,
             systemPrompt: input.system,
             tools,
             toolTargets: options.targets(),
             toolChoice: evidenceOnly || tools.length === 0 ? "none" : "auto",
-            toolExecutor: evidenceOnly ? refuseEvidenceOnlyToolCall : dispatcher.execute,
-            middleware: options.policies.middlewareFor({ events: observation.events }),
+            toolExecutor: evidenceOnly
+              ? refuseEvidenceOnlyToolCall
+              : toolExecutorForTurn(dispatcher, input),
+            ...(options.compaction === undefined ? {} : { compaction: options.compaction }),
             model: options.model,
             ...(options.modelFallbacks === undefined || options.modelFallbacks.length === 0
               ? {}

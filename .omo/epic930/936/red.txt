@@ -1,0 +1,334 @@
+$ bun test --timeout 15000 packages/policy/test/engine-determinism.test.ts packages/policy/test/point-enforcement.test.ts
+bun test v1.3.6 (d530ed99)
+
+packages/policy/test/engine-determinism.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find module '@openomni/protocol' from '/Users/ino/Develop/openomni-wt-936/packages/policy/src/permission-evaluate.ts'
+-------------------------------
+
+
+packages/policy/test/point-enforcement.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find module '@openomni/protocol' from '/Users/ino/Develop/openomni-wt-936/packages/policy/src/engine/dispatch.ts'
+-------------------------------
+
+-------------------------------------------------------|---------|---------|-------------------
+File                                                   | % Funcs | % Lines | Uncovered Line #s
+-------------------------------------------------------|---------|---------|-------------------
+All files                                              |    0.00 |    0.00 |
+-------------------------------------------------------|---------|---------|-------------------
+
+ 0 pass
+ 2 fail
+ 2 errors
+Ran 2 tests across 2 files. [16.00ms]
+
+[exit 1]
+
+$ bun test --timeout 15000 packages/agent/test/core/execution/execution-verdicts-model.test.ts packages/agent/test/core/execution/tools-sole-emitter.test.ts packages/agent/test/core/execution/tools.test.ts packages/agent/test/core/policy/audit-emission.test.ts packages/agent/test/core/policy/native-tool-post-dispatch.test.ts
+bun test v1.3.6 (d530ed99)
+
+packages/agent/test/core/execution/execution-verdicts-model.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find module '@openomni/agent' from '/Users/ino/Develop/openomni-wt-936/packages/agent/test/core/execution/execution-verdicts-model.test.ts'
+-------------------------------
+
+
+packages/agent/test/core/execution/tools-sole-emitter.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find module '@openomni/agent' from '/Users/ino/Develop/openomni-wt-936/packages/agent/test/core/execution/tools-sole-emitter.test.ts'
+-------------------------------
+
+
+packages/agent/test/core/execution/tools.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find module '@openomni/agent' from '/Users/ino/Develop/openomni-wt-936/packages/agent/test/core/execution/tools.test.ts'
+-------------------------------
+
+
+packages/agent/test/core/policy/native-tool-post-dispatch.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find module '@openomni/agent' from '/Users/ino/Develop/openomni-wt-936/packages/agent/test/core/policy/native-tool-post-dispatch.test.ts'
+-------------------------------
+
+
+packages/agent/test/core/policy/audit-emission.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find module '@openomni/agent' from '/Users/ino/Develop/openomni-wt-936/packages/agent/test/core/policy/audit-emission.test.ts'
+-------------------------------
+
+
+ 0 pass
+ 5 fail
+ 5 errors
+Ran 5 tests across 5 files. [13.00ms]
+
+[exit 1]
+
+$ bun test --timeout 15000 packages/policy/test/engine-determinism.test.ts packages/policy/test/point-enforcement.test.ts # after bun install
+bun test v1.3.6 (d530ed99)
+
+packages/policy/test/engine-determinism.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find module '@openomni/protocol' from '/Users/ino/Develop/openomni-wt-936/packages/policy/src/engine/dispatch.ts'
+-------------------------------
+
+
+packages/policy/test/point-enforcement.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+-------------------------------
+
+--------------------------------------------|---------|---------|-------------------
+File                                        | % Funcs | % Lines | Uncovered Line #s
+--------------------------------------------|---------|---------|-------------------
+All files                                   |    0.00 |    0.00 |
+--------------------------------------------|---------|---------|-------------------
+
+ 0 pass
+ 2 fail
+ 2 errors
+Ran 2 tests across 2 files. [44.00ms]
+
+[exit 1]
+
+$ bun test --timeout 15000 packages/agent/test/core/execution/execution-verdicts-model.test.ts packages/agent/test/core/execution/tools-sole-emitter.test.ts packages/agent/test/core/execution/tools.test.ts packages/agent/test/core/policy/audit-emission.test.ts packages/agent/test/core/policy/native-tool-post-dispatch.test.ts # after bun install
+bun test v1.3.6 (d530ed99)
+
+packages/agent/test/core/execution/execution-verdicts-model.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find module '@openomni/agent' from '/Users/ino/Develop/openomni-wt-936/packages/agent/test/core/execution/execution-verdicts-model.test.ts'
+-------------------------------
+
+
+packages/agent/test/core/execution/tools-sole-emitter.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find module '@openomni/agent' from '/Users/ino/Develop/openomni-wt-936/packages/agent/test/core/execution/tools-sole-emitter.test.ts'
+-------------------------------
+
+
+packages/agent/test/core/execution/tools.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find module '@openomni/agent' from '/Users/ino/Develop/openomni-wt-936/packages/agent/test/core/execution/tools.test.ts'
+-------------------------------
+
+
+packages/agent/test/core/policy/native-tool-post-dispatch.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find module '@openomni/agent' from '/Users/ino/Develop/openomni-wt-936/packages/agent/test/core/policy/native-tool-post-dispatch.test.ts'
+-------------------------------
+
+
+packages/agent/test/core/policy/audit-emission.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find module '@openomni/agent' from '/Users/ino/Develop/openomni-wt-936/packages/agent/test/core/policy/audit-emission.test.ts'
+-------------------------------
+
+
+ 0 pass
+ 5 fail
+ 5 errors
+Ran 5 tests across 5 files. [25.00ms]
+
+[exit 1]
+
+$ bun test --timeout 15000 (after baseline build; expected new contract failures)
+bun test v1.3.6 (d530ed99)
+
+packages/policy/test/engine-determinism.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+1 | })
+2 | {
+    ^
+SyntaxError: Export named 'createPolicyCompiler' not found in module '/Users/ino/Develop/openomni-wt-936/packages/policy/src/index.ts'.
+      at loadAndEvaluateModule (2:1)
+-------------------------------
+
+
+packages/policy/test/point-enforcement.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+1 | })
+2 | {
+    ^
+SyntaxError: Export named 'createPolicyCompiler' not found in module '/Users/ino/Develop/openomni-wt-936/packages/policy/src/index.ts'.
+      at loadAndEvaluateModule (2:1)
+-------------------------------
+
+
+packages/agent/test/core/execution/execution-verdicts-model.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find module '@openomni/agent' from '/Users/ino/Develop/openomni-wt-936/packages/agent/test/core/execution/execution-verdicts-model.test.ts'
+-------------------------------
+
+
+packages/agent/test/core/execution/tools-sole-emitter.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find module '@openomni/agent' from '/Users/ino/Develop/openomni-wt-936/packages/agent/test/core/execution/tools-sole-emitter.test.ts'
+-------------------------------
+
+
+packages/agent/test/core/execution/tools.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find module '@openomni/agent' from '/Users/ino/Develop/openomni-wt-936/packages/agent/test/core/execution/tools.test.ts'
+-------------------------------
+
+
+packages/agent/test/core/policy/native-tool-post-dispatch.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find module '@openomni/agent' from '/Users/ino/Develop/openomni-wt-936/packages/agent/test/core/policy/native-tool-post-dispatch.test.ts'
+-------------------------------
+
+
+packages/agent/test/core/policy/audit-emission.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find module '@openomni/agent' from '/Users/ino/Develop/openomni-wt-936/packages/agent/test/core/policy/audit-emission.test.ts'
+-------------------------------
+
+-------------------------------------------------------|---------|---------|-------------------
+File                                                   | % Funcs | % Lines | Uncovered Line #s
+-------------------------------------------------------|---------|---------|-------------------
+All files                                              |    0.00 |    0.00 |
+-------------------------------------------------------|---------|---------|-------------------
+
+ 0 pass
+ 7 fail
+ 7 errors
+Ran 7 tests across 7 files. [57.00ms]
+
+$ bun test --timeout 15000 (source-relative RED)
+bun test v1.3.6 (d530ed99)
+
+packages/policy/test/engine-determinism.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+1 | })
+2 | {
+    ^
+SyntaxError: Export named 'createPolicyCompiler' not found in module '/Users/ino/Develop/openomni-wt-936/packages/policy/src/index.ts'.
+      at loadAndEvaluateModule (2:1)
+-------------------------------
+
+
+packages/policy/test/point-enforcement.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+1 | })
+2 | {
+    ^
+SyntaxError: Export named 'createPolicyCompiler' not found in module '/Users/ino/Develop/openomni-wt-936/packages/policy/src/index.ts'.
+      at loadAndEvaluateModule (2:1)
+-------------------------------
+
+
+packages/agent/test/core/execution/execution-verdicts-model.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+1 | })
+2 | {
+    ^
+SyntaxError: Export named 'createExecutor' not found in module '/Users/ino/Develop/openomni-wt-936/packages/agent/src/index.ts'.
+      at loadAndEvaluateModule (2:1)
+-------------------------------
+
+
+packages/agent/test/core/execution/tools-sole-emitter.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+1 | })
+2 | {
+    ^
+SyntaxError: Export named 'createDispatcher' not found in module '/Users/ino/Develop/openomni-wt-936/packages/agent/src/index.ts'.
+      at loadAndEvaluateModule (2:1)
+-------------------------------
+
+
+packages/agent/test/core/execution/tools.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+1 | })
+2 | {
+    ^
+SyntaxError: Export named 'scopeObservation' not found in module '/Users/ino/Develop/openomni-wt-936/packages/agent/src/index.ts'.
+      at loadAndEvaluateModule (2:1)
+-------------------------------
+
+
+packages/agent/test/core/policy/native-tool-post-dispatch.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+1 | })
+2 | {
+    ^
+SyntaxError: Export named 'createDispatcher' not found in module '/Users/ino/Develop/openomni-wt-936/packages/agent/src/index.ts'.
+      at loadAndEvaluateModule (2:1)
+-------------------------------
+
+
+packages/agent/test/core/policy/audit-emission.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+1 | })
+2 | {
+    ^
+SyntaxError: Export named 'createExecutor' not found in module '/Users/ino/Develop/openomni-wt-936/packages/agent/src/index.ts'.
+      at loadAndEvaluateModule (2:1)
+-------------------------------
+
+----------------------------------------------------------------|---------|---------|-------------------
+File                                                            | % Funcs | % Lines | Uncovered Line #s
+----------------------------------------------------------------|---------|---------|-------------------
+All files                                                       |    0.00 |    0.00 |
+----------------------------------------------------------------|---------|---------|-------------------
+
+ 0 pass
+ 7 fail
+ 7 errors
+Ran 7 tests across 7 files. [90.00ms]

@@ -1,152 +1,182 @@
-import { describe, expect, it } from "bun:test";
-import { deny, registerAt } from "../../helpers/policy-decision";
-import { Operational, PolicyDecision } from "@openomni/protocol";
-import { Bus, collector } from "@openomni/telemetry";
-import { dispatchBudgetCheck } from "../../../src/core/execution/lifecycle-dispatch";
-import { PolicyEngine, type PolicyContext } from "../../../src/core/policy";
-import { makeAgentBase, makeConfig, makeState } from "./lifecycle-dispatch-fixture";
-import { captureBusEvents } from "../../helpers/bus-event";
+import { describe, expect, it, jest } from "bun:test";
+import { Operational, type Tool } from "@openomni/protocol";
+import { runAgent } from "../../../src/core/execution/run";
+import { createAssistantMessage } from "../../../src/core/message-factory";
+import { Bus, collector } from "../../../src/index";
+import {
+  createMockLlmConfig,
+  createStopOutcome,
+  mockProviderData,
+  mockProviderModel,
+} from "../../helpers/mock-llm";
+import { runInput } from "../../helpers/run-input";
 
-describe("dispatchBudgetCheck (budget exhaustion)", () => {
-  /**
-   * `publishBudgetTelemetry` proves it uses the `run` it was handed; only this
-   * proves the lifecycle hands it the real one. Pinning the invariant one
-   * frame below where the trace enters leaves the wiring free to be wrong.
-   */
-  it("files the budget event under the run's trace, from the dispatch frame", async () => {
-    const warning = captureBusEvents(Operational.Events.Warn);
-    const agentBase = makeAgentBase();
-    const state = makeState();
-    state.budgetState.turns = 20;
+describe("run budget terminal facts", () => {
+  it("charges successful and failed tools across turns before the next admission", async () => {
+    jest.useFakeTimers();
+    const events = collector();
+    let modelCalls = 0;
+    let executions = 0;
+    const toolExecutor = async (call: Tool.Call): Promise<Tool.Result> => {
+      executions += 1;
+      jest.advanceTimersByTime(executions === 1 ? 4 : 6);
+      if (executions === 2) throw new Error("tool failed");
+      return {
+        id: `result-${call.id}`,
+        toolCallId: call.id,
+        toolName: call.tool,
+        output: "ok",
+      };
+    };
 
     try {
-      await dispatchBudgetCheck(
-        state,
-        PolicyEngine.create({ clock: Date.now }),
-        makeConfig({ budget: { maxTurns: 24 } }),
-        agentBase,
-      );
-      const [seen] = await warning.done;
-      expect(warning.events).toHaveLength(1);
-      expect(seen).toMatchObject({
-        traceId: agentBase.traceId,
-        sessionId: agentBase.sessionId,
+      const result = await runAgent(runInput([{ role: "user", content: "hi" }]), {
+        events,
+        model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+        budget: {
+          maxTurns: -1,
+          maxToolCalls: -1,
+          maxWallTimeMs: -1,
+          maxToolRuntimeMs: 10,
+        },
+        steeringPending: () => modelCalls < 3,
+        tools: [
+          {
+            name: "lookup",
+            description: "Lookup",
+            inputSchema: { type: "object" },
+            safe: true,
+            placement: "host",
+            requires: [],
+          },
+        ],
+        toolExecutor,
+        llm: createMockLlmConfig({
+          getModels: async () => mockProviderData,
+          fromModelsDevModel: () => mockProviderModel,
+          run: async (input, sink) => {
+            modelCalls += 1;
+            input.shouldYield?.();
+            const call = { id: `call-${modelCalls}`, tool: "lookup", input: {} };
+            try {
+              await input.toolExecutor?.(call);
+            } catch (error) {
+              expect(error).toEqual(new Error("tool failed"));
+            }
+            const message = createAssistantMessage("", "", "session");
+            sink.onMessage({
+              ...message,
+              parts: [
+                ...message.parts,
+                {
+                  id: `step-${modelCalls}`,
+                  sessionID: "session",
+                  messageID: message.info.id,
+                  type: "step-finish",
+                  reason: "tool-calls",
+                  cost: 0,
+                  tokens: {
+                    input: 0,
+                    output: 0,
+                    reasoning: 0,
+                    cache: { read: 0, write: 0 },
+                  },
+                },
+              ],
+            });
+            return createStopOutcome();
+          },
+        }),
       });
+
+      expect(result.finishReason).toBe("max-steps");
+      expect(modelCalls).toBe(2);
+      expect(executions).toBe(2);
+      expect(events.named(Operational.Events.Warn.name)).toContainEqual(
+        expect.objectContaining({
+          msg: "budget exceeded: tool wall time",
+          context: expect.objectContaining({ toolCalls: 2, toolRuntimeMs: 10 }),
+        }),
+      );
     } finally {
-      warning.unsubscribe();
+      jest.useRealTimers();
     }
   });
-  it("dispatches a truthful max-steps lifecycle outcome when budget is exceeded", async () => {
-    const observedOutcomes: unknown[] = [];
-    const state = makeState();
-    const engine = PolicyEngine.create({ clock: Date.now });
-    registerAt(
-      engine,
-      "run.lifecycle.post",
-      "test:max-steps-observer",
-      0,
-      (context: PolicyContext) => {
-        observedOutcomes.push(Reflect.get(context, "runOutcome"));
-        return PolicyDecision.allow({ policyId: "test.max-steps-observer" });
-      },
-    );
-    state.budgetState = {
-      ...state.budgetState,
-      turns: 100,
-      toolCalls: 100,
-      totalInputTokens: 100000,
-      totalOutputTokens: 100000,
-      toolRuntimeMs: 100000,
-    };
-    const config = makeConfig({ budget: { maxTurns: 1 } });
 
-    const result = await dispatchBudgetCheck(state, engine, config, makeAgentBase());
-
-    expect(result).not.toBeNull();
-    expect(observedOutcomes).toEqual([{ type: "max-steps" }]);
-  });
-
-  /**
-   * Audit L4: wall-time exhaustion still ends with finishReason "max-steps" —
-   * the AgentResult union's only budget-exhaustion member — but the REAL
-   * limit is on the record: the budget-exceeded Warn emitted in the same
-   * dispatch names it, on the run's trace.
-   */
-  it("wall-time exhaustion: finishReason max-steps, with the real limit named on the record", async () => {
-    const collected = collector();
-    const state = makeState();
-    // startTime pushed into the past: wall time is the exceeded limit while
-    // every countable pool is untouched.
-    state.budgetState = { ...state.budgetState, startTime: Date.now() - 10_000 };
-    const config = makeConfig({ events: collected, budget: { maxWallTimeMs: 1000 } });
-
-    const result = await dispatchBudgetCheck(
-      state,
-      PolicyEngine.create({ clock: Date.now }),
-      config,
-      makeAgentBase(),
-    );
-
-    expect(result).not.toBeNull();
-    expect(result?.finishReason).toBe("max-steps");
-    const warns = collected.named(Operational.Events.Warn.name);
-    expect(warns).toHaveLength(1);
-    expect(warns[0]).toMatchObject({
-      msg: "budget exceeded: wall time",
-      context: { type: "exceeded" },
+  it("ends before model execution when the turn budget is exhausted", async () => {
+    let calls = 0;
+    const result = await runAgent(runInput([{ role: "user", content: "hi" }]), {
+      events: Bus,
+      model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+      budget: { maxTurns: 0 },
+      llm: createMockLlmConfig({
+        getModels: async () => mockProviderData,
+        fromModelsDevModel: () => mockProviderModel,
+        run: async () => {
+          calls += 1;
+          return createStopOutcome();
+        },
+      }),
     });
+    expect(result.finishReason).toBe("max-steps");
+    expect(calls).toBe(0);
   });
 
-  it("still returns max-steps when the post-run observer denies", async () => {
-    const engine = PolicyEngine.create({ clock: Date.now });
-    registerAt(engine, "run.lifecycle.post", "test:deny-post-budget", 0, () => deny());
-    const state = makeState();
-    state.budgetState.turns = 1;
-
-    const result = await dispatchBudgetCheck(
-      state,
-      engine,
-      makeConfig({ budget: { maxTurns: 1 } }),
-      makeAgentBase(),
-    );
-
-    expect(result?.finishReason).toBe("max-steps");
-  });
-
-  it("returns null when budget is not exceeded", async () => {
-    const engine = PolicyEngine.create({ clock: Date.now });
-    const state = makeState();
-    const config = makeConfig({ budget: { maxTurns: 100 } });
-
-    const result = await dispatchBudgetCheck(state, engine, config, makeAgentBase());
-    expect(result).toBeNull();
-  });
-
-  /**
-   * The point of the port. The loop reports to whatever the composition root
-   * hands it — no process-wide `Bus`, and P2 can put a fail-closed ledger
-   * append behind this without touching the loop.
-   */
-  it("reports through the injected sink, not a global bus", async () => {
-    const collected = collector();
-    const busSaw: string[] = [];
-    const unsubscribe = Bus.observe((descriptor) => busSaw.push(descriptor.name));
-    const agentBase = makeAgentBase();
-    const state = makeState();
-    state.budgetState.turns = 20;
-
+  it("reports wall-time exhaustion through only the injected sink", async () => {
+    const events = collector();
+    const busEvents: string[] = [];
+    const unsubscribe = Bus.observe((event) => busEvents.push(event.name));
+    let calls = 0;
     try {
-      await dispatchBudgetCheck(
-        state,
-        PolicyEngine.create({ clock: Date.now }),
-        makeConfig({ events: collected, budget: { maxTurns: 24 } }),
-        agentBase,
-      );
+      const result = await runAgent(runInput([{ role: "user", content: "hi" }]), {
+        events,
+        model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+        budget: { maxWallTimeMs: 0 },
+        llm: createMockLlmConfig({
+          getModels: async () => mockProviderData,
+          fromModelsDevModel: () => mockProviderModel,
+          run: async () => {
+            calls += 1;
+            return createStopOutcome();
+          },
+        }),
+      });
+
+      expect(result.finishReason).toBe("max-steps");
+      expect(calls).toBe(0);
+      expect(events.named(Operational.Events.Warn.name)).toHaveLength(1);
+      expect(events.named(Operational.Events.Warn.name)[0]).toMatchObject({
+        msg: "budget exceeded: wall time",
+        context: { type: "exceeded" },
+      });
+      expect(busEvents).toEqual([]);
     } finally {
       unsubscribe();
     }
+  });
 
-    expect(collected.named(Operational.Events.Warn.name)).toHaveLength(1);
-    expect(busSaw).toEqual([]);
+  it("correlates the exceeded-budget record to the run identity", async () => {
+    const input = runInput([{ role: "user", content: "hi" }]);
+    const warning = Promise.withResolvers<{ traceId: string; sessionId?: string; msg: string }>();
+    const unsubscribe = Bus.subscribe(Operational.Events.Warn, warning.resolve);
+    try {
+      await runAgent(input, {
+        events: Bus,
+        model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+        budget: { maxTurns: 0 },
+        llm: createMockLlmConfig({
+          getModels: async () => mockProviderData,
+          fromModelsDevModel: () => mockProviderModel,
+          run: async () => createStopOutcome(),
+        }),
+      });
+      expect(await warning.promise).toMatchObject({
+        traceId: input.traceContext.traceId,
+        sessionId: input.traceContext.sessionId,
+        msg: "budget exceeded: turns",
+      });
+    } finally {
+      unsubscribe();
+    }
   });
 });

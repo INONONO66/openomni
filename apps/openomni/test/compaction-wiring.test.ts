@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { Bus } from "@openomni/telemetry";
+import type { RunInput, Sink } from "@openomni/llm";
 import { loadConfig } from "../src/config";
-import { createConfiguredCompactionPolicy } from "../src/index";
+import { configuredCompaction } from "../src/compaction/strategy";
+import { assistantMessage } from "./helpers/assistant-message";
+import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
+import { nextMessage, opened } from "./helpers/ws";
 
 const KEYS = [
   "OPENOMNI_MODEL_PROVIDER",
@@ -10,6 +13,7 @@ const KEYS = [
   "OPENOMNI_COMPACTION_SUMMARIZER",
 ] as const;
 let saved: Record<string, string | undefined>;
+const suite = residentSuite();
 
 beforeEach(() => {
   saved = Object.fromEntries(KEYS.map((key) => [key, process.env[key]]));
@@ -27,15 +31,64 @@ afterEach(() => {
   }
 });
 
-describe("compaction composition root", () => {
-  it("wires onSummarize by default through loadConfig", () => {
-    const registration = createConfiguredCompactionPolicy(loadConfig(), Bus).create();
-    expect(registration.pointIds).toEqual(["run.turn.post", "run.completion.pre"]);
+describe("compaction composition configuration", () => {
+  it("wires a run-scoped summarizer by default", () => {
+    expect(configuredCompaction(loadConfig()).onSummarize).toBeFunction();
   });
 
-  it("omits onSummarize when OPENOMNI_COMPACTION_SUMMARIZER=off", () => {
+  it("omits the summarizer when explicitly off while preserving deterministic reduction", () => {
     process.env.OPENOMNI_COMPACTION_SUMMARIZER = "off";
-    const registration = createConfiguredCompactionPolicy(loadConfig(), Bus).create();
-    expect(registration.pointIds).toEqual(["run.completion.pre"]);
+    const compaction = configuredCompaction(loadConfig());
+    expect(compaction.onSummarize).toBeUndefined();
+    expect(compaction.elideToolOutputs).toEqual({ minOutputChars: 4000, keepHeadChars: 500 });
   });
+  it("passes configured compaction through the production Resident root", async () => {
+    const config = suite.config("openomni-root-compaction-", {
+      wsToken: "root-compaction-token",
+      compactionSummarizer: false,
+    });
+    const messageCounts: number[] = [];
+    let constrained = false;
+    let calls = 0;
+    const app = await suite.boot({
+      config,
+      llm: {
+        resolveProviderModel: async (model) => ({
+          ...(await fakeProviderModel(model)),
+          limit: { context: constrained ? 100 : 100_000 },
+        }),
+        run: async (input: RunInput, sink: Sink) => {
+          calls += 1;
+          if (constrained) messageCounts.push(input.messages.length);
+          sink.onMessage(
+            assistantMessage(input, {
+              call: calls,
+              reason: constrained && messageCounts.length === 1 ? "tool-calls" : "stop",
+              text: `answer ${calls} ${"filler ".repeat(30)}`,
+              tokens: constrained
+                ? { input: 90, output: 1, reasoning: 0, cache: { read: 0, write: 0 } }
+                : undefined,
+            }),
+          );
+          return { type: "stop" };
+        },
+      },
+    });
+    const ws = new WebSocket(`ws://127.0.0.1:${app.port}/ws?token=root-compaction-token`);
+    await opened(ws);
+    for (let index = 0; index < 6; index += 1) {
+      const reply = nextMessage(ws);
+      ws.send(JSON.stringify({ type: "message", text: `seed ${index} ${"filler ".repeat(30)}` }));
+      await reply;
+    }
+    constrained = true;
+    const reply = nextMessage(ws);
+    ws.send(JSON.stringify({ type: "message", text: "compact now" }));
+    await reply;
+    ws.close();
+
+    expect(messageCounts).toHaveLength(2);
+    expect(messageCounts[1]).toBeLessThan(messageCounts[0] ?? 0);
+  });
+
 });

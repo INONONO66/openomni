@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
-import { collector } from "@openomni/telemetry";
+import { collector } from "../../src/index";
 import { Compaction } from "../../src/compaction/compact";
 import { elideToolOutputs } from "../../src/compaction/reduce";
 

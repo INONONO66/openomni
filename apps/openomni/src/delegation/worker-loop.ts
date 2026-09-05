@@ -1,6 +1,9 @@
 import {
   createSessionChatRunner,
+  createTurnDispatcher,
+  HOST_TARGET,
   session,
+  sessionTool,
   type ChatAgentConfig,
   type SessionHandle,
   type SessionRunner,
@@ -8,19 +11,30 @@ import {
   type SessionRuntime,
 } from "@openomni/agent";
 import type { LedgerSession, Model } from "@openomni/protocol";
-import { Bus, newTraceId } from "@openomni/telemetry";
+import { Bus, newTraceId } from "@openomni/agent";
 import { chatProviderConfig } from "../composition/chat-provider";
 import { SessionBindingCache } from "../composition/session-bindings";
 import { observeComponent } from "../observation/component";
 import { buildAgentPrompt } from "../prompt/build";
 import { WORKER_PRESET } from "../prompt/roles";
+import { seedKernelPolicyRows } from "../policy-seed";
 import { createTools } from "../tools/core/catalog";
-import { createDispatcher, HOST_TARGET } from "../tools/core/dispatch";
-import { sessionTool } from "../tools/core/project";
 import { decideDrive, initialDriveState, type DriveState } from "./drive-loop";
 import { renderInstruction } from "./instruction";
 import type { InlineWorkerRunner } from "./inline-driver";
 import type { DelegationKernel } from "./kernel";
+
+export function toolExecutorForTurn(
+  dispatcher: Pick<ReturnType<typeof createTurnDispatcher>, "execute">,
+  input: Pick<SessionRunnerInput, "sessionId" | "turnId">,
+): NonNullable<ChatAgentConfig["toolExecutor"]> {
+  return (call, context) =>
+    dispatcher.execute(call, {
+      sessionId: input.sessionId,
+      turnId: input.turnId,
+      ...(context?.signal === undefined ? {} : { signal: context.signal }),
+    });
+}
 
 export class WorkerRunError extends Error {
   constructor(
@@ -37,6 +51,7 @@ export interface WorkerLoopOptions {
   readonly apiKey: string;
   readonly transport?: ChatAgentConfig["transport"];
   readonly llm?: ChatAgentConfig["llm"];
+  readonly compaction?: ChatAgentConfig["compaction"];
   readonly kernel: () => DelegationKernel;
   readonly sessionRuntime?: SessionRuntime;
 }
@@ -52,6 +67,7 @@ interface WorkerBinding {
 }
 
 export function createInlineWorkerRunner(options: WorkerLoopOptions): SessionInlineWorkerRunner {
+  seedKernelPolicyRows();
   const bindings = new SessionBindingCache<WorkerBinding>();
   const runtime = options.sessionRuntime ?? { observations: Bus };
 
@@ -60,9 +76,9 @@ export function createInlineWorkerRunner(options: WorkerLoopOptions): SessionInl
       { delegation: options.kernel() },
       { role: "worker", depth, sessionId },
     );
-    const dispatcher = createDispatcher(definitions, sessionId);
     const runner = createSessionChatRunner({
       prepare(input: SessionRunnerInput) {
+        const dispatcher = createTurnDispatcher(definitions, input, runtime);
         const toolNames = new Set(input.tools.map((tool) => tool.name));
         const tools = dispatcher.specs.filter((tool) => toolNames.has(tool.name));
         const traceId = newTraceId();
@@ -80,12 +96,14 @@ export function createInlineWorkerRunner(options: WorkerLoopOptions): SessionInl
         return {
           config: {
             events: observation.events,
+            executor: dispatcher.executor,
             systemPrompt: input.system,
             tools,
             toolTargets: [HOST_TARGET],
             toolChoice: tools.length === 0 ? "none" : "auto",
-            toolExecutor: dispatcher.execute,
+            toolExecutor: toolExecutorForTurn(dispatcher, input),
             model: options.model,
+            ...(options.compaction === undefined ? {} : { compaction: options.compaction }),
             ...chatProviderConfig(options),
           },
           traceContext: { traceId, sessionId: input.sessionId, runId, agentName: "worker" },

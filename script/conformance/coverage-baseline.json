@@ -44,11 +44,6 @@
     "linesHit": 6062,
     "pct": 97.43
   },
-  "packages/telemetry": {
-    "linesFound": 225,
-    "linesHit": 223,
-    "pct": 99.11
-  },
   "script": {
     "linesFound": 3810,
     "linesHit": 1167,

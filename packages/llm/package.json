@@ -17,7 +17,6 @@
     "zod": "^4.5.4"
   },
   "devDependencies": {
-    "@openomni/telemetry": "workspace:*",
     "@types/bun": "latest"
   }
 }

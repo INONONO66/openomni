@@ -1,19 +1,13 @@
-import { createPolicyEngine } from "./engine/dispatch";
-
-export { PolicyRegistrationError } from "./engine/registration";
-export { evaluatePermission, decisionFromEvaluation } from "./permission-evaluate";
+export {
+  compilePolicySnapshot,
+  createPolicyCompiler,
+  PolicyCompileError,
+  SEEDED_POLICY_ROWS,
+} from "./row-compiler";
 export type {
-  PolicyEngineConfig,
-  GenericPolicyContext,
-  CanonicalPolicyRegistrationGeneric,
-  PolicyRegistrationFactoryGeneric,
-  PolicyEngineInstanceGeneric,
-  DispatchContextGeneric,
-  CanonicalAuditDispatchContextGeneric,
-  PolicyPointId,
-} from "./engine/types";
-// composeEffects has no production consumer outside this package's engine,
-// but it remains a deliberate public conformance seam for policy-owned tests.
-export { composeEffects } from "./effects/compose";
+  CompiledPolicySnapshot,
+  PolicyEvaluation,
+  PolicyEvaluationInput,
+} from "./row-compiler";
 
-export const PolicyEngine = { create: createPolicyEngine };
+export { decisionFromEvaluation, evaluatePermission } from "./permission-evaluate";

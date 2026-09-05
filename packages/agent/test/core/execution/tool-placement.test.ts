@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 import type { RunInput } from "@openomni/llm";
 import type { Machine, Tool } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../../../src/index";
 import { ChatAgent } from "../../../src/core/chat-agent";
 import type { ChatAgentConfig, ChatAgentInput } from "../../../src/core/types";
 

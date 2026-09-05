@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { ActorRegistry, ApprovalStore, Storage } from "@openomni/ledger";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "@openomni/agent";
 import { createApprovalTool, type ApprovalPort } from "../src/tools/authority/approval";
 import { createTools } from "../src/tools/core/catalog";
-import { eraseTool } from "../src/tools/core/define";
-import { createDispatcher } from "../src/tools/core/dispatch";
+import { createDispatcher, eraseTool } from "@openomni/agent";
+import { executor } from "./helpers/executor";
 import { dispatchModelTool, modelToolOutput } from "./helpers/tool-dispatch";
 
 /**
@@ -98,15 +98,19 @@ async function requestPromotion(at = T0): Promise<string> {
 describe("approval output boundary", () => {
   it("rejects malformed output through the dispatcher", async () => {
     const tool = eraseTool(createApprovalTool(port));
-    const result = await createDispatcher([
-      { ...tool, execute: async () => ({ op: "request" }) },
-    ]).execute({
-      id: "approval-invalid-output",
-      tool: "approval",
-      input: {
-        operation: { op: "decide", approvalId: "approval:1", decision: "approved" },
+    const result = await createDispatcher(
+      [{ ...tool, execute: async () => ({ op: "request" }) }],
+      { executor },
+    ).execute(
+      {
+        id: "approval-invalid-output",
+        tool: "approval",
+        input: {
+          operation: { op: "decide", approvalId: "approval:1", decision: "approved" },
+        },
       },
-    });
+      { sessionId: "approval-session", turnId: "approval-turn" },
+    );
 
     expect(result).toEqual({
       toolCallId: "approval-invalid-output",
@@ -114,7 +118,7 @@ describe("approval output boundary", () => {
       toolName: "approval",
       output: "approval produced invalid output",
       isError: true,
-      errorClass: "invalid_output",
+      errorKind: "invalid_output",
     });
   });
 });
@@ -269,7 +273,7 @@ describe("approval tool boundary failures", () => {
         { approvals: port },
         RESIDENT,
       )({ op, args: {} });
-      expect(result).toMatchObject({ isError: true, errorClass: "invalid_input" });
+      expect(result).toMatchObject({ isError: true, errorKind: "invalid_input" });
       expect(result.output).toBeString();
     }
 

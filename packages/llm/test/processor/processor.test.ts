@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, jest, spyOn, test } from "bun:test";
 import { LlmCall, Operational, type Message, type Tool } from "@openomni/protocol";
 import type { Sink } from "../../src/sink";
-import { collector } from "@openomni/telemetry";
+import { collector } from "../helpers/observation";
 import { Processor } from "../../src/processor";
 import { APIError } from "../../src/error";
 import type { Provider } from "../../src/provider";

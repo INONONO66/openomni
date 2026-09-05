@@ -4,7 +4,7 @@ import {
   assistantMessage as buildAssistantMessage,
 } from "../helpers/fixtures";
 import { LlmCall, Operational, type Transcript } from "@openomni/protocol";
-import { Bus, collector } from "@openomni/telemetry";
+import { Bus, collector } from "../helpers/observation";
 import { APIError } from "../../src/error";
 import { Processor } from "../../src/processor";
 import { Retry } from "../../src/retry";

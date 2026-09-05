@@ -1,12 +1,12 @@
 import { expect, test } from "bun:test";
 import { SessionHandleStore } from "@openomni/ledger";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "@openomni/agent";
 import type { RunInput, Sink } from "@openomni/llm";
 import { attachMachineDaemon, createMachineHost, type MachineDaemon } from "@openomni/machines";
 import type { Machine } from "@openomni/protocol";
 import type { DelegationOrigin } from "../src/delegation/admission";
 import type { CatalogPorts } from "../src/tools/core/catalog";
-import type { AnyToolDefinition } from "../src/tools/core/define";
+import type { AnyToolDefinition } from "@openomni/protocol";
 import { createCellRegistry } from "../src/tools/cell-registry";
 import type { CellPorts } from "../src/tools/execution/run-code";
 import { modelToolOutput } from "./helpers/tool-dispatch";
@@ -114,7 +114,7 @@ test("a cell batches delegation into one turn", async () => {
   expect(answer).toContain("done(check lint); done(check types); done(check tests)");
   // One Resident turn, not three: that is what code mode bought.
   expect(residentTurns).toHaveLength(1);
-  expect(answer).toContain("machines=unknown tool: machines");
+  expect(answer).toContain("machines=unregistered tool: machines");
 }, 60_000);
 
 test("the machine tool is not offered while nothing is attached", async () => {
@@ -165,7 +165,7 @@ test("the machine tool is not offered while nothing is attached", async () => {
   ]);
   // All tools are host-projected; the local default host reports live attachment failure.
   expect(answer).toContain("the default kernel host is not attached right now");
-  expect(answer).toContain("machines=unknown tool: machines");
+  expect(answer).toContain("machines=unregistered tool: machines");
 }, 30_000);
 
 /**

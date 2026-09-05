@@ -143,16 +143,90 @@ describe("evaluatePermission", () => {
   });
 
   for (const { name, list, pattern, resource, expected } of [
-    { name: "wildcard allowlist", list: "allowlist", pattern: "*", resource: "file.read", expected: { action: "continue", reason: "allowlist", policyId: "guardrail.permission", matchedPattern: "*" } },
-    { name: "wildcard denylist", list: "denylist", pattern: "*", resource: "file.read", expected: { action: "abort", reason: "denylist", policyId: "guardrail.permission", matchedPattern: "*" } },
-    { name: "wildcard approval", list: "requireApproval", pattern: "*", resource: "file.read", expected: { action: "abort", reason: "require_approval", policyId: "guardrail.permission", matchedPattern: "*" } },
-    { name: "prefix allowlist", list: "allowlist", pattern: "file.*", resource: "file.read", expected: { action: "continue", reason: "allowlist", policyId: "guardrail.permission", matchedPattern: "file.*" } },
-    { name: "prefix denylist", list: "denylist", pattern: "file.*", resource: "file.read", expected: { action: "abort", reason: "denylist", policyId: "guardrail.permission", matchedPattern: "file.*" } },
-    { name: "prefix approval", list: "requireApproval", pattern: "file.*", resource: "file.read", expected: { action: "abort", reason: "require_approval", policyId: "guardrail.permission", matchedPattern: "file.*" } },
-    { name: "prefix miss", list: "allowlist", pattern: "file.*", resource: "filesystem.read", expected: { action: "abort", reason: "allowlist_miss", policyId: "guardrail.permission" } },
+    {
+      name: "wildcard allowlist",
+      list: "allowlist",
+      pattern: "*",
+      resource: "file.read",
+      expected: {
+        action: "continue",
+        reason: "allowlist",
+        policyId: "guardrail.permission",
+        matchedPattern: "*",
+      },
+    },
+    {
+      name: "wildcard denylist",
+      list: "denylist",
+      pattern: "*",
+      resource: "file.read",
+      expected: {
+        action: "abort",
+        reason: "denylist",
+        policyId: "guardrail.permission",
+        matchedPattern: "*",
+      },
+    },
+    {
+      name: "wildcard approval",
+      list: "requireApproval",
+      pattern: "*",
+      resource: "file.read",
+      expected: {
+        action: "abort",
+        reason: "require_approval",
+        policyId: "guardrail.permission",
+        matchedPattern: "*",
+      },
+    },
+    {
+      name: "prefix allowlist",
+      list: "allowlist",
+      pattern: "file.*",
+      resource: "file.read",
+      expected: {
+        action: "continue",
+        reason: "allowlist",
+        policyId: "guardrail.permission",
+        matchedPattern: "file.*",
+      },
+    },
+    {
+      name: "prefix denylist",
+      list: "denylist",
+      pattern: "file.*",
+      resource: "file.read",
+      expected: {
+        action: "abort",
+        reason: "denylist",
+        policyId: "guardrail.permission",
+        matchedPattern: "file.*",
+      },
+    },
+    {
+      name: "prefix approval",
+      list: "requireApproval",
+      pattern: "file.*",
+      resource: "file.read",
+      expected: {
+        action: "abort",
+        reason: "require_approval",
+        policyId: "guardrail.permission",
+        matchedPattern: "file.*",
+      },
+    },
+    {
+      name: "prefix miss",
+      list: "allowlist",
+      pattern: "file.*",
+      resource: "filesystem.read",
+      expected: { action: "abort", reason: "allowlist_miss", policyId: "guardrail.permission" },
+    },
   ] as const) {
     it(`matches ${name}`, () => {
-      expect(evaluatePermission({ action: "tool.call", [list]: [pattern] }, request(resource))).toMatchObject(expected);
+      expect(
+        evaluatePermission({ action: "tool.call", [list]: [pattern] }, request(resource)),
+      ).toMatchObject(expected);
     });
   }
 

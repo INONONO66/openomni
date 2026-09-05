@@ -1,158 +1,96 @@
-import { describe, expect, it } from "bun:test";
-import { Policy } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
-import type { z } from "zod";
-import { PolicyEngine } from "../../../src/core/policy";
-import { atPoint, deny, policyContext } from "../../helpers/policy-decision";
-import { captureBusEvents } from "../../helpers/bus-event";
+import { expect, it } from "bun:test";
+import { createExecutor, type ExecutionLedger } from "../../../src/index";
+import { compilePolicySnapshot } from "@openomni/policy";
+import { L0Observation, type LedgerAction, type PolicyRow } from "@openomni/protocol";
 
-type PolicyEvaluatedEvent = z.infer<typeof Policy.Events.Evaluated.schema>;
-type PolicyDecisionComposedEvent = z.infer<typeof Policy.Events.DecisionComposed.schema>;
-
-function nativeToolDescriptor(name: string): Policy.Resource.Descriptor {
+function policyRow(
+  name: string,
+  kind: PolicyRow.Row["kind"],
+  phase: PolicyRow.Phase,
+  verdict: PolicyRow.Row["verdict"]["value"],
+): PolicyRow.Row {
   return {
-    id: `tool:${name}`,
-    kind: "tool",
-    labels: ["source:system"],
-    capabilities: ["tool.execute"],
-    effects: ["external.write"],
-    source: { type: "system" },
+    name,
+    kind,
+    phase,
+    match: { encodingVersion: 1, value: { op: "read" } },
+    verdict: { encodingVersion: 1, value: verdict },
+    priority: 100,
+    generation: 7,
   };
 }
 
-describe("PolicyEngine audit emission", () => {
-  it("emits policy.evaluated with canonical audit context for blocking dispatch", async () => {
-    const descriptor = nativeToolDescriptor("shell");
-    const evaluated = captureBusEvents(Policy.Events.Evaluated);
-
-    try {
-      const engine = PolicyEngine.create({
-        clock: Date.now,
-        traceContext: {
-          traceId: "trace-config",
-          sessionId: "sess-config",
-          runId: "run-config",
-          agentName: "config-agent",
-        },
-        auditEmit: Bus.publish,
-      });
-      engine.register(
-        atPoint("tool.native.pre", {
-          name: "deny-shell",
-          effects: ["audit.annotate"],
-          priority: 0,
-          fn: () => deny("policy.deny-shell", "blocked-shell"),
-        }),
-      );
-
-      const ctx = {
-        ...policyContext(),
-        sessionId: "sess-request",
-        runId: "run-request",
-        toolId: "shell",
-        toolName: "shell",
-        toolInput: { command: "ls" },
-        resourceDescriptor: descriptor,
-        traceContext: {
-          traceId: "trace-request",
-          sessionId: "sess-request",
-          runId: "run-request",
-          agentName: "request-agent",
-        },
-      };
-
-      await engine.dispatchPoint("tool.native.pre", ctx);
-      const [event] = (await evaluated.done) as readonly PolicyEvaluatedEvent[];
-
-      expect(evaluated.events).toHaveLength(1);
-      expect(event).toMatchObject({
-        traceId: "trace-request",
-        sessionId: "sess-request",
-        runId: "run-request",
-        // Attributed to the invoked registration, not the middleware's
-        // self-reported "policy.deny-shell" id.
-        policyId: "deny-shell",
-        actor: { kind: "agent", name: "request-agent", runId: "run-request" },
-        action: "tool.call",
-        resource: "shell",
-        verdict: "deny",
-        reason: "blocked-shell",
-        effects: [{ type: "audit.annotate", annotation: "blocked-shell", severity: "error" }],
-        reasonCodes: ["blocked-shell"],
-        pointId: "tool.native.pre",
-        pointVersion: 1,
-        resourceDescriptor: descriptor,
-      });
-      expect(typeof event?.durationMs).toBe("number");
-    } finally {
-      evaluated.unsubscribe();
-      Bus.reset();
-    }
+it("awaits policy.decision commit before publishing its observation", async () => {
+  const appended: LedgerAction.Append[] = [];
+  const observations: string[] = [];
+  const decisionCommit = Promise.withResolvers<void>();
+  let revision = 0;
+  const ledger: ExecutionLedger = {
+    async commit(action) {
+      if (action.kind === "policy.decision") await decisionCommit.promise;
+      appended.push(action);
+      revision += 1;
+      return { action: { ...action, ordinal: revision }, revision };
+    },
+  };
+  const executor = createExecutor({
+    policy: compilePolicySnapshot({
+      generation: 7,
+      mandatory: ["compaction"],
+      rows: [
+        { ...policyRow("compaction", "turn", "post", { type: "allow" }), match: { encodingVersion: 1, value: {} } },
+        policyRow("allow-read", "tool", "pre", { type: "allow" }),
+      ],
+    }),
+    ledger,
+    observations: {
+      publish(event, value) {
+        if (event.name === L0Observation.ActionCommittedEvent.name) {
+          const committed = L0Observation.ActionCommitted.parse(value);
+          observations.push(committed.id);
+        }
+      },
+    },
+    identity: {
+      sessionId: "session-audit",
+      role: "resident",
+      parentActionId: "turn-parent",
+    },
+    clock: () => 42,
+    entropy: (() => {
+      let index = 0;
+      return () => `audit-${++index}`;
+    })(),
   });
 
-  it("emits policy.decision.composed for blocking dispatch", async () => {
-    const descriptor = nativeToolDescriptor("shell");
-    const evaluated = captureBusEvents(Policy.Events.Evaluated);
-    const composed = captureBusEvents(Policy.Events.DecisionComposed);
+  const running = executor.run(
+    { kind: "tool", op: "read", intent: { path: "/tmp/a" }, effect: { ok: true } },
+    async () => "done",
+  );
+  await Promise.resolve();
+  expect(appended).toHaveLength(0);
+  expect(observations).toHaveLength(0);
 
-    try {
-      const engine = PolicyEngine.create({ clock: Date.now, auditEmit: Bus.publish });
-      engine.register(
-        atPoint("tool.native.pre", {
-          name: "deny-shell",
-          effects: ["audit.annotate"],
-          priority: 0,
-          fn: () => deny("policy.deny-shell", "blocked-shell"),
-        }),
-      );
+  decisionCommit.resolve();
+  await running;
 
-      const decision = await engine.dispatchPoint("tool.native.pre", {
-        ...policyContext(),
-        sessionId: "sess-v2",
-        runId: "run-v2",
-        toolId: "shell",
-        toolName: "shell",
-        toolInput: { command: "ls" },
-        resourceDescriptor: descriptor,
-        traceContext: {
-          traceId: "trace-v2",
-          sessionId: "sess-v2",
-          runId: "run-v2",
-          agentName: "audit-agent",
-        },
-      });
-
-      const evaluatedEvents = (await evaluated.done) as readonly PolicyEvaluatedEvent[];
-      const composedEvents = (await composed.done) as readonly PolicyDecisionComposedEvent[];
-      expect(decision.effects).toEqual([
-        { type: "run.abort", reason: "blocked-shell" },
-        { type: "audit.annotate", annotation: "blocked-shell", severity: "error" },
-      ]);
-      expect(evaluatedEvents).toHaveLength(1);
-      expect(composedEvents).toHaveLength(1);
-      expect(composedEvents[0]).toMatchObject({
-        traceId: "trace-v2",
-        sessionId: "sess-v2",
-        runId: "run-v2",
-        actor: { kind: "agent", name: "audit-agent", runId: "run-v2" },
-        action: "tool.call",
-        resource: "shell",
-        verdict: "deny",
-        reason: "blocked-shell",
-        effects: [
-          { type: "run.abort", reason: "blocked-shell" },
-          { type: "audit.annotate", annotation: "blocked-shell", severity: "error" },
-        ],
-        reasonCodes: ["blocked-shell"],
-        pointId: "tool.native.pre",
-        pointVersion: 1,
-        resourceDescriptor: descriptor,
-      });
-      expect(typeof composedEvents[0]?.durationMs).toBe("number");
-    } finally {
-      evaluated.unsubscribe();
-      composed.unsubscribe();
-      Bus.reset();
-    }
+  const decision = appended.find((action) => action.kind === "policy.decision");
+  expect(decision).toMatchObject({
+    parentId: "turn-parent",
+    sessionId: "session-audit",
+    kind: "policy.decision",
+    intent: {
+      value: {
+        hook: "tool.pre",
+        generation: 7,
+        matchedRuleIds: ["allow-read"],
+        verdict: "allow",
+      },
+    },
   });
+  const value = decision?.intent.value;
+  expect(typeof value === "object" && value !== null && !Array.isArray(value) ? value.inputHash : undefined)
+    .toMatch(/^sha256:[0-9a-f]{64}$/);
+  expect(observations[0]).toBe(decision?.id);
+  expect(appended.findIndex((action) => action.id === observations[0])).toBe(0);
 });

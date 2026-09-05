@@ -8,9 +8,9 @@ import type {
 } from "@openomni/ledger";
 import { Vault } from "@openomni/ledger";
 import type { Actor, Approval, Provisioning } from "@openomni/protocol";
-import { newTraceId } from "@openomni/telemetry";
+import { newTraceId } from "@openomni/agent";
 import { z } from "zod";
-import { defineTool, ToolRefused } from "../core/define";
+import { defineTool, ToolRefused } from "@openomni/agent";
 import {
   isRegisteredProvider,
   validateProviderCredential,

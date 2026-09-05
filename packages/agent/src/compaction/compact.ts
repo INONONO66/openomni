@@ -106,7 +106,41 @@ export const DEFAULT_PROTECT_RECENT = 6;
 // ~20k tokens of verbatim user text carried through a cut (Codex ships the
 // same order of magnitude). Strategy may narrow or widen it.
 const DEFAULT_PRESERVE_USER_CHARS = 80_000;
+const DEFAULT_SUMMARIZER_DEADLINE_MS = 60_000;
 const ANCHOR_HEADER = "[Conversation Summary]\n";
+
+export function withSummarizerDeadline(
+  summarize: NonNullable<CompactionOptions["onSummarize"]>,
+  deadlineMs = DEFAULT_SUMMARIZER_DEADLINE_MS,
+): NonNullable<CompactionOptions["onSummarize"]> {
+  return async (messages, previousAnchor, budget, operationSignal) => {
+    const controller = new AbortController();
+    const cancellation = Promise.withResolvers<never>();
+    const abort = (): void => {
+      const error = new Error("compaction summarizer operation aborted");
+      error.name = "AbortError";
+      controller.abort(error);
+      cancellation.reject(error);
+    };
+    operationSignal?.addEventListener("abort", abort, { once: true });
+    const timer = setTimeout(() => {
+      const error = new Error(`compaction summarizer exceeded ${deadlineMs}ms deadline`);
+      error.name = "SummarizerDeadlineError";
+      controller.abort(error);
+      cancellation.reject(error);
+    }, deadlineMs);
+    try {
+      if (operationSignal?.aborted === true) abort();
+      return await Promise.race([
+        summarize(messages, previousAnchor, budget, controller.signal),
+        cancellation.promise,
+      ]);
+    } finally {
+      clearTimeout(timer);
+      operationSignal?.removeEventListener("abort", abort);
+    }
+  };
+}
 
 /**
  * Time carriage (#737): the one fixed grammar a marker may wear. The whole
@@ -453,9 +487,19 @@ export namespace Compaction {
     };
 
     try {
+      const boundedOptions =
+        options.onSummarize === undefined
+          ? options
+          : {
+              ...options,
+              onSummarize: withSummarizerDeadline(
+                options.onSummarize,
+                options.summarizerDeadlineMs,
+              ),
+            };
       return await compactUnbracketed(
         messages,
-        options,
+        boundedOptions,
         dispatch.measuredTokens,
         dispatch.candidate,
         finish,
@@ -691,7 +735,9 @@ function isAnchorMessage(message: Message.WithParts): boolean {
   );
 }
 
-export function latestCompactionAnchorId(span: readonly Message.WithParts[]): string | undefined {
+export function latestCompactionAnchorId(
+  span: readonly Message.WithParts[],
+): string | undefined {
   for (let index = span.length - 1; index >= 0; index -= 1) {
     const message = span[index];
     if (message !== undefined && isAnchorMessage(message)) return message.info.id;

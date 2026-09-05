@@ -3,13 +3,13 @@
 import { describe, expect, test, beforeEach } from "bun:test";
 import { Operational } from "@openomni/protocol";
 import { Session } from "../src/session";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "./helpers/observation";
 import { Storage } from "../src/storage/storage";
 import "../src/storage/initialize";
 
 /**
  * `Bus.publish` queues every subscriber in exactly one `queueMicrotask`
- * (`packages/telemetry/src/bus.ts:55-64`), and the queue drains completely
+ * (`packages/agent/src/observation/bus.ts:55-64`), and the queue drains completely
  * before an awaiting continuation resumes. Every call under test here returns
  * synchronously, so anything it published is already queued when this runs:
  * one hop is the exact signal in both directions - it proves a delivery

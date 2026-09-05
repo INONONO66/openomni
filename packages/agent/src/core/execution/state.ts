@@ -4,12 +4,10 @@ import type { Message, Policy, TraceContext } from "@openomni/protocol";
 import {
   createBudgetState,
   recordTokenUsage,
-  recordToolCall,
   recordTurn,
   type BudgetState,
 } from "../budget";
-import type { AgentResult, AgentStep, ChatAgentConfig, ChatAgentInput, TokenUsage } from "../types";
-import type { DispatchContext } from "../policy";
+import type { AgentResult, AgentStep, ChatAgentInput, TokenUsage } from "../types";
 import type { TerminalReason } from "../retry";
 import { createUserMessage, createAssistantMessage } from "../message-factory";
 import type { CompactionYield } from "../../compaction/geometry";
@@ -242,10 +240,6 @@ export function recordRunTurn(state: RunState): void {
   state.budgetState = recordTurn(state.budgetState);
 }
 
-export function recordRunToolCall(state: RunState, durationMs: number): void {
-  state.budgetState = recordToolCall(state.budgetState, durationMs);
-}
-
 export function recordCallContext(state: RunState, contextTokens: number): void {
   state.lastCallContextTokens = contextTokens;
 }
@@ -296,7 +290,7 @@ export function appendRunMessages(state: RunState, messages: readonly Message.Wi
   state.messages.push(...messages);
 }
 
-export function replaceRunMessages(state: RunState, messages: Message.WithParts[]): void {
+function replaceRunMessages(state: RunState, messages: Message.WithParts[]): void {
   state.messages = messages;
   // The measurement described the window this rewrite just changed. Clearing
   // it makes the next completion check skip-and-record rather than re-fire
@@ -304,78 +298,16 @@ export function replaceRunMessages(state: RunState, messages: Message.WithParts[
   state.lastCallContextTokens = undefined;
 }
 
-export function advanceRunTurn(state: RunState): void {
-  state.turnIndex++;
-}
-
-export function advanceRunContinuation(state: RunState): void {
-  state.continuationCount++;
-  advanceRunTurn(state);
-}
-
-export function applyCompactionMessages(state: RunState, messages: Message.WithParts[]): number {
+export function applyCompactionMessages(
+  state: RunState,
+  messages: Message.WithParts[],
+): number {
   const messagesBefore = state.messages.length;
   replaceRunMessages(state, messages);
   state.compactionCount += 1;
   return messagesBefore;
 }
 
-type LifecyclePolicyContextOverrides = Partial<
-  Pick<
-    DispatchContext,
-    "turnCount" | "continuationCount" | "elapsedMs" | "isCompletion" | "toolInput"
-  >
-> &
-  Record<string, unknown>;
-
-export function buildLifecyclePolicyContext<
-  const TOverrides extends LifecyclePolicyContextOverrides = Record<string, never>,
->(
-  state: RunState,
-  config: ChatAgentConfig,
-  agentBase: AgentRunBase,
-  overrides: TOverrides = {} as TOverrides,
-): Omit<DispatchContext, "actorId" | "sessionId" | "runId"> &
-  Omit<TOverrides, "actorId" | "sessionId" | "runId"> & {
-    readonly actorId: string;
-    readonly sessionId: string;
-    readonly runId: string;
-  } {
-  const { elapsedMs = Date.now() - state.startTime, ...rest } = overrides;
-  return {
-    steps: state.steps,
-    usage: state.totalUsage,
-    turnCount: state.budgetState.turns,
-    attempt: state.attempt,
-    isCompletion: false,
-    continuationCount: state.continuationCount,
-    elapsedMs,
-    messages: state.messages,
-    budgetState: state.budgetState,
-    budget: config.budget,
-    contextTokens: state.lastCallContextTokens,
-    contextWindowTokens: state.contextWindowTokens,
-    // Every builtin dispatched at a lifecycle point reads its trace from here.
-    // Omitting it made a policy that reports — compaction — refuse at a
-    // fail-closed point, which reads as the run aborting.
-    traceContext: {
-      traceId: agentBase.traceId,
-      sessionId: agentBase.sessionId,
-      runId: agentBase.runId,
-    },
-    ...rest,
-    actorId: agentBase.actorId,
-    sessionId: agentBase.sessionId,
-    runId: agentBase.runId,
-    // The generic is what makes each point's declared inputs type-check at the
-    // eleven call sites; the cost is this one cast. TypeScript cannot prove an
-    // object literal satisfies `Omit<TOverrides, K>` while `TOverrides` is
-    // still a parameter, and a single assertion is rejected as
-    // non-overlapping for the same reason.
-  } as unknown as Omit<DispatchContext, "actorId" | "sessionId" | "runId"> &
-    Omit<TOverrides, "actorId" | "sessionId" | "runId"> & {
-      readonly actorId: string;
-      readonly sessionId: string;
-      readonly runId: string;
-    };
+export function advanceRunTurn(state: RunState): void {
+  state.turnIndex++;
 }

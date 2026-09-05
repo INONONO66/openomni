@@ -1,9 +1,46 @@
 import { describe, expect, it } from "bun:test";
 import { z } from "zod";
 import { createCellRegistry } from "./cell-registry";
-import { defineTool, eraseTool, type ToolExecutionContext } from "./core/define";
-import { createDispatcher } from "./core/dispatch";
+import {
+  createDispatcher,
+  createExecutor,
+  defineTool,
+  eraseTool,
+} from "@openomni/agent";
+import { LedgerAction, type Tool, type ToolExecutionContext } from "@openomni/protocol";
 import { createRunCodeTool, type CellPorts } from "./execution/run-code";
+let ordinal = 0;
+const executor = createExecutor({
+  policy: {
+    generation: 1,
+    contentHash: "cell-test-policy",
+    evaluate: (input) => ({
+      generation: 1,
+      snapshotHash: "cell-test-policy",
+      inputHash: `${input.kind}:${input.phase}:${input.op}`,
+      matchedRuleIds: [],
+      verdict: "allow",
+      value: input.value,
+      effects: [],
+      obligations: [],
+      bucket: `${input.kind}/${input.phase}/${input.op}`,
+      evaluatedRuleCount: 0,
+    }),
+  },
+  ledger: {
+    async commit(action) {
+      ordinal += 1;
+      return {
+        action: LedgerAction.Node.parse({ ...action, ordinal }),
+        revision: ordinal,
+      };
+    },
+  },
+  observations: { publish: () => undefined },
+  identity: { sessionId: "parent-session", role: "resident", parentActionId: "parent-turn" },
+  clock: () => 1,
+  entropy: () => `cell-action-${ordinal + 1}`,
+});
 
 const parent = (signal = new AbortController().signal): ToolExecutionContext => ({
   sessionId: "parent-session",
@@ -57,9 +94,15 @@ describe("cell registry dispatch", () => {
       }),
     );
     const registry = createCellRegistry();
+    const cellDispatcher = createDispatcher([definition], { executor });
     registry.bind(
       "cell-a",
-      createDispatcher([definition]).executeCell as never,
+      (async (call: Tool.Call, context?: Tool.ExecutionContext) =>
+        await cellDispatcher.executeCell(call, {
+          sessionId: "parent-session",
+          turnId: "parent-turn",
+          ...(context?.signal === undefined ? {} : { signal: context.signal }),
+        })) as never,
       parent(controller.signal),
     );
 
@@ -99,17 +142,14 @@ describe("cell registry dispatch", () => {
       tools: () => [privateTool],
       newCellId: () => "settled-cell",
     };
-    const dispatcher = createDispatcher([eraseTool(createRunCodeTool(ports))], "parent-session");
+    const dispatcher = createDispatcher([eraseTool(createRunCodeTool(ports))], { executor });
 
     await dispatcher.execute(
       { id: "run-code", tool: "run_code", input: { code: "1", timeoutMs: 1000 } },
       {
         signal: parent().signal,
-        traceContext: {
-          traceId: "parent-trace",
-          sessionId: "parent-session",
-          runId: "parent-turn",
-        },
+        sessionId: "parent-session",
+        turnId: "parent-turn",
       },
     );
 
@@ -123,14 +163,18 @@ describe("cell registry dispatch", () => {
     const registry = createCellRegistry();
     registry.bind(
       "resident-cell",
-      createDispatcher([valueTool("private", "resident")]).executeCell as never,
+      createDispatcher([valueTool("private", "resident")], { executor }).executeCell as never,
       parent(),
     );
-    registry.bind("worker-cell", createDispatcher([]).executeCell as never, parent());
+    registry.bind(
+      "worker-cell",
+      createDispatcher([], { executor }).executeCell as never,
+      parent(),
+    );
 
     expect(
       await registry.callTool({ cellId: "worker-cell", name: "private", arguments: {} }),
-    ).toEqual({ status: "failed", error: "unknown tool: private" });
+    ).toEqual({ status: "failed", error: "unregistered tool: private" });
     expect(
       await registry.callTool({ cellId: "resident-cell", name: "private", arguments: {} }),
     ).toEqual({ status: "completed", value: { value: "resident" } });

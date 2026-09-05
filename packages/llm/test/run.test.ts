@@ -4,10 +4,10 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { LlmCall, type Message, type Tool } from "@openomni/protocol";
 import type { Sink } from "../src/sink";
-import { Bus, collector } from "@openomni/telemetry";
+import { Bus, collector } from "./helpers/observation";
 import { Auth } from "../src/auth";
 import type { Provider } from "../src/provider";
-import { newTraceId } from "@openomni/telemetry";
+import { newTraceId } from "./helpers/observation";
 
 const TEST_TRACE = { traceId: newTraceId(), sessionId: "session-test", runId: "run-test" };
 

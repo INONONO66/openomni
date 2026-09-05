@@ -1,8 +1,7 @@
-import type { ChatAgentConfig } from "@openomni/agent";
-import type { Machine } from "@openomni/protocol";
+import type { ChatAgentConfig, Executor } from "@openomni/agent";
+import type { AnyToolDefinition, Machine } from "@openomni/protocol";
 import { z } from "zod";
-import { defineTool, type AnyToolDefinition } from "../core/define";
-import { createDispatcher } from "../core/dispatch";
+import { createDispatcher, currentExecutor, defineTool } from "@openomni/agent";
 import type { CellRegistry } from "../cell-registry";
 
 /** What running a cell needs, without knowing how the host is composed. */
@@ -28,15 +27,23 @@ export interface CellPorts {
 function cellDoor(
   definitions: readonly AnyToolDefinition[],
   sessionId: string,
+  cellId: string,
+  executor: Executor,
 ): NonNullable<ChatAgentConfig["toolExecutor"]> {
   const cellTools = definitions.filter(
     (tool) => tool.name !== RUN_CODE_TOOL_NAME && tool.visibility.cell.length > 0,
   );
-  const dispatcher = createDispatcher(cellTools, sessionId);
+  // The cell door is invoked asynchronously by the kernel over IPC, after this
+  // run_code turn has returned and its ambient execution context is gone, so the
+  // executor must be captured now (while run_code itself is executing) and
+  // injected explicitly rather than inherited at call time.
+  const dispatcher = createDispatcher(cellTools, { executor });
   return async (call, context) =>
-    dispatcher.executeCell(call, context) as Promise<
-      Awaited<ReturnType<NonNullable<ChatAgentConfig["toolExecutor"]>>>
-    >;
+    dispatcher.executeCell(call, {
+      sessionId,
+      turnId: cellId,
+      ...(context?.signal === undefined ? {} : { signal: context.signal }),
+    }) as Promise<Awaited<ReturnType<NonNullable<ChatAgentConfig["toolExecutor"]>>>>;
 }
 
 const Input = z
@@ -80,7 +87,11 @@ export function createRunCodeTool(ports: CellPorts) {
     visibility: { model: ["resident", "worker"], cell: ["resident", "worker"] },
     execute: async ({ code, timeoutMs }, ctx) => {
       const cellId = ports.newCellId();
-      ports.registry.bind(cellId, cellDoor(ports.tools(ctx.sessionId), ctx.sessionId), ctx);
+      ports.registry.bind(
+        cellId,
+        cellDoor(ports.tools(ctx.sessionId), ctx.sessionId, cellId, currentExecutor()),
+        ctx,
+      );
       try {
         return await ports.runCell(ports.defaultMachineId, {
           cellId,

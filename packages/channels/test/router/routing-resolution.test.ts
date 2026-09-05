@@ -7,7 +7,7 @@ import {
   SurfaceKey,
   WaitStore,
 } from "@openomni/ledger";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../helpers/observation";
 import { IngressRoutingError } from "../../src/router/routing-resolution";
 import { WaitService } from "../../src/router/wait/index";
 import {

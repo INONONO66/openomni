@@ -5,7 +5,7 @@ import {
 } from "@openomni/channels";
 import { ChannelGrantStore } from "@openomni/ledger";
 import type { Actor, Gateway, Ingress } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "@openomni/agent";
 
 /**
  * The tier a named channel surface mounts with when no Owner decision

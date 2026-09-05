@@ -1,10 +1,11 @@
 import { initialize, Storage } from "@openomni/ledger";
 import { Delegation, Model } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "@openomni/agent";
 import { z } from "zod";
 import { createDelegationKernel, type DelegationKernel } from "./kernel";
 import { createInlineDriver, type InlineWorkerRunner } from "./inline-driver";
 import { createInlineWorkerRunner, WorkerRunError } from "./worker-loop";
+import { seedKernelPolicyRows } from "../policy-seed";
 
 /** Child-process wire: parse, acknowledge delivery, then report one outcome. */
 export const ProcessWorkerRequest = z
@@ -106,6 +107,7 @@ function processWorkerRun(
 ): Promise<{ readonly text: string; readonly tokens: number; readonly runId?: string }> {
   if (request.dbPath !== undefined && Storage.getInitializedDbPath() === null) {
     initialize({ dbPath: request.dbPath, observationSink: Bus });
+    seedKernelPolicyRows();
   }
   let kernel: DelegationKernel;
   const runner = createInlineWorkerRunner({

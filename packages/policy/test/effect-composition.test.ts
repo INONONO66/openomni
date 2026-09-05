@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { Policy } from "@openomni/protocol";
-import { composeEffects } from "@openomni/policy";
+import { composeEffects } from "../src/effects/compose";
 
 interface DecisionOptions {
   readonly policyId: string;

@@ -1,6 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { Sink } from "../src/sink";
-import { Bus, collector, newTraceId } from "@openomni/telemetry";
+import { Bus, collector, newTraceId } from "./helpers/observation";
 import { Operational } from "@openomni/protocol";
 
 const TEST_TRACE = { traceId: newTraceId(), sessionId: "session-test", runId: "run-test" };

@@ -9,13 +9,13 @@ import {
 } from "@openomni/ledger";
 import type { ChannelRuntimeStatus } from "../src/provisioning/supervisor";
 import { createTools } from "../src/tools/core/catalog";
-import { eraseTool } from "../src/tools/core/define";
-import { createDispatcher } from "../src/tools/core/dispatch";
+import { createDispatcher, eraseTool } from "@openomni/agent";
 import {
   createProvisionTool,
   personManifestDigest,
   type ProvisionPort,
 } from "../src/tools/mutation/provision";
+import { executor } from "./helpers/executor";
 import { dispatchModelTool, modelToolOutput } from "./helpers/tool-dispatch";
 
 const NOW = 1_756_000_000_000;
@@ -123,13 +123,17 @@ describe("provision output boundary", () => {
   test("rejects malformed output through the dispatcher", async () => {
     const { port } = portWith();
     const tool = eraseTool(createProvisionTool(port));
-    const result = await createDispatcher([
-      { ...tool, execute: async () => ({ op: "status" }) },
-    ]).execute({
-      id: "provision-invalid-output",
-      tool: "provision",
-      input: { operation: { op: "status", args: {} } },
-    });
+    const result = await createDispatcher(
+      [{ ...tool, execute: async () => ({ op: "status" }) }],
+      { executor },
+    ).execute(
+      {
+        id: "provision-invalid-output",
+        tool: "provision",
+        input: { operation: { op: "status", args: {} } },
+      },
+      { sessionId: "provision-session", turnId: "provision-turn" },
+    );
 
     expect(result).toEqual({
       toolCallId: "provision-invalid-output",
@@ -137,7 +141,7 @@ describe("provision output boundary", () => {
       toolName: "provision",
       output: "provision produced invalid output",
       isError: true,
-      errorClass: "invalid_output",
+      errorKind: "invalid_output",
     });
   });
 });
@@ -579,7 +583,7 @@ describe("refusal branches", () => {
         RESIDENT,
         () => NOW,
       )(typeof input === "object" ? { op: name, args: input } : input);
-      expect(result).toMatchObject({ isError: true, errorClass: "invalid_input" });
+      expect(result).toMatchObject({ isError: true, errorKind: "invalid_input" });
       expect(result.output).toContain("provision refused");
     }
   });

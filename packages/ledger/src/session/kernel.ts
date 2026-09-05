@@ -4,6 +4,7 @@ import {
   type LedgerAction,
   type LedgerSession,
   L0Observation,
+  type PolicyRow,
   SessionGeneration,
   SessionTurn,
   type ObservationSink,
@@ -114,10 +115,14 @@ export function listRows(): LedgerSession.Row[] {
   return requiredSessions().list();
 }
 
-export function currentPolicyGeneration(): number {
+export function policyRows(generation?: number): PolicyRow.Row[] {
   const policies = Storage.get().policies;
   if (policies === undefined) throw new Error("L0 storage capability is unavailable: policies");
-  return policies.rows().reduce((latest, policy) => Math.max(latest, policy.generation), 0);
+  return policies.rows(generation);
+}
+
+export function currentPolicyGeneration(): number {
+  return policyRows().reduce((latest, policy) => Math.max(latest, policy.generation), 0);
 }
 
 export function latestGeneration(

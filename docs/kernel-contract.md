@@ -154,6 +154,14 @@ The required base discrimination set is exactly fourteen fixtures:
 
 Cross-cutting proofs cover silence, one-question selection for multi-lens input, cooldown, mute, and Voice preservation; they do not add a lens.
 
+### L2 action executor
+
+Every native `prompt`, `turn`, `llm`, and `tool` operation crosses the session-pinned executor, which evaluates the compiled pre bucket before the body runs and the post bucket over the result. Each evaluation commits its own `policy.decision` action, so the durable tree carries the verdict even when nothing else is appended.
+
+Who owns the action record differs by kind. `llm` and `tool` operations are executor-owned: the executor commits an intent before invoking the body and exactly one linked terminal result (`executed`, `blocked_post`, or typed `failed`); a retried model call adds a child `attempt` intent/result pair per attempt. `prompt` and `turn` are decided over records the session machine already owns, the durable inbox action and the turn envelope, so the executor adds policy decisions and a verdict, never a duplicate intent or result. A pre denial never invokes the body, and for the executor-owned kinds it commits no intent. Post denial records `reverted` when a reverter exists and `irreversible` otherwise. Tool lifecycle observations are projections emitted only after the corresponding intent/result commit; observations are never authority or truth.
+
+Policy authority is the immutable compiled row snapshot pinned by the durable session generation. There is no caller-owned callback policy engine or callback registration surface. The OpenOmni boot composition seeds the kernel's mandatory policy rows into durable storage before sessions are materialized; a generation without the mandatory row compiles to a fail-closed snapshot and refuses the turn.
+
 ### Executor kinds
 
 `executorKind` is a WorkItem field:

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import {
   closeSessions,
   session,
@@ -12,12 +12,14 @@ import {
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import {
   type BusEvent,
+  type LedgerAction,
   L0Observation,
   type ObservationSink,
+  type PolicyRow,
   type SessionGeneration,
   type SessionTurn,
 } from "@openomni/protocol";
-import { Bus } from "@openomni/telemetry";
+import { Bus, SEEDED_POLICY_ROWS } from "../src/index";
 
 const SIGNAL_TIMEOUT_MS = 1_000;
 
@@ -103,6 +105,9 @@ beforeEach(() => {
     scheduleHeartbeat: () => () => undefined,
   };
   Storage.initialize({ dbPath: ":memory:", observationSink: sink });
+  const policies = Storage.get().policies;
+  if (policies === undefined) throw new Error("missing policy adapter");
+  for (const row of SEEDED_POLICY_ROWS) policies.append({ ...row, generation: 1 });
 });
 
 afterEach(async () => {
@@ -113,6 +118,26 @@ afterEach(async () => {
 
 function residentOptions(id: string, runner: SessionRunner): SessionCreateOptions {
   return { id, role: "resident", runner, tools: [tool("read")], system };
+}
+
+function policyHook(action: LedgerAction.Node): string | undefined {
+  if (action.kind !== "policy.decision") return undefined;
+  const value = action.intent.value;
+  if (value === null || Array.isArray(value) || typeof value !== "object") return undefined;
+  return typeof value.hook === "string" ? value.hook : undefined;
+}
+
+function policyGeneration(action: LedgerAction.Node): number | undefined {
+  if (action.kind !== "policy.decision") return undefined;
+  const value = action.intent.value;
+  if (value === null || Array.isArray(value) || typeof value !== "object") return undefined;
+  return typeof value.generation === "number" ? value.generation : undefined;
+}
+
+function seedPolicy(rows: readonly Omit<PolicyRow.Row, "generation">[]): void {
+  const policies = Storage.get().policies;
+  if (policies === undefined) throw new Error("missing policy adapter");
+  for (const row of [...SEEDED_POLICY_ROWS, ...rows]) policies.append({ ...row, generation: 1 });
 }
 
 function commitOpenTurn(input: {
@@ -126,7 +151,7 @@ function commitOpenTurn(input: {
     role: "resident",
     tools: [tool("read")],
     system,
-    policyGeneration: 0,
+    policyGeneration: SessionHandleStore.currentPolicyGeneration(),
     actionId: `${input.sessionId}:configure`,
     at: now,
   });
@@ -179,6 +204,313 @@ function commitOpenTurn(input: {
 }
 
 describe("durable session handle", () => {
+  test("records prompt and turn policy once at their existing durable envelopes", async () => {
+    const observedBeforeCommit: string[] = [];
+    const observedDecisionIds = new Set<string>();
+    sink.onCommit = (committed) => {
+      if (committed.kind !== "policy.decision") return;
+      observedDecisionIds.add(committed.id);
+      if (!SessionHandleStore.tree("policy-topology").some((action) => action.id === committed.id)) {
+        observedBeforeCommit.push(committed.id);
+      }
+    };
+    const policies = Storage.get().policies;
+    if (policies === undefined) throw new Error("missing policy adapter");
+    const runner: SessionRunner = async () => {
+      for (const row of policies.rows(1)) policies.append({ ...row, generation: 2 });
+      policies.append({
+        name: "deny-new-generation-turn-post",
+        kind: "turn",
+        phase: "post",
+        match: { encodingVersion: 1, value: { op: "session" } },
+        verdict: { encodingVersion: 1, value: { type: "deny", reason: "new generation" } },
+        priority: 2_000,
+        generation: 2,
+      });
+      return { kind: "result", text: "complete" };
+    };
+    const handle = session(residentOptions("policy-topology", runner), runtime);
+
+    const result = await handle.prompt("run once");
+
+    const tree = SessionHandleStore.tree(handle.id);
+    const prompt = tree.find((action) => action.kind === "prompt");
+    const turn = tree.find((action) => SessionHandleStore.turnIntent(action) !== undefined);
+    const decisions = tree.filter((action) => action.kind === "policy.decision");
+    expect(result).toEqual({ kind: "result", text: "complete" });
+    expect(tree.filter((action) => action.kind === "prompt")).toHaveLength(1);
+    expect(tree.filter((action) => action.kind === "turn")).toHaveLength(2);
+    expect(decisions.map(policyHook).sort()).toEqual([
+      "prompt.post",
+      "prompt.pre",
+      "turn.post",
+      "turn.pre",
+    ]);
+    expect(
+      decisions
+        .filter((action) => policyHook(action)?.startsWith("prompt."))
+        .every((action) => action.parentId === prompt?.id),
+    ).toBe(true);
+    expect(
+      decisions
+        .filter((action) => policyHook(action)?.startsWith("turn."))
+        .every((action) => action.parentId === turn?.id),
+    ).toBe(true);
+    expect(decisions.map(policyGeneration)).toEqual([1, 1, 1, 1]);
+    expect(observedDecisionIds).toEqual(new Set(decisions.map((action) => action.id)));
+    expect(observedBeforeCommit).toEqual([]);
+  });
+
+  test("a prompt pre denial consumes the inbox row without constructing or running a turn", async () => {
+    await Storage.withIsolation(async () => {
+      Storage.initialize({ dbPath: ":memory:", observationSink: sink });
+      seedPolicy([
+        {
+          name: "deny-prompt-pre",
+          kind: "prompt",
+          phase: "pre",
+          match: { encodingVersion: 1, value: { op: "inbox" } },
+          verdict: { encodingVersion: 1, value: { type: "deny", reason: "prompt refused" } },
+          priority: 2_000,
+        },
+      ]);
+      const isolatedRuntime = { ...runtime };
+      let calls = 0;
+      const handle = session(
+        residentOptions("prompt-pre-deny", async () => {
+          calls += 1;
+          return { kind: "result", text: "must not run" };
+        }),
+        isolatedRuntime,
+      );
+
+      const result = await handle.prompt("blocked prompt");
+
+      const tree = SessionHandleStore.tree(handle.id);
+      expect(result).toMatchObject({
+        kind: "error",
+        cause: { name: "SessionPolicyRefusal", reason: "prompt refused" },
+      });
+      expect(calls).toBe(0);
+      expect(tree.filter((action) => action.kind === "turn")).toEqual([]);
+      expect(tree.filter((action) => action.kind === "policy.decision").map(policyHook)).toEqual([
+        "prompt.pre",
+      ]);
+      expect(SessionHandleStore.inboxRows(handle.id).map((row) => row.status)).toEqual([
+        "consumed",
+      ]);
+      await closeSessions(isolatedRuntime);
+      Storage.reset();
+    });
+  });
+
+  test("a prompt post denial records both prompt decisions but never starts a turn", async () => {
+    await Storage.withIsolation(async () => {
+      Storage.initialize({ dbPath: ":memory:", observationSink: sink });
+      seedPolicy([
+        {
+          name: "deny-prompt-post",
+          kind: "prompt",
+          phase: "post",
+          match: { encodingVersion: 1, value: { op: "inbox" } },
+          verdict: { encodingVersion: 1, value: { type: "deny", reason: "prompt post refused" } },
+          priority: 2_000,
+        },
+      ]);
+      const isolatedRuntime = { ...runtime };
+      let calls = 0;
+      const handle = session(
+        residentOptions("prompt-post-deny", async () => {
+          calls += 1;
+          return { kind: "result", text: "must not run" };
+        }),
+        isolatedRuntime,
+      );
+
+      const result = await handle.prompt("blocked after record");
+
+      const tree = SessionHandleStore.tree(handle.id);
+      expect(result).toMatchObject({
+        kind: "error",
+        cause: { name: "SessionPolicyRefusal", reason: "prompt post refused" },
+      });
+      expect(calls).toBe(0);
+      expect(tree.filter((action) => action.kind === "turn")).toEqual([]);
+      expect(tree.filter((action) => action.kind === "policy.decision").map(policyHook)).toEqual([
+        "prompt.pre",
+        "prompt.post",
+      ]);
+      await closeSessions(isolatedRuntime);
+      Storage.reset();
+    });
+  });
+
+  test("fails closed when prompt post policy transforms its immutable receipt", async () => {
+    await Storage.withIsolation(async () => {
+      Storage.initialize({ dbPath: ":memory:", observationSink: sink });
+      seedPolicy([
+        {
+          name: "transform-prompt-receipt",
+          kind: "prompt",
+          phase: "post",
+          match: { encodingVersion: 1, value: { op: "inbox" } },
+          verdict: {
+            encodingVersion: 1,
+            value: { type: "transform", name: "redact", paths: ["result.status"] },
+          },
+          priority: 2_000,
+        },
+      ]);
+      const isolatedRuntime = { ...runtime };
+      let calls = 0;
+      const handle = session(
+        residentOptions("prompt-transform", async () => {
+          calls += 1;
+          return { kind: "result", text: "must not run" };
+        }),
+        isolatedRuntime,
+      );
+
+      const result = await handle.prompt("immutable prompt");
+
+      expect(result).toMatchObject({
+        kind: "error",
+        cause: { name: "SessionPolicyRefusal", reason: "invalid_output" },
+      });
+      expect(calls).toBe(0);
+      expect(SessionHandleStore.tree(handle.id).filter((action) => action.kind === "turn")).toEqual(
+        [],
+      );
+      await closeSessions(isolatedRuntime);
+      Storage.reset();
+    });
+  });
+
+  test("accepts a turn post transform only when the result still satisfies its contract", async () => {
+    for (const path of ["result.usage", "result.text"] as const) {
+      await Storage.withIsolation(async () => {
+        Storage.initialize({ dbPath: ":memory:", observationSink: sink });
+        seedPolicy([
+          {
+            name: `transform-turn-${path}`,
+            kind: "turn",
+            phase: "post",
+            match: { encodingVersion: 1, value: { op: "session" } },
+            verdict: {
+              encodingVersion: 1,
+              value: { type: "transform", name: "redact", paths: [path] },
+            },
+            priority: 2_000,
+          },
+        ]);
+        const isolatedRuntime = { ...runtime };
+        let calls = 0;
+        const handle = session(
+          residentOptions(`turn-transform-${path}`, async () => {
+            calls += 1;
+            return {
+              kind: "result",
+              text: "typed result",
+              usage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 },
+            };
+          }),
+          isolatedRuntime,
+        );
+
+        const result = await handle.prompt("transform turn result");
+
+        expect(calls).toBe(1);
+        if (path === "result.usage") {
+          expect(result).toEqual({ kind: "result", text: "typed result" });
+        } else {
+          expect(result).toMatchObject({
+            kind: "error",
+            cause: { name: "SessionPolicyRefusal", reason: "invalid_output" },
+          });
+        }
+        await closeSessions(isolatedRuntime);
+        Storage.reset();
+      });
+    }
+  });
+
+  test("turn policy denial distinguishes body-zero pre from irreversible post", async () => {
+    for (const phase of ["pre", "post"] as const) {
+      await Storage.withIsolation(async () => {
+        Storage.initialize({ dbPath: ":memory:", observationSink: sink });
+        seedPolicy([
+          {
+            name: `deny-turn-${phase}`,
+            kind: "turn",
+            phase,
+            match: { encodingVersion: 1, value: { op: "session" } },
+            verdict: {
+              encodingVersion: 1,
+              value: { type: "deny", reason: `turn ${phase} refused` },
+            },
+            priority: 2_000,
+          },
+        ]);
+        const isolatedRuntime = { ...runtime };
+        let calls = 0;
+        const handle = session(
+          residentOptions(`turn-${phase}-deny`, async () => {
+            calls += 1;
+            return { kind: "result", text: "body result" };
+          }),
+          isolatedRuntime,
+        );
+
+        const result = await handle.prompt("start the turn");
+
+        const tree = SessionHandleStore.tree(handle.id);
+        const hooks = tree
+          .filter((action) => action.kind === "policy.decision")
+          .map(policyHook);
+        expect(result).toMatchObject({
+          kind: "error",
+          cause: { name: "SessionPolicyRefusal", reason: `turn ${phase} refused` },
+        });
+        expect(calls).toBe(phase === "pre" ? 0 : 1);
+        expect(hooks).toEqual(
+          phase === "pre"
+            ? ["prompt.pre", "prompt.post", "turn.pre"]
+            : ["prompt.pre", "prompt.post", "turn.pre", "turn.post"],
+        );
+        expect(
+          tree.map(SessionHandleStore.turnTerminal).find((terminal) => terminal !== undefined),
+        ).toMatchObject({ kind: "error" });
+        await closeSessions(isolatedRuntime);
+        Storage.reset();
+      });
+    }
+  });
+
+  test("refuses a turn when its pinned generation has no mandatory policy row", async () => {
+    await Storage.withIsolation(async () => {
+      Storage.initialize({ dbPath: ":memory:", observationSink: sink });
+      const isolatedRuntime = { ...runtime };
+      let calls = 0;
+      const handle = session(
+        residentOptions("missing-policy", async () => {
+          calls += 1;
+          return { kind: "result", text: "ran" };
+        }),
+        isolatedRuntime,
+      );
+
+      const result = await handle.prompt("must be refused");
+
+      expect(calls).toBe(0);
+      expect(result).toMatchObject({
+        kind: "error",
+        cause: { name: "SessionPolicyRefusal", code: "session_policy_refused" },
+      });
+      await closeSessions(isolatedRuntime);
+      Storage.reset();
+    });
+  });
+
   test("serializes one runner and drains concurrent prompts as distinct ordered messages", async () => {
     const entered = signal<SessionRunnerInput>();
     const releaseBoundary = signal<void>();
@@ -770,6 +1102,116 @@ describe("durable session handle", () => {
     ).toHaveLength(1);
   });
 
+  test("a reactivated handle removes a tool from the next runner generation", async () => {
+    const inputs: SessionRunnerInput[] = [];
+    const runner: SessionRunner = async (input) => {
+      inputs.push(input);
+      return { kind: "result", text: "complete" };
+    };
+    const handle = session(
+      {
+        ...residentOptions("remove-after-reactivation", runner),
+        tools: [tool("read"), tool("search")],
+      },
+      runtime,
+    );
+
+    await handle.prompt("hibernate the original controller");
+    const receipt = await handle.tools.remove(["read"]);
+    await handle.prompt("use the configured generation");
+
+    expect(receipt).toEqual({ generation: 2, revertTo: 1 });
+    expect(inputs.at(-1)?.tools.map((entry) => entry.name)).toEqual(["search"]);
+  });
+
+  test("a reactivated handle replaces system blocks for the next runner generation", async () => {
+    const inputs: SessionRunnerInput[] = [];
+    const runner: SessionRunner = async (input) => {
+      inputs.push(input);
+      return { kind: "result", text: "complete" };
+    };
+    const handle = session(residentOptions("blocks-after-reactivation", runner), runtime);
+    const nextBlocks = [{ id: "safety", source: "operator", content: "Use the safe path." }];
+
+    await handle.prompt("hibernate the original controller");
+    const receipt = await handle.system.blocks.set(nextBlocks);
+    await handle.prompt("use the configured generation");
+
+    expect(receipt).toEqual({ generation: 2, revertTo: 1 });
+    expect(inputs).toHaveLength(2);
+    expect(inputs[1]?.systemHash).not.toBe(inputs[0]?.systemHash);
+    expect(inputs[1]?.tools.map((entry) => entry.name)).toEqual(["read"]);
+    expect(
+      SessionHandleStore.latestGeneration(SessionHandleStore.tree(handle.id)).systemBlocks,
+    ).toEqual(nextBlocks);
+  });
+
+  test("reports typed lease contention from the SQLite-backed session API", async () => {
+    const runner: SessionRunner = async () => ({ kind: "result", text: "must not run" });
+    const handle = session(residentOptions("lease-contention", runner), runtime);
+    const acquired = SessionHandleStore.acquireLease({
+      sessionId: handle.id,
+      owner: "other-process",
+      expectedFence: 0,
+      now,
+      expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
+    });
+    if (!acquired.ok) throw new Error("contention fixture could not acquire its lease");
+
+    await expect(handle.prompt("contended turn")).rejects.toMatchObject({
+      name: "SessionLeaseError",
+      message: "session lease held",
+      result: {
+        ok: false,
+        reason: "held",
+        holder: "other-process",
+        expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
+      },
+    });
+  });
+
+  test("default heartbeat uses an unreferenced timer and clears it after the runner settles", async () => {
+    const entered = signal<void>();
+    const release = signal<void>();
+    const setIntervalSpy = spyOn(globalThis, "setInterval");
+    const clearIntervalSpy = spyOn(globalThis, "clearInterval");
+    const runner: SessionRunner = async () => {
+      entered.resolve();
+      await release.promise;
+      return { kind: "result", text: "complete" };
+    };
+    const handle = session(residentOptions("default-heartbeat", runner), {
+      observations: sink,
+      clock: runtime.clock,
+      entropy: runtime.entropy,
+      processId: runtime.processId,
+    });
+
+    const running = handle.prompt("start");
+    try {
+      await bounded(entered.promise, "default-heartbeat runner entry");
+      expect(setIntervalSpy).toHaveBeenCalledTimes(1);
+      const timer = setIntervalSpy.mock.results[0]?.value;
+      if (
+        typeof timer !== "object" ||
+        timer === null ||
+        !("hasRef" in timer) ||
+        typeof timer.hasRef !== "function"
+      ) {
+        throw new Error("default heartbeat did not return a timer handle");
+      }
+      expect(timer.hasRef()).toBe(false);
+      release.resolve();
+      await bounded(running, "default-heartbeat runner completion");
+      expect(clearIntervalSpy).toHaveBeenCalledWith(timer);
+    } finally {
+      release.resolve();
+      await bounded(running, "default-heartbeat cleanup");
+      setIntervalSpy.mockRestore();
+      clearIntervalSpy.mockRestore();
+    }
+  });
+
   test("evicts idle runtime state while a retained handle can rehydrate it", async () => {
     let hibernations = 0;
     const hibernated = signal<void>();
@@ -858,7 +1300,7 @@ describe("durable session handle", () => {
     await worker.prompt("do the work");
 
     expect(worker.id.startsWith("delegation-")).toBe(false);
-    expect(worker.get()).toMatchObject({ parentId: parent.id, role: "worker", revision: 5 });
+    expect(worker.get()).toMatchObject({ parentId: parent.id, role: "worker", revision: 9 });
     expect(SessionHandleStore.row(parent.id).leaseFence).toBe(0);
     expect(SessionHandleStore.row(worker.id).leaseFence).toBe(1);
   });

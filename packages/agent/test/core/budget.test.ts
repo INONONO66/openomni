@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { Operational } from "@openomni/protocol";
-import { Bus, collector } from "@openomni/telemetry";
+import { Bus, collector } from "../../src/index";
 import { captureBusEvents } from "../helpers/bus-event";
 import {
   BUDGET_DEFAULTS,

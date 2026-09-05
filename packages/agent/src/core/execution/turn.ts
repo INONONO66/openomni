@@ -1,42 +1,23 @@
-import { Run, type RunInput, type Sink } from "@openomni/llm";
+import type { RunInput, Sink } from "@openomni/llm";
 import { Placement } from "@openomni/placement";
-import { type Message, Operational, PolicyDecision } from "@openomni/protocol";
-import { Tool } from "@openomni/protocol";
-import type { BusEvent, Policy } from "@openomni/protocol";
-import {
-  describeBudgetRemaining,
-  effectiveBudgetThresholds,
-  effectiveMaxToolCalls,
-} from "../budget";
-import { createAssistantMessage } from "../message-factory";
+import { type Message, Operational, Tool } from "@openomni/protocol";
+import type { BusEvent } from "@openomni/protocol";
+import { effectiveMaxToolCalls, recordToolCall } from "../budget";
+import { Compaction, type CompactionSession } from "../../compaction";
 import { resolveCompactionGeometry } from "../../compaction/geometry";
 import { measuredContextTokens } from "../../compaction/measure";
-import { RunReasonCode } from "../policy/reason-codes";
-import type { PolicyEngineInstance } from "../policy";
+import { createAssistantMessage } from "../message-factory";
 import * as Retry from "../retry";
 import type { AgentResult, ChatAgentConfig, TokenUsage } from "../types";
-import { effectOf, PolicyEffectApplier } from "./effects";
+import { emitErrorRetry, emitTurnComplete, runResult } from "./run-events";
 import {
-  applyEffectOrDeny,
-  emitBudgetReassurance,
-  emitBudgetWarning,
-  emitErrorRetry,
-  emitTurnComplete,
-  guardAbortedResult,
-  publishDenyDiagnostic,
-  runResult,
-} from "./run-events";
-import {
-  advanceRunContinuation,
   advanceRunTurn,
+  applyCompactionMessages,
   disarmWindowYield,
   appendRunMessages,
   appendRunStep,
-  applyCompactionMessages,
-  buildLifecyclePolicyContext,
   recordAssistantTokenDelta,
   recordCallContext,
-  recordRunToolCall,
   recordRunTurn,
   setLastAssistantText,
   type AgentRunBase,
@@ -46,7 +27,6 @@ import {
   type RunTrace,
   type TurnArtifacts,
 } from "./state";
-import { createToolExecutor } from "./tools";
 
 export function buildSystemPrompt(
   basePrompt: string | undefined,
@@ -169,166 +149,45 @@ function buildToolMetadataMap(tools: ChatAgentConfig["tools"]): Map<string, Tool
   return metadata;
 }
 
-function resolvePolicyToolName(
-  toolName: string,
-  metadata: Map<string, ToolPolicyMetadata>,
-): string {
-  // Tool names are DOTTED end-to-end now: the `@openomni/llm` wire boundary
-  // (#749) sanitizes only the name crossing to the provider SDK and sets the
-  // executed `call.tool` to the internal dotted spec name, so the name
-  // reaching here is always that dotted name — never an underscore-mangled
-  // wire name. The former `_`→`.` recovery leg is therefore dead. A `tool:`
-  // canonical label still redirects to the policy-canonical name for a tool
-  // whose spec name is not itself the canonical (kept for MCP/aliased tools).
-  const canonical = metadata.get(toolName)?.labels?.find((label) => label.startsWith("tool:"));
-  return canonical ? canonical.slice(5) : toolName;
-}
-
-function applyPreTurnEffects(
-  state: RunState,
-  config: ChatAgentConfig,
-  agentBase: AgentRunBase,
-  decision: Policy.PolicyDecision,
-): void {
-  PolicyEffectApplier.applyPromptMessageEffects(state, decision);
-
-  if (decision.reasonCodes.includes(RunReasonCode.BudgetReassurance)) {
-    emitBudgetReassurance(
-      config.events,
-      agentBase,
-      describeBudgetRemaining(state.budgetState, config.budget),
-      effectiveBudgetThresholds(config.budget).reassuranceThreshold,
-    );
-  }
-  if (decision.reasonCodes.includes(RunReasonCode.BudgetWarning)) {
-    emitBudgetWarning(
-      config.events,
-      agentBase,
-      describeBudgetRemaining(state.budgetState, config.budget),
-      effectiveBudgetThresholds(config.budget).warningThreshold,
-    );
-  }
-}
-
 interface PreparedTurnTools {
   readonly allTools: Tool.Spec[];
-  readonly hookedExecutor: ReturnType<typeof createToolExecutor> | undefined;
-  readonly metadata: Map<string, ToolPolicyMetadata>;
-  readonly policyDecisions: TurnArtifacts["toolPolicyDecisions"];
+  readonly executor: NonNullable<ChatAgentConfig["toolExecutor"]> | undefined;
 }
 
-function prepareTurnTools(
-  state: RunState,
-  config: ChatAgentConfig,
-  engine: PolicyEngineInstance,
-  trace: RunTrace,
-): PreparedTurnTools {
+function prepareTurnTools(state: RunState, config: ChatAgentConfig): PreparedTurnTools {
   const toolTargets = config.toolTargets ?? [{ kind: "host", capabilities: [] } as const];
   const placement = Placement.resolveTools(config.tools ?? [], toolTargets);
   const allTools = placement
     .filter((decision) => decision.offerable)
     .map((decision) => decision.tool);
-  const placedExecutor = config.toolExecutor
-    ? placementGatedExecutor(placement, config.toolExecutor)
-    : undefined;
-  const policyDecisions: TurnArtifacts["toolPolicyDecisions"] = [];
-  const metadata = buildToolMetadataMap(allTools);
-  const hookedExecutor = placedExecutor
-    ? createToolExecutor({
-        events: config.events,
-        toolExecutor: placedExecutor,
-        engine,
-        getPolicyToolName: (toolName) => resolvePolicyToolName(toolName, metadata),
-        getToolLabels: (toolName) => metadata.get(toolName)?.labels,
-        getToolDescriptor: (toolName) => metadata.get(toolName)?.descriptor,
-        onToolComplete: (durationMs) => {
-          recordRunToolCall(state, durationMs);
-        },
-        getContext: () => ({
-          steps: state.steps,
-          turnCount: state.budgetState.turns,
-          elapsedMs: Date.now() - state.startTime,
-          usage: state.totalUsage,
-        }),
-        onDecision: (_timing, decision) => {
-          policyDecisions.push({ decision });
-        },
-        traceContext: trace,
-        signal: config.signal,
+  const configuredExecutor = config.toolExecutor;
+  const executor = configuredExecutor
+    ? placementGatedExecutor(placement, async (call, context) => {
+        const startedAt = Date.now();
+        try {
+          return await configuredExecutor(call, context);
+        } finally {
+          state.budgetState = recordToolCall(state.budgetState, Date.now() - startedAt);
+        }
       })
     : undefined;
-  return { allTools, hookedExecutor, metadata, policyDecisions };
-}
-
-function catalogLabels(metadata: Map<string, ToolPolicyMetadata>): Policy.LabelEntry[] {
-  const labels: Policy.LabelEntry[] = [];
-  for (const [name, toolMetadata] of metadata) {
-    for (const label of toolMetadata.labels ?? []) {
-      labels.push({ value: `${name}:${label}`, source: "tool_metadata" });
-    }
-  }
-  return labels;
+  return { allTools, executor };
 }
 
 export async function buildTurn(
   state: RunState,
   config: ChatAgentConfig,
-  engine: PolicyEngineInstance,
   providerModel: RunInput["model"],
   configuredToolChoice: RunInput["toolChoice"],
   trace: RunTrace,
-  agentBase: AgentRunBase,
   sink?: Sink,
 ): Promise<BuildTurnResult> {
-  const preTurnDecision = await engine.dispatchPoint(
-    "run.turn.pre",
-    buildLifecyclePolicyContext(state, config, agentBase, { turnIndex: state.turnIndex }),
-  );
-
-  if (PolicyDecision.isBlocking(preTurnDecision)) {
-    const reason = PolicyDecision.reason(preTurnDecision, "stop");
-    return {
-      type: "complete",
-      result: runResult(state, {
-        finishReason: reason === RunReasonCode.Stalled ? "stalled" : "stop",
-        guardAborted: reason !== RunReasonCode.Stalled,
-      }),
-    };
-  }
-
-  applyPreTurnEffects(state, config, agentBase, preTurnDecision);
-
   recordRunTurn(state);
   if (config.signal?.aborted) throw Retry.abortError();
 
-  const tools = prepareTurnTools(state, config, engine, trace);
-  const systemResult = await buildTurnSystemPrompt(
-    state,
-    config,
-    engine,
-    agentBase,
-    tools.allTools,
-  );
-  if (systemResult.blocked) {
-    return { type: "complete", result: guardAbortedResult(state) };
-  }
-  const system = systemResult.system;
-
-  const toolSelectionDecision = await engine.dispatchPoint(
-    "tool.catalog.pre",
-    buildLifecyclePolicyContext(state, config, agentBase, {
-      labels: catalogLabels(tools.metadata),
-      availableTools: tools.allTools,
-    }),
-  );
-
-  if (PolicyDecision.isBlocking(toolSelectionDecision)) {
-    return { type: "complete", result: guardAbortedResult(state) };
-  }
-  const selectedTools = PolicyEffectApplier.applyToolFilterEffects(
-    tools.allTools,
-    toolSelectionDecision,
-  );
+  const tools = prepareTurnTools(state, config);
+  const system = buildSystemPrompt(config.systemPrompt, tools.allTools);
+  const selectedTools = tools.allTools;
 
   const turnUsage: TokenUsage = {
     inputTokens: 0,
@@ -387,7 +246,7 @@ export async function buildTurn(
         auth: providerModel.providerID === config.model.provider ? config.auth : undefined,
         ...(config.transport === undefined ? {} : { transport: config.transport }),
         allowAuthFallback: config.allowAuthFallback,
-        toolExecutor: tools.hookedExecutor,
+        toolExecutor: tools.executor,
         toolChoice: configuredToolChoice,
         maxSteps: stepCap,
         // Agent owns retry attempts, their backoff, and fallback selection.
@@ -417,7 +276,7 @@ export async function buildTurn(
       stepCap,
       windowYieldArmed: yieldAtInputTokens !== undefined,
       steering,
-      toolPolicyDecisions: tools.policyDecisions,
+      toolPolicyDecisions: [],
     },
   };
 }
@@ -470,40 +329,6 @@ function createTrackingSink(
   };
 }
 
-async function buildTurnSystemPrompt(
-  state: RunState,
-  config: ChatAgentConfig,
-  engine: PolicyEngineInstance,
-  agentBase: AgentRunBase,
-  tools: Tool.Spec[],
-): Promise<{ system?: string; blocked?: Policy.PolicyDecision }> {
-  let system = buildSystemPrompt(config.systemPrompt, tools);
-  const decision = await engine.dispatchPoint(
-    "prompt.context.pre",
-    buildLifecyclePolicyContext(state, config, agentBase, { turnIndex: state.turnIndex }),
-  );
-  if (PolicyDecision.isBlocking(decision)) return { system, blocked: decision };
-
-  for (const effect of decision.effects) {
-    if (effect.type === "prompt.replace") {
-      system = effect.prompt;
-    } else if (effect.type === "prompt.append_context") {
-      system = system
-        ? `${system}
-
-${effect.context}`
-        : effect.context;
-    } else if (effect.type === "prompt.inject_message") {
-      system = system
-        ? `${system}
-
-${effect.message}`
-        : effect.message;
-    }
-  }
-  return { system };
-}
-
 export type StopOutcome = AgentResult | "continue";
 
 /**
@@ -536,121 +361,37 @@ function turnYield(
 export async function handleStop(
   state: RunState,
   config: ChatAgentConfig,
-  engine: PolicyEngineInstance,
   agentBase: AgentRunBase,
   turn: TurnArtifacts,
+  compaction: CompactionSession | undefined,
 ): Promise<StopOutcome> {
   emitTurnComplete(config.events, state, agentBase, turn.turnUsage);
-
-  const toolAbort = turn.toolPolicyDecisions.find(
-    (entry) => PolicyDecision.isBlocking(entry.decision) && effectOf(entry.decision, "run.abort"),
-  );
-
-  // THIS turn's text, read off the turn's own boundary snapshot — never
-  // `state.lastAssistantText`, which may still hold the PREVIOUS turn's text
-  // when this turn produced none. Reusing it re-emitted the old text as a
-  // fresh step, turn result, and result.text while history correctly
-  // recorded empty (#audit M3).
   const turnText = assistantTextOf(turn.turnAssistant.message);
   const step = { type: "text" as const, content: turnText };
   appendRunStep(state, step);
   if (config.onStepFinish) await config.onStepFinish(step);
-
-  if (toolAbort)
-    return runResult(state, { finishReason: "stop", text: turnText, guardAborted: true });
-
-  // #546: the turn's assistant output always enters history — tool and
-  // reasoning parts included, regardless of continuation — and it enters
-  // BEFORE run.turn.post dispatch, so history-rewriting policies
-  // (run.replace_messages) operate on a history that contains it and stay
-  // the final word.
   const assistantMessage = resolveTurnAssistant(config.events, state, turn, agentBase);
   appendRunMessages(state, [assistantMessage]);
+  prepareCompactionAfterContinue(state, config, compaction);
 
-  const postTurnDecision = await engine.dispatchPoint(
-    "run.turn.post",
-    buildLifecyclePolicyContext(state, config, agentBase, {
-      isCompletion: true,
-      turnIndex: state.turnIndex,
-      turnResult: {
-        type: "stop",
-        text: turnText,
-        usage: turn.turnUsage,
-      },
-    }),
-  );
-
-  if (!PolicyDecision.isBlocking(postTurnDecision)) {
-    const applied = applyEffectOrDeny(config.events, "turn.finish", state, agentBase, () =>
-      PolicyEffectApplier.applyMessageReplacementEffect(state, postTurnDecision),
-    );
-    if (!applied.ok) return applied.result;
-  }
-
-  const continuationMessages = PolicyEffectApplier.continuationMessages(
-    postTurnDecision,
-    state.sessionId,
-    assistantMessage.info.id,
-  );
-  if (!PolicyDecision.isBlocking(postTurnDecision) && continuationMessages.length > 0) {
-    appendRunMessages(state, continuationMessages);
-    const blocked = await applyPostCompaction(state, engine, config, agentBase, true);
-    if (blocked) return blocked;
-    advanceRunContinuation(state);
-    return "continue";
-  }
-
-  if (PolicyDecision.isBlocking(postTurnDecision)) {
-    const reason = PolicyDecision.reason(postTurnDecision, "stop");
-    if (effectOf(postTurnDecision, "run.abort")) {
-      return runResult(state, {
-        finishReason: reason === RunReasonCode.Stalled ? "stalled" : "stop",
-        guardAborted: reason !== RunReasonCode.Stalled,
-      });
-    }
-    publishDenyDiagnostic(config.events, "turn.finish", postTurnDecision, state, agentBase);
-  }
-
-  // The yield branch sits AFTER the continuation path on purpose: the
-  // run.turn.post dispatch above DRAINS the injection queue, and a yield
-  // that early-returned before the continuation application would destroy
-  // the drained messages (#651 review BLOCKER — a child finishing during a
-  // long parent tool loop enqueues exactly there).
   const yielded = turnYield(turn, assistantMessage);
   if (yielded === "steer") {
-    // A steering yield whose pending injection already drained took the
-    // continuation branch above. Reaching here means nothing arrived (the
-    // host check outpaced the queue, or the message drained elsewhere): the
-    // turn ended early on purpose, so the only honest move is another turn —
-    // ending as "max-steps" would report a cap that never applied. A host
-    // that never clears its pending signal is bounded by the budget check.
     advanceRunTurn(state);
     return "continue";
   }
   if (yielded === "window") {
-    const compactionsBefore = state.compactionCount;
-    const blocked = await applyPostCompaction(state, engine, config, agentBase, false, true);
-    if (blocked) return blocked;
-    if (
-      (state.compactionCount === compactionsBefore && state.lastCompactionDeferred !== true) ||
-      state.lastCompactionIneffective === true
-    ) {
-      // A no-op or structurally ineffective cut cannot justify repeatedly
-      // yielding this run at the same boundary.
-      disarmWindowYield(state);
-    }
+    const result = await applyCompaction(state, config, agentBase, compaction, "yield");
+    if (result === "none" || state.lastCompactionIneffective === true) disarmWindowYield(state);
     advanceRunTurn(state);
     return "continue";
   }
-  if (yielded === "steps") {
-    // The step budget ran out while the model still wanted tools. Ending as
-    // a plain stop pretended completion; the cap is the honest reason.
-    await dispatchPostRunTransform(state, engine, config, agentBase, "max-steps");
-    return runResult(state, { finishReason: "max-steps", text: turnText });
+  if (yielded !== "steps") {
+    await applyCompaction(state, config, agentBase, compaction, "threshold");
   }
-
-  await dispatchPostRunTransform(state, engine, config, agentBase, "stop");
-  return runResult(state, { finishReason: "stop", text: turnText });
+  return runResult(state, {
+    finishReason: yielded === "steps" ? "max-steps" : "stop",
+    text: turnText,
+  });
 }
 
 /**
@@ -679,146 +420,174 @@ export function handleContinue(
   advanceRunTurn(state);
 }
 
-export async function handleError(
+type ErrorRetryPolicy = Parameters<typeof Retry.shouldRetry>[0];
+
+export function handleError(
   state: RunState,
-  engine: PolicyEngineInstance,
   config: ChatAgentConfig,
   agentBase: AgentRunBase,
-  error: unknown,
+  error: Error,
   attempt: number,
-  retryPolicy: Parameters<typeof Retry.shouldRetry>[0],
+  retryPolicy: ErrorRetryPolicy,
+  compaction: CompactionSession | undefined,
+): Promise<ErrorDecision>;
+export function handleError(
+  config: ChatAgentConfig,
+  agentBase: AgentRunBase,
+  error: Error,
+  attempt: number,
+  retryPolicy: ErrorRetryPolicy,
+): Promise<ErrorDecision>;
+export async function handleError(
+  stateOrConfig: RunState | ChatAgentConfig,
+  configOrAgent: ChatAgentConfig | AgentRunBase,
+  agentOrError: AgentRunBase | Error,
+  errorOrAttempt: Error | number,
+  attemptOrPolicy: number | ErrorRetryPolicy,
+  retryPolicy?: ErrorRetryPolicy,
+  compaction?: CompactionSession,
 ): Promise<ErrorDecision> {
-  const normalizedError = error instanceof Error ? error : new Error(String(error));
-  const typedFailure = Run.FailureError.isInstance(normalizedError as unknown)
-    ? (normalizedError as Run.Failure)
-    : undefined;
-  const onErrorDecision = await engine.dispatchPoint(
-    "run.error.error",
-    buildLifecyclePolicyContext(state, config, agentBase, {
-      toolInput: {
-        error: {
-          name: typedFailure?.data.providerErrorName ?? normalizedError.name,
-          message: normalizedError.message,
-          ...(normalizedError.stack === undefined ? {} : { stack: normalizedError.stack }),
-          ...(typedFailure === undefined
-            ? {}
-            : {
-                ...(typedFailure.data.retryAfterMs === undefined
-                  ? {}
-                  : { retryAfterMs: typedFailure.data.retryAfterMs }),
-                usage: typedFailure.data.usage,
-                aborted: typedFailure.data.aborted,
-                contextOverflow: typedFailure.data.contextOverflow,
-              }),
-        },
-      },
-      errorCode: normalizedError.name || "Error",
-      errorPhase: "agent.run",
-    }),
-  );
+  const hasState = "messages" in stateOrConfig;
+  const state = hasState ? stateOrConfig : undefined;
+  const config = (hasState ? configOrAgent : stateOrConfig) as ChatAgentConfig;
+  const agentBase = (hasState ? agentOrError : configOrAgent) as AgentRunBase;
+  const error = (hasState ? errorOrAttempt : agentOrError) as Error;
+  const attempt = (hasState ? attemptOrPolicy : errorOrAttempt) as number;
+  const policy = (hasState ? retryPolicy : attemptOrPolicy) as ErrorRetryPolicy;
 
-  if (PolicyDecision.isBlocking(onErrorDecision)) {
-    if (effectOf(onErrorDecision, "run.abort")) {
-      return { action: "complete", result: guardAbortedResult(state) };
-    }
-    publishDenyDiagnostic(config.events, "error", onErrorDecision, state, agentBase);
-  }
-
-  const lastError = normalizedError.message;
-  const retryEffect = effectOf(onErrorDecision, "run.retry_after");
-  const effectiveRetryPolicy =
-    retryEffect?.maxRetries === undefined
-      ? retryPolicy
-      : {
-          ...retryPolicy,
-          maxAttempts: Math.min(retryPolicy.maxAttempts, retryEffect.maxRetries),
-        };
-
-  // An abort is decided by identity (signal state / typed error), BEFORE any
-  // message classification: it is the run being told to stop, never a fault
-  // to retry, and it must not emit retry-promising telemetry (#audit M4).
-  if (Retry.isAbort(normalizedError, config.signal)) {
+  if (Retry.isAbort(error, config.signal)) {
     return {
       action: "throw",
-      error: normalizedError,
-      failure: { reason: "aborted", attempt, maxAttempts: effectiveRetryPolicy.maxAttempts },
+      error,
+      failure: { reason: "aborted", attempt, maxAttempts: policy.maxAttempts },
     };
   }
-
-  // L5 (compaction-design, #715): a provider context-overflow re-enters the
-  // existing compaction seam — the overflow handler never rewrites history
-  // itself; contextYielded=true because the provider refusing IS the trigger
-  // (the same argument as #651's yield). Exactly one recovery per run: if
-  // the seam reclaimed anything, retry the call immediately; otherwise, or
-  // on a second overflow, end honestly — a blind retry of the same prompt
-  // fails the same way. Deliberate divergence from pss-runtime's mid-loop
-  // apply: history rewrites stay locked to run.completion.pre (D8).
-  if (Retry.isContextOverflow(normalizedError)) {
-    if (state.overflowCompactionAttempted !== true) {
+  if (Retry.isContextOverflow(error)) {
+    const failure = {
+      reason: "context_overflow" as const,
+      attempt,
+      maxAttempts: policy.maxAttempts,
+    };
+    if (state !== undefined && state.overflowCompactionAttempted !== true) {
       state.overflowCompactionAttempted = true;
-      const compactionsBefore = state.compactionCount;
-      // A deny here (blocked !== null) is discarded rather than returned as
-      // the run's result: the guarded "stop" would fabricate an answer for a
-      // run whose model call never succeeded. The deny itself is recorded by
-      // publishDenyDiagnostic inside applyPostCompaction; the terminal then
-      // names context_overflow — the proximate cause (#726 review F6).
-      const blocked = await applyPostCompaction(state, engine, config, agentBase, false, true);
-      if (blocked === null && state.compactionCount > compactionsBefore) {
-        // Note (#726 review F5): this retry is sanctioned OUTSIDE the retry
-        // policy ceiling — issue #715's "retry once" — so the ErrorRetry
-        // record may carry attempt === maxAttempts, a shape no other
-        // producer emits.
+      const result = await applyCompaction(state, config, agentBase, compaction, "yield");
+      if (result === "compacted") {
         emitErrorRetry(config.events, agentBase, {
-          attempt,
-          maxAttempts: effectiveRetryPolicy.maxAttempts,
-          error: lastError,
-          reason: "context_overflow",
+          ...failure,
+          error: error.message,
           backoffMs: 0,
         });
-        return {
-          action: "retry",
-          backoffMs: 0,
-          failure: {
-            reason: "context_overflow",
-            attempt,
-            maxAttempts: effectiveRetryPolicy.maxAttempts,
-          },
-        };
+        return { action: "retry", backoffMs: 0, failure };
       }
     }
-    return {
-      action: "throw",
-      error: normalizedError,
-      failure: {
-        reason: "context_overflow",
-        attempt,
-        maxAttempts: effectiveRetryPolicy.maxAttempts,
-      },
-    };
+    return { action: "throw", error, failure };
   }
-
-  const retryReason = Retry.classifyRetryReason(lastError);
-  if (Retry.shouldRetry(effectiveRetryPolicy, retryReason, attempt)) {
-    const backoffMs = retryEffect?.delayMs ?? Retry.calculateBackoffMs(retryPolicy, attempt);
+  const reason = Retry.classifyRetryReason(error.message);
+  if (Retry.shouldRetry(policy, reason, attempt)) {
+    const backoffMs = Retry.calculateBackoffMs(policy, attempt);
     emitErrorRetry(config.events, agentBase, {
       attempt,
-      maxAttempts: effectiveRetryPolicy.maxAttempts,
-      error: lastError,
-      reason: retryReason,
+      maxAttempts: policy.maxAttempts,
+      error: error.message,
+      reason,
       backoffMs,
     });
     return {
       action: "retry",
       backoffMs,
-      failure: { reason: retryReason, attempt, maxAttempts: effectiveRetryPolicy.maxAttempts },
+      failure: { reason, attempt, maxAttempts: policy.maxAttempts },
     };
   }
-
   return {
     action: "throw",
-    error: normalizedError,
-    failure: { reason: retryReason, attempt, maxAttempts: effectiveRetryPolicy.maxAttempts },
+    error,
+    failure: { reason, attempt, maxAttempts: policy.maxAttempts },
   };
+}
+
+type CompactionApplyResult = "compacted" | "deferred" | "none";
+
+function resolvedCompaction(
+  state: RunState,
+  config: ChatAgentConfig,
+): (NonNullable<ChatAgentConfig["compaction"]> & { contextWindowTokens: number }) | undefined {
+  if (config.compaction === undefined) return undefined;
+  const contextWindowTokens = config.compaction.contextWindowTokens ?? state.contextWindowTokens;
+  if (contextWindowTokens === undefined) return undefined;
+  return { ...config.compaction, contextWindowTokens };
+}
+
+export function prepareCompactionAfterContinue(
+  state: RunState,
+  config: ChatAgentConfig,
+  compaction: CompactionSession | undefined,
+): void {
+  const options = resolvedCompaction(state, config);
+  const measuredTokens = state.lastCallContextTokens;
+  if (options === undefined || measuredTokens === undefined || compaction === undefined) return;
+  const geometry = compactionGeometry(state, options);
+  compaction.prepare(
+    state.messages,
+    measuredTokens,
+    geometry.prepareTokens,
+    options.contextWindowTokens,
+  );
+}
+
+function compactionGeometry(
+  state: RunState,
+  options: NonNullable<ReturnType<typeof resolvedCompaction>>,
+) {
+  return resolveCompactionGeometry({
+    contextWindowTokens: options.contextWindowTokens,
+    ...(options.reserveTokens === undefined ? {} : { reserveTokens: options.reserveTokens }),
+    ...(state.lastCompactionYield === undefined
+      ? {}
+      : { previousYield: state.lastCompactionYield }),
+  });
+}
+
+async function applyCompaction(
+  state: RunState,
+  config: ChatAgentConfig,
+  agentBase: AgentRunBase,
+  compaction: CompactionSession | undefined,
+  trigger: "threshold" | "yield",
+): Promise<CompactionApplyResult> {
+  const options = resolvedCompaction(state, config);
+  if (options === undefined) return "none";
+  const measuredTokens = state.lastCallContextTokens;
+  const geometry = compactionGeometry(state, options);
+  if (
+    trigger === "threshold" &&
+    (measuredTokens === undefined ||
+      !Compaction.shouldCompact(measuredTokens, options, state.lastCompactionYield))
+  ) {
+    return "none";
+  }
+  if (
+    measuredTokens !== undefined &&
+    compaction?.inFlight() === true &&
+    measuredTokens < geometry.graceTokens
+  ) {
+    state.lastCompactionDeferred = true;
+    return "deferred";
+  }
+
+  state.lastCompactionDeferred = undefined;
+  const candidate = compaction?.candidate();
+  const result = await Compaction.compact(state.messages, options, agentBase, config.events, {
+    trigger,
+    ...(measuredTokens === undefined ? {} : { measuredTokens }),
+    ...(candidate === undefined ? {} : { candidate }),
+  });
+  if (candidate !== undefined) compaction?.consume();
+  state.lastCompactionIneffective = result.ineffective;
+  if (result.yield !== undefined) state.lastCompactionYield = result.yield;
+  if (result.summarizerFailed === true) compaction?.disable();
+  if (!result.compacted) return "none";
+  applyCompactionMessages(state, result.messages);
+  return "compacted";
 }
 
 /**
@@ -846,76 +615,4 @@ function resolveTurnAssistant(
   });
   const parentID = state.messages.at(-1)?.info.id ?? "";
   return createAssistantMessage("", parentID, state.sessionId);
-}
-
-async function dispatchPostRunTransform(
-  state: RunState,
-  engine: PolicyEngineInstance,
-  config: ChatAgentConfig,
-  agentBase: AgentRunBase,
-  runOutcome: "stop" | "max-steps",
-): Promise<void> {
-  const postRunDecision = await engine.dispatchPoint(
-    "run.lifecycle.post",
-    buildLifecyclePolicyContext(state, config, agentBase, {
-      isCompletion: true,
-      runOutcome: { type: runOutcome },
-    }),
-  );
-  if (PolicyDecision.isBlocking(postRunDecision)) {
-    publishDenyDiagnostic(config.events, "run.finish", postRunDecision, state, agentBase);
-  }
-}
-
-async function applyPostCompaction(
-  state: RunState,
-  engine: PolicyEngineInstance,
-  config: ChatAgentConfig,
-  agentBase: AgentRunBase,
-  isCompletion: boolean,
-  contextYielded = false,
-): Promise<AgentResult | null> {
-  const compactionDecision = await engine.dispatchPoint(
-    "run.completion.pre",
-    buildLifecyclePolicyContext(state, config, agentBase, {
-      isCompletion,
-      contextYielded,
-      completionCandidate: {
-        isCompletion,
-        messages: state.messages,
-      },
-    }),
-  );
-  if (config.signal?.aborted === true) throw Retry.abortError();
-
-  if (PolicyDecision.isBlocking(compactionDecision)) {
-    publishDenyDiagnostic(
-      config.events,
-      "completion.prepare",
-      compactionDecision,
-      state,
-      agentBase,
-    );
-    return guardAbortedResult(state, { finishReason: "stop" });
-  }
-
-  const applied = applyEffectOrDeny(
-    config.events,
-    "completion.prepare",
-    state,
-    agentBase,
-    () => PolicyEffectApplier.replacementMessages(compactionDecision),
-    { finishReason: "stop" },
-  );
-  if (!applied.ok) return applied.result;
-  const messages = applied.value;
-  state.lastCompactionIneffective =
-    compactionDecision.reasonCodes.includes("compaction_ineffective");
-  state.lastCompactionDeferred = compactionDecision.reasonCodes.includes(
-    "compaction_deferred_speculation_grace",
-  );
-  if (messages !== undefined) applyCompactionMessages(state, messages);
-  PolicyEffectApplier.applyPromptMessageEffects(state, compactionDecision);
-
-  return null;
 }

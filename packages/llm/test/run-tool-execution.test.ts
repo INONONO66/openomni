@@ -2,7 +2,7 @@ import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { Tool } from "@openomni/protocol";
 import type { Sink } from "../src/sink";
 import type { Provider } from "../src/provider";
-import { Bus, newTraceId } from "@openomni/telemetry";
+import { Bus, newTraceId } from "./helpers/observation";
 
 const TEST_TRACE = { traceId: newTraceId(), sessionId: "session-test", runId: "run-test" };
 

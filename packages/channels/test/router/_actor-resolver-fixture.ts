@@ -1,7 +1,7 @@
 import { beforeEach } from "bun:test";
 import type { Gateway, Ingress } from "@openomni/protocol";
 import { ActorRegistry, ChannelGrantStore, Storage } from "@openomni/ledger";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../helpers/observation";
 import { createGatewayRouter, type GatewayRouter } from "../../src/router/index.js";
 
 /**

@@ -1,8 +1,9 @@
 import { processEntryPath } from "./process-entry-path";
+import { configuredCompaction } from "./compaction/strategy";
+import { seedKernelPolicyRows } from "./policy-seed";
 import {
   type ChatAgentConfig,
   closeSessions,
-  createCompactionPolicy,
   type SessionRuntime,
   sweepSessions,
 } from "@openomni/agent";
@@ -26,14 +27,8 @@ import {
 
 import { createMachineHost, type MachineHost } from "@openomni/machines";
 import type { Placement } from "@openomni/placement";
-import {
-  type BusEvent,
-  type Channel,
-  Gateway,
-  type Ingress,
-  type Machine,
-} from "@openomni/protocol";
-import { Bus, newTraceId } from "@openomni/telemetry";
+import { type Channel, Gateway, type Ingress, type Machine } from "@openomni/protocol";
+import { Bus, newTraceId } from "@openomni/agent";
 import { desiredChannels, materializePersons } from "./provisioning/declared";
 import { type ChannelSupervisor, createChannelSupervisor } from "./provisioning/supervisor";
 import { resolveKek } from "./provisioning/vault-key";
@@ -45,8 +40,7 @@ import {
   type OpenOmniConfig,
   type RegisteredActor,
 } from "./config";
-import { createLlmToolPort, type LlmIo } from "./tools/execution/llm";
-import { createCompactionSummarizer } from "./compaction/summarizer";
+import { createLlmToolPort } from "./tools/execution/llm";
 import { createChannelDriver } from "./delegation/channel-driver";
 import { createInlineDriver } from "./delegation/inline-driver";
 import {
@@ -60,38 +54,15 @@ import { createProcessDriver } from "./delegation/process-driver";
 import { createInlineWorkerRunner } from "./delegation/worker-loop";
 import { createMountedChannelGrantRegistrar, createResidentGateway } from "./gateway";
 import { createComposer, rollbackToCause } from "./composition/composer";
-import { createPolicyRegistry } from "./composition/policy-registry";
-import { createDriverRegistry } from "./composition/driver-registry";
 import { buildInboundEvent } from "./inbound";
 import { createResident, type ResidentDelivery } from "./resident";
-import { HOST_TARGET } from "./tools/core/dispatch";
+import { HOST_TARGET } from "@openomni/agent";
 import { createCellRegistry } from "./tools/cell-registry";
 import type { CellPorts } from "./tools/execution/run-code";
 
 interface StartOptions {
   readonly config?: OpenOmniConfig;
   readonly llm?: ChatAgentConfig["llm"];
-}
-
-export function createConfiguredCompactionPolicy(
-  config: OpenOmniConfig,
-  events: BusEvent.Sink,
-  io: LlmIo = {},
-): ReturnType<typeof createCompactionPolicy> {
-  const transport = modelTransport(config.model);
-  return createCompactionPolicy({
-    events,
-    priority: 900,
-    elideToolOutputs: { minOutputChars: 4000, keepHeadChars: 500 },
-    ...(config.compactionSummarizer === false
-      ? {}
-      : {
-          onSummarize: createCompactionSummarizer({
-            model: { ...config.model, ...(transport === undefined ? {} : { transport }) },
-            io,
-          }),
-        }),
-  });
 }
 
 /**
@@ -256,11 +227,12 @@ export async function startOpenOmni(options: StartOptions = {}) {
   try {
     await composer.mount("journal", (ctx) => {
       initialize({ dbPath: config.dbPath, observationSink: Bus });
+      seedKernelPolicyRows();
       ctx.effect(() => Storage.reset());
     });
     const sessionTools = new Map<
       string,
-      readonly import("./tools/core/define").AnyToolDefinition[]
+      readonly import("@openomni/protocol").AnyToolDefinition[]
     >();
     const sessionRuntime: SessionRuntime = { observations: Bus };
     await composer.mount("session.handles", (ctx) => {
@@ -282,6 +254,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
     const runner = createInlineWorkerRunner({
       model: config.model,
       apiKey: config.model.apiKey,
+      compaction: configuredCompaction(config, options.llm ?? {}),
       ...(transport === undefined ? {} : { transport }),
       kernel: () => {
         if (kernel === undefined)
@@ -303,33 +276,19 @@ export async function startOpenOmni(options: StartOptions = {}) {
       now: () => Date.now(),
       newWaitId: () => crypto.randomUUID(),
     });
-    // The kernel reads this table at dispatch time, so registrations made
-    // (or replaced) after boot are visible to the very next dispatch. Each
-    // boot registration is a composer-owned effect: disposing revokes the
-    // driver's admission to new work while in-flight runs complete under the
-    // generation that dispatched them.
-    const driverRegistry = createDriverRegistry();
-    await composer.mount("delegation.drivers", (ctx) => {
-      const registrations = [
-        driverRegistry.register("inline", createInlineDriver(runner)),
-        driverRegistry.register("channel", channelDriver),
-        driverRegistry.register(
-          "process",
-          createProcessDriver({
-            command: [process.execPath, processEntryPath(import.meta.url)],
-            worker: {
-              model: { provider: config.model.provider, id: config.model.id },
-              apiKey: config.model.apiKey,
-              ...(transport === undefined ? {} : { transport }),
-            },
-            dbPath: config.dbPath,
-          }),
-        ),
-      ];
-      for (const registration of registrations) {
-        ctx.effect(() => registration.dispose());
-      }
-    });
+    const drivers = {
+      inline: createInlineDriver(runner),
+      channel: channelDriver,
+      process: createProcessDriver({
+        command: [process.execPath, processEntryPath(import.meta.url)],
+        worker: {
+          model: { provider: config.model.provider, id: config.model.id },
+          apiKey: config.model.apiKey,
+          ...(transport === undefined ? {} : { transport }),
+        },
+        dbPath: config.dbPath,
+      }),
+    };
     // The catalog's approval lane (§6): Owner-consent requests plus the two
     // acts they authorize — promotion and cross-channel endpoint merge.
     // Provisioning administration port: the supervisor is created after the
@@ -374,7 +333,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       events: Bus,
       wake: (wake) => wakeDelivery.deliver(wake),
       bootSweep: false,
-      drivers: driverRegistry.drivers,
+      drivers,
       now: () => Date.now(),
       newDelegationId: () => crypto.randomUUID(),
     });
@@ -426,24 +385,12 @@ export async function startOpenOmni(options: StartOptions = {}) {
             newCellId: () => crypto.randomUUID(),
           };
 
-    // The Resident's policy floor: compaction is declared mandatory, so a
-    // run without it is refused fail-closed rather than run unprotected.
-    // The registration is a composer-owned effect — disposing the policy
-    // stage suspends dependent runs instead of silently widening them.
-    const policyRegistry = createPolicyRegistry({ mandatory: ["compaction"] });
-    await composer.mount("policy", (ctx) => {
-      const compaction = policyRegistry.register("compaction", (run) =>
-        createConfiguredCompactionPolicy(config, run.events, options.llm ?? {}),
-      );
-      ctx.effect(() => compaction.dispose());
-    });
-
     residentDeliver = createResident({
       model: config.model,
       ...(config.model.fallbacks === undefined ? {} : { modelFallbacks: config.model.fallbacks }),
       apiKey: config.model.apiKey,
       ...(transport === undefined ? {} : { transport }),
-      policies: policyRegistry,
+      compaction: configuredCompaction(config, options.llm ?? {}),
       tools: {
         delegation: delegationKernel,
         ...(cells === undefined ? {} : { cells }),

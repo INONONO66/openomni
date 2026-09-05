@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
 import { RunEvents } from "../../src/core/execution/events";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../../src/index";
 import {
   Compaction,
   estimateMessagesTokens,

@@ -1,77 +1,38 @@
-/// <reference types="bun" />
-
 import { describe, expect, it } from "bun:test";
-import type { Tool } from "@openomni/protocol";
-import { createToolExecutor } from "../../../src/core/execution/tools";
-import { PolicyEngine } from "../../../src/core/policy";
-import { Bus } from "@openomni/telemetry";
+import type { ToolExecutionContext } from "@openomni/protocol";
+import { z } from "zod";
+import { createDispatcher, defineTool, eraseTool } from "../../../src/index";
+import { recordingExecutor } from "../../helpers/compiled-policy";
 
-describe("createToolExecutor execution context", () => {
-  it("forwards the active trace while preserving the per-call cancellation signal", async () => {
-    const fallbackController = new AbortController();
-    const callController = new AbortController();
-    callController.abort("cancelled by caller");
-    const traceContext = {
-      traceId: "trace-tool-context",
-      sessionId: "session-tool-context",
-      runId: "run-tool-context",
-    };
-    let capturedContext: Tool.ExecutionContext | undefined;
-    const executor = createToolExecutor({
-      events: Bus,
-      engine: PolicyEngine.create({ clock: Date.now }),
-      signal: fallbackController.signal,
-      traceContext,
-      toolExecutor: async (call, context) => {
-        capturedContext = context;
-        return { id: "result-tool-context", toolCallId: call.id, output: "ok" };
-      },
+describe("tool execution context", () => {
+  it("forwards per-call cancellation with kernel-owned correlation identity", async () => {
+    const controller = new AbortController();
+    controller.abort("caller cancelled");
+    let captured: ToolExecutionContext | undefined;
+    const definition = defineTool({
+      name: "capture",
+      description: "Capture context",
+      category: "query",
+      input: z.object({}).strict(),
+      output: z.string(),
+      visibility: { model: ["resident"], cell: ["resident"] },
+      execute: async (_input, context) => { captured = context; return "ok"; },
+      render: (_input, output) => output,
     });
+    const { executor } = recordingExecutor();
+    const dispatcher = createDispatcher([eraseTool(definition)], { executor });
 
-    await executor(
-      { id: "call-tool-context", tool: "fixture", input: {} },
-      { signal: callController.signal },
+    await dispatcher.execute(
+      { id: "call-1", tool: "capture", input: {} },
+      { sessionId: "session-call", turnId: "turn-1", signal: controller.signal },
     );
 
-    expect(capturedContext).toEqual({
-      signal: callController.signal,
-      traceContext,
+    expect(captured).toEqual({
+      signal: controller.signal,
+      sessionId: "session-call",
+      turnId: "turn-1",
+      callId: "call-1",
     });
-    expect(capturedContext?.traceContext).not.toBe(traceContext);
-    expect(capturedContext?.signal?.aborted).toBe(true);
-  });
-
-  it("prefers the per-call trace while falling back to the configured cancellation signal", async () => {
-    const fallbackController = new AbortController();
-    fallbackController.abort("cancelled by run");
-    const fallbackTrace = {
-      traceId: "trace-fallback",
-      sessionId: "session-fallback",
-      runId: "run-1",
-    };
-    const callTrace = { traceId: "trace-call", sessionId: "session-call", runId: "run-call" };
-    let capturedContext: Tool.ExecutionContext | undefined;
-    const executor = createToolExecutor({
-      events: Bus,
-      engine: PolicyEngine.create({ clock: Date.now }),
-      signal: fallbackController.signal,
-      traceContext: fallbackTrace,
-      toolExecutor: async (call, context) => {
-        capturedContext = context;
-        return { id: "result-call-trace", toolCallId: call.id, output: "ok" };
-      },
-    });
-
-    await executor(
-      { id: "call-call-trace", tool: "fixture", input: {} },
-      { traceContext: callTrace },
-    );
-
-    expect(capturedContext).toEqual({
-      signal: fallbackController.signal,
-      traceContext: callTrace,
-    });
-    expect(capturedContext?.traceContext).not.toBe(callTrace);
-    expect(capturedContext?.signal?.aborted).toBe(true);
+    expect(captured?.signal?.aborted).toBe(true);
   });
 });

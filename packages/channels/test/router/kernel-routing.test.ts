@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { Ingress } from "@openomni/protocol";
 import { BlacklistStore, ChannelGrantStore } from "@openomni/ledger";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../helpers/observation";
 
 import {
   createMappedOwnerSession,

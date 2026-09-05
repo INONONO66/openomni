@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { Gateway } from "@openomni/protocol";
 import { ActorRegistry } from "@openomni/ledger";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../../helpers/observation";
 import {
   deliverySurfaceKey,
   hasScopedSenderTargetCandidate,

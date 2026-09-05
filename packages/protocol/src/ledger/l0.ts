@@ -521,14 +521,6 @@ export namespace L0Observation {
   });
 }
 
-export interface ObservationSink extends BusEvent.Sink {
-  subscribe?<T>(
-    event: BusEvent.Descriptor<T>,
-    handler: (data: T) => void,
-    options?: { match?: Partial<T> },
-  ): () => void;
-}
-
 export namespace PolicyRow {
   export const Phase = z.enum(["pre", "post"]);
   export type Phase = z.infer<typeof Phase>;
@@ -536,7 +528,7 @@ export namespace PolicyRow {
   export const Row = z
     .object({
       name: Identifier,
-      kind: LedgerAction.Kind,
+      kind: Identifier,
       phase: Phase,
       match: EncodedPayload,
       verdict: EncodedPayload,

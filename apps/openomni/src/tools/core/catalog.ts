@@ -1,4 +1,4 @@
-import type { Tool } from "@openomni/protocol";
+import type { AnyToolDefinition, Tool } from "@openomni/protocol";
 import type { DelegationOrigin } from "../../delegation/admission";
 import type { DelegationKernel } from "../../delegation/kernel";
 import { createApprovalTool, type ApprovalPort } from "../authority/approval";
@@ -10,8 +10,7 @@ import {
 import { createLlmTool, type LlmPort } from "../execution/llm";
 import { createRunCodeTool, type CellPorts } from "../execution/run-code";
 import { createProvisionTool, type ProvisionPort } from "../mutation/provision";
-import { eraseTool, type AnyToolDefinition } from "./define";
-import { toolSpec } from "./project";
+import { eraseTool, toolSpec } from "@openomni/agent";
 
 export interface CatalogPorts {
   readonly delegation?: DelegationKernel;

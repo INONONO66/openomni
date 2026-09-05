@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it, mock } from "bun:test";
 import type { RunInput, Sink } from "@openomni/llm";
-import { Bus } from "@openomni/telemetry";
+import { Bus } from "../../src/index";
 import {
   createMockLlmConfig,
   createStopOutcome,
