@@ -22,7 +22,6 @@ interface WsConnection {
 
 interface WebSocketUpgradeOptions {
   data: WsConnectionData;
-  headers?: Record<string, string>;
 }
 
 export class WebSocketHandler {
@@ -123,6 +122,9 @@ export class WebSocketHandler {
     const externalId = authenticated
       ? new URL(req.url).searchParams.get("actor")?.trim()
       : undefined;
+    // Bun 1.3.6 writes an explicit response protocol twice. Narrow the offer
+    // AFTER authentication so Bun negotiates only the selected, non-secret protocol.
+    if (auth.protocol !== undefined) req.headers.set("sec-websocket-protocol", auth.protocol);
     const ok = server.upgrade(req, {
       // `ws::dm:<uuid>` — empty namespace, so no workspace is derived and
       // actor endpoints registered as plain channel "ws" resolve.
@@ -136,7 +138,6 @@ export class WebSocketHandler {
         authenticated,
         ...(externalId ? { externalId } : {}),
       } satisfies WsConnectionData,
-      ...(auth.headers !== undefined ? { headers: auth.headers } : {}),
     });
     if (ok) return undefined;
     return new Response("WebSocket upgrade failed", { status: 400 });

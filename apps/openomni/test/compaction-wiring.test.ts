@@ -4,7 +4,7 @@ import { loadConfig } from "../src/config";
 import { configuredCompaction } from "../src/compaction/strategy";
 import { assistantMessage } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
-import { nextMessage, opened } from "./helpers/ws";
+import { nextMessage } from "./helpers/ws";
 
 const KEYS = [
   "OPENOMNI_MODEL_PROVIDER",
@@ -74,8 +74,7 @@ describe("compaction composition configuration", () => {
         },
       },
     });
-    const ws = new WebSocket(`ws://127.0.0.1:${app.port}/ws?token=root-compaction-token`);
-    await opened(ws);
+    const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "root-compaction-token"]);
     for (let index = 0; index < 6; index += 1) {
       const reply = nextMessage(ws);
       ws.send(JSON.stringify({ type: "message", text: `seed ${index} ${"filler ".repeat(30)}` }));
@@ -85,7 +84,6 @@ describe("compaction composition configuration", () => {
     const reply = nextMessage(ws);
     ws.send(JSON.stringify({ type: "message", text: "compact now" }));
     await reply;
-    ws.close();
 
     expect(messageCounts).toHaveLength(2);
     expect(messageCounts[1]).toBeLessThan(messageCounts[0] ?? 0);

@@ -1,8 +1,15 @@
-import { expect, test } from "bun:test";
+import { beforeEach, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
+import { dirname } from "node:path";
+import { interpreterWitness } from "./helpers/interpreter-witness";
 import { SessionHandleStore } from "@openomni/ledger";
 import { Bus } from "@openomni/agent";
 import type { RunInput, Sink } from "@openomni/llm";
-import { attachMachineDaemon, createMachineHost, type MachineDaemon } from "@openomni/machines";
+import {
+  attachMachineDaemon as attachDaemon,
+  createMachineHost as createHost,
+  type MachineDaemon,
+} from "@openomni/machines";
 import type { Machine } from "@openomni/protocol";
 import type { DelegationOrigin } from "../src/delegation/admission";
 import type { CatalogPorts } from "../src/tools/core/catalog";
@@ -13,16 +20,42 @@ import { modelToolOutput } from "./helpers/tool-dispatch";
 import { assistantMessage } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { socketPath as testSocketPath } from "./helpers/socket-path";
-import { nextMessage, openSocket } from "./helpers/ws";
+import { nextMessage } from "./helpers/ws";
 
 const WS_TOKEN = "code-mode-e2e-token";
 const MACHINE_ID = "alpha";
 
-let daemon: MachineDaemon | undefined;
-const suite = residentSuite(() => {
-  daemon?.close();
-  daemon = undefined;
+let witness: ReturnType<typeof interpreterWitness>;
+beforeEach(() => {
+  witness = interpreterWitness();
 });
+
+const suite = residentSuite(async () => {
+  try {
+    await witness.wait();
+  } finally {
+    witness.restore();
+  }
+});
+
+// Registration occurs before returning to any fallible test or harness work.
+async function createMachineHost(options: Parameters<typeof createHost>[0]) {
+  const host = await createHost(options);
+  suite.defer(() => {
+    host.close();
+    expect(existsSync(options.socketPath)).toBe(false);
+    console.log("967-U1 host cleanup", JSON.stringify({
+      socketPath: options.socketPath, socketExists: existsSync(options.socketPath),
+    }));
+  });
+  return host;
+}
+
+async function attachMachineDaemon(options: Parameters<typeof attachDaemon>[0]): Promise<MachineDaemon> {
+  const daemon = await attachDaemon(options);
+  suite.defer(() => daemon.close());
+  return daemon;
+}
 
 const enrollment: Machine.Enrollment = {
   machineId: MACHINE_ID,
@@ -40,12 +73,13 @@ test("a cell batches delegation into one turn", async () => {
   const socketPath = testSocketPath();
   const residentTurns: string[] = [];
 
+  const config = suite.config("openomni-code-mode-", {
+    wsToken: WS_TOKEN,
+    model: { provider: "fake", id: "code-mode-test", apiKey: "test-key" },
+    machines: { socketPath, enrolled: [enrollment] },
+  });
   const app = await suite.boot({
-    config: suite.config("openomni-code-mode-", {
-      wsToken: WS_TOKEN,
-      model: { provider: "fake", id: "code-mode-test", apiKey: "test-key" },
-      machines: { socketPath, enrolled: [enrollment] },
-    }),
+    config,
     llm: {
       resolveProviderModel: fakeProviderModel,
       run: async (input: RunInput, sink: Sink) => {
@@ -86,7 +120,7 @@ test("a cell batches delegation into one turn", async () => {
     },
   });
 
-  daemon = await attachMachineDaemon({
+  const daemon = await attachMachineDaemon({
     socketPath,
     offer: {
       machineId: MACHINE_ID,
@@ -98,12 +132,11 @@ test("a cell batches delegation into one turn", async () => {
   });
   expect(daemon.attachment.status).toBe("attached");
 
-  const ws = await openSocket(`ws://127.0.0.1:${app.port}/ws?token=${WS_TOKEN}`);
+  const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", WS_TOKEN]);
   const reply = nextMessage(ws, 30_000);
   ws.send(JSON.stringify({ type: "message", text: "check everything" }));
 
   const answer = (JSON.parse(String((await reply).data)) as { text: string }).text;
-  ws.close();
 
   // The machine was attached, so the machine-placed tool was offered.
   expect(answer).toContain(
@@ -115,6 +148,15 @@ test("a cell batches delegation into one turn", async () => {
   // One Resident turn, not three: that is what code mode bought.
   expect(residentTurns).toHaveLength(1);
   expect(answer).toContain("machines=unregistered tool: machines");
+  expect(witness.pids).toHaveLength(1);
+  await suite.cleanup();
+  expect(witness.completed).toBe(true);
+  expect(existsSync(socketPath)).toBe(false);
+  expect(existsSync(dirname(config.dbPath))).toBe(false);
+  console.log("967-U1 code-mode cleanup", JSON.stringify({
+    pids: witness.pids, socketPath, socketExists: existsSync(socketPath),
+    dbPath: config.dbPath, directoryExists: existsSync(dirname(config.dbPath)),
+  }));
 }, 60_000);
 
 test("the machine tool is not offered while nothing is attached", async () => {
@@ -148,12 +190,11 @@ test("the machine tool is not offered while nothing is attached", async () => {
     },
   });
 
-  const ws = await openSocket(`ws://127.0.0.1:${app.port}/ws?token=${WS_TOKEN}`);
+  const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", WS_TOKEN]);
   const reply = nextMessage(ws, 15_000);
   ws.send(JSON.stringify({ type: "message", text: "run something" }));
 
   const answer = (JSON.parse(String((await reply).data)) as { text: string }).text;
-  ws.close();
 
   expect(offered).toEqual([
     "delegate",
@@ -199,7 +240,7 @@ test("a cell cannot present another cell's id when calling back", async () => {
       return { status: "completed", value: call.cellId };
     },
   });
-  daemon = await attachMachineDaemon({
+  await attachMachineDaemon({
     socketPath,
     offer: {
       machineId: MACHINE_ID,
@@ -224,13 +265,39 @@ test("a cell cannot present another cell's id when calling back", async () => {
     tenant: "tenant-two",
   });
   await slow;
-  host.close();
 
   // Completion itself proves the overlap: on one interpreter AAA's hold would
   // wait forever for a BBB that cannot start until AAA settles.
   expect([...served].sort()).toEqual(["delegate@BBB", "hold@AAA"]);
   expect(forging.status).toBe("completed");
 }, 40_000);
+
+test("967-U1 error cleanup owns the host and awaits every interpreter", async () => {
+  const { socketPath, runWith } = await startCellHarness({ llm: async () => "ok" });
+  const directory = suite.tempDir("openomni-code-mode-failure-");
+  const failure = new Error("U1_INJECTED_CELL_FAILURE");
+  try {
+    await runWith({ role: "resident", depth: 0, sessionId: "failure-a" }, "1 + 1");
+    await runWith({ role: "resident", depth: 0, sessionId: "failure-b" }, "2 + 2");
+    expect(witness.pids).toHaveLength(2);
+    try {
+      throw failure;
+    } catch (error) {
+      expect(error).toBe(failure);
+    } finally {
+      await suite.cleanup();
+    }
+    expect(existsSync(socketPath)).toBe(false);
+    expect(witness.completed).toBe(true);
+    expect(existsSync(directory)).toBe(false);
+    console.log("967-U1 code-mode failure cleanup", JSON.stringify({
+      pids: witness.pids, socketPath, socketExists: existsSync(socketPath),
+      directory, directoryExists: existsSync(directory),
+    }));
+  } finally {
+    await suite.cleanup();
+  }
+}, 30_000);
 
 const CELL_ORIGIN: DelegationOrigin = { role: "resident", depth: 0, sessionId: "cell-e2e" };
 
@@ -249,7 +316,7 @@ async function startCellHarness(ports: CatalogPorts) {
     now: () => Date.now(),
     callTool: registry.callTool,
   });
-  daemon = await attachMachineDaemon({
+  const daemon = await attachMachineDaemon({
     socketPath,
     offer: {
       machineId: MACHINE_ID,
@@ -273,7 +340,7 @@ async function startCellHarness(ports: CatalogPorts) {
   };
   const execute = modelToolOutput("run_code", { ...ports, cells }, CELL_ORIGIN);
   return {
-    host,
+    socketPath,
     run: (code: string) => execute({ code, timeoutMs: 15_000 }),
     runWith: (origin: DelegationOrigin, code: string) =>
       modelToolOutput("run_code", { ...ports, cells }, origin)({ code, timeoutMs: 15_000 }),
@@ -281,14 +348,13 @@ async function startCellHarness(ports: CatalogPorts) {
 }
 
 test("cells from different sessions never share interpreter state", async () => {
-  const { host, runWith } = await startCellHarness({ llm: async () => "ok" });
+  const { runWith } = await startCellHarness({ llm: async () => "ok" });
   const sessionA: DelegationOrigin = { role: "resident", depth: 0, sessionId: "session-a" };
   const sessionB: DelegationOrigin = { role: "resident", depth: 0, sessionId: "session-b" };
 
   await runWith(sessionA, "shared = 'mine'\n'set'");
   const sameSession = await runWith(sessionA, "shared");
   const otherSession = await runWith(sessionB, "shared");
-  host.close();
 
   // Same session: state persists. Other session: a separate interpreter, so
   // the name simply does not exist there.
@@ -299,7 +365,7 @@ test("cells from different sessions never share interpreter state", async () => 
 
 test("a cell rejects legacy scalar llm input and preserves canonical arrays", async () => {
   const prompts: string[] = [];
-  const { host, run } = await startCellHarness({
+  const { run } = await startCellHarness({
     llm: async (prompt) => {
       prompts.push(prompt);
       return `answered: ${prompt}`;
@@ -317,7 +383,6 @@ test("a cell rejects legacy scalar llm input and preserves canonical arrays", as
       "{'legacy': legacy, 'canonical': canonical}",
     ].join("\n"),
   );
-  host.close();
 
   // The cell sees the dispatcher refusal as ToolError and does not invoke the port.
   expect(output).toBe("{'legacy': 'invalid_input', 'canonical': ['answered: x']}");
@@ -325,7 +390,7 @@ test("a cell rejects legacy scalar llm input and preserves canonical arrays", as
 }, 40_000);
 
 test("a failing llm call raises ToolError inside the cell instead of returning failure text", async () => {
-  const { host, run } = await startCellHarness({
+  const { run } = await startCellHarness({
     llm: async () => {
       throw new Error("llm failed: provider on fire");
     },
@@ -341,7 +406,6 @@ test("a failing llm call raises ToolError inside the cell instead of returning f
       "outcome",
     ].join("\n"),
   );
-  host.close();
 
   expect(output).toContain("raised: ");
   expect(output).toContain("llm failed: provider on fire");
@@ -355,19 +419,24 @@ test("parallel() runs independent tool calls concurrently and returns both resul
   const bothArrived = new Promise<void>((resolve) => {
     releaseBoth = resolve;
   });
-  const { host, run } = await startCellHarness({
+  const { run } = await startCellHarness({
     llm: async (prompt) => {
       inFlight += 1;
       maxInFlight = Math.max(maxInFlight, inFlight);
       if (inFlight === 2) releaseBoth?.();
       // A serialized door would wedge the first call here; the bounded wait
       // turns that into a failure rather than a hang.
-      await Promise.race([
-        bothArrived,
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("tool calls were serialized")), 10_000),
-        ),
-      ]);
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          bothArrived,
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(() => reject(new Error("tool calls were serialized")), 10_000);
+          }),
+        ]);
+      } finally {
+        clearTimeout(timer);
+      }
       inFlight -= 1;
       return `answered(${prompt})`;
     },
@@ -382,7 +451,6 @@ test("parallel() runs independent tool calls concurrently and returns both resul
       "'; '.join(results)",
     ].join("\n"),
   );
-  host.close();
 
   // Both calls were in flight at once — the kernel's concurrent door, not luck.
   expect(maxInFlight).toBe(2);
@@ -400,7 +468,7 @@ test("a machine offering more than it is enrolled for keeps only the intersectio
     now: () => Date.now(),
     callTool: async () => ({ status: "failed", error: "no tools" }),
   });
-  daemon = await attachMachineDaemon({
+  await attachMachineDaemon({
     socketPath,
     offer: {
       machineId: MACHINE_ID,
@@ -413,5 +481,4 @@ test("a machine offering more than it is enrolled for keeps only the intersectio
 
   // Without kernel.py in the effective set, run_code stays unofferable.
   expect(host.attached(MACHINE_ID)).toEqual(["fs.read"]);
-  host.close();
 }, 30_000);

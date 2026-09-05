@@ -1,6 +1,5 @@
 import { describe, expect, it } from "bun:test";
 import type { Channel } from "@openomni/protocol";
-import { Operational } from "@openomni/protocol";
 import type { ChannelAuthnDecisionObserver } from "../src/authn/types";
 import type { PublishPort } from "../src/types";
 import { WebSocketHandler } from "../src/websocket";
@@ -41,18 +40,19 @@ function createUpgradeServer() {
 }
 
 describe("WebSocketHandler authentication", () => {
-  it("authenticates with auth subprotocol and selects the auth protocol", () => {
+  it.each(["", "?token=wrong-token"])("967-U1 canonical auth ignores query %s", (query) => {
     const decisions: ChannelAuthnDecision[] = [];
     const handler = createHandler(decisions);
     const upgrade = createUpgradeServer();
-    const req = new Request("http://localhost/ws", {
+    const req = new Request(`http://localhost/ws${query}`, {
       headers: { "Sec-WebSocket-Protocol": "auth, secret-token" },
     });
 
     const res = handler.handleUpgrade(req, upgrade.server);
 
     expect(res).toBeUndefined();
-    expect(upgrade.options?.headers).toEqual({ "Sec-WebSocket-Protocol": "auth" });
+    expect(req.headers.get("sec-websocket-protocol")).toBe("auth");
+    expect(upgrade.options?.headers).toBeUndefined();
     expect((upgrade.options?.data as { surfaceKey: string }).surfaceKey).toStartWith("ws:");
     expect((upgrade.options?.data as { authenticated: boolean }).authenticated).toBe(true);
     expect(decisions).toEqual([
@@ -60,52 +60,60 @@ describe("WebSocketHandler authentication", () => {
         name: "channel-authn:websocket-token",
         policyId: "guardrail.permission",
         verdict: "allow",
-        reason: "websocket subprotocol token accepted",
       }),
     ]);
   });
 
-  it("keeps query token fallback and publishes a deprecation warning", () => {
-    const warnings: string[] = [];
-    const collector: PublishPort = (event, data) => {
-      if (event.name === Operational.Events.Warn.name) {
-        warnings.push((data as { msg: string }).msg);
-      }
-    };
-    const handler = createHandler([], collector);
-    const upgrade = createUpgradeServer();
-    const req = new Request("http://localhost/ws?token=secret-token");
+  it.each([
+    ["query-only", "?token=secret-token", ""],
+    ["missing", "", ""],
+    ["bare auth", "", "auth"],
+    ["wrong protocol", "", "auth, wrong-token"],
+    ["wrong protocol with valid query", "?token=secret-token", "auth, wrong-token"],
+  ])("967-U1 rejects %s credentials before upgrade", (_name, query, protocol) => {
+    let upgrades = 0;
+    const decisions: ChannelAuthnDecision[] = [];
+    const handler = createHandler(decisions);
+    const req = new Request(`http://localhost/ws${query}`, {
+      headers: { "Sec-WebSocket-Protocol": protocol },
+    });
 
-    const res = handler.handleUpgrade(req, upgrade.server);
+    const res = handler.handleUpgrade(req, {
+      upgrade() {
+        upgrades += 1;
+        return true;
+      },
+    });
 
-    expect(res).toBeUndefined();
-    expect(upgrade.options?.headers).toBeUndefined();
-    expect((upgrade.options?.data as { authenticated: boolean }).authenticated).toBe(true);
-    expect(warnings).toEqual(["websocket query token auth is deprecated"]);
+    expect(res?.status).toBe(401);
+    expect(upgrades).toBe(0);
+    expect(decisions.map((decision) => decision.verdict)).toEqual(["deny"]);
   });
 
-  it("marks websocket connections unauthenticated when token auth is not configured", () => {
+  it("967-U1 tokenless bootstrap does not bind actor", () => {
     const handler = new WebSocketHandler(async () => ({ text: "ok" }), noopPublish);
     const upgrade = createUpgradeServer();
-    const req = new Request("http://localhost/ws");
+    const req = new Request("http://localhost/ws?actor=alice");
 
     const res = handler.handleUpgrade(req, upgrade.server);
 
     expect(res).toBeUndefined();
     expect((upgrade.options?.data as { authenticated: boolean }).authenticated).toBe(false);
+    expect(upgrade.options?.data).not.toHaveProperty("externalId");
   });
 
-  it("marks websocket connections unauthenticated when token auth is configured as empty", () => {
+  it("967-U1 empty-token bootstrap does not bind actor", () => {
     const handler = new WebSocketHandler(async () => ({ text: "ok" }), noopPublish, {
       token: "",
     });
     const upgrade = createUpgradeServer();
-    const req = new Request("http://localhost/ws");
+    const req = new Request("http://localhost/ws?actor=alice");
 
     const res = handler.handleUpgrade(req, upgrade.server);
 
     expect(res).toBeUndefined();
     expect((upgrade.options?.data as { authenticated: boolean }).authenticated).toBe(false);
+    expect(upgrade.options?.data).not.toHaveProperty("externalId");
   });
 
   it("passes websocket authentication state through inbound message raw metadata", async () => {

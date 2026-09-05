@@ -1,15 +1,52 @@
 import { describe, expect, it } from "bun:test";
-import { join } from "node:path";
+import { Database } from "bun:sqlite";
+import { AssertionError } from "node:assert/strict";
+import { existsSync } from "node:fs";
+import { connect } from "node:net";
+import { dirname, join } from "node:path";
 import type { Sink } from "@openomni/llm";
 import { Session, SessionHandleStore, SurfaceKey } from "@openomni/ledger";
 import { loadConfig, type OpenOmniConfig } from "../src/config";
 import { assistantMessage } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
-import { nextMessage, opened } from "./helpers/ws";
+import { nextMessage } from "./helpers/ws";
 
 const REPLY = "A deterministic Resident reply.";
 const WS_TOKEN = "e2e-upgrade-token";
 const suite = residentSuite();
+
+/** A valid raw upgrade that exposes 101 as well as refusal, without fetch's 101 restriction. */
+async function upgradeResponse(port: number, path: string) {
+  const socket = connect({ host: "127.0.0.1", port });
+  const closed = new Promise<void>((resolve) => socket.once("close", () => resolve()));
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await new Promise<{ status: number; raw: string }>((resolve, reject) => {
+      timer = setTimeout(() => reject(new Error("HTTP upgrade response timed out")), 2000);
+      let raw = "";
+      socket.setEncoding("utf8");
+      socket.on("error", reject);
+      socket.on("data", (chunk) => {
+        raw += chunk;
+        const end = raw.indexOf("\r\n\r\n");
+        if (end < 0) return;
+        const status = Number(raw.split(" ")[1]);
+        const length = Number(/content-length: (\d+)/i.exec(raw)?.[1] ?? 0);
+        if (raw.length < end + 4 + length) return;
+        resolve({ status, raw });
+      });
+      socket.once("connect", () => socket.write([
+        `GET ${path} HTTP/1.1`, `Host: 127.0.0.1:${port}`,
+        "Connection: Upgrade", "Upgrade: websocket", "Sec-WebSocket-Version: 13",
+        "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==", "", "",
+      ].join("\r\n")));
+    });
+  } finally {
+    clearTimeout(timer);
+    socket.destroy();
+    await closed;
+  }
+}
 
 async function bootWithConfig(config: OpenOmniConfig): Promise<{ port: number }> {
   const app = await suite.boot({
@@ -87,6 +124,80 @@ const CONFIG_ENV = [
 ] as const;
 
 describe("OpenOmni Resident WebSocket", () => {
+  it("967-U1 real upgrade rejects query-only before admission and accepts canonical auth", async () => {
+    let providerCalls = 0;
+    const config = suite.config("openomni-967-u1-", { wsToken: WS_TOKEN });
+    const app = await suite.boot({
+      config,
+      llm: {
+        resolveProviderModel: fakeProviderModel,
+        run: async (input, sink: Sink) => {
+          providerCalls += 1;
+          sink.onMessage(assistantMessage(input, { text: REPLY }));
+          return { type: "stop" };
+        },
+      },
+    });
+    const db = new Database(config.dbPath, { readonly: true });
+    try {
+      const refusal = await upgradeResponse(app.port, `/ws?token=${WS_TOKEN}`);
+      const before = db.query("SELECT COUNT(*) AS count FROM session").get();
+      console.log("967-U1 HTTP", JSON.stringify({ port: app.port, dbPath: config.dbPath, ...refusal, providerCalls, sessions: before }));
+      expect(refusal.status).toBe(401);
+      expect(providerCalls).toBe(0);
+      expect(before).toEqual({ count: 0 });
+      expect(db.query("SELECT COUNT(*) AS count FROM action").get()).toEqual({ count: 0 });
+
+      const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", WS_TOKEN]);
+      expect(ws.protocol).toBe("auth");
+      const response = nextMessage(ws);
+      ws.send(JSON.stringify({ type: "message", text: "967-U1 input" }));
+      const reply = JSON.parse(String((await response).data));
+      expect(reply).toEqual({ type: "response", text: REPLY });
+      expect(providerCalls).toBe(1);
+      expect(Session.list()).toHaveLength(1);
+      const session = Session.list()[0];
+      if (session === undefined) throw new Error("resident session was not persisted");
+      const snapshot = SessionHandleStore.getSnapshot(session.id);
+      expect(snapshot).toMatchObject({ role: "resident", state: "idle" });
+      expect(snapshot.turns.at(-1)?.messages).toEqual([
+        { role: "user", text: "967-U1 input" }, { role: "assistant", text: REPLY },
+      ]);
+      const sessions = db.query("SELECT id, role, state, revision FROM session").all();
+      const actions = db.query("SELECT session_id, kind, ordinal FROM action ORDER BY ordinal").all();
+      expect(sessions).toHaveLength(1);
+      expect(actions.length).toBeGreaterThan(0);
+      console.log("967-U1 WS SQLite", JSON.stringify({ protocol: ws.protocol, reply, providerCalls, sessions, actions, turns: snapshot.turns }));
+    } finally {
+      db.close();
+      await suite.cleanup();
+      expect(existsSync(dirname(config.dbPath))).toBe(false);
+      console.log("967-U1 cleanup", JSON.stringify({ port: app.port, dbPath: config.dbPath, directoryExists: existsSync(dirname(config.dbPath)) }));
+    }
+  });
+
+  it("967-U1 closes owned sockets and removes SQLite after an assertion failure", async () => {
+    const config = suite.config("openomni-967-failure-", { wsToken: WS_TOKEN });
+    const app = await bootWithConfig(config);
+    const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", WS_TOKEN]);
+    const failure = new AssertionError({
+      actual: ws.protocol,
+      expected: "intentional-assertion-failure",
+      operator: "strictEqual",
+    });
+    try {
+      throw failure;
+    } catch (error) {
+      expect(error).toBe(failure);
+    } finally {
+      // Outside any rejection matcher: a cleanup rejection must fail this test.
+      await suite.cleanup();
+    }
+    expect(ws.readyState).toBe(WebSocket.CLOSED);
+    expect(existsSync(dirname(config.dbPath))).toBe(false);
+    console.log("967-U1 failure cleanup", JSON.stringify({ state: ws.readyState, directoryExists: existsSync(dirname(config.dbPath)), port: app.port }));
+  });
+
   it("boots WebSocket-only when no channel credentials are configured", async () => {
     const app = await bootApp();
 
@@ -96,8 +207,8 @@ describe("OpenOmni Resident WebSocket", () => {
     expect(webhook.status).toBe(404);
     expect(await webhook.text()).toBe("Not found");
 
-    const ws = new WebSocket(`ws://127.0.0.1:${app.port}/ws?token=${WS_TOKEN}`);
-    await opened(ws);
+    const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", WS_TOKEN]);
+    expect(ws.protocol).toBe("auth");
     const reply = nextMessage(ws);
     ws.send(JSON.stringify({ type: "message", text: "Help me judge this." }));
 
@@ -118,7 +229,6 @@ describe("OpenOmni Resident WebSocket", () => {
     const surfaceKeys = SurfaceKey.listBySession(session.id);
     expect(surfaceKeys).toHaveLength(1);
     expect(surfaceKeys[0]).toStartWith("ws:");
-    ws.close();
   });
 
   it("boots WebSocket-only through loadConfig when channel env vars are unset", async () => {
@@ -168,11 +278,11 @@ describe("OpenOmni Resident WebSocket", () => {
     expect(await response.text()).toBe("Missing signature");
   });
 
-  it("rejects an upgrade carrying the wrong token", async () => {
+  it("rejects an upgrade carrying the wrong subprotocol token", async () => {
     const app = await bootApp();
 
-    const ws = new WebSocket(`ws://127.0.0.1:${app.port}/ws?token=wrong-token`);
-    await expect(opened(ws)).rejects.toThrow("WebSocket failed before opening");
+    await expect(suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "wrong-token"]))
+      .rejects.toThrow("WebSocket failed before opening");
     expect(Session.list()).toHaveLength(0);
   });
 

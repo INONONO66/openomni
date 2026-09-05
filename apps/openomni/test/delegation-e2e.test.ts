@@ -3,7 +3,7 @@ import { SessionHandleStore } from "@openomni/ledger";
 import type { RunInput, Sink } from "@openomni/llm";
 import { assistantMessage } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
-import { nextMessage, openSocket } from "./helpers/ws";
+import { nextMessage } from "./helpers/ws";
 
 const WS_TOKEN = "delegation-e2e-token";
 const WORKER_ANSWER = "the build is green";
@@ -61,12 +61,11 @@ test("a Resident turn hands work to an inline worker and reports what came back"
       },
     },
   });
-  const ws = await openSocket(`ws://127.0.0.1:${app.port}/ws?token=${WS_TOKEN}`);
+  const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", WS_TOKEN]);
   const reply = nextMessage(ws, 10_000);
   ws.send(JSON.stringify({ type: "message", text: "is the build ok?" }));
 
   const answer = JSON.parse(String((await reply).data)) as { type: string; text: string };
-  ws.close();
 
   expect(answer.text).toContain(WORKER_ANSWER);
   // Proof the worker was a loop of its own rather than the Resident answering

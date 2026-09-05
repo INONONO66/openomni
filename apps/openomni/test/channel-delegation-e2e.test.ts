@@ -3,7 +3,7 @@ import type { RunInput, Sink } from "@openomni/llm";
 import { SessionHandleStore } from "@openomni/ledger";
 import { assistantMessage } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
-import { nextFrame, openSocket } from "./helpers/ws";
+import { nextFrame } from "./helpers/ws";
 
 const WS_TOKEN = "channel-delegation-e2e-token";
 const suite = residentSuite();
@@ -77,10 +77,12 @@ test("the Resident delegates to an external actor over the channel and reports t
     },
   });
 
-  const base = `ws://127.0.0.1:${app.port}/ws?token=${WS_TOKEN}`;
-  const owner = await openSocket(base);
-  const alice = await openSocket(`${base}&actor=alice`);
-  const bob = await openSocket(`${base}&actor=bob`);
+  const base = `ws://127.0.0.1:${app.port}/ws`;
+  const protocols = ["auth", WS_TOKEN];
+  const owner = await suite.openSocket(base, protocols);
+  const alice = await suite.openSocket(`${base}?actor=alice`, protocols);
+  const bob = await suite.openSocket(`${base}?actor=bob`, protocols);
+  expect([owner.protocol, alice.protocol, bob.protocol]).toEqual(["auth", "auth", "auth"]);
 
   const instruction = nextFrame(alice, (frame) => frame.type === "message");
   const ownerAnswer = nextFrame(owner, (frame) => frame.type === "response");
@@ -126,12 +128,13 @@ test("the Resident delegates to an external actor over the channel and reports t
     residentTexts.filter((text) => text.includes("delegation ") && text.includes(" settled:")),
   ).toHaveLength(1);
   if (ownerSessionId === undefined) throw new Error("owner session was not materialized");
-  const wakeDelivery = SessionHandleStore.tree(ownerSessionId)
+  const wakeDeliveries = SessionHandleStore.tree(ownerSessionId)
     .map(SessionHandleStore.delivery)
-    .find((entry) => entry?.kind === "prompt" && entry.content.includes(" settled:"));
-  expect(wakeDelivery?.origin.value).toMatchObject({ systemKind: "delegation.settled" });
-
-  owner.close();
-  alice.close();
-  bob.close();
+    .filter((entry) => entry?.kind === "prompt" && entry.content.includes(" settled:"));
+  expect(wakeDeliveries).toHaveLength(1);
+  expect(wakeDeliveries[0]?.origin.value).toMatchObject({ systemKind: "delegation.settled" });
+  console.log("967-U1 actor correlation", JSON.stringify({
+    messageId: delivered.messageId, ownerSessionId, wakeDeliveries,
+    ownerProtocol: owner.protocol, aliceProtocol: alice.protocol, bobProtocol: bob.protocol,
+  }));
 });
