@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { Database } from "bun:sqlite";
+import { AssertionError } from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { connect } from "node:net";
 import { dirname, join } from "node:path";
@@ -179,13 +180,19 @@ describe("OpenOmni Resident WebSocket", () => {
     const config = suite.config("openomni-967-failure-", { wsToken: WS_TOKEN });
     const app = await bootWithConfig(config);
     const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", WS_TOKEN]);
-    await expect((async () => {
-      try {
-        expect(ws.protocol).toBe("intentional-assertion-failure");
-      } finally {
-        await suite.cleanup();
-      }
-    })()).rejects.toThrow();
+    const failure = new AssertionError({
+      actual: ws.protocol,
+      expected: "intentional-assertion-failure",
+      operator: "strictEqual",
+    });
+    try {
+      throw failure;
+    } catch (error) {
+      expect(error).toBe(failure);
+    } finally {
+      // Outside any rejection matcher: a cleanup rejection must fail this test.
+      await suite.cleanup();
+    }
     expect(ws.readyState).toBe(WebSocket.CLOSED);
     expect(existsSync(dirname(config.dbPath))).toBe(false);
     console.log("967-U1 failure cleanup", JSON.stringify({ state: ws.readyState, directoryExists: existsSync(dirname(config.dbPath)), port: app.port }));

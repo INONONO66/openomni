@@ -23,39 +23,53 @@ export interface ResidentSuite {
   boot(options: Parameters<typeof startOpenOmni>[0]): ReturnType<typeof startOpenOmni>;
   /** Owns every connected socket until cleanup, including assertion failures. */
   openSocket(url: string, protocols: string[], timeoutMs?: number): Promise<WebSocket>;
+  /** Registers an owned resource immediately, before the next fallible operation. */
+  defer(dispose: () => Promise<void> | void): void;
   cleanup(): Promise<void>;
 }
 
 /**
  * One suite's app lifecycle: tracked temp state directories, at most one
  * running app per test, and a storage reset between tests. `beforeReset`
- * runs first in the teardown for suite-specific handles (bus journal,
- * machine daemons) that must close before storage goes away.
+ * runs after registered disposers and before app/storage teardown, so
+ * suite-specific completion witnesses can await the resources just closed.
  */
 export function residentSuite(beforeReset?: () => Promise<void> | void): ResidentSuite {
   const directories: string[] = [];
   let stop: (() => Promise<void>) | undefined;
   const sockets: WebSocket[] = [];
+  const disposers: (() => Promise<void> | void)[] = [];
 
   async function cleanup() {
-    try {
-      await Promise.all([Promise.all(sockets.splice(0).map((ws) => closeSocket(ws))), beforeReset?.()]);
-    } finally {
+    const failures: unknown[] = [];
+    // Every owner gets a disposal attempt; no later failure replaces an earlier one.
+    async function attempt(dispose: () => Promise<void> | void) {
       try {
-        await stop?.();
-      } finally {
-        stop = undefined;
-        Storage.reset();
-        for (const directory of directories.splice(0)) {
-          rmSync(directory, { recursive: true, force: true });
-        }
+        await dispose();
+      } catch (error) {
+        failures.push(error);
       }
     }
+    await Promise.all(sockets.splice(0).map((ws) => attempt(() => closeSocket(ws))));
+    for (const dispose of disposers.splice(0).reverse()) await attempt(dispose);
+    await attempt(() => beforeReset?.());
+    const stopApp = stop;
+    stop = undefined;
+    await attempt(() => stopApp?.());
+    await attempt(() => Storage.reset());
+    for (const directory of directories.splice(0)) {
+      await attempt(() => rmSync(directory, { recursive: true, force: true }));
+    }
+    if (failures.length === 1) throw failures[0];
+    if (failures.length > 1) throw new AggregateError(failures, "resident suite cleanup failed");
   }
   afterEach(cleanup);
 
   return {
     cleanup,
+    defer(dispose) {
+      disposers.push(dispose);
+    },
     async openSocket(url, protocols, timeoutMs) {
       const ws = await openSocket(url, protocols, timeoutMs);
       sockets.push(ws);

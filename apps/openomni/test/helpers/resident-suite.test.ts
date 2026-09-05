@@ -1,0 +1,45 @@
+import { expect, test } from "bun:test";
+import { existsSync } from "node:fs";
+import { residentSuite } from "./resident-suite";
+
+const suite = residentSuite();
+
+test("967-U1 cleanup attempts every disposer and propagates every rejection", async () => {
+  // Given two independent teardown failures and owned temporary state.
+  const directory = suite.tempDir("openomni-cleanup-errors-");
+  const first = new Error("U1_FIRST_DISPOSER_FAILURE");
+  const second = new Error("U1_SECOND_DISPOSER_FAILURE");
+  const disposed: number[] = [];
+  suite.defer(() => {
+    disposed.push(1);
+    throw first;
+  });
+  suite.defer(async () => {
+    disposed.push(2);
+    throw second;
+  });
+
+  // When cleanup runs, both errors remain observable, in disposal order.
+  let failure: unknown;
+  try {
+    await suite.cleanup();
+  } catch (error) {
+    failure = error;
+  }
+  // Then no failed disposer prevents another owner from being released.
+  expect(failure).toBeInstanceOf(AggregateError);
+  if (!(failure instanceof AggregateError)) throw failure;
+  expect(failure.errors).toEqual([second, first]);
+  expect(disposed).toEqual([2, 1]);
+  expect(existsSync(directory)).toBe(false);
+});
+
+test("967-U1 a single cleanup rejection retains its identity", async () => {
+  const failure = new Error("U1_SINGLE_DISPOSER_FAILURE");
+  suite.defer(() => { throw failure; });
+  const observed = await suite.cleanup().then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+  expect(observed).toBe(failure);
+});
