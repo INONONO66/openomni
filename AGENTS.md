@@ -1,6 +1,6 @@
 # PROJECT KNOWLEDGE BASE
 
-Last verified against `kernel/936`: 2026-09-04 (telemetry demoted into `packages/agent/src/observation`, policy rows compiled into immutable generations, tool dispatch centralized in the kernel executor; keep this stamp current when editing - doc-state sync law).
+Last verified against `kernel/936`: 2026-09-05 (telemetry demoted into `packages/agent/src/observation`, policy rows compiled into immutable generations, tool dispatch centralized in the kernel executor; keep this stamp current when editing - doc-state sync law).
 
 ## OVERVIEW
 

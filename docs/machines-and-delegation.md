@@ -244,7 +244,16 @@ reaches it only through tools in its catalog (`delegate`, `await_delegation`,
 
 ### Session identity boundary
 
-Resident and native worker execution share `@openomni/agent`'s session handle.
+Resident and native worker execution share `@openomni/agent`'s session handle
+and its per-turn L2 executor. The app retains only catalog data and endpoint
+bindings; prompt, turn, model, and both model/cell tool doors are decided
+against the same pinned compiled-policy snapshot and write into the same
+durable action tree. Model and tool calls get executor-owned intent/result
+pairs; prompt and turn decisions ride the inbox action and turn envelope the
+session machine already committed. Tool Started/Completed observations follow
+those intent/result commits. OpenOmni's storage boot seeds the mandatory
+kernel policy rows before either role materializes a session; missing durable
+policy data refuses execution rather than installing an in-memory fallback.
 The delegation id is reused as the durable worker session id; no
 `delegation-<id>` alias, WorkItem row, or Attempt row is created. The worker
 adapter supplies role-specific tools and system text, while lease acquisition,
