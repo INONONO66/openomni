@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import { compilePolicySnapshot } from "@openomni/policy";
-import { LedgerAction, type PlainValue } from "@openomni/protocol";
+import { compilePolicySnapshot, type CompiledPolicySnapshot } from "@openomni/policy";
+import type { LedgerAction, PlainValue } from "@openomni/protocol";
 import { createDispatcher, createExecutor, defineTool, ToolRefused } from "../src/index";
+import { allowAllPolicy as allowAll, opPhaseOf, recordingLedger } from "./helpers/compiled-policy";
 import { z } from "zod";
 
 const denyPre = compilePolicySnapshot({
@@ -20,39 +21,6 @@ const denyPre = compilePolicySnapshot({
   ],
 });
 
-/**
- * The compiler fails closed on a generation missing its mandatory rules, so an
- * "allow everything" snapshot still has to carry the mandatory compaction row.
- */
-const allowAll = compilePolicySnapshot({
-  generation: 1,
-  mandatory: [],
-  rows: [
-    {
-      name: "compaction",
-      kind: "turn",
-      phase: "post",
-      match: { encodingVersion: 1, value: { op: "compaction" } },
-      verdict: { encodingVersion: 1, value: { type: "allow" } },
-      priority: 1000,
-      generation: 1,
-    },
-  ],
-});
-
-/**
- * The executor carries `op` and `phase` inside the intent/effect payload
- * (executor.ts writes `{ phase, op, value }`), not as top-level node fields.
- */
-function opPhaseOf(action: LedgerAction.Append): string {
-  for (const carrier of [action.intent?.value, action.effect?.value]) {
-    if (carrier === null || typeof carrier !== "object" || Array.isArray(carrier)) continue;
-    const { op, phase } = carrier;
-    if (typeof op === "string" && typeof phase === "string") return `${op}:${phase}`;
-  }
-  return "unknown";
-}
-
 function echoTool(onRun: () => void) {
   return defineTool({
     name: "echo",
@@ -69,38 +37,26 @@ function echoTool(onRun: () => void) {
   });
 }
 
-function deniedDispatcher(executions: { count: number }) {
-  let ordinal = 0;
-  const executor = createExecutor({
-    policy: denyPre,
-    ledger: {
-      async commit(action) {
-        ordinal += 1;
-        return { action: LedgerAction.Node.parse({ ...action, ordinal }), revision: ordinal };
-      },
-    },
+function durableExecutor(policy: CompiledPolicySnapshot, committed?: LedgerAction.Append[]) {
+  const recording = recordingLedger(committed);
+  return createExecutor({
+    policy,
+    ledger: recording.ledger,
     observations: { publish: () => undefined },
     identity: { sessionId: "session-1", role: "resident", parentActionId: "turn-1" },
     clock: () => 1,
-    entropy: () => `action-${ordinal + 1}`,
+    entropy: recording.entropy,
   });
+}
+
+function deniedDispatcher(executions: { count: number }) {
   return createDispatcher(
     [
-      defineTool({
-        name: "echo",
-        description: "Echo input",
-        category: "query",
-        input: z.object({ value: z.string() }).strict(),
-        output: z.string(),
-        visibility: { model: ["resident"], cell: ["resident"] },
-        execute: async ({ value }) => {
-          executions.count += 1;
-          return value;
-        },
-        render: (_input, value) => value,
+      echoTool(() => {
+        executions.count += 1;
       }),
     ],
-    { executor },
+    { executor: durableExecutor(denyPre) },
   );
 }
 
@@ -133,21 +89,7 @@ describe("compiled tool.pre denial", () => {
 describe("cell-door executor propagation", () => {
   it("inherits the enclosing executor so nested cell tools commit durably", async () => {
     const committed: LedgerAction.Append[] = [];
-    let ordinal = 0;
-    const executor = createExecutor({
-      policy: allowAll,
-      ledger: {
-        async commit(action) {
-          committed.push(action);
-          ordinal += 1;
-          return { action: LedgerAction.Node.parse({ ...action, ordinal }), revision: ordinal };
-        },
-      },
-      observations: { publish: () => undefined },
-      identity: { sessionId: "session-1", role: "resident", parentActionId: "turn-1" },
-      clock: () => 1,
-      entropy: () => `action-${ordinal + 1}`,
-    });
+    const executor = durableExecutor(allowAll, committed);
 
     // The inner dispatcher is built with NO executor option, exactly as the
     // production cell door does in apps/openomni/src/tools/execution/run-code.ts.
