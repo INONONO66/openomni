@@ -16,7 +16,7 @@ export type ChannelAuthnDecisionObserver = (decision: ChannelAuthnDecision) => v
 
 export interface WebSocketAuthResult {
   readonly verdict: Policy.PolicyDecision;
-  readonly headers?: Record<string, string>;
+  readonly protocol?: string;
   readonly response?: Response;
 }
 

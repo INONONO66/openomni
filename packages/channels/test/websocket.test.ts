@@ -51,7 +51,8 @@ describe("WebSocketHandler authentication", () => {
     const res = handler.handleUpgrade(req, upgrade.server);
 
     expect(res).toBeUndefined();
-    expect(upgrade.options?.headers).toEqual({ "Sec-WebSocket-Protocol": "auth" });
+    expect(req.headers.get("sec-websocket-protocol")).toBe("auth");
+    expect(upgrade.options?.headers).toBeUndefined();
     expect((upgrade.options?.data as { surfaceKey: string }).surfaceKey).toStartWith("ws:");
     expect((upgrade.options?.data as { authenticated: boolean }).authenticated).toBe(true);
     expect(decisions).toEqual([

@@ -12,7 +12,7 @@ interface WebSocketAuthState {
   /** The upgrade attempt's trace (D11 origin, one per upgrade) — both auth warns inherit it. */
   readonly traceId: string;
   readonly token?: string;
-  headers?: Record<string, string>;
+  protocol?: string;
   response?: Response;
 }
 
@@ -72,7 +72,7 @@ function evaluateWebSocketToken(state: WebSocketAuthState): Policy.PolicyDecisio
     });
   }
 
-  state.headers = { "Sec-WebSocket-Protocol": subprotocolAuth.selected };
+  state.protocol = subprotocolAuth.selected;
   return evaluateChannelPermission({
     action: policyId,
     resource: "websocket.upgrade",
@@ -110,7 +110,7 @@ export function authenticateWebSocketUpgrade(input: {
 
   return {
     verdict,
-    ...(state.headers !== undefined ? { headers: state.headers } : {}),
+    ...(state.protocol !== undefined ? { protocol: state.protocol } : {}),
     ...(state.response !== undefined ? { response: state.response } : {}),
   };
 }
