@@ -8,7 +8,7 @@ test("967-U1 teardown rejection fails the real assertion-failure cleanup test", 
     "--preload", fileURLToPath(new URL("./helpers/cleanup-rejection.preload.ts", import.meta.url)),
     fileURLToPath(new URL("./e2e.test.ts", import.meta.url)),
     "-t", "967-U1 closes owned sockets",
-  ], { stdout: "pipe", stderr: "pipe" });
+  ], { stdin: "ignore", stdout: "pipe", stderr: "pipe" });
   let timedOut = false;
   const timer = setTimeout(() => {
     timedOut = true;

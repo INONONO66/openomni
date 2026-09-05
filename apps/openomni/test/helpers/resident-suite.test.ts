@@ -20,16 +20,16 @@ test("967-U1 cleanup attempts every disposer and propagates every rejection", as
   });
 
   // When cleanup runs, both errors remain observable, in disposal order.
-  let failure: unknown;
+  let failure: AggregateError | undefined;
   try {
     await suite.cleanup();
   } catch (error) {
+    if (!(error instanceof AggregateError)) throw error;
     failure = error;
   }
   // Then no failed disposer prevents another owner from being released.
   expect(failure).toBeInstanceOf(AggregateError);
-  if (!(failure instanceof AggregateError)) throw failure;
-  expect(failure.errors).toEqual([second, first]);
+  expect(failure?.errors).toEqual([second, first]);
   expect(disposed).toEqual([2, 1]);
   expect(existsSync(directory)).toBe(false);
 });
@@ -37,9 +37,11 @@ test("967-U1 cleanup attempts every disposer and propagates every rejection", as
 test("967-U1 a single cleanup rejection retains its identity", async () => {
   const failure = new Error("U1_SINGLE_DISPOSER_FAILURE");
   suite.defer(() => { throw failure; });
-  const observed = await suite.cleanup().then(
-    () => undefined,
-    (error: unknown) => error,
-  );
-  expect(observed).toBe(failure);
+  await expect(suite.cleanup()).rejects.toBe(failure);
+});
+
+test("967-U1 non-Error cleanup rejections retain their cause", async () => {
+  const cause = Symbol("U1_NON_ERROR_REJECTION");
+  suite.defer(() => { throw cause; });
+  await expect(suite.cleanup()).rejects.toMatchObject({ cause });
 });
