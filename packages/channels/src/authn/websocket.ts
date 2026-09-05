@@ -52,10 +52,9 @@ function evaluateWebSocketToken(state: WebSocketAuthState): Policy.PolicyDecisio
     });
   }
 
-  const url = new URL(state.request.url);
   const subprotocolAuth = readSubprotocolAuth(state.request);
-  const provided = subprotocolAuth?.token ?? url.searchParams.get("token");
-  if (provided === null || !tokensEqual(provided, state.token)) {
+  const provided = subprotocolAuth?.token;
+  if (subprotocolAuth === undefined || provided === undefined || !tokensEqual(provided, state.token)) {
     state.publish(Operational.Events.Warn, {
       traceId: state.traceId,
       time: Date.now(),
@@ -73,30 +72,13 @@ function evaluateWebSocketToken(state: WebSocketAuthState): Policy.PolicyDecisio
     });
   }
 
-  if (subprotocolAuth) {
-    state.headers = { "Sec-WebSocket-Protocol": subprotocolAuth.selected };
-    return evaluateChannelPermission({
-      action: policyId,
-      resource: "websocket.upgrade",
-      field: "authenticated",
-      allowed: true,
-      allowReason: "websocket subprotocol token accepted",
-      denyReason: "websocket token missing or invalid",
-    });
-  }
-
-  state.publish(Operational.Events.Warn, {
-    traceId: state.traceId,
-    time: Date.now(),
-    component: "server",
-    msg: "websocket query token auth is deprecated",
-  });
+  state.headers = { "Sec-WebSocket-Protocol": subprotocolAuth.selected };
   return evaluateChannelPermission({
     action: policyId,
     resource: "websocket.upgrade",
     field: "authenticated",
     allowed: true,
-    allowReason: "websocket query token accepted",
+    allowReason: "websocket subprotocol token accepted",
     denyReason: "websocket token missing or invalid",
   });
 }

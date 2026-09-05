@@ -13,7 +13,7 @@ import { modelToolOutput } from "./helpers/tool-dispatch";
 import { assistantMessage } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { socketPath as testSocketPath } from "./helpers/socket-path";
-import { nextMessage, openSocket } from "./helpers/ws";
+import { nextMessage } from "./helpers/ws";
 
 const WS_TOKEN = "code-mode-e2e-token";
 const MACHINE_ID = "alpha";
@@ -98,12 +98,11 @@ test("a cell batches delegation into one turn", async () => {
   });
   expect(daemon.attachment.status).toBe("attached");
 
-  const ws = await openSocket(`ws://127.0.0.1:${app.port}/ws?token=${WS_TOKEN}`);
+  const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", WS_TOKEN]);
   const reply = nextMessage(ws, 30_000);
   ws.send(JSON.stringify({ type: "message", text: "check everything" }));
 
   const answer = (JSON.parse(String((await reply).data)) as { text: string }).text;
-  ws.close();
 
   // The machine was attached, so the machine-placed tool was offered.
   expect(answer).toContain(
@@ -148,12 +147,11 @@ test("the machine tool is not offered while nothing is attached", async () => {
     },
   });
 
-  const ws = await openSocket(`ws://127.0.0.1:${app.port}/ws?token=${WS_TOKEN}`);
+  const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", WS_TOKEN]);
   const reply = nextMessage(ws, 15_000);
   ws.send(JSON.stringify({ type: "message", text: "run something" }));
 
   const answer = (JSON.parse(String((await reply).data)) as { text: string }).text;
-  ws.close();
 
   expect(offered).toEqual([
     "delegate",

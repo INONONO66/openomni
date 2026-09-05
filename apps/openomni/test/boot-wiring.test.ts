@@ -19,7 +19,7 @@ import {
 } from "../src/provisioning/supervisor";
 import { assistantMessage } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
-import { nextMessage, opened } from "./helpers/ws";
+import { nextMessage } from "./helpers/ws";
 
 const suite = residentSuite();
 
@@ -41,16 +41,13 @@ describe("boot tool catalog", () => {
       },
     });
 
-    const ws = new WebSocket(`ws://127.0.0.1:${app.port}/ws?token=boot-catalog-token`);
-    const ready = opened(ws);
-    await ready;
+    const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "boot-catalog-token"]);
     const reply = nextMessage(ws);
     ws.send(JSON.stringify({ type: "message", text: "catalog" }));
 
     expect(JSON.parse(String((await reply).data))).toEqual({ type: "response", text: "ready" });
     expect(await toolNames).not.toContain("work_items");
     expect(await toolNames).not.toContain("complete_work");
-    ws.close();
   });
 });
 

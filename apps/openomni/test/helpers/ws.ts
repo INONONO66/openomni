@@ -4,7 +4,7 @@
  */
 
 /** Resolves when the socket opens; rejects on error or after `timeoutMs`. */
-export function opened(ws: WebSocket, timeoutMs = 2000): Promise<void> {
+function opened(ws: WebSocket, timeoutMs = 2000): Promise<void> {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(
       () => reject(new Error(`WebSocket open timed out after ${timeoutMs}ms`)),
@@ -30,10 +30,32 @@ export function opened(ws: WebSocket, timeoutMs = 2000): Promise<void> {
 }
 
 /** Opens a socket to `url` and resolves once it is connected. */
-export async function openSocket(url: string, timeoutMs = 2000): Promise<WebSocket> {
-  const ws = new WebSocket(url);
-  await opened(ws, timeoutMs);
+export async function openSocket(
+  url: string,
+  protocols: string[],
+  timeoutMs = 2000,
+): Promise<WebSocket> {
+  const ws = new WebSocket(url, protocols);
+  try {
+    await opened(ws, timeoutMs);
+  } catch (error) {
+    await closeSocket(ws, timeoutMs);
+    throw error;
+  }
   return ws;
+}
+
+/** Subscribe before closing and await the transport's completion, including failed opens. */
+export function closeSocket(ws: WebSocket, timeoutMs = 2000): Promise<void> {
+  if (ws.readyState === WebSocket.CLOSED) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("WebSocket close timed out")), timeoutMs);
+    ws.addEventListener("close", () => {
+      clearTimeout(timer);
+      resolve();
+    }, { once: true });
+    ws.close();
+  });
 }
 
 /** The next message event on the socket, whatever it carries. */
