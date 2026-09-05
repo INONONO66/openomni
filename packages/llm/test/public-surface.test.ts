@@ -1,6 +1,34 @@
 import { describe, expect, test } from "bun:test";
+import ts from "typescript";
+import type { Sink } from "../src";
 
 describe("@openomni/llm root public surface", () => {
+  test("967 public sink excludes fact tap", async () => {
+    // Given: the public type and its machine-readable declaration.
+    const callbacks = {
+      onMessage: true,
+      onToolCall: true,
+      onToolResult: true,
+    } satisfies Record<keyof Sink, true>;
+    const source = ts.createSourceFile(
+      "sink.ts",
+      await Bun.file(new URL("../src/sink.ts", import.meta.url)).text(),
+      ts.ScriptTarget.Latest,
+      true,
+    );
+
+    // When: TypeScript parses the callback members (not comments or prose).
+    const contract = source.statements.find(
+      (node): node is ts.InterfaceDeclaration =>
+        ts.isInterfaceDeclaration(node) && node.name.text === "Sink",
+    );
+
+    // Then: only retained callbacks are public; the typed map is exhaustive too.
+    expect(contract?.members.map((member) => member.name?.getText(source)).sort()).toEqual(
+      Object.keys(callbacks).sort(),
+    );
+  });
+
   test("exposes the package contract", async () => {
     // Given: a consumer imports the root package barrel.
     const root = await import("../src");

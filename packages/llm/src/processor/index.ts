@@ -139,7 +139,6 @@ export namespace Processor {
         throw new Error(`transcript recording defect: ${outcome.reason} on ${fact.type}`);
       }
       folded = outcome.state;
-      sink.onFact?.(fact);
       // Snapshots go out at part boundaries only; the fold state is immutable
       // so consumers may hold it without copying.
       if (fact.type !== "message.created") {
@@ -445,10 +444,6 @@ export namespace Processor {
           messageId: message.info.id,
           partCount: message.parts.length,
         });
-      },
-
-      onFact(fact: Transcript.Fact) {
-        sink.onFact?.(fact);
       },
 
       onToolCall(call: Tool.Call) {

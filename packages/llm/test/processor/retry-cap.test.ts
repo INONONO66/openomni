@@ -3,7 +3,7 @@ import {
   anthropicModel as model,
   assistantMessage as buildAssistantMessage,
 } from "../helpers/fixtures";
-import { LlmCall, Operational, type Transcript } from "@openomni/protocol";
+import { LlmCall, Operational, type Message } from "@openomni/protocol";
 import { Bus, collector } from "../helpers/observation";
 import { APIError } from "../../src/error";
 import { Processor } from "../../src/processor";
@@ -27,7 +27,7 @@ describe("Processor retry cap", () => {
 
   test("records synchronous stream failure before process promise settlement", async () => {
     const failure = new Error("synchronous stream failure");
-    const facts: Transcript.Fact[] = [];
+    const messages: Message.WithParts[] = [];
     const publish = spyOn(Bus, "publish");
     const processor = Processor.create({
       assistantMessage: buildAssistantMessage("msg-sync", "session-sync", "parent-sync"),
@@ -37,8 +37,7 @@ describe("Processor retry cap", () => {
       maxRetryAttempts: 0,
       events: Bus,
       sink: {
-        onMessage: () => undefined,
-        onFact: (fact) => facts.push(fact),
+        onMessage: (message) => messages.push(message),
         onToolCall: () => undefined,
         onToolResult: () => undefined,
       },
@@ -51,8 +50,8 @@ describe("Processor retry cap", () => {
     try {
       const processing = processor.process({ system: "", promptText: "" });
       const rejection = processing.catch((error) => error);
-      expect(facts.map((fact) => fact.type)).toEqual(["message.created", "message.finished"]);
-      expect(facts[1]).toMatchObject({ type: "message.finished", finish: "error" });
+      expect(messages).toHaveLength(1);
+      expect(messages[0]?.info).toMatchObject({ finish: "error" });
       expect(
         publish.mock.calls
           .filter((call) => call[0] === Operational.Events.Info)
@@ -67,7 +66,7 @@ describe("Processor retry cap", () => {
 
   test("records rejected createStream promises in the first rejection continuation", async () => {
     const failure = new Error("rejected createStream promise");
-    const facts: Transcript.Fact[] = [];
+    const messages: Message.WithParts[] = [];
     const publish = spyOn(Bus, "publish");
     const processor = Processor.create({
       assistantMessage: buildAssistantMessage("msg-rejected", "session-rejected", "parent"),
@@ -77,8 +76,7 @@ describe("Processor retry cap", () => {
       maxRetryAttempts: 0,
       events: Bus,
       sink: {
-        onMessage: () => undefined,
-        onFact: (fact) => facts.push(fact),
+        onMessage: (message) => messages.push(message),
         onToolCall: () => undefined,
         onToolResult: () => undefined,
       },
@@ -90,7 +88,8 @@ describe("Processor retry cap", () => {
       const processing = processor.process({ system: "", promptText: "" });
       const rejection = processing.catch((error) => error);
       await Promise.resolve();
-      expect(facts.map((fact) => fact.type)).toEqual(["message.created", "message.finished"]);
+      expect(messages).toHaveLength(1);
+      expect(messages[0]?.info).toMatchObject({ finish: "error" });
       expect(
         publish.mock.calls
           .filter((call) => call[0] === Operational.Events.Info)

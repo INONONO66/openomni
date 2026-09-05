@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { anthropicModel as model, assistantMessage as buildAssistantMessage } from "../helpers/fixtures";
-import type { Message, Tool, Transcript } from "@openomni/protocol";
+import {
+  anthropicModel as model,
+  assistantMessage as buildAssistantMessage,
+} from "../helpers/fixtures";
+import type { Message, Tool } from "@openomni/protocol";
 import type { Sink } from "../../src/sink";
 import { Bus } from "../helpers/observation";
 import { APIError } from "../../src/error";
@@ -9,23 +12,22 @@ import { Processor } from "../../src/processor";
 type Capture = {
   sink: Sink;
   messages: Message.WithParts[];
-  facts: Transcript.Fact[];
+  toolCalls: Tool.Call[];
   toolResults: Tool.Result[];
 };
 
 function capture(): Capture {
   const messages: Message.WithParts[] = [];
-  const facts: Transcript.Fact[] = [];
+  const toolCalls: Tool.Call[] = [];
   const toolResults: Tool.Result[] = [];
   return {
     sink: {
       onMessage: (message) => messages.push(message),
-      onToolCall: () => undefined,
+      onToolCall: (call) => toolCalls.push(call),
       onToolResult: (result) => toolResults.push(result),
-      onFact: (fact) => facts.push(fact),
     },
     messages,
-    facts,
+    toolCalls,
     toolResults,
   };
 }
@@ -63,6 +65,65 @@ function retryableError() {
 describe("Processor fold-based emission (#545 T2)", () => {
   afterEach(() => {
     Bus.reset();
+  });
+
+  test("967 provider assembly without public fact tap", async () => {
+    // Given: a billed failed attempt, then a text/tool response.
+    const cap = capture();
+    let attempts = 0;
+    const processor = createProcessor(cap, {
+      createStream: async () => ({
+        fullStream: (async function* () {
+          attempts += 1;
+          if (attempts === 1) {
+            yield {
+              type: "step-finish",
+              finishReason: "stop",
+              usage: { inputTokens: 5, outputTokens: 7 },
+            };
+            throw retryableError();
+          }
+          yield { type: "text-start" };
+          yield { type: "text-delta", text: "retained" };
+          yield { type: "text-end" };
+          yield { type: "tool-call", toolCallId: "paired", toolName: "lookup", input: {} };
+          yield { type: "tool-result", toolCallId: "paired", toolName: "lookup", output: "42" };
+          yield {
+            type: "step-finish",
+            finishReason: "stop",
+            usage: { inputTokens: 11, outputTokens: 13 },
+          };
+          yield { type: "finish" };
+        })(),
+      }),
+    });
+
+    // When: the real processor folds both attempts.
+    await processor.process({ system: "", promptText: "" });
+
+    // Then: immutable snapshots, paired callbacks and all billed usage survive.
+    expect(attempts).toBe(2);
+    expect(cap.messages[0]?.info).toMatchObject({ tokens: { input: 0, output: 0 } });
+    const terminals = cap.messages.filter(
+      (message) => message.info.role === "assistant" && message.info.finish !== undefined,
+    );
+    expect(terminals.map((message) => message.info)).toMatchObject([
+      { finish: "error", tokens: { input: 5, output: 7 } },
+      { finish: "stop", tokens: { input: 11, output: 13 } },
+    ]);
+    expect(cap.messages.at(-1)?.parts).toMatchObject([
+      { type: "text", text: "retained" },
+      { type: "tool", callID: "paired", state: { status: "completed", output: "42" } },
+      { type: "step-finish", tokens: { input: 11, output: 13 } },
+    ]);
+    expect(cap.toolCalls).toEqual([{ id: "paired", tool: "lookup", input: {} }]);
+    expect(cap.toolResults).toMatchObject([{ toolCallId: "paired", output: "42" }]);
+    expect(processor.usageTotals).toEqual({
+      input: 16,
+      output: 20,
+      reasoning: 0,
+      cache: { read: 0, write: 0 },
+    });
   });
 
   test("emits onMessage only at part boundaries, never per token", async () => {
@@ -123,38 +184,6 @@ describe("Processor fold-based emission (#545 T2)", () => {
     expect(processor.message.tokens.input).toBe(10);
   });
 
-  test("emits transcript facts in fold order with attempt identity", async () => {
-    const cap = capture();
-    const processor = createProcessor(cap, {
-      createStream: streamOf([
-        { type: "text-start", providerMetadata: {} },
-        { type: "text-delta", text: "Hi" },
-        { type: "text-end", providerMetadata: {} },
-        { type: "finish" },
-      ]),
-    });
-
-    await processor.process({ system: "", promptText: "" });
-
-    expect(cap.facts.map((fact) => fact.type)).toEqual([
-      "message.created",
-      "part.appended",
-      "part.advanced",
-      "message.finished",
-    ]);
-    const attemptIds = new Set(cap.facts.map((fact) => fact.attemptId));
-    expect(attemptIds.size).toBe(1);
-    const finished = cap.facts.at(-1);
-    if (finished?.type !== "message.finished") throw new Error("expected message.finished");
-    expect(finished.finish).toBe("stop");
-    expect(finished.usage).toEqual({
-      input: 0,
-      output: 0,
-      reasoning: 0,
-      cache: { read: 0, write: 0 },
-    });
-  });
-
   test("failed-attempt parts do not re-emit into the retry attempt", async () => {
     let attemptCount = 0;
     const cap = capture();
@@ -196,6 +225,7 @@ describe("Processor fold-based emission (#545 T2)", () => {
             yield { type: "text-start", providerMetadata: {} };
             throw retryableError();
           }
+          expect(cap.messages.at(-1)?.info).toMatchObject({ finish: "error" });
           yield { type: "finish" };
         })(),
       }),
@@ -203,21 +233,8 @@ describe("Processor fold-based emission (#545 T2)", () => {
 
     await processor.process({ system: "", promptText: "" });
 
-    const kinds = cap.facts.map((fact) => `${fact.type}@${fact.attemptId}`);
-    const created = cap.facts.filter((fact) => fact.type === "message.created");
-    expect(created).toHaveLength(2);
-    expect(created[0]?.attemptId).not.toBe(created[1]?.attemptId);
-
-    const firstFinishedIndex = cap.facts.findIndex((fact) => fact.type === "message.finished");
-    const secondCreatedIndex = cap.facts.findIndex(
-      (fact, index) => fact.type === "message.created" && index > 0,
-    );
-    expect(firstFinishedIndex).toBeGreaterThan(-1);
-    expect(firstFinishedIndex).toBeLessThan(secondCreatedIndex);
-    const firstFinished = cap.facts[firstFinishedIndex];
-    if (firstFinished?.type !== "message.finished") throw new Error("expected message.finished");
-    expect(firstFinished.finish).toBe("error");
-    expect(kinds.at(-1)).toContain("message.finished");
+    expect(attemptCount).toBe(2);
+    expect(cap.messages.at(-1)?.info).toMatchObject({ finish: "stop" });
   });
 
   test("length finish fails incomplete tool calls with no salvage", async () => {
