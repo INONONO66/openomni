@@ -252,9 +252,10 @@ The exact per-file map is a stage-2 deliverable, re-measured at cut time.
 Re-measured at cut (#707 slice 1, 2026-08-19) — corrections to the
 inventory above:
 
-- **event-projector: reclassified brain-side.** It writes session content
-  (`Session.addMessage`/`addPart`): moving it would be the S1 violation.
-  It is the Deliver consumer's projection step, not perimeter routing.
+- **event-projector: historically reclassified brain-side.** That legacy
+  projection and its static message/part API are now removed (#967 U2).
+  The live Deliver consumer commits prompts through a durable session handle;
+  canonical L0 action history, not perimeter routing, owns session content.
 - **session-resolver: splits.** The gateway mints the sessionId and claims
   the surface↔session map (its own domain, record-before-act); the brain
   lazily materializes the session row on first Deliver (idempotent

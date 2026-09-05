@@ -1,21 +1,18 @@
-import { describe, test, expect, beforeEach } from "bun:test";
+import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { Channel } from "@openomni/protocol";
 import { SurfaceKey } from "../src/surface-key";
 import { Storage } from "../src/storage/storage";
 import "../src/storage/initialize";
+import { materializeSession } from "./helpers/session";
+
+afterEach(() => Storage.reset());
 
 // The pure string codec (create/fromChannel/parse) lives in the protocol
 // adapter domain — see packages/protocol/test/adapter-surface-key.test.ts.
 // This suite covers the storage semantics: claim/lookup/listBySession.
 
 function seedSession(id: string): void {
-  Storage.get().session.set(id, {
-    id,
-    title: "test",
-    model: { providerID: "test", modelID: "test" },
-    time: { created: Date.now(), updated: Date.now() },
-    spawnDepth: 0,
-  });
+  materializeSession(id);
 }
 
 describe("SurfaceKey", () => {
@@ -238,9 +235,7 @@ describe("SurfaceKey", () => {
       const bare = Storage.get();
       Storage.configure({
         transaction: bare.transaction.bind(bare),
-        session: bare.session,
-        message: bare.message,
-        part: bare.part,
+        close: () => bare.close?.(),
       });
 
       expect(() => SurfaceKey.claim(key, "session-1")).toThrow(absentMessage);
@@ -252,9 +247,7 @@ describe("SurfaceKey", () => {
       const bare = Storage.get();
       Storage.configure({
         transaction: bare.transaction.bind(bare),
-        session: bare.session,
-        message: bare.message,
-        part: bare.part,
+        close: () => bare.close?.(),
       });
 
       // The pre-#522 fail-open returned the candidate sessionId as if the

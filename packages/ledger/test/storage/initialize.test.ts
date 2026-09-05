@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { Storage } from "../../src/storage/storage";
 import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage";
 import { initialize } from "../../src/storage/initialize";
+import { materializeSession } from "../helpers/session";
 
 let tmpDir: string;
 
@@ -54,21 +55,15 @@ describe("Storage.initialize", () => {
     const dbPath = join(tmpDir, ".openomni", "storage.db");
     initialize({ dbPath });
 
-    const session = {
-      id: "s1",
-      title: "Persisted",
-      model: { providerID: "test", modelID: "test-model" },
-      time: { created: Date.now(), updated: Date.now() },
-      spawnDepth: 0,
-    };
-    Storage.get().session.set("s1", session);
-
-    // Verify by opening a second adapter to the same DB
+    const session = materializeSession("s1");
+    Storage.reset();
     const verifyAdapter = new SqliteStorageAdapter(dbPath);
-    const recovered = verifyAdapter.session.get("s1");
-    verifyAdapter.close();
-    expect(recovered).toBeDefined();
-    expect(recovered?.title).toBe("Persisted");
+    try {
+      expect(verifyAdapter.sessions.get("s1")).toEqual(session);
+      expect(verifyAdapter.actions.tree("s1")).toHaveLength(1);
+    } finally {
+      verifyAdapter.close();
+    }
   });
 
   test("is idempotent — no error on second call", () => {
@@ -95,20 +90,18 @@ describe("Storage.initialize", () => {
     const parentAdapter = Storage.get();
 
     Storage.withIsolation(() => {
-      expect(() => initialize({ dbPath })).not.toThrow();
-      expect(Storage.get()).toBeInstanceOf(SqliteStorageAdapter);
-      expect(Storage.get()).not.toBe(parentAdapter);
-      expect(Storage.getInitializedDbPath()).toBe(dbPath);
-      Storage.get().session.set("isolated-session", {
-        id: "isolated-session",
-        title: "Isolated",
-        model: { providerID: "test", modelID: "test" },
-        time: { created: 1, updated: 1 },
-        spawnDepth: 0,
-      });
+      try {
+        expect(() => initialize({ dbPath })).not.toThrow();
+        expect(Storage.get()).toBeInstanceOf(SqliteStorageAdapter);
+        expect(Storage.get()).not.toBe(parentAdapter);
+        expect(Storage.getInitializedDbPath()).toBe(dbPath);
+        materializeSession("isolated-session");
+      } finally {
+        Storage.reset();
+      }
     });
 
-    expect(parentAdapter.session.get("isolated-session")?.title).toBe("Isolated");
+    expect(parentAdapter.sessions?.get("isolated-session")?.role).toBe("resident");
   });
 
   test("Storage.initialize is callable on the namespace", () => {

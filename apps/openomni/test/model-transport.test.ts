@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { initialize, Session, SessionHandleStore, Storage } from "@openomni/ledger";
+import { initialize, SessionHandleStore, Storage } from "@openomni/ledger";
 import type { RunInput, Sink } from "@openomni/llm";
 import type { Gateway } from "@openomni/protocol";
 import { modelTransport, type OpenOmniConfig } from "../src/config";
@@ -34,11 +34,8 @@ const resolveProviderModel = async (model: { provider: string; id: string }) => 
 });
 
 function createSession(): string {
-  return Session.create({
-    traceId: "trace-model-transport",
-    title: "transport session",
-    model: { providerID: "fake", modelID: "resident-test" },
-  }).id;
+  // The real Resident materializes this gateway-minted identity on delivery.
+  return crypto.randomUUID();
 }
 
 function residentDelivery(sessionId: string): Gateway.Deliver {

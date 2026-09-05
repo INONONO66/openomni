@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -13,7 +13,6 @@ import {
   Wait,
 } from "@openomni/protocol";
 import { DelegationStore } from "../../src/delegation/index.js";
-import { SessionInfo } from "../../src/session/info.js";
 import { createMemoryL0Adapter } from "./memory-l0-adapter.js";
 import { Migration } from "../../src/storage/migration-runner.js";
 import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage.js";
@@ -380,28 +379,12 @@ describe("SQLite adapter contract guards", () => {
     ).toThrow("Wait revision must advance exactly once");
   });
 
-  test("session parse cache evicts its oldest normalized snapshot at capacity", () => {
-    const parse = mock(SessionInfo.parse.bind(SessionInfo));
-    Object.defineProperty(SessionInfo, "parse", { configurable: true, value: parse });
-    try {
-      for (let index = 0; index <= 4096; index += 1) {
-        const id = `session-cache-${index}`;
-        adapter.session.set(id, {
-          id,
-          title: id,
-          model: { providerID: "test", modelID: "test" },
-          time: { created: index, updated: index },
-          spawnDepth: 0,
-        });
-        expect(adapter.session.get(id)?.id).toBe(id);
-      }
-      parse.mockClear();
-
-      expect(adapter.session.get("session-cache-0")?.id).toBe("session-cache-0");
-      expect(parse).toHaveBeenCalledTimes(1);
-    } finally {
-      delete (SessionInfo as unknown as { parse?: unknown }).parse;
-    }
+  test("canonical session reads cannot mutate a later snapshot", () => {
+    adapter.sessions.create(sessionRow("session-isolated"));
+    const first = adapter.sessions.get("session-isolated");
+    if (first === undefined) throw new Error("missing session");
+    first.revision = 99;
+    expect(adapter.sessions.get(first.id)?.revision).toBe(0);
   });
 });
 

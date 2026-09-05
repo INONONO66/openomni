@@ -7,12 +7,9 @@ import { createSqliteChannelGrantAdapter } from "./sqlite-channel-grant-adapter"
 import { createSqliteProvisioningAdapter } from "./sqlite-provisioning-adapter";
 import { createSqliteEgressBudgetAdapter } from "./sqlite-egress-budget-adapter";
 import { createSqliteDelegationAdapter } from "./sqlite-delegation-adapter";
-import { createSqliteMessageAdapter } from "./sqlite-message-adapter";
-import { createSqlitePartAdapter } from "./sqlite-part-adapter";
 import { clearSqliteStorage, initializeSqliteDatabase } from "./sqlite-schema-lifecycle";
 import { createSqliteL0Adapters } from "./sqlite-l0-adapter";
 import type { ObservationSink } from "@openomni/protocol";
-import { createSqliteSessionAdapter } from "./sqlite-session-adapter";
 import { createSqliteSurfaceKeyAdapter } from "./sqlite-surface-key-adapter";
 import { createSqliteApprovalAdapter } from "./sqlite-approval-adapter";
 import { createSqliteWaitAdapter } from "./sqlite-wait-adapter";
@@ -25,9 +22,6 @@ export class SqliteStorageAdapter implements Storage.Adapter {
   readonly observationSink: ObservationSink;
   private closed = false;
 
-  readonly session: Storage.Adapter["session"];
-  readonly message: Storage.Adapter["message"];
-  readonly part: Storage.Adapter["part"];
   readonly surfaceKey: NonNullable<Storage.Adapter["surfaceKey"]>;
   readonly workerRunState: WorkerRunStateStore.Adapter;
   readonly wait: NonNullable<Storage.Adapter["wait"]>;
@@ -55,9 +49,6 @@ export class SqliteStorageAdapter implements Storage.Adapter {
       throw err;
     }
 
-    this.session = createSqliteSessionAdapter(this.db);
-    this.message = createSqliteMessageAdapter(this.db);
-    this.part = createSqlitePartAdapter(this.db);
     this.surfaceKey = createSqliteSurfaceKeyAdapter(this.db);
     this.workerRunState = createSqliteWorkerRunStateAdapter(this.db);
     this.wait = createSqliteWaitAdapter(this.db);

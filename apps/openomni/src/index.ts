@@ -21,7 +21,6 @@ import {
   initialize,
   PersonStore,
   SecretStore,
-  Session,
   Storage,
 } from "@openomni/ledger";
 
@@ -490,7 +489,6 @@ export async function startOpenOmni(options: StartOptions = {}) {
     // settlements must be able to deliver their one owner-session wake.
     const recoveryTraceId = newTraceId();
     WaitService.sweepExpired(recoveryTraceId, Bus.publish);
-    Session.sweepExpired(recoveryTraceId);
     kernel.start();
     // Recovery wakes arrived during kernel.start() and queued; arming binds
     // the Resident delivery and flushes them. Reject-only on failure: the

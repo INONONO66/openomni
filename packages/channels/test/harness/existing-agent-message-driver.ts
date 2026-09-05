@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { Wait, type Gateway } from "@openomni/protocol";
 import {
   ActorRegistry,
-  Session,
+  SessionHandleStore,
   SqliteStorageAdapter,
   Storage,
   WaitStore,
@@ -116,7 +116,7 @@ function registerDriverActors(): void {
 // the adapter layer; the store surface is session-internal.
 /** Session census: messaging must never allocate a session. */
 function allocationCount(): number {
-  return Session.list().length;
+  return SessionHandleStore.listRows().length;
 }
 
 function awaitedWaitSpec() {
@@ -481,7 +481,16 @@ async function runScenario(scenario: ExistingAgentMessageDriverScenario): Promis
 }
 
 function runIsolatedScenario(scenario: ExistingAgentMessageDriverScenario) {
-  return Bus.withIsolation(() => Storage.withIsolation(() => runScenario(scenario)));
+  return Bus.withIsolation(() =>
+    Storage.withIsolation(async () => {
+      try {
+        return await runScenario(scenario);
+      } finally {
+        Storage.reset();
+        Bus.reset();
+      }
+    }),
+  );
 }
 
 function isScenario(value: string | undefined): value is ExistingAgentMessageDriverScenario {

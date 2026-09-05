@@ -11,8 +11,7 @@ describe("BlacklistStore SQLite persistence", () => {
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "blacklist-test-"));
     dbPath = join(tmpDir, "test.db");
-    Storage.initialize({ dbPath: ":memory:" });
-    Storage.configure(new SqliteStorageAdapter(dbPath));
+    Storage.initialize({ dbPath });
   });
 
   afterEach(async () => {
@@ -31,6 +30,7 @@ describe("BlacklistStore SQLite persistence", () => {
       updatedAt: 200,
     });
 
+    Storage.reset();
     Storage.configure(new SqliteStorageAdapter(dbPath));
 
     expect(BlacklistStore.get(stored.id)).toEqual(stored);
@@ -54,9 +54,7 @@ describe("BlacklistStore SQLite persistence", () => {
     const bare = Storage.get();
     Storage.configure({
       transaction: bare.transaction.bind(bare),
-      session: bare.session,
-      message: bare.message,
-      part: bare.part,
+      close: () => bare.close?.(),
     });
 
     expect(() => BlacklistStore.list()).toThrow("does not implement blacklist");

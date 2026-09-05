@@ -5,7 +5,7 @@ import { Storage } from "../../src/storage/storage";
 import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage";
 import { createSqliteSurfaceKeyAdapter } from "../../src/storage/sqlite-surface-key-adapter";
 import "../../src/storage/initialize";
-import { Session } from "../../src/session";
+import { materializeSession } from "../helpers/session";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -17,8 +17,7 @@ describe("SurfaceKey SQLite persistence", () => {
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "surfacekey-test-"));
     dbPath = join(tmpDir, "test.db");
-    Storage.initialize({ dbPath: ":memory:" });
-    Storage.configure(new SqliteStorageAdapter(dbPath));
+    Storage.initialize({ dbPath });
   });
 
   afterEach(async () => {
@@ -27,32 +26,22 @@ describe("SurfaceKey SQLite persistence", () => {
   });
 
   test("persists across Storage re-init", () => {
-    const session = Session.create({
-      traceId: "trace-surface-key",
-      title: "persist-test",
-      model: { providerID: "test", modelID: "test-model" },
-    });
+    const session = materializeSession("persist-test");
     SurfaceKey.claim("telegram:bot:chat:123", session.id);
 
+    Storage.reset();
     Storage.configure(new SqliteStorageAdapter(dbPath));
 
     expect(SurfaceKey.lookup("telegram:bot:chat:123")).toBe(session.id);
   });
 
   test("re-claim with expected owner updates session in SQLite", () => {
-    const session1 = Session.create({
-      traceId: "trace-surface-key",
-      title: "old-session",
-      model: { providerID: "test", modelID: "test-model" },
-    });
-    const session2 = Session.create({
-      traceId: "trace-surface-key",
-      title: "new-session",
-      model: { providerID: "test", modelID: "test-model" },
-    });
+    const session1 = materializeSession("old-session");
+    const session2 = materializeSession("new-session");
     SurfaceKey.claim("slack:ws:channel:C1", session1.id);
     SurfaceKey.claim("slack:ws:channel:C1", session2.id, session1.id);
 
+    Storage.reset();
     Storage.configure(new SqliteStorageAdapter(dbPath));
 
     expect(SurfaceKey.lookup("slack:ws:channel:C1")).toBe(session2.id);

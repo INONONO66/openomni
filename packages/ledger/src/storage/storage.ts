@@ -1,6 +1,5 @@
-import type { BusEvent, Message, Storage as ProtocolStorage } from "@openomni/protocol";
+import type { BusEvent, Storage as ProtocolStorage } from "@openomni/protocol";
 import { AsyncLocalStorage } from "node:async_hooks";
-import type { SessionInfo } from "../session/info";
 import type { WorkerRunStateStore } from "../worker-run/state-store";
 
 export const productionStorageAdapterBrand: unique symbol = Symbol("productionStorageAdapter");
@@ -19,26 +18,6 @@ export namespace Storage {
      * close followed by reset is a supported teardown order.
      */
     close?(): void;
-    session: {
-      get(id: string): SessionInfo | undefined;
-      set(id: string, info: SessionInfo): void;
-      list(): SessionInfo[];
-      remove(id: string): boolean;
-    };
-    message: {
-      get(sessionID: string, messageID: string): Message.Info | undefined;
-      set(sessionID: string, message: Message.Info): void;
-      list(sessionID: string): Message.Info[];
-      remove(sessionID: string, messageID: string): boolean;
-      setStatus?(messageID: string, status: string): void;
-      findByStatus?(status: string): Array<{ id: string; sessionId: string }>;
-    };
-    part: {
-      get(messageID: string, partID: string): Message.Part | undefined;
-      set(messageID: string, part: Message.Part): void;
-      list(messageID: string): Message.Part[];
-      remove(messageID: string, partID: string): boolean;
-    };
     // Optional here for test fakes only — SurfaceKey operations fail closed
     // (requireSubAdapter throw) when it is missing; production adapters wire
     // it as required (SqliteStorageAdapter).
@@ -88,9 +67,6 @@ const storageScope = new AsyncLocalStorage<StorageScope>();
 
 export namespace Storage {
   const requiredProductionCapabilities = [
-    "session",
-    "message",
-    "part",
     "surfaceKey",
 
     "wait",
