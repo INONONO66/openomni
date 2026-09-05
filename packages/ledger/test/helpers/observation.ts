@@ -1,162 +1,48 @@
 import type { BusEvent } from "@openomni/protocol";
-import { AsyncLocalStorage } from "node:async_hooks";
 
-type BusData =
-  | bigint
-  | boolean
-  | null
-  | number
-  | object
-  | string
-  | symbol
-  | undefined;
+type Datum = object | string | number | boolean | bigint | symbol | null | undefined;
+type Subscriber = (event: BusEvent.Descriptor<never>, data: never) => void;
+type Observer = (event: { readonly name: string }, data: Datum) => void;
 
-type ParseResult<T> = { readonly data: T; readonly success: true } | { readonly success: false };
+const subscriptions = new Map<string, Set<Subscriber>>();
+const observers = new Set<Observer>();
 
-type Handler = <T>(event: BusEvent.Descriptor<T>, data: T) => void;
-type Observer = (event: Bus.PublishedDescriptor, data: BusData) => void;
-
-function toBusData<T>(value: T): BusData {
-  if (value === null) return null;
-  if (typeof value === "object" || typeof value === "function") return value;
-  if (typeof value === "bigint") return value;
-  if (typeof value === "boolean") return value;
-  if (typeof value === "number") return value;
-  if (typeof value === "string") return value;
-  if (typeof value === "symbol") return value;
-  return undefined;
+function publish<T>(event: BusEvent.Descriptor<T>, data: T): void {
+  for (const observer of [...observers]) queueMicrotask(() => observer(event, data as Datum));
+  for (const subscriber of [...(subscriptions.get(event.name) ?? [])]) {
+    queueMicrotask(() => subscriber(event as BusEvent.Descriptor<never>, data as never));
+  }
 }
 
-function isEventData<T, U>(
-  expected: BusEvent.Descriptor<T>,
-  published: BusEvent.Descriptor<U>,
-  _data: U,
-): _data is U & T {
-  return expected.name === published.name;
+function subscribe<T>(
+  event: BusEvent.Descriptor<T>,
+  handler: (data: T) => void,
+  options?: { match?: Partial<T> },
+): () => void {
+  const set = subscriptions.get(event.name) ?? new Set<Subscriber>();
+  const subscriber: Subscriber = (_descriptor, data) => {
+    if (options?.match !== undefined && !matches(data, options.match)) return;
+    handler(data);
+  };
+  set.add(subscriber);
+  subscriptions.set(event.name, set);
+  return () => set.delete(subscriber);
 }
 
-interface Subscription {
-  handler: Handler;
+function matches<T>(data: T, expected: Partial<T>): boolean {
+  if (data === null || typeof data !== "object") return false;
+  return Object.entries(expected).every(([key, value]) => Reflect.get(data, key) === value);
 }
 
-type BusState = {
-  subscribers: Map<string, Set<Subscription>>;
-  observers: Set<Observer>;
+export const Bus = {
+  publish,
+  subscribe,
+  observe(observer: Observer): () => void {
+    observers.add(observer);
+    return () => observers.delete(observer);
+  },
+  reset(): void {
+    subscriptions.clear();
+    observers.clear();
+  },
 };
-
-const rootState = createState();
-const busScope = new AsyncLocalStorage<BusState>();
-
-function createState(): BusState {
-  return { subscribers: new Map(), observers: new Set() };
-}
-
-function currentState(): BusState {
-  return busScope.getStore() ?? rootState;
-}
-
-export namespace Bus {
-
-  export interface PublishedDescriptor {
-    readonly name: string;
-    readonly schema: { readonly safeParse: (value: BusData) => ParseResult<BusData> };
-    readonly visibility?: BusEvent.Visibility;
-  }
-
-  export function publish<T>(event: BusEvent.Descriptor<T>, data: T): void {
-    const state = currentState();
-    const subs = state.subscribers.get(event.name);
-    if (state.observers.size > 0) {
-      const publishedEvent: PublishedDescriptor = {
-        name: event.name,
-        schema: {
-          safeParse: (value) => {
-            const parsed = event.schema.safeParse(value);
-            return parsed.success
-              ? { success: true, data: toBusData(parsed.data) }
-              : { success: false };
-          },
-        },
-        ...(event.visibility === undefined ? {} : { visibility: event.visibility }),
-      };
-      const publishedData = toBusData(data);
-      const observerSnapshot = [...state.observers];
-      for (const observer of observerSnapshot) {
-        queueMicrotask(() => {
-          try {
-            observer(publishedEvent, publishedData);
-          } catch (err) {
-            console.warn("Bus observer error", { event: event.name, error: String(err) });
-          }
-        });
-      }
-    }
-
-    if (!subs) return;
-
-    const snapshot = [...subs];
-
-    for (const sub of snapshot) {
-      queueMicrotask(() => {
-        try {
-          sub.handler(event, data);
-        } catch (err) {
-          console.warn("Bus handler error", { event: event.name, error: String(err) });
-        }
-      });
-    }
-  }
-
-  export function subscribe<T>(
-    event: BusEvent.Descriptor<T>,
-    handler: (data: T) => void,
-    options?: { match?: Partial<T> },
-  ): () => void {
-    const state = currentState();
-    let subs = state.subscribers.get(event.name);
-    if (!subs) {
-      subs = new Set();
-      state.subscribers.set(event.name, subs);
-    }
-    const subscription: Subscription = {
-      handler: (publishedEvent, data) => {
-        if (!isEventData(event, publishedEvent, data)) return;
-        if (options?.match && !matches(data, options.match)) return;
-        handler(data);
-      },
-    };
-    subs.add(subscription);
-    const captured = subs;
-    const eventName = event.name;
-    return () => {
-      captured.delete(subscription);
-      if (captured.size === 0 && state.subscribers.get(eventName) === captured) {
-        state.subscribers.delete(eventName);
-      }
-    };
-  }
-
-  export function observe(handler: Observer): () => void {
-    const state = currentState();
-    state.observers.add(handler);
-    return () => {
-      state.observers.delete(handler);
-    };
-  }
-
-  export function reset(): void {
-    const state = currentState();
-    state.subscribers.clear();
-    state.observers.clear();
-  }
-
-  function matches<T>(data: T, match: Partial<T>): boolean {
-    if (data === null || typeof data !== "object") return false;
-    if (match === null || typeof match !== "object") return true;
-    for (const key of Object.keys(match)) {
-      if (Reflect.get(data, key) !== Reflect.get(match, key)) return false;
-    }
-    return true;
-  }
-}
-

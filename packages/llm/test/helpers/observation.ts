@@ -1,170 +1,41 @@
 import type { BusEvent } from "@openomni/protocol";
-import { AsyncLocalStorage } from "node:async_hooks";
 
-type BusData =
-  | bigint
-  | boolean
-  | null
-  | number
-  | object
-  | string
-  | symbol
-  | undefined;
+type Datum = object | string | number | boolean | bigint | symbol | null | undefined;
+type Listener = (descriptor: BusEvent.Descriptor<never>, value: never) => void;
+const listeners = new Map<string, Set<Listener>>();
 
-type ParseResult<T> = { readonly data: T; readonly success: true } | { readonly success: false };
-
-type Handler = <T>(event: BusEvent.Descriptor<T>, data: T) => void;
-type Observer = (event: PublishedDescriptor, data: BusData) => void;
-
-function toBusData<T>(value: T): BusData {
-  if (value === null) return null;
-  if (typeof value === "object" || typeof value === "function") return value;
-  if (typeof value === "bigint") return value;
-  if (typeof value === "boolean") return value;
-  if (typeof value === "number") return value;
-  if (typeof value === "string") return value;
-  if (typeof value === "symbol") return value;
-  return undefined;
+function publish<T>(descriptor: BusEvent.Descriptor<T>, value: T): void {
+  for (const listener of listeners.get(descriptor.name) ?? []) {
+    queueMicrotask(() => listener(descriptor as BusEvent.Descriptor<never>, value as never));
+  }
 }
 
-function isEventData<T, U>(
-  expected: BusEvent.Descriptor<T>,
-  published: BusEvent.Descriptor<U>,
-  _data: U,
-): _data is U & T {
-  return expected.name === published.name;
+function subscribe<T>(descriptor: BusEvent.Descriptor<T>, listener: (value: T) => void): () => void {
+  const bucket = listeners.get(descriptor.name) ?? new Set<Listener>();
+  const wrapped: Listener = (_event, value) => listener(value);
+  bucket.add(wrapped);
+  listeners.set(descriptor.name, bucket);
+  return () => bucket.delete(wrapped);
 }
 
-interface Subscription {
-  handler: Handler;
-}
-
-type BusState = {
-  subscribers: Map<string, Set<Subscription>>;
-  observers: Set<Observer>;
+export const Bus = {
+  publish,
+  subscribe,
+  reset: () => listeners.clear(),
 };
 
-const rootState = createState();
-const busScope = new AsyncLocalStorage<BusState>();
-
-function createState(): BusState {
-  return { subscribers: new Map(), observers: new Set() };
-}
-
-function currentState(): BusState {
-  return busScope.getStore() ?? rootState;
-}
-
-interface PublishedDescriptor {
-  readonly name: string;
-  readonly schema: { readonly safeParse: (value: BusData) => ParseResult<BusData> };
-  readonly visibility?: BusEvent.Visibility;
-}
-
-function publish<T>(event: BusEvent.Descriptor<T>, data: T): void {
-  const state = currentState();
-  const subs = state.subscribers.get(event.name);
-  if (state.observers.size > 0) {
-    const publishedEvent: PublishedDescriptor = {
-      name: event.name,
-      schema: {
-        safeParse: (value) => {
-          const parsed = event.schema.safeParse(value);
-          return parsed.success
-            ? { success: true, data: toBusData(parsed.data) }
-            : { success: false };
-        },
-      },
-      ...(event.visibility === undefined ? {} : { visibility: event.visibility }),
-    };
-    const publishedData = toBusData(data);
-    const observerSnapshot = [...state.observers];
-    for (const observer of observerSnapshot) {
-      queueMicrotask(() => {
-        try {
-          observer(publishedEvent, publishedData);
-        } catch (err) {
-          console.warn("Bus observer error", { event: event.name, error: String(err) });
-        }
-      });
-    }
-  }
-
-  if (!subs) return;
-
-  const snapshot = [...subs];
-
-  for (const sub of snapshot) {
-    queueMicrotask(() => {
-      try {
-        sub.handler(event, data);
-      } catch (err) {
-        console.warn("Bus handler error", { event: event.name, error: String(err) });
-      }
-    });
-  }
-}
-
-function subscribe<T>(
-  event: BusEvent.Descriptor<T>,
-  handler: (data: T) => void,
-  options?: { match?: Partial<T> },
-): () => void {
-  const state = currentState();
-  let subs = state.subscribers.get(event.name);
-  if (!subs) {
-    subs = new Set();
-    state.subscribers.set(event.name, subs);
-  }
-  const subscription: Subscription = {
-    handler: (publishedEvent, data) => {
-      if (!isEventData(event, publishedEvent, data)) return;
-      if (options?.match && !matches(data, options.match)) return;
-      handler(data);
-    },
-  };
-  subs.add(subscription);
-  const captured = subs;
-  const eventName = event.name;
-  return () => {
-    captured.delete(subscription);
-    if (captured.size === 0 && state.subscribers.get(eventName) === captured) {
-      state.subscribers.delete(eventName);
-    }
-  };
-}
-
-function reset(): void {
-  const state = currentState();
-  state.subscribers.clear();
-  state.observers.clear();
-}
-
-function matches<T>(data: T, match: Partial<T>): boolean {
-  if (data === null || typeof data !== "object") return false;
-  if (match === null || typeof match !== "object") return true;
-  for (const key of Object.keys(match)) {
-    if (Reflect.get(data, key) !== Reflect.get(match, key)) return false;
-  }
-  return true;
-}
-
-export const Bus = { publish, reset, subscribe };
-
 export interface Collector extends BusEvent.Sink {
-  readonly events: readonly { readonly name: string; readonly data: BusData }[];
-  named(name: string): readonly BusData[];
+  readonly events: readonly { readonly name: string; readonly data: Datum }[];
+  named(name: string): readonly Datum[];
   reset(): void;
 }
 
 export function collector(): Collector {
-  const events: Array<{ readonly name: string; readonly data: BusData }> = [];
+  const events: Array<{ readonly name: string; readonly data: Datum }> = [];
   return {
-    publish(event, data) {
-      events.push({ name: event.name, data: toBusData(data) });
-    },
     events,
-    named: (name) => events.filter((event) => event.name === name).map((event) => event.data),
+    publish: (event, data) => events.push({ name: event.name, data: data as Datum }),
+    named: (name) => events.filter((entry) => entry.name === name).map((entry) => entry.data),
     reset: () => {
       events.length = 0;
     },
