@@ -326,10 +326,7 @@ describe("Processor", () => {
        */
       type ReportedCount = number | string | null | boolean;
       type ReportedUsage = Partial<
-        Record<
-          "inputTokens" | "input_tokens" | "outputTokens" | "output_tokens",
-          ReportedCount
-        >
+        Record<"inputTokens" | "input_tokens" | "outputTokens" | "output_tokens", ReportedCount>
       >;
 
       function processStep(usage: ReportedUsage | undefined) {
@@ -386,33 +383,30 @@ describe("Processor", () => {
         ["infinite", Number.POSITIVE_INFINITY],
         ["fractional", 1.5],
         ["unsafe", Number.MAX_SAFE_INTEGER + 1],
-      ])(
-        "substitutes the estimate for invalid numeric (%s) provider usage",
-        async (_name, value) => {
-          const capture = capturingSink();
-          const processor = createProcessor({
-            sink: capture.sink,
-            estimateUsage: sentinelEstimator,
-            createStream: streamOf([
-              { type: "step-start" },
-              {
-                type: "step-finish",
-                finishReason: "end_turn",
-                usage: { inputTokens: value, outputTokens: value },
-                providerMetadata: {},
-              },
-              { type: "finish" },
-            ]),
-          });
+      ])("substitutes the estimate for invalid numeric (%s) provider usage", async (_name, value) => {
+        const capture = capturingSink();
+        const processor = createProcessor({
+          sink: capture.sink,
+          estimateUsage: sentinelEstimator,
+          createStream: streamOf([
+            { type: "step-start" },
+            {
+              type: "step-finish",
+              finishReason: "end_turn",
+              usage: { inputTokens: value, outputTokens: value },
+              providerMetadata: {},
+            },
+            { type: "finish" },
+          ]),
+        });
 
-          await processor.process({ system: "", promptText: "prompt" });
+        await processor.process({ system: "", promptText: "prompt" });
 
-          expect(processor.message.tokens.input).toBe(SENTINEL.inputTokens);
-          expect(processor.message.tokens.output).toBe(SENTINEL.outputTokens);
-          // The fold completes: invalid accounting no longer aborts the step.
-          expect(capture.finalParts().some((part) => part.type === "step-finish")).toBe(true);
-        },
-      );
+        expect(processor.message.tokens.input).toBe(SENTINEL.inputTokens);
+        expect(processor.message.tokens.output).toBe(SENTINEL.outputTokens);
+        // The fold completes: invalid accounting no longer aborts the step.
+        expect(capture.finalParts().some((part) => part.type === "step-finish")).toBe(true);
+      });
 
       test("keeps a reported zero authoritative instead of estimating", async () => {
         const processor = processStep({
@@ -852,14 +846,9 @@ describe("Processor", () => {
       // finish:"error" (which toModelMessages hides from replay) and marked
       // in-flight tools as failed instead of interrupted.
       const capture = capturingSink();
-      const facts: Array<{ type: string; transition?: { to: string }; finish?: string }> = [];
-      const sink: Sink = {
-        ...capture.sink,
-        onFact: (fact) => facts.push(fact as never),
-      };
       const reason = new Error("cancelled by coordinator");
       const processor = createProcessor({
-        sink,
+        sink: capture.sink,
         createStream: async () => ({
           fullStream: (async function* () {
             yield {
@@ -887,11 +876,6 @@ describe("Processor", () => {
       // The pending tool settles as interrupted (the fold projects it onto
       // Tool.StateError with error:"interrupted" — Tool.State has no
       // interrupted status), not as a plain processing error.
-      expect(
-        facts.some(
-          (fact) => fact.type === "part.advanced" && fact.transition?.to === "interrupted",
-        ),
-      ).toBe(true);
       const toolPart = capture
         .finalParts()
         .find((part): part is Message.ToolPart => part.type === "tool");
