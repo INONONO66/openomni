@@ -156,7 +156,6 @@ describe("operator transport reaches every model caller", () => {
       model: { provider: "fake", id: "resident-test" },
       apiKey: "test-key",
       transport: OPERATOR_TRANSPORT,
-      middleware: [],
       tools: {},
       targets: () => [],
       llm: {

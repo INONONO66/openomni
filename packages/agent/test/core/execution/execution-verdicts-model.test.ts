@@ -124,6 +124,112 @@ describe("the single L2 executor's four-kind verdict model", () => {
     expect(actions).toHaveLength(4);
   });
 
+  it("passes the committed intent receipt to the body after its commit resolves", async () => {
+    const intentCommitReached = Promise.withResolvers<void>();
+    const releaseIntentCommit = Promise.withResolvers<void>();
+    let revision = 0;
+    let committedIntent: LedgerAction.Receipt | undefined;
+    let bodyIntent: LedgerAction.Receipt | undefined;
+    const body = mock(async (intent: LedgerAction.Receipt) => {
+      bodyIntent = intent;
+      return { ok: true };
+    });
+    const executor = createExecutor({
+      policy: compilePolicySnapshot({
+        generation: 1,
+        rows: [mandatory],
+        mandatory: ["compaction"],
+      }),
+      ledger: {
+        async commit(action) {
+          const isIntent = action.kind === "llm" && committedIntent === undefined;
+          if (isIntent) {
+            intentCommitReached.resolve();
+            await releaseIntentCommit.promise;
+          }
+          revision += 1;
+          const receipt = {
+            action: { ...action, ordinal: revision },
+            revision,
+          } satisfies LedgerAction.Receipt;
+          if (isIntent) committedIntent = receipt;
+          return receipt;
+        },
+      },
+      observations: { publish: () => undefined },
+      identity: {
+        sessionId: "session-1",
+        role: "resident",
+        parentActionId: "turn-intent-1",
+      },
+      clock: () => 100,
+      entropy: () => `receipt-${revision + 1}`,
+    });
+
+    const running = executor.run(
+      { kind: "llm", op: "test", intent: {}, effect: {} },
+      body,
+    );
+    await intentCommitReached.promise;
+    expect(body).toHaveBeenCalledTimes(0);
+
+    releaseIntentCommit.resolve();
+    await running;
+
+    expect(body).toHaveBeenCalledTimes(1);
+    expect(bodyIntent).toBe(committedIntent);
+    expect(bodyIntent?.action.parentId).toBe("turn-intent-1");
+  });
+
+  it("fails closed when a transform removes the result envelope", async () => {
+    const { actions, executor } = harness([
+      row("remove-result", "tool", "post", {
+        type: "transform",
+        name: "redact",
+        paths: ["result"],
+      }),
+    ]);
+
+    const result = await executor.run(
+      { kind: "tool", op: "test", intent: {}, effect: {} },
+      async () => ({ ok: true }),
+    );
+
+    expect(result).toMatchObject({ terminal: "blocked_post", reason: "invalid_output" });
+    expect(resultEffects(actions, "tool")).toEqual([
+      expect.objectContaining({ terminal: "blocked_post", reason: "invalid_output" }),
+    ]);
+  });
+
+  it("commits a linked failed result before rethrowing a body failure", async () => {
+    const { actions, executor } = harness([]);
+    const failure = new TypeError("body failed");
+
+    await expect(
+      executor.run(
+        { kind: "tool", op: "test", intent: { requested: true }, effect: { completed: false } },
+        async () => {
+          throw failure;
+        },
+      ),
+    ).rejects.toBe(failure);
+
+    expect(actions.map((action) => action.kind)).toEqual([
+      "policy.decision",
+      "tool",
+      "tool",
+    ]);
+    const intent = actions[1];
+    const result = actions[2];
+    expect(result?.parentId).toBe(intent?.id);
+    expect(result?.effect.value).toEqual({
+      phase: "result",
+      terminal: "failed",
+      effect: { completed: false },
+      error: { name: "TypeError" },
+    });
+  });
+
   for (const kind of kinds) {
     it(`${kind}: pre deny commits no intent/result and never calls body`, async () => {
       const { actions, executor } = harness([

@@ -1,15 +1,46 @@
 import { describe, expect, it } from "bun:test";
 import { z } from "zod";
 import { createCellRegistry } from "./cell-registry";
-import { createDispatcher, defineTool, eraseTool, type Executor } from "@openomni/agent";
-import type { Tool, ToolExecutionContext } from "@openomni/protocol";
+import {
+  createDispatcher,
+  createExecutor,
+  defineTool,
+  eraseTool,
+} from "@openomni/agent";
+import { LedgerAction, type Tool, type ToolExecutionContext } from "@openomni/protocol";
 import { createRunCodeTool, type CellPorts } from "./execution/run-code";
-
-const executor: Executor = {
-  async run(_request, body) {
-    return { terminal: "executed", value: await body() };
+let ordinal = 0;
+const executor = createExecutor({
+  policy: {
+    generation: 1,
+    contentHash: "cell-test-policy",
+    evaluate: (input) => ({
+      generation: 1,
+      snapshotHash: "cell-test-policy",
+      inputHash: `${input.kind}:${input.phase}:${input.op}`,
+      matchedRuleIds: [],
+      verdict: "allow",
+      value: input.value,
+      effects: [],
+      obligations: [],
+      bucket: `${input.kind}/${input.phase}/${input.op}`,
+      evaluatedRuleCount: 0,
+    }),
   },
-};
+  ledger: {
+    async commit(action) {
+      ordinal += 1;
+      return {
+        action: LedgerAction.Node.parse({ ...action, ordinal }),
+        revision: ordinal,
+      };
+    },
+  },
+  observations: { publish: () => undefined },
+  identity: { sessionId: "parent-session", role: "resident", parentActionId: "parent-turn" },
+  clock: () => 1,
+  entropy: () => `cell-action-${ordinal + 1}`,
+});
 
 const parent = (signal = new AbortController().signal): ToolExecutionContext => ({
   sessionId: "parent-session",

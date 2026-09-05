@@ -1,14 +1,20 @@
 import { SessionHandleStore } from "@openomni/ledger";
 import { createPolicyCompiler, type CompiledPolicySnapshot } from "@openomni/policy";
 import {
+  canonicalDigest,
   Deadline,
   type Inbox,
   type LedgerAction,
   type LedgerSession,
   type ObservationSink,
+  type PlainObject,
+  type PlainValue,
   SessionGeneration,
   SessionTurn,
 } from "@openomni/protocol";
+import type { AgentExecutionLifecycle } from "./core/types";
+import { RunReasonCode } from "./core/policy/reason-codes";
+import { createExecutor } from "./executor";
 
 interface SessionTool {
   readonly name: string;
@@ -46,6 +52,7 @@ export interface SessionRunnerInput {
   readonly actionId: string;
   readonly ledger: SessionActionCommitPort;
   readonly policy: CompiledPolicySnapshot;
+  readonly execution?: AgentExecutionLifecycle;
   readonly resultId: string;
   readonly parentActionId: string | null;
   readonly boundaryActionId: string | null;
@@ -150,6 +157,15 @@ class SessionLeaseError extends Error {
   }
 }
 
+class SessionPolicyRefusal extends Error {
+  readonly code = "session_policy_refused";
+
+  constructor(readonly reason: string) {
+    super("session policy refused");
+    this.name = "SessionPolicyRefusal";
+  }
+}
+
 export class SessionCommitError extends Error {
   constructor(readonly result: Exclude<LedgerSession.CommitResult, { readonly ok: true }>) {
     super(`session commit ${result.reason}`);
@@ -209,21 +225,7 @@ class SessionRegistry {
   private readonly policies = createPolicyCompiler({
     source: {
       append: () => false,
-      rows: (generation) => {
-        const rows = SessionHandleStore.policyRows(generation);
-        if (generation !== 0 || rows.length > 0) return rows;
-        return [
-          {
-            name: "compaction",
-            kind: "turn",
-            phase: "post",
-            match: { encodingVersion: 1, value: { op: "compaction" } },
-            verdict: { encodingVersion: 1, value: { type: "allow" } },
-            priority: 0,
-            generation,
-          },
-        ];
-      },
+      rows: (generation) => SessionHandleStore.policyRows(generation),
     },
   });
   private swept = false;
@@ -458,7 +460,25 @@ function createController(
       createdAt: clock(),
       parentActionId: actions.at(-1)?.id ?? null,
     });
-    if (kind === "interrupt" && current.state === "running") controller?.abort();
+    if (kind === "interrupt" && current.state === "running") {
+      try {
+        const interrupted = SessionHandleStore.row(sessionId);
+        const committed = SessionHandleStore.commit({
+          sessionId,
+          owner,
+          fence,
+          now: clock(),
+          expectedRevision: interrupted.revision,
+          actions: [],
+          consumeInboxIds: [],
+          state: "interrupted",
+          releaseLease: false,
+        });
+        requireCommit(committed);
+      } finally {
+        controller?.abort();
+      }
+    }
     if (kind === "resume" && current.state === "running") return undefined;
     return reconcile();
   }
@@ -512,9 +532,18 @@ function createController(
     const actions = SessionHandleStore.tree(sessionId);
     const generation = SessionHandleStore.latestGeneration(actions);
     const pending = SessionHandleStore.pendingInbox(sessionId);
+    const promptRefusal = await evaluatePromptPolicies(
+      pending,
+      pinPolicy(generation.policyGeneration),
+    );
+    if (promptRefusal !== undefined) {
+      await consumePolicyBlockedInbox(pending, true);
+      return policyRefusalResult(promptRefusal.reason);
+    }
     const resultId = entropy();
     const turnId = entropy();
-    const parentActionId = actions.at(-1)?.id ?? null;
+    const currentActions = SessionHandleStore.tree(sessionId);
+    const parentActionId = currentActions.at(-1)?.id ?? null;
     const deliveries = deliveryActions(pending, turnId, "before_llm", parentActionId);
     const envelope = turnIntentAction({
       id: turnId,
@@ -532,7 +561,7 @@ function createController(
       owner,
       fence,
       now: clock(),
-      expectedRevision: current.revision,
+      expectedRevision: SessionHandleStore.row(sessionId).revision,
       actions: [...deliveries, envelope],
       consumeInboxIds: pending.map((item) => item.id),
       state: "running",
@@ -569,6 +598,106 @@ function createController(
       generation,
       resume: false,
     });
+  }
+
+  async function evaluatePromptPolicies(
+    items: readonly Inbox.Row[],
+    policy: CompiledPolicySnapshot,
+  ): Promise<SessionPolicyRefusal | undefined> {
+    const ledger = createExecutionLedger();
+    let refusal: SessionPolicyRefusal | undefined;
+    for (const item of items) {
+      if (item.kind !== "prompt") continue;
+      const recorded: PlainValue = { inboxId: item.id, status: "recorded" };
+      const outcome = await createExecutor({
+        policy,
+        ledger,
+        observations: runtime.observations,
+        identity: {
+          sessionId,
+          role: SessionHandleStore.row(sessionId).role,
+          parentActionId: item.id,
+        },
+        clock,
+        entropy,
+      }).runExisting(
+        {
+          kind: "prompt",
+          op: "inbox",
+          intent: {
+            inboxId: item.id,
+            content: item.content,
+            origin: item.origin.value,
+            createdAt: item.createdAt,
+            ordinal: item.ordinal,
+          },
+          effect: { status: "recorded" },
+        },
+        async () => recorded,
+      );
+      if (refusal !== undefined) continue;
+      if (outcome.terminal !== "executed") {
+        refusal = new SessionPolicyRefusal(outcome.reason);
+      } else if (canonicalDigest(outcome.value) !== canonicalDigest(recorded)) {
+        refusal = new SessionPolicyRefusal("invalid_output");
+      }
+    }
+    return refusal;
+  }
+
+  async function consumePolicyBlockedInbox(
+    items: readonly Inbox.Row[],
+    releaseLease: boolean,
+  ): Promise<void> {
+    const current = SessionHandleStore.row(sessionId);
+    commitSession({
+      expectedRevision: current.revision,
+      actions: [],
+      consumeInboxIds: items.map((item) => item.id),
+      state: current.state,
+      releaseLease,
+    });
+  }
+
+  function commitSession(input: {
+    readonly expectedRevision: number;
+    readonly actions: readonly LedgerAction.Append[];
+    readonly consumeInboxIds: readonly string[];
+    readonly state: LedgerSession.State;
+    readonly releaseLease: boolean;
+    readonly generation?: LedgerSession.GenerationPointers;
+  }): Extract<LedgerSession.CommitResult, { readonly ok: true }> {
+    const committed = SessionHandleStore.commit({
+      sessionId,
+      owner,
+      fence,
+      now: clock(),
+      expectedRevision: input.expectedRevision,
+      actions: [...input.actions],
+      consumeInboxIds: [...input.consumeInboxIds],
+      state: input.state,
+      ...(input.generation === undefined ? {} : { generation: input.generation }),
+      releaseLease: input.releaseLease,
+    });
+    if (!committed.ok) throw new SessionCommitError(committed);
+    return committed;
+  }
+
+  function createExecutionLedger(): SessionActionCommitPort {
+    return {
+      async commit(action) {
+        const current = SessionHandleStore.row(sessionId);
+        const receipt = commitSession({
+          expectedRevision: current.revision,
+          actions: [action],
+          consumeInboxIds: [],
+          state: current.state,
+          releaseLease: false,
+        }).receipts[0];
+        if (receipt === undefined) throw new Error("single-action commit returned no receipt");
+        return receipt;
+      },
+    };
   }
 
   async function resumeTurn(open: SessionHandleStore.OpenTurn): Promise<SessionRunnerResult> {
@@ -700,6 +829,16 @@ function createController(
     let boundaryActionId = input.boundaryActionId;
     let result: SessionRunnerResult;
     let interruptedRunner: Promise<SessionRunnerResult> | undefined;
+    const policy = pinPolicy(input.generation.policyGeneration);
+    const ledger = createExecutionLedger();
+    const execution = createExecutor({
+      policy,
+      ledger,
+      observations: runtime.observations,
+      identity: { sessionId, role: row.role, parentActionId: input.turnId },
+      clock,
+      entropy,
+    });
     const boundary = async (kind: SessionTurn.Boundary): Promise<SessionBoundaryResult> => {
       const drained = await drainBoundary(
         input.turnId,
@@ -707,6 +846,7 @@ function createController(
         kind,
         input.resumeCount,
         parentActionId,
+        policy,
       );
       parentActionId = drained.parentActionId;
       boundaryActionId = drained.boundaryActionId;
@@ -721,50 +861,76 @@ function createController(
           { once: true },
         );
       });
-      const ledger: SessionActionCommitPort = {
-        async commit(action) {
-          const current = SessionHandleStore.row(sessionId);
-          const committed = SessionHandleStore.commit({
-            sessionId,
-            owner,
-            fence,
-            now: clock(),
-            expectedRevision: current.revision,
-            actions: [action],
-            consumeInboxIds: [],
-            state: "running",
-            releaseLease: false,
-          });
-          requireCommit(committed);
-          if (!committed.ok) throw new SessionCommitError(committed);
-          const receipt = committed.receipts[0];
-          if (receipt === undefined) throw new Error("single-action commit returned no receipt");
-          return receipt;
+      let running: Promise<SessionRunnerResult> | undefined;
+      let runnerResult: SessionRunnerResult | undefined;
+      let evaluatedResult: PlainValue | undefined;
+      const outcome = await execution.runExisting(
+        {
+          kind: "turn",
+          op: "session",
+          intent: {
+            turnId: input.turnId,
+            resultId: input.resultId,
+            resumeCount: input.resumeCount,
+            resume: input.resume,
+            toolsGeneration: input.generation.generation,
+            toolsHash: input.generation.toolsHash,
+            systemHash: input.generation.systemHash,
+            policyGeneration: input.generation.policyGeneration,
+          },
+          effect: { terminal: "sealed" },
         },
-      };
-      const running = runner({
-        sessionId,
-        role: row.role,
-        turnId: input.turnId,
-        actionId: input.parentActionId,
-        ledger,
-        policy: pinPolicy(input.generation.policyGeneration),
-        resultId: input.resultId,
-        parentActionId,
-        boundaryActionId,
-        messages: sessionMessages(SessionHandleStore.tree(sessionId)),
-        tools: input.generation.tools,
-        toolsGeneration: input.generation.generation,
-        toolsHash: input.generation.toolsHash,
-        system: input.generation.systemValue,
-        systemHash: input.generation.systemHash,
-        policyGeneration: input.generation.policyGeneration,
-        resumeCount: input.resumeCount,
-        signal: turnController.signal,
-        boundary,
-      });
-      result = await Promise.race([running, aborted]);
-      if (turnController.signal.aborted) {
+        async () => {
+          if (turnController.signal.aborted) {
+            runnerResult = { kind: "interrupted", text: "" };
+          } else {
+            running = runner({
+              sessionId,
+              role: row.role,
+              turnId: input.turnId,
+              actionId: input.parentActionId,
+              ledger,
+              policy,
+              execution,
+              resultId: input.resultId,
+              parentActionId,
+              boundaryActionId,
+              messages: sessionMessages(SessionHandleStore.tree(sessionId)),
+              tools: input.generation.tools,
+              toolsGeneration: input.generation.generation,
+              toolsHash: input.generation.toolsHash,
+              system: input.generation.systemValue,
+              systemHash: input.generation.systemHash,
+              policyGeneration: input.generation.policyGeneration,
+              resumeCount: input.resumeCount,
+              signal: turnController.signal,
+              boundary,
+            });
+            try {
+              runnerResult = await Promise.race([running, aborted]);
+            } catch (error) {
+              runnerResult = {
+                kind: "error",
+                text: error instanceof Error ? error.message : String(error),
+                ...(error instanceof Error ? { cause: error } : {}),
+              };
+            }
+          }
+          evaluatedResult = sessionRunnerResultValue(runnerResult);
+          return evaluatedResult;
+        },
+      );
+      if (outcome.terminal !== "executed") {
+        result = policyRefusalResult(outcome.reason);
+      } else if (runnerResult === undefined || evaluatedResult === undefined) {
+        result = policyRefusalResult("invalid_output");
+      } else if (canonicalDigest(outcome.value) === canonicalDigest(evaluatedResult)) {
+        result = runnerResult;
+      } else {
+        result =
+          sessionRunnerResultFromValue(outcome.value) ?? policyRefusalResult("invalid_output");
+      }
+      if (turnController.signal.aborted && running !== undefined) {
         interruptedRunner = running;
         // Mark the live runner BEFORE the interrupted terminal is sealed: any
         // configure re-entered from a synchronous observation of that seal
@@ -856,6 +1022,7 @@ function createController(
     boundary: SessionTurn.Boundary,
     resumeCount: number,
     parentActionId: string,
+    policy: CompiledPolicySnapshot,
   ): Promise<{
     readonly messages: SessionTurn.Message[];
     readonly interrupted: boolean;
@@ -863,6 +1030,11 @@ function createController(
     readonly boundaryActionId: string;
   }> {
     const pending = SessionHandleStore.pendingInbox(sessionId);
+    const promptRefusal = await evaluatePromptPolicies(pending, policy);
+    if (promptRefusal !== undefined) {
+      await consumePolicyBlockedInbox(pending, false);
+      throw promptRefusal;
+    }
     const checkpointId = entropy();
     const deliveries = deliveryActions(pending, turnId, boundary, checkpointId);
     const checkpoint = turnCheckpointAction({
@@ -1035,7 +1207,7 @@ function createController(
     // runner's own settlement path owns the release (session-wide single flight).
     const ownsRunningLease =
       current.leaseOwner === owner &&
-      (current.state === "running" || liveInterruptRunner !== undefined);
+      (active !== undefined || current.state === "running" || liveInterruptRunner !== undefined);
     fence = ownsRunningLease ? current.leaseFence : acquire(current.leaseFence);
     const configured = SessionHandleStore.configureAction({
       id: entropy(),
@@ -1353,6 +1525,144 @@ function turnTerminalAction(input: {
     irreversible: true,
     ts: input.at,
   };
+}
+
+function policyRefusalResult(reason: string): SessionRunnerResult {
+  const cause = new SessionPolicyRefusal(reason);
+  return { kind: "error", text: cause.message, cause };
+}
+
+function sessionRunnerResultValue(result: SessionRunnerResult): PlainValue {
+  if (result.kind === "interrupted") {
+    return { kind: result.kind, ...(result.text === undefined ? {} : { text: result.text }) };
+  }
+  if (result.kind === "error") {
+    return {
+      kind: result.kind,
+      text: result.text,
+      ...(result.reported === undefined ? {} : { reported: result.reported }),
+    };
+  }
+  return {
+    kind: result.kind,
+    text: result.text,
+    ...(result.finishReason === undefined ? {} : { finishReason: result.finishReason }),
+    ...(result.usage === undefined
+      ? {}
+      : {
+          usage: {
+            inputTokens: result.usage.inputTokens,
+            outputTokens: result.usage.outputTokens,
+            totalTokens: result.usage.totalTokens,
+            ...(result.usage.reasoningTokens === undefined
+              ? {}
+              : { reasoningTokens: result.usage.reasoningTokens }),
+            ...(result.usage.cacheReadTokens === undefined
+              ? {}
+              : { cacheReadTokens: result.usage.cacheReadTokens }),
+            ...(result.usage.cacheWriteTokens === undefined
+              ? {}
+              : { cacheWriteTokens: result.usage.cacheWriteTokens }),
+          },
+        }),
+  };
+}
+
+function sessionRunnerResultFromValue(value: PlainValue): SessionRunnerResult | undefined {
+  if (!plainObject(value) || typeof value.kind !== "string") return undefined;
+  if (value.kind === "interrupted") {
+    if (!onlyKeys(value, ["kind", "text"])) return undefined;
+    if ("text" in value && typeof value.text !== "string") return undefined;
+    return { kind: "interrupted", ...(typeof value.text === "string" ? { text: value.text } : {}) };
+  }
+  if (value.kind === "error") {
+    if (!onlyKeys(value, ["kind", "text", "reported"]) || typeof value.text !== "string") {
+      return undefined;
+    }
+    if ("reported" in value && value.reported !== true) return undefined;
+    return {
+      kind: "error",
+      text: value.text,
+      ...(value.reported === true ? { reported: true as const } : {}),
+    };
+  }
+  if (value.kind !== "result") return undefined;
+  if (!onlyKeys(value, ["kind", "text", "finishReason", "usage"])) return undefined;
+  if (typeof value.text !== "string") return undefined;
+  const finishReason = value.finishReason;
+  if (
+    finishReason !== undefined &&
+    finishReason !== "stop" &&
+    finishReason !== "max-steps" &&
+    finishReason !== RunReasonCode.Stalled
+  ) {
+    return undefined;
+  }
+  const usage = value.usage === undefined ? undefined : sessionUsageFromValue(value.usage);
+  if (value.usage !== undefined && usage === undefined) return undefined;
+  return {
+    kind: "result",
+    text: value.text,
+    ...(finishReason === undefined ? {} : { finishReason }),
+    ...(usage === undefined ? {} : { usage }),
+  };
+}
+
+type SessionUsage = NonNullable<Extract<SessionRunnerResult, { readonly kind: "result" }>["usage"]>;
+
+function sessionUsageFromValue(value: PlainValue): SessionUsage | undefined {
+  if (
+    !plainObject(value) ||
+    !onlyKeys(value, [
+      "inputTokens",
+      "outputTokens",
+      "totalTokens",
+      "reasoningTokens",
+      "cacheReadTokens",
+      "cacheWriteTokens",
+    ])
+  ) {
+    return undefined;
+  }
+  const inputTokens = value.inputTokens;
+  const outputTokens = value.outputTokens;
+  const totalTokens = value.totalTokens;
+  if (!finiteNumber(inputTokens) || !finiteNumber(outputTokens) || !finiteNumber(totalTokens)) {
+    return undefined;
+  }
+  const reasoningTokens = optionalFiniteNumber(value, "reasoningTokens");
+  const cacheReadTokens = optionalFiniteNumber(value, "cacheReadTokens");
+  const cacheWriteTokens = optionalFiniteNumber(value, "cacheWriteTokens");
+  if (reasoningTokens === false || cacheReadTokens === false || cacheWriteTokens === false) {
+    return undefined;
+  }
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens,
+    ...(reasoningTokens === undefined ? {} : { reasoningTokens }),
+    ...(cacheReadTokens === undefined ? {} : { cacheReadTokens }),
+    ...(cacheWriteTokens === undefined ? {} : { cacheWriteTokens }),
+  };
+}
+
+function optionalFiniteNumber(value: PlainObject, key: string): number | undefined | false {
+  if (!(key in value)) return undefined;
+  const candidate = value[key];
+  return finiteNumber(candidate) ? candidate : false;
+}
+
+function finiteNumber(value: PlainValue | undefined): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function plainObject(value: PlainValue): value is PlainObject {
+  return value !== null && !Array.isArray(value) && typeof value === "object";
+}
+
+function onlyKeys(value: PlainObject, keys: readonly string[]): boolean {
+  const allowed = new Set(keys);
+  return Object.keys(value).every((key) => allowed.has(key));
 }
 
 function defaultHeartbeat(callback: () => void, intervalMs: number): () => void {

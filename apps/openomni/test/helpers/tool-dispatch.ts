@@ -2,16 +2,11 @@ import { spyOn } from "bun:test";
 import type { Tool } from "@openomni/protocol";
 import type { DelegationOrigin } from "../../src/delegation/admission";
 import { createTools, type CatalogPorts } from "../../src/tools/core/catalog";
-import { createDispatcher, type Executor } from "@openomni/agent";
+import { createDispatcher } from "@openomni/agent";
+import { executor } from "./executor";
 
 const RESIDENT: DelegationOrigin = { role: "resident", depth: 0, sessionId: "test" };
 let nextCallId = 0;
-const executor: Executor = {
-  async run(_request, body) {
-    return { terminal: "executed", value: await body() };
-  },
-};
-
 export function dispatchModelTool(
   name: string,
   ports: CatalogPorts,

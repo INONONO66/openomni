@@ -1,3 +1,4 @@
+import type { PlainValue } from "@openomni/protocol";
 import {
   assertToolExecutor,
   assertUnambiguousToolMetadata,
@@ -5,21 +6,19 @@ import {
   handleContinue,
   handleError,
   handleStop,
+  prepareCompactionAfterContinue,
 } from "./turn";
-import { ModelsDev, Provider, Retry as LlmRetry, type Run, run as llmRun } from "@openomni/llm";
+import { ModelsDev, Provider, Retry as LlmRetry, Run, run as llmRun } from "@openomni/llm";
 import type { Sink } from "@openomni/llm";
 import { Placement } from "@openomni/placement";
+import { CompactionSession } from "../../compaction";
+import { DEFAULT_PROTECT_RECENT } from "../../compaction/compact";
 import { resolveCompactionGeometry } from "../../compaction/geometry";
 import type { AgentResult, ChatAgentConfig, ChatAgentInput } from "../types";
 import * as Retry from "../retry";
-import { PolicyEngine, type PolicyEngineInstance } from "../policy";
 import { emitRunCompleted, emitRunFailed, emitRunStarted, emitTurnStart } from "./run-events";
-import {
-  dispatchBudgetCheck,
-  dispatchModelRequest,
-  dispatchModelResponse,
-  dispatchPreRun,
-} from "./lifecycle-dispatch";
+import { publishBudgetTelemetry } from "../budget";
+import { runResult } from "./run-events";
 import {
   createRunState,
   recordRunAttempt,
@@ -28,6 +27,8 @@ import {
   nonEmptyString,
   requireTrace,
   type AgentRunBase,
+  type BuildTurnResult,
+  type ErrorDecision,
   type RunFailureFacts,
   type RunState,
   type RunTrace,
@@ -42,9 +43,28 @@ import {
  * The `AgentEvent` generator that used to carry all three had no consumer
  * outside this package's own tests.
  */
-type RetryPolicy = Parameters<typeof handleError>[6];
+type RetryPolicy = Parameters<typeof Retry.shouldRetry>[0];
 
 type AttemptModel = ChatAgentConfig["model"];
+
+interface AttemptContext {
+  attemptModel: AttemptModel;
+  providerModel: Provider.Model;
+}
+
+type SuccessfulModelOutcome = Extract<Run.Outcome, { type: "stop" | "continue" }>;
+
+const AGENT_COMPLETE = { type: "agent_complete" } as const;
+
+class LlmExecutionRefused extends Error {
+  constructor(
+    readonly terminal: "blocked_pre" | "blocked_post",
+    readonly reason: string,
+  ) {
+    super(`llm execution ${terminal}: ${reason}`);
+    this.name = "LlmExecutionRefused";
+  }
+}
 
 interface RunProgress {
   attempt: number;
@@ -71,12 +91,7 @@ export async function runAgent(
   assertToolExecutor(config);
   assertUnambiguousToolMetadata(config);
   const state = createRunState({ ...input, traceContext: trace });
-  const engine = PolicyEngine.create({
-    clock: Date.now,
-    traceContext: { traceId, sessionId, runId },
-    auditEmit: (descriptor, data) => config.events.publish(descriptor, data),
-  });
-  for (const middleware of config.middleware ?? []) engine.add(middleware);
+  const compaction = createCompactionSession(config);
   emitRunStarted(config.events, trace, config.model.id);
 
   const finish = (result: AgentResult): AgentResult => {
@@ -85,10 +100,8 @@ export async function runAgent(
   };
 
   try {
-    const preRunResult = await dispatchPreRun(state, engine, config, agentBase);
-    if (preRunResult) return finish(preRunResult);
     return finish(
-      await runAttempts(state, config, sink, engine, trace, agentBase, retryPolicy, progress),
+      await runAttempts(state, config, sink, trace, agentBase, retryPolicy, progress, compaction),
     );
   } catch (error) {
     const facts =
@@ -103,7 +116,19 @@ export async function runAgent(
       Retry.attachFailureFacts(error, { ...facts, llm: true });
     }
     throw error;
+  } finally {
+    compaction?.abort();
   }
+}
+
+function createCompactionSession(config: ChatAgentConfig): CompactionSession | undefined {
+  const options = config.compaction;
+  if (options?.onSummarize === undefined || options.speculate === false) return undefined;
+  return new CompactionSession({
+    protectRecentMessages: options.protectRecentMessages ?? DEFAULT_PROTECT_RECENT,
+    summarize: options.onSummarize,
+    summarizerDeadlineMs: options.summarizerDeadlineMs,
+  });
 }
 
 /** Fallbacks make validation failures retryable on a different candidate. */
@@ -135,67 +160,116 @@ async function runAttempts(
   state: RunState,
   config: ChatAgentConfig,
   sink: Sink | undefined,
-  engine: RunPolicyEngine,
   trace: RunTrace,
   agentBase: AgentRunBase,
   retryPolicy: RetryPolicy,
   progress: RunProgress,
+  compaction: CompactionSession | undefined,
 ): Promise<AgentResult> {
   for (;;) {
     try {
-      return await runAttempt(state, config, sink, engine, trace, agentBase, progress);
+      return await runAttempt(
+        state,
+        config,
+        sink,
+        trace,
+        agentBase,
+        progress,
+        retryPolicy,
+        compaction,
+      );
     } catch (error) {
       if (!(error instanceof Error)) throw error;
-      const decision = await handleError(
+      if (error instanceof LlmExecutionRefused || progress.thrownFailure !== undefined) throw error;
+      const decision = await handleAttemptFailure(
         state,
-        engine,
         config,
         agentBase,
         error,
-        progress.attempt,
+        progress,
         retryPolicy,
+        compaction,
       );
       if (decision.action === "complete") return decision.result;
-      if (decision.action === "throw") {
-        progress.thrownFailure = decision.failure;
-        throw decision.error;
-      }
-      // Preserve the decided failure across an abort raised by the backoff.
-      progress.failureReasons.push(decision.failure.reason);
-      progress.thrownFailure = decision.failure;
-      await LlmRetry.sleep(decision.backoffMs, config.signal);
-      progress.thrownFailure = undefined;
-      progress.attempt += 1;
     }
   }
+}
+
+async function advanceRetry(
+  config: ChatAgentConfig,
+  progress: RunProgress,
+  decision: Extract<ErrorDecision, { action: "retry" }>,
+): Promise<void> {
+  // Preserve the decided failure across an abort raised by the backoff.
+  progress.failureReasons.push(decision.failure.reason);
+  progress.thrownFailure = decision.failure;
+  await LlmRetry.sleep(decision.backoffMs, config.signal);
+  progress.thrownFailure = undefined;
+  progress.attempt += 1;
+}
+
+async function handleAttemptFailure(
+  state: RunState,
+  config: ChatAgentConfig,
+  agentBase: AgentRunBase,
+  error: Error,
+  progress: RunProgress,
+  retryPolicy: RetryPolicy,
+  compaction: CompactionSession | undefined,
+): Promise<Exclude<ErrorDecision, { action: "throw" }>> {
+  const decision = await handleError(
+    state,
+    config,
+    agentBase,
+    error,
+    progress.attempt,
+    retryPolicy,
+    compaction,
+  );
+  if (decision.action === "throw") {
+    progress.thrownFailure = decision.failure;
+    throw decision.error;
+  }
+  if (decision.action === "retry") await advanceRetry(config, progress, decision);
+  return decision;
 }
 
 async function runAttempt(
   state: RunState,
   config: ChatAgentConfig,
   sink: Sink | undefined,
-  engine: RunPolicyEngine,
   trace: RunTrace,
   agentBase: AgentRunBase,
   progress: RunProgress,
+  retryPolicy: RetryPolicy,
+  compaction: CompactionSession | undefined,
 ): Promise<AgentResult> {
+  const context = await prepareAttempt(state, config, progress);
+  return runTurns(
+    state,
+    config,
+    sink,
+    trace,
+    agentBase,
+    context,
+    progress,
+    retryPolicy,
+    compaction,
+  );
+}
+
+async function prepareAttempt(
+  state: RunState,
+  config: ChatAgentConfig,
+  progress: RunProgress,
+): Promise<AttemptContext> {
   recordRunAttempt(state, progress.attempt);
   const attemptModel = selectAttemptModel(config, state, progress);
   const providerModel = await (config.llm?.resolveProviderModel ?? resolveProviderModel)(
     attemptModel,
   );
   recordRunWindow(state, providerModel.limit?.context ?? 0);
-  return runTurns(
-    state,
-    config,
-    sink,
-    engine,
-    trace,
-    agentBase,
-    attemptModel,
-    providerModel,
-    progress,
-  );
+  return { attemptModel, providerModel };
 }
 
 function selectAttemptModel(
@@ -219,74 +293,148 @@ async function runTurns(
   state: RunState,
   config: ChatAgentConfig,
   sink: Sink | undefined,
-  engine: RunPolicyEngine,
   trace: RunTrace,
   agentBase: AgentRunBase,
-  attemptModel: AttemptModel,
-  providerModel: Provider.Model,
+  context: AttemptContext,
   progress: RunProgress,
+  retryPolicy: RetryPolicy,
+  compaction: CompactionSession | undefined,
 ): Promise<AgentResult> {
   for (;;) {
-    const budgetResult = await dispatchBudgetCheck(state, engine, config, agentBase);
-    if (budgetResult) return budgetResult;
-    emitTurnStart(config.events, state, agentBase);
-    const turnResult = await buildTurn(
-      state,
-      config,
-      engine,
-      providerModel,
-      config.toolChoice,
-      trace,
-      agentBase,
-      sink,
-    );
+    const turnResult = await prepareTurn(state, config, sink, trace, agentBase, context);
     if (turnResult.type === "complete") return turnResult.result;
     const connectionResult = await runConnection(
       state,
       config,
-      engine,
+      sink,
+      trace,
       agentBase,
-      attemptModel,
-      providerModel,
+      context,
       turnResult.turn,
       progress,
+      retryPolicy,
+      compaction,
     );
     if (connectionResult !== undefined) return connectionResult;
   }
 }
 
+async function prepareTurn(
+  state: RunState,
+  config: ChatAgentConfig,
+  sink: Sink | undefined,
+  trace: RunTrace,
+  agentBase: AgentRunBase,
+  context: AttemptContext,
+): Promise<BuildTurnResult> {
+  const budgetStatus = publishBudgetTelemetry(
+    state.budgetState,
+    agentBase,
+    config.events,
+    config.budget,
+  );
+  if (budgetStatus === "exceeded") {
+    return { type: "complete", result: runResult(state, { finishReason: "max-steps" }) };
+  }
+  emitTurnStart(config.events, state, agentBase);
+  return buildTurn(state, config, context.providerModel, config.toolChoice, trace, sink);
+}
+
 async function runConnection(
   state: RunState,
   config: ChatAgentConfig,
-  engine: RunPolicyEngine,
+  sink: Sink | undefined,
+  trace: RunTrace,
   agentBase: AgentRunBase,
-  attemptModel: AttemptModel,
-  providerModel: Provider.Model,
-  turn: TurnArtifacts,
+  context: AttemptContext,
+  initialTurn: TurnArtifacts,
   progress: RunProgress,
+  retryPolicy: RetryPolicy,
+  compaction: CompactionSession | undefined,
 ): Promise<AgentResult | undefined> {
   const runLlm = config.llm?.run ?? llmRun;
-  const gate = await dispatchModelRequest(state, engine, config, agentBase, providerModel.id);
-  if (gate.blocked) return gate.blocked;
-  const call = await resolveConnectionModel(
-    state,
-    config,
-    attemptModel,
-    providerModel,
-    turn,
-    gate.overrideModel,
+  let turn = initialTurn;
+  const invokeModel = async (): Promise<SuccessfulModelOutcome> => {
+    const call = await resolveConnectionModel(
+      state,
+      config,
+      context.attemptModel,
+      context.providerModel,
+      turn,
+      undefined,
+    );
+    const outcome = await runLlm(call.runInput, turn.trackingSink);
+    return requireSuccessfulModelOutcome(outcome, progress);
+  };
+  const executor = config.executor;
+  const lifecycle = config.execution;
+  if (executor === undefined || lifecycle === undefined) {
+    const outcome = await invokeModel();
+    return handleModelOutcome(outcome, state, config, agentBase, turn, progress, compaction);
+  }
+
+  let completedResult: AgentResult | undefined;
+  const execution = await executor.run(
+    {
+      kind: "llm",
+      op: "chat",
+      intent: { provider: context.providerModel.providerID, model: context.providerModel.id },
+      effect: {},
+    },
+    async (llmIntent) => {
+      for (;;) {
+        try {
+          return await lifecycle.runAttempt(
+            llmIntent,
+            {
+              op: "chat",
+              intent: {
+                attempt: progress.attempt,
+                provider: context.providerModel.providerID,
+                model: context.providerModel.id,
+              },
+              effect: {},
+            },
+            invokeModel,
+          );
+        } catch (error) {
+          if (!(error instanceof Error)) throw error;
+          const decision = await handleAttemptFailure(
+            state,
+            config,
+            agentBase,
+            error,
+            progress,
+            retryPolicy,
+            compaction,
+          );
+          if (decision.action === "complete") {
+            completedResult = decision.result;
+            return AGENT_COMPLETE;
+          }
+          const nextContext = await prepareAttempt(state, config, progress);
+          context.attemptModel = nextContext.attemptModel;
+          context.providerModel = nextContext.providerModel;
+          const nextTurn = await prepareTurn(state, config, sink, trace, agentBase, context);
+          if (nextTurn.type === "complete") {
+            completedResult = nextTurn.result;
+            return AGENT_COMPLETE;
+          }
+          turn = nextTurn.turn;
+        }
+      }
+    },
   );
-  const outcome = await runLlm(call.runInput, turn.trackingSink);
-  const responseResult = await dispatchModelResponse(
-    state,
-    engine,
-    config,
-    { outcome, responseTokens: turn.turnUsage.outputTokens },
-    agentBase,
-    call.model.id,
-  );
-  if (responseResult) return responseResult;
-  return handleModelOutcome(outcome, state, config, engine, agentBase, turn, progress);
+
+  if (execution.terminal !== "executed") {
+    throw new LlmExecutionRefused(execution.terminal, execution.reason);
+  }
+  const outcome = parseLogicalLlmOutput(execution.value);
+  if (outcome.type === "agent_complete") {
+    if (completedResult === undefined) throw new Error("llm execution lost its completion result");
+    return completedResult;
+  }
+  return handleModelOutcome(outcome, state, config, agentBase, turn, progress, compaction);
 }
 
 async function resolveConnectionModel(
@@ -333,19 +481,38 @@ async function handleModelOutcome(
   outcome: Run.Outcome,
   state: RunState,
   config: ChatAgentConfig,
-  engine: RunPolicyEngine,
   agentBase: AgentRunBase,
   turn: TurnArtifacts,
   progress: RunProgress,
+  compaction: CompactionSession | undefined,
 ): Promise<AgentResult | undefined> {
-  if (outcome.type === "stop") {
-    const stopOutcome = await handleStop(state, config, engine, agentBase, turn);
+  const successful = requireSuccessfulModelOutcome(outcome, progress);
+  if (successful.type === "stop") {
+    const stopOutcome = await handleStop(state, config, agentBase, turn, compaction);
     return stopOutcome === "continue" ? undefined : stopOutcome;
   }
-  if (outcome.type === "continue") {
-    handleContinue(config.events, state, agentBase, turn.turnUsage);
-    return undefined;
+  handleContinue(config.events, state, agentBase, turn.turnUsage);
+  prepareCompactionAfterContinue(state, config, compaction);
+  return undefined;
+}
+
+function parseLogicalLlmOutput(value: PlainValue): Run.Outcome | typeof AGENT_COMPLETE {
+  if (
+    value !== null &&
+    !Array.isArray(value) &&
+    typeof value === "object" &&
+    value.type === AGENT_COMPLETE.type
+  ) {
+    return AGENT_COMPLETE;
   }
+  return Run.Outcome.parse(value);
+}
+
+function requireSuccessfulModelOutcome(
+  outcome: Run.Outcome,
+  progress: RunProgress,
+): SuccessfulModelOutcome {
+  if (outcome.type === "stop" || outcome.type === "continue") return outcome;
   if (outcome.type === "aborted") throw outcome.error ?? Retry.abortError();
   if (outcome.type === "error") {
     const source = outcome.error;
@@ -409,5 +576,3 @@ async function resolveProviderModel(model: {
 
   throw new Error(`Model not found: ${model.id} for provider ${model.provider}`);
 }
-
-type RunPolicyEngine = PolicyEngineInstance;

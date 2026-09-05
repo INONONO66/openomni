@@ -17,11 +17,24 @@ import { SessionBindingCache } from "../composition/session-bindings";
 import { observeComponent } from "../observation/component";
 import { buildAgentPrompt } from "../prompt/build";
 import { WORKER_PRESET } from "../prompt/roles";
+import { seedKernelPolicyRows } from "../policy-seed";
 import { createTools } from "../tools/core/catalog";
 import { decideDrive, initialDriveState, type DriveState } from "./drive-loop";
 import { renderInstruction } from "./instruction";
 import type { InlineWorkerRunner } from "./inline-driver";
 import type { DelegationKernel } from "./kernel";
+
+export function toolExecutorForTurn(
+  dispatcher: Pick<ReturnType<typeof createTurnDispatcher>, "execute">,
+  input: Pick<SessionRunnerInput, "sessionId" | "turnId">,
+): NonNullable<ChatAgentConfig["toolExecutor"]> {
+  return (call, context) =>
+    dispatcher.execute(call, {
+      sessionId: input.sessionId,
+      turnId: input.turnId,
+      ...(context?.signal === undefined ? {} : { signal: context.signal }),
+    });
+}
 
 export class WorkerRunError extends Error {
   constructor(
@@ -38,6 +51,7 @@ export interface WorkerLoopOptions {
   readonly apiKey: string;
   readonly transport?: ChatAgentConfig["transport"];
   readonly llm?: ChatAgentConfig["llm"];
+  readonly compaction?: ChatAgentConfig["compaction"];
   readonly kernel: () => DelegationKernel;
   readonly sessionRuntime?: SessionRuntime;
 }
@@ -53,6 +67,7 @@ interface WorkerBinding {
 }
 
 export function createInlineWorkerRunner(options: WorkerLoopOptions): SessionInlineWorkerRunner {
+  seedKernelPolicyRows();
   const bindings = new SessionBindingCache<WorkerBinding>();
   const runtime = options.sessionRuntime ?? { observations: Bus };
 
@@ -81,17 +96,14 @@ export function createInlineWorkerRunner(options: WorkerLoopOptions): SessionInl
         return {
           config: {
             events: observation.events,
+            executor: dispatcher.executor,
             systemPrompt: input.system,
             tools,
             toolTargets: [HOST_TARGET],
             toolChoice: tools.length === 0 ? "none" : "auto",
-            toolExecutor: (call, context) =>
-              dispatcher.execute(call, {
-                sessionId: input.sessionId,
-                turnId: input.turnId,
-                ...(context?.signal === undefined ? {} : { signal: context.signal }),
-              }),
+            toolExecutor: toolExecutorForTurn(dispatcher, input),
             model: options.model,
+            ...(options.compaction === undefined ? {} : { compaction: options.compaction }),
             ...chatProviderConfig(options),
           },
           traceContext: { traceId, sessionId: input.sessionId, runId, agentName: "worker" },

@@ -17,12 +17,14 @@ import { Bus, newTraceId } from "@openomni/agent";
 import { chatProviderConfig } from "./composition/chat-provider";
 import { SessionBindingCache } from "./composition/session-bindings";
 import type { DelegationOrigin } from "./delegation/admission";
+import { toolExecutorForTurn } from "./delegation/worker-loop";
 import { classifyTurnFailure } from "./observation/llm-failure";
 import { observeComponent } from "./observation/component";
 import { buildAgentPrompt } from "./prompt/build";
 import { RESIDENT_PRESET } from "./prompt/roles";
 import type { CatalogPorts } from "./tools/core/catalog";
 import { createTools } from "./tools/core/catalog";
+import { seedKernelPolicyRows } from "./policy-seed";
 
 const EVIDENCE_ONLY_TOOL_REFUSAL =
   "tool execution denied: this turn is evidence-only and may not drive tools";
@@ -52,9 +54,9 @@ export interface ResidentOptions {
   readonly apiKey: string;
   readonly transport?: ChatAgentConfig["transport"];
   readonly llm?: ChatAgentConfig["llm"];
+  readonly compaction?: ChatAgentConfig["compaction"];
   readonly tools: CatalogPorts;
   readonly targets: () => readonly Placement.ToolTarget[];
-  readonly middleware?: ChatAgentConfig["middleware"];
   readonly sessionRuntime?: SessionRuntime;
 }
 
@@ -123,6 +125,7 @@ function requireResult(result: SessionRunnerResult | undefined): SessionRunnerRe
 }
 
 export function createResident(options: ResidentOptions): ResidentDelivery {
+  seedKernelPolicyRows();
   const bindings = new SessionBindingCache<ResidentBinding>();
   const runtime = options.sessionRuntime ?? { observations: Bus };
 
@@ -152,19 +155,15 @@ export function createResident(options: ResidentOptions): ResidentDelivery {
         return {
           config: {
             events: observation.events,
+            executor: dispatcher.executor,
             systemPrompt: input.system,
             tools,
             toolTargets: options.targets(),
             toolChoice: evidenceOnly || tools.length === 0 ? "none" : "auto",
             toolExecutor: evidenceOnly
               ? refuseEvidenceOnlyToolCall
-              : (call, context) =>
-                  dispatcher.execute(call, {
-                    sessionId: input.sessionId,
-                    turnId: input.turnId,
-                    ...(context?.signal === undefined ? {} : { signal: context.signal }),
-                  }),
-            ...(options.middleware === undefined ? {} : { middleware: options.middleware }),
+              : toolExecutorForTurn(dispatcher, input),
+            ...(options.compaction === undefined ? {} : { compaction: options.compaction }),
             model: options.model,
             ...(options.modelFallbacks === undefined || options.modelFallbacks.length === 0
               ? {}

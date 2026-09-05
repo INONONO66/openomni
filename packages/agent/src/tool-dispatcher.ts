@@ -15,18 +15,14 @@ import {
   type ToolExecutionContext,
 } from "@openomni/protocol";
 import { z } from "zod";
-import {
-  createExecutor,
-  createToolExecutionObservationOwner,
-  type ExecutionLedger,
-  type Executor,
-  type ToolExecutionObservationOwner,
-} from "./executor";
+import { createExecutor, type ExecutionLedger, type Executor } from "./executor";
 
 const MODEL_OUTPUT_MAX_CHARS = 32_000;
 export const HOST_TARGET: Placement.ToolTarget = { kind: "host", capabilities: [] };
 
 export class ToolRefused extends Error {
+  readonly errorKind = "precondition_failed";
+
   constructor(toolName: string, reason: string) {
     super(`${toolName} refused: ${reason}`);
     this.name = "ToolRefused";
@@ -50,13 +46,8 @@ type CellToolDispatchResult = Omit<ToolDispatchResult, "output"> & {
   readonly output: PlainValue;
 };
 
-interface ToolExecutionObservation extends BusEvent.Sink {}
-
 export interface DispatcherOptions {
   readonly executor: Executor;
-  readonly observations?: ToolExecutionObservation;
-  readonly executionObservations?: ToolExecutionObservationOwner;
-  readonly clock?: () => number;
   readonly timeoutMs?: number;
 }
 
@@ -67,6 +58,7 @@ interface DispatchContext {
 }
 
 export interface Dispatcher {
+  readonly executor?: Executor;
   readonly specs: readonly Tool.Spec[];
   execute(call: Tool.Call, context: DispatchContext): Promise<ToolDispatchResult>;
   executeCell(call: Tool.Call, context: DispatchContext): Promise<CellToolDispatchResult>;
@@ -104,6 +96,15 @@ export function toolInputSchema(definition: AnyToolDefinition): JsonSchemaObject
 
 const activeExecutor = new AsyncLocalStorage<Executor>();
 
+export class ExecutorContextError extends Error {
+  readonly code = "executor_context_missing";
+
+  constructor() {
+    super("executor context is required");
+    this.name = "ExecutorContextError";
+  }
+}
+
 /**
  * The executor of the enclosing execution, for a consumer that must capture it
  * synchronously and inject it into a dispatcher invoked later out of context
@@ -113,7 +114,7 @@ const activeExecutor = new AsyncLocalStorage<Executor>();
 export function currentExecutor(): Executor {
   const executor = activeExecutor.getStore();
   if (executor === undefined) {
-    throw new Error("currentExecutor() called outside an active execution");
+    throw new ExecutorContextError();
   }
   return executor;
 }
@@ -123,7 +124,7 @@ export function createDispatcher(
   options?: DispatcherOptions,
 ): Dispatcher {
   /**
-   * The cell door builds its dispatcher at tool-definition time, long before any
+   * The cell door builds its dispatcher at tool-definition time, well ahead of every
    * execution context exists, so the ambient executor is resolved per dispatch:
    * an explicitly injected executor wins, otherwise the enclosing execution's
    * executor is inherited (nested cell tools), otherwise the dispatch fails
@@ -134,10 +135,6 @@ export function createDispatcher(
   const resolveExecutor = (): Executor | undefined =>
     options?.executor ?? activeExecutor.getStore();
   const known = new Map(definitions.map((definition) => [definition.name, definition]));
-  const clock = options?.clock ?? Date.now;
-  const executionObservations =
-    options?.executionObservations ?? createToolExecutionObservationOwner(options?.observations, clock);
-
   async function dispatch(
     call: Tool.Call,
     providedContext: DispatchContext,
@@ -152,15 +149,18 @@ export function createDispatcher(
     if (!parsedInput.success) {
       const issue = parsedInput.error.issues[0];
       const path = issue?.path.map(String).join(".") ?? "";
-      const reason = issue === undefined ? "invalid input" : path === "" ? issue.message : `${path}: ${issue.message}`;
+      const reason =
+        issue === undefined
+          ? "invalid input"
+          : path === ""
+            ? issue.message
+            : `${path}: ${issue.message}`;
       return failed(call, `${definition.name} refused: ${reason}`, "invalid_input");
     }
 
-    const startedAt = clock();
-    executionObservations.started(call, context, definition.name, startedAt);
     const executor = resolveExecutor();
     if (executor === undefined) {
-      throw new Error("tool dispatcher requires an executor");
+      throw new ExecutorContextError();
     }
     const execution = await executor
       .run(
@@ -169,6 +169,11 @@ export function createDispatcher(
           op: definition.name,
           intent: PlainValueSchema.parse(call.input),
           effect: { category: definition.category },
+          toolObservation: {
+            turnId: context.turnId,
+            callId: call.id,
+            ...(options?.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
+          },
         },
         () =>
           activeExecutor.run(executor, async () =>
@@ -178,41 +183,52 @@ export function createDispatcher(
           ),
       )
       .catch((error: CaughtValue) => {
-        executionObservations.completed(call, context, definition.name, startedAt, true);
         throw toError(error);
       });
 
     if (execution.terminal !== "executed") {
       const refusal = new ToolRefused(definition.name, execution.reason);
-      executionObservations.completed(call, context, definition.name, startedAt, true);
       if (door === "cell") throw refusal;
       return failed(call, refusal.message, "precondition_failed");
     }
 
-    const outcome = ToolBodyOutcome.parse(execution.value);
+    const parsedOutcome = ToolBodyOutcome.safeParse(execution.value);
+    if (!parsedOutcome.success) {
+      const result = failed(call, `${definition.name} produced invalid output`, "invalid_output");
+      return result;
+    }
+    const outcome = parsedOutcome.data;
     if (outcome.status === "timed_out") {
       const result = failed(call, `${definition.name} timed out`, "execution_failed");
-      executionObservations.timedOut(call, context, definition.name, options?.timeoutMs ?? 0);
-      executionObservations.completed(call, context, definition.name, startedAt, true);
       return result;
     }
     if (outcome.status === "error") {
       const result = failed(call, outcome.message, outcome.errorKind);
-      executionObservations.completed(call, context, definition.name, startedAt, true);
       return result;
     }
 
+    const transformedOutput = definition.output.safeParse(outcome.output);
+    if (!transformedOutput.success) {
+      const result = failed(call, `${definition.name} produced invalid output`, "invalid_output");
+      return result;
+    }
+    const output = PlainValueSchema.safeParse(transformedOutput.data);
+    if (!output.success) {
+      const result = failed(call, `${definition.name} produced invalid output`, "invalid_output");
+      return result;
+    }
     const result = {
       toolCallId: call.id,
       id: call.id,
       toolName: call.tool,
-      output: door === "cell" ? outcome.output : truncate(definition.render(parsedInput.data, outcome.output)),
+      output:
+        door === "cell" ? output.data : truncate(definition.render(parsedInput.data, output.data)),
     } satisfies ToolDispatchResult | CellToolDispatchResult;
-    executionObservations.completed(call, context, definition.name, startedAt, false);
     return result;
   }
 
   return {
+    ...(options?.executor === undefined ? {} : { executor: options.executor }),
     specs: definitions
       .filter((definition) => definition.visibility.model.length > 0)
       .map((definition) => ({
@@ -258,23 +274,20 @@ export function createTurnDispatcher(
   definitions: readonly AnyToolDefinition[],
   input: TurnDispatchInput,
   runtime: TurnDispatchRuntime,
-): Dispatcher {
-  return createDispatcher(definitions, {
-    executor: createExecutor({
-      policy: input.policy,
-      ledger: input.ledger,
-      observations: runtime.observations,
-      identity: {
-        sessionId: input.sessionId,
-        role: input.role,
-        parentActionId: input.actionId,
-      },
-      clock: runtime.clock ?? Date.now,
-      entropy: runtime.entropy ?? (() => crypto.randomUUID()),
-    }),
+): Dispatcher & { readonly executor: Executor } {
+  const executor = createExecutor({
+    policy: input.policy,
+    ledger: input.ledger,
     observations: runtime.observations,
-    ...(runtime.clock === undefined ? {} : { clock: runtime.clock }),
+    identity: {
+      sessionId: input.sessionId,
+      role: input.role,
+      parentActionId: input.actionId,
+    },
+    clock: runtime.clock ?? Date.now,
+    entropy: runtime.entropy ?? (() => crypto.randomUUID()),
   });
+  return { ...createDispatcher(definitions, { executor }), executor };
 }
 
 export function sessionTool(definition: AnyToolDefinition): SessionGeneration.Tool {
@@ -333,7 +346,9 @@ async function executeToolBody<In extends z.ZodType, Out extends z.ZodType>(
     };
   }
   const parsedOutput = definition.output.safeParse(outcome.value);
-  const jsonOutput = parsedOutput.success ? PlainValueSchema.safeParse(parsedOutput.data) : parsedOutput;
+  const jsonOutput = parsedOutput.success
+    ? PlainValueSchema.safeParse(parsedOutput.data)
+    : parsedOutput;
   if (!(parsedOutput.success && jsonOutput.success)) {
     return {
       status: "error",

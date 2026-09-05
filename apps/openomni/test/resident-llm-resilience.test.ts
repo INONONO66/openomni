@@ -2,9 +2,8 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ChatAgentConfig } from "@openomni/agent";
 import { initialize, Session, SessionHandleStore, Storage } from "@openomni/ledger";
-import { type Gateway, type Model, PolicyDecision } from "@openomni/protocol";
+import type { Gateway, Model } from "@openomni/protocol";
 import { createResidentGateway } from "../src/gateway";
 import { createResident } from "../src/resident";
 import { assistantMessage } from "./helpers/assistant-message";
@@ -20,28 +19,6 @@ afterEach(() => {
 
 const PRIMARY: Model.Ref = { provider: "fake", id: "resident-test" };
 const FALLBACK: Model.Ref = { provider: "other", id: "fallback-model" };
-
-/**
- * Zero-backoff retry middleware: these tests pin WHICH model each attempt
- * resolves and WHAT the caller sees when the chain is spent — never the
- * backoff schedule, which would otherwise make them wall-clock bound.
- */
-const zeroBackoff: NonNullable<ChatAgentConfig["middleware"]>[number] = {
-  kind: "point",
-  name: "test-zero-backoff",
-  pointIds: ["run.error.error"],
-  effectCapabilities: { "run.error.error": ["run.retry_after"] },
-  priority: 100,
-  fn: () =>
-    PolicyDecision.allow({
-      policyId: "test.zero-backoff",
-      effects: [{ type: "run.retry_after", delayMs: 0 }],
-    }),
-};
-
-function policies() {
-  return [zeroBackoff];
-}
 
 function openSession(prefix: string): string {
   const directory = mkdtempSync(join(tmpdir(), prefix));
@@ -95,7 +72,6 @@ describe("Resident model fallback wiring", () => {
       model: PRIMARY,
       modelFallbacks: [FALLBACK],
       apiKey: "test-key",
-      middleware: policies(),
       tools: {},
       targets: () => [],
       llm: {
@@ -130,7 +106,6 @@ describe("Resident model fallback wiring", () => {
     const resident = createResident({
       model: PRIMARY,
       apiKey: "test-key",
-      middleware: policies(),
       tools: {},
       targets: () => [],
       llm: {
@@ -191,7 +166,6 @@ describe("Resident terminal LLM failure surfacing", () => {
     return createResident({
       model: PRIMARY,
       apiKey: "test-key",
-      middleware: policies(),
       tools: {},
       targets: () => [],
       llm: alwaysFailing(error),
@@ -306,7 +280,6 @@ describe("Resident terminal LLM failure surfacing", () => {
     const resident = createResident({
       model: PRIMARY,
       apiKey: "test-key",
-      middleware: policies(),
       tools: {},
       targets: () => [],
       llm: {

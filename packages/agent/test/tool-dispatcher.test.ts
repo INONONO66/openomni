@@ -8,14 +8,10 @@ import {
   toolInputSchema,
   toolSpec,
 } from "../src/index";
-import type { Executor } from "../src/executor";
+import { recordingExecutor } from "./helpers/compiled-policy";
 import { z } from "zod";
 
-const executor: Executor = {
-  async run(_request, body) {
-    return { terminal: "executed", value: await body() };
-  },
-};
+const executor = recordingExecutor().executor;
 
 function dispatcher(definitions: Parameters<typeof createDispatcher>[0]) {
   return createDispatcher(definitions, { executor });
@@ -81,17 +77,17 @@ describe("tool dispatcher public contract", () => {
     expect(sessionTool(eraseTool(execution))).toMatchObject({ name: "run", category: "execution" });
   });
 
-  it("classifies unknown tools and invalid inputs without invoking a tool", async () => {
+  it("classifies missing tools and invalid inputs without invoking a tool", async () => {
     let executions = 0;
     const dispatch = dispatcher([definition({ execute: () => {
       executions += 1;
       return Promise.resolve("ok");
     } })]);
 
-    const unknown = await dispatch.execute({ ...call, tool: "missing" }, context);
+    const missing = await dispatch.execute({ ...call, tool: "missing" }, context);
     const invalid = await dispatch.execute({ ...call, input: {} }, context);
 
-    expect(unknown).toMatchObject({ isError: true, errorKind: "unregistered_tool" });
+    expect(missing).toMatchObject({ isError: true, errorKind: "unregistered_tool" });
     expect(invalid).toMatchObject({ isError: true, errorKind: "invalid_input" });
     expect(executions).toBe(0);
   });

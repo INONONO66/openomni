@@ -1,6 +1,6 @@
-import { Operational, PolicyDecision } from "@openomni/protocol";
+import { Operational } from "@openomni/protocol";
 import { RunEvents } from "./events";
-import type { BusEvent, Policy, TraceContext } from "@openomni/protocol";
+import type { BusEvent, TraceContext } from "@openomni/protocol";
 import type { RetryReason, TerminalReason } from "../retry";
 import type { AgentResult, AgentStep, TokenUsage } from "../types";
 import { getCompactionCount, type AgentRunBase, type RunState } from "./state";
@@ -47,34 +47,6 @@ export function emitTurnComplete(
       outputTokens: turnUsage.outputTokens,
       totalTokens: turnUsage.totalTokens,
     },
-  });
-}
-
-export function emitBudgetReassurance(
-  events: BusEvent.Sink,
-  agentBase: AgentRunBase,
-  remaining: string,
-  threshold: number,
-): void {
-  events.publish(RunEvents.BudgetReassurance, {
-    ...agentBase,
-    time: Date.now(),
-    remaining,
-    threshold,
-  });
-}
-
-export function emitBudgetWarning(
-  events: BusEvent.Sink,
-  agentBase: AgentRunBase,
-  remaining: string,
-  threshold: number,
-): void {
-  events.publish(RunEvents.BudgetWarning, {
-    ...agentBase,
-    time: Date.now(),
-    remaining,
-    threshold,
   });
 }
 
@@ -149,72 +121,6 @@ export function emitRunFailed(
     error,
     context: { ...decision },
   });
-}
-
-export function publishDenyDiagnostic(
-  events: BusEvent.Sink,
-  timing: Policy.Timing,
-  decision: Policy.PolicyDecision,
-  state: RunState,
-  agentBase: AgentRunBase,
-): void {
-  const reason = PolicyDecision.reason(decision, "denied");
-  const sessionId = agentBase.sessionId;
-  events.publish(Operational.Events.Info, {
-    traceId: agentBase.traceId,
-    time: Date.now(),
-    sessionId,
-    component: "agent",
-    msg: "agent.policy.deny.diagnostic",
-    context: {
-      timing,
-      reason,
-      policyId: decision.policyId,
-      turns: state.budgetState.turns,
-      elapsedMs: Date.now() - state.startTime,
-    },
-  });
-}
-
-export function guardAbortedResult(
-  state: RunState,
-  options?: { text?: string; steps?: AgentStep[]; finishReason?: "stop" | "stalled" },
-): AgentResult {
-  return runResult(state, { ...options, guardAborted: true });
-}
-
-/**
- * Runs an effect application whose failure must end the run as a RECORDED
- * deny rather than an unhandled throw (`policy.invalid_replacement_messages`
- * is the known thrower). The catch below used to exist verbatim at three
- * seams — model response, turn finish, completion prepare — so the record
- * shape is kept identical by keeping it in one place.
- */
-export function applyEffectOrDeny<T>(
-  events: BusEvent.Sink,
-  timing: Policy.Timing,
-  state: RunState,
-  agentBase: AgentRunBase,
-  apply: () => T,
-  options?: { finishReason?: "stop" | "stalled" },
-): { ok: true; value: T } | { ok: false; result: AgentResult } {
-  try {
-    return { ok: true, value: apply() };
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    publishDenyDiagnostic(
-      events,
-      timing,
-      PolicyDecision.deny({
-        policyId: "agent.policy.composed",
-        reasonCodes: [reason],
-        effects: [{ type: "run.abort", reason }],
-      }),
-      state,
-      agentBase,
-    );
-    return { ok: false, result: guardAbortedResult(state, options) };
-  }
 }
 
 export function runResult(

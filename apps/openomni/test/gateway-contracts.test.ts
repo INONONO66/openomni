@@ -88,7 +88,6 @@ function testResident(run: ResidentRun) {
   return createResident({
     model: MODEL,
     apiKey: "test-key",
-    middleware: [],
     tools: {},
     targets: () => [{ kind: "host", id: "brain", capabilities: [] }],
     llm: {

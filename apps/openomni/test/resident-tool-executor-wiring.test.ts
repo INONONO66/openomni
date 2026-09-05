@@ -132,6 +132,7 @@ test("a resident tool call is executed and observed through the durable executor
   await resident(delivery(sessionId));
 
   const tree = SessionHandleStore.tree(sessionId);
+  const prompt = tree.find((action) => action.kind === "prompt");
   const turn = tree.find((action) => action.kind === "turn" && action.id !== tree.at(-1)?.id);
   const toolIntent = tree.find(
     (action) => action.kind === "tool" && field(action.intent.value, "phase") === "intent",
@@ -148,10 +149,25 @@ test("a resident tool call is executed and observed through the durable executor
   expect(
     decisions.map((action) => field(action.intent.value, "hook")).sort(),
   ).toEqual([
+    "llm.post",
+    "llm.pre",
+    "prompt.post",
+    "prompt.pre",
     "tool.post",
     "tool.pre",
+    "turn.post",
+    "turn.pre",
   ]);
-  expect(decisions.every((action) => action.parentId === turn?.id)).toBe(true);
+  expect(
+    decisions
+      .filter((action) => String(field(action.intent.value, "hook")).startsWith("prompt."))
+      .every((action) => action.parentId === prompt?.id),
+  ).toBe(true);
+  expect(
+    decisions
+      .filter((action) => !String(field(action.intent.value, "hook")).startsWith("prompt."))
+      .every((action) => action.parentId === turn?.id),
+  ).toBe(true);
   expect(eventNames.filter((name) => name === Tool.Events.Started.name)).toHaveLength(1);
   expect(eventNames.filter((name) => name === Tool.Events.Completed.name)).toHaveLength(1);
 });

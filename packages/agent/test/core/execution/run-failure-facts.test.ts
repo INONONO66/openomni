@@ -1,49 +1,57 @@
-import { describe, expect, it } from "bun:test";
-import { PolicyDecision } from "@openomni/protocol";
-import { Bus } from "../../../src/index";
+import { describe, expect, it, jest } from "bun:test";
+import { RunEvents } from "../../../src/core/execution/events";
 import { runAgent } from "../../../src/core/execution/run";
 import { failureFacts } from "../../../src/core/retry";
-import type { PolicyEngineRegistration } from "../../../src/core/policy";
+import { Bus } from "../../../src/index";
 import { createMockLlmConfig, mockProviderData, mockProviderModel } from "../../helpers/mock-llm";
 import { runInput } from "../../helpers/run-input";
 
-/** Zero-backoff retry so the attempt ladder is exercised without waiting on it. */
-const zeroBackoff: PolicyEngineRegistration = {
-  kind: "point",
-  name: "test-zero-backoff",
-  pointIds: ["run.error.error"],
-  effectCapabilities: { "run.error.error": ["run.retry_after"] },
-  priority: 100,
-  fn: () =>
-    PolicyDecision.allow({
-      policyId: "test.zero-backoff",
-      effects: [{ type: "run.retry_after", delayMs: 0 }],
-    }),
-};
-
-async function failingRun(errorMessage: string): Promise<unknown> {
+async function retryingFailure(operation: () => Promise<Error>): Promise<Error> {
+  jest.useFakeTimers();
+  const first = Promise.withResolvers<void>();
+  const second = Promise.withResolvers<void>();
+  let retries = 0;
+  const unsubscribe = Bus.subscribe(RunEvents.ErrorRetry, () => {
+    retries += 1;
+    if (retries === 1) first.resolve();
+    if (retries === 2) second.resolve();
+  });
   try {
-    await runAgent(runInput([{ role: "user", content: "hi" }]), {
-      events: Bus,
-      model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-      middleware: [zeroBackoff],
-      llm: createMockLlmConfig({
-        getModels: async () => mockProviderData,
-        fromModelsDevModel: () => mockProviderModel,
-        run: async () => ({ type: "error", error: { message: errorMessage, name: "Error" } }),
-      }),
-    });
-  } catch (error) {
-    return error;
+    const running = operation();
+    await first.promise;
+    jest.advanceTimersByTime(1_000);
+    await second.promise;
+    jest.advanceTimersByTime(2_000);
+    return await running;
+  } finally {
+    unsubscribe();
+    jest.useRealTimers();
   }
-  throw new Error("expected the run to fail");
 }
 
-describe("terminal failure facts on the raised error", () => {
-  it("carries the decided reason, spent attempts, and the ceiling", async () => {
-    const error = await failingRun("transient blip");
+function llmFailure(message: string): Promise<Error> {
+  return retryingFailure(async () => {
+    try {
+      await runAgent(runInput([{ role: "user", content: "hi" }]), {
+        events: Bus,
+        model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+        llm: createMockLlmConfig({
+          getModels: async () => mockProviderData,
+          fromModelsDevModel: () => mockProviderModel,
+          run: async () => ({ type: "error", error: { message, name: "Error" } }),
+        }),
+      });
+    } catch (error) {
+      if (error instanceof Error) return error;
+      throw error;
+    }
+    throw new Error("expected failure");
+  });
+}
 
-    expect(failureFacts(error)).toEqual({
+describe("terminal failure facts", () => {
+  it("carries the classified reason, spent attempts, and ceiling", async () => {
+    expect(failureFacts(await llmFailure("transient blip"))).toEqual({
       reason: "transient_error",
       attempt: 3,
       maxAttempts: 3,
@@ -51,48 +59,47 @@ describe("terminal failure facts on the raised error", () => {
     });
   });
 
-  it("reports one attempt for a reason the policy never retries", async () => {
-    const error = await failingRun("validation failed: unusable shape");
-
-    expect(failureFacts(error)).toEqual({
-      reason: "validation_error",
-      attempt: 1,
-      maxAttempts: 3,
-      llm: true,
-    });
-  });
-
-  it("leaves the error's own identity and message untouched", async () => {
-    const error = await failingRun("transient blip");
-
-    expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toBe("transient blip");
-    // Non-enumerable: nothing serializes the facts by accident.
-    expect(Object.keys(error as object)).not.toContain("failureFacts");
-    expect(JSON.stringify({ ...(error as object) })).toBe("{}");
-  });
-
-  it("does not mark a configuration failure as an LLM terminal", async () => {
-    let thrown: unknown;
+  it("keeps non-retryable validation failures at one attempt", async () => {
+    let error: Error | undefined;
     try {
       await runAgent(runInput([{ role: "user", content: "hi" }]), {
         events: Bus,
         model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-        middleware: [zeroBackoff],
-        llm: {
-          resolveProviderModel: async () => {
-            throw new Error("catalog invariant failed");
-          },
-        },
+        llm: createMockLlmConfig({
+          getModels: async () => mockProviderData,
+          fromModelsDevModel: () => mockProviderModel,
+          run: async () => ({ type: "error", error: { message: "validation failed", name: "Error" } }),
+        }),
       });
-    } catch (error) {
-      thrown = error;
+    } catch (caught) {
+      if (caught instanceof Error) error = caught;
     }
-
-    expect(failureFacts(thrown)).toBeUndefined();
+    expect(failureFacts(error)).toEqual({ reason: "validation_error", attempt: 1, maxAttempts: 3, llm: true });
   });
 
-  it("answers undefined for an error no agent run decided", () => {
+  it("preserves error identity and keeps facts non-enumerable", async () => {
+    const error = await llmFailure("transient blip");
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toBe("transient blip");
+    expect(Object.keys(error)).not.toContain("failureFacts");
+    expect(JSON.stringify({ ...error })).toBe("{}");
+  });
+
+  it("does not mark pre-provider or unrelated failures as LLM terminals", async () => {
+    const error = await retryingFailure(async () => {
+      try {
+        await runAgent(runInput([{ role: "user", content: "hi" }]), {
+          events: Bus,
+          model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+          llm: { resolveProviderModel: async () => { throw new Error("catalog invariant failed"); } },
+        });
+      } catch (caught) {
+        if (caught instanceof Error) return caught;
+        throw caught;
+      }
+      throw new Error("expected failure");
+    });
+    expect(failureFacts(error)).toBeUndefined();
     expect(failureFacts(new Error("unrelated"))).toBeUndefined();
     expect(failureFacts(undefined)).toBeUndefined();
     expect(failureFacts("a string throw")).toBeUndefined();

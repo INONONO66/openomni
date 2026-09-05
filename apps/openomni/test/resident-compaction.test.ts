@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createCompactionPolicy } from "@openomni/agent";
 import type { Sink } from "@openomni/llm";
 import { initialize, Storage } from "@openomni/ledger";
 import type { Gateway } from "@openomni/protocol";
@@ -47,16 +46,6 @@ function delivery(sessionId: string, payload: string, id: string): Gateway.Deliv
   };
 }
 
-function residentPolicies() {
-  return [
-    createCompactionPolicy({
-      events: { publish: () => undefined },
-      priority: 900,
-      elideToolOutputs: { minOutputChars: 4000, keepHeadChars: 500 },
-    }),
-  ];
-}
-
 describe("Resident compaction", () => {
   it("replaces oversized hydrated history before continuing the Resident run", async () => {
     const directory = mkdtempSync(join(tmpdir(), "openomni-resident-compaction-"));
@@ -67,7 +56,6 @@ describe("Resident compaction", () => {
     const seed = createResident({
       model: { provider: "fake", id: "resident-test" },
       apiKey: "test-key",
-      middleware: [],
       tools: {},
       targets: () => [],
       llm: {
@@ -98,7 +86,10 @@ describe("Resident compaction", () => {
     const resident = createResident({
       model: { provider: "fake", id: "resident-test" },
       apiKey: "test-key",
-      middleware: residentPolicies(),
+      compaction: {
+        contextWindowTokens: 100,
+        elideToolOutputs: { minOutputChars: 4000, keepHeadChars: 500 },
+      },
       tools: {},
       targets: () => [],
       llm: {

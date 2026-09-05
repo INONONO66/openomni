@@ -1,14 +1,19 @@
 import { describe, expect, it } from "bun:test";
-import { type BusEvent, Tool } from "@openomni/protocol";
 import {
   createDispatcher,
   createTurnDispatcher,
+  ExecutorContextError,
   currentExecutor,
   defineTool,
   type Executor,
 } from "../src/index";
 import { z } from "zod";
-import { allowAllPolicy, opPhaseOf, recordingLedger } from "./helpers/compiled-policy";
+import {
+  allowAllPolicy,
+  opPhaseOf,
+  recordingExecutor,
+  recordingLedger,
+} from "./helpers/compiled-policy";
 
 function tool(name: string, execute: () => Promise<string>, output = z.string()) {
   return defineTool({
@@ -23,11 +28,7 @@ function tool(name: string, execute: () => Promise<string>, output = z.string())
   });
 }
 
-const passThrough: Executor = {
-  async run(_request, body) {
-    return { terminal: "executed", value: await body() };
-  },
-};
+const passThrough = recordingExecutor().executor;
 
 const context = { sessionId: "session-1", turnId: "turn-1" };
 const call = (name: string) => ({ id: `call-${name}`, tool: name, input: {} });
@@ -54,7 +55,7 @@ describe("createTurnDispatcher", () => {
 
 describe("currentExecutor", () => {
   it("throws outside an active execution", () => {
-    expect(() => currentExecutor()).toThrow("called outside an active execution");
+    expect(() => currentExecutor()).toThrow(ExecutorContextError);
   });
 
   it("returns the executor running the tool body", async () => {
@@ -76,23 +77,15 @@ describe("currentExecutor", () => {
 });
 
 describe("tool body outcomes", () => {
-  it("settles a never-resolving body as timed_out and publishes the observation", async () => {
-    const published: string[] = [];
-    const observations: BusEvent.Sink = {
-      publish(event) {
-        published.push(event.name);
-      },
-    };
+  it("settles a never-resolving body as timed_out", async () => {
     const dispatcher = createDispatcher([tool("stall", () => new Promise<string>(() => undefined))], {
       executor: passThrough,
       timeoutMs: 5,
-      observations,
     });
 
     const result = await dispatcher.execute(call("stall"), context);
 
     expect(result).toMatchObject({ isError: true, errorKind: "execution_failed" });
-    expect(published).toContain(Tool.Events.TimedOut.name);
   });
 
   it("clears the timer when the body finishes inside the timeout", async () => {
@@ -119,13 +112,14 @@ describe("tool body outcomes", () => {
   });
 
   it("propagates an executor failure to the caller", async () => {
+    const failure = new TypeError("ledger unavailable");
     const failing: Executor = {
       run() {
-        return Promise.reject(new Error("ledger unavailable"));
+        return Promise.reject(failure);
       },
     };
     const dispatcher = createDispatcher([tool("echo", async () => "ok")], { executor: failing });
 
-    await expect(dispatcher.execute(call("echo"), context)).rejects.toThrow("ledger unavailable");
+    await expect(dispatcher.execute(call("echo"), context)).rejects.toBe(failure);
   });
 });

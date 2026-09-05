@@ -1,406 +1,111 @@
-import { createBudgetState } from "../../src/core/budget";
 import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
-import { createCompactionPolicy } from "../../src/compaction";
-import type { PolicyFn } from "../../src/core/policy";
-import { effectOf } from "../helpers/policy-decision";
-import { Bus } from "../../src/index";
+import { Compaction } from "../../src/compaction";
+import { collector } from "../../src/observation/bus";
+import { resolveCompactionGeometry } from "../../src/compaction/geometry";
 
-function baseCtx(
-  overrides?: Partial<Omit<Parameters<PolicyFn>[0], "pointId">>,
-): Parameters<PolicyFn>[0] {
-  return {
-    timing: "turn.finish",
-    pointId: "run.completion.pre",
-    traceContext: { traceId: "trace-builtin-test" },
-    sessionId: "session-builtin-test",
-    steps: [],
-    usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-    turnCount: 0,
-    isCompletion: false,
-    continuationCount: 0,
-    elapsedMs: 0,
-    ...overrides,
-  };
-}
-
-function createTestMessage(id: string): Message.WithParts {
+function user(id: string): Message.WithParts {
   return {
     info: {
       id,
-      sessionID: "test-session",
+      sessionID: "policy-session",
       role: "user",
-      time: { created: Date.now() },
-      agent: "test-agent",
-      model: { providerID: "test", modelID: "test" },
-      system: `Test message ${id}`,
+      time: { created: 1 },
+      agent: "test",
+      model: { providerID: "", modelID: "" },
     },
-    parts: [
-      {
-        id: `part-${id}`,
-        sessionID: "test-session",
-        messageID: id,
-        type: "text",
-        text: `Test message ${id}`,
-      },
-    ],
+    parts: [{ id: `${id}-text`, sessionID: "policy-session", messageID: id, type: "text", text: id }],
   };
 }
 
-describe("createCompactionPolicy", () => {
-  /**
-   * `run.completion.pre` is fail-closed: a throw here becomes a deny carrying
-   * `run.abort`, which ends the run. Skipping is the lesser failure, and the
-   * reason code says which one happened.
-   */
-  it("skips rather than aborting when no trace reaches it", async () => {
-    const middleware = createCompactionPolicy({
-      priority: 900,
-      events: Bus,
-      contextWindowTokens: 100,
-      protectRecentMessages: 2,
-    }).create();
-    for (const traceContext of [undefined, { traceId: "" }]) {
-      const verdict = await middleware.fn(
-        baseCtx({
-          traceContext,
-          messages: Array.from({ length: 12 }, (_unused, index) => createTestMessage(`m${index}`)),
-          contextTokens: 900,
-        }),
-      );
+function assistant(id: string): Message.WithParts {
+  return {
+    info: {
+      id,
+      sessionID: "policy-session",
+      role: "assistant",
+      time: { created: 1 },
+      parentID: "",
+      modelID: "model",
+      providerID: "provider",
+      agent: "test",
+      path: { cwd: "/", root: "/" },
+      cost: 0,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    },
+    parts: [{ id: `${id}-text`, sessionID: "policy-session", messageID: id, type: "text", text: id }],
+  };
+}
 
-      expect(verdict.verdict).toBe("allow");
-      expect(verdict.reasonCodes).toContain("compaction_skipped_no_trace");
-    }
-  });
-  it("continues when below threshold", async () => {
-    const middleware = createCompactionPolicy({
-      priority: 900,
-      events: Bus,
-      contextWindowTokens: 10000,
-    }).create();
+const identity = { traceId: "trace", sessionId: "policy-session", runId: "run" };
 
-    const messages = [createTestMessage("msg1"), createTestMessage("msg2")];
-    const ctx = baseCtx({
-      messages,
-      contextTokens: 1500,
-    });
-
-    const verdict = await middleware.fn(ctx);
-
-    expect(verdict.verdict).toBe("allow");
+describe("compaction geometry and apply policy", () => {
+  it("uses adaptive geometry instead of cumulative run spend", () => {
+    expect(Compaction.shouldCompact(449, { contextWindowTokens: 1000 })).toBe(false);
+    expect(Compaction.shouldCompact(450, { contextWindowTokens: 1000 })).toBe(true);
   });
 
-  it("transforms when above threshold", async () => {
-    const middleware = createCompactionPolicy({
-      priority: 900,
-      events: Bus,
-      contextWindowTokens: 1000,
-      protectRecentMessages: 2,
-    }).create();
-
-    const messages = Array.from({ length: 10 }, (_, i) => createTestMessage(`msg${i}`));
-    const ctx = baseCtx({
-      messages,
-      contextTokens: 8000,
-    });
-
-    const verdict = await middleware.fn(ctx);
-
-    expect(verdict.verdict).toBe("allow");
-    const replacement = effectOf(verdict, "run.replace_messages");
-    expect(replacement).toBeDefined();
-    expect(replacement?.messages.length).toBeLessThan(messages.length);
-    expect(verdict.reasonCodes).toContain("compaction_ineffective");
+  it("reserves configured headroom before the ratio threshold", () => {
+    expect(
+      resolveCompactionGeometry({ contextWindowTokens: 1000, reserveTokens: 600 }).thresholdTokens,
+    ).toBe(400);
   });
 
-  it("moves the next threshold later after an ineffective compaction", async () => {
-    const middleware = createCompactionPolicy({
-      priority: 900,
-      events: Bus,
-      contextWindowTokens: 1000,
-      protectRecentMessages: 2,
-    }).create();
-    const messages = Array.from({ length: 10 }, (_, index) => createTestMessage(`adaptive${index}`));
-    const first = await middleware.fn(baseCtx({ messages, contextTokens: 500 }));
-    expect(first.reasonCodes).toContain("compaction_ineffective");
-
-    const second = await middleware.fn(baseCtx({ messages, contextTokens: 470 }));
-    expect(second.effects).toHaveLength(0);
-  });
-
-  it("transforms when reserve budget is reached before ratio threshold", async () => {
-    const middleware = createCompactionPolicy({
-      priority: 900,
-      events: Bus,
-      contextWindowTokens: 1000,
-      reserveTokens: 250,
-      protectRecentMessages: 2,
-    }).create();
-
-    const messages = Array.from({ length: 10 }, (_, i) => createTestMessage(`msg${i}`));
-    const ctx = baseCtx({
-      messages,
-      contextTokens: 760,
-    });
-
-    const verdict = await middleware.fn(ctx);
-
-    expect(verdict.verdict).toBe("allow");
-    const replacement = effectOf(verdict, "run.replace_messages");
-    expect(replacement).toBeDefined();
-    expect(replacement?.messages.length).toBeLessThan(messages.length);
-  });
-
-  it("continues when no messages in context", async () => {
-    const middleware = createCompactionPolicy({
-      priority: 900,
-      events: Bus,
-      contextWindowTokens: 1000,
-    }).create();
-
-    const ctx = baseCtx({
-      messages: undefined,
-      contextTokens: 8000,
-    });
-
-    const verdict = await middleware.fn(ctx);
-
-    expect(verdict.verdict).toBe("allow");
-  });
-
-  it("continues when empty messages array", async () => {
-    const middleware = createCompactionPolicy({
-      priority: 900,
-      events: Bus,
-      contextWindowTokens: 1000,
-    }).create();
-
-    const ctx = baseCtx({
-      messages: [],
-      contextTokens: 8000,
-    });
-
-    const verdict = await middleware.fn(ctx);
-
-    expect(verdict.verdict).toBe("allow");
-  });
-
-  it("skips with a recorded reason when nothing was measured", async () => {
-    const middleware = createCompactionPolicy({
-      priority: 900,
-      events: Bus,
-      contextWindowTokens: 1000,
-    }).create();
-
-    const messages = Array.from({ length: 10 }, (_, i) => createTestMessage(`msg${i}`));
-    const ctx = baseCtx({
-      messages,
-      contextTokens: undefined,
-    });
-
-    const verdict = await middleware.fn(ctx);
-
-    expect(verdict.verdict).toBe("allow");
-    expect(verdict.reasonCodes).toContain("compaction_skipped_no_measurement");
-  });
-
-  it("carries the caller's priority — no ordering opinion of its own", () => {
-    const middleware = createCompactionPolicy({
-      priority: 42,
-      events: Bus,
-      contextWindowTokens: 1000,
-    }).create();
-
-    expect(middleware.priority).toBe(42);
-  });
-
-  it("has name builtin:compaction", () => {
-    const middleware = createCompactionPolicy({
-      priority: 900,
-      events: Bus,
-      contextWindowTokens: 1000,
-    }).create();
-
-    expect(middleware.name).toBe("builtin:compaction");
-  });
-
-  it("registers the canonical completion point", () => {
-    const middleware = createCompactionPolicy({
-      priority: 900,
-      events: Bus,
-      contextWindowTokens: 1000,
-    }).create();
-
-    expect(middleware.pointIds).toEqual(["run.completion.pre"]);
-    expect(middleware.effectCapabilities["run.completion.pre"]).toEqual(["run.replace_messages"]);
-  });
-
-  it("ignores run spend entirely — a huge budget with a small window stays uncompacted", async () => {
-    // The regression this whole change exists to prevent: the trigger must
-    // read the measured window, never the cumulative spend.
-    const middleware = createCompactionPolicy({
-      priority: 900,
-      events: Bus,
-      contextWindowTokens: 1000,
-      protectRecentMessages: 2,
-    }).create();
-    const verdict = await middleware.fn(
-      baseCtx({
-        messages: Array.from({ length: 12 }, (_unused, index) => createTestMessage(`m${index}`)),
-        contextTokens: 100,
-        budgetState: { ...createBudgetState(), totalInputTokens: 900000, totalOutputTokens: 90000 },
-      }),
-    );
-
-    expect(verdict.verdict).toBe("allow");
-    expect(verdict.effects).toHaveLength(0);
-  });
-
-  it("triggers from the loop's window fact when config does not restate it", async () => {
-    // The wiring PR's point: the product default carries no window — the loop
-    // records the resolved model's limit, and the policy reads it from the
-    // dispatch context.
-    const middleware = createCompactionPolicy({
-      priority: 900,
-      events: Bus,
-      protectRecentMessages: 2,
-    }).create();
-    const verdict = await middleware.fn(
-      baseCtx({
-        messages: Array.from({ length: 12 }, (_unused, index) => createTestMessage(`m${index}`)),
-        contextTokens: 900,
+  it("moves a low-yield next threshold later", () => {
+    expect(
+      resolveCompactionGeometry({
         contextWindowTokens: 1000,
-      }),
-    );
-
-    expect(verdict.verdict).toBe("allow");
-    expect(effectOf(verdict, "run.replace_messages")).toBeDefined();
+        previousYield: { savedTokens: 20, tokensBefore: 500 },
+      }).thresholdTokens,
+    ).toBe(500);
   });
 
-  it("skips with a recorded reason when no window is known anywhere", async () => {
-    // Proxy models report limit.context 0, which the loop records as unknown.
-    const middleware = createCompactionPolicy({
-      priority: 900,
-      events: Bus,
-      protectRecentMessages: 2,
-    }).create();
-    const verdict = await middleware.fn(
-      baseCtx({
-        messages: Array.from({ length: 12 }, (_unused, index) => createTestMessage(`m${index}`)),
-        contextTokens: 900,
-      }),
+  it("cuts at a user boundary when the threshold seam fires", async () => {
+    const messages = Array.from({ length: 8 }, (_entry, index) => user(`u${index}`));
+    const result = await Compaction.compact(
+      messages,
+      { contextWindowTokens: 1000, protectRecentMessages: 2 },
+      identity,
+      collector(),
+      { trigger: "threshold", measuredTokens: 900 },
     );
-
-    expect(verdict.verdict).toBe("allow");
-    expect(verdict.reasonCodes).toContain("compaction_skipped_no_window");
-    expect(verdict.effects).toHaveLength(0);
+    expect(result.compacted).toBe(true);
+    expect(result.messages).toHaveLength(2);
   });
 
-  it("lets config narrow the loop's window, never widen the trigger away", async () => {
-    const middleware = createCompactionPolicy({
-      priority: 900,
-      events: Bus,
-      protectRecentMessages: 2,
-      contextWindowTokens: 500,
-    }).create();
-    const verdict = await middleware.fn(
-      baseCtx({
-        messages: Array.from({ length: 12 }, (_unused, index) => createTestMessage(`m${index}`)),
-        contextTokens: 450,
-        contextWindowTokens: 100_000,
-      }),
-    );
-
-    expect(effectOf(verdict, "run.replace_messages")).toBeDefined();
-  });
-
-  it("records the boundary refusal instead of dying at a fail-closed point", async () => {
-    // Assistant-first history (reachable from resumed worker hydration), no
-    // summarizer, nothing elidable: the round must end as a recorded skip.
-    const middleware = createCompactionPolicy({
-      priority: 900,
-      events: Bus,
-      protectRecentMessages: 2,
-    }).create();
-    const assistantOnly = Array.from({ length: 8 }, (_unused, index) => {
-      const message = createTestMessage(`a${index}`);
-      return { ...message, info: { ...message.info, role: "assistant" as const } };
-    });
-    const verdict = await middleware.fn(
-      baseCtx({
-        messages: assistantOnly as Parameters<PolicyFn>[0]["messages"],
-        contextTokens: 900,
-        contextWindowTokens: 1000,
-      }),
-    );
-
-    expect(verdict.verdict).toBe("allow");
-    expect(verdict.reasonCodes).toContain("compaction_skipped_no_boundary");
-    expect(verdict.effects).toHaveLength(0);
-  });
-
-  it("records a triggered round that reclaimed nothing", async () => {
-    // Cutoff snaps to a user message at index 0 → no cut, nothing elidable:
-    // the silent path the wiring review found. A full window with no visible
-    // reason is how a provider 400 arrives unexplained.
-    const middleware = createCompactionPolicy({
-      priority: 900,
-      events: Bus,
-      protectRecentMessages: 2,
-    }).create();
+  it("falls back to a user-boundary cut when summarization fails", async () => {
     const messages = [
-      createTestMessage("u0"),
-      ...Array.from({ length: 7 }, (_unused, index) => {
-        const message = createTestMessage(`a${index}`);
-        return { ...message, info: { ...message.info, role: "assistant" as const } };
-      }),
+      user("fallback-user-0"),
+      ...Array.from({ length: 5 }, (_entry, index) => assistant(`fallback-assistant-${index}`)),
+      user("fallback-user-1"),
+      assistant("fallback-tail"),
     ];
-    const verdict = await middleware.fn(
-      baseCtx({
-        messages: messages as Parameters<PolicyFn>[0]["messages"],
-        contextTokens: 900,
+    const result = await Compaction.compact(
+      messages,
+      {
         contextWindowTokens: 1000,
-      }),
+        protectRecentMessages: 2,
+        onSummarize: async () => {
+          throw new Error("summarizer unavailable");
+        },
+      },
+      identity,
+      collector(),
+      { trigger: "threshold", measuredTokens: 900 },
     );
-
-    expect(verdict.verdict).toBe("allow");
-    expect(verdict.reasonCodes).toContain("compaction_skipped_nothing_reclaimed");
+    expect(result).toMatchObject({ compacted: true, summarizerFailed: true });
+    expect(result.messages).toHaveLength(2);
   });
 
-  it("compacts a yield-borne dispatch without re-gating the loop's trigger", async () => {
-    // The yield IS the trigger; the seam must not re-derive a stricter gate.
-    const middleware = createCompactionPolicy({
-      priority: 900,
-      events: Bus,
-      protectRecentMessages: 2,
-    }).create();
-    const verdict = await middleware.fn(
-      baseCtx({
-        messages: Array.from({ length: 12 }, (_unused, index) => createTestMessage(`m${index}`)),
-        contextTokens: 800,
-        contextWindowTokens: 1000,
-        contextYielded: true,
-      }),
+  it("records nothing reclaimed when the protected tail covers history", async () => {
+    const messages = [user("u0")];
+    const result = await Compaction.compact(
+      messages,
+      { contextWindowTokens: 1000, protectRecentMessages: 2 },
+      identity,
+      collector(),
+      { trigger: "yield", measuredTokens: 900 },
     );
-
-    expect(effectOf(verdict, "run.replace_messages")).toBeDefined();
-  });
-
-  it("honors the adaptive threshold on non-yield dispatches", async () => {
-    const middleware = createCompactionPolicy({
-      priority: 900,
-      events: Bus,
-      protectRecentMessages: 2,
-    }).create();
-    const verdict = await middleware.fn(
-      baseCtx({
-        messages: Array.from({ length: 12 }, (_unused, index) => createTestMessage(`m${index}`)),
-        contextTokens: 400,
-        contextWindowTokens: 1000,
-      }),
-    );
-
-    expect(verdict.effects).toHaveLength(0);
+    expect(result).toMatchObject({ compacted: false, removedCount: 0 });
   });
 });

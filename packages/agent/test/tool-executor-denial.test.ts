@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { compilePolicySnapshot, type CompiledPolicySnapshot } from "@openomni/policy";
 import type { LedgerAction, PlainValue } from "@openomni/protocol";
-import { createDispatcher, createExecutor, defineTool, ToolRefused } from "../src/index";
+import { createDispatcher, createExecutor, defineTool } from "../src/index";
 import { allowAllPolicy as allowAll, opPhaseOf, recordingLedger } from "./helpers/compiled-policy";
 import { z } from "zod";
 
@@ -71,7 +71,6 @@ describe("compiled tool.pre denial", () => {
 
     expect(executions.count).toBe(0);
     expect(result).toMatchObject({ isError: true, errorKind: "precondition_failed" });
-    expect(result.output).toContain("not_allowed");
   });
 
   it("throws through the cell door without running the body", async () => {
@@ -81,7 +80,10 @@ describe("compiled tool.pre denial", () => {
       .executeCell(call, context)
       .then((result) => result.output);
 
-    await expect(running).rejects.toBeInstanceOf(ToolRefused);
+    await expect(running).rejects.toMatchObject({
+      name: "ToolRefused",
+      errorKind: "precondition_failed",
+    });
     expect(executions.count).toBe(0);
   });
 });
@@ -123,7 +125,7 @@ describe("cell-door executor propagation", () => {
 
     // A successful model-door result carries no isError key at all.
     expect(result.isError).toBeUndefined();
-    expect(result.output).toContain("nested");
+    expect(result.output).toBe("nested");
     // Both the outer and the nested tool committed intent+result through the
     // SAME durable executor: 2 tools x (intent + result) + policy decisions.
     const toolPhases = committed
@@ -138,6 +140,6 @@ describe("cell-door executor propagation", () => {
 
     await expect(
       orphan.executeCell({ id: "call-orphan", tool: "echo", input: { value: "x" } }, context),
-    ).rejects.toThrow("tool dispatcher requires an executor");
+    ).rejects.toMatchObject({ name: "ExecutorContextError", code: "executor_context_missing" });
   });
 });

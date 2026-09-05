@@ -1,10 +1,11 @@
 import type { TraceContext } from "@openomni/protocol";
 import { ChatAgent } from "./core/chat-agent";
 import type { AgentResult, ChatAgentConfig } from "./core/types";
+import type { Executor } from "./executor";
 import type { SessionRunner, SessionRunnerInput, SessionRunnerResult } from "./session-handle";
 
 interface SessionChatRun {
-  readonly config: ChatAgentConfig;
+  readonly config: ChatAgentConfig & { readonly executor: Executor };
   readonly traceContext: TraceContext.Type;
   readonly around?: (operation: () => Promise<AgentResult>) => Promise<AgentResult>;
 }
@@ -37,8 +38,18 @@ export function createSessionChatRunner(options: SessionChatRunnerOptions): Sess
         }
 
         const prepared = options.prepare(input);
+        if (prepared.config.executor === undefined) {
+          throw new Error("durable chat runner requires an executor");
+        }
+        if (input.execution === undefined) {
+          throw new Error("durable chat runner requires an execution lifecycle");
+        }
         const execute = () =>
-          ChatAgent.create({ ...prepared.config, signal: input.signal }).run({
+          ChatAgent.create({
+            ...prepared.config,
+            execution: input.execution,
+            signal: input.signal,
+          }).run({
             messages,
             traceContext: prepared.traceContext,
           });

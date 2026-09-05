@@ -1,8 +1,9 @@
 import { processEntryPath } from "./process-entry-path";
+import { configuredCompaction } from "./compaction/strategy";
+import { seedKernelPolicyRows } from "./policy-seed";
 import {
   type ChatAgentConfig,
   closeSessions,
-  createCompactionPolicy,
   type SessionRuntime,
   sweepSessions,
 } from "@openomni/agent";
@@ -26,13 +27,7 @@ import {
 
 import { createMachineHost, type MachineHost } from "@openomni/machines";
 import type { Placement } from "@openomni/placement";
-import {
-  type BusEvent,
-  type Channel,
-  Gateway,
-  type Ingress,
-  type Machine,
-} from "@openomni/protocol";
+import { type Channel, Gateway, type Ingress, type Machine } from "@openomni/protocol";
 import { Bus, newTraceId } from "@openomni/agent";
 import { desiredChannels, materializePersons } from "./provisioning/declared";
 import { type ChannelSupervisor, createChannelSupervisor } from "./provisioning/supervisor";
@@ -45,8 +40,7 @@ import {
   type OpenOmniConfig,
   type RegisteredActor,
 } from "./config";
-import { createLlmToolPort, type LlmIo } from "./tools/execution/llm";
-import { createCompactionSummarizer } from "./compaction/summarizer";
+import { createLlmToolPort } from "./tools/execution/llm";
 import { createChannelDriver } from "./delegation/channel-driver";
 import { createInlineDriver } from "./delegation/inline-driver";
 import {
@@ -69,27 +63,6 @@ import type { CellPorts } from "./tools/execution/run-code";
 interface StartOptions {
   readonly config?: OpenOmniConfig;
   readonly llm?: ChatAgentConfig["llm"];
-}
-
-export function createConfiguredCompactionPolicy(
-  config: OpenOmniConfig,
-  events: BusEvent.Sink,
-  io: LlmIo = {},
-): ReturnType<typeof createCompactionPolicy> {
-  const transport = modelTransport(config.model);
-  return createCompactionPolicy({
-    events,
-    priority: 900,
-    elideToolOutputs: { minOutputChars: 4000, keepHeadChars: 500 },
-    ...(config.compactionSummarizer === false
-      ? {}
-      : {
-          onSummarize: createCompactionSummarizer({
-            model: { ...config.model, ...(transport === undefined ? {} : { transport }) },
-            io,
-          }),
-        }),
-  });
 }
 
 /**
@@ -254,6 +227,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
   try {
     await composer.mount("journal", (ctx) => {
       initialize({ dbPath: config.dbPath, observationSink: Bus });
+      seedKernelPolicyRows();
       ctx.effect(() => Storage.reset());
     });
     const sessionTools = new Map<
@@ -280,6 +254,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
     const runner = createInlineWorkerRunner({
       model: config.model,
       apiKey: config.model.apiKey,
+      compaction: configuredCompaction(config, options.llm ?? {}),
       ...(transport === undefined ? {} : { transport }),
       kernel: () => {
         if (kernel === undefined)
@@ -410,14 +385,12 @@ export async function startOpenOmni(options: StartOptions = {}) {
             newCellId: () => crypto.randomUUID(),
           };
 
-    const middleware = [createConfiguredCompactionPolicy(config, Bus, options.llm ?? {})];
-
     residentDeliver = createResident({
       model: config.model,
       ...(config.model.fallbacks === undefined ? {} : { modelFallbacks: config.model.fallbacks }),
       apiKey: config.model.apiKey,
       ...(transport === undefined ? {} : { transport }),
-      middleware,
+      compaction: configuredCompaction(config, options.llm ?? {}),
       tools: {
         delegation: delegationKernel,
         ...(cells === undefined ? {} : { cells }),
