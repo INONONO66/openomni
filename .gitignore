@@ -44,5 +44,13 @@ dist-npm
 skills-lock.json
 *.local.ts
 
+# Local agent working reports
+/REPORT.md
+/REPORT-*.md
+/REVIEW.md
+/REVIEW-*.md
+/LEAD-VERIFICATION.md
+/PR.md
+
 # TypeScript incremental state
 *.tsbuildinfo
