@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788671620908,
+  "lastUpdate": 1788702864031,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -65649,6 +65649,100 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 889993,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "58da7116a857fa17552513b9fc11580bf9e6fd4c",
+          "message": "feat(agent): execute deterministic session tool waves (#980)\n\n* fix(agent): retain original compaction boundary\n\n* fix(agent): make compaction projections exactly reversible\n\n* feat(agent): persist admitted compaction before projection\n\n* refactor(agent): keep compaction failure internal\n\n* docs(agent): record verified compaction increments and remaining scope\n\n* feat(agent): execute deterministic session tool waves\n\n* fix(agent): retain nested raw effects under the turn lease\n\n* fix(agent): retain timed tool definitions until raw settlement\n\n* fix(agent): fulfill timed ownership on raw rejection\n\n* test(agent): restore PR980 wave coverage\n\n* test(agent): close PR980 aggregate coverage blockers",
+          "timestamp": "2026-09-06T22:53:15+09:00",
+          "tree_id": "1c2cf883551c75394ef8c5692a4a746aad08b36c",
+          "url": "https://github.com/INONONO66/openomni/commit/58da7116a857fa17552513b9fc11580bf9e6fd4c"
+        },
+        "date": 1788702863331,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1411,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 11060,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 5593,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1423612,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 351205,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6657066,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 108,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1131,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 600,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 379192,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2545,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 14519,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 137742,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 694590,
             "unit": "ns/op"
           }
         ]
