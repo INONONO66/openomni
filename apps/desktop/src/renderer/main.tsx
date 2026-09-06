@@ -37,12 +37,33 @@ async function endpoint() {
   }
 }
 
-// `transport` is `undefined` for the mock, which is how `App`'s own tuned mock
-// stays in charge of the fixture surface.
-const { transport } = selectChatTransport(await endpoint());
+/**
+ * A misconfigured gateway is reported, never downgraded.
+ *
+ * `selectChatTransport` throws when the configured token cannot be carried as a
+ * subprotocol. Falling back to the mock there would answer a configuration
+ * mistake with a fabricated conversation that looks exactly like a working one
+ * — the console would appear to be talking to the daemon. So the failure is
+ * printed as the surface: one sentence naming the variable to fix, on the
+ * window the Owner is already looking at, instead of a blank page and a line in
+ * a devtools console they have no reason to open.
+ */
+function fatal(message: string): void {
+  const notice = document.createElement("pre");
+  notice.textContent = message;
+  notice.style.cssText = "margin:0;padding:24px;white-space:pre-wrap;font:13px ui-monospace,monospace";
+  root?.replaceChildren(notice);
+}
 
-reactRoot.render(
-  <StrictMode>
-    <App transport={transport} />
-  </StrictMode>,
-);
+try {
+  // `transport` is `undefined` for the mock, which is how `App`'s own tuned
+  // mock stays in charge of the fixture surface.
+  const { transport } = selectChatTransport(await endpoint());
+  reactRoot.render(
+    <StrictMode>
+      <App transport={transport} />
+    </StrictMode>,
+  );
+} catch (error) {
+  fatal(error instanceof Error ? error.message : String(error));
+}

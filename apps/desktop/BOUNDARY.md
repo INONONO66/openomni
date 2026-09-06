@@ -30,4 +30,12 @@ The token travels as the WebSocket subprotocol pair `["auth", token]`, which is 
 
 A renderer with no bridge behind it — the showcase, `scripts/shoot-chat.ts` — gets `undefined` and falls back to the mock, which is a correct answer rather than a degraded one.
 
+Two consequences worth stating plainly, because both are deliberate:
+
+**The packaged app always resolves an endpoint.** With no variable set the resolver still returns the loopback default, so the real console selects the gateway and never the mock. A daemon that is not running therefore shows an empty session rather than a fixture — which is the honest outcome. The mock surface is for the screenshot script and the showcase, both of which run without a preload; if the app fell back to it whenever the socket was down, an operator with a dead daemon would be reading a scripted conversation.
+
+**A live transport is never seeded with fixture messages.** `App` seeds `Chat` from `timelines` only when it was given no transport. Over the gateway a session opens empty, because the fixture contains tool calls that never ran and a pending approval whose Approve button would decide a command no machine was asked to run. `test/app-chat.test.tsx` pins both halves.
+
+**A token that cannot be a subprotocol is refused at selection**, not at first send: `new WebSocket` throws a bare `SyntaxError` on a non-token protocol value, from inside the transport, long after the mistake was made. `main.tsx` renders that message as the window instead of falling back — answering a misconfiguration with a fake conversation would hide it.
+
 `packages/ui` is data-blind. It imports neither `ai` nor `@ai-sdk/react`, does not name SDK message or tool-part types, and renders only `TranscriptNode`, costs, pending approvals, strings, and callbacks supplied by the app.

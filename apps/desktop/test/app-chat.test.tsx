@@ -88,6 +88,37 @@ describe("the shell renders the selected session's SDK messages", () => {
   });
 });
 
+/**
+ * What the transcript may claim when a REAL wire is behind it.
+ *
+ * The mock fixture is a conversation nobody had: tool calls that never ran, a
+ * cost that was never spent, and a pending approval whose Approve button would
+ * post a decision about a command no machine was asked to execute. Rendering it
+ * over the gateway transport would be a fabricated history wearing a real
+ * connection — the exact failure a transport swap must not introduce, and one
+ * no screenshot catches because the surface looks correct either way.
+ */
+describe("a live transport is never handed fabricated history", () => {
+  test("Given a gateway transport, When the app renders, Then the transcript starts empty", () => {
+    const live = renderToStaticMarkup(<App transport={createMockChatTransport()} />);
+
+    // Pinned on the fixture's own content rather than on a node count: these
+    // three are the prompt, the parsed tool target, and the approval, and each
+    // is a distinct claim the surface would be making on the wire's behalf.
+    expect(live).not.toContain("The ledger append path takes the lease twice");
+    expect(live).not.toContain("packages/kernel/src/ledger/append.rs");
+    expect(live).not.toContain("waiting for approval");
+    expect(live).toContain("No turns in this session yet.");
+  });
+
+  test("Given no transport, When the app renders, Then the mock surface keeps its fixture", () => {
+    // The other half of the same decision: absence means the mock surface, and
+    // the mock surface is the one that is allowed to show a scripted session.
+    expect(html).toContain("The ledger append path takes the lease twice");
+    expect(html).not.toContain("No turns in this session yet.");
+  });
+});
+
 describe("the chat is scoped to the selected session", () => {
   test("Given another session's timeline, When the app renders, Then its prose is absent", () => {
     // One `Chat` per session, and only the selected one is adapted. A shell

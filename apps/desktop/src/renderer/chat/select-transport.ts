@@ -28,6 +28,19 @@ export type SelectedTransport =
   | { readonly kind: "mock"; readonly transport: undefined; readonly protocols?: undefined };
 
 /**
+ * An HTTP token, per RFC 9110 §5.6.2 — the grammar a subprotocol name must obey.
+ *
+ * Checked here rather than left to the platform because `new WebSocket(url,
+ * protocols)` THROWS a bare `SyntaxError` on a value outside this set, and it
+ * throws from inside the transport's first send: the operator would see "Wrong
+ * protocol for WebSocket" on their first message, with nothing naming the
+ * variable that caused it. The daemon puts no character constraint on
+ * `OPENOMNI_WS_TOKEN`, so a space in one is a configuration mistake, not an
+ * impossibility.
+ */
+const HTTP_TOKEN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+
+/**
  * The token's place on the wire.
  *
  * `packages/channels/src/authn/websocket.ts` reads the `Sec-WebSocket-Protocol`
@@ -36,6 +49,13 @@ export type SelectedTransport =
  * unrecognised protocol and authenticate nothing.
  */
 function authProtocols(token: string): readonly string[] {
+  if (!HTTP_TOKEN.test(token)) {
+    // The token's VALUE is deliberately not in the message. It is a credential,
+    // and this string reaches a console log and a crash report.
+    throw new Error(
+      "OPENOMNI_WS_TOKEN cannot be offered as a WebSocket subprotocol: it must contain only unreserved token characters (letters, digits, and !#$%&'*+-.^_`|~)",
+    );
+  }
   return ["auth", token];
 }
 
