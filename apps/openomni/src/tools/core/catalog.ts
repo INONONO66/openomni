@@ -8,14 +8,15 @@ import {
   createDelegateTool,
 } from "../authority/delegation";
 import { createLlmTool, type LlmPort } from "../execution/llm";
-import { createRunCodeTool, type CellPorts } from "../execution/run-code";
+import { createRunCodeTool } from "../execution/run-code";
+import type { composeCodemode } from "../../composition/codemode";
 import { createProvisionTool, type ProvisionPort } from "../mutation/provision";
 import { eraseTool, toolSpec } from "@openomni/agent";
 
 export interface CatalogPorts {
   readonly delegation?: DelegationKernel;
   readonly approvals?: ApprovalPort;
-  readonly cells?: CellPorts;
+  readonly cells?: Pick<ReturnType<typeof composeCodemode>, "cell" | "bindTools">;
   readonly llm?: LlmPort;
   readonly provisioning?: ProvisionPort;
 }
@@ -36,7 +37,7 @@ export function createTools(
   if (ports.approvals !== undefined) tools.push(eraseTool(createApprovalTool(ports.approvals)));
   if (ports.provisioning !== undefined)
     tools.push(eraseTool(createProvisionTool(ports.provisioning)));
-  if (ports.cells !== undefined) tools.push(eraseTool(createRunCodeTool(ports.cells)));
+  if (ports.cells !== undefined) tools.push(eraseTool(createRunCodeTool(ports.cells.cell)));
   if (ports.llm !== undefined) tools.push(eraseTool(createLlmTool(ports.llm)));
   const visible = tools.filter(
     (tool) =>

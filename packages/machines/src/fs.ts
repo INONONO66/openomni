@@ -1,5 +1,5 @@
 import { CString, FFIType, dlopen, toArrayBuffer, type Pointer } from "bun:ffi";
-import { closeSync, constants, fstatSync, openSync, readSync } from "node:fs";
+import { closeSync, constants, fstatSync, ftruncateSync, openSync, readSync, writeSync } from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { Machine } from "@openomni/protocol";
 
@@ -33,11 +33,14 @@ type Root = {
   readonly fd: number;
 };
 
-const libc = dlopen(process.platform === "darwin" ? "/usr/lib/libSystem.B.dylib" : "libc.so.6", {
-  openat: {
-    args: [FFIType.i32, FFIType.cstring, FFIType.i32, FFIType.i32],
-    returns: FFIType.i32,
-  },
+const libcPath = process.platform === "darwin" ? "/usr/lib/libSystem.B.dylib" : "libc.so.6";
+// Darwin's public openat is variadic: arm64 passes its mode on the stack.
+// Bind the fixed-arity syscall entry so FFI passes creation mode correctly.
+const openSignature = { args: [FFIType.i32, FFIType.cstring, FFIType.i32, FFIType.i32], returns: FFIType.i32 } as const;
+const nativeOpen = process.platform === "darwin"
+  ? dlopen(libcPath, { __openat: openSignature }).symbols.__openat
+  : dlopen(libcPath, { openat: openSignature }).symbols.openat;
+const libc = dlopen(libcPath, {
   readlinkat: {
     args: [FFIType.i32, FFIType.cstring, FFIType.ptr, FFIType.u64],
     returns: FFIType.i64,
@@ -146,7 +149,7 @@ function readLinkAt(dirfd: number, name: string): { target: string } | { errno: 
 }
 
 function openAt(dirfd: number, name: string, flags: number): { fd: number } | { errno: number } {
-  const fd = libc.symbols.openat(dirfd, cString(name), flags, 0);
+  const fd = nativeOpen(dirfd, cString(name), flags, 0o600);
   return fd < 0 ? { errno: errno() } : { fd };
 }
 
@@ -172,6 +175,7 @@ function walk(
   finalDirectory: boolean,
   preserveFinalSymlink: boolean,
   shown: string,
+  targetFlags = O_TARGET,
 ): WalkResult {
   let pending = [...initialSegments];
   let traversed: string[] = [];
@@ -209,7 +213,7 @@ function walk(
     const segment = pending[0] as string;
     const isFinal = pending.length === 1;
     const flags =
-      (isFinal ? O_TARGET : constants.O_RDONLY) |
+      (isFinal ? targetFlags : constants.O_RDONLY) |
       O_NOFOLLOW |
       O_CLOEXEC |
       (!isFinal || finalDirectory ? O_DIRECTORY : 0);
@@ -409,7 +413,7 @@ function entryAt(dirfd: number, name: string): { name: string; kind: EntryKind; 
 }
 
 /**
- * Daemon-local read-only filesystem surface. Each canonical export root is
+ * Daemon-local filesystem surface. Each canonical export root is
  * opened once, and requests walk from that descriptor with openat(O_NOFOLLOW).
  * Symlinks are expanded lexically and every expansion restarts at the root fd,
  * so no pathname is checked and then resolved again for use.
@@ -441,10 +445,26 @@ export function createFsDriver(
       return refused("path_escapes_export", `path escapes export: ${shown}`);
     }
 
-    const target = walk(root, segments, request.op === "list", request.op === "stat", shown);
+    const data = request.op === "write" ? Buffer.from(request.data, "base64") : undefined;
+    if (data !== undefined && data.length > Machine.FS_WRITE_MAX_BYTES) {
+      return refused("too_large", "write exceeds socket byte cap");
+    }
+    const target = walk(root, segments, request.op === "list", request.op === "stat", shown,
+      request.op === "write" ? constants.O_WRONLY | constants.O_CREAT | constants.O_NONBLOCK : O_TARGET);
+
     if (isRefusal(target)) return target;
 
     try {
+      if (data !== undefined) {
+        if (!fstatSync(target.fd).isFile()) return refused("wrong_kind", `path is not a file: ${shown}`);
+        // Never truncate before checking the pinned descriptor's kind.
+        ftruncateSync(target.fd, 0);
+        let bytesWritten = 0;
+        while (bytesWritten < data.length) {
+          bytesWritten += writeSync(target.fd, data, bytesWritten, data.length - bytesWritten, bytesWritten);
+        }
+        return { status: "completed", value: { op: "write", bytesWritten } };
+      }
       if (request.op === "read") {
         const metadata = fstatSync(target.fd);
         if (!metadata.isFile()) return refused("wrong_kind", `path is not a file: ${shown}`);
@@ -459,7 +479,7 @@ export function createFsDriver(
           status: "completed",
           value: {
             op: "read",
-            data: buffer.subarray(0, bytesRead).toString("utf8"),
+            data: buffer.subarray(0, bytesRead).toString("base64"),
             bytesRead,
             size: metadata.size,
             truncated: offset + bytesRead < metadata.size,

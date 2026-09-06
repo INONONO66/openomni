@@ -163,3 +163,9 @@ GitHub changes executed and re-read with `gh` on 2026-09-06:
 - #950 remains OPEN with `icebox`, `architecture`, `improvement`; its body explicitly places it outside #930 and cross-links #811/#948. No duplicate successor was filed.
 - Scope stays exactly #950's machine-offer isolation capability/fail-closed execution and gateway egress secret gate, including its existing profile/blocklist/scanner acceptance. No implementation or profile/scanner design is absorbed into I08.
 - Re-triage remains closure of #938/#939 (I08) and #946 (I06); all three are OPEN at verification. This is a parking receipt, not a hardening delivery claim.
+
+## #938 follow-up
+
+- **R3-3 (parked):** add a platform-specific `fchdir`/descriptor-backed cwd
+  helper for exec so shell startup can inherit the pinned export directory.
+  Current contract deliberately accepts the bounded pathname check/spawn TOCTOU.

@@ -2,6 +2,8 @@
 
 Verified against merged `c4fb774869fb060859bbdc2f58ce37ee3a3072c9` (PR #985), 2026-09-06. Resident and native workers share the session-owned loop; legacy session CRUD/TTL and the I09 deletion surfaces are absent. Native archive confirmation and guarded migration 0034 are wired; session-owned Wait and physical message/part retention remain. Deletion and outstanding quality receipts: `docs/SLOP.md`. Keep this stamp current when editing (doc-state sync law). Gateway transport wiring verified on `feat/desktop-gateway-transport` (2026-09-06): the endpoint is resolved in Electron main from env and reaches the renderer over one `contextBridge` call.
 
+Machine/codemode ownership updated on `kernel/938-machines-host` (2026-09-06): raw WHERE handles, injected code runner, two-boundary authority, and production machine attach composition.
+
 ## OVERVIEW
 
 OpenOmni is a single-Owner Agent OS: one Resident delegates through durable contracts and evidence, not self-report. The repository contains core packages, one deployable kernel app, and an Electron console (`apps/desktop`) with app-owned AI SDK chat state and shared UI presentation. Target contracts live in `docs/core-model.md`, `docs/kernel-contract.md`, and `docs/machines-and-delegation.md`; `docs/implementation-status.md` is authoritative for current wiring.
@@ -21,7 +23,8 @@ openomni/
 │   ├── llm/             # provider I/O, transforms, retry, token/cost accounting
 │   ├── agent/           # durable sessions, stateless runAgent loop, executor, compaction
 │   ├── ipc/             # protocol-only bidirectional IPC transport
-│   ├── machines/        # attached-machine driver band
+│   ├── machines/        # raw list/get/fs/exec/runCode WHERE endpoint
+│   ├── codemode/        # code facade, machine handles, per-tenant interpreter runner
 │   ├── channels/        # channel drivers and perimeter gateway router
 │   └── ui/              # shared console presentation and design system
 ├── script/              # conformance and repository gates
@@ -37,14 +40,15 @@ openomni/
 Read `X <- Y` as Y may depend on X.
 
 ```text
-protocol <- ipc, ledger, policy, llm, placement, agent, machines, channels, apps/openomni, apps/desktop
+protocol <- ipc, ledger, policy, llm, placement, agent, machines, codemode, channels, apps/openomni, apps/desktop
 ipc <- machines, apps/openomni
 ledger <- agent, channels, apps/openomni
 policy <- agent, channels, apps/openomni
 llm <- agent, apps/openomni
 placement <- agent, apps/openomni
 agent <- apps/openomni
-machines <- apps/openomni
+machines <- codemode, apps/openomni
+codemode <- apps/openomni
 channels <- apps/openomni
 ui <- apps/desktop
 ```
@@ -59,8 +63,9 @@ ui <- apps/desktop
 | `placement` | protocol |
 | `agent` | protocol, ledger, policy, placement, llm; `src/` may depend on protocol, ledger, policy, placement, llm |
 | `machines` | protocol, ipc |
+| `codemode` | protocol, machines |
 | `channels` | protocol, policy, ledger; `src/` may depend on protocol, policy, ledger |
-| `apps/openomni` | protocol, channels, ipc, agent, llm, ledger, policy, placement, machines |
+| `apps/openomni` | protocol, channels, ipc, agent, llm, ledger, policy, placement, machines, codemode |
 | `ui` | none |
 | `apps/desktop` | protocol, ui |
 <!-- END GENERATED TOPOLOGY -->
@@ -79,7 +84,8 @@ ui <- apps/desktop
 | `packages/llm` | Provider behavior and model accounting | Product routing or tools |
 | `packages/agent` | Generic durable-session mechanics over ledger facts, stateless loop, and compaction | Product-specific session identity, routing, or lifecycle policy |
 | `packages/ipc` | Framing and bidirectional transport | Run semantics or authorization |
-| `packages/machines` | Machine attach and cell execution driver | Enrollment policy or product judgment |
+| `packages/machines` | Machine attachment, confined fs, exec and injected code wire | Interpreter internals, enrollment policy or product judgment |
+| `packages/codemode` | Code facade, machine object handles, per-tenant interpreter and call routing | Kernel policy, ledger, model rendering |
 | `packages/channels` | Drivers plus perimeter routing, waits, and admission | Session content or product execution |
 | `apps/openomni` | Product composition: Resident, gateway, delegation, code mode, boot/shutdown | Reimplementation of package primitives |
 | `apps/desktop` | Electron shell: main/preload/renderer build pipeline, window security defaults, the gateway endpoint resolved from env in main and handed to the renderer over one `contextBridge` call; AI SDK chat state and transports; the attention ordering engine, the search engine, mock fixtures, session-selection state, and per-session draft and approval-decision state | Kernel logic; anything beyond protocol contracts; **transcript presentation — that is `packages/ui`'s** |
@@ -94,7 +100,8 @@ ui <- apps/desktop
 | Policy mechanism | `packages/policy/src/` |
 | Session loop, executor, and compaction | `packages/agent/src/session-chat-runner.ts`, `packages/agent/src/core/`, `packages/agent/src/executor.ts`, `packages/agent/src/compaction/` |
 | Channel driver or perimeter route | `packages/channels/src/` |
-| Machine attach/cell execution | `packages/machines/src/` |
+| Raw machine endpoints | `packages/machines/src/` |
+| Code mode and injected interpreter | `packages/codemode/src/` |
 | Resident and app composition | `apps/openomni/src/resident.ts`, `apps/openomni/src/index.ts` |
 | Production compaction strategy | `apps/openomni/src/compaction/`, `packages/agent/src/compaction/` |
 | Gateway and channel registration | `apps/openomni/src/gateway.ts`, `apps/openomni/src/channels.ts` |
@@ -106,7 +113,7 @@ ui <- apps/desktop
 ## CONVENTIONS
 
 - ESM, strict TypeScript, Zod-first shared contracts, namespace-style public APIs.
-- One enforcement layer per invariant; durable writes fail closed.
+- One enforcement layer per invariant; durable writes fail closed. Machine effects enter captured kernel `tool.pre` and daemon negotiated/offered capability/export enforcement; no app VFS policy layer.
 - No deep package imports. Driver-band code stays on published protocol/IPC contracts.
 - Product vocabulary avoids new `runtime`, `task`, and `envelope` nouns in protocol surfaces.
 - Tests must use exact state/event completion rather than timing sleeps; behavior-sensitive failure paths must assert typed errors or messages.

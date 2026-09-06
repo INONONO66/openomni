@@ -16,6 +16,17 @@ export namespace Machine {
   export const MachineId = Schema.MachineId;
   export type MachineId = Schema.MachineId;
   export const WireMethod = Schema.WireMethod;
+  export const AbsolutePath = Schema.AbsolutePath;
+  export const ExecRequest = Schema.ExecRequest;
+  export type ExecRequest = Schema.ExecRequest;
+  export const ExecResult = Schema.ExecResult;
+  export type ExecResult = Schema.ExecResult;
+  export const CancelCode = Schema.CancelCode;
+  export const CancelResult = Schema.CancelResult;
+  export type CancelResult = import("zod").infer<typeof Schema.CancelResult>;
+  export const FS_WRITE_MAX_BYTES = Schema.FS_WRITE_MAX_BYTES;
+  export const EXEC_MAX_BYTES = Schema.EXEC_MAX_BYTES;
+  export const EXEC_TIMEOUT_MS = Schema.EXEC_TIMEOUT_MS;
   export const Enrollment = Schema.Enrollment;
   export type Enrollment = Schema.Enrollment;
   export const Offer = Schema.Offer;

@@ -40,9 +40,9 @@ test("typed facade round-trips a known method through the public transport barre
   const observed: Array<{ method: string; params: unknown }> = [];
   const server = await createIpcServer(path, (method, received, respond) => {
     observed.push({ method, params: received });
-    const request = Ipc.Methods["machine.run_cell"].params.parse(received);
+    const request = Ipc.Methods["machine.run_code"].params.parse(received);
     respond(
-      Ipc.Methods["machine.run_cell"].result.parse({
+      Ipc.Methods["machine.run_code"].result.parse({
         status: "completed",
         cellId: request.cellId,
         output: { stdout: request.code, stderr: "" },
@@ -53,8 +53,8 @@ test("typed facade round-trips a known method through the public transport barre
   try {
     const client = await connectIpcClient(path);
     try {
-      const result = await typedCall(client, "machine.run_cell", params, 1_000);
-      expect(observed).toEqual([{ method: "machine.run_cell", params }]);
+      const result = await typedCall(client, "machine.run_code", params, 1_000);
+      expect(observed).toEqual([{ method: "machine.run_code", params }]);
       expect(result).toEqual({
         status: "completed",
         cellId: "typed-cell",

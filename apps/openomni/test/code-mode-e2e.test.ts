@@ -1,6 +1,7 @@
 import { beforeEach, expect, test } from "bun:test";
-import { existsSync } from "node:fs";
-import { dirname } from "node:path";
+import { existsSync, mkdtempSync, mkdirSync, rmSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { tmpdir } from "node:os";
 import { interpreterWitness } from "./helpers/interpreter-witness";
 import { SessionHandleStore } from "@openomni/ledger";
 import { Bus } from "@openomni/agent";
@@ -13,9 +14,8 @@ import {
 import type { Machine } from "@openomni/protocol";
 import type { DelegationOrigin } from "../src/delegation/admission";
 import type { CatalogPorts } from "../src/tools/core/catalog";
-import type { AnyToolDefinition } from "@openomni/protocol";
-import { createCellRegistry } from "../src/tools/cell-registry";
-import type { CellPorts } from "../src/tools/execution/run-code";
+import { composeCodemode } from "../src/composition/codemode";
+import { createCodemode } from "@openomni/codemode";
 import { modelToolOutput } from "./helpers/tool-dispatch";
 import { requestToolStep, assistantMessage } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
@@ -58,7 +58,7 @@ async function createMachineHost(options: Parameters<typeof createHost>[0]) {
 async function attachMachineDaemon(
   options: Parameters<typeof attachDaemon>[0],
 ): Promise<MachineDaemon> {
-  const daemon = await attachDaemon(options);
+  const daemon = await attachDaemon({ ...options, runner: createCodemode().runner });
   suite.defer(() => daemon.close());
   return daemon;
 }
@@ -70,11 +70,74 @@ const enrollment: Machine.Enrollment = {
   enrolledAt: 0,
 };
 
+const fullEnrollment = (): Machine.Enrollment => ({
+  ...enrollment,
+  allowedCapabilities: ["fs.read", "fs.write", "shell.exec", "kernel.py"],
+  allowedExports: ["data"],
+});
+
 /**
  * The payoff, end to end and with a real daemon: one cell makes three
  * delegate calls that would otherwise be three turns, and the answers come
  * back inside the cell rather than to the model.
  */
+test("app root runs machine read write shell and code through one run_code cell", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "om-app-machine-"));
+  const root = join(directory, "data");
+  mkdirSync(root);
+  const socketPath = testSocketPath();
+  const appEnrollment = { ...fullEnrollment(), allowedExports: ["data"] };
+  const config = suite.config("openomni-app-machine-", {
+    wsToken: WS_TOKEN,
+    model: { provider: "fake", id: "app-machine-test", apiKey: "test-key" },
+    machines: { socketPath, enrolled: [appEnrollment] },
+  });
+  const app = await suite.boot({
+    config,
+    llm: {
+      resolveModel: fakeProviderModel,
+      run: async (input: RunInput, sink: Sink) => {
+        const call = requestToolStep(input, sink, {
+          id: "machine-cell",
+          tool: "run_code",
+          input: {
+            code: [
+              `m = codemode.getMachine('${MACHINE_ID}')`,
+              `m.write(${JSON.stringify(join(root, "value"))}, bytes([0, 255, 128, 65]))`,
+              `readback = list(m.read(${JSON.stringify(join(root, "value"))})['data'])`,
+              `shell = m.shell('printf shell; exit 7', ${JSON.stringify(root)})`,
+              `code = m.run('6 * 7')`,
+              "(readback, shell['stdout'], shell['exitCode'], code['value'])",
+            ].join("\n"),
+            timeoutMs: 15_000,
+          },
+        });
+        if (call === undefined) return { type: "stop" };
+        sink.onMessage(assistantMessage(input, { text: call.output }));
+        return { type: "stop" };
+      },
+    },
+  });
+  const daemon = await attachMachineDaemon({ socketPath, fsExports: new Map([["data", root]]), offer: {
+    machineId: MACHINE_ID,
+    offeredCapabilities: appEnrollment.allowedCapabilities,
+    exports: [{ name: "data", path: root }],
+    daemonVersion: "test",
+    platform: `${process.platform}-${process.arch}`,
+    offeredAt: 1,
+  }});
+  suite.defer(() => daemon.close());
+  const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", WS_TOKEN]);
+  const reply = nextMessage(ws, 15_000);
+  ws.send(JSON.stringify({ type: "message", text: "exercise machine" }));
+  const answer = (JSON.parse(String((await reply).data)) as { text: string }).text;
+  expect(answer).toContain("[0, 255, 128, 65]");
+  expect(answer).toContain("b'shell'");
+  expect(answer).toContain("7");
+  expect(answer).toContain("'42'");
+  rmSync(directory, { recursive: true, force: true });
+}, 30_000);
+
 test("a cell batches delegation into one turn", async () => {
   const socketPath = testSocketPath();
   const residentTurns: string[] = [];
@@ -116,11 +179,9 @@ test("a cell batches delegation into one turn", async () => {
           },
         });
         if (executed === undefined) return { type: "stop" };
-        const listed = requestToolStep(input, sink, { id: "call-2", tool: "machines", input: {} });
-        if (listed === undefined) return { type: "stop" };
         sink.onMessage(
           assistantMessage(input, {
-            text: `offered=[${offered.join(",")}] cell=${executed?.output ?? "nothing"} machines=${listed?.output ?? "nothing"}`,
+            text: `offered=[${offered.join(",")}] cell=${executed?.output ?? "nothing"}`,
           }),
         );
         return { type: "stop" };
@@ -154,9 +215,8 @@ test("a cell batches delegation into one turn", async () => {
   // is the cell's final expression as Python rendered it, quotes included.
   expect(answer).toContain("done(check lint); done(check types); done(check tests)");
   // One Resident turn, not three: that is what code mode bought.
-  expect(residentTurns).toHaveLength(3);
+  expect(residentTurns).toHaveLength(2);
   expect(new Set(residentTurns).size).toBe(1);
-  expect(answer).toContain("machines=unregistered tool: machines");
   expect(witness.pids).toHaveLength(1);
   await suite.cleanup();
   expect(witness.completed).toBe(true);
@@ -195,11 +255,9 @@ test("the machine tool is not offered while nothing is attached", async () => {
           input: { code: "1", timeoutMs: 1000 },
         });
         if (forced === undefined) return { type: "stop" };
-        const listed = requestToolStep(input, sink, { id: "call-2", tool: "machines", input: {} });
-        if (listed === undefined) return { type: "stop" };
         sink.onMessage(
           assistantMessage(input, {
-            text: `forced=${forced?.output ?? "nothing"} machines=${listed?.output ?? "nothing"}`,
+            text: `forced=${forced?.output ?? "nothing"}`,
           }),
         );
         return { type: "stop" };
@@ -222,8 +280,7 @@ test("the machine tool is not offered while nothing is attached", async () => {
     "run_code",
   ]);
   // All tools are host-projected; the local default host reports live attachment failure.
-  expect(answer).toContain("the default kernel host is not attached right now");
-  expect(answer).toContain("machines=unregistered tool: machines");
+  expect(answer).toContain("kernel_not_available");
 }, 30_000);
 
 /**
@@ -268,13 +325,13 @@ test("a cell cannot present another cell's id when calling back", async () => {
     },
   });
 
-  const slow = host.runCell(MACHINE_ID, {
+  const slow = host.get(MACHINE_ID).runCode({
     cellId: "AAA",
     code: "tool.hold()",
     timeoutMs: 15_000,
     tenant: "tenant-one",
   });
-  const forging = await host.runCell(MACHINE_ID, {
+  const forging = await host.get(MACHINE_ID).runCode({
     cellId: "BBB",
     // The call carries no id of its own; naming one changes nothing.
     code: "tool.delegate(cellId='AAA', instruction='borrow')",
@@ -331,13 +388,13 @@ const CELL_ORIGIN: DelegationOrigin = { role: "resident", depth: 0, sessionId: "
  */
 async function startCellHarness(ports: CatalogPorts) {
   const socketPath = testSocketPath();
-  const registry = createCellRegistry();
+  let cells: ReturnType<typeof composeCodemode>;
   const host = await createMachineHost({
     socketPath,
     enrollment: (machineId) => (machineId === MACHINE_ID ? enrollment : undefined),
     events: Bus,
     now: () => Date.now(),
-    callTool: registry.callTool,
+    callTool: (call) => cells.callTool(call),
   });
   const daemon = await attachMachineDaemon({
     socketPath,
@@ -350,17 +407,8 @@ async function startCellHarness(ports: CatalogPorts) {
     },
   });
   expect(daemon.attachment.status).toBe("attached");
-  const sessionTools = new Map<string, readonly AnyToolDefinition[]>();
-  const cells: CellPorts = {
-    registry,
-    defaultMachineId: MACHINE_ID,
-    runCell: (machineId, request) => host.runCell(machineId, request),
-    bindTools: (sessionId, tools) => {
-      sessionTools.set(sessionId, tools);
-    },
-    tools: (sessionId) => sessionTools.get(sessionId) ?? [],
-    newCellId: () => crypto.randomUUID(),
-  };
+  cells = composeCodemode(host);
+  suite.defer(() => cells.close());
   const execute = modelToolOutput("run_code", { ...ports, cells }, CELL_ORIGIN);
   return {
     socketPath,
@@ -503,5 +551,5 @@ test("a machine offering more than it is enrolled for keeps only the intersectio
   });
 
   // Without kernel.py in the effective set, run_code stays unofferable.
-  expect(host.attached(MACHINE_ID)).toEqual(["fs.read"]);
+  expect(host.list().find((entry) => entry.machineId === MACHINE_ID)?.capabilities).toEqual(["fs.read"]);
 }, 30_000);

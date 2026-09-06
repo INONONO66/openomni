@@ -162,7 +162,25 @@ Who owns the action record differs by kind. `llm` and `tool` operations are exec
 
 Policy authority is the immutable compiled row snapshot pinned by the durable session generation. There is no caller-owned callback policy engine or callback registration surface. The OpenOmni boot composition seeds the kernel's mandatory policy rows into durable storage before sessions are materialized; a generation without the mandatory row compiles to a fail-closed snapshot and refuses the turn.
 
-## 3. Turn termination, not task satisfaction
+## 3. Machine and codemode contract
+
+The machine endpoint is a raw WHERE surface: `MachineHost.list()` and stable
+`get(id)` handles expose confined filesystem operations, `exec(cmd, cwd)`, and
+`runCode`. Enrollment and daemon offer capabilities intersect fail-closed;
+`shell.exec` is distinct from filesystem capabilities and is required for
+`exec`. For each exec call the daemon re-resolves the effective export root pathname,
+checks cwd containment, and spawns by pathname. Exec does not share the fs
+branch's pinned-root invariant: replacing the export-root pathname before a
+request changes where exec actually starts (fs keeps reading the root pinned at
+attach), and a symlink swap between check and spawn is a bounded, accepted
+TOCTOU for now (follow-up #938 in `docs/SLOP.md`). This is
+not an OS shell sandbox: commands run as
+the daemon user and may exercise that user's other OS authority once started;
+Owner grants shell execution knowingly. Codemode consumes these handles through
+one `run_code` cell runner, with per-tenant interpreter state and no legacy
+machines or filesystem tools.
+
+## 4. Turn termination, not task satisfaction
 
 The old task-ticket, executor-kind, completion-admission and evidence-gate contracts were withdrawn by #940. There is no replacement ticket/evidence store or completion authority. The kernel records that a turn terminated; the model reading the returned letter judges satisfaction. Generic provider attempts remain children of model actions, not a revived task domain. The live delegation/gateway surfaces and unmerged messaging target are distinguished in [Implementation Status](implementation-status.md).
 

@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { loadConfig } from "../config";
 import { installShutdownHandlers, startOpenOmni } from "../index";
 import { type CliDeps, runCli } from "./commands";
+import { attachConfiguredMachine } from "./machine";
 import type { DaemonIo, DaemonTarget, ExecResult } from "./daemon";
 import { daemonActive, unitPath } from "./daemon";
 import { applyEnvFile, parseEnvFile, writeEnvFile } from "./env-file";
@@ -162,6 +163,14 @@ export function createCliDeps(home: string = homedir(), options: CliRuntimeOptio
     io,
     envPath,
     startApp,
+    async attachMachine(configPath) {
+      const daemon = await attachConfiguredMachine(configPath);
+      console.log(JSON.stringify(daemon.attachment));
+      if (daemon.attachment.status === "refused") { await daemon.close(); return 1; }
+      installShutdownHandlers({ stop: () => daemon.close(), exit: (code) => process.exit(code), on: (signal, handler) => process.once(signal, handler) });
+      await daemon.closed;
+      return 0;
+    },
     ask,
     writeEnv: (entries) => writeEnvFile(envPath, entries),
     doctorPorts,

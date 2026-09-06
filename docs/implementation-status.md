@@ -4,6 +4,8 @@ Single source of truth for current wiring, not a declaration that every target i
 
 **Verified source:** `c4fb774869fb060859bbdc2f58ce37ee3a3072c9`, tree `0d6318c742a1ca0eeaa5ddf30003108ba8a53487`, 2026-09-06. This includes #965, the #967 correction PRs, and #985's session-loop convergence. The #948 patch changes documentation only. [SLOP and deletion receipts](SLOP.md) contain exact grep commands, merged commits, gate results, and outstanding acceptance; closed issue labels are not implementation evidence.
 
+Machine/codemode wiring is updated by #938/#939 in PR #991, rebased onto `5b3ff997` including #987's deletion receipts and #988's protocol-only messaging contracts. The source pin above identifies the retained #948 historical receipt, not the new machine implementation.
+
 ## Deployed shape
 
 | Component | Current wiring | Source |
@@ -20,11 +22,12 @@ Single source of truth for current wiring, not a declaration that every target i
 | LLM | Canonical model/auth resolution, provider classification, retry-after/backoff, and corrected additive token accounting. The processor performs one attempt; session execution owns retry and re-admission. The unused public fact tap is removed (#976); ephemeral transcript folding and message/tool callbacks remain. | `packages/llm/src/`, `packages/agent/src/executor-attempts.ts` |
 | Compaction | App-configured summarization and agent-owned speculative/synchronous compaction, with durable projection/range/hash/revert evidence and reconstruction from canonical actions. The summarizer is wired, not dormant. | `apps/openomni/src/compaction/`, `packages/agent/src/compaction/`, `packages/agent/src/session-history.ts` |
 | Observation | Scoped agent bus/component observations are projections, not durable authority. Ledger facts commit before observation. The old telemetry package and bus-persistence writer are absent. | `packages/agent/src/observation/`, `apps/openomni/src/observation/` |
-| Machines and cells | Attached-machine enrollment/offer intersection, tenant-isolated interpreters, IPC and cell tool bridge. The app's `run_code` uses the configured default machine; cell-only `llm` accepts batched prompts. The raw filesystem driver remains, but the old app filesystem/list-machines tools are absent. | `packages/machines/`, `packages/ipc/`, `apps/openomni/src/tools/execution/` |
+| Machine body and raw endpoints | Stable list/get handles expose binary-safe confined fs read/write/list/stat, stateless exec(cmd,cwd), and runCode. Enrollment/offer intersection is fail-closed. Exactly two authorization boundaries: captured kernel tool.pre and daemon capability/export enforcement. The descriptor-pinned no-follow confinement driver remains; machines owns no interpreter. Old app filesystem/list-machines tools remain absent. | `packages/machines/`, `packages/protocol/src/machine/`, `packages/ipc/` |
+| Code mode | Public factory supplies machine object handles and cell.run. The injected daemon runner owns lazy per-tenant Python processes, parallel/llm helpers and callback routing. The brain facade never spawns Python. Cancellation and close propagate across the attachment and await process cleanup. App VFS, cell registry and old machine methods are deleted; the single run_code tool delegates to codemode. Cell-only llm retains batched prompts and its 32-prompt per-catalog budget. The scp-style plain-tool door remains #949. | `packages/codemode/`, `apps/openomni/src/composition/codemode.ts`, `apps/openomni/src/tools/execution/` |
 | Tool catalog and prompts | The current catalog has delegation, approval, provisioning, cell execution and cell LLM definitions. The prompt builder accepts model tuning only; deleted-domain injection/instructions are absent. Model output truncation retains its marker and original size; cell values stay full. | `apps/openomni/src/tools/core/catalog.ts`, `apps/openomni/src/prompt/`, `packages/agent/src/tool-dispatcher.ts` |
-| CLI and composition | Start/onboard/daemon/doctor/logs and npm staging belong to the app. Reversible composition owns both boot rollback and reverse-order shutdown. | `apps/openomni/src/cli/`, `apps/openomni/script/build-npm-package.ts`, `apps/openomni/src/composition/composer.ts` |
+| CLI and composition | Start/onboard/daemon/doctor/logs and npm staging belong to the app. The minimal `openomni machine attach <config.json>` composes the retained machine daemon wire; Resident `openomni daemon` remains unchanged. Reversible composition owns both boot rollback and reverse-order shutdown. | `apps/openomni/src/cli/`, `apps/openomni/script/build-npm-package.ts`, `apps/openomni/src/composition/composer.ts` |
 
-`packages/placement` still exists and participates in tool placement. There is no `packages/codemode` at this source pin. Generated `AGENTS.md` topology describes the twelve present workspaces, not I08's target layout. Delegation and the current approval tool are retained consumers, not deleted-domain residue to remove in a docs PR.
+`packages/placement` still exists and participates in tool placement. PR #991 adds `packages/codemode`; generated `AGENTS.md` topology now describes thirteen workspaces. Delegation and the current approval tool are retained consumers, not deleted-domain residue. The original twelve-workspace census remains historical evidence at the #948 source pin.
 
 ## I09 deletion receipt synchronization
 
@@ -33,7 +36,7 @@ The A-row domain deletions below pass their exact production grep at the verifie
 | Rows | Disposition | Merged evidence |
 | --- | --- | --- |
 | A1, A2, A5 | Dormant transcript persistence, unused surface claim, and runtime integration client removed. The live ephemeral transcript fold survives. | #944 / PR #963, `b44cd76e` |
-| A9 | Historical test-only export list was already zero; no invented deletion. The current empty-baseline Knip run reports twelve workspaces, zero issues. This is not proof of #945's stricter production-consumer census. | #944 / PR #963; current gate receipt in SLOP.md |
+| A9 | Historical test-only export list was already zero; no invented deletion. The #948 source-pin empty-baseline Knip run reported twelve workspaces, zero issues. This is not proof of #945's stricter production-consumer census. | #944 / PR #963; current gate receipt in SLOP.md |
 | A13 | Old task-ticket/completion domain, tools, schemas, and stores deleted. Later owner-schema correction consumed through #967. Generic provider-attempt history is unrelated and remains. | #940 / PR #960, `6c5d65d6`; PR #977, `eec7f7fc` |
 | A14 | Built-in curated stores, mutation tool, config, and prompt injection removed without replacement. Local user files are not migrated by this docs update. | #941 / PR #958, `d35cdd39` |
 | A15 | Blob store/schema/adapter/tools and spill removed; distinct model/cell output handling survives. | #942 / PR #959, `7edfe5d2` |
@@ -66,6 +69,6 @@ The archive CLI creates a native SQLite image plus a v2 all-table receipt at exp
 ## Parked and otherwise unimplemented
 
 - [#950](https://github.com/INONONO66/openomni/issues/950) remains `icebox`, outside #930, superseding closed [#811](https://github.com/INONONO66/openomni/issues/811). It owns machine-offer isolation capability/fail-closed execution and the gateway egress secret gate. Kernel trust-boundary placement does not decide sandbox profiles or scanner semantics. Re-triage follows #938/#939 and #946; all three are open at verification. No sandbox/scanner implementation is included here.
-- I05/I06/I08's final catalog, unified messaging, machine-locus/codemode layout, and deletion of remaining live delegation/placement consumers are not predeclared shipped.
+- I05/I06's final catalog, unified messaging runtime, machine-locus plain-tool door, and deletion of remaining live delegation/placement consumers are not predeclared shipped. #988 adds protocol-only sendMessage/gateway ingest contracts, not runtime cutover; I08's machine handles and codemode package are described above.
 - Connector definitions and installation schemas are not an installed connector execution host. The dormant installation store is deleted.
 - Governor/Jester/Voice, Stakes and effective-authority target consumers, dynamic reactive composition, and any later memory/search redesign are not promoted to shipped by retained design prose.

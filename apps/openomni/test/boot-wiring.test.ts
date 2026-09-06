@@ -13,7 +13,7 @@ import type { Channel } from "@openomni/protocol";
 import type { BuiltChannel, ChannelComponent } from "../src/channels";
 import { createComposer } from "../src/composition/composer";
 import { MOUNTED_CHANNEL_DEFAULT_TIER, registerTrustedChannelGrant } from "../src/gateway";
-import { createMachinesPort, replyText } from "../src/index";
+import { replyText } from "../src/index";
 import {
   type ChannelSupervisor,
   createChannelSupervisor,
@@ -208,73 +208,6 @@ describe("replyText", () => {
   test("hands a string payload back verbatim and serializes anything else", () => {
     expect(replyText("done")).toBe("done");
     expect(replyText({ status: "done", count: 2 })).toBe('{"status":"done","count":2}');
-  });
-});
-
-describe("createMachinesPort", () => {
-  const enrolled = [
-    { name: "a", machineId: "machine:a", allowedCapabilities: ["shell"], enrolledAt: 1 },
-    { name: "b", machineId: "machine:b", allowedCapabilities: ["shell"], enrolledAt: 1 },
-  ];
-  const machines = { socketPath: "/tmp/unused.sock", enrolled };
-
-  test("is absent without a host or enrollment", () => {
-    expect(createMachinesPort(undefined, machines)).toBeUndefined();
-    expect(
-      createMachinesPort(
-        { attached: () => undefined, attachedExports: () => undefined },
-        undefined,
-      ),
-    ).toBeUndefined();
-  });
-
-  test("folds enrollment against live attachment per read", () => {
-    const port = createMachinesPort(
-      {
-        attached: (machineId) => (machineId === "machine:a" ? ["shell"] : undefined),
-        attachedExports: () => [],
-      },
-      machines,
-    );
-    if (port === undefined) throw new Error("expected a machines port");
-
-    expect(port()).toEqual([
-      { machineId: "machine:a", attached: true, capabilities: ["shell"], effectiveExports: [] },
-      { machineId: "machine:b", attached: false, capabilities: [], effectiveExports: [] },
-    ]);
-  });
-
-  test("reports the live effective export set, not the enrollment's wish", () => {
-    const port = createMachinesPort(
-      {
-        attached: (machineId) => (machineId === "machine:a" ? ["fs.read"] : undefined),
-        // The host answers with enrollment∩offer, so an export the Owner
-        // allowed but the daemon never offered is simply not here.
-        attachedExports: (machineId) => (machineId === "machine:a" ? ["notes"] : undefined),
-      },
-      {
-        socketPath: "/tmp/unused.sock",
-        enrolled: [
-          {
-            name: "a",
-            machineId: "machine:a",
-            allowedCapabilities: ["fs.read"],
-            allowedExports: ["notes", "src"],
-            enrolledAt: 1,
-          },
-        ],
-      },
-    );
-    if (port === undefined) throw new Error("expected a machines port");
-
-    expect(port()).toEqual([
-      {
-        machineId: "machine:a",
-        attached: true,
-        capabilities: ["fs.read"],
-        effectiveExports: ["notes"],
-      },
-    ]);
   });
 });
 

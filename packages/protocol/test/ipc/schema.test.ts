@@ -93,7 +93,9 @@ describe("Ipc.Methods param schemas", () => {
     expect(Object.keys(Ipc.Methods).sort()).toEqual(
       [
         Machine.WireMethod.Attach,
-        Machine.WireMethod.RunCell,
+        Machine.WireMethod.RunCode,
+        Machine.WireMethod.CancelCode,
+        Machine.WireMethod.Exec,
         Machine.WireMethod.CallTool,
         Machine.WireMethod.FsOp,
       ].sort(),
@@ -110,13 +112,13 @@ describe("Ipc.Methods param schemas", () => {
     expect(Ipc.Methods[Machine.WireMethod.Attach].result).toBe(Machine.AttachResult);
   });
 
-  test("machine.run_cell params reject a cell request without a timeout", () => {
-    const valid = Ipc.Methods[Machine.WireMethod.RunCell].params.safeParse({
+  test("machine.run_code params reject a cell request without a timeout", () => {
+    const valid = Ipc.Methods[Machine.WireMethod.RunCode].params.safeParse({
       cellId: "cell-1",
       code: "print(1)",
       timeoutMs: 1_000,
     });
-    const missingTimeout = Ipc.Methods[Machine.WireMethod.RunCell].params.safeParse({
+    const missingTimeout = Ipc.Methods[Machine.WireMethod.RunCode].params.safeParse({
       cellId: "cell-1",
       code: "print(1)",
     });
@@ -127,7 +129,7 @@ describe("Ipc.Methods param schemas", () => {
   test("machine.call_tool params reject an unnamed tool call", () => {
     const valid = Ipc.Methods[Machine.WireMethod.CallTool].params.safeParse({
       cellId: "cell-1",
-      name: "machines",
+      name: "inventory",
       arguments: {},
     });
     const unnamed = Ipc.Methods[Machine.WireMethod.CallTool].params.safeParse({

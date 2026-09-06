@@ -51,13 +51,15 @@ const methods = {
     params: Machine.Offer,
     result: Machine.AttachResult,
   },
-  [Machine.WireMethod.RunCell]: {
+  [Machine.WireMethod.Exec]: { params: Machine.ExecRequest, result: Machine.ExecResult },
+  [Machine.WireMethod.CancelCode]: { params: Machine.CancelCode, result: Machine.CancelResult },
+  [Machine.WireMethod.RunCode]: {
     params: Machine.CellRequest,
     result: Machine.CellResult,
   },
   /**
    * Machine daemon → machine host, made from inside a running cell
-   * (docs/machines-and-delegation.md §5.5): the reverse direction of RunCell,
+   * (docs/machines-and-delegation.md §2.2): the reverse direction of RunCode,
    * on the same attachment, so one cell can batch what would otherwise be N
    * tool round trips.
    */
@@ -66,10 +68,9 @@ const methods = {
     result: Machine.ToolCallResult,
   },
   /**
-   * Machine host → machine daemon: one read-only filesystem op against a named
-   * export. The host has already gated attachment, the `fs.read` capability,
-   * and the effective-export set; the daemon re-checks its own offer and owns
-   * path confinement, because only it knows where the export really lives.
+   * Machine host → machine daemon: one filesystem op against a named export.
+   * The host translates real absolute paths; the daemon checks the negotiated
+   * capability/export ceilings and its own offer, then confines the operation.
    */
   [Machine.WireMethod.FsOp]: {
     params: Machine.FsRequest,

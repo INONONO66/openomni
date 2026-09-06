@@ -11,6 +11,7 @@ export interface IpcClient {
 
 export type ConnectIpcClientOptions = {
   connectTimeoutMs?: number;
+  onDisconnect?: () => void;
   onRequest?: (
     method: string,
     params: Record<string, unknown> | undefined,
@@ -108,6 +109,7 @@ export function connectIpcClient(
     socket.on("close", () => {
       connected = false;
       failAllPending(new IpcConnectionError("socket closed"));
+      opts.onDisconnect?.();
     });
 
     socket.on("end", () => {

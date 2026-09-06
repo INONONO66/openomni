@@ -39,103 +39,110 @@ The daemon itself is the driver-band `packages/machines` package
 ({protocol, ipc} deps only, reverse-connection over the ipc transport);
 enrollment storage is a ledger record; attach admission is kernel judgment.
 
-### 2.1 The machine filesystem (read-only)
+### 2.1 Raw machine and code-mode consumers
 
-Attached machines appear as ONE flat namespace,
-`/machines/<machineId>/<export>/<path inside it>`, carrying a read-only slice:
-`read`, `list`, `stat`, and no mutation verb anywhere in the vocabulary.
+`MachineHost.list()` returns attached enrollment fields, tags (empty when
+omitted), the effective capability set, and os/arch from the daemon's platform
+report. Detached machines are absent. `get(id)` returns a stable handle, even
+before attachment; calling an unattached handle throws `MachineRefusalError`
+with `machine_not_attached`. Handles follow reattachment by identity, not by
+whichever connection was most recently used.
 
-- **One capability gates the whole surface.** `Machine.WellKnownCapability.fsRead`
-  (`fs.read`) grants read|list|stat together. A per-op split would let an Owner
-  grant `list` while believing they withheld `read`, when a listing already
-  leaks the names it enumerates.
-- **Exports are the unit of reach, and they fold like capabilities.**
-  `Enrollment.allowedExports?` (what the Owner published) ∩ `Offer.exports?`
-  (what the daemon serves) = `Machine.effectiveExports(...)`. Both sides are
-  additive-optional and BOTH default to empty, so a pre-VFS peer on either end
-  grants zero reach. `Machine.ExportName` owns the flat lowercase grammar so
-  the Owner's spelling and the daemon's offer cannot drift.
-- **The offer carries names only.** The daemon-local directory behind an export
-  never crosses the wire; the host cannot address — or leak — a filesystem
-  layout it has no business knowing.
-- **Enforcement is layered on purpose** (the same shape as the `kernel.py`
-  gate). The HOST checks attachment, `fs.read`, and the effective export set
-  before the wire. The DAEMON re-checks its own offer across the trust
-  boundary and OWNS path confinement.
-- **Confinement is a descriptor-anchored no-follow walk, not a pathname
-  check.** Root acquisition walks the configured root from a descriptor for
-  `/`, opening each component without following it, and records the canonical
-  root string from that walk. Each request then walks components RELATIVE TO
-  THAT ROOT DESCRIPTOR. The kernel is never asked to follow a request symlink:
-  an in-root link is expanded lexically and re-walked under the root fd; a link
-  resolving outside refuses. Thus every root-acquisition and request component
-  is opened by the decision that pins it, rather than checked by one pathname
-  resolution and used by another. **Exactly one owner holds each descriptor**
-  the walk acquires: the owning state is cleared before the close, so a failed
-  root reopen closes each acquired descriptor once, never a reused fd number
-  belonging to an unrelated open, and the reopen failure itself propagates
-  instead of a secondary close error.
-- **Outside-root refusals are uniform, deliberately.** ANY resolution landing
-  outside the export root refuses as `path_escapes_export`, regardless of
-  whether the outside target exists. Classifying an escaping link before its
-  target's existence is consulted is what keeps the refusal from working as an
-  existence oracle: a dangling link out and a live link out must be
-  indistinguishable, or the coarse reason set has been defeated by its own
-  error path.
-- `Machine.FsRequest` paths are RELATIVE to the export root (`""` is the root).
-  The schema refuses a leading `/`, any `..` segment, and an embedded NUL as a
-  cheap first gate — not as the confinement boundary.
-- `Machine.FsResult` refuses with a typed reason
-  (`export_not_available`, `path_escapes_export`, `not_found`, `wrong_kind`,
-  `io_error`), never a transport error: the attachment survives and the caller
-  learns WHICH boundary held. `FS_READ_MAX_BYTES` / `FS_LIST_MAX_ENTRIES` are
-  named in the protocol and enforced by the daemon; a bitten ceiling reports
-  `truncated` rather than silently presenting a prefix as the whole thing.
-  Final-target inspection uses `O_NONBLOCK`, so a FIFO reports kind `other`
-  instead of parking the daemon inside `open`. Listing classifies each entry by
-  a no-follow open: a directory or regular file is classified from its
-  descriptor, an entry that is neither and is not a symlink (socket, device)
-  reports kind `other` rather than failing the listing. `read` refuses a
-  non-regular target — `wrong_kind` when it could be opened and classified,
-  `io_error` when it could not be opened at all.
-- **The typed-refusal contract covers requests the host was ENTITLED to make.**
-  A daemon asked for `fs.read` when it never offered `fs.read` is not looking at
-  a refusable request — it is looking at a host violating the attachment it
-  negotiated. That arm is a transport-level protocol error
-  (`MachineDaemonProtocolError`, reason `capability_not_offered`), not an
-  `FsResult` refusal, and it is correct that it is: `FsResult` reasons are
-  answers the ASKER is meant to read and act on, and there is no honest thing
-  for a compromised host to learn from "you may not do what you already agreed
-  you could not do". The distinction is the trust boundary itself — refusals
-  speak to callers inside the contract, protocol errors to peers who broke it.
-  An export NAME absent from the daemon's own `Offer.exports` stays inside the
-  contract: the capability was negotiated, only the name was not, so the daemon
-  answers with the typed `export_not_available` refusal that already exists for
-  exactly that boundary.
+The handle exposes `fs.read/write/list/stat`, `exec(cmd,cwd)` and
+`runCode(cell,signal?)`. Filesystem inputs are real absolute POSIX paths, never
+a virtual root or URL. The longest matching offered root translates to the
+existing export-relative `machine.fs_op` wire. Equal normalized roots refuse
+`ambiguous_export`; the host does not select a broader root to evade a narrower
+root's refusal. Offers carry named absolute roots; daemon configuration must
+match those roots. Missing enrollment export grants fail closed.
 
-The app surface is three host-placed tools — `fs_read`, `fs_list`, `fs_stat` —
-over a router that parses the namespace path
-(`apps/openomni/src/machines/vfs.ts`). Host placement is deliberate twice over:
-the BRAIN forwards the request, and a machine-placed tool would be folded out
-of a cell's catalog — precisely where reading a machine's files pays. The
-tools declare no `requires`: placement resolves requirements against one
-target's effective set, and a host-placed tool resolves against the host,
-which holds no machine capabilities; the grant is per-MACHINE and the machine
-is named inside the path, which placement cannot see. The host's `fsOp`
-therefore owns that gate.
+There are exactly two authorization boundaries: the kernel executor's
+`tool.pre` for app-originated effects, and the daemon's negotiated capability,
+offer and export checks. Host path translation and same-connection cell
+provenance are protocol mechanics, not additional policy checks. The app has
+no VFS capability gate or cross-machine prohibition. Both consumer doors use
+the same raw endpoint; the plain-tool locus door belongs to #949.
 
-**The two doors do NOT see the same namespace, and that asymmetry is the
-point.** The flat namespace is the OWNER's view: the model door addresses every
-attached machine, because the Resident acts on the Owner's authority and that
-authority spans them all. A CELL is not the Owner — it is code the Owner
-dispatched to ONE machine, and code that can spell a path can spell any path.
-So the executing `machineId` (the one `run_code` dispatched to) is bound into
-the cell's catalog at the composition root, and a cell-originated `fs_*` call
-naming any OTHER machine refuses as `cross_machine_denied` before the host is
-reached — an app-level refusal, because no daemon and no host was asked: the
-question was not the cell's to ask. Without that binding, a compromised daemon
-on A reads B's effective exports through any A cell in flight, and B's own
-gates correctly permit it, because the missing check was never B's to make.
+- `fs.read` gates read/list/stat. `fs.write` gates write. The daemon checks
+  both its own offer and the enrollment/offer negotiation on every request.
+- The descriptor-pinned `openat(O_NOFOLLOW)` confinement walk is retained.
+  Symlinks are expanded under the pinned root; escaping and dangling external
+  links uniformly refuse `path_escapes_export`. Root descriptor ownership and
+  FIFO/socket nonblocking handling are unchanged.
+- Writes create or overwrite a regular file, mode 0600 for new files. They
+  open without truncating, verify the pinned descriptor's kind, then truncate
+  and write. Writes are not atomic or transactional; an I/O refusal may leave
+  a partial effect. Parent directories are not created. The 262144-byte
+  socket cap refuses an oversized write before opening its target.
+- Read returns `{op,data:Uint8Array,bytesRead,size,truncated}`; write returns
+  `{op,bytesWritten}`. List and stat return their raw protocol structures.
+  JSON wire bytes are lossless base64, never lossy UTF-8 or model previews.
+  Reads retain the 262144-byte window cap and lists the 1000-entry cap, both
+  with explicit truncation facts.
+- `shell.exec` grants machine shell authority. For each call, the daemon
+  re-resolves the effective export root pathname and validates the requested
+  cwd before spawning `/bin/sh` by pathname. Exec does not share the fs
+  branch's pinned-root invariant: replacing the export-root pathname before a
+  request changes the directory exec actually starts in (fs requests keep
+  reading the root pinned at attach), and a symlink swap between validation
+  and spawn is a bounded, accepted TOCTOU for now (follow-up #938 in
+  `docs/SLOP.md`).
+  This is path validation, not an OS shell sandbox: a shell running as the
+  daemon OS user remains arbitrary within that user's normal OS authority
+  (including absolute paths and `cd` elsewhere). The Owner grants `exec`
+  knowingly. Every execution requires an absolute cwd; no cwd persists between
+  calls. Results
+  retain raw stdout/stderr bytes, nullable exitCode/signal, and truncation.
+  The combined output socket cap is 262144 bytes; reaching it kills the
+  process group. A 30000ms deadline and attachment close also kill the group.
+- Filesystem refusals are typed throws at the consumer surface and typed
+  wire values. Exec and code retain typed terminal/refusal values. Invalid
+  schemas and transport loss throw typed schema/IPC errors.
+
+### 2.2 Code-mode ownership and lifecycle
+
+`createCodemode({machines,llm,tools})` is a reusable facade over a structural
+machines port. It supplies `cell.run(code,tenant,{timeoutMs,signal})` and
+`listMachines/getMachine/findMachine({tag})`. Tag lookup requires exactly one
+match: zero or multiple matches are typed errors, never arbitrary selection.
+Handles expose `read/write/list/stat/shell/run`, forwarding raw structures and
+bytes. The same names are installed under the Python `codemode` global;
+Python reads and shell outputs contain bytes, and writes accept bytes.
+
+Only a daemon's injected `createCodemode().runner` starts Python, lazily on
+its first request. Codemode owns the interpreter map, per-tenant persistence,
+parallel helper, llm helper, callId routing and cell bindings. Different tenants
+never share an interpreter. Nested handle `run` uses a nested tenant to avoid
+queuing behind its calling interpreter. The brain facade never spawns Python.
+The app captures its executor and tool catalog at cell entry; `run_code` is
+metadata/render plus one `cell.run` call. Machine-handle calls pass through the
+captured executor's `tool.pre`, without manufacturing model tool definitions.
+
+A call is accepted only from the connection with that live cell in flight.
+Forged, late and detached callbacks cannot inherit another cell's authority.
+`machine.cancel_code` propagates AbortSignal cancellation. Timeout/cancel kills
+that interpreter, discards its state and lets its successor start fresh.
+Attachment loss closes the injected runner; `daemon.close()` and `closed`
+await process cleanup. Facade close cancels and awaits its live requests.
+
+`openomni machine attach <config.json>` is the minimal production composition
+of the retained daemon wire. It prints its structured attach result, exits 1
+on refusal, and awaits close on host loss or SIGINT/SIGTERM. It is distinct
+from `openomni daemon`, which still manages the Resident service. Example:
+
+```json
+{
+  "socketPath": "/tmp/openomni-machines.sock",
+  "offer": {
+    "machineId": "laptop",
+    "offeredCapabilities": ["fs.read", "fs.write", "shell.exec", "kernel.py"],
+    "exports": [{ "name": "work", "path": "/home/owner/work" }],
+    "daemonVersion": "1",
+    "platform": "linux-arm64",
+    "offeredAt": 1
+  }
+}
+```
 
 ## 3. Delegation contracts (`protocol/src/delegation/`)
 
@@ -273,8 +280,7 @@ parallel lifecycle.
   two never alias.
 - **A machine is a WHERE, never a WHO.** Delegation addresses workers and
   actors; a machine is a body execution lands on, and its addressing surface
-  is the tool axis (`run_code` cells name a `machineId`, discovered through
-  the `machines` catalog tool). The once-reserved `machine` transport arm was
+  is the raw endpoint axis (code-mode cells select machine object handles). The once-reserved `machine` transport arm was
   removed rather than left dormant (Owner decision, #786): a worker whose
   tools should land on a machine is an ordinary `process` worker whose
   catalog placement folds against that machine.
@@ -309,7 +315,7 @@ The machine axis of `@openomni/placement` folds candidate machines against
    - **5a — kernel substrate: landed.** A machine offering `kernel.py` runs
      code cells with interpreter state persisting across cells, each cell
      under a required deadline, behind the effective-capability gate. The
-     daemon keeps one interpreter PER TENANT (`CellRequest.tenant`, the
+     injected codemode runner keeps one interpreter PER TENANT (`CellRequest.tenant`, the
      asking session): a Python process offers no in-process isolation, so
      the process boundary is what keeps one session's state — and anything
      a cell leaves running — out of another session's cells.

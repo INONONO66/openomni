@@ -41,7 +41,8 @@ ring 2  @openomni/llm             model access
 ring 3  @openomni/agent           generic durable-session mechanics and stateless LLM loop
 
 lateral driver/gateway band:
-        @openomni/machines        machine attach and cell execution
+        @openomni/machines        raw machine WHERE endpoints
+        @openomni/codemode        code facade and injected interpreter runner
         @openomni/channels        platform drivers plus perimeter router
 
 composition:
@@ -52,7 +53,7 @@ Each package depends only on the allowlist in `script/check-deps.ts`. The app co
 
 ## Execution Targets and Driver Band
 
-A machine is WHERE execution happens, never WHO is delegated to. `packages/machines` exposes attachment and cell execution over protocol/IPC contracts. `packages/placement` performs the pure capability fold. `apps/openomni` names the selected machine and injects the placement-gated tool door.
+A machine is WHERE execution happens, never WHO is delegated to. `packages/machines` exposes list/get and raw fs/exec/runCode handles over protocol/IPC contracts. `packages/codemode` consumes only the structural machines port and protocol, owning machine object handles and per-tenant interpreters. The composition root injects the returned runner into a machine daemon; the brain facade does not spawn Python. Authorization occurs at kernel `tool.pre` and daemon offered/negotiated capability and export enforcement, not in an app VFS. The retained `run_code` adapter calls `cell.run` once. `openomni machine attach` supplies the production daemon composition.
 
 Delegation addresses WHO:
 
@@ -64,7 +65,7 @@ The removed local worker manager is not part of the final topology. Process dele
 
 Band rules:
 
-1. `machines` depends only on protocol and IPC.
+1. `machines` depends only on protocol and IPC; `codemode` depends on protocol and the machines port, never the reverse.
 2. `channels` driver code depends only on protocol; its judgment sub-band may additionally consume policy and perimeter ledger surfaces.
 3. Registration happens in `apps/openomni`.
 4. Drivers expose effects behind interfaces and never decide product admission.

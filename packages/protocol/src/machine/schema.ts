@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { EpochMs } from "../time.js";
+import { PlainValueSchema } from "../json.js";
 
 /**
  * Capability id grammar: two-plus dot-separated lowercase segments —
@@ -25,10 +26,12 @@ export const WellKnownCapability = {
    * withheld `read`, when a listing already leaks the names it enumerates.
    */
   fsRead: "fs.read",
+  fsWrite: "fs.write",
+  shellExec: "shell.exec",
 } as const satisfies Record<string, CapabilityId>;
 
 /**
- * Export name grammar: the second path segment of `/machines/<id>/<export>/…`.
+ * Export name grammar: a daemon-local confinement root identifier.
  * Flat and lowercase so a name can never be confused with a path (no dot, no
  * slash, no leading dash that an argv parser would eat) and so the Owner's
  * enrollment spelling matches the daemon's offer byte for byte.
@@ -41,13 +44,20 @@ export const ExportName = z
   });
 export type ExportName = z.infer<typeof ExportName>;
 
+export const AbsolutePath = z.string().refine(
+  (path) => path.startsWith("/") && !path.includes("\0") && !path.split("/").includes(".."),
+  { message: "expected an absolute path without NUL or .. segments" },
+);
+
 export const MachineId = z.string().min(1);
 export type MachineId = z.infer<typeof MachineId>;
 
 /** One owner for the frozen machine wire method names used by both peers. */
 export const WireMethod = {
   Attach: "machine.attach",
-  RunCell: "machine.run_cell",
+  RunCode: "machine.run_code",
+  CancelCode: "machine.cancel_code",
+  Exec: "machine.exec",
   CallTool: "machine.call_tool",
   FsOp: "machine.fs_op",
 } as const;
@@ -76,12 +86,10 @@ export const Enrollment = z
   .object({
     machineId: MachineId,
     name: z.string().min(1),
+    tags: z.array(z.string().min(1)).optional(),
     allowedCapabilities: z.array(CapabilityId).min(1).superRefine(uniqueCapabilities),
     /**
-     * Which exports the fs surface may reach. Optional for wire compat with
-     * pre-VFS enrollments, and ABSENT READS AS NONE: an Owner who never named
-     * an export has published nothing, so the fold (`fold.ts`) yields the
-     * empty set rather than the daemon's whole offer.
+     * Which exports the fs surface may reach. Absence grants no exports.
      */
     allowedExports: z.array(ExportName).superRefine(uniqueExports).optional(),
     enrolledAt: EpochMs,
@@ -99,12 +107,11 @@ export const Offer = z
     machineId: MachineId,
     offeredCapabilities: z.array(CapabilityId).superRefine(uniqueCapabilities),
     /**
-     * Exports the daemon is willing to serve, BY NAME ONLY: the daemon-local
-     * directory behind a name never crosses the wire, so the host cannot leak
-     * (or address) a filesystem layout it has no business knowing.
+     * Real absolute roots used to translate consumer paths into confined wire
+     * requests. Longest matching root wins; equal roots are ambiguous.
      */
     exports: z
-      .array(z.object({ name: ExportName }).strict())
+      .array(z.object({ name: ExportName, path: AbsolutePath }).strict())
       .superRefine((entries, ctx) => {
         uniqueExports(
           entries.map((entry) => entry.name),
@@ -130,8 +137,7 @@ export const AttachResult = z.discriminatedUnion("status", [
     .object({
       status: z.literal("attached"),
       effectiveCapabilities: z.array(CapabilityId).superRefine(uniqueCapabilities),
-      /** Additive: a pre-VFS host answers without it and the daemon reads none. */
-      effectiveExports: z.array(ExportName).superRefine(uniqueExports).optional(),
+      effectiveExports: z.array(ExportName).superRefine(uniqueExports),
     })
     .strict(),
   z
@@ -177,7 +183,7 @@ export const ToolCall = z
   .object({
     cellId: z.string().min(1),
     name: z.string().min(1),
-    arguments: z.record(z.string(), z.unknown()),
+    arguments: z.record(z.string(), PlainValueSchema),
   })
   .strict();
 export type ToolCall = z.infer<typeof ToolCall>;
@@ -188,7 +194,7 @@ export type ToolCall = z.infer<typeof ToolCall>;
  * so — the host's tool port owns that judgment, not this contract.
  */
 export const ToolCallResult = z.discriminatedUnion("status", [
-  z.object({ status: z.literal("completed"), value: z.unknown().optional() }).strict(),
+  z.object({ status: z.literal("completed"), value: PlainValueSchema.optional() }).strict(),
   z.object({ status: z.literal("failed"), error: z.string().min(1) }).strict(),
 ]);
 export type ToolCallResult = z.infer<typeof ToolCallResult>;
@@ -211,12 +217,9 @@ export const CellResult = z.discriminatedUnion("status", [
       error: z.string(),
     })
     .strict(),
-  z
-    .object({
-      status: z.literal("timed_out"),
-      cellId: z.string().min(1),
-    })
-    .strict(),
+  z.object({ status: z.literal("timed_out"), cellId: z.string().min(1) }).strict(),
+  z.object({ status: z.literal("cancelled"), cellId: z.string().min(1) }).strict(),
+  z.object({ status: z.literal("refused"), reason: z.enum(["machine_not_attached", "kernel_not_available"]) }).strict(),
 ]);
 export type CellResult = z.infer<typeof CellResult>;
 
@@ -226,6 +229,10 @@ export type CellResult = z.infer<typeof CellResult>;
  * bytes); the contract only names them and reports `truncated` when they bite.
  */
 export const FS_READ_MAX_BYTES = 262_144;
+export const FS_WRITE_MAX_BYTES = 262_144;
+export const EXEC_MAX_BYTES = 262_144;
+export const EXEC_TIMEOUT_MS = 30_000;
+const Base64 = z.string().regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/);
 export const FS_LIST_MAX_ENTRIES = 1000;
 
 /**
@@ -246,7 +253,7 @@ const FsPath = z
     { message: "path must be relative to the export root, with no .. segment or NUL" },
   );
 
-/** Read-only slice: three ops, no mutation verb in the vocabulary at all. */
+/** Export-relative requests; the daemon owns the final confinement check. */
 export const FsRequest = z.discriminatedUnion("op", [
   z
     .object({
@@ -258,6 +265,7 @@ export const FsRequest = z.discriminatedUnion("op", [
       limit: z.number().int().positive().optional(),
     })
     .strict(),
+  z.object({ op: z.literal("write"), export: ExportName, path: FsPath, data: Base64 }).strict(),
   z.object({ op: z.literal("list"), export: ExportName, path: FsPath }).strict(),
   z.object({ op: z.literal("stat"), export: ExportName, path: FsPath }).strict(),
 ]);
@@ -272,15 +280,14 @@ const FsEntryKind = z.enum(["file", "dir", "symlink", "other"]);
 
 /** Answer shapes keyed by the op that asked, so a reply can never be mismatched. */
 const FsValue = z.discriminatedUnion("op", [
+  z.object({ op: z.literal("write"), bytesWritten: z.number().int().nonnegative() }).strict(),
   z
     .object({
       op: z.literal("read"),
       /**
-       * UTF-8 lossy-decoded text. The wire carries JSON, so binary is decoded
-       * with replacement characters instead of failing the read: the model gets
-       * an honest, bounded answer about a file it should not have opened.
+       * Lossless base64 bytes on JSON wire; consumer handles decode to bytes.
        */
-      data: z.string(),
+      data: Base64,
       bytesRead: z.number().int().nonnegative(),
       /** Full file size, so a truncated read still reports what it missed. */
       size: z.number().int().nonnegative(),
@@ -330,9 +337,31 @@ export const FsResult = z.discriminatedUnion("status", [
         "not_found",
         "wrong_kind",
         "io_error",
+        "too_large",
+        "ambiguous_export",
+        "machine_not_attached",
+        "fs_not_available",
       ]),
       message: z.string().min(1),
     })
     .strict(),
 ]);
 export type FsResult = z.infer<typeof FsResult>;
+
+export const ExecRequest = z.object({ cmd: z.string().min(1), cwd: AbsolutePath }).strict();
+export type ExecRequest = z.infer<typeof ExecRequest>;
+export const ExecResult = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("completed"),
+    stdout: Base64,
+    stderr: Base64,
+    exitCode: z.number().int().nullable(),
+    signal: z.string().nullable(),
+    truncated: z.boolean(),
+  }).strict(),
+  z.object({ status: z.literal("refused"), reason: z.enum(["machine_not_attached", "exec_not_available", "path_escapes_export", "io_error"]) }).strict(),
+  z.object({ status: z.enum(["timed_out", "cancelled"]) }).strict(),
+]);
+export type ExecResult = z.infer<typeof ExecResult>;
+export const CancelCode = z.object({ cellId: z.string().min(1) }).strict();
+export const CancelResult = z.object({ cancelled: z.boolean() }).strict();

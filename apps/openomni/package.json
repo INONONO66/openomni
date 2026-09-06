@@ -22,7 +22,8 @@
     "@openomni/protocol": "workspace:*",
     "zod": "^4.5.4",
     "@openomni/placement": "workspace:*",
-    "@openomni/machines": "workspace:*"
+    "@openomni/machines": "workspace:*",
+    "@openomni/codemode": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "latest"

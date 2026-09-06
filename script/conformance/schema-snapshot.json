@@ -56,6 +56,17 @@
   ],
   "Actor.ProvisionalMintPolicy": ["max", "windowMs"],
   "Actor.ResolvedEndpoint": ["endpoint", "identity"],
+  "Alarm.Arm": ["fireAt", "id", "kind", "sessionId", "spec"],
+  "Alarm.Row": [
+    "createdAt",
+    "fireAt",
+    "id",
+    "kind",
+    "sessionId",
+    "spec",
+    "status",
+    "updatedAt"
+  ],
   "AppConnector.Consent": [
     "capabilities",
     "credentials",
@@ -158,6 +169,7 @@
   "BusEvent.Metadata": [
     "actorId",
     "agentName",
+    "callId",
     "componentGeneration",
     "componentId",
     "configRevision",
@@ -165,11 +177,13 @@
     "parentSpanId",
     "pluginName",
     "pluginVersion",
+    "role",
     "runId",
     "sessionId",
     "spanId",
     "time",
-    "traceId"
+    "traceId",
+    "turnId"
   ],
   "Delegation.Handle": [
     "address",
@@ -433,6 +447,27 @@
   ],
   "Gateway.WaitContext": ["allowedAction", "waitId"],
   "Gateway.WaitControl": ["action", "reason", "waitId"],
+  "Inbox.Commit": [
+    "content",
+    "createdAt",
+    "id",
+    "kind",
+    "origin",
+    "parentActionId",
+    "sessionId"
+  ],
+  "Inbox.Row": [
+    "consumedAt",
+    "consumedBy",
+    "content",
+    "createdAt",
+    "id",
+    "kind",
+    "ordinal",
+    "origin",
+    "sessionId",
+    "status"
+  ],
   "Ingress.ActorSchema": [
     "actorId",
     "agentName",
@@ -505,6 +540,7 @@
   "Ipc.Notification": ["id", "method", "params", "type", "v"],
   "Ipc.Request": ["id", "method", "params", "type", "v"],
   "Ipc.Response": ["error", "id", "result", "type", "v"],
+  "L0Observation.ActionCommitted": ["id", "kind", "revision", "sessionId"],
   "Ledger.AdoptGenesis": ["data", "timeCreated", "type"],
   "Ledger.ChainBreak": [
     "actual",
@@ -519,26 +555,143 @@
   "Ledger.Outcome#cas_conflict": ["currentHead", "kind"],
   "Ledger.RecordedFact": ["data", "seq", "streamId", "timeCreated", "type"],
   "Ledger.RouteNotDelivered": ["inboundId", "reason"],
+  "LedgerAction.Append#0": [
+    "effect",
+    "id",
+    "intent",
+    "kind",
+    "parentId",
+    "revert",
+    "sessionId",
+    "ts"
+  ],
+  "LedgerAction.Append#1": [
+    "effect",
+    "id",
+    "intent",
+    "irreversible",
+    "kind",
+    "parentId",
+    "sessionId",
+    "ts"
+  ],
+  "LedgerAction.Node#0": [
+    "effect",
+    "id",
+    "intent",
+    "kind",
+    "ordinal",
+    "parentId",
+    "revert",
+    "sessionId",
+    "ts"
+  ],
+  "LedgerAction.Node#1": [
+    "effect",
+    "id",
+    "intent",
+    "irreversible",
+    "kind",
+    "ordinal",
+    "parentId",
+    "sessionId",
+    "ts"
+  ],
+  "LedgerAction.Receipt": ["action", "revision"],
+  "LedgerSession.AcquireLease": [
+    "expectedFence",
+    "expiresAt",
+    "now",
+    "owner",
+    "sessionId"
+  ],
+  "LedgerSession.Commit": [
+    "actions",
+    "consumeInboxIds",
+    "expectedRevision",
+    "fence",
+    "generation",
+    "now",
+    "owner",
+    "releaseLease",
+    "sessionId",
+    "state"
+  ],
+  "LedgerSession.CommitResult#0": ["ok", "receipts", "row"],
+  "LedgerSession.CommitResult#1": [
+    "currentFence",
+    "currentRevision",
+    "ok",
+    "reason"
+  ],
+  "LedgerSession.GenerationPointers": [
+    "policyGeneration",
+    "systemHash",
+    "toolsGeneration"
+  ],
+  "LedgerSession.LeaseResult#0": ["fence", "ok"],
+  "LedgerSession.LeaseResult#1": ["expiresAt", "holder", "ok", "reason"],
+  "LedgerSession.LeaseResult#2": ["currentFence", "ok", "reason"],
+  "LedgerSession.Materialize": ["initialAction", "row"],
+  "LedgerSession.MaterializeResult#0": ["created", "receipt", "row"],
+  "LedgerSession.MaterializeResult#1": ["created", "row"],
+  "LedgerSession.RenewLease": [
+    "expiresAt",
+    "fence",
+    "now",
+    "owner",
+    "sessionId"
+  ],
+  "LedgerSession.Row": [
+    "id",
+    "leaseExpiresAt",
+    "leaseFence",
+    "leaseOwner",
+    "parentId",
+    "policyGeneration",
+    "revision",
+    "role",
+    "state",
+    "systemHash",
+    "toolsGeneration"
+  ],
   "Machine.AttachResult#attached": [
     "effectiveCapabilities",
     "effectiveExports",
     "status"
   ],
   "Machine.AttachResult#refused": ["reason", "status"],
+  "Machine.CancelCode": ["cellId"],
+  "Machine.CancelResult": ["cancelled"],
   "Machine.CellRequest": ["cellId", "code", "tenant", "timeoutMs"],
+  "Machine.CellResult#cancelled": ["cellId", "status"],
   "Machine.CellResult#completed": ["cellId", "output", "status", "value"],
   "Machine.CellResult#raised": ["cellId", "error", "output", "status"],
+  "Machine.CellResult#refused": ["reason", "status"],
   "Machine.CellResult#timed_out": ["cellId", "status"],
   "Machine.Enrollment": [
     "allowedCapabilities",
     "allowedExports",
     "enrolledAt",
     "machineId",
-    "name"
+    "name",
+    "tags"
   ],
+  "Machine.ExecRequest": ["cmd", "cwd"],
+  "Machine.ExecResult#2": ["status"],
+  "Machine.ExecResult#completed": [
+    "exitCode",
+    "signal",
+    "status",
+    "stderr",
+    "stdout",
+    "truncated"
+  ],
+  "Machine.ExecResult#refused": ["reason", "status"],
   "Machine.FsRequest#list": ["export", "op", "path"],
   "Machine.FsRequest#read": ["export", "limit", "offset", "op", "path"],
   "Machine.FsRequest#stat": ["export", "op", "path"],
+  "Machine.FsRequest#write": ["data", "export", "op", "path"],
   "Machine.FsResult#completed": ["status", "value"],
   "Machine.FsResult#refused": ["message", "reason", "status"],
   "Machine.Offer": [
@@ -822,6 +975,15 @@
     "requireApproval",
     "requireApprovalLabels"
   ],
+  "PolicyRow.Row": [
+    "generation",
+    "kind",
+    "match",
+    "name",
+    "phase",
+    "priority",
+    "verdict"
+  ],
   "Provisioning.ChannelInstance": [
     "createdBy",
     "credentialRef",
@@ -858,6 +1020,97 @@
     "rotatedAt",
     "wrappedDek"
   ],
+  "SessionGeneration.ConfigureEffect": ["phase", "snapshot"],
+  "SessionGeneration.ConfigureIntent": ["operation"],
+  "SessionGeneration.ConfigureReceipt": ["generation", "revertTo"],
+  "SessionGeneration.ConfigureRevert": ["generation"],
+  "SessionGeneration.Snapshot": [
+    "generation",
+    "policyGeneration",
+    "revertTo",
+    "systemBlocks",
+    "systemHash",
+    "systemPreset",
+    "systemValue",
+    "tools",
+    "toolsHash"
+  ],
+  "SessionGeneration.SystemBlock": ["content", "id", "source"],
+  "SessionGeneration.Tool": ["category", "inputSchema", "name", "sequential"],
+  "SessionTurn.Checkpoint": [
+    "boundary",
+    "boundaryActionId",
+    "phase",
+    "resultId",
+    "resumeCount",
+    "turnId"
+  ],
+  "SessionTurn.Delivery": [
+    "boundary",
+    "content",
+    "inboxId",
+    "kind",
+    "origin",
+    "phase",
+    "turnId"
+  ],
+  "SessionTurn.Intent": [
+    "boundaryActionId",
+    "inboxIds",
+    "phase",
+    "policyGeneration",
+    "resultId",
+    "resumeCount",
+    "systemHash",
+    "toolsGeneration",
+    "toolsHash"
+  ],
+  "SessionTurn.Message": ["role", "text"],
+  "SessionTurn.Observation#gap": ["from", "kind", "sessionId", "to"],
+  "SessionTurn.Observation#revision": [
+    "actionId",
+    "actionKind",
+    "kind",
+    "revision",
+    "sessionId"
+  ],
+  "SessionTurn.Pending": ["phase"],
+  "SessionTurn.Resume": [
+    "boundaryActionId",
+    "phase",
+    "policyGeneration",
+    "resultId",
+    "resumeCount",
+    "systemHash",
+    "toolsGeneration",
+    "toolsHash",
+    "turnId"
+  ],
+  "SessionTurn.Snapshot": [
+    "id",
+    "lease",
+    "openTurnId",
+    "parentId",
+    "policyGeneration",
+    "revision",
+    "role",
+    "state",
+    "systemHash",
+    "toolsGeneration",
+    "turns"
+  ],
+  "SessionTurn.Tail": ["messages", "startedAt", "state", "terminal", "turnId"],
+  "SessionTurn.Terminal": [
+    "alarmIds",
+    "boundaryActionId",
+    "kind",
+    "phase",
+    "reason",
+    "resumeCount",
+    "text",
+    "turnId"
+  ],
+  "SessionTurn.TerminalIntent": ["phase", "turnId"],
   "Token.AgentUsage": [
     "cacheReadTokens",
     "cacheWriteTokens",
@@ -885,7 +1138,8 @@
     "placement",
     "prompt",
     "requires",
-    "safe"
+    "safe",
+    "sequential"
   ],
   "Tool.State#completed": [
     "input",

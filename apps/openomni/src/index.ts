@@ -29,7 +29,7 @@ import {
 
 import { createMachineHost, type MachineHost } from "@openomni/machines";
 import type { Placement } from "@openomni/placement";
-import { type Channel, Gateway, type Ingress, type Machine } from "@openomni/protocol";
+import { type Channel, Gateway, type Ingress } from "@openomni/protocol";
 import { Bus, newTraceId } from "@openomni/agent";
 import { desiredChannels, materializePersons } from "./provisioning/declared";
 import { type ChannelSupervisor, createChannelSupervisor } from "./provisioning/supervisor";
@@ -59,8 +59,7 @@ import { createComposer, rollbackToCause } from "./composition/composer";
 import { buildInboundEvent } from "./inbound";
 import { createResident, type ResidentDelivery } from "./resident";
 import { HOST_TARGET } from "@openomni/agent";
-import { createCellRegistry } from "./tools/cell-registry";
-import type { CellPorts } from "./tools/execution/run-code";
+import { composeCodemode } from "./composition/codemode";
 
 interface StartOptions {
   readonly sessionRuntime?: Pick<
@@ -80,15 +79,9 @@ interface StartOptions {
  */
 function attachedTargets(
   host: MachineHost | undefined,
-  enrolled: readonly Machine.Enrollment[],
 ): readonly Placement.ToolTarget[] {
   if (host === undefined) return [HOST_TARGET];
-  const machines = enrolled.flatMap((enrollment): Placement.ToolTarget[] => {
-    const capabilities = host.attached(enrollment.machineId);
-    return capabilities === undefined
-      ? []
-      : [{ kind: "machine", id: enrollment.machineId, capabilities: [...capabilities] }];
-  });
+  const machines = host.list().map((entry): Placement.ToolTarget => ({ kind: "machine", id: entry.machineId, capabilities: entry.capabilities }));
   return [HOST_TARGET, ...machines];
 }
 
@@ -114,38 +107,6 @@ function registerActors(actors: readonly RegisteredActor[]): void {
       externalId: actor.externalId,
     });
   }
-}
-
-interface MachineStatus {
-  readonly machineId: string;
-  readonly attached: boolean;
-  readonly capabilities: readonly string[];
-  readonly effectiveExports?: readonly string[];
-}
-type MachinesPort = () => readonly MachineStatus[];
-
-export function createMachinesPort(
-  host: Pick<MachineHost, "attached" | "attachedExports"> | undefined,
-  machines: OpenOmniConfig["machines"],
-): MachinesPort | undefined {
-  if (host === undefined || machines === undefined) return undefined;
-  return () =>
-    machines.enrolled.map((enrollment) => {
-      const capabilities = host.attached(enrollment.machineId);
-      return capabilities === undefined
-        ? {
-            machineId: enrollment.machineId,
-            attached: false,
-            capabilities: [],
-            effectiveExports: [],
-          }
-        : {
-            machineId: enrollment.machineId,
-            attached: true,
-            capabilities: [...capabilities],
-            effectiveExports: [...(host.attachedExports(enrollment.machineId) ?? [])],
-          };
-    });
 }
 
 /**
@@ -237,10 +198,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       seedKernelPolicyRows();
       ctx.effect(() => Storage.reset());
     });
-    const sessionTools = new Map<
-      string,
-      readonly import("@openomni/protocol").AnyToolDefinition[]
-    >();
+
     const sessionRuntime: SessionRuntime = {
       ...options.sessionRuntime,
       observations: Bus,
@@ -368,7 +326,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
 
     // The cell door is bound per cell rather than globally, so a cell serves
     // exactly the tools its own dispatcher holds.
-    const registry = createCellRegistry();
+    let cells: ReturnType<typeof composeCodemode> | undefined;
     const machines = config.machines;
     const host: MachineHost | undefined =
       machines === undefined
@@ -378,7 +336,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
             enrollment: (machineId) => machines.enrolled.find((e) => e.machineId === machineId),
             events: Bus,
             now: () => Date.now(),
-            callTool: registry.callTool,
+            callTool: (call) => cells === undefined ? Promise.resolve({ status: "failed", error: "codemode is not composed" }) : cells.callTool(call),
           });
     if (host !== undefined) {
       const attachedHost = host;
@@ -387,25 +345,15 @@ export async function startOpenOmni(options: StartOptions = {}) {
 
     // Self-referential: a cell's catalog is the same one that dispatches cells,
     // and placement subtracts what a cell cannot reach.
-    const machineHost = host;
     const llmPort = createLlmToolPort(
       { ...config.model, ...(transport === undefined ? {} : { transport }) },
       options.llm ?? {},
     );
-    const defaultMachineId = machines?.enrolled[0]?.machineId;
-    const cells: CellPorts | undefined =
-      machineHost === undefined || defaultMachineId === undefined
-        ? undefined
-        : {
-            registry,
-            defaultMachineId,
-            runCell: (machineId, request) => machineHost.runCell(machineId, request),
-            bindTools: (sessionId, tools) => {
-              sessionTools.set(sessionId, tools);
-            },
-            tools: (sessionId) => sessionTools.get(sessionId) ?? [],
-            newCellId: () => crypto.randomUUID(),
-          };
+    if (host !== undefined) {
+      cells = composeCodemode(host);
+      const composed = cells;
+      await composer.mount("codemode", (ctx) => ctx.effect(() => composed.close()));
+    }
 
     residentDeliver = createResident({
       toolDefinitions: options.toolDefinitions,
@@ -421,7 +369,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
         approvals: approvalPort,
         provisioning: provisioningPort,
       },
-      targets: () => attachedTargets(host, machines?.enrolled ?? []),
+      targets: () => attachedTargets(host),
       sessionRuntime,
       ...(options.llm === undefined ? {} : { llm: options.llm }),
     });

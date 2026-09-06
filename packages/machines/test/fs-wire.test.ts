@@ -1,278 +1,440 @@
 import { describe, expect, test } from "bun:test";
-import { closeSync, mkdirSync, mkdtempSync, openSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { IpcRemoteError, connectIpcClient, createIpcServer, typedCall } from "@openomni/ipc";
-import type { BusEvent, Machine } from "@openomni/protocol";
-import { attachMachineDaemon } from "../src/daemon";
-import { MachineDaemonProtocolError } from "../src/errors";
-import { type MachineHost, createMachineHost } from "../src/host";
+import { createIpcServer, typedCall } from "@openomni/ipc";
+import { Machine } from "@openomni/protocol";
+import { attachMachineDaemon, createMachineHost, MachineRefusalError } from "../src/index";
 import { socketPath } from "./helpers/socket-path";
 
-// These tests assert the fs wire surface, not attach telemetry.
-const silent: BusEvent.Sink = {
+const silent = {
   publish() {
     return;
   },
 };
-
-function enrollment(overrides: Partial<Machine.Enrollment> = {}): Machine.Enrollment {
+const capabilities = ["fs.read", "fs.write", "shell.exec", "kernel.py"];
+function enrollment(): Machine.Enrollment {
   return {
+    machineId: "m-1",
     name: "workstation",
-    machineId: "m-1",
-    allowedCapabilities: ["fs.read"],
+    allowedCapabilities: capabilities,
     allowedExports: ["docs"],
-    enrolledAt: 1000,
-    ...overrides,
+    enrolledAt: 1,
   };
 }
-
-function offer(overrides: Partial<Machine.Offer> = {}): Machine.Offer {
+function offer(root: string, changes: Partial<Machine.Offer> = {}): Machine.Offer {
   return {
     machineId: "m-1",
-    daemonVersion: "0.1.0",
-    platform: "darwin",
-    offeredCapabilities: ["fs.read"],
-    exports: [{ name: "docs" }],
-    offeredAt: 2000,
-    ...overrides,
+    offeredCapabilities: capabilities,
+    exports: [{ name: "docs", path: root }],
+    daemonVersion: "test",
+    platform: "darwin-arm64",
+    offeredAt: 2,
+    ...changes,
   };
 }
-
-async function withHost(
-  enrolled: Machine.Enrollment,
-  run: (context: { host: MachineHost; path: string }) => Promise<void>,
-): Promise<void> {
-  const path = socketPath();
-  const host = await createMachineHost({
-    socketPath: path,
-    enrollment: () => enrolled,
-    events: silent,
-    now: () => 5000,
-  });
+async function fixture(run: (root: string) => Promise<void>) {
+  const root = mkdtempSync(join(tmpdir(), "om-wire-"));
   try {
-    await run({ host, path });
+    await run(root);
   } finally {
-    host.close();
+    rmSync(root, { recursive: true, force: true });
   }
 }
 
-describe("machine fs wire surface", () => {
-  test("real host and daemon round-trip read, list, and stat over a unix socket", async () => {
-    const base = mkdtempSync(join(tmpdir(), "openomni-machine-wire-fs-"));
-    const root = join(base, "docs");
-    mkdirSync(root);
-    writeFileSync(join(root, "note.txt"), "hello machine");
-    try {
-      await withHost(enrollment(), async ({ host, path }) => {
-        const daemon = await attachMachineDaemon({
-          socketPath: path,
-          offer: offer(),
-          fsExports: new Map([["docs", root]]),
-        });
-        try {
-          expect(daemon.attachment).toEqual({
-            status: "attached",
-            effectiveCapabilities: ["fs.read"],
-            effectiveExports: ["docs"],
-          });
-          expect(host.attachedExports("m-1")).toEqual(["docs"]);
-          await expect(
-            host.fsOp("m-1", { op: "read", export: "docs", path: "note.txt" }),
-          ).resolves.toEqual({
-            status: "completed",
-            value: {
-              op: "read",
-              data: "hello machine",
-              bytesRead: 13,
-              size: 13,
-              truncated: false,
-            },
-          });
-          const list = await host.fsOp("m-1", { op: "list", export: "docs", path: "" });
-          expect(list).toEqual({
-            status: "completed",
-            value: {
-              op: "list",
-              entries: [{ name: "note.txt", kind: "file", size: 13 }],
-              truncated: false,
-            },
-          });
-          const stat = await host.fsOp("m-1", { op: "stat", export: "docs", path: "note.txt" });
-          expect(stat).toMatchObject({
-            status: "completed",
-            value: { op: "stat", kind: "file", size: 13 },
-          });
-        } finally {
-          daemon.close();
-        }
+describe("real machine consumer surface", () => {
+  test("write/read/list/stat preserve binary bytes and raw metadata", async () => {
+    await fixture(async (root) => {
+      const path = socketPath();
+      const host = await createMachineHost({
+        socketPath: path,
+        enrollment,
+        events: silent,
+        now: () => 3,
       });
-    } finally {
-      rmSync(base, { recursive: true, force: true });
-    }
-  });
-
-  test("refuses an unattached machine and an attachment without fs.read", async () => {
-    await withHost(enrollment(), async ({ host, path }) => {
-      await expect(host.fsOp("missing", { op: "stat", export: "docs", path: "" })).resolves.toEqual(
-        { status: "refused", reason: "machine_not_attached" },
-      );
-
       const daemon = await attachMachineDaemon({
         socketPath: path,
-        offer: offer({ offeredCapabilities: [] }),
+        offer: offer(root),
+        fsExports: new Map([["docs", root]]),
       });
       try {
-        await expect(host.fsOp("m-1", { op: "stat", export: "docs", path: "" })).resolves.toEqual({
-          status: "refused",
-          reason: "fs_not_available",
+        const target = host.get("m-1");
+        const bytes = Buffer.from([0, 255, 128, 10, 65]);
+        expect(await target.fs.write(join(root, "data"), bytes)).toEqual({
+          op: "write",
+          bytesWritten: 5,
         });
-      } finally {
-        daemon.close();
-      }
-    });
-  });
-
-  test("daemon re-checks its own capability offer across the wire boundary", async () => {
-    const protocolError = new MachineDaemonProtocolError({
-      reason: "capability_not_offered",
-      capability: "fs.read",
-      message: "fs.read was not offered by this machine",
-    });
-    expect(protocolError).toBeInstanceOf(MachineDaemonProtocolError);
-    expect(protocolError.data.reason).toBe("capability_not_offered");
-    expect(protocolError.message).toBe("fs.read was not offered by this machine");
-
-    const path = socketPath();
-    const rogueHost = await createIpcServer(path, (_method, _params, respond) => {
-      respond({
-        status: "attached",
-        effectiveCapabilities: ["fs.read"],
-        effectiveExports: ["docs"],
-      });
-    });
-    const daemon = await attachMachineDaemon({
-      socketPath: path,
-      offer: offer({ offeredCapabilities: [] }),
-    });
-    try {
-      try {
-        await typedCall(rogueHost, "machine.fs_op", { op: "stat", export: "docs", path: "" }, 5000);
-        throw new Error("expected an fs capability protocol error");
-      } catch (error) {
-        expect(error).toBeInstanceOf(IpcRemoteError);
-        if (!(error instanceof IpcRemoteError)) throw error;
-        expect(error.data).toEqual({
-          code: 1000,
-          message: "IPC error 1000: fs.read was not offered by this machine",
+        expect(await target.fs.read(join(root, "data"))).toEqual({
+          op: "read",
+          data: bytes,
+          bytesRead: 5,
+          size: 5,
+          truncated: false,
         });
-        expect(error.message).toBe("IPC error 1000: fs.read was not offered by this machine");
-      }
-    } finally {
-      daemon.close();
-      rogueHost.close();
-    }
-  });
-
-  test("daemon re-checks export names from its own offer", async () => {
-    const base = mkdtempSync(join(tmpdir(), "openomni-machine-offer-fs-"));
-    const root = join(base, "private");
-    mkdirSync(root);
-    const path = socketPath();
-    const rogueHost = await createIpcServer(path, (_method, _params, respond) => {
-      respond({
-        status: "attached",
-        effectiveCapabilities: ["fs.read"],
-        effectiveExports: ["private"],
-      });
-    });
-    const daemon = await attachMachineDaemon({
-      socketPath: path,
-      offer: offer({ exports: [{ name: "docs" }] }),
-      fsExports: new Map([["private", root]]),
-    });
-    try {
-      await expect(
-        typedCall(rogueHost, "machine.fs_op", { op: "stat", export: "private", path: "" }, 5000),
-      ).resolves.toEqual({
-        status: "refused",
-        reason: "export_not_available",
-        message: "export is not available: private",
-      });
-    } finally {
-      daemon.close();
-      rogueHost.close();
-      rmSync(base, { recursive: true, force: true });
-    }
-  });
-
-  test("refuses an export outside enrollment without a daemon wire request", async () => {
-    await withHost(enrollment(), async ({ host, path }) => {
-      let fsRequests = 0;
-      const daemon = await connectIpcClient(path, {
-        onRequest(method, _params, respond) {
-          if (method === "machine.fs_op") {
-            fsRequests += 1;
-            respond({
-              status: "completed",
-              value: { op: "stat", kind: "file", size: 1, mtimeMs: 0 },
-            });
-          }
-        },
-      });
-      try {
-        await typedCall(
-          daemon,
-          "machine.attach",
-          offer({ exports: [{ name: "docs" }, { name: "private" }] }),
-          5000,
-        );
+        expect(await target.fs.list(root)).toEqual({
+          op: "list",
+          entries: [{ name: "data", kind: "file", size: 5 }],
+          truncated: false,
+        });
+        expect(await target.fs.stat(join(root, "data"))).toMatchObject({
+          op: "stat",
+          kind: "file",
+          size: 5,
+        });
+        expect(await target.fs.write(join(root, "data"), Buffer.from("x"))).toEqual({
+          op: "write",
+          bytesWritten: 1,
+        });
+        expect((await target.fs.read(join(root, "data"))).data).toEqual(Buffer.from("x"));
+        await expect(target.fs.read("/outside-export")).rejects.toMatchObject({
+          name: "MachineRefusalError",
+          data: { reason: "export_not_available" },
+        });
         await expect(
-          host.fsOp("m-1", { op: "stat", export: "private", path: "secret" }),
-        ).resolves.toEqual({
-          status: "refused",
-          reason: "export_not_available",
-          message: "export is not available: private",
-        });
-        expect(fsRequests).toBe(0);
+          target.fs.write(join(root, "large"), Buffer.alloc(Machine.FS_WRITE_MAX_BYTES + 1)),
+        ).rejects.toMatchObject({ name: "MachineRefusalError", data: { reason: "too_large" } });
       } finally {
-        daemon.close();
+        await daemon.close();
+        host.close();
+      }
+    });
+  });
+
+  test("unattached handles throw typed refusal and a capability fold grants no extra authority", async () => {
+    await fixture(async (root) => {
+      const path = socketPath();
+      const host = await createMachineHost({
+        socketPath: path,
+        enrollment: () => ({ ...enrollment(), allowedCapabilities: ["fs.read"] }),
+        events: silent,
+        now: () => 3,
+      });
+      await expect(host.get("missing").fs.stat(root)).rejects.toBeInstanceOf(MachineRefusalError);
+      const daemon = await attachMachineDaemon({
+        socketPath: path,
+        offer: offer(root),
+        fsExports: new Map([["docs", root]]),
+      });
+      try {
+        await expect(
+          host.get("m-1").fs.write(join(root, "no"), Buffer.from("no")),
+        ).rejects.toMatchObject({
+          name: "MachineRefusalError",
+          data: { reason: "fs_not_available" },
+        });
+        expect(await host.get("m-1").exec("echo no", root)).toEqual({
+          status: "refused",
+          reason: "exec_not_available",
+        });
+        expect(
+          await host.get("m-1").runCode({ cellId: "no", code: "no", timeoutMs: 1000 }),
+        ).toEqual({ status: "refused", reason: "kernel_not_available" });
+      } finally {
+        await daemon.close();
+        host.close();
+      }
+    });
+  });
+
+  test("exec documents pathname TOCTOU after an export symlink swap", async () => {
+    await fixture(async (base) => {
+      const first = join(base, "first");
+      const moved = join(base, "moved");
+      const second = join(base, "second");
+      const link = join(base, "root");
+      mkdirSync(first);
+      mkdirSync(second);
+      writeFileSync(join(first, "mark"), "FIRST");
+      writeFileSync(join(second, "mark"), "SECOND");
+      symlinkSync(first, link);
+      const path = socketPath();
+      const host = await createMachineHost({
+        socketPath: path,
+        enrollment,
+        events: silent,
+        now: () => 3,
+      });
+      const daemon = await attachMachineDaemon({
+        socketPath: path,
+        offer: offer(link),
+        fsExports: new Map([["docs", link]]),
+      });
+      try {
+        renameSync(first, moved);
+        rmSync(link);
+        symlinkSync(second, link);
+        // Contract contrast on one wire: the fs branch keeps its root pinned at attach and still reads FIRST,
+        // while exec re-resolves and spawns by pathname, so the accepted TOCTOU follows SECOND.
+        expect((await host.get("m-1").fs.read(join(link, "mark"))).data).toEqual(
+          Buffer.from("FIRST"),
+        );
+        await expect(host.get("m-1").exec("cat mark", link)).resolves.toMatchObject({
+          status: "completed",
+          stdout: Buffer.from("SECOND"),
+        });
+      } finally {
+        await daemon.close();
+        host.close();
+      }
+    });
+  });
+
+  test("exec uses each explicit cwd and returns independent stdout, stderr, exit and signal", async () => {
+    await fixture(async (root) => {
+      const a = join(root, "a");
+      const b = join(root, "b");
+      mkdirSync(a);
+      mkdirSync(b);
+      writeFileSync(join(a, "mark"), "A");
+      writeFileSync(join(b, "mark"), "B");
+      const path = socketPath();
+      const host = await createMachineHost({
+        socketPath: path,
+        enrollment,
+        events: silent,
+        now: () => 3,
+      });
+      const daemon = await attachMachineDaemon({
+        socketPath: path,
+        offer: offer(root),
+        fsExports: new Map([["docs", root]]),
+      });
+      try {
+        const target = host.get("m-1");
+        await expect(target.exec("true", "/tmp")).resolves.toEqual({
+          status: "refused",
+          reason: "path_escapes_export",
+        });
+        expect(await target.exec("cat mark; printf err >&2; cd /; exit 7", a)).toEqual({
+          status: "completed",
+          stdout: Buffer.from("A"),
+          stderr: Buffer.from("err"),
+          exitCode: 7,
+          signal: null,
+          truncated: false,
+        });
+        expect(await target.exec("cat mark", b)).toMatchObject({
+          status: "completed",
+          stdout: Buffer.from("B"),
+          exitCode: 0,
+        });
+        expect(await target.exec("cat mark", a)).toMatchObject({
+          status: "completed",
+          stdout: Buffer.from("A"),
+        });
+        expect(await target.exec("kill -TERM $$", a)).toMatchObject({
+          status: "completed",
+          exitCode: null,
+          signal: "SIGTERM",
+        });
+        expect(await target.exec("true", join(root, "absent"))).toEqual({
+          status: "refused",
+          reason: "io_error",
+        });
+        symlinkSync("/tmp", join(root, "outside"));
+        await expect(target.exec("true", join(root, "outside"))).resolves.toEqual({
+          status: "refused",
+          reason: "path_escapes_export",
+        });
+        const capped = await target.exec("yes x", root);
+        expect(capped.status).toBe("completed");
+        if (capped.status !== "completed") throw new Error("expected a capped execution result");
+        expect(capped.truncated).toBe(true);
+        expect(capped.stdout.length + capped.stderr.length).toBe(Machine.EXEC_MAX_BYTES);
+      } finally {
+        await daemon.close();
+        host.close();
       }
     });
   });
 });
 
-describe("attach failure", () => {
-  // fsOp opens a descriptor per configured export before the daemon connects.
-  // A connection failure must release them; otherwise each retry leaks an fd
-  // set and a reconnect loop exhausts the daemon's descriptor table.
-  test("releases export descriptors when the connection fails", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "openomni-fs-leak-"));
-    const root = join(dir, "docs");
-    mkdirSync(root);
-    // Never bound, so connectIpcClient rejects.
-    const deadSocket = socketPath();
-
-    const openDescriptors = (): number => {
-      const probe = openSync(dir, 0);
-      closeSync(probe);
-      return probe;
-    };
-
-    const before = openDescriptors();
-    for (let attempt = 0; attempt < 8; attempt++) {
-      await expect(
-        attachMachineDaemon({
-          socketPath: deadSocket,
-          offer: offer({ exports: [{ name: "docs" }] }),
-          fsExports: new Map([["docs", root]]),
-        }),
-      ).rejects.toBeInstanceOf(Error);
+test("longest normalized root wins, and equal roots refuse rather than selecting arbitrarily", async () => {
+  await fixture(async (root) => {
+    const nested = join(root, "nested");
+    mkdirSync(nested);
+    const path = socketPath();
+    const host = await createMachineHost({
+      socketPath: path,
+      enrollment,
+      events: silent,
+      now: () => 3,
+    });
+    const daemon = await attachMachineDaemon({
+      socketPath: path,
+      offer: offer(root, {
+        exports: [
+          { name: "docs", path: root },
+          { name: "private", path: `${nested}/./` },
+        ],
+      }),
+      fsExports: new Map([
+        ["docs", root],
+        ["private", `${nested}/./`],
+      ]),
+    });
+    try {
+      await expect(host.get("m-1").fs.stat(nested)).rejects.toMatchObject({
+        name: "MachineRefusalError",
+        data: { reason: "export_not_available" },
+      });
+    } finally {
+      await daemon.close();
     }
-    const after = openDescriptors();
+    const duplicate = await attachMachineDaemon({
+      socketPath: path,
+      offer: offer(root, {
+        exports: [
+          { name: "docs", path: root },
+          { name: "alias", path: `${root}/./` },
+        ],
+      }),
+    });
+    try {
+      await expect(host.get("m-1").fs.stat(root)).rejects.toMatchObject({
+        name: "MachineRefusalError",
+        data: { reason: "ambiguous_export" },
+      });
+    } finally {
+      await duplicate.close();
+      host.close();
+    }
+  });
+});
 
-    // The lowest free descriptor must not drift: a leak per attempt walks it up.
-    expect(after).toBe(before);
-    rmSync(dir, { recursive: true, force: true });
+describe("daemon boundary cannot be bypassed by a rogue host", () => {
+  test.each([
+    "read",
+    "write",
+  ] as const)("rechecks %s capabilities even when the host fabricates an effective grant", async (op) => {
+    await fixture(async (root) => {
+      const path = socketPath();
+      const host = await createIpcServer(path, (_method, _params, respond) =>
+        respond({
+          status: "attached",
+          effectiveCapabilities: capabilities,
+          effectiveExports: ["docs"],
+        }),
+      );
+      const daemon = await attachMachineDaemon({
+        socketPath: path,
+        offer: offer(root, { offeredCapabilities: [] }),
+        fsExports: new Map([["docs", root]]),
+      });
+      try {
+        const request: Machine.FsRequest =
+          op === "write"
+            ? { op, export: "docs", path: "file", data: "eA==" }
+            : { op, export: "docs", path: "file" };
+        expect(await typedCall(host, "machine.fs_op", request)).toMatchObject({
+          status: "refused",
+          reason: "fs_not_available",
+        });
+        expect(await typedCall(host, "machine.exec", { cmd: "echo no", cwd: root })).toEqual({
+          status: "refused",
+          reason: "exec_not_available",
+        });
+        expect(
+          await typedCall(host, "machine.run_code", { cellId: "no", code: "no", timeoutMs: 1000 }),
+        ).toEqual({ status: "refused", reason: "kernel_not_available" });
+      } finally {
+        await daemon.close();
+        host.close();
+      }
+    });
+  });
+
+  test.each([
+    "offer",
+    "enrollment",
+  ] as const)("rechecks the %s export ceiling over real wire", async (missing) => {
+    await fixture(async (root) => {
+      const path = socketPath();
+      const host = await createIpcServer(path, (_method, _params, respond) =>
+        respond({
+          status: "attached",
+          effectiveCapabilities: capabilities,
+          effectiveExports: missing === "enrollment" ? [] : ["docs"],
+        }),
+      );
+      const daemon = await attachMachineDaemon({
+        socketPath: path,
+        offer: offer(root, missing === "offer" ? { exports: [] } : {}),
+        fsExports: new Map([["docs", root]]),
+      });
+      try {
+        expect(
+          await typedCall(host, "machine.fs_op", {
+            op: "write",
+            export: "docs",
+            path: "file",
+            data: "eA==",
+          }),
+        ).toMatchObject({ status: "refused", reason: "export_not_available" });
+        expect(await typedCall(host, "machine.exec", { cmd: "true", cwd: root })).toEqual({
+          status: "refused",
+          reason: "path_escapes_export",
+        });
+        if (missing === "offer") {
+          expect(await typedCall(host, "machine.exec", { cmd: "true", cwd: root })).toEqual({
+            status: "refused",
+            reason: "path_escapes_export",
+          });
+        }
+      } finally {
+        await daemon.close();
+        host.close();
+      }
+    });
+  });
+
+  test("refuses exec when the offered root disagrees with daemon configuration", async () => {
+    await fixture(async (root) => {
+      const outside = `${root}-outside`;
+      mkdirSync(outside);
+      const path = socketPath();
+      const host = await createIpcServer(path, (_method, _params, respond) =>
+        respond({
+          status: "attached",
+          effectiveCapabilities: capabilities,
+          effectiveExports: ["data"],
+        }),
+      );
+      const daemon = await attachMachineDaemon({
+        socketPath: path,
+        offer: { ...offer(root), exports: [{ name: "data", path: root }] },
+        fsExports: new Map([["data", outside]]),
+      });
+      try {
+        expect(await typedCall(host, "machine.exec", { cmd: "true", cwd: root })).toEqual({
+          status: "refused",
+          reason: "path_escapes_export",
+        });
+        expect(await typedCall(host, "machine.exec", { cmd: "true", cwd: outside })).toEqual({
+          status: "refused",
+          reason: "path_escapes_export",
+        });
+      } finally {
+        await daemon.close();
+        host.close();
+      }
+    });
+  });
+
+  test("connection failure closes the injected runner", async () => {
+    let closed = 0;
+    await expect(
+      attachMachineDaemon({
+        socketPath: socketPath(),
+        offer: offer("/tmp"),
+        runner: {
+          runCode: async (request) => ({ status: "cancelled", cellId: request.cellId }),
+          close: async () => {
+            closed += 1;
+          },
+        },
+      }),
+    ).rejects.toMatchObject({ name: "IpcConnectionError" });
+    expect(closed).toBe(1);
   });
 });

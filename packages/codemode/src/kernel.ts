@@ -1,9 +1,11 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { createInterface, type Interface } from "node:readline";
 import { Machine } from "@openomni/protocol";
+import { z } from "zod";
 
 const PYTHON_DRIVER = String.raw`
 import ast
+import base64
 import concurrent.futures
 import contextlib
 import io
@@ -91,7 +93,7 @@ class _Tools:
                     if _answer_queues.get(_call_id) is _answers:
                         del _answer_queues[_call_id]
             if _answer["status"] == "completed":
-                return _answer["value"]
+                return _answer.get("value")
             raise ToolError(_answer["error"])
 
         return call
@@ -121,8 +123,44 @@ def llm(prompts):
     return tool.llm(prompts=prompts)
 
 
-def llm_batched(prompts):
-    return llm(prompts)
+class _Machine:
+    def __init__(self, machine_id):
+        self.machine_id = machine_id
+
+    def read(self, path):
+        value = tool['codemode.read'](machineId=self.machine_id, path=path)
+        value['data'] = base64.b64decode(value['data'])
+        return value
+
+    def write(self, path, data):
+        return tool['codemode.write'](machineId=self.machine_id, path=path, data=base64.b64encode(data).decode('ascii'))
+
+    def list(self, path):
+        return tool['codemode.list'](machineId=self.machine_id, path=path)
+
+    def stat(self, path):
+        return tool['codemode.stat'](machineId=self.machine_id, path=path)
+
+    def shell(self, cmd, cwd):
+        value = tool['codemode.shell'](machineId=self.machine_id, cmd=cmd, cwd=cwd)
+        if value['status'] == 'completed':
+            value['stdout'] = base64.b64decode(value['stdout'])
+            value['stderr'] = base64.b64decode(value['stderr'])
+        return value
+
+    def run(self, code):
+        return tool['codemode.run'](machineId=self.machine_id, code=code)
+
+
+class _Codemode:
+    def listMachines(self):
+        return tool['codemode.listMachines']()
+
+    def getMachine(self, machine_id):
+        return _Machine(machine_id)
+
+    def findMachine(self, query):
+        return _Machine(tool['codemode.findMachine'](query=query))
 
 
 tool = _Tools()
@@ -132,7 +170,7 @@ _scope = {
     "ToolError": ToolError,
     "parallel": parallel,
     "llm": llm,
-    "llm_batched": llm_batched,
+    "codemode": _Codemode(),
 }
 threading.Thread(target=_read_stdin, name="driver-stdin", daemon=True).start()
 
@@ -182,28 +220,12 @@ while True:
     _emit({"kind": "result", "result": _result})
 `;
 
-type ToolCallFrame = {
-  readonly callId: string;
-  readonly cellId: string;
-  readonly name: string;
-  readonly arguments: Record<string, unknown>;
-};
+const ToolCallFrame = Machine.ToolCall.extend({ kind: z.literal("tool_call"), callId: z.string().min(1) });
+type ToolCallFrame = z.infer<typeof ToolCallFrame>;
+const Frame = z.discriminatedUnion("kind", [ToolCallFrame, z.object({ kind: z.literal("result"), result: Machine.CellResult }).strict()]);
 
-/**
- * Frames the driver writes back: either a `tool.<name>()` call to service, or
- * the cell's own result. Internal to this stdin/stdout channel — the host
- * boundary speaks `Machine.ToolCall` / `Machine.CellResult` instead.
- */
-function isToolCallFrame(frame: unknown): frame is ToolCallFrame {
-  return (frame as { kind?: unknown } | null)?.kind === "tool_call";
-}
-
-function resultOf(frame: unknown): unknown {
-  return (frame as { result?: unknown } | null)?.result;
-}
-
-/** Answers a `tool.<name>()` call made from inside a cell. */
-export type CellToolCaller = (call: Machine.ToolCall) => Promise<Machine.ToolCallResult>;
+/** Answers a call made from inside a cell. */
+type CellToolCaller = (call: Machine.ToolCall) => Promise<Machine.ToolCallResult>;
 
 type PendingCell = {
   readonly resolve: (result: Machine.CellResult) => void;
@@ -226,8 +248,12 @@ export class PythonKernel {
   private lines: Interface | undefined;
   private pending: PendingCell | undefined;
   private tail: Promise<void> = Promise.resolve();
+  private readonly lifetime = new AbortController();
+  private readonly exits = new Set<Promise<void>>();
 
-  run(request: Machine.CellRequest, callTool: CellToolCaller): Promise<Machine.CellResult> {
+  run(request: Machine.CellRequest, callTool: CellToolCaller, signal?: AbortSignal): Promise<Machine.CellResult> {
+    const cancellation = signal === undefined ? this.lifetime.signal : AbortSignal.any([signal, this.lifetime.signal]);
+    if (cancellation.aborted) return Promise.resolve({ status: "cancelled", cellId: request.cellId });
     const deadline = Date.now() + request.timeoutMs;
     let queueExpired = false;
     let resolveResult!: (result: Machine.CellResult) => void;
@@ -241,6 +267,20 @@ export class PythonKernel {
       resolveResult({ status: "timed_out", cellId: request.cellId });
     }, request.timeoutMs);
 
+    const abort = () => {
+      queueExpired = true;
+      clearTimeout(queueTimer);
+      const pending = this.pending;
+      if (pending?.cellId === request.cellId) {
+        clearTimeout(pending.timer);
+        this.pending = undefined;
+        pending.inFlight.clear();
+        this.discard(pending.process);
+        pending.resolve({ status: "cancelled", cellId: request.cellId });
+      }
+      resolveResult({ status: "cancelled", cellId: request.cellId });
+    };
+    cancellation.addEventListener("abort", abort, { once: true });
     const operation = this.tail.then(() => {
       clearTimeout(queueTimer);
       if (queueExpired) return;
@@ -256,15 +296,14 @@ export class PythonKernel {
       () => undefined,
       () => undefined,
     );
-    return result;
+    return result.finally(() => cancellation.removeEventListener("abort", abort));
   }
 
-  close(): void {
-    const process = this.process;
-    this.process = undefined;
-    this.lines?.close();
-    this.lines = undefined;
-    process?.kill("SIGKILL");
+  async close(): Promise<void> {
+    this.lifetime.abort();
+    if (this.process !== undefined) this.discard(this.process);
+    await this.tail;
+    await Promise.all([...this.exits]);
   }
 
   private execute(
@@ -299,6 +338,9 @@ export class PythonKernel {
 
   private start(): ChildProcessWithoutNullStreams {
     const process = spawn("python3", ["-u", "-c", PYTHON_DRIVER]);
+    const exited = new Promise<void>((resolve) => process.once("close", () => resolve()));
+    this.exits.add(exited);
+    void exited.then(() => this.exits.delete(exited));
     const lines = createInterface({ input: process.stdout });
     this.process = process;
     this.lines = lines;
@@ -306,16 +348,16 @@ export class PythonKernel {
     lines.on("line", (line) => {
       const pending = this.pending;
       if (pending?.process !== process) return;
-      let frame: unknown;
+      let frame: z.infer<typeof Frame>;
       try {
-        frame = JSON.parse(line);
+        frame = Frame.parse(JSON.parse(line));
       } catch (error) {
-        this.settleWithParseFailure(process, pending, error);
+        this.settleWithParseFailure(process, pending, error instanceof Error ? error : new Error(String(error)));
         return;
       }
       // A tool call leaves the cell pending — including its deadline, so a cell
       // that hangs waiting on a tool still times out honestly.
-      if (isToolCallFrame(frame)) {
+      if (frame.kind === "tool_call") {
         this.answerToolCall(process, pending, frame);
         return;
       }
@@ -323,7 +365,7 @@ export class PythonKernel {
       this.pending = undefined;
       pending.inFlight.clear();
       try {
-        pending.resolve(Machine.CellResult.parse(resultOf(frame)));
+        pending.resolve(frame.result);
       } catch (error) {
         this.discard(process);
         pending.reject(error instanceof Error ? error : new Error(String(error)));
@@ -352,7 +394,7 @@ export class PythonKernel {
   private settleWithParseFailure(
     process: ChildProcessWithoutNullStreams,
     pending: PendingCell,
-    error: unknown,
+    error: Error,
   ): void {
     clearTimeout(pending.timer);
     this.pending = undefined;
@@ -380,7 +422,7 @@ export class PythonKernel {
           })}\n`,
         );
       } catch (error) {
-        this.settleWithParseFailure(process, pending, error);
+        this.settleWithParseFailure(process, pending, error instanceof Error ? error : new Error(String(error)));
       }
       return;
     }
@@ -392,7 +434,7 @@ export class PythonKernel {
         pending.callTool({ cellId: pending.cellId, name: frame.name, arguments: frame.arguments }),
       )
       .catch(
-        (error: unknown): Machine.ToolCallResult => ({
+        (error: Error): Machine.ToolCallResult => ({
           status: "failed",
           error: error instanceof Error ? error.message : String(error),
         }),
@@ -403,7 +445,7 @@ export class PythonKernel {
         if (this.pending !== pending || !pending.inFlight.has(frame.callId)) return;
         process.stdin.write(`${JSON.stringify({ ...answer, callId: frame.callId })}\n`);
       })
-      .catch((error: unknown) => {
+      .catch((error: Error) => {
         // A synchronous serialization/write failure is a kernel-channel failure,
         // but a stale process has already been deliberately discarded.
         if (this.pending === pending && pending.inFlight.has(frame.callId)) {

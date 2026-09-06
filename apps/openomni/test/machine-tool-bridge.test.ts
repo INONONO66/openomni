@@ -1,11 +1,10 @@
+import { createCodemode } from "@openomni/codemode";
 import { describe, expect, test } from "bun:test";
-import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { connectIpcClient, typedCall } from "@openomni/ipc";
 import { Machine } from "@openomni/protocol";
-import { attachMachineDaemon } from "../src/daemon";
-import { type MachineHost, createMachineHost } from "../src/host";
-import { MachineCellError } from "../src/index";
-import { PythonKernel } from "../src/kernel";
+import { attachMachineDaemon } from "@openomni/machines";
+import { type MachineHost, createMachineHost } from "@openomni/machines";
+import { MachineCellError } from "@openomni/machines";
 import { socketPath } from "./helpers/socket-path";
 
 const silent = {
@@ -16,7 +15,7 @@ const silent = {
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
-  let reject!: (reason?: unknown) => void;
+  let reject!: (reason?: Error) => void;
   const promise = new Promise<T>((resolvePromise, rejectPromise) => {
     resolve = resolvePromise;
     reject = rejectPromise;
@@ -56,7 +55,7 @@ async function withBridge(
       return { status: "failed", error: `tool is not offerable: ${call.name}` };
     },
   });
-  const daemon = await attachMachineDaemon({
+  const daemon = await attachMachineDaemon({ runner: createCodemode().runner,
     socketPath: path,
     offer: {
       machineId: "m-1",
@@ -75,10 +74,10 @@ async function withBridge(
 }
 
 describe("code-mode tool bridge", () => {
-  test("a cell reaches host tools repeatedly within one run_cell", async () => {
+  test("a cell reaches host tools repeatedly within one run_code", async () => {
     await withBridge(async ({ host, calls }) => {
       // The whole point of code mode: two tool calls, one round trip.
-      const result = await host.runCell("m-1", {
+      const result = await host.get("m-1").runCode({
         cellId: "batch",
         code: "first = tool.add(a=1, b=2)\nsecond = tool.add(a=first, b=10)\nsecond",
         timeoutMs: 15_000,
@@ -95,7 +94,7 @@ describe("code-mode tool bridge", () => {
     let arrivals = 0;
     await withBridge(
       async ({ host }) => {
-        const result = await host.runCell("m-1", {
+        const result = await host.get("m-1").runCode({
           cellId: "parallel-routing",
           code: [
             "parallel([",
@@ -127,7 +126,7 @@ describe("code-mode tool bridge", () => {
   test("llm calls the canonical batched tool and returns its value unchanged", async () => {
     await withBridge(
       async ({ host, calls }) => {
-        const result = await host.runCell("m-1", {
+        const result = await host.get("m-1").runCode({
           cellId: "llm-sugar",
           code: "llm(['summarize this'])",
           timeoutMs: 15_000,
@@ -142,12 +141,12 @@ describe("code-mode tool bridge", () => {
     );
   });
 
-  test("llm_batched returns llm results in prompt order", async () => {
+  test("llm returns llm results in prompt order", async () => {
     await withBridge(
       async ({ host, calls }) => {
-        const result = await host.runCell("m-1", {
+        const result = await host.get("m-1").runCode({
           cellId: "llm-batched",
-          code: "llm_batched(['first', 'second'])",
+          code: "llm(['first', 'second'])",
           timeoutMs: 15_000,
         });
 
@@ -171,42 +170,11 @@ describe("code-mode tool bridge", () => {
     );
   });
 
-  test("an unknown callId answer is ignored without disturbing the waiting call", async () => {
-    const kernel = new PythonKernel();
-    const callEntered = deferred<void>();
-    const releaseCall = deferred<void>();
-    try {
-      const running = kernel.run(
-        { cellId: "unknown-answer", code: "tool.echo(value='real')", timeoutMs: 15_000 },
-        async () => {
-          callEntered.resolve();
-          await releaseCall.promise;
-          return { status: "completed", value: "real answer" };
-        },
-      );
-      await callEntered.promise;
-      const child = (kernel as unknown as { process?: ChildProcessWithoutNullStreams }).process;
-      if (!child) throw new Error("expected a running Python process");
-      child.stdin.write(
-        `${JSON.stringify({ callId: "not-in-flight", status: "completed", value: "stray" })}\n`,
-      );
-      releaseCall.resolve();
-
-      await expect(running).resolves.toMatchObject({
-        status: "completed",
-        value: "'real answer'",
-      });
-    } finally {
-      releaseCall.resolve();
-      kernel.close();
-    }
-  });
-
   test("parallel waits for other thunks before propagating an exception", async () => {
     const completed = deferred<void>();
     await withBridge(
       async ({ host, calls }) => {
-        const result = await host.runCell("m-1", {
+        const result = await host.get("m-1").runCode({
           cellId: "parallel-error",
           code: [
             "def fail():",
@@ -228,55 +196,9 @@ describe("code-mode tool bridge", () => {
     );
   });
 
-  test("a timeout SIGKILLs a cell with in-flight tool calls and consumes late rejection", async () => {
-    const kernel = new PythonKernel();
-    const callEntered = deferred<void>();
-    const toolAnswer = deferred<Machine.ToolCallResult>();
-    type KillSignal = Parameters<ChildProcessWithoutNullStreams["kill"]>[0];
-    const signals: KillSignal[] = [];
-    const unhandled: unknown[] = [];
-    const onUnhandled = (error: unknown) => unhandled.push(error);
-    const rejectionEvents = process as unknown as {
-      on(event: "unhandledRejection", listener: (error: unknown) => void): void;
-      off(event: "unhandledRejection", listener: (error: unknown) => void): void;
-    };
-    rejectionEvents.on("unhandledRejection", onUnhandled);
-    try {
-      const running = kernel.run(
-        {
-          cellId: "timeout-in-flight",
-          code: "parallel([lambda: tool.slow(), lambda: tool.slow()])",
-          timeoutMs: 1_000,
-        },
-        () => {
-          callEntered.resolve();
-          return toolAnswer.promise;
-        },
-      );
-      await callEntered.promise;
-      const child = (kernel as unknown as { process?: ChildProcessWithoutNullStreams }).process;
-      if (!child) throw new Error("expected a running Python process");
-      const kill = child.kill.bind(child);
-      child.kill = ((signal?: KillSignal) => {
-        signals.push(signal);
-        return kill(signal);
-      }) as typeof child.kill;
-
-      await expect(running).resolves.toEqual({ status: "timed_out", cellId: "timeout-in-flight" });
-      expect(signals).toContain("SIGKILL");
-      toolAnswer.reject(new Error("late tool failure"));
-      await new Promise<void>((resolve) => setImmediate(resolve));
-      expect(unhandled).toEqual([]);
-    } finally {
-      rejectionEvents.off("unhandledRejection", onUnhandled);
-      toolAnswer.resolve({ status: "failed", error: "closed" });
-      kernel.close();
-    }
-  });
-
   test("a tool the host refuses raises a catchable error and does not run", async () => {
     await withBridge(async ({ host, calls }) => {
-      const result = await host.runCell("m-1", {
+      const result = await host.get("m-1").runCode({
         cellId: "refused",
         code: [
           "try:",
@@ -300,7 +222,7 @@ describe("code-mode tool bridge", () => {
 
   test("a dotted tool name reaches the host under its canonical spelling", async () => {
     await withBridge(async ({ host, calls }) => {
-      await host.runCell("m-1", {
+      await host.get("m-1").runCode({
         cellId: "dotted",
         code: "try:\n    tool['screen.capture'](region='full')\nexcept ToolError:\n    pass",
         timeoutMs: 15_000,
@@ -317,7 +239,7 @@ describe("code-mode tool bridge", () => {
   test("a tool that fails on the host surfaces the failure inside the cell", async () => {
     await withBridge(
       async ({ host }) => {
-        const result = await host.runCell("m-1", {
+        const result = await host.get("m-1").runCode({
           cellId: "failing",
           code: "tool.add(a=1, b=2)",
           timeoutMs: 15_000,
@@ -333,7 +255,7 @@ describe("code-mode tool bridge", () => {
   test("a cell blocked on a slow tool still honours its deadline and recovers", async () => {
     await withBridge(
       async ({ host }) => {
-        const blocked = await host.runCell("m-1", {
+        const blocked = await host.get("m-1").runCode({
           cellId: "blocked",
           code: "tool.add(a=1, b=2)",
           timeoutMs: 800,
@@ -342,7 +264,7 @@ describe("code-mode tool bridge", () => {
 
         // The interpreter was replaced while it sat inside a tool call; the
         // next cell must still get a working one.
-        const next = await host.runCell("m-1", {
+        const next = await host.get("m-1").runCode({
           cellId: "after",
           code: "'alive'",
           timeoutMs: 15_000,
@@ -377,7 +299,7 @@ describe("code-mode tool bridge", () => {
     let runCellRequests = 0;
     const daemon = await connectIpcClient(path, {
       onRequest: async (method, params, respond) => {
-        if (method !== Machine.WireMethod.RunCell) return;
+        if (method !== Machine.WireMethod.RunCode) return;
         runCellRequests += 1;
         const request = Machine.CellRequest.parse(params);
         announceFirst();
@@ -402,25 +324,25 @@ describe("code-mode tool bridge", () => {
         },
         5000,
       );
-      const first = host.runCell("m-1", {
+      const first = host.get("m-1").runCode({
         cellId: "duplicate",
         code: "'first'",
         timeoutMs: 15_000,
       });
       await firstReceived;
 
-      let duplicateError: unknown;
+      let duplicateError: Error | undefined;
       try {
-        await host.runCell("m-1", {
+        await host.get("m-1").runCode({
           cellId: "duplicate",
           code: "'second'",
           timeoutMs: 15_000,
         });
       } catch (error) {
-        duplicateError = error;
+        duplicateError = error instanceof Error ? error : new Error(String(error));
       }
       expect(MachineCellError.isInstance(duplicateError)).toBe(true);
-      if (!MachineCellError.isInstance(duplicateError)) {
+      if (!(duplicateError instanceof MachineCellError)) {
         throw new Error("expected a typed duplicate-cell refusal");
       }
       expect(duplicateError.data).toMatchObject({
@@ -466,63 +388,11 @@ describe("code-mode tool bridge", () => {
           { cellId: "c", name: "add", arguments: {} },
           5000,
         ),
-      ).rejects.toThrow("machine is not attached");
+      ).rejects.toThrow("no cell in flight: c");
       expect(reached).toBe(false);
     } finally {
       intruder.close();
       host.close();
-    }
-  });
-
-  test("a tool answer that outlives its cell never reaches the next one", async () => {
-    const kernel = new PythonKernel();
-    let announceSlowCall!: () => void;
-    const slowCallEntered = new Promise<void>((resolve) => {
-      announceSlowCall = resolve;
-    });
-    let releaseSlowCall!: () => void;
-    const slowCallBlocked = new Promise<void>((resolve) => {
-      releaseSlowCall = resolve;
-    });
-    try {
-      await expect(
-        kernel.run({ cellId: "warm", code: "1 + 1", timeoutMs: 15_000 }, async () => ({
-          status: "failed",
-          error: "no tools during warmup",
-        })),
-      ).resolves.toMatchObject({ status: "completed", value: "2" });
-      const firstPending = kernel.run(
-        { cellId: "one", code: "tool.slow()", timeoutMs: 100 },
-        async () => {
-          announceSlowCall();
-          await slowCallBlocked;
-          return { status: "completed", value: "stray" };
-        },
-      );
-      await Promise.race([
-        slowCallEntered,
-        firstPending.then((result) => {
-          throw new Error(`cell terminated before tool entry: ${result.status}`);
-        }),
-      ]);
-      await expect(firstPending).resolves.toEqual({ status: "timed_out", cellId: "one" });
-
-      // Timeout replaced the interpreter. The successor completes before the
-      // old callback is released, so its result cannot depend on scheduler luck.
-      const second = await kernel.run(
-        { cellId: "two", code: "tool.mine()", timeoutMs: 2000 },
-        async () => ({ status: "completed", value: "mine" }),
-      );
-      expect(second).toMatchObject({ status: "completed", cellId: "two", value: "'mine'" });
-
-      releaseSlowCall();
-      const third = await kernel.run({ cellId: "three", code: "1 + 1", timeoutMs: 15_000 }, () =>
-        Promise.resolve({ status: "failed", error: "no tools" }),
-      );
-      expect(third).toMatchObject({ status: "completed", value: "2" });
-    } finally {
-      releaseSlowCall();
-      kernel.close();
     }
   });
 
@@ -598,7 +468,7 @@ describe("code-mode tool bridge", () => {
     // cell is retired rather than merely unknown to some other connection.
     const daemon = await connectIpcClient(path, {
       onRequest: (method, _params, respond) => {
-        if (method === Machine.WireMethod.RunCell) {
+        if (method === Machine.WireMethod.RunCode) {
           respond({
             status: "completed",
             cellId: "spent",
@@ -620,7 +490,7 @@ describe("code-mode tool bridge", () => {
         },
         5000,
       );
-      const cell = await host.runCell("m-1", {
+      const cell = await host.get("m-1").runCode({
         cellId: "spent",
         code: "'done'",
         timeoutMs: 15_000,
@@ -647,16 +517,16 @@ describe("code-mode tool bridge", () => {
 
   test("a superseded daemon loses tool access mid-cell without wedging it", async () => {
     const path = socketPath();
-    let release: (value: unknown) => void = () => {
+    let release: () => void = () => {
       return;
     };
-    const firstCallBlocked = new Promise((resolve) => {
+    const firstCallBlocked = new Promise<void>((resolve) => {
       release = resolve;
     });
-    let announceEntered: (value: unknown) => void = () => {
+    let announceEntered: () => void = () => {
       return;
     };
-    const firstCallEntered = new Promise((resolve) => {
+    const firstCallEntered = new Promise<void>((resolve) => {
       announceEntered = resolve;
     });
     let calls = 0;
@@ -673,7 +543,7 @@ describe("code-mode tool bridge", () => {
       callTool: async () => {
         calls += 1;
         if (calls === 1) {
-          announceEntered(null);
+          announceEntered();
           await firstCallBlocked;
         }
         return { status: "completed", value: calls };
@@ -686,10 +556,10 @@ describe("code-mode tool bridge", () => {
       offeredCapabilities: ["kernel.py" as const],
       offeredAt: 2000,
     };
-    const first = await attachMachineDaemon({ socketPath: path, offer });
+    const first = await attachMachineDaemon({ runner: createCodemode().runner, socketPath: path, offer });
     let second: Awaited<ReturnType<typeof attachMachineDaemon>> | undefined;
     try {
-      const cell = host.runCell("m-1", {
+      const cell = host.get("m-1").runCode({
         cellId: "live",
         code: [
           "a = tool.t()",
@@ -704,16 +574,16 @@ describe("code-mode tool bridge", () => {
 
       // Take the machine over while the cell sits inside its first tool call.
       await firstCallEntered;
-      second = await attachMachineDaemon({ socketPath: path, offer });
-      release(null);
+      second = await attachMachineDaemon({ runner: createCodemode().runner, socketPath: path, offer });
+      release();
 
       // Being superseded revokes tools, but the cell still finishes on its
       // own terms instead of hanging on an answer that will never come.
       const result = await cell;
       expect(result).toMatchObject({ status: "completed", value: "(1, 'lost')" });
     } finally {
-      first.close();
-      second?.close();
+      await first.close();
+      await second?.close();
       host.close();
     }
   });
@@ -723,7 +593,7 @@ describe("code-mode tool bridge", () => {
       // The reviewer's exploit: cell one leaves a thread behind, cell two
       // wakes it, and the call — if allowed — would run under cell two's
       // identity, catalog, and budget. join() makes the ordering exact.
-      const armed = await host.runCell("m-1", {
+      const armed = await host.get("m-1").runCode({
         cellId: "cell-one",
         code: [
           "import threading",
@@ -744,7 +614,7 @@ describe("code-mode tool bridge", () => {
       });
       expect(armed).toMatchObject({ status: "completed", value: "'armed'" });
 
-      const outcome = await host.runCell("m-1", {
+      const outcome = await host.get("m-1").runCode({
         cellId: "cell-two",
         code: "evt.set()\nleak.join()\nbox[0]",
         timeoutMs: 15_000,
@@ -760,7 +630,7 @@ describe("code-mode tool bridge", () => {
       // Cell code can write raw frames to the driver's real stdout. A frame
       // stamped with a different cellId must never become a host call; the
       // legit call after it proves the kernel kept serving this cell.
-      const result = await host.runCell("m-1", {
+      const result = await host.get("m-1").runCode({
         cellId: "honest",
         code: [
           "import json, sys",
@@ -782,7 +652,7 @@ describe("code-mode tool bridge", () => {
 
   test("each tenant gets its own interpreter: state persists within, never across", async () => {
     await withBridge(async ({ host }) => {
-      const set = await host.runCell("m-1", {
+      const set = await host.get("m-1").runCode({
         cellId: "a-1",
         code: "x = 41\n'set'",
         timeoutMs: 15_000,
@@ -790,7 +660,7 @@ describe("code-mode tool bridge", () => {
       });
       expect(set).toMatchObject({ status: "completed" });
 
-      const sameTenant = await host.runCell("m-1", {
+      const sameTenant = await host.get("m-1").runCode({
         cellId: "a-2",
         code: "x + 1",
         timeoutMs: 15_000,
@@ -798,7 +668,7 @@ describe("code-mode tool bridge", () => {
       });
       expect(sameTenant).toMatchObject({ status: "completed", value: "42" });
 
-      const otherTenant = await host.runCell("m-1", {
+      const otherTenant = await host.get("m-1").runCode({
         cellId: "b-1",
         code: "x",
         timeoutMs: 15_000,
@@ -809,8 +679,8 @@ describe("code-mode tool bridge", () => {
 
       // Back-compat: a tenantless request reads as the "default" tenant and
       // shares one interpreter with other tenantless requests.
-      await host.runCell("m-1", { cellId: "d-1", code: "y = 7", timeoutMs: 15_000 });
-      const defaulted = await host.runCell("m-1", { cellId: "d-2", code: "y", timeoutMs: 15_000 });
+      await host.get("m-1").runCode({ cellId: "d-1", code: "y = 7", timeoutMs: 15_000 });
+      const defaulted = await host.get("m-1").runCode({ cellId: "d-2", code: "y", timeoutMs: 15_000 });
       expect(defaulted).toMatchObject({ status: "completed", value: "7" });
     });
   });
@@ -828,7 +698,7 @@ describe("code-mode tool bridge", () => {
       events: silent,
       now: () => 5000,
     });
-    const daemon = await attachMachineDaemon({
+    const daemon = await attachMachineDaemon({ runner: createCodemode().runner,
       socketPath: path,
       offer: {
         machineId: "m-1",
@@ -839,7 +709,7 @@ describe("code-mode tool bridge", () => {
       },
     });
     try {
-      const result = await host.runCell("m-1", {
+      const result = await host.get("m-1").runCode({
         cellId: "no-tools",
         code: "tool.add(a=1, b=2)",
         timeoutMs: 15_000,

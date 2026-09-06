@@ -40,7 +40,7 @@ export function effectiveCapabilities(enrollment: Enrollment, offer: Offer): Eff
 
 export type EffectiveExportsOutcome =
   | {
-      /** The export set the flat `/machines/<id>/<export>/…` namespace exposes. */
+      /** The negotiated confinement-root identifiers. */
       kind: "effective";
       machineId: MachineId;
       /** enrollment ∩ offer — deduped and sorted here, for stable comparison. */
@@ -56,7 +56,7 @@ export type EffectiveExportsOutcome =
  * effective = enrollment ∩ offer, the same fold as capabilities but over export
  * names. Both sides are optional on the wire and BOTH default to empty: an
  * enrollment that names no export publishes nothing, and a daemon that offers
- * none serves nothing, so a pre-VFS peer on either end grants zero reach.
+ * none serves nothing. No implicit filesystem authority is granted.
  */
 export function effectiveExports(enrollment: Enrollment, offer: Offer): EffectiveExportsOutcome {
   if (enrollment.machineId !== offer.machineId) {
