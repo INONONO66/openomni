@@ -13,9 +13,8 @@ import {
 import type { Machine } from "@openomni/protocol";
 import type { DelegationOrigin } from "../src/delegation/admission";
 import type { CatalogPorts } from "../src/tools/core/catalog";
-import type { AnyToolDefinition } from "@openomni/protocol";
-import { createCellRegistry } from "../src/tools/cell-registry";
-import type { CellPorts } from "../src/tools/execution/run-code";
+import { composeCodemode } from "../src/composition/codemode";
+import { createCodemode } from "@openomni/codemode";
 import { modelToolOutput } from "./helpers/tool-dispatch";
 import { requestToolStep, assistantMessage } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
@@ -58,7 +57,7 @@ async function createMachineHost(options: Parameters<typeof createHost>[0]) {
 async function attachMachineDaemon(
   options: Parameters<typeof attachDaemon>[0],
 ): Promise<MachineDaemon> {
-  const daemon = await attachDaemon(options);
+  const daemon = await attachDaemon({ ...options, runner: createCodemode().runner });
   suite.defer(() => daemon.close());
   return daemon;
 }
@@ -222,7 +221,7 @@ test("the machine tool is not offered while nothing is attached", async () => {
     "run_code",
   ]);
   // All tools are host-projected; the local default host reports live attachment failure.
-  expect(answer).toContain("the default kernel host is not attached right now");
+  expect(answer).toContain("kernel_not_available");
   expect(answer).toContain("machines=unregistered tool: machines");
 }, 30_000);
 
@@ -268,13 +267,13 @@ test("a cell cannot present another cell's id when calling back", async () => {
     },
   });
 
-  const slow = host.runCell(MACHINE_ID, {
+  const slow = host.get(MACHINE_ID).runCode({
     cellId: "AAA",
     code: "tool.hold()",
     timeoutMs: 15_000,
     tenant: "tenant-one",
   });
-  const forging = await host.runCell(MACHINE_ID, {
+  const forging = await host.get(MACHINE_ID).runCode({
     cellId: "BBB",
     // The call carries no id of its own; naming one changes nothing.
     code: "tool.delegate(cellId='AAA', instruction='borrow')",
@@ -331,13 +330,13 @@ const CELL_ORIGIN: DelegationOrigin = { role: "resident", depth: 0, sessionId: "
  */
 async function startCellHarness(ports: CatalogPorts) {
   const socketPath = testSocketPath();
-  const registry = createCellRegistry();
+  let cells: ReturnType<typeof composeCodemode>;
   const host = await createMachineHost({
     socketPath,
     enrollment: (machineId) => (machineId === MACHINE_ID ? enrollment : undefined),
     events: Bus,
     now: () => Date.now(),
-    callTool: registry.callTool,
+    callTool: (call) => cells.callTool(call),
   });
   const daemon = await attachMachineDaemon({
     socketPath,
@@ -350,17 +349,8 @@ async function startCellHarness(ports: CatalogPorts) {
     },
   });
   expect(daemon.attachment.status).toBe("attached");
-  const sessionTools = new Map<string, readonly AnyToolDefinition[]>();
-  const cells: CellPorts = {
-    registry,
-    defaultMachineId: MACHINE_ID,
-    runCell: (machineId, request) => host.runCell(machineId, request),
-    bindTools: (sessionId, tools) => {
-      sessionTools.set(sessionId, tools);
-    },
-    tools: (sessionId) => sessionTools.get(sessionId) ?? [],
-    newCellId: () => crypto.randomUUID(),
-  };
+  cells = composeCodemode(host);
+  suite.defer(() => cells.close());
   const execute = modelToolOutput("run_code", { ...ports, cells }, CELL_ORIGIN);
   return {
     socketPath,
@@ -503,5 +493,5 @@ test("a machine offering more than it is enrolled for keeps only the intersectio
   });
 
   // Without kernel.py in the effective set, run_code stays unofferable.
-  expect(host.attached(MACHINE_ID)).toEqual(["fs.read"]);
+  expect(host.list().find((entry) => entry.machineId === MACHINE_ID)?.capabilities).toEqual(["fs.read"]);
 }, 30_000);

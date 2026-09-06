@@ -1,138 +1,121 @@
 import { type IpcClient, connectIpcClient, typedCall } from "@openomni/ipc";
 import { Machine } from "@openomni/protocol";
-import { MachineDaemonProtocolError } from "./errors";
+import { MachineRefusalError } from "./errors";
 import { createFsDriver } from "./fs";
-import { PythonKernel } from "./kernel";
+import { execute } from "./exec";
+
+/** Injected at composition: machines never imports or owns an interpreter. */
+export interface CodeRunner {
+  runCode(request: Machine.CellRequest, call: (call: Machine.ToolCall) => Promise<Machine.ToolCallResult>, signal: AbortSignal): Promise<Machine.CellResult>;
+  close(): Promise<void>;
+}
 
 export interface MachineDaemonOptions {
   readonly socketPath: string;
   readonly offer: Machine.Offer;
-  /** Daemon-local export roots; absolute paths never cross the wire. */
   readonly fsExports?: ReadonlyMap<string, string>;
+  readonly runner?: CodeRunner;
   readonly attachTimeoutMs?: number;
 }
-
 export interface MachineDaemon {
-  /** The host's verdict — a refusal is a typed outcome, not a thrown error. */
   readonly attachment: Machine.AttachResult;
-  close(): void;
+  readonly closed: Promise<void>;
+  close(): Promise<void>;
 }
 
-/**
- * Machine-side daemon for the localhost slice: connect to the host socket,
- * offer the capability set, and hold the connection open — the live
- * connection IS the attachment. A daemon that offers the Python-kernel
- * capability serves cells over the reverse request channel with one
- * interpreter PER TENANT: a Python process gives no in-process isolation, so
- * the only way to keep one session's cells (their state, and any thread they
- * leave behind) out of another session's way is a process boundary.
- */
 export async function attachMachineDaemon(options: MachineDaemonOptions): Promise<MachineDaemon> {
-  const offersKernel = options.offer.offeredCapabilities.includes(
-    Machine.WellKnownCapability.pythonKernel,
-  );
-  const offersFs = options.offer.offeredCapabilities.includes(Machine.WellKnownCapability.fsRead);
-  const offeredExports = new Set((options.offer.exports ?? []).map((entry) => entry.name));
-  const fsOp = createFsDriver(options.fsExports ?? new Map());
-  const kernels = new Map<string, PythonKernel>();
-  const kernelFor = (tenant: string | undefined): PythonKernel => {
-    const key = tenant ?? "default";
-    let kernel = kernels.get(key);
-    if (kernel === undefined) {
-      kernel = new PythonKernel();
-      kernels.set(key, kernel);
-    }
-    return kernel;
-  };
-  const closeKernels = () => {
-    for (const kernel of kernels.values()) kernel.close();
-    kernels.clear();
-  };
-  // Assigned before any request can arrive: the host can only send RunCell
-  // over a connection this call establishes.
+  const offer = Machine.Offer.parse(options.offer);
+  const filesystem = createFsDriver(options.fsExports ?? new Map());
+  const lifetime = new AbortController();
+  const cells = new Map<string, AbortController>();
+  const pending = new Set<Promise<Machine.CellResult | Machine.ExecResult>>();
   let client: IpcClient | undefined;
-  // The host can only send requests over the connection this call establishes,
-  // so a handler firing before assignment would be a transport bug, not input.
-  const requireClient = (): IpcClient => {
-    if (client === undefined) {
-      throw new Error("machine daemon received a request before its client was connected");
-    }
+  let attachment: Machine.AttachResult = { status: "refused", reason: "machine_not_enrolled" };
+  let ready!: () => void;
+  const attached = new Promise<void>((resolve) => { ready = resolve; });
+  let resolveClosed!: () => void;
+  let rejectClosed!: (error: Error) => void;
+  const closed = new Promise<void>((resolve, reject) => { resolveClosed = resolve; rejectClosed = reject; });
+  let closing: Promise<void> | undefined;
+  function close(): Promise<void> {
+    if (closing !== undefined) return closing;
+    lifetime.abort();
+    for (const cell of cells.values()) cell.abort();
+    filesystem.close();
+    client?.close();
+    closing = (async () => {
+      await options.runner?.close();
+      await Promise.allSettled([...pending]);
+    })();
+    closing.then(resolveClosed, (error: Error) => rejectClosed(error));
+    return closing;
+  }
+  function has(capability: string): boolean {
+    return attachment.status === "attached" && attachment.effectiveCapabilities.includes(capability) && offer.offeredCapabilities.includes(capability);
+  }
+  function requireClient(): IpcClient {
+    if (client === undefined) throw new MachineRefusalError({ reason: "closed", message: "daemon connection is closed" });
     return client;
-  };
-  // fsOp already holds open export descriptors, so a failure to connect must
-  // release them rather than leak one set of fds per attach attempt.
-  const connecting = connectIpcClient(options.socketPath, {
-    onRequest: async (method, params, respond) => {
-      if (method === Machine.WireMethod.FsOp) {
-        // The host gate owns normal authorization; the daemon still re-checks
-        // its own offer because the host is across a trust boundary.
-        if (!offersFs) {
-          const capability = Machine.WellKnownCapability.fsRead;
-          throw new MachineDaemonProtocolError({
-            reason: "capability_not_offered",
-            capability,
-            message: `${capability} was not offered by this machine`,
-          });
-        }
-        const request = Machine.FsRequest.parse(params);
-        if (!offeredExports.has(request.export)) {
-          respond({
-            status: "refused",
-            reason: "export_not_available",
-            message: `export is not available: ${request.export}`,
-          } satisfies Machine.FsResult);
+  }
+  try {
+    client = await connectIpcClient(options.socketPath, {
+      onDisconnect: () => { void close(); },
+      onRequest: async (method, params, respond) => {
+        await attached;
+        if (method === Machine.WireMethod.FsOp) {
+          const request = Machine.FsRequest.parse(params);
+          const capability = request.op === "write" ? Machine.WellKnownCapability.fsWrite : Machine.WellKnownCapability.fsRead;
+          if (!has(capability)) {
+            respond({ status: "refused", reason: "fs_not_available", message: `${capability} is not available` } satisfies Machine.FsResult);
+            return;
+          }
+          const offered = offer.exports?.find((entry) => entry.name === request.export);
+          if (attachment.status !== "attached" || !attachment.effectiveExports.includes(request.export) || offered === undefined || options.fsExports?.get(request.export) !== offered.path) {
+            respond({ status: "refused", reason: "export_not_available", message: `export is not available: ${request.export}` } satisfies Machine.FsResult);
+            return;
+          }
+          respond(await filesystem(request));
           return;
         }
-        respond(await fsOp(request));
-        return;
-      }
-      if (method !== Machine.WireMethod.RunCell) {
-        throw new Error(`unknown method: ${method}`);
-      }
-      // The host gate owns this refusal; a daemon that never offered the Python-kernel capability
-      // still re-checks because the host is across a trust boundary.
-      if (!offersKernel) {
-        throw new Error(
-          `${Machine.WellKnownCapability.pythonKernel} was not offered by this machine`,
-        );
-      }
-      const request = Machine.CellRequest.parse(params);
-      respond(
-        await kernelFor(request.tenant).run(request, async (call) =>
-          Machine.ToolCallResult.parse(
-            await typedCall(requireClient(), Machine.WireMethod.CallTool, call, request.timeoutMs),
-          ),
-        ),
-      );
-    },
-  });
-  try {
-    const connected = await connecting;
-    client = connected;
-    // typedCall types the wire result but does not validate it; the host is
-    // across a trust boundary, so parse before believing it.
-    const attachment = Machine.AttachResult.parse(
-      await typedCall(
-        connected,
-        Machine.WireMethod.Attach,
-        options.offer,
-        options.attachTimeoutMs,
-      ),
-    );
-    return {
-      attachment,
-      close() {
-        closeKernels();
-        fsOp.close();
-        connected.close();
+        if (method === Machine.WireMethod.Exec) {
+          const request = Machine.ExecRequest.parse(params);
+          if (!has(Machine.WellKnownCapability.shellExec)) {
+            respond({ status: "refused", reason: "exec_not_available" } satisfies Machine.ExecResult);
+            return;
+          }
+          const execution = execute(request, lifetime.signal);
+          pending.add(execution);
+          try { respond(await execution); } finally { pending.delete(execution); }
+          return;
+        }
+        if (method === Machine.WireMethod.CancelCode) {
+          const request = Machine.CancelCode.parse(params);
+          const cell = cells.get(request.cellId);
+          cell?.abort();
+          respond({ cancelled: cell !== undefined } satisfies Machine.CancelResult);
+          return;
+        }
+        if (method !== Machine.WireMethod.RunCode) throw new MachineRefusalError({ reason: "invalid_method", message: `invalid method: ${method}` });
+        const request = Machine.CellRequest.parse(params);
+        if (!has(Machine.WellKnownCapability.pythonKernel) || options.runner === undefined) {
+          respond({ status: "refused", reason: "kernel_not_available" } satisfies Machine.CellResult);
+          return;
+        }
+        if (cells.has(request.cellId)) throw new MachineRefusalError({ reason: "invalid_response", message: "duplicate cell id" });
+        const cell = new AbortController();
+        cells.set(request.cellId, cell);
+        const execution = options.runner.runCode(request, async (call) => Machine.ToolCallResult.parse(await typedCall(requireClient(), Machine.WireMethod.CallTool, call, request.timeoutMs)), cell.signal);
+        pending.add(execution);
+        try { respond(Machine.CellResult.parse(await execution)); }
+        finally { cells.delete(request.cellId); pending.delete(execution); }
       },
-    };
+    });
+    attachment = Machine.AttachResult.parse(await typedCall(client, Machine.WireMethod.Attach, offer, options.attachTimeoutMs));
+    ready();
+    return { attachment, closed, close };
   } catch (error) {
-    closeKernels();
-    fsOp.close();
-    // client stays unassigned when the connection itself failed; the transport
-    // owns its own cleanup in that case.
-    client?.close();
+    ready();
+    await close();
     throw error;
   }
 }

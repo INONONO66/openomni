@@ -26,6 +26,7 @@ export interface CliDeps {
   readonly io: DaemonIo;
   readonly envPath: string;
   readonly startApp: () => Promise<void>;
+  readonly attachMachine: (configPath: string) => Promise<number>;
   readonly ask: Ask;
   readonly writeEnv: (entries: readonly EnvEntry[]) => void;
   readonly doctorPorts: () => Promise<DoctorPorts>;
@@ -39,6 +40,7 @@ Usage:
   openomni start                 run the Resident in the foreground
   openomni onboard               interactive setup → ~/.openomni/env
   openomni daemon <verb>         install | uninstall | status | start | stop | restart
+  openomni machine attach <json> attach a machine daemon using a JSON config
   openomni doctor                read-only diagnostics
   openomni logs                  follow the daemon logs
   openomni help                  show this message`;
@@ -65,6 +67,12 @@ export async function runCli(args: readonly string[], deps: CliDeps): Promise<nu
       return await onboard(deps);
     case "daemon":
       return daemon(args[1], deps);
+    case "machine":
+      if (args[1] !== "attach" || args[2] === undefined || args.length !== 3) {
+        deps.stderr("usage: openomni machine attach <config.json>");
+        return 1;
+      }
+      return deps.attachMachine(args[2]);
     case "doctor":
       return await doctor(deps);
     case "logs":

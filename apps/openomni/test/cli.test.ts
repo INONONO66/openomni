@@ -638,6 +638,7 @@ describe("cli dispatch", () => {
         io,
         envPath: "/Users/owner/.openomni/env",
         startApp: () => Promise.resolve(),
+        attachMachine: async () => 0,
         ask: () => Promise.resolve(""),
         writeEnv: () => undefined,
         doctorPorts: () =>
@@ -655,6 +656,16 @@ describe("cli dispatch", () => {
       },
     };
   }
+
+  test("machine attach validates arity and forwards the config without starting the Resident", async () => {
+    const seen: string[] = [];
+    const { deps: cli } = deps({ attachMachine: async (path) => { seen.push(path); return 7; } });
+    expect(await runCli(["machine"], cli)).toBe(1);
+    expect(await runCli(["machine", "attach"], cli)).toBe(1);
+    expect(await runCli(["machine", "attach", "config.json", "extra"], cli)).toBe(1);
+    expect(await runCli(["machine", "attach", "config.json"], cli)).toBe(7);
+    expect(seen).toEqual(["config.json"]);
+  });
 
   test("unknown command prints usage and exits 1", async () => {
     const { deps: cli, err } = deps();

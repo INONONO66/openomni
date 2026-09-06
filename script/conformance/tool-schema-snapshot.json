@@ -493,20 +493,18 @@
   },
   {
     "name": "run_code",
-    "description": "Run Python on the local default kernel host. State persists across cells in _scope; host tools are available through tool.<name>(...).",
+    "description": "Run Python with persistent tenant state, machine handles, parallel, llm, and host tool proxies.",
     "inputSchema": {
       "type": "object",
       "properties": {
         "code": {
           "type": "string",
-          "minLength": 1,
-          "description": "Python source. Call host tools as tool.<name>(...)."
+          "minLength": 1
         },
         "timeoutMs": {
           "type": "integer",
           "exclusiveMinimum": 0,
-          "maximum": 9007199254740991,
-          "description": "How long the cell may run before it is stopped."
+          "maximum": 9007199254740991
         }
       },
       "required": ["code", "timeoutMs"],

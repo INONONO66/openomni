@@ -12,7 +12,6 @@ import {
   type ObservationSink,
   type PlainValue,
 } from "@openomni/protocol";
-import { createCellRegistry } from "../src/tools/cell-registry";
 import { createResident } from "../src/resident";
 import { requestToolStep, assistantMessage } from "./helpers/assistant-message";
 
@@ -75,20 +74,16 @@ test("a resident tool call is executed and observed through the durable executor
     apiKey: "test-key",
     tools: {
       cells: {
-        registry: createCellRegistry(),
-        defaultMachineId: "machine-1",
-        async runCell(_machineId, request) {
+        cell: { async run() {
           bodyRuns += 1;
           return {
             status: "completed",
-            cellId: request.cellId,
+            cellId: "cell-1",
             value: "ok",
             output: { stdout: "ok", stderr: "" },
           };
-        },
+        } },
         bindTools: () => undefined,
-        tools: () => [],
-        newCellId: () => "cell-1",
       },
     },
     targets: () => [{ kind: "host", capabilities: [] }],

@@ -1,33 +1,38 @@
 {
   "apps/openomni": {
-    "linesFound": 5983,
-    "linesHit": 5561,
-    "pct": 92.95
+    "linesFound": 4494,
+    "linesHit": 4366,
+    "pct": 97.15
   },
   "packages/agent": {
-    "linesFound": 2883,
-    "linesHit": 2831,
-    "pct": 98.2
+    "linesFound": 5365,
+    "linesHit": 5256,
+    "pct": 97.97
   },
   "packages/channels": {
-    "linesFound": 3622,
-    "linesHit": 3484,
-    "pct": 96.19
+    "linesFound": 4365,
+    "linesHit": 4364,
+    "pct": 99.98
+  },
+  "packages/codemode": {
+    "linesFound": 327,
+    "linesHit": 322,
+    "pct": 98.47
   },
   "packages/ipc": {
-    "linesFound": 480,
-    "linesHit": 444,
-    "pct": 92.5
+    "linesFound": 486,
+    "linesHit": 485,
+    "pct": 99.79
   },
   "packages/ledger": {
-    "linesFound": 5341,
-    "linesHit": 5169,
-    "pct": 97.12
+    "linesFound": 3192,
+    "linesHit": 3170,
+    "pct": 99.31
   },
   "packages/llm": {
-    "linesFound": 2022,
-    "linesHit": 1966,
-    "pct": 97.23
+    "linesFound": 2077,
+    "linesHit": 2058,
+    "pct": 99.09
   },
   "packages/placement": {
     "linesFound": 44,
@@ -35,18 +40,18 @@
     "pct": 100
   },
   "packages/policy": {
-    "linesFound": 1620,
-    "linesHit": 1569,
-    "pct": 96.85
+    "linesFound": 1240,
+    "linesHit": 1226,
+    "pct": 98.87
   },
   "packages/protocol": {
-    "linesFound": 6222,
-    "linesHit": 6062,
-    "pct": 97.43
+    "linesFound": 4978,
+    "linesHit": 4977,
+    "pct": 99.98
   },
   "script": {
-    "linesFound": 3810,
-    "linesHit": 1167,
-    "pct": 30.63
+    "linesFound": 4357,
+    "linesHit": 1486,
+    "pct": 34.11
   }
 }

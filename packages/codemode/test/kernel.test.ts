@@ -1,9 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import type { BusEvent, Machine } from "@openomni/protocol";
-import { attachMachineDaemon } from "../src/daemon";
-import { type MachineHost, createMachineHost } from "../src/host";
-import { type CellToolCaller, PythonKernel } from "../src/kernel";
-import { socketPath } from "./helpers/socket-path";
+import { type BusEvent, Machine } from "@openomni/protocol";
+import { attachMachineDaemon } from "@openomni/machines";
+import { type MachineHost, createMachineHost } from "@openomni/machines";
+import { PythonKernel } from "../src/kernel";
+import { createCodemode } from "../src/index";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+const socketPath = () => join(tmpdir(), `oc-${crypto.randomUUID()}.sock`);
+type CellToolCaller = Parameters<PythonKernel["run"]>[1];
 
 /** These cells call no tools, so a call is a test bug and must be visible. */
 const noTools: CellToolCaller = (call) =>
@@ -53,11 +57,11 @@ async function withMachine(
     now: () => 5000,
     callTool,
   });
-  const daemon = await attachMachineDaemon({ socketPath: path, offer: offer(capabilities) });
+  const daemon = await attachMachineDaemon({ runner: createCodemode().runner, socketPath: path, offer: offer(capabilities) });
   try {
     await run({ host });
   } finally {
-    daemon.close();
+    await daemon.close();
     host.close();
   }
 }
@@ -95,7 +99,7 @@ describe("cell settlement ownership", () => {
         value: "42",
       });
     } finally {
-      kernel.close();
+      await kernel.close();
     }
   });
 
@@ -121,7 +125,7 @@ describe("cell settlement ownership", () => {
       expect(timedOut).toMatchObject({ status: "timed_out", cellId: "wedged" });
       expect(successor).toMatchObject({ status: "completed", cellId: "successor", value: "42" });
     } finally {
-      kernel.close();
+      await kernel.close();
     }
   });
 });
@@ -147,7 +151,7 @@ describe("code-mode kernel substrate", () => {
         kernel.run({ cellId: "after-invalid-driver-output", code: "persisted", timeoutMs: 1_000 }, noTools),
       ).resolves.toMatchObject({ status: "raised" });
     } finally {
-      kernel.close();
+      await kernel.close();
     }
   });
 
@@ -157,29 +161,27 @@ describe("code-mode kernel substrate", () => {
       await expect(
         kernel.run(
           { cellId: "unserializable-answer", code: "tool.test()", timeoutMs: 1_000 },
-          () => Promise.resolve({ status: "completed", value: 1n }),
+          () => Promise.resolve(Machine.ToolCallResult.parse({ status: "completed", value: 1n })),
         ),
-      ).rejects.toBeInstanceOf(TypeError);
+      ).resolves.toMatchObject({ status: "raised" });
     } finally {
-      kernel.close();
+      await kernel.close();
     }
   });
 
   test("interpreter state persists across cells in one attachment", async () => {
     await withMachine(["kernel.py"], async ({ host }) => {
-      const first = await host.runCell("mac-studio", cell("value = 6 * 7"));
+      const first = await host.get("mac-studio").runCode(cell("value = 6 * 7"));
       expect(first.status).toBe("completed");
 
-      const second = await host.runCell("mac-studio", cell("value"));
+      const second = await host.get("mac-studio").runCode(cell("value"));
       expect(second).toMatchObject({ status: "completed", value: "42" });
     });
   });
 
   test("a raise reports raised with the output produced before it", async () => {
     await withMachine(["kernel.py"], async ({ host }) => {
-      const result = await host.runCell(
-        "mac-studio",
-        cell("print('before the raise')\nraise ValueError('boom')"),
+      const result = await host.get("mac-studio").runCode(cell("print('before the raise')\nraise ValueError('boom')"),
       );
 
       expect(result.status).toBe("raised");
@@ -195,27 +197,23 @@ describe("code-mode kernel substrate", () => {
 
   test("a cell over its deadline is timed_out and the next cell still runs", async () => {
     await withMachine(["kernel.py"], async ({ host }) => {
-      const timedOut = await host.runCell(
-        "mac-studio",
-        cell("import time\nwhile True: time.sleep(0.05)", 750),
+      const timedOut = await host.get("mac-studio").runCode(cell("import time\nwhile True: time.sleep(0.05)", 750),
       );
       expect(timedOut).toMatchObject({ status: "timed_out" });
 
       // Forward progress is the guarantee: the replacement interpreter serves
       // the next cell. Prior state is gone, which is the documented tradeoff.
-      const next = await host.runCell("mac-studio", cell("1 + 1"));
+      const next = await host.get("mac-studio").runCode(cell("1 + 1"));
       expect(next).toMatchObject({ status: "completed", value: "2" });
       // The replacement interpreter starts clean — the documented tradeoff.
-      const lost = await host.runCell("mac-studio", cell("'time' in dir()"));
+      const lost = await host.get("mac-studio").runCode(cell("'time' in dir()"));
       expect(lost).toMatchObject({ status: "completed", value: "False" });
     });
   });
 
   test("stdout and stderr are both captured on a completed cell", async () => {
     await withMachine(["kernel.py"], async ({ host }) => {
-      const result = await host.runCell(
-        "mac-studio",
-        cell("import sys\nprint('out')\nprint('err', file=sys.stderr)"),
+      const result = await host.get("mac-studio").runCode(cell("import sys\nprint('out')\nprint('err', file=sys.stderr)"),
       );
 
       expect(result.status).toBe("completed");
@@ -226,7 +224,7 @@ describe("code-mode kernel substrate", () => {
 
   test("a statement-only cell completes with no value", async () => {
     await withMachine(["kernel.py"], async ({ host }) => {
-      const result = await host.runCell("mac-studio", cell("x = 1"));
+      const result = await host.get("mac-studio").runCode(cell("x = 1"));
 
       expect(result).toMatchObject({
         status: "completed",
@@ -239,7 +237,7 @@ describe("code-mode kernel substrate", () => {
 
   test("a machine attached without kernel.py is refused, not executed", async () => {
     await withMachine(["fs.read"], async ({ host }) => {
-      const result = await host.runCell("mac-studio", cell("print('should not run')"));
+      const result = await host.get("mac-studio").runCode(cell("print('should not run')"));
 
       expect(result).toEqual({ status: "refused", reason: "kernel_not_available" });
     });
@@ -254,9 +252,7 @@ describe("code-mode kernel substrate", () => {
       now: () => 5000,
     });
     try {
-      const result = await host.runCell("mac-mini", cell("1"));
-
-      expect(result).toEqual({ status: "refused", reason: "machine_not_attached" });
+      await expect(host.get("mac-mini").runCode(cell("1"))).rejects.toMatchObject({ name: "MachineRefusalError", data: { reason: "machine_not_attached" } });
     } finally {
       host.close();
     }
