@@ -2,7 +2,7 @@
 
 Verified against merged `c4fb774869fb060859bbdc2f58ce37ee3a3072c9` (PR #985), 2026-09-06. Resident and native workers share the session-owned loop; legacy session CRUD/TTL and the I09 deletion surfaces are absent. Native archive confirmation and guarded migration 0034 are wired; session-owned Wait and physical message/part retention remain. Deletion and outstanding quality receipts: `docs/SLOP.md`. Keep this stamp current when editing (doc-state sync law). Gateway transport wiring verified on `feat/desktop-gateway-transport` (2026-09-06): the endpoint is resolved in Electron main from env and reaches the renderer over one `contextBridge` call.
 
-Machine/codemode ownership updated on `kernel/938-machines-host` (2026-09-06): raw WHERE handles, injected code runner, two-boundary authority, and production machine attach composition.
+Machine/codemode ownership updated on `kernel/949-tools-catalog` (2026-09-06), based on `f9c02a66`: raw WHERE handles, injected code runner, two-boundary authority, and production machine attach composition. Stage 1 adds locus-aware path tools and bash, deletes the target-selection workspace, and retains the legacy catalog entries pending stage 2.
 
 ## OVERVIEW
 

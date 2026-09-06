@@ -13,6 +13,12 @@ import { createRunCodeTool } from "../execution/run-code";
 import type { composeCodemode } from "../../composition/codemode";
 import { createProvisionTool, type ProvisionPort } from "../mutation/provision";
 import { eraseTool, toolSpec } from "@openomni/agent";
+import { createReadTool } from "../fs/read";
+import { createWriteTool } from "../fs/write";
+import { createEditTool } from "../fs/edit";
+import { createListTool } from "../fs/list";
+import { createSearchTool } from "../fs/search";
+import { createBashTool } from "../code/bash";
 
 export interface CatalogPorts {
   readonly machines?: MachineHost;
@@ -28,7 +34,14 @@ export function createTools(
   ports: CatalogPorts,
   origin: DelegationOrigin,
 ): readonly AnyToolDefinition[] {
-  const tools: AnyToolDefinition[] = [];
+  const tools: AnyToolDefinition[] = [
+    eraseTool(createReadTool(ports)),
+    eraseTool(createWriteTool(ports)),
+    eraseTool(createEditTool(ports)),
+    eraseTool(createListTool(ports)),
+    eraseTool(createSearchTool(ports)),
+    eraseTool(createBashTool(ports)),
+  ];
   if (ports.delegation !== undefined) {
     tools.push(
       eraseTool(createDelegateTool(ports.delegation, origin.role, origin.depth)),

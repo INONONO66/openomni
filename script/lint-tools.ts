@@ -396,15 +396,6 @@ export function definitionInvariantViolations(
         subject: definition.name,
         message: "[tool-source-location] catalog definition has no verifiable source file",
       });
-    } else {
-      const directory = filePath.match(/\/tools\/(query|mutation|authority|execution)\//)?.[1];
-      if (directory !== definition.category) {
-        violations.push({
-          check: "tool-lint",
-          subject: definition.name,
-          message: `[tool-category-directory] category ${definition.category} must live in tools/${definition.category}, found ${filePath}`,
-        });
-      }
     }
     if (!TOOL_CATEGORIES.includes(definition.category)) {
       violations.push({

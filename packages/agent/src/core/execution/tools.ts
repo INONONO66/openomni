@@ -1,7 +1,7 @@
 import type { ChatAgentConfig } from "../types";
 import type { RunState } from "./state";
 import { recordToolCall } from "../budget";
-import { Tool } from "@openomni/protocol";
+import type { Tool } from "@openomni/protocol";
 
 export function buildSystemPrompt(
   basePrompt: string | undefined,
