@@ -16,7 +16,7 @@ interface CompactionExecution {
   readonly signal?: AbortSignal;
 }
 
-export class CompactionExecutionError extends Error {
+class CompactionExecutionError extends Error {
   readonly code = "compaction_execution_refused";
   constructor(readonly reason: string) {
     super(`compaction execution refused: ${reason}`);
