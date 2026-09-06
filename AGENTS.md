@@ -18,7 +18,6 @@ openomni/
 ├── packages/
 │   ├── protocol/        # Zod schemas and cross-package contracts
 │   ├── policy/          # pure policy engine and effect composition
-│   ├── placement/       # pure model/tool target selection
 │   ├── ledger/          # durable stores and journal persistence
 │   ├── llm/             # provider I/O, transforms, retry, token/cost accounting
 │   ├── agent/           # durable sessions, stateless runAgent loop, executor, compaction
@@ -40,12 +39,11 @@ openomni/
 Read `X <- Y` as Y may depend on X.
 
 ```text
-protocol <- ipc, ledger, policy, llm, placement, agent, machines, codemode, channels, apps/openomni, apps/desktop
+protocol <- ipc, ledger, policy, llm, agent, machines, codemode, channels, apps/openomni, apps/desktop
 ipc <- machines, apps/openomni
 ledger <- agent, channels, apps/openomni
 policy <- agent, channels, apps/openomni
 llm <- agent, apps/openomni
-placement <- agent, apps/openomni
 agent <- apps/openomni
 machines <- codemode, apps/openomni
 codemode <- apps/openomni
@@ -60,12 +58,11 @@ ui <- apps/desktop
 | `ledger` | protocol |
 | `policy` | protocol |
 | `llm` | protocol |
-| `placement` | protocol |
-| `agent` | protocol, ledger, policy, placement, llm; `src/` may depend on protocol, ledger, policy, placement, llm |
+| `agent` | protocol, ledger, policy, llm; `src/` may depend on protocol, ledger, policy, llm |
 | `machines` | protocol, ipc |
 | `codemode` | protocol, machines |
 | `channels` | protocol, policy, ledger; `src/` may depend on protocol, policy, ledger |
-| `apps/openomni` | protocol, channels, ipc, agent, llm, ledger, policy, placement, machines, codemode |
+| `apps/openomni` | protocol, channels, ipc, agent, llm, ledger, policy, machines, codemode |
 | `ui` | none |
 | `apps/desktop` | protocol, ui |
 <!-- END GENERATED TOPOLOGY -->
@@ -78,7 +75,6 @@ ui <- apps/desktop
 | --- | --- | --- |
 | `packages/protocol` | Schemas, wire contracts, pure folds | I/O, storage, product decisions |
 | `packages/policy` | Generic policy evaluation | Product-specific authority |
-| `packages/placement` | Pure target selection | Authorization or execution |
 | `packages/agent/src/observation` | Bus and scoped observation | Durable or decision state |
 | `packages/ledger` | Durable state and typed store surfaces | Routing and authority decisions |
 | `packages/llm` | Provider behavior and model accounting | Product routing or tools |

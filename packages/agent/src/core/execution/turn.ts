@@ -1,4 +1,4 @@
-import { buildSystemPrompt, prepareTurnTools } from "./tool-placement";
+import { buildSystemPrompt, prepareTurnTools } from "./tools";
 import { accumulateUsage, type RunInput, type Sink } from "@openomni/llm";
 import { Message, type BusEvent, Operational, PlainValueSchema } from "@openomni/protocol";
 import { effectiveMaxToolCalls, publishBudgetTelemetry } from "../budget";
@@ -78,7 +78,6 @@ export async function buildTurn(
     type: "ready",
     turn: {
       toolExecutor: tools.executor,
-      refusedTools: tools.refused,
       runInput: {
         events: config.events,
         // ALIASING INVARIANT: this is `state.messages` itself, not a copy.

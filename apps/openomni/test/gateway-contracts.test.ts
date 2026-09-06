@@ -93,7 +93,6 @@ function testResident(run: ResidentRun) {
     model: MODEL,
     apiKey: "test-key",
     tools: {},
-    targets: () => [{ kind: "host", id: "brain", capabilities: [] }],
     llm: {
       resolveModel: async (model) => ({
         id: model.id,

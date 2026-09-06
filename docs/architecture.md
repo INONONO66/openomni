@@ -35,7 +35,6 @@ ring 0  @openomni/protocol        schemas and pure folds
 ring 1  @openomni/agent       observation
         @openomni/ledger          durable stores
         @openomni/policy          pure policy engine
-        @openomni/placement       pure target selection
 ring 2  @openomni/llm             model access
         @openomni/ipc             thin transport
 ring 3  @openomni/agent           generic durable-session mechanics and stateless LLM loop

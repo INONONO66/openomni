@@ -1,5 +1,4 @@
 import { executeToolBody, ToolBodyOutcome } from "./tool-body";
-import type { Placement } from "@openomni/placement";
 import { activeExecutor, ExecutorContextError } from "./executor-context";
 export { currentExecutor, ExecutorContextError } from "./executor-context";
 import type { CompiledPolicySnapshot } from "@openomni/policy";
@@ -29,7 +28,6 @@ import {
 } from "./executor";
 
 const MODEL_OUTPUT_MAX_CHARS = 32_000;
-export const HOST_TARGET: Placement.ToolTarget = { kind: "host", capabilities: [] };
 
 export class ToolRefused extends Error {
   readonly errorKind = "precondition_failed";
@@ -415,7 +413,6 @@ export function toolSpec(definition: AnyToolDefinition): Tool.Spec {
     inputSchema: toolInputSchema(definition),
     safe: toolIsSafe(definition.category),
     ...(definition.sequential ? { sequential: true } : {}),
-    placement: "host",
   };
 }
 
@@ -441,6 +438,14 @@ function failed(call: Tool.Call, output: string, errorKind: ToolErrorKind): Tool
 
 function truncate(output: string): string {
   if (output.length <= MODEL_OUTPUT_MAX_CHARS) return output;
-  const marker = `\n[truncated: ${output.length} chars]`;
-  return `${output.slice(0, MODEL_OUTPUT_MAX_CHARS - marker.length)}${marker}`;
+  // Reserve the marker's final width, including the digits of the dropped count.
+  let kept = MODEL_OUTPUT_MAX_CHARS;
+  let marker: string;
+  for (;;) {
+    marker = `\n[truncated: ${output.length - kept} chars dropped; ${output.length} chars original]`;
+    const available = MODEL_OUTPUT_MAX_CHARS - marker.length;
+    if (available === kept) break;
+    kept = available;
+  }
+  return `${output.slice(0, kept)}${marker}`;
 }

@@ -1,7 +1,6 @@
 // Agent package public API: only surfaces consumed by product composition.
 export type { ChatAgentConfig } from "./core/types";
 export { failureFacts } from "./core/retry";
-export { placementGatedExecutor } from "./core/execution/tool-placement";
 export type { CompactionOptions } from "./compaction";
 export { createSessionChatRunner } from "./session-chat-runner";
 export { closeSessions, getSessionHandle, session, sweepSessions } from "./session-handle";
@@ -19,7 +18,6 @@ export {
   defineTool,
   eraseTool,
   ExecutorContextError,
-  HOST_TARGET,
   sessionTool,
   ToolRefused,
   toolInputSchema,

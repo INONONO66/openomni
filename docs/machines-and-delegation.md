@@ -289,27 +289,20 @@ parallel lifecycle.
   The `channel` transport opens a Wait; `Settled.no_response` is the delegation
   reading of that Wait's expiry.
 
-## 4. Tool placement (`Tool.Placement`, `Tool.Spec`)
+## 4. Tool execution boundaries
 
-- `placement`: `machine` (runs on an attached machine's daemon), `host` (runs
-  on the brain's own host), `free` (anywhere — pure/network tools).
-  Additive-optional on `Tool.Spec`; the catalog resolver (stage 4 below) is
-  the single owner of the absent-means-`free` read.
-- `requires`: capabilities the executing side must hold
-  (`Machine.CapabilityId` grammar). Placement resolution =
-  `placement` × `requires` ⊆ effective set of a candidate target.
-- The mutation axis is the EXISTING `safe` field (`safe === false` is what
-  earlier drafts called `mutates`) — one spelling per convention.
-
-The machine axis of `@openomni/placement` folds candidate machines against
-`requires`; the model axis (#752) is unchanged.
+The executor's `tool.pre` policy point owns call-time admission. There is no
+separate target-selection package or capability-based catalog fold. Machine
+operations additionally cross the daemon's negotiated capability/export boundary.
+The model-fallback fold belongs to `@openomni/llm`. Tool `safe` derives only from
+`category === "query"`.
 
 ## 5. Delivery order
 
 1. **Contracts** (this document's schemas) — landed first.
 2. `packages/machines` daemon + localhost attach (driver band).
 3. `apps/openomni` slice 1: pure Resident chat loop (no memory, no delegation).
-4. **Agent-loop placement axis + tool catalog `requires` resolution — landed.**
+4. **Executor tool admission replaces the former target eligibility fold (#949 stage 1).**
 5. Code mode, in two slices because the substrate and the batching payoff are
    independently verifiable:
    - **5a — kernel substrate: landed.** A machine offering `kernel.py` runs
@@ -322,9 +315,9 @@ The machine axis of `@openomni/placement` folds candidate machines against
    - **5b — the `tool.<name>()` bridge: landed.** A running cell calls back to
      the host's tool port over the same attachment (`machine.call_tool`), so
      one cell replaces N tool round trips. The host does not re-implement the
-     placement gate: the composition root injects the same placement-gated
-     executor the model-facing catalog uses, so a tool the fold refused cannot
-     be reached by spelling its name in code. A tool call is served only on an
+     admission gate: the composition root injects the same policy executor
+     the model-facing catalog uses, so a denied tool cannot be reached by
+     spelling its name in code. A tool call is served only on an
      attached connection and only for a cell the host itself dispatched and is
      still awaiting. The `eval` tool spec that offers code mode to the
      model belongs with the app that composes a catalog, and lands with it.

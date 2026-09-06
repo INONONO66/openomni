@@ -1,4 +1,5 @@
 import type { AnyToolDefinition, Tool } from "@openomni/protocol";
+import type { MachineHost } from "@openomni/machines";
 import type { DelegationOrigin } from "../../delegation/admission";
 import type { DelegationKernel } from "../../delegation/kernel";
 import { createApprovalTool, type ApprovalPort } from "../authority/approval";
@@ -14,6 +15,7 @@ import { createProvisionTool, type ProvisionPort } from "../mutation/provision";
 import { eraseTool, toolSpec } from "@openomni/agent";
 
 export interface CatalogPorts {
+  readonly machines?: MachineHost;
   readonly delegation?: DelegationKernel;
   readonly approvals?: ApprovalPort;
   readonly cells?: Pick<ReturnType<typeof composeCodemode>, "cell" | "bindTools">;

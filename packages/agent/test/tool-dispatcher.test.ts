@@ -72,7 +72,8 @@ describe("tool dispatcher public contract", () => {
     const execution = definition({ name: "run", category: "execution" });
 
     expect(toolInputSchema(eraseTool(query))).toMatchObject({ type: "object" });
-    expect(toolSpec(eraseTool(query))).toMatchObject({ name: "echo", safe: true, placement: "host" });
+    expect(toolSpec(eraseTool(query))).toMatchObject({ name: "echo", safe: true });
+    expect(toolSpec(eraseTool(query))).not.toHaveProperty("placement");
     expect(toolSpec(eraseTool(execution))).toMatchObject({ name: "run", safe: false });
     expect(sessionTool(eraseTool(execution))).toMatchObject({ name: "run", category: "execution" });
   });
@@ -122,6 +123,7 @@ describe("tool dispatcher public contract", () => {
     expect(cell.output).toBe(output);
     expect(typeof model.output).toBe("string");
     expect(model.output).toHaveLength(32_000);
-    expect(model.output).toEndWith("[truncated: 40000 chars]");
+    const marker = "\n[truncated: 8054 chars dropped; 40000 chars original]";
+    expect(model.output).toBe(`${output.slice(0, 32_000 - marker.length)}${marker}`);
   });
 });

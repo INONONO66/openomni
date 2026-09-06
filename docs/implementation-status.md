@@ -27,7 +27,7 @@ Machine/codemode wiring is updated by #938/#939 in PR #991, rebased onto `5b3ff9
 | Tool catalog and prompts | The current catalog has delegation, approval, provisioning, cell execution and cell LLM definitions. The prompt builder accepts model tuning only; deleted-domain injection/instructions are absent. Model output truncation retains its marker and original size; cell values stay full. | `apps/openomni/src/tools/core/catalog.ts`, `apps/openomni/src/prompt/`, `packages/agent/src/tool-dispatcher.ts` |
 | CLI and composition | Start/onboard/daemon/doctor/logs and npm staging belong to the app. The minimal `openomni machine attach <config.json>` composes the retained machine daemon wire; Resident `openomni daemon` remains unchanged. Reversible composition owns both boot rollback and reverse-order shutdown. | `apps/openomni/src/cli/`, `apps/openomni/script/build-npm-package.ts`, `apps/openomni/src/composition/composer.ts` |
 
-`packages/placement` still exists and participates in tool placement. PR #991 adds `packages/codemode`; generated `AGENTS.md` topology now describes thirteen workspaces. Delegation and the current approval tool are retained consumers, not deleted-domain residue. The original twelve-workspace census remains historical evidence at the #948 source pin.
+#949 stage 1 removes the target-selection workspace and capability-based catalog fold; call-time admission belongs to executor `tool.pre`. Model fallback selection now belongs to `packages/llm`. Together with PR #991's codemode workspace, the generated topology describes twelve workspaces. Delegation and the current approval tool remain untouched pending stage 2; no final catalog seal is claimed.
 
 ## I09 deletion receipt synchronization
 

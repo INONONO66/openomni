@@ -57,7 +57,6 @@ describe("Resident compaction", () => {
       model: { provider: "fake", id: "resident-test" },
       apiKey: "test-key",
       tools: {},
-      targets: () => [],
       llm: {
         resolveModel: async (model) => ({
           id: model.id,
@@ -91,7 +90,6 @@ describe("Resident compaction", () => {
         elideToolOutputs: { minOutputChars: 4000, keepHeadChars: 500 },
       },
       tools: {},
-      targets: () => [],
       llm: {
         resolveModel: async (model) => ({
           id: model.id,
