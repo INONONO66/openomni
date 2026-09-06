@@ -114,8 +114,9 @@ const ANCHOR_HEADER = "[Conversation Summary]\n";
 export function withSummarizerDeadline(
   summarize: NonNullable<CompactionOptions["onSummarize"]>,
   deadlineMs = DEFAULT_SUMMARIZER_DEADLINE_MS,
+  signal?: AbortSignal,
 ): NonNullable<CompactionOptions["onSummarize"]> {
-  return async (messages, previousAnchor, budget, operationSignal) => {
+  return async (messages, previousAnchor, budget, operationSignal = signal) => {
     const controller = new AbortController();
     const cancellation = Promise.withResolvers<never>();
     const abort = (): void => {
@@ -439,6 +440,7 @@ export namespace Compaction {
     events: BusEvent.Sink,
     dispatch: {
       readonly trigger: "threshold" | "yield";
+      readonly signal?: AbortSignal;
       readonly measuredTokens?: number;
       /** A speculative candidate (L4): promoted with zero model calls when
        * its canonical prefix is unchanged; otherwise the synchronous merge
@@ -502,6 +504,7 @@ export namespace Compaction {
               onSummarize: withSummarizerDeadline(
                 options.onSummarize,
                 options.summarizerDeadlineMs,
+                dispatch.signal,
               ),
             };
       return await compactUnbracketed(

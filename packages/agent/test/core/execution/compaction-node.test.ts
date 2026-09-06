@@ -1,5 +1,10 @@
 import { expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
+import { runAgent } from "../../../src/core/execution/run";
+import { compiledPolicy, recordingExecutor } from "../../helpers/compiled-policy";
+import { runInput } from "../../helpers/run-input";
+import { RunEvents } from "../../../src/core/execution/events";
+import { executeCompaction } from "../../../src/compaction/execute-cut";
 import { createCompactionPlan, restoreCompactionProjection } from "../../../src/compaction/durable";
 import { Compaction } from "../../../src/compaction/compact";
 
@@ -116,4 +121,186 @@ it("retains concurrent entries after restoring a full-range elision", () => {
   // Then: there is one original copy per ID, followed by the concurrent entry.
   expect(plan.record.firstKeptEntryId).toBe("last");
   expect(restored).toEqual([...prior, concurrent]);
+});
+
+it("commits a reversible compaction result before completion observations and the next model call", async () => {
+  // Given: a real executor and an overflow at the provider I/O seam.
+  const recording = recordingExecutor();
+  let calls = 0;
+  let durableAtObservation = false;
+  let durableAtNextCall = false;
+  const committedRecord = () =>
+    recording.committed.some((action) => action.kind === "compaction" && "revert" in action);
+  // When: the production run loop recovers through its compaction path.
+  await runAgent(
+    runInput([
+      { role: "user", content: "goal" },
+      { role: "assistant", content: "prior evidence ".repeat(200) },
+      { role: "user", content: "continue" },
+    ]),
+    {
+      events: {
+        publish(event) {
+          if (event.name === RunEvents.CompactionCompleted.name)
+            durableAtObservation = committedRecord();
+        },
+      },
+      executor: recording.executor,
+      model: { provider: "provider", id: "model" },
+      compaction: {
+        contextWindowTokens: 1000,
+        protectRecentMessages: 1,
+        speculate: false,
+        onSummarize: async () => "checkpoint",
+      },
+      llm: {
+        resolveProviderModel: async () => ({
+          id: "model",
+          name: "model",
+          providerID: "provider",
+          limit: { context: 1000, output: 100 },
+        }),
+        run: async () => {
+          calls += 1;
+          if (calls === 1) return { type: "error", error: new Error("prompt is too long") };
+          durableAtNextCall = committedRecord();
+          return { type: "stop" };
+        },
+      },
+    },
+  );
+  // Then: the durable reversible action precedes both consumers.
+  expect(durableAtObservation).toBe(true);
+  expect(durableAtNextCall).toBe(true);
+  expect(
+    recording.committed.filter((action) => action.kind === "compaction" && "revert" in action),
+  ).toHaveLength(1);
+});
+
+function executionInput(
+  executor: Parameters<typeof executeCompaction>[0]["executor"],
+  observed: string[],
+): Parameters<typeof executeCompaction>[0] {
+  return {
+    history: [assistant("first"), assistant("last")],
+    executor,
+    options: {
+      contextWindowTokens: 1000,
+      protectRecentMessages: 1,
+      onSummarize: async () => "summary",
+    },
+    identity: { traceId: "trace", sessionId: "session-1" },
+    dispatch: { trigger: "yield" },
+    events: {
+      publish(event) {
+        observed.push(event.name);
+      },
+    },
+  };
+}
+
+it("holds completion observation until the reversible commit resolves", async () => {
+  // Given: the real executor's durable result commit is explicitly gated.
+  const reached = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const recording = recordingExecutor({
+    async onCommit(action) {
+      if (action.kind === "compaction" && "revert" in action) {
+        reached.resolve();
+        await release.promise;
+      }
+    },
+  });
+  const observed: string[] = [];
+  // When: compaction reaches that exact unresolved commit.
+  const pending = executeCompaction(executionInput(recording.executor, observed));
+  await reached.promise;
+  expect(observed).toEqual([RunEvents.CompactionStarted.name]);
+  release.resolve();
+  await pending;
+  // Then: completion follows persistence, never precedes it.
+  expect(observed).toEqual([RunEvents.CompactionStarted.name, RunEvents.CompactionCompleted.name]);
+});
+
+it("does not report completion or mutate history when the reversible commit fails", async () => {
+  // Given: a fenced commit failure, not a mock compaction implementation.
+  const failure = new Error("fence rejected");
+  const recording = recordingExecutor({
+    async onCommit(action) {
+      if (action.kind === "compaction" && "revert" in action) throw failure;
+    },
+  });
+  const observed: string[] = [];
+  const input = executionInput(recording.executor, observed);
+  const original = structuredClone(input.history);
+  // When: the real strategy succeeds but its durable result cannot commit.
+  await expect(executeCompaction(input)).rejects.toBe(failure);
+  // Then: the active history and success observation remain untouched.
+  expect(input.history).toEqual(original);
+  expect(observed).toEqual([RunEvents.CompactionStarted.name]);
+});
+
+it("refuses compaction before the summarizer when compiled pre policy denies it", async () => {
+  // Given: a real compiled compaction pre denial.
+  const recording = recordingExecutor({
+    policy: compiledPolicy([
+      {
+        name: "deny-compaction",
+        kind: "turn",
+        phase: "post",
+        generation: 1,
+        priority: 2000,
+        match: { encodingVersion: 1, value: { op: "compaction" } },
+        verdict: { encodingVersion: 1, value: { type: "deny", reason: "hold" } },
+      },
+    ]),
+  });
+  const observed: string[] = [];
+  // When: the projection is submitted through the executor.
+  await expect(
+    executeCompaction(executionInput(recording.executor, observed)),
+  ).rejects.toMatchObject({ code: "compaction_execution_refused", reason: "hold" });
+  // Then: neither compaction work nor observations ran.
+  expect(observed).toEqual([]);
+  expect(recording.committed.every((action) => action.kind === "policy.decision")).toBe(true);
+});
+
+it("forwards session cancellation into an in-flight compaction summarizer", async () => {
+  // Given: the exact summary-start event and a manually controlled provider.
+  const controller = new AbortController();
+  const started = Promise.withResolvers<void>();
+  const released = Promise.withResolvers<string>();
+  const recording = recordingExecutor();
+  const observed: string[] = [];
+  const base = executionInput(recording.executor, observed);
+  let summarySignal: AbortSignal | undefined;
+  const pending = executeCompaction({
+    ...base,
+    signal: controller.signal,
+    options: {
+      ...base.options,
+      onSummarize: async (_messages, _anchor, _budget, signal) => {
+        summarySignal = signal;
+        started.resolve();
+        return released.promise;
+      },
+    },
+  }).then(
+    () => "completed",
+    (error) => (error instanceof Error ? error.name : "non-error"),
+  );
+  await started.promise;
+  try {
+    // When: the session interrupts during summarization.
+    controller.abort();
+    // Then: cooperative cancellation reaches the real provider boundary.
+    expect(summarySignal?.aborted).toBe(true);
+    expect(await pending).toBe("AbortError");
+    expect(
+      recording.committed.some((action) => action.kind === "compaction" && "revert" in action),
+    ).toBe(false);
+  } finally {
+    released.resolve("late summary");
+    await pending;
+  }
 });

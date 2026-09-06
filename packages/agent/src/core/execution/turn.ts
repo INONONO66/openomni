@@ -4,6 +4,7 @@ import { type Message, Operational, Tool } from "@openomni/protocol";
 import type { BusEvent } from "@openomni/protocol";
 import { effectiveMaxToolCalls, recordToolCall } from "../budget";
 import { Compaction, type CompactionSession } from "../../compaction";
+import { executeCompaction } from "../../compaction/execute-cut";
 import { resolveCompactionGeometry } from "../../compaction/geometry";
 import { measuredContextTokens } from "../../compaction/measure";
 import { createAssistantMessage } from "../message-factory";
@@ -573,10 +574,14 @@ async function applyCompaction(
 
   state.lastCompactionDeferred = undefined;
   const candidate = compaction?.candidate();
-  const result = await Compaction.compact(state.messages, options, agentBase, config.events, {
-    trigger,
-    ...(measuredTokens === undefined ? {} : { measuredTokens }),
-    ...(candidate === undefined ? {} : { candidate }),
+  const result = await executeCompaction({
+    history: state.messages, options, identity: agentBase, events: config.events,
+    executor: config.executor, signal: config.signal,
+    dispatch: {
+      trigger,
+      ...(measuredTokens === undefined ? {} : { measuredTokens }),
+      ...(candidate === undefined ? {} : { candidate }),
+    },
   });
   if (candidate !== undefined) compaction?.consume();
   state.lastCompactionIneffective = result.ineffective;

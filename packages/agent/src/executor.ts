@@ -12,7 +12,7 @@ import type {
   PolicyEvaluationInput,
 } from "@openomni/policy";
 
-const CORE_KINDS = new Set(["prompt", "turn", "llm", "tool"]);
+const CORE_KINDS = new Set(["prompt", "turn", "llm", "tool", "compaction"]);
 type ToolObservationStatus = "success" | "error" | "timed_out";
 
 export class UnregisteredExecutionKindError extends Error {
@@ -53,6 +53,8 @@ interface ExecutionRequest {
   readonly intent: PlainValue;
   readonly effect: PlainValue;
   readonly revert?: () => void | Promise<void>;
+  /** Result-dependent evidence for a reversible durable projection. */
+  readonly revertData?: () => PlainValue | undefined;
   readonly toolObservation?: ToolObservationIdentity;
 }
 
@@ -127,10 +129,14 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
     phase: "pre" | "post",
     value: PlainValue,
   ): Promise<PolicyEvaluation> {
+    // Compaction is the existing turn.post/compaction policy operation,
+    // even though its durable evidence has the dedicated compaction kind.
+    const point =
+      request.kind === "compaction"
+        ? { kind: "turn", phase: "post" as const, op: "compaction" }
+        : { kind: request.kind, phase, op: request.op };
     const input: PolicyEvaluationInput = {
-      kind: request.kind,
-      phase,
-      op: request.op,
+      ...point,
       role: options.identity.role,
       sessionId: options.identity.sessionId,
       value,
@@ -144,7 +150,7 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
       intent: {
         encodingVersion: 1,
         value: {
-          hook: `${request.kind}.${phase}`,
+          hook: `${point.kind}.${point.phase}`,
           generation: decision.generation,
           matchedRuleIds: [...decision.matchedRuleIds],
           verdict: decision.verdict,
@@ -268,8 +274,14 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
             terminal: outcome.terminal,
             effect: request.effect,
             resultHash: canonicalDigest(outcome.value),
+            ...(request.kind === "compaction" ? { result: outcome.value } : {}),
           };
-    await appendResult({ kind, op: request.op }, intentId, effect);
+    await appendResult(
+      { kind, op: request.op },
+      intentId,
+      effect,
+      outcome.terminal === "executed" ? request.revertData?.() : undefined,
+    );
     const status =
       outcome.terminal === "blocked_post" ? "error" : toolObservationStatus(outcome.value);
     publishToolTerminal(request, startedAt, status);
@@ -389,14 +401,27 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
     subject: ActionSubject,
     parentId: string,
     value: PlainValue,
+    revert?: PlainValue,
   ): Promise<void> {
-    await commit(
-      actionAppend(
-        { ...subject, parentId },
-        { encodingVersion: 1, value: { phase: "result", op: subject.op } },
-        { encodingVersion: 1, value },
-      ),
+    const action = actionAppend(
+      { ...subject, parentId },
+      { encodingVersion: 1, value: { phase: "result", op: subject.op } },
+      { encodingVersion: 1, value },
     );
+    if (revert === undefined) {
+      await commit(action);
+    } else {
+      await commit({
+        id: action.id,
+        parentId: action.parentId,
+        sessionId: action.sessionId,
+        kind: action.kind,
+        intent: action.intent,
+        effect: action.effect,
+        ts: action.ts,
+        revert: { encodingVersion: 1, value: revert },
+      });
+    }
   }
 
   function actionAppend(
