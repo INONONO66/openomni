@@ -68,8 +68,12 @@ describe("Highlight", () => {
   test("Given every run, When rendered, Then the full label survives in order", () => {
     // A highlight that drops or reorders glyphs is a renamed row.
     const html = renderToStaticMarkup(<Highlight runs={runs} />);
+    const text = html
+      .split("<")
+      .map((chunk) => chunk.slice(chunk.indexOf(">") + 1))
+      .join("");
 
-    expect(html.replaceAll(/<[^>]*>/g, "")).toBe("ledger append path");
+    expect(text).toBe("ledger append path");
   });
 
   test("Given no match, When rendered, Then nothing is emphasised", () => {
