@@ -97,7 +97,12 @@ export function Console({
     // construction, but the Owner pointing at the whole screen means the
     // composition — and a name that only ever said `Panel` would leave the
     // screen itself unaddressable.
-    <Panel className="flex h-full min-h-0" data-density="shell" data-ui={UI_NAMES.Console} tone="bg">
+    <Panel
+      className="flex h-full min-h-0"
+      data-density="shell"
+      data-ui={UI_NAMES.Console}
+      tone="bg"
+    >
       {sidebar}
       <Panel as="main" className="flex min-w-0 flex-1 flex-col" tone="bg">
         <MainHeader detail={detail} title={title} />

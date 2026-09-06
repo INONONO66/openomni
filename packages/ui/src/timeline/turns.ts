@@ -24,7 +24,7 @@ import type {
  */
 
 /** One prose block of an agent answer, addressed on its own. */
-export interface ProsePart {
+interface ProsePart {
   readonly kind: "prose";
   readonly id: string;
   readonly block: TranscriptMarkdown;
@@ -33,19 +33,19 @@ export interface ProsePart {
 }
 
 /** A run of adjacent tool calls, with nothing between them. */
-export interface ToolsPart {
+interface ToolsPart {
   readonly kind: "tools";
   readonly id: string;
   readonly calls: readonly TranscriptTool[];
 }
 
-export interface UserPart {
+interface UserPart {
   readonly kind: "user";
   readonly id: string;
   readonly text: string;
 }
 
-export interface EpochPart {
+interface EpochPart {
   readonly kind: "epoch";
   readonly id: string;
   readonly label: string;

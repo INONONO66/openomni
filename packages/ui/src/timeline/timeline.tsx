@@ -131,7 +131,12 @@ export function Timeline({
   }
 
   return (
-    <div className="flex flex-col" data-session={sessionId} data-transcript data-ui={UI_NAMES.Timeline}>
+    <div
+      className="flex flex-col"
+      data-session={sessionId}
+      data-transcript
+      data-ui={UI_NAMES.Timeline}
+    >
       {turns.map((turn, index) => (
         <TurnView
           cost={costs[turn.index]}

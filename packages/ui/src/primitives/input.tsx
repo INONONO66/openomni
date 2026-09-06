@@ -54,7 +54,11 @@ export function Input({
     // The name is on the WRAPPER, which is the field as the Owner sees it: the
     // surface, the focus underline, and the icon slot are all here, and the
     // `<input>` Base UI renders one level down carries none of them.
-    <label className={`${WRAPPER} ${SIZE[size]} ${className}`} data-ui={UI_NAMES.Input} htmlFor={controlId}>
+    <label
+      className={`${WRAPPER} ${SIZE[size]} ${className}`}
+      data-ui={UI_NAMES.Input}
+      htmlFor={controlId}
+    >
       <span className="sr-only">{label}</span>
       {icon}
       <BaseInput className={CONTROL} id={controlId} {...rest} />

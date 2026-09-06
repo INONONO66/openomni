@@ -77,7 +77,11 @@ export function Spinner({
   readonly className?: string;
 }) {
   return (
-    <span className={`inline-flex items-center gap-1 ${className}`} data-spinner data-ui={UI_NAMES.Spinner}>
+    <span
+      className={`inline-flex items-center gap-1 ${className}`}
+      data-spinner
+      data-ui={UI_NAMES.Spinner}
+    >
       {/* One cell wide, matching the character column it sits in, so a row does
           not change width when its tool goes live. */}
       {/* biome-ignore lint/a11y/noSvgWithoutTitle: aria-hidden decoration; the word beside it is the name */}

@@ -67,13 +67,13 @@ export function Voice({
     // Spread LAST, so a caller that gives its Voice a more specific name wins:
     // the transcript's time line is a `Turn.Meta` that happens to be typeset in
     // the meta voice, and the Owner addresses the line, not the typography.
-    <Tag className={`${VOICE[voice]} ${className}`} data-ui={UI_NAMES.Voice} data-voice={voice} {...rest}>
+    <Tag
+      className={`${VOICE[voice]} ${className}`}
+      data-ui={UI_NAMES.Voice}
+      data-voice={voice}
+      {...rest}
+    >
       {children}
     </Tag>
   );
-}
-
-/** The class string, for the few places that style an element they do not own. */
-export function voiceClass(voice: VoiceName): string {
-  return VOICE[voice];
 }

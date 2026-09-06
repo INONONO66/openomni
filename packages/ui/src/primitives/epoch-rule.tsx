@@ -82,7 +82,11 @@ export function EpochRule({
 
   if (onJump === undefined) {
     return (
-      <div className={`flex items-center gap-2 ${bounds}`} data-epoch-rule data-ui={UI_NAMES.EpochRule}>
+      <div
+        className={`flex items-center gap-2 ${bounds}`}
+        data-epoch-rule
+        data-ui={UI_NAMES.EpochRule}
+      >
         <hr aria-hidden className="m-0 h-0 w-0 border-0 p-0" />
         {content}
       </div>

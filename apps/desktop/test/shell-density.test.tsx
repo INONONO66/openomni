@@ -34,7 +34,7 @@ function transcript(id: string): string {
  * The three voices, as the exact class pairs the transcript emits.
  *
  * They are spelled out here rather than imported so this gate is INDEPENDENT of
- * the module it checks: importing `voiceClass` would make the test agree with
+ * the module it checks: importing the voice table would make the test agree with
  * whatever the source says, including a fourth voice someone added.
  */
 const PROSE = "text-[14px]/[21px]";

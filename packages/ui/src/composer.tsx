@@ -310,7 +310,10 @@ export function Composer({
         {/* One meta line under the field. Left: what is answering. Right: what
             the turn has cost. Both in the meta voice, both dim, because neither
             is something the Owner acts on — they are there to be glanced at. */}
-        <div className="flex items-baseline justify-between gap-cell pt-2 pb-3" data-ui={UI_NAMES.ComposerMeta}>
+        <div
+          className="flex items-baseline justify-between gap-cell pt-2 pb-3"
+          data-ui={UI_NAMES.ComposerMeta}
+        >
           <Voice className="min-w-0 truncate text-fg/40" voice="meta">
             {hint}
           </Voice>

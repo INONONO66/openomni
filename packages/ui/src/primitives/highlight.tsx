@@ -52,7 +52,10 @@ export function Highlight({
   readonly className?: string;
 }) {
   return (
-    <span className={`min-w-0 truncate text-label ${REST[tone]} ${className}`} data-ui={UI_NAMES.Highlight}>
+    <span
+      className={`min-w-0 truncate text-label ${REST[tone]} ${className}`}
+      data-ui={UI_NAMES.Highlight}
+    >
       {runs.map((run, index) => (
         // Runs are positional by construction — order IS the identity here, and
         // a content-derived key would collide on a repeated glyph.

@@ -175,7 +175,10 @@ export function MainHeader({
   readonly detail: string;
 }) {
   return (
-    <header className="drag-region flex h-titlebar shrink-0 items-center" data-ui={UI_NAMES.MainHeader}>
+    <header
+      className="drag-region flex h-titlebar shrink-0 items-center"
+      data-ui={UI_NAMES.MainHeader}
+    >
       {/* The header text hangs on the SAME measure as the content beneath it,
           so the title and the first line of prose share one left edge. A header
           pinned to the window's own gutter while the content is centered puts

@@ -93,7 +93,11 @@ export function Disclosure({
     // The name rides the ROOT rather than the trigger: the Owner's word covers
     // the header and the region it opens, because "the Disclosure is too tight"
     // is as often about the panel's gap as about the label.
-    <BaseCollapsible.Root className={className} data-ui={UI_NAMES.Disclosure} defaultOpen={defaultOpen}>
+    <BaseCollapsible.Root
+      className={className}
+      data-ui={UI_NAMES.Disclosure}
+      defaultOpen={defaultOpen}
+    >
       <BaseCollapsible.Trigger
         className={`focus-ring group flex h-row select-none items-center rounded-md px-row-inset text-left transition-quiet hover:bg-hover ${LEVEL[level]}`}
         data-level={level}

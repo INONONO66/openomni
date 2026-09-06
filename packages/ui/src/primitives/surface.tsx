@@ -183,6 +183,10 @@ export function Caret({ streaming = false }: { readonly streaming?: boolean }) {
  */
 export function Rule({ className = "" }: { readonly className?: string }) {
   return (
-    <span aria-hidden className={`block w-px self-stretch bg-line ${className}`} data-ui={UI_NAMES.Rule} />
+    <span
+      aria-hidden
+      className={`block w-px self-stretch bg-line ${className}`}
+      data-ui={UI_NAMES.Rule}
+    />
   );
 }

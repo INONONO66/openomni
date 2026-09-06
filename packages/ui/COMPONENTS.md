@@ -88,6 +88,6 @@ and the condition is what makes it appear in the product surface. The list lives
   `Turn.Response › CodeFence`. Wrapping it to make the name appear would insert a layout-free box
   between the turn's gap and the fence's border — a box the Owner could then address and nobody
   could style.
-- **`composerKey`, `voiceClass`, `expansionFor`, `spacingClass`, `segmentTurns`, `anchorId`,
+- **`composerKey`, `expansionFor`, `spacingClass`, `segmentTurns`, `anchorId`,
   `summarize` and the rest of the pure functions have no name**, because they render nothing. They
   are the law behind what the named elements do, and the Owner addresses the element.

@@ -142,7 +142,12 @@ export function ToolRow({
   const status = call.status;
 
   return (
-    <div className="group/tool" data-anchor={anchor} data-tool-row={call.id} data-ui={UI_NAMES.ToolRow}>
+    <div
+      className="group/tool"
+      data-anchor={anchor}
+      data-tool-row={call.id}
+      data-ui={UI_NAMES.ToolRow}
+    >
       <div className="flex items-baseline gap-cell">
         {/* The chevron holds its 12px column whether or not it is a control, so
             a row with a payload and a row without share one text x. A slot that
