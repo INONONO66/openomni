@@ -535,7 +535,9 @@ export namespace Compaction {
       summarizerError?: Error,
     ) => CompactionResult,
   ): Promise<CompactionResult> {
-    const protectRecent = options.protectRecentMessages ?? DEFAULT_PROTECT_RECENT;
+    // A reversible cut names original content as its kept boundary. Even a
+    // zero-tail strategy must retain one atomic call/result entry unchanged.
+    const protectRecent = Math.max(1, options.protectRecentMessages ?? DEFAULT_PROTECT_RECENT);
 
     if (messages.length <= protectRecent) {
       return finish({ messages, compacted: false, removedCount: 0 }, "nothing_reclaimed", 0);
