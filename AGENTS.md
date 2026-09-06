@@ -1,17 +1,17 @@
 # PROJECT KNOWLEDGE BASE
 
-Session authority verified against `kernel/967-session`: 2026-09-06 (legacy Session namespace, CRUD/message adapters and boot TTL removed; canonical handles and recovery retained). Archive/retired-owner cutover verified on `kernel/967-data` (2026-09-06): explicit native archive confirmation and guarded migration 0034; session-owned Wait remains live and message/part disposition is deferred. Other ownership remains as verified on `kernel/936` (2026-09-05). Keep this stamp current when editing (doc-state sync law). Desktop/ui verified against `feat/desktop-ai-sdk` (2026-09-06): apps/desktop owns AI SDK chat state while `packages/ui/src/names.ts` owns every `data-ui` address and `packages/ui/COMPONENTS.md` documents them 1:1.
+Verified against merged `c4fb774869fb060859bbdc2f58ce37ee3a3072c9` (PR #985), 2026-09-06. Resident and native workers share the session-owned loop; legacy session CRUD/TTL and the I09 deletion surfaces are absent. Native archive confirmation and guarded migration 0034 are wired; session-owned Wait and physical message/part retention remain. Deletion and outstanding quality receipts: `docs/SLOP.md`. Keep this stamp current when editing (doc-state sync law).
 
 ## OVERVIEW
 
-OpenOmni is a single-Owner Agent OS: one Resident delegates through durable contracts and evidence, not self-report. The repository now contains core packages, one deployable app, and an Electron console skeleton (`apps/desktop`, build infrastructure only). Target contracts live in `docs/core-model.md`, `docs/kernel-contract.md`, and `docs/machines-and-delegation.md`; `docs/implementation-status.md` is authoritative for current wiring.
+OpenOmni is a single-Owner Agent OS: one Resident delegates through durable contracts and evidence, not self-report. The repository contains core packages, one deployable kernel app, and an Electron console (`apps/desktop`) with app-owned AI SDK chat state and shared UI presentation. Target contracts live in `docs/core-model.md`, `docs/kernel-contract.md`, and `docs/machines-and-delegation.md`; `docs/implementation-status.md` is authoritative for current wiring.
 
 ## STRUCTURE
 
 ```text
 openomni/
 ├── apps/
-│   ├── openomni/        # sole deployable app: Resident, gateway composition, machines, delegation, memory
+│   ├── openomni/        # kernel app: Resident, gateway composition, machines, delegation
 │   └── desktop/         # Electron console: shell/build pipeline plus app-owned AI SDK chat state
 ├── packages/
 │   ├── protocol/        # Zod schemas and cross-package contracts
@@ -19,10 +19,11 @@ openomni/
 │   ├── placement/       # pure model/tool target selection
 │   ├── ledger/          # durable stores and journal persistence
 │   ├── llm/             # provider I/O, transforms, retry, token/cost accounting
-│   ├── agent/           # generic durable-session mechanics, stateless ChatAgent loop, compaction
+│   ├── agent/           # durable sessions, stateless runAgent loop, executor, compaction
 │   ├── ipc/             # protocol-only bidirectional IPC transport
 │   ├── machines/        # attached-machine driver band
-│   └── channels/        # channel drivers and perimeter gateway router
+│   ├── channels/        # channel drivers and perimeter gateway router
+│   └── ui/              # shared console presentation and design system
 ├── script/              # conformance and repository gates
 ├── turbo.json
 └── package.json
@@ -80,7 +81,7 @@ ui <- apps/desktop
 | `packages/ipc` | Framing and bidirectional transport | Run semantics or authorization |
 | `packages/machines` | Machine attach and cell execution driver | Enrollment policy or product judgment |
 | `packages/channels` | Drivers plus perimeter routing, waits, and admission | Session content or product execution |
-| `apps/openomni` | Product composition: Resident, gateway, delegation, memory, code mode, boot/shutdown | Reimplementation of package primitives |
+| `apps/openomni` | Product composition: Resident, gateway, delegation, code mode, boot/shutdown | Reimplementation of package primitives |
 | `apps/desktop` | Electron shell: main/preload/renderer build pipeline, window security defaults; AI SDK chat state and transports; the attention ordering engine, the search engine, mock fixtures, session-selection state, and per-session draft and approval-decision state | Kernel logic; anything beyond protocol contracts; **transcript presentation — that is `packages/ui`'s** |
 | `packages/ui` | The design system: tokens, primitives, window chrome, the transcript's presentation (timeline, the three voices, tool rows and their folding, the composer, the approval tray, anchors), the one `Console` composition both the renderer and the showcase render, and the component NAMES the Owner reviews by — `src/names.ts` is the single owner of every `data-ui` address, documented 1:1 in `COMPONENTS.md` | Any data or kernel vocabulary — it may not name a session, project, agent, or run state |
 
@@ -91,14 +92,14 @@ ui <- apps/desktop
 | Shared schema or event | `packages/protocol/src/` |
 | Session/store behavior | `packages/ledger/src/` |
 | Policy mechanism | `packages/policy/src/` |
-| ChatAgent loop and compaction | `packages/agent/src/core/` |
+| Session loop, executor, and compaction | `packages/agent/src/session-chat-runner.ts`, `packages/agent/src/core/`, `packages/agent/src/executor.ts`, `packages/agent/src/compaction/` |
 | Channel driver or perimeter route | `packages/channels/src/` |
 | Machine attach/cell execution | `packages/machines/src/` |
 | Resident and app composition | `apps/openomni/src/resident.ts`, `apps/openomni/src/index.ts` |
 | Production compaction strategy | `apps/openomni/src/compaction/`, `packages/agent/src/compaction/` |
 | Gateway and channel registration | `apps/openomni/src/gateway.ts`, `apps/openomni/src/channels.ts` |
 | Delegation lifecycle and transports | `apps/openomni/src/delegation/` |
-| Product tools and memory | `apps/openomni/src/tools/`, `apps/openomni/src/memory/` |
+| Product tools and provisioning | `apps/openomni/src/tools/`, `apps/openomni/src/tools/mutation/provision.ts` |
 | Shipped-state truth | `docs/implementation-status.md` |
 | Conformance/ratchets | `script/`, `script/conformance/` |
 
@@ -114,7 +115,7 @@ ui <- apps/desktop
 
 ## COMMANDS
 
-CI selection and verification verified on `chore/optimize-ci-verification`,
+CI selection and verification wiring inspected at `c4fb7748` (includes PR #983),
 2026-09-06. See `docs/ci.md` for dependency-aware PR lanes, full runs, and
 fail-closed completion checks.
 
@@ -143,7 +144,7 @@ bun run ci test --lane scripts
 # Sole deployable app
 bun run --cwd apps/openomni dev
 
-# Desktop console skeleton (Electron)
+# Desktop console (Electron)
 bun run --cwd apps/desktop dev
 ```
 
@@ -151,8 +152,9 @@ Coverage baselines are updated after coverage-producing test runs with `bun run 
 
 ## NOTES
 
-- `apps/openomni` is the only deployable composition and production entry point. `apps/desktop` is a build-infrastructure skeleton: the topology permits `protocol` only, it imports no workspace package yet, and it ships no product features.
+- `apps/openomni` is the kernel composition root. `apps/desktop` owns Electron and AI SDK chat state and imports `packages/ui`; its dependency band permits `protocol` and `ui`, not kernel implementation packages.
 - `packages/channels` is the perimeter gateway; `apps/openomni` injects delivery and observation ports. Conversation windows, send leases, and engagement lifecycles were removed in issue #943; ordinary sends use grants, egress budgets, idempotency, and Wait correlation.
 - `packages/agent` coordinates generic session handles through `SessionHandleStore`; `packages/ledger` owns the durable facts, while product-specific session identity, routing, and lifecycle policy remain in `apps/openomni`.
 - Shipped-state claims, including Stakes, effective authority, and connector consumers, belong only in `docs/implementation-status.md`; other docs define target contracts or historical context and defer to it.
-- CI lives in `.github/workflows/ci.yml`; whole-repository formatting is always `bunx ultracite check --formatter-enabled=false .`.
+- CI lives in `.github/workflows/ci.yml`; its Ultracite check is `bunx ultracite check --formatter-enabled=false .` (formatting disabled). Full formatting checks use `bunx ultracite check .`; the pinned baseline has existing formatter failures, recorded in `docs/SLOP.md`.
+- The dead-export ratchet, event-pairing and ledger-producer drift tests are wired, but they are not #945's complete production-only publisher/export/store census or final quality gate. E4 is required, not parked; #950 alone parks sandbox/egress hardening outside #930.
