@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import { Migration } from "../../src/storage/migration-runner";
+import { U967Error } from "../../src/storage/u967-preflight";
 import { createDispositionFixture } from "../helpers/disposition-967";
 import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage";
 import { initializeSqliteDatabase } from "../../src/storage/sqlite-schema-lifecycle";
@@ -74,7 +75,10 @@ describe("967 atomic disposition", () => {
     expect(() => {
       const adapter = new SqliteStorageAdapter(fixture.path);
       adapter.close();
-    }).toThrow();
+    }).toThrow(expect.objectContaining({
+      constructor: U967Error,
+      code: "approval_required",
+    }));
     expect(fixture.db.serialize()).toEqual(before);
   });
 
