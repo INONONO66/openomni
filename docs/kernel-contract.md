@@ -168,8 +168,9 @@ The machine endpoint is a raw WHERE surface: `MachineHost.list()` and stable
 `get(id)` handles expose confined filesystem operations, `exec(cmd, cwd)`, and
 `runCode`. Enrollment and daemon offer capabilities intersect fail-closed;
 `shell.exec` is distinct from filesystem capabilities and is required for
-`exec`. The daemon confines cwd values to effective exports through the pinned
-no-follow descriptor path. This is not an OS shell sandbox: commands run as
+`exec`. The daemon confines cwd values to effective exports through canonical
+containment checks; the final OS spawn uses a pathname because portable
+ descriptor-backed cwd is unavailable on all supported platforms. This is not an OS shell sandbox: commands run as
 the daemon user and may exercise that user's other OS authority once started;
 Owner grants shell execution knowingly. Codemode consumes these handles through
 one `run_code` cell runner, with per-tenant interpreter state and no legacy

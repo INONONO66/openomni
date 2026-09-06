@@ -129,7 +129,7 @@ describe("Ipc.Methods param schemas", () => {
   test("machine.call_tool params reject an unnamed tool call", () => {
     const valid = Ipc.Methods[Machine.WireMethod.CallTool].params.safeParse({
       cellId: "cell-1",
-      name: "machines",
+      name: "inventory",
       arguments: {},
     });
     const unnamed = Ipc.Methods[Machine.WireMethod.CallTool].params.safeParse({

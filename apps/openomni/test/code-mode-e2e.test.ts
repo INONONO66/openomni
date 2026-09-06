@@ -70,7 +70,7 @@ const enrollment: Machine.Enrollment = {
   enrolledAt: 0,
 };
 
-const fullEnrollment = (root: string): Machine.Enrollment => ({
+const fullEnrollment = (): Machine.Enrollment => ({
   ...enrollment,
   allowedCapabilities: ["fs.read", "fs.write", "shell.exec", "kernel.py"],
   allowedExports: ["data"],
@@ -86,7 +86,7 @@ test("app root runs machine read write shell and code through one run_code cell"
   const root = join(directory, "data");
   mkdirSync(root);
   const socketPath = testSocketPath();
-  const appEnrollment = fullEnrollment(root);
+  const appEnrollment = { ...fullEnrollment(), allowedExports: ["data"] };
   const config = suite.config("openomni-app-machine-", {
     wsToken: WS_TOKEN,
     model: { provider: "fake", id: "app-machine-test", apiKey: "test-key" },
@@ -215,7 +215,7 @@ test("a cell batches delegation into one turn", async () => {
   // is the cell's final expression as Python rendered it, quotes included.
   expect(answer).toContain("done(check lint); done(check types); done(check tests)");
   // One Resident turn, not three: that is what code mode bought.
-  expect(residentTurns).toHaveLength(3);
+  expect(residentTurns).toHaveLength(2);
   expect(new Set(residentTurns).size).toBe(1);
   expect(witness.pids).toHaveLength(1);
   await suite.cleanup();

@@ -80,9 +80,11 @@ the same raw endpoint; the plain-tool locus door belongs to #949.
   Reads retain the 262144-byte window cap and lists the 1000-entry cap, both
   with explicit truncation facts.
 - `shell.exec` grants machine shell authority, but the daemon confines the
-  requested cwd to an effective export using its pinned descriptor/openat
-  no-follow path; escaping or symlinked-out cwd values refuse with
-  `path_escapes_export`. This is path confinement only: a shell running as the
+  requested cwd to an effective export using the same effective export and
+  canonical containment checks as filesystem requests; escaping or
+  symlinked-out cwd values refuse with `path_escapes_export`. The shell cwd is
+  handed to the OS by pathname after that check (the OS does not provide a
+  portable descriptor-backed cwd on all supported platforms). This is path confinement only: a shell running as the
   daemon OS user remains arbitrary within that user's normal OS authority
   (including absolute paths and `cd` elsewhere). The Owner grants `exec`
   knowingly. Every execution requires an absolute cwd; no cwd persists between

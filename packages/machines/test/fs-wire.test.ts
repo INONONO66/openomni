@@ -120,6 +120,7 @@ describe("daemon boundary cannot be bypassed by a rogue host", () => {
       const daemon = await attachMachineDaemon({ socketPath: path, offer: offer(root, missing === "offer" ? { exports: [] } : {}), fsExports: new Map([["docs", root]]) });
       try {
         expect(await typedCall(host, "machine.fs_op", { op: "write", export: "docs", path: "file", data: "eA==" })).toMatchObject({ status: "refused", reason: "export_not_available" });
+        expect(await typedCall(host, "machine.exec", { cmd: "true", cwd: root })).toEqual({ status: "refused", reason: "path_escapes_export" });
       } finally { await daemon.close(); host.close(); }
     });
   });

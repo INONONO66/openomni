@@ -55,25 +55,25 @@ export async function attachMachineDaemon(options: MachineDaemonOptions): Promis
   function has(capability: string): boolean {
     return attachment.status === "attached" && attachment.effectiveCapabilities.includes(capability) && offer.offeredCapabilities.includes(capability);
   }
-  function confinedCwd(cwd: string): boolean {
+  function openCwd(cwd: string): { readonly cwd: string; readonly close: () => void } | Machine.ExecResult {
     const absolute = posix.normalize(cwd);
-    for (const root of options.fsExports?.values() ?? []) {
-      let canonicalRoot: string;
-      try {
-        canonicalRoot = posix.normalize(realpathSync(root)).replace(/\/+$/, "") || "/";
-      } catch {
-        continue;
-      }
-      if (absolute !== root && !absolute.startsWith(`${posix.normalize(root).replace(/\/+$/, "")}/`)) continue;
+    const allowed = attachment.status === "attached" ? attachment.effectiveExports : [];
+    for (const name of allowed) {
+      const offered = offer.exports?.find((entry) => entry.name === name);
+      const configured = options.fsExports?.get(name);
+      if (offered === undefined || configured !== offered.path) continue;
+      const root = posix.normalize(offered.path).replace(/\/+$/, "") || "/";
+      if (absolute !== root && !absolute.startsWith(`${root}/`)) continue;
       try {
         const resolved = posix.normalize(realpathSync(absolute));
-        if (resolved === canonicalRoot || resolved.startsWith(`${canonicalRoot}/`)) return true;
+        const canonical = posix.normalize(realpathSync(root));
+        if (resolved !== canonical && !resolved.startsWith(`${canonical}/`)) return { status: "refused", reason: "path_escapes_export" };
       } catch {
-        // A missing cwd remains export-confined; spawn reports its typed I/O refusal.
-        return true;
+        // A missing path remains inside the configured root; spawn reports io_error.
       }
+      return { cwd: absolute, close: () => undefined };
     }
-    return false;
+    return { status: "refused", reason: "path_escapes_export" };
   }
   function requireClient(): IpcClient {
     if (client === undefined) throw new MachineRefusalError({ reason: "closed", message: "daemon connection is closed" });
@@ -105,11 +105,13 @@ export async function attachMachineDaemon(options: MachineDaemonOptions): Promis
             respond({ status: "refused", reason: "exec_not_available" } satisfies Machine.ExecResult);
             return;
           }
-          if (!confinedCwd(request.cwd)) {
-            respond({ status: "refused", reason: "path_escapes_export" } satisfies Machine.ExecResult);
+          const cwd = openCwd(request.cwd);
+          if ("status" in cwd) {
+            respond(cwd);
             return;
           }
-          const execution = execute(request, lifetime.signal);
+          const execution = execute({ ...request, cwd: cwd.cwd }, lifetime.signal);
+          cwd.close();
           pending.add(execution);
           try { respond(await execution); } finally { pending.delete(execution); }
           return;
