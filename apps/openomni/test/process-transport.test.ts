@@ -1,5 +1,5 @@
-import { expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { afterEach, expect, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DelegationStore } from "@openomni/ledger";
@@ -17,6 +17,19 @@ import { RESIDENT, useDelegationStore } from "./helpers/delegation";
 
 useDelegationStore();
 
+const directories: string[] = [];
+afterEach(() => {
+  const errors: unknown[] = [];
+  for (const directory of directories.splice(0)) {
+    try {
+      rmSync(directory, { recursive: true, force: true });
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  if (errors.length > 0) throw new AggregateError(errors, "process fixture cleanup failed");
+});
+
 const WORKER = { model: { provider: "anthropic", id: "test-model" }, apiKey: "test-key" } as const;
 
 function independentAsk(text: string, deadline: number) {
@@ -30,6 +43,7 @@ function independentAsk(text: string, deadline: number) {
 
 function fakeEntry(body: string): string {
   const directory = mkdtempSync(join(tmpdir(), "openomni-process-"));
+  directories.push(directory);
   const path = join(directory, "entry.ts");
   writeFileSync(path, body);
   return path;

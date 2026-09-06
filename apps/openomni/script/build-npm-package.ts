@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
  */
 const appDir = fileURLToPath(new URL("..", import.meta.url));
 const repoRoot = join(appDir, "..", "..");
-const staging = join(appDir, "dist-npm");
+const staging = process.argv[2] ?? join(appDir, "dist-npm");
 
 rmSync(staging, { recursive: true, force: true });
 mkdirSync(join(staging, "bin"), { recursive: true });

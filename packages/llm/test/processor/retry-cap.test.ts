@@ -190,27 +190,30 @@ describe("Processor retry cap", () => {
     });
 
     try {
-      await processor.process({ system: "", promptText: "" });
-      expect.unreachable("Should have thrown the retry error that exceeded the cap");
-    } catch (e) {
-      expect(e).toBe(retryErrors[2]);
-    }
+      try {
+        await processor.process({ system: "", promptText: "" });
+        expect.unreachable("Should have thrown the retry error that exceeded the cap");
+      } catch (e) {
+        expect(e).toBe(retryErrors[2]);
+      }
 
-    expect(attemptCount).toBe(3);
-    // Exact sequence of requested delays: the retry-after-ms header provides "1ms" delays.
-    expect(sleep.mock.calls.map(([delay]) => delay)).toEqual([1, 1]);
-    const retries = (
-      events.named(LlmCall.Events.RetryDecided.name) as Array<{ maxAttempts: number }>
-    ).map((event) => event.maxAttempts);
-    expect(retries).toEqual([2, 2]);
-    // Pin (#606 audit): budget exhaustion is a decline too — it must say why.
-    const exhausted = (
-      events.named(Operational.Events.Error.name) as Array<{ msg: string; error?: string }>
-    )
-      .filter((event) => event.msg === "retry attempts exhausted")
-      .map((event) => event.error);
-    expect(exhausted).toEqual(["rate_limit: attempt cap 2 exceeded"]);
-    sleep.mockRestore();
+      expect(attemptCount).toBe(3);
+      // Exact sequence of requested delays: the retry-after-ms header provides "1ms" delays.
+      expect(sleep.mock.calls.map(([delay]) => delay)).toEqual([1, 1]);
+      const retries = (
+        events.named(LlmCall.Events.RetryDecided.name) as Array<{ maxAttempts: number }>
+      ).map((event) => event.maxAttempts);
+      expect(retries).toEqual([2, 2]);
+      // Pin (#606 audit): budget exhaustion is a decline too — it must say why.
+      const exhausted = (
+        events.named(Operational.Events.Error.name) as Array<{ msg: string; error?: string }>
+      )
+        .filter((event) => event.msg === "retry attempts exhausted")
+        .map((event) => event.error);
+      expect(exhausted).toEqual(["rate_limit: attempt cap 2 exceeded"]);
+    } finally {
+      sleep.mockRestore();
+    }
   });
 });
 

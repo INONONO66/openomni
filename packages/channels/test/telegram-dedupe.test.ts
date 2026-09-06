@@ -75,9 +75,17 @@ describe("TelegramAdapter dedupe (D1)", () => {
       return null;
     });
 
-    await adapter.start("trace-dedupe-test");
-    await deliveredBoth.promise;
-    adapter.stop("trace-dedupe-test");
+    const timeout = setTimeout(
+      () => deliveredBoth.reject(new Error("Telegram handoff timed out")),
+      2_000,
+    );
+    try {
+      await adapter.start("trace-dedupe-test");
+      await deliveredBoth.promise;
+    } finally {
+      clearTimeout(timeout);
+      adapter.stop("trace-dedupe-test");
+    }
 
     expect(delivered).toHaveLength(2);
     const surfaceKeys = delivered.map((m) => m.surfaceKey).sort();
