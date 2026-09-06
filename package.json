@@ -8,6 +8,10 @@
   },
   "scripts": {
     "build": "turbo run build",
+    "ci": "bun run script/ci.ts",
+    "ci:plan": "bun run script/ci-plan.ts",
+    "ci:test": "bun run script/ci.ts test",
+    "ci:check-types": "bun run script/ci.ts check-types",
     "dev": "turbo run dev",
     "prepare": "lefthook install",
     "lint": "bun run lint:guards && bun run lint:side-effects && bun run lint:docs && bunx ultracite check --formatter-enabled=false .",

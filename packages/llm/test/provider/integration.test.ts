@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { Auth } from "../../src/auth";
 import { type ModelsDev, Provider } from "../../src/provider";
 import { getLanguage, getSDK } from "../../src/provider/sdk";
+import { usePrivateCatalog } from "../helpers/catalog";
 
 function makeModel(provider: "anthropic" | "openai", id: string): Provider.Model {
   return {
@@ -49,6 +50,8 @@ const sdkCases: Array<{
 ];
 
 describe("Provider Integration", () => {
+  usePrivateCatalog();
+
   it.each(sdkCases)("full flow: getSDK returns valid SDK ($name)", ({
     model,
     auth,

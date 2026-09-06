@@ -485,6 +485,12 @@ describe("code-mode tool bridge", () => {
       releaseSlowCall = resolve;
     });
     try {
+      await expect(
+        kernel.run({ cellId: "warm", code: "1 + 1", timeoutMs: 15_000 }, async () => ({
+          status: "failed",
+          error: "no tools during warmup",
+        })),
+      ).resolves.toMatchObject({ status: "completed", value: "2" });
       const firstPending = kernel.run(
         { cellId: "one", code: "tool.slow()", timeoutMs: 100 },
         async () => {
@@ -493,7 +499,12 @@ describe("code-mode tool bridge", () => {
           return { status: "completed", value: "stray" };
         },
       );
-      await slowCallEntered;
+      await Promise.race([
+        slowCallEntered,
+        firstPending.then((result) => {
+          throw new Error(`cell terminated before tool entry: ${result.status}`);
+        }),
+      ]);
       await expect(firstPending).resolves.toEqual({ status: "timed_out", cellId: "one" });
 
       // Timeout replaced the interpreter. The successor completes before the

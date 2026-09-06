@@ -21,6 +21,7 @@
  *
  * Modes:
  *   bun run script/check-coverage-ratchet.ts             check against baseline
+ *   bun run script/check-coverage-ratchet.ts --lane <dir> check one topology lane
  *   bun run script/check-coverage-ratchet.ts --update    rewrite baseline from
  *                                                        current reports (diff =
  *                                                        sign-off surface; shrink
@@ -31,13 +32,25 @@
 
 import { mkdtempSync, readdirSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, posix } from "node:path";
+import * as ts from "typescript";
+import { z } from "zod";
 import { assertTopologyComplete, coverageLanes, TOPOLOGY } from "./topology";
 
 const BASELINE_PATH = "script/conformance/coverage-baseline.json";
 // 0.5pp absorbs the measured stable macOS<->ubuntu platform offset (coordinator
 // showed 0.45pp on the first CI run) while still catching real regressions.
 const TOLERANCE_PP = 0.5;
+
+const countSchema = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
+const coverageSchema = z
+  .object({
+    linesFound: countSchema,
+    linesHit: countSchema,
+    pct: z.number().min(0).max(100),
+  })
+  .refine((value) => value.linesHit <= value.linesFound, "LH must not exceed LF");
+const baselineSchema = z.record(z.string(), coverageSchema);
 
 export interface PackageCoverage {
   readonly linesFound: number;
@@ -70,12 +83,7 @@ export interface SourceInventoryDrift {
 }
 
 function isOwnedScriptSource(file: string): boolean {
-  return (
-    !file.includes("/") &&
-    /\.tsx?$/.test(file) &&
-    !file.endsWith(".test.ts") &&
-    !file.endsWith(".test.tsx")
-  );
+  return !file.includes("/") && /\.tsx?$/.test(file) && !/\.(test|spec)\.tsx?$/.test(file);
 }
 
 export function scriptSourceInventoryDrift(
@@ -96,6 +104,92 @@ export function scriptSourceInventoryDrift(
   };
 }
 
+function isOwnedSource(file: string, sourceRoot: "src/" | "."): boolean {
+  return sourceRoot === "."
+    ? isOwnedScriptSource(file)
+    : file.startsWith("src/") && /\.tsx?$/.test(file) && !/\.(test|spec)\.tsx?$/.test(file);
+}
+
+/** Erased declarations and pure re-export barrels have no owned executable lines.
+ * Their target modules remain independently required by the on-disk inventory.
+ */
+export function hasExecutableSource(file: string): boolean {
+  const source = ts.createSourceFile(
+    file,
+    readFileSync(file, "utf8"),
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  if (source.isDeclarationFile) return false;
+  return source.statements.some((statement) => {
+    if (
+      ts.isInterfaceDeclaration(statement) ||
+      ts.isTypeAliasDeclaration(statement) ||
+      ts.isEmptyStatement(statement)
+    )
+      return false;
+    if (
+      ts.canHaveModifiers(statement) &&
+      ts.getModifiers(statement)?.some((modifier) => modifier.kind === ts.SyntaxKind.DeclareKeyword)
+    )
+      return false;
+    if (ts.isImportDeclaration(statement)) {
+      const clause = statement.importClause;
+      if (clause?.isTypeOnly) return false;
+      if (
+        clause &&
+        !clause.name &&
+        clause.namedBindings &&
+        ts.isNamedImports(clause.namedBindings) &&
+        clause.namedBindings.elements.length > 0 &&
+        clause.namedBindings.elements.every((element) => element.isTypeOnly)
+      )
+        return false;
+    }
+    if (ts.isExportDeclaration(statement)) {
+      if (statement.isTypeOnly) return false;
+      if (
+        statement.moduleSpecifier &&
+        (!statement.exportClause ||
+          ts.isNamespaceExport(statement.exportClause) ||
+          (ts.isNamedExports(statement.exportClause) && statement.exportClause.elements.length > 0))
+      )
+        return false;
+      if (
+        statement.exportClause &&
+        ts.isNamedExports(statement.exportClause) &&
+        (statement.exportClause.elements.length > 0 || !statement.moduleSpecifier) &&
+        statement.exportClause.elements.every((element) => element.isTypeOnly)
+      )
+        return false;
+    }
+    return true;
+  });
+}
+
+function assertWorkspaceSourceInventory(lcovText: string, laneDir: string): void {
+  const files = [
+    ...new Bun.Glob("src/**/*.{ts,tsx}").scanSync({ cwd: laneDir, onlyFiles: true }),
+  ].filter((file) => isOwnedSource(file, "src/"));
+  const reported = new Set(
+    lcovText
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith("SF:"))
+      .map((line) => line.slice(3))
+      .filter((file) => isOwnedSource(file, "src/")),
+  );
+  const missing = files
+    .filter((file) => hasExecutableSource(join(laneDir, file)) && !reported.has(file))
+    .sort();
+  const unexpected = [...reported].filter((file) => !files.includes(file)).sort();
+  if (missing.length || unexpected.length) {
+    throw new Error(
+      `${laneDir}: LCOV source inventory mismatch; missing owned source(s): ${missing.join(", ")}; unexpected/stale source(s): ${unexpected.join(", ")}`,
+    );
+  }
+}
+
 function ownedScriptSources(scriptDir = "script"): string[] {
   return readdirSync(scriptDir, { withFileTypes: true })
     .filter((entry) => entry.isFile() && isOwnedScriptSource(entry.name))
@@ -105,7 +199,9 @@ function ownedScriptSources(scriptDir = "script"): string[] {
 
 function assertScriptSourceInventory(lcovText: string, scriptDir = "script"): readonly string[] {
   const ownedSources = ownedScriptSources(scriptDir);
-  const { missing, unexpected } = scriptSourceInventoryDrift(lcovText, ownedSources);
+  const drift = scriptSourceInventoryDrift(lcovText, ownedSources);
+  const missing = drift.missing.filter((file) => hasExecutableSource(join(scriptDir, file)));
+  const unexpected = drift.unexpected;
   if (missing.length > 0 || unexpected.length > 0) {
     const details = [
       ...(missing.length > 0 ? [`missing owned source(s): ${missing.join(", ")}`] : []),
@@ -115,7 +211,7 @@ function assertScriptSourceInventory(lcovText: string, scriptDir = "script"): re
       `script: LCOV source inventory does not match ${ownedSources.length} on-disk top-level non-test TypeScript modules — ${details.join("; ")}`,
     );
   }
-  return ownedSources;
+  return ownedSources.filter((file) => hasExecutableSource(join(scriptDir, file)));
 }
 
 export function parseLcovSummary(
@@ -125,32 +221,41 @@ export function parseLcovSummary(
   let linesFound = 0;
   let linesHit = 0;
   let currentFile = "";
-  let fileFound = 0;
-  let fileHit = 0;
-
+  let fileFound: number | undefined;
+  let fileHit: number | undefined;
+  const seen = new Set<string>();
   for (const rawLine of lcovText.split("\n")) {
     const line = rawLine.trim();
     if (line.startsWith("SF:")) {
+      if (currentFile) throw new Error(`Incomplete LCOV record: ${currentFile}`);
       currentFile = line.slice(3);
-      fileFound = 0;
-      fileHit = 0;
-    } else if (line.startsWith("LF:")) {
-      fileFound = Number(line.slice(3));
-    } else if (line.startsWith("LH:")) {
-      fileHit = Number(line.slice(3));
+      if (!currentFile || seen.has(currentFile) || posix.normalize(currentFile) !== currentFile)
+        throw new Error(`Invalid or duplicate LCOV source: ${currentFile}`);
+      seen.add(currentFile);
+      fileFound = undefined;
+      fileHit = undefined;
+    } else if (line.startsWith("LF:") || line.startsWith("LH:")) {
+      const value = line.slice(3);
+      if (!currentFile || !/^\d+$/.test(value)) throw new Error(`Invalid LCOV counter: ${line}`);
+      const count = countSchema.parse(Number(value));
+      if (line.startsWith("LF:")) {
+        if (fileFound !== undefined) throw new Error(`Duplicate LF: ${currentFile}`);
+        fileFound = count;
+      } else {
+        if (fileHit !== undefined) throw new Error(`Duplicate LH: ${currentFile}`);
+        fileHit = count;
+      }
     } else if (line === "end_of_record") {
-      const isOwned =
-        sourceRoot === "src/"
-          ? currentFile.startsWith(sourceRoot)
-          : isOwnedScriptSource(currentFile);
-      if (isOwned) {
-        linesFound += fileFound;
-        linesHit += fileHit;
+      if (!currentFile || fileFound === undefined || fileHit === undefined || fileHit > fileFound)
+        throw new Error(`Incomplete or invalid LCOV record: ${currentFile}`);
+      if (isOwnedSource(currentFile, sourceRoot)) {
+        linesFound = countSchema.parse(linesFound + fileFound);
+        linesHit = countSchema.parse(linesHit + fileHit);
       }
       currentFile = "";
     }
   }
-
+  if (currentFile) throw new Error(`Unterminated LCOV record: ${currentFile}`);
   return { linesFound, linesHit, pct: coveragePct(linesFound, linesHit) };
 }
 
@@ -159,6 +264,8 @@ export function compareCoverage(
   current: Readonly<Record<string, PackageCoverage>>,
   tolerancePp: number,
 ): CoverageComparison {
+  baselineSchema.parse(baseline);
+  baselineSchema.parse(current);
   const violations: string[] = [];
   const improvements: string[] = [];
 
@@ -174,7 +281,7 @@ export function compareCoverage(
     // report scores 100% and would otherwise pass as an "improvement" with no
     // baseline diff (no sign-off surface). A silently disabled gate is the
     // worst regression this script exists to prevent.
-    if (coverage.linesFound === 0 && base.linesFound > 0) {
+    if (coverage.linesFound === 0) {
       violations.push(
         `${packageDir}: coverage report contains zero src/ line records while the baseline has ${base.linesFound} — instrumentation was disabled or filtered away; the gate fails closed`,
       );
@@ -209,18 +316,24 @@ export function compareCoverage(
   return { violations, improvements };
 }
 
-async function collectCurrentCoverage(): Promise<Record<string, PackageCoverage>> {
+async function collectCurrentCoverage(
+  selectedLane?: string,
+): Promise<Record<string, PackageCoverage>> {
   const collected: Record<string, PackageCoverage> = {};
-  for (const workspace of TOPOLOGY.filter((candidate) => !candidate.coverageLane)) {
+  for (const workspace of TOPOLOGY.filter(
+    (candidate) => !selectedLane && !candidate.coverageLane,
+  )) {
     if (await Bun.file(`${workspace.dir}/coverage/lcov.info`).exists()) {
       throw new Error(
         `${workspace.dir}: coverage report exists but topology explicitly sets coverageLane: false`,
       );
     }
   }
-  for (const lane of coverageLanes()) {
+  for (const lane of coverageLanes().filter(
+    (candidate) => !selectedLane || candidate.dir === selectedLane,
+  )) {
     const report = Bun.file(`${lane.dir}/coverage/lcov.info`);
-    if (!(await report.exists())) continue;
+    if (!(await report.exists())) throw new Error(`${lane.dir}: missing coverage report`);
     const lcovText = await report.text();
     if (lane.sourceRoot === ".") {
       const inventory = assertScriptSourceInventory(lcovText, lane.dir);
@@ -228,13 +341,19 @@ async function collectCurrentCoverage(): Promise<Record<string, PackageCoverage>
         `INVENTORY: ${lane.dir} ${inventory.length}/${inventory.length} owned modules — ${inventory.join(", ")}\n`,
       );
     }
-    collected[lane.dir] = parseLcovSummary(lcovText, lane.sourceRoot);
+    if (lane.sourceRoot === "src/") assertWorkspaceSourceInventory(lcovText, lane.dir);
+    const coverage = parseLcovSummary(lcovText, lane.sourceRoot);
+    if (coverage.linesFound === 0)
+      throw new Error(
+        `${lane.dir}: zero instrumented owned lines; check and update both require usable instrumentation`,
+      );
+    collected[lane.dir] = coverage;
   }
   return Object.fromEntries(Object.entries(collected).sort(([a], [b]) => a.localeCompare(b)));
 }
 
 function readBaseline(): CoverageBaseline {
-  const baseline = JSON.parse(readFileSync(BASELINE_PATH, "utf8")) as CoverageBaseline;
+  const baseline = baselineSchema.parse(JSON.parse(readFileSync(BASELINE_PATH, "utf8")));
   const expected = coverageLanes()
     .map((lane) => lane.dir)
     .sort();
@@ -433,7 +552,25 @@ function selfTest(): void {
 // ---------------------------------------------------------------------------
 
 async function main(): Promise<void> {
-  const args = new Set(process.argv.slice(2));
+  const rawArgs = process.argv.slice(2);
+  const args = new Set(rawArgs);
+  let selectedLane: string | undefined;
+  for (let index = 0; index < rawArgs.length; index++) {
+    const arg = rawArgs[index];
+    if (arg === "--lane") {
+      const dir = rawArgs[++index];
+      if (selectedLane || !dir || !coverageLanes().some((lane) => lane.dir === dir))
+        throw new Error("--lane requires one topology coverage lane directory");
+      selectedLane = dir;
+    } else if (!["--update", "--self-test", "--self-test-missing-source"].includes(arg ?? "")) {
+      throw new Error(`Unknown coverage option: ${arg}`);
+    }
+  }
+  if (
+    selectedLane &&
+    (args.has("--update") || args.has("--self-test") || args.has("--self-test-missing-source"))
+  )
+    throw new Error("--lane cannot combine with update or self-test modes");
 
   if (args.has("--self-test-missing-source")) {
     missingSourceSelfTest();
@@ -444,7 +581,7 @@ async function main(): Promise<void> {
   }
 
   assertTopologyComplete();
-  const current = await collectCurrentCoverage();
+  const current = await collectCurrentCoverage(selectedLane);
   const expectedCoverageDirs = coverageLanes()
     .map((lane) => lane.dir)
     .sort();
@@ -463,7 +600,11 @@ async function main(): Promise<void> {
     return;
   }
 
-  const { violations, improvements } = compareCoverage(readBaseline(), current, TOLERANCE_PP);
+  const baseline = readBaseline();
+  const selectedBaseline = selectedLane
+    ? Object.fromEntries(Object.entries(baseline).filter(([dir]) => dir === selectedLane))
+    : baseline;
+  const { violations, improvements } = compareCoverage(selectedBaseline, current, TOLERANCE_PP);
 
   for (const improvement of improvements) {
     process.stdout.write(`IMPROVED: ${improvement}\n`);

@@ -1,17 +1,33 @@
 import { describe, expect, it, beforeEach, afterEach, mock } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ModelsDev } from "../../src/model";
 
 describe("ModelsDev", () => {
-  const originalEnv = { ...process.env };
+  let originalEnv: NodeJS.ProcessEnv;
+  let directory: string;
+  let originalFetch: typeof fetch;
+  const network = mock(() => Promise.reject(new Error("unexpected network request")));
 
   beforeEach(() => {
+    originalEnv = { ...process.env };
+    originalFetch = globalThis.fetch;
+    directory = mkdtempSync(join(tmpdir(), "models-test-"));
+    process.env.OPENOMNI_MODELS_PATH = join(directory, "models.json");
+    process.env.OPENOMNI_AUTH_FILE = join(directory, "auth.json");
+    process.env.OPENOMNI_DISABLE_MODELS_FETCH = "1";
+    network.mockClear();
+    globalThis.fetch = Object.assign(network, { preconnect: originalFetch.preconnect });
     ModelsDev.Data.reset();
   });
 
   afterEach(() => {
-    process.env = { ...originalEnv };
+    globalThis.fetch = originalFetch;
+    ModelsDev.Data.reset();
+    process.env = originalEnv;
+    rmSync(directory, { recursive: true, force: true });
+    expect(network).not.toHaveBeenCalled();
   });
 
   describe("public API", () => {
@@ -58,9 +74,10 @@ describe("ModelsDev", () => {
 
   describe("env flags", () => {
     it("should use OPENOMNI_MODELS_PATH for cache location", async () => {
-      const fakePath = join(tmpdir(), `openomni-test-${Date.now()}`, "models.json");
+      const fakePath = join(directory, "missing", "models.json");
       process.env.OPENOMNI_MODELS_PATH = fakePath;
 
+      delete process.env.OPENOMNI_DISABLE_MODELS_FETCH;
       const originalFetch = globalThis.fetch;
       globalThis.fetch = Object.assign(
         mock(() => Promise.reject(new Error("offline"))),
@@ -80,7 +97,7 @@ describe("ModelsDev", () => {
     });
 
     it("should skip fetch when OPENOMNI_DISABLE_MODELS_FETCH is set", async () => {
-      const fakePath = join(tmpdir(), `openomni-test-${Date.now()}`, "models.json");
+      const fakePath = join(directory, "missing", "models.json");
       process.env.OPENOMNI_MODELS_PATH = fakePath;
       process.env.OPENOMNI_DISABLE_MODELS_FETCH = "true";
 
@@ -96,6 +113,7 @@ describe("ModelsDev", () => {
       try {
         const data = await ModelsDev.get();
         expect(typeof data).toBe("object");
+        expect(fetchSpy).not.toHaveBeenCalled();
       } finally {
         globalThis.fetch = originalFetch;
         delete process.env.OPENOMNI_MODELS_PATH;
@@ -106,6 +124,7 @@ describe("ModelsDev", () => {
 
   describe("snapshot fallback", () => {
     it("should return data from snapshot when fetch and cache fail", async () => {
+      delete process.env.OPENOMNI_DISABLE_MODELS_FETCH;
       const originalFetch = globalThis.fetch;
       globalThis.fetch = Object.assign(
         mock(() => Promise.reject(new Error("offline"))),
@@ -114,7 +133,7 @@ describe("ModelsDev", () => {
         },
       );
 
-      const fakePath = join(tmpdir(), `openomni-test-${Date.now()}`, "models.json");
+      const fakePath = join(directory, "missing", "models.json");
       process.env.OPENOMNI_MODELS_PATH = fakePath;
       ModelsDev.Data.reset();
       try {
@@ -128,6 +147,7 @@ describe("ModelsDev", () => {
     });
 
     it("should return empty object as final fallback when snapshot unavailable", async () => {
+      delete process.env.OPENOMNI_DISABLE_MODELS_FETCH;
       const originalFetch = globalThis.fetch;
       globalThis.fetch = Object.assign(
         mock(() => Promise.reject(new Error("offline"))),
@@ -136,7 +156,7 @@ describe("ModelsDev", () => {
         },
       );
 
-      const fakePath = join(tmpdir(), `openomni-test-${Date.now()}`, "models.json");
+      const fakePath = join(directory, "missing", "models.json");
       process.env.OPENOMNI_MODELS_PATH = fakePath;
       process.env.OPENOMNI_DISABLE_MODELS_FETCH = "true";
       ModelsDev.Data.reset();

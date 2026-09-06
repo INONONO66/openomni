@@ -1,12 +1,19 @@
 name: Benchmark
 
-# The regression gate lives in the `publish` job, which only runs on
-# main / workflow_dispatch. On a PR the 15-minute benchmark ran but could
-# never fail the check (publish is skipped), so it was pure theater. Run it
-# only where it can actually gate: main pushes and manual dispatch.
+# Performance comparisons run after merge or on demand, not as PR admission.
 on:
   push:
     branches: [main]
+    paths:
+      - packages/**
+      - script/**
+      - package.json
+      - bun.lock
+      - bunfig.toml
+      - turbo.json
+      - tsconfig.base.json
+      - .github/workflows/benchmark.yml
+      - .github/actions/**
   workflow_dispatch:
     inputs:
       runs:
@@ -31,17 +38,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version-file: package.json
-
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        with:
-          path: ~/.bun/install/cache
-          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
-          restore-keys: bun-${{ runner.os }}-
-
-      - run: bun install --frozen-lockfile
+      - uses: ./.github/actions/setup
+      - name: Validate benchmark input
+        env:
+          BENCHMARK_RUNS: ${{ github.event.inputs.runs || '5' }}
+        run: bun run script/summarize-benchmark-runs.ts --validate-input
       - run: bunx turbo run build --filter=@openomni/protocol
 
       - name: Run repeated benchmarks
@@ -63,14 +64,6 @@ jobs:
             cp packages/agent/bench-results/agent.json "bench-results/runs/$run/agent.json"
           done
 
-      # RSS-delta leak guards: absolute-MB assertions after Bun.gc are too
-      # noisy for the blocking Test job (RSS includes JIT/allocator pages GC
-      # never returns), so they live here, off the PR-required path. The file
-      # is named *.bench.ts so `bun test` auto-discovery in the Test job skips
-      # it; it only runs when pointed at explicitly.
-      - name: Memory regression guards (informational)
-        run: bun test ./packages/ledger/test/bench/memory-regression.bench.ts
-
       - name: Summarize benchmark runs
         env:
           BENCHMARK_RUNS: ${{ github.event.inputs.runs || '5' }}
@@ -80,12 +73,23 @@ jobs:
         run: cat bench-results/summary.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload benchmark results
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: benchmark-results
           path: bench-results/
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 14
+
+  memory:
+    name: Memory regression guards
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: ./.github/actions/setup
+      - run: bunx turbo run build --filter=@openomni/protocol
+      - run: bun test ./packages/ledger/test/bench/memory-regression.bench.ts
 
   publish:
     name: Publish benchmark history
@@ -143,10 +147,13 @@ jobs:
           tool: customSmallerIsBetter
           output-file-path: bench-results/combined.json
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          auto-push: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') }}
+          auto-push: false
           gh-pages-branch: gh-pages
           benchmark-data-dir-path: dev/bench
           alert-threshold: "150%"
           comment-on-alert: true
           fail-on-alert: ${{ steps.ghp.outputs.exists == 'true' }}
           summary-always: true
+      - name: Publish accepted benchmark reference
+        if: success()
+        run: git push origin gh-pages:gh-pages

@@ -11,7 +11,7 @@ export function removeSqliteFiles(path: string): void {
     try {
       unlinkSync(`${path}${suffix}`);
     } catch (error) {
-      if (!(error instanceof Error)) throw error;
+      if (!(error instanceof Error) || !("code" in error) || error.code !== "ENOENT") throw error;
     }
   }
 }
