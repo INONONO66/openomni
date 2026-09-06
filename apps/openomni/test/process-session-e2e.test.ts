@@ -1,9 +1,14 @@
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { initialize, SessionHandleStore, Storage } from "@openomni/ledger";
+import { DelegationStore, initialize, SessionHandleStore, Storage } from "@openomni/ledger";
+import { Bus, closeSessions, sweepSessions, type SessionRuntime } from "@openomni/agent";
+import { Delegation } from "@openomni/protocol";
+import { createProcessDriver } from "../src/delegation/process-driver";
+import { createDelegationKernel, type DriverOutcome } from "../src/delegation/kernel";
+import { createWorkerSessionRunner } from "../src/composition/worker-session";
 import { ProcessWorkerResult } from "../src/delegation/process-entry";
 import { z } from "zod";
 
@@ -151,3 +156,186 @@ test("spawned production entry uses the session loop and permits a recursive inl
     rmSync(directory, { recursive: true, force: true });
   }
 }, 15000);
+
+function bounded<T>(promise: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  return Promise.race([
+    promise,
+    new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => reject(new Error("process recovery event deadline")), 10000);
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
+
+for (const mode of ["cancel", "cancel-commit-window", "crash"] as const) {
+  test(`real process ${mode} followed by boot lease-expiry recovery`, async () => {
+    const directory = mkdtempSync(join(tmpdir(), "937-process-recovery-"));
+    const dbPath = join(directory, "live.sqlite");
+    const cancelPath = join(directory, "cancel.sqlite");
+    const delegationId = `worker-${mode}`;
+    const entered = Promise.withResolvers<void>();
+    const releaseProvider = Promise.withResolvers<void>();
+    const joined = Promise.withResolvers<DriverOutcome>();
+    let requests = 0;
+    let acknowledgments = 0;
+    const provider = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      async fetch(request) {
+        await request.text();
+        requests += 1;
+        if (requests === 1) {
+          entered.resolve();
+          await releaseProvider.promise;
+        }
+        return response(false);
+      },
+    });
+    const model = { provider: "anthropic", id: "claude-opus-4-5" };
+    const transport = { baseUrl: `http://127.0.0.1:${provider.port}/v1` };
+    const driver = createProcessDriver({
+      command: [
+        process.execPath,
+        new URL("../src/delegation/process-entry.ts", import.meta.url).pathname,
+      ],
+      worker: { model, apiKey: "recovery-key", transport },
+      dbPath,
+    });
+    initialize({ dbPath });
+    SessionHandleStore.materialize({
+      id: "process-parent",
+      role: "resident",
+      parentId: null,
+      tools: [],
+      system: { preset: "", blocks: [] },
+      policyGeneration: 0,
+      actionId: "parent-config",
+      at: 1,
+    });
+    const kernel = createDelegationKernel({
+      drivers: {
+        process: {
+          async run(admitted, handle, signal, report) {
+            const result = await driver.run(admitted, handle, signal, {
+              delivered() {
+                acknowledgments += 1;
+                report?.delivered();
+              },
+            });
+            joined.resolve(result);
+            return result;
+          },
+        },
+      },
+      now: Date.now,
+      wake: () => undefined,
+      newDelegationId: () => delegationId,
+      bootSweep: false,
+      events: Bus,
+    });
+    let runtime: SessionRuntime | undefined;
+    let dispatched = false;
+    let copied = false;
+    const unsubscribe = Bus.subscribe(Delegation.Events.Settled, (event) => {
+      if (
+        mode !== "cancel-commit-window" ||
+        event.delegationId !== delegationId ||
+        event.status !== "cancelled"
+      )
+        return;
+      // Durable cancellation already won, but the process driver's abort listener
+      // has not run. Recovery must also honor this crash window.
+      const db = new Database(dbPath, { readonly: true });
+      try {
+        writeFileSync(cancelPath, db.serialize());
+      } finally {
+        db.close();
+      }
+      copied = true;
+    });
+    try {
+      const delegated = await kernel.delegate(
+        {
+          address: { kind: "core", scope: "independent" },
+          operation: "ask",
+          payload: { text: "do work" },
+          deadline: Date.now() + 30000,
+        },
+        { role: "resident", depth: 0, sessionId: "process-parent" },
+      );
+      if (!("handle" in delegated)) throw new Error(delegated.refused);
+      dispatched = true;
+      await bounded(entered.promise);
+      expect(acknowledgments).toBe(1);
+      const row = SessionHandleStore.row(delegationId);
+      const open = SessionHandleStore.openTurns(SessionHandleStore.tree(delegationId))[0];
+      if (open === undefined || row.leaseExpiresAt === null || row.leaseOwner === null)
+        throw new Error("missing live worker lease/turn");
+      if (mode === "crash") {
+        process.kill(Number(row.leaseOwner.split(":")[0]), "SIGKILL");
+      } else {
+        expect((await kernel.cancelDelegation(delegationId)).status).toBe("cancelled");
+      }
+      const outcome = await bounded(joined.promise);
+      expect(outcome.status).toBe(mode === "crash" ? "failed" : "cancelled");
+      kernel.stop();
+      releaseProvider.resolve();
+      Storage.reset();
+      if (mode === "cancel-commit-window") expect(copied).toBe(true);
+      initialize({ dbPath: mode === "cancel-commit-window" ? cancelPath : dbPath });
+      const prefix = SessionHandleStore.tree(delegationId);
+      runtime = {
+        observations: Bus,
+        clock: () => (row.leaseExpiresAt === null ? 0 : row.leaseExpiresAt + 1),
+      };
+      const runner = createWorkerSessionRunner({
+        model,
+        apiKey: "recovery-key",
+        transport,
+        kernel: () => kernel,
+        sessionRuntime: runtime,
+      });
+      await bounded(sweepSessions((sessionRow) => runner.runnerFor(sessionRow), runtime));
+      const tree = SessionHandleStore.tree(delegationId);
+      const terminal = tree.flatMap((action) => {
+        const value = SessionHandleStore.turnTerminal(action);
+        return value === undefined ? [] : [value];
+      });
+      console.log(
+        "937 R2",
+        JSON.stringify({
+          mode,
+          outcome,
+          requests,
+          terminal,
+          delegation: DelegationStore.get(delegationId)?.settled?.status,
+        }),
+      );
+      expect(requests).toBe(mode === "crash" ? 2 : 1);
+      expect(terminal).toMatchObject([
+        {
+          turnId: open.turnId,
+          kind: mode === "crash" ? "result" : "interrupted",
+          resumeCount: mode === "crash" ? 1 : 0,
+        },
+      ]);
+      expect(tree.find((action) => SessionHandleStore.turnTerminal(action) !== undefined)?.id).toBe(
+        open.resultId,
+      );
+      expect(tree.slice(0, prefix.length)).toEqual(prefix);
+      expect(SessionHandleStore.openTurns(tree)).toHaveLength(0);
+      expect(SessionHandleStore.row(delegationId).leaseOwner).toBeNull();
+      if (mode !== "crash")
+        expect(DelegationStore.get(delegationId)?.settled?.status).toBe("cancelled");
+    } finally {
+      unsubscribe();
+      kernel.stop();
+      releaseProvider.resolve();
+      if (dispatched) await bounded(joined.promise);
+      if (runtime !== undefined) await closeSessions(runtime);
+      await provider.stop(true);
+      Storage.reset();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  }, 15000);
+}

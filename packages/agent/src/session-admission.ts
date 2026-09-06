@@ -246,14 +246,17 @@ export function createSessionAdmission(
 
   async function resumeTurn(open: SessionHandleStore.OpenTurn): Promise<SessionRunnerResult> {
     await awaitRetainedRunner();
+    state.fence = acquire(SessionHandleStore.row(sessionId).leaseFence);
+    if (SessionHandleStore.pendingInbox(sessionId).some((item) => item.kind === "interrupt")) {
+      const interrupted = { kind: "interrupted" as const };
+      await seal(open, interrupted, true);
+      return interrupted;
+    }
     if (open.resumeCount >= SessionHandleStore.RESUME_BUDGET) {
-      state.fence = acquire(SessionHandleStore.row(sessionId).leaseFence);
       const exhausted = { kind: "error" as const, text: "session resume budget exhausted" };
       await seal(open, exhausted, true);
       return exhausted;
     }
-    const current = SessionHandleStore.row(sessionId);
-    state.fence = acquire(current.leaseFence);
     const generation = generationForOpen(open);
     const resumeCount = open.resumeCount + 1;
     const resumeId = entropy();

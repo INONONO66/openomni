@@ -12,6 +12,7 @@ import {
   type SessionRunnerResult,
 } from "@openomni/agent";
 import type { LedgerSession, Model } from "@openomni/protocol";
+import { DelegationStore, SessionHandleStore } from "@openomni/ledger";
 import { Bus, newTraceId } from "@openomni/agent";
 import { chatProviderConfig } from "./chat-provider";
 import { SessionBindingCache } from "./session-bindings";
@@ -78,7 +79,7 @@ export function createWorkerSessionRunner(
       { delegation: options.kernel() },
       { role: "worker", depth, sessionId },
     );
-    const runner = createSessionChatRunner({
+    const chatRunner = createSessionChatRunner({
       prepare(input: SessionRunnerInput) {
         const dispatcher = createTurnDispatcher(definitions, input, runtime);
         const toolNames = new Set(input.tools.map((tool) => tool.name));
@@ -119,6 +120,10 @@ export function createWorkerSessionRunner(
         };
       },
     });
+    const runner: SessionRunner = (input) =>
+      DelegationStore.get(sessionId)?.settled?.status === "cancelled"
+        ? Promise.resolve({ kind: "interrupted" })
+        : chatRunner(input);
     const handle = session(
       {
         id: sessionId,
@@ -166,7 +171,29 @@ export function createWorkerSessionRunner(
   };
 
   return Object.assign(run, {
-    runnerFor: (row: LedgerSession.Row) => createBinding(row.id, row.parentId, 1).runner,
+    runnerFor: (row: LedgerSession.Row) => {
+      const binding = createBinding(row.id, row.parentId, 1);
+      const settled = DelegationStore.get(row.id)?.settled;
+      // Cancellation's CAS precedes process termination. Reconstruct its inbox
+      // interrupt even if the host died between that CAS and killing the child.
+      // A crash has no cancelled terminal and retains normal fenced recovery.
+      if (
+        settled?.status === "cancelled" &&
+        SessionHandleStore.openTurns(SessionHandleStore.tree(row.id)).length > 0 &&
+        !SessionHandleStore.pendingInbox(row.id).some((item) => item.kind === "interrupt")
+      ) {
+        SessionHandleStore.commitInbox({
+          id: crypto.randomUUID(),
+          sessionId: row.id,
+          kind: "interrupt",
+          content: "",
+          createdAt: settled.at,
+          origin: { encodingVersion: 1, value: { delegationId: row.id } },
+          parentActionId: SessionHandleStore.tree(row.id).at(-1)?.id ?? null,
+        });
+      }
+      return binding.runner;
+    },
   });
 }
 
