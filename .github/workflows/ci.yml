@@ -43,11 +43,7 @@ jobs:
           else
             bun run script/ci-plan.ts --full > ci-plan.json
           fi
-          jq -c 'select(.verify | type == "boolean")' ci-plan.json
           echo "plan=$(jq -c . ci-plan.json)" >> "$GITHUB_OUTPUT"
-          echo "verify=$(jq -r .verify ci-plan.json)" >> "$GITHUB_OUTPUT"
-          echo "matrix=$(jq -c .matrix ci-plan.json)" >> "$GITHUB_OUTPUT"
-          echo "dependencyReview=$(jq -r .dependencyReview ci-plan.json)" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
