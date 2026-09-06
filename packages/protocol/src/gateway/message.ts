@@ -2,6 +2,7 @@ import { z } from "zod";
 import { Actor } from "../actor/index.js";
 import { LedgerSession, SessionTurn } from "../ledger/l0.js";
 import { EpochMs } from "../time.js";
+import { Wait } from "../wait/index.js";
 
 const Id = z.string().min(1);
 const DurationMs = z.number().nonnegative();
@@ -54,8 +55,8 @@ const IngressFacts = z
     channelId: Id,
     addressees: z.array(z.object({ externalId: Id }).strict()),
     dm: z.boolean(),
-    reply: z
-      .object({ replyToMessageId: Id.optional(), threadId: Id.optional(), chain: z.array(Id) })
+    reply: Wait.Correlation.omit({ endpointId: true, channelId: true })
+      .extend({ chain: z.array(Id) })
       .strict()
       .optional(),
     payload: z.json(),

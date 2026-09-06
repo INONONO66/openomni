@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import type { z } from "zod";
-import { Actor, Gateway, LedgerAction } from "../src/index.js";
+import { Actor, Gateway, LedgerAction, Wait } from "../src/index.js";
 
-function issues(result: z.ZodSafeParseResult<unknown>) {
+function issues<T>(result: z.ZodSafeParseResult<T>) {
   expect(result.success).toBe(false);
   if (result.success) throw new Error("expected invalid input");
   return result.error.issues.map((issue) => ({
@@ -157,6 +157,70 @@ describe("gateway ingest", () => {
     expect(issues(Gateway.IngressFacts.safeParse(missingEvent))).toEqual([
       { code: "invalid_type", path: ["eventId"] },
     ]);
+  });
+
+  test("normalized reply facts preserve shared correlation fields and precedence", () => {
+    const pins = { endpointId: "endpoint-1", channelId: ingress.channelId };
+    const cases: { correlation: Wait.Correlation; levels: Wait.CorrelationQuery[] }[] = [
+      { correlation: { tokenHash: "token-1" }, levels: [{ tokenHash: "token-1" }, pins] },
+      {
+        correlation: { externalConversationId: "conversation-1" },
+        levels: [{ externalConversationId: "conversation-1" }],
+      },
+      {
+        correlation: { tokenHash: "token-1", externalConversationId: "conversation-1" },
+        levels: [{ tokenHash: "token-1" }, { externalConversationId: "conversation-1" }],
+      },
+      {
+        correlation: {
+          replyToMessageId: "message-0",
+          threadId: "thread-1",
+          tokenHash: "token-1",
+          externalConversationId: "conversation-1",
+        },
+        levels: [
+          { replyToMessageId: "message-0" },
+          { threadId: "thread-1" },
+          { tokenHash: "token-1" },
+          { externalConversationId: "conversation-1" },
+        ],
+      },
+    ];
+    for (const { correlation, levels } of cases) {
+      const shared: Wait.Correlation = Wait.Correlation.parse(correlation);
+      const input = { ...ingress, reply: { ...shared, chain: [] } };
+      const parsed: Gateway.IngressFacts = Gateway.IngressFacts.parse(input);
+      expect(shared).toEqual(correlation);
+      expect(parsed).toEqual(input);
+      if (parsed.reply === undefined) throw new Error("expected parsed reply");
+      const { chain, ...normalized } = parsed.reply;
+      expect(chain).toEqual([]);
+      const scoped: Wait.Correlation = Wait.Correlation.parse({ ...normalized, ...pins });
+      expect(Wait.waitTierLevels(scoped)).toEqual(levels);
+    }
+  });
+
+  test("reply facts reject resolved identity and authority but retain correlation validation", () => {
+    for (const key of ["endpointId", "channelId", "senderTier", "verdict"]) {
+      expect(
+        issues(
+          Gateway.IngressFacts.safeParse({
+            ...ingress,
+            reply: {
+              tokenHash: "token-1",
+              externalConversationId: "conversation-1",
+              chain: [],
+              [key]: "forged",
+            },
+          }),
+        ),
+      ).toEqual([{ code: "unrecognized_keys", path: ["reply"], keys: [key] }]);
+    }
+    for (const key of ["tokenHash", "externalConversationId"]) {
+      expect(
+        issues(Gateway.IngressFacts.safeParse({ ...ingress, reply: { chain: [], [key]: "" } })),
+      ).toEqual([{ code: "too_small", path: ["reply", key] }]);
+    }
   });
 
   test("only actor executed delivery carries the three exhaustive receipt values", () => {
