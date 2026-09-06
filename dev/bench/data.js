@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788711519592,
+  "lastUpdate": 1788717781716,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -66025,6 +66025,100 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 907490,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ed02adc6e534fbd83bba1e3b9f8f1d7fe5dae1ee",
+          "message": "ci: selective workspace verification and reliable test gates (#983)\n\n* test: isolate catalog, packaging and child process fixtures\n\nUltraworked with [omo](https://github.com/code-yeongyu/oh-my-openagent)\n\nCo-authored-by: sisyphus-dev-ai <sisyphus-dev-ai@users.noreply.github.com>\n\n* fix(ci): reject incomplete coverage and blind gate discovery\n\nUltraworked with [omo](https://github.com/code-yeongyu/oh-my-openagent)\n\nCo-authored-by: sisyphus-dev-ai <sisyphus-dev-ai@users.noreply.github.com>\n\n* ci: select affected workspaces and share verified builds\n\nUltraworked with [omo](https://github.com/code-yeongyu/oh-my-openagent)\n\nCo-authored-by: sisyphus-dev-ai <sisyphus-dev-ai@users.noreply.github.com>\n\n* test(ipc): stabilize oversized wire fixture under load\n\nUltraworked with [omo](https://github.com/code-yeongyu/oh-my-openagent)\n\nCo-authored-by: sisyphus-dev-ai <sisyphus-dev-ai@users.noreply.github.com>\n\n* ci: keep selection outputs owned by the planner\n\nUltraworked with [omo](https://github.com/code-yeongyu/oh-my-openagent)\n\nCo-authored-by: sisyphus-dev-ai <sisyphus-dev-ai@users.noreply.github.com>\n\n---------\n\nCo-authored-by: sisyphus-dev-ai <sisyphus-dev-ai@users.noreply.github.com>",
+          "timestamp": "2026-09-07T03:01:44+09:00",
+          "tree_id": "bf9f2ebe09348bd281ed897ed51146766a57347b",
+          "url": "https://github.com/INONONO66/openomni/commit/ed02adc6e534fbd83bba1e3b9f8f1d7fe5dae1ee"
+        },
+        "date": 1788717780930,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1721,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 12873,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 6736,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1771165,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 449269,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 8101939,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 137,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1511,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 722,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 511085,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3490,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 18476,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 178926,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 890984,
             "unit": "ns/op"
           }
         ]
