@@ -1,6 +1,62 @@
 import { expect, it } from "bun:test";
 import { runWaveBodies } from "../../../src/core/execution/tool-wave";
 import { recordingExecutor } from "../../helpers/compiled-policy";
+import { createDispatcher, defineTool } from "../../../src/tool-dispatcher";
+import { z } from "zod";
+
+for (const door of ["cell", "wave"] as const) {
+  for (const rejects of [false, true]) {
+    it(`inherits retention into a timed ${door} definition that ${rejects ? "rejects" : "fulfills"}`, async () => {
+      // Given: a real unbound executor inherits only the surrounding wave's owner.
+      const gate = Promise.withResolvers<void>();
+      const timedOut = Promise.withResolvers<void>();
+      const effects = new Set<Promise<void>>();
+      const executor = recordingExecutor().executor;
+      const dispatcher = createDispatcher([defineTool({
+        name: "timed", description: "timed effect", category: "query",
+        visibility: { model: ["resident"], cell: ["resident"] },
+        input: z.object({}), output: z.string(), render: (_input, output) => output,
+        async execute(_input, context) {
+          context.signal.addEventListener("abort", () => timedOut.resolve(), { once: true });
+          await gate.promise;
+          if (rejects) throw new Error("raw effect rejected");
+          return "effect";
+        },
+      })], { executor, timeoutMs: 0 });
+      const wave = runWaveBodies([{
+        async run() {
+          const call = { id: "timed-call", tool: "timed", input: {} };
+          const context = { sessionId: "session-1", turnId: "turn-1" };
+          const results = door === "cell"
+            ? [await dispatcher.executeCell(call, context)]
+            : await dispatcher.executeWave([call], context);
+          expect(results.map((result) => result.isError)).toEqual([true]);
+          return null;
+        },
+      }], {
+        signal: new AbortController().signal,
+        retain(effect) {
+          effects.add(effect);
+          void effect.then(() => effects.delete(effect));
+        },
+      });
+      try {
+        // When: actual timeout and both caller wrappers settle before the definition.
+        await timedOut.promise;
+        await wave;
+        // Then: exactly the raw definition settlement still belongs to the owner.
+        expect(effects.size).toBe(1);
+        gate.resolve();
+        await Promise.all(effects);
+        expect(effects.size).toBe(0);
+      } finally {
+        gate.resolve();
+        await wave;
+        await Promise.all(effects);
+      }
+    }, 5000);
+  }
+}
 
 it("inherits raw-body retention through nested executors without a bound turn owner", async () => {
   // Given: ownership supplied only at the enclosing wave, not on either executor.

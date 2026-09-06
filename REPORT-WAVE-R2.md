@@ -2,7 +2,7 @@
 
 ## Outcome and scope
 
-R1 is fixed on `kernel/937-integration`, additively over `5c96d52221d897c5990921f786744cbd317df139`. Ready for ultrabrain incremental review, not full #937 approval. Prior wave/compaction/G034 commits are unchanged ancestors. Task: `st_01a07652`.
+This increment fixed ordinary transitive retention on `kernel/937-integration`, additively over `5c96d52221d897c5990921f786744cbd317df139`. `REVIEW-WAVE-R2.md` subsequently demonstrated missing retention below the configured tool timeout race; the actual-definition correction and proof are in `REPORT-WAVE-R3.md`. This historical receipt is not full R1 or #937 approval. Prior wave/compaction/G034 commits are unchanged ancestors. Task: `st_01a07652`.
 
 The existing per-turn executor now binds the session's signal and retention capability. `runBatch` combines caller, enclosing body and turn cancellation, and passes the bound owner (or inherited owner for standalone nested executors) to every raw body. `run` uses that same path. The ambient scope carries ownership as well as its signal. The existing session effect set drains until empty; no second manager, lock, policy engine, action store or migration was added. Existing fenced ledger admission and heartbeat/release ownership are unchanged.
 

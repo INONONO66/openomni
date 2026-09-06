@@ -699,6 +699,137 @@ for (const door of ["current-run", "current-batch", "captured-run", "captured-ba
   }, 15000);
 }
 
+for (const door of ["current-cell", "current-wave", "captured-cell", "captured-wave"] as const) {
+  for (const rejects of [false, true]) {
+    test(`timed ${door} retains the actual definition until ${rejects ? "rejection" : "fulfillment"}`, async () => {
+      // Given: the review timeout countercase with a real file effect and actual app stack.
+      const captured = Promise.withResolvers<ReturnType<typeof currentExecutor>>();
+      const outerGate = Promise.withResolvers<void>();
+      const rawGate = Promise.withResolvers<void>();
+      const timedOut = Promise.withResolvers<void>();
+      const rawDone = Promise.withResolvers<void>();
+      const wrapper = Promise.withResolvers<readonly { readonly isError?: boolean }[]>();
+      const directory = suite.tempDir("openomni-937-timed-effect-");
+      const marker = join(directory, "effect.bin");
+      const current = door.startsWith("current-");
+      let rawStarted = false;
+      let sessionId = "";
+      const inner = waveTool("inner", async (signal) => {
+        signal.addEventListener("abort", () => timedOut.resolve(), { once: true });
+        rawStarted = true;
+        await rawGate.promise;
+        writeFileSync(marker, new Uint8Array([9, 3, 7]));
+        rawDone.resolve();
+        if (rejects) throw new Error("raw effect rejected");
+        return "effect";
+      });
+      const dispatch = (executor?: ReturnType<typeof currentExecutor>) => {
+        // The current door resolves its executor from the enclosing tool scope.
+        const dispatcher = createDispatcher([inner], {
+          executor: executor ?? currentExecutor(), timeoutMs: 0,
+        });
+        const call = { id: "timed-inner", tool: "inner", input: { slot: "inner" } };
+        const context = { sessionId, turnId: "timed-turn", signal: new AbortController().signal };
+        return door.endsWith("cell")
+          ? dispatcher.executeCell(call, context).then((result) => [result])
+          : dispatcher.executeWave([call], context);
+      };
+      const { app, socket, received, dbPath, cleanup } = await waveApp([
+        waveTool("A", async () => "A", true),
+        waveTool("outer", async () => {
+          captured.resolve(currentExecutor());
+          await outerGate.promise;
+          if (current) wrapper.resolve(await dispatch());
+          return "outer";
+        }),
+      ], ["A", "outer"]);
+      const reply = nextMessage(socket, 5000);
+      let handle: SessionHandle | undefined;
+      let competitorFence: number | undefined;
+      try {
+        socket.send(JSON.stringify({ type: "message", text: "run timed nested effect" }));
+        const executor = await bounded(captured.promise);
+        const row = activeRow();
+        sessionId = row.id;
+        handle = app.sessions.get(sessionId);
+        if (handle === undefined) throw new Error("missing SDK handle");
+        const interrupted = Promise.withResolvers<void>();
+        suite.defer(Bus.subscribe(LlmCall.Events.Completed, () => {
+          if (received.length !== 2 || handle === undefined) return;
+          void handle.interrupt().then(interrupted.resolve, interrupted.reject);
+        }));
+        if (current) outerGate.resolve();
+        else {
+          expect(() => currentExecutor()).toThrow("executor context is required");
+          void dispatch(executor).then(wrapper.resolve, wrapper.reject);
+        }
+        // When: the real zero-duration timeout releases the wrapper, not the definition.
+        await bounded(timedOut.promise);
+        expect((await bounded(wrapper.promise)).map((result) => result.isError)).toEqual([true]);
+        outerGate.resolve();
+        await bounded(interrupted.promise);
+        expect(existsSync(marker)).toBe(false);
+        expect(toolResults(sessionId).map((result) => [result.callId, result.terminal])).toEqual([
+          ["timed-inner", "executed"], ["call-A", "executed"], ["call-outer", "executed"],
+        ]);
+        const held = SessionHandleStore.row(sessionId);
+        const contender = SessionHandleStore.acquireLease({
+          sessionId, owner: "timed-contender", expectedFence: held.leaseFence,
+          now: Date.now(), expiresAt: Date.now() + SessionHandleStore.LEASE_TTL_MS,
+        });
+        if (contender.ok) competitorFence = contender.fence;
+        // Then: neither timeout nor SDK interruption transfers the live effect's lease.
+        expect(contender).toMatchObject({ ok: false });
+        expect(held.leaseOwner).toBe(row.leaseOwner);
+        const beforeActions = SessionHandleStore.tree(sessionId).length;
+        const db = new Database(dbPath, { readonly: true });
+        try {
+          expect(db.query<{ count: number }, []>("SELECT count(*) AS count FROM action").get()?.count)
+            .toBe(beforeActions);
+        } finally { db.close(); }
+        let staleStarts = 0;
+        const stale = () => executor.run({ kind: "tool", op: "stale", intent: {}, effect: {} }, async () => {
+          staleStarts += 1;
+          return null;
+        });
+        await expect(stale()).rejects.toMatchObject({ name: "SessionCommitError" });
+        rawGate.resolve();
+        await bounded(rawDone.promise);
+        await reply;
+        expect(readFileSync(marker)).toEqual(Buffer.from([9, 3, 7]));
+        const released = SessionHandleStore.row(sessionId);
+        expect(released.leaseOwner).toBeNull();
+        const next = SessionHandleStore.acquireLease({
+          sessionId, owner: "timed-contender", expectedFence: released.leaseFence,
+          now: Date.now(), expiresAt: Date.now() + SessionHandleStore.LEASE_TTL_MS,
+        });
+        if (next.ok) competitorFence = next.fence;
+        expect(next).toMatchObject({ ok: true, fence: row.leaseFence + 1 });
+        await expect(stale()).rejects.toMatchObject({ name: "SessionCommitError" });
+        expect(staleStarts).toBe(0);
+        expect(SessionHandleStore.tree(sessionId)).toHaveLength(beforeActions);
+        expect(received).toHaveLength(2);
+      } finally {
+        outerGate.resolve();
+        rawGate.resolve();
+        if (rawStarted) await bounded(rawDone.promise);
+        await reply;
+        await bounded(handle?.close() ?? Promise.resolve());
+        if (competitorFence !== undefined) {
+          const row = SessionHandleStore.row(sessionId);
+          expect(SessionHandleStore.commit({
+            sessionId, owner: "timed-contender", fence: competitorFence, now: Date.now(),
+            expectedRevision: row.revision, actions: [], consumeInboxIds: [],
+            state: row.state, releaseLease: true,
+          }).ok).toBe(true);
+        }
+        await cleanup();
+        expect(existsSync(directory)).toBe(false);
+      }
+    }, 15000);
+  }
+}
+
 test("approval-time prompts retain durable identities and enter the next model separately in order", async () => {
   // Given: a real model invocation suspended on its original B approval.
   const { app, socket, received } = await waveApp([waveTool("B", async () => "B")], ["B"]);

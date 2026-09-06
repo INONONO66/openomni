@@ -5,6 +5,7 @@ import {
   type ToolExecutionContext,
 } from "@openomni/protocol";
 import { z } from "zod";
+import { waveBodyScope } from "./core/execution/tool-wave";
 
 export const ToolBodyOutcome = z.discriminatedUnion("status", [
   z.object({ status: z.literal("timed_out") }).strict(),
@@ -73,6 +74,9 @@ async function executeDefinition<In extends z.ZodType, Out extends z.ZodType>(
     (value) => ({ timedOut: false, value }) as const,
     (error) => ({ timedOut: false, error: toError(error) }) as const,
   );
+  // Retain actual definition settlement, not the caller-facing timeout race.
+  // Both fulfillment and rejection above settle this ownership promise normally.
+  waveBodyScope.getStore()?.retain?.(execution.then(() => undefined));
   const timeout = Promise.withResolvers<{ readonly timedOut: true }>();
   const timer = setTimeout(() => {
     controller.abort(new Error(`tool timed out after ${timeoutMs}ms`));
