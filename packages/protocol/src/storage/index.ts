@@ -33,6 +33,10 @@ export namespace Storage {
   export interface AlarmSubAdapter {
     arm(row: Alarm.Arm): Alarm.Row | undefined;
     cancel(id: string, updatedAt: number): Alarm.Row | undefined;
+    get(id: string): Alarm.Row | undefined;
+    rearm(id: string, at: number): Alarm.Row | undefined;
+    acquire(id: string, expectedFence: number): Alarm.Row | undefined;
+    fire(input: Alarm.Fire): Alarm.Fired | undefined;
     due(at: number): Alarm.Row[];
   }
 

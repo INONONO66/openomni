@@ -506,6 +506,34 @@ export namespace Inbox {
 }
 
 export namespace Alarm {
+  const Lifetime = {
+    persistent: z.literal(true).optional(),
+    timeout_ms: z.number().int().positive().optional(),
+  };
+  export const Watch = z
+    .union([
+      z
+        .object({
+          command: z.string().min(1),
+          filter: z.string().optional(),
+          description: z.string().min(1),
+          ...Lifetime,
+        })
+        .strict(),
+      z
+        .object({
+          path: z.string().min(1),
+          event: z.enum(["create", "modify"]),
+          description: z.string().min(1),
+          ...Lifetime,
+        })
+        .strict(),
+    ])
+    .refine((spec) => (spec.persistent === true) !== (spec.timeout_ms !== undefined), {
+      message: "exactly one of persistent and timeout_ms is required",
+    });
+  export type Watch = z.infer<typeof Watch>;
+
   export const Kind = z.enum(["at", "watch"]);
   export type Kind = z.infer<typeof Kind>;
 
@@ -520,14 +548,48 @@ export namespace Alarm {
       fireAt: EpochMs,
       spec: EncodedPayload.optional(),
       status: Status,
+      epoch: z.number().int().positive().default(1),
+      fence: z.number().int().nonnegative().default(0),
+      lastBatch: z.string().nullable().default(null),
+      notifications: z.number().int().nonnegative().default(0),
       createdAt: EpochMs,
       updatedAt: EpochMs,
     })
     .strict();
   export type Row = z.infer<typeof Row>;
 
-  export const Arm = Row.omit({ status: true, createdAt: true, updatedAt: true });
+  export const Arm = Row.omit({
+    status: true,
+    createdAt: true,
+    updatedAt: true,
+    epoch: true,
+    fence: true,
+    lastBatch: true,
+    notifications: true,
+  });
   export type Arm = z.infer<typeof Arm>;
+
+  export const Fire = z
+    .object({
+      id: Identifier,
+      epoch: z.number().int().positive(),
+      fence: z.number().int().nonnegative(),
+      actionId: Identifier,
+      inboxId: Identifier,
+      at: EpochMs,
+      content: z.string(),
+      batchHash: z.string().optional(),
+      limit: z.number().int().nonnegative(),
+      terminal: z.boolean(),
+    })
+    .strict();
+  export type Fire = z.infer<typeof Fire>;
+
+  export interface Fired {
+    readonly row: Row;
+    readonly inbox: Inbox.Row;
+    readonly receipts: readonly LedgerAction.Receipt[];
+  }
 }
 
 export namespace L0Observation {

@@ -43,6 +43,7 @@ const ORDERED_MIGRATIONS: Migration.Definition[] = [
   { name: "0032_drop_dormant_tables/migration.sql" },
   { name: "0033_fenced_session_handles/migration.sql" },
   { name: U967_MIGRATION },
+  { name: "0035_watch_alarms/migration.sql" },
 ];
 
 const CLEAR_ORDER = [

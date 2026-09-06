@@ -26,10 +26,14 @@ export function preflight967(db: Database, migrations: readonly { readonly name:
   if (schema.length === 0) return "fresh";
   if (!schema.some((row) => row.name === "_migrations")) throw new U967Error("unsupported_upgrade");
   const history = db.query<{ name: string }, []>("SELECT name FROM _migrations ORDER BY rowid").all();
-  const applied = history.at(-1)?.name === U967_MIGRATION;
-  const expected = applied ? migrations : migrations.slice(0, -1);
+  const last = history.at(-1)?.name;
+  const watches = last === "0035_watch_alarms/migration.sql";
+  const applied = watches || last === U967_MIGRATION;
+  const boundary = migrations.findIndex((migration) => migration.name === U967_MIGRATION);
+  const expected = migrations.slice(0, watches ? boundary + 2 : applied ? boundary + 1 : boundary);
+  const fingerprint = watches ? "sha256:3e3f4978b3ab09d0dc06868119799ef6f1934e990f5da4ed33faf61cd54f33dc" : applied ? SCHEMA_0034 : SCHEMA_0033;
   if (canonicalDigest(history) !== canonicalDigest(expected)
-    || canonicalDigest(schema) !== (applied ? SCHEMA_0034 : SCHEMA_0033)) {
+    || canonicalDigest(schema) !== fingerprint) {
     throw new U967Error("unsupported_upgrade");
   }
   return applied ? "applied" : "pending";
