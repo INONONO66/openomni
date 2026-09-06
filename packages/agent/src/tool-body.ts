@@ -70,13 +70,16 @@ async function executeDefinition<In extends z.ZodType, Out extends z.ZodType>(
   const forwardAbort = () => controller.abort(context.signal.reason);
   context.signal.addEventListener("abort", forwardAbort, { once: true });
   const scopedContext = { ...context, signal: controller.signal };
-  const execution = Promise.resolve(definition.execute(input, scopedContext)).then(
+  const rawExecution = Promise.resolve(definition.execute(input, scopedContext));
+  const execution = rawExecution.then(
     (value) => ({ timedOut: false, value }) as const,
     (error) => ({ timedOut: false, error: toError(error) }) as const,
   );
-  // Retain actual definition settlement, not the caller-facing timeout race.
-  // Both fulfillment and rejection above settle this ownership promise normally.
-  waveBodyScope.getStore()?.retain?.(execution.then(() => undefined));
+  // Ownership follows raw settlement, independent of fallible result conversion.
+  waveBodyScope.getStore()?.retain?.(rawExecution.then(
+    () => undefined,
+    () => undefined,
+  ));
   const timeout = Promise.withResolvers<{ readonly timedOut: true }>();
   const timer = setTimeout(() => {
     controller.abort(new Error(`tool timed out after ${timeoutMs}ms`));
