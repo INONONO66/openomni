@@ -102,11 +102,12 @@ function serveUpgrade() {
       header = request.headers.get("sec-websocket-protocol");
       upgraded?.();
       // The token is never echoed back as the negotiated protocol — the
-      // gateway answers `auth` — so the reply narrows to the marker, and
-      // answers nothing at all when nothing was offered: a server naming a
-      // protocol the client did not offer is a failed handshake.
-      const options = header === null ? {} : { headers: { "sec-websocket-protocol": "auth" } };
-      return self.upgrade(request, options)
+      // gateway answers `auth`. Narrow the OFFER on the request (as
+      // packages/channels/src/websocket.ts does) instead of passing a response
+      // header: Bun 1.3.6 writes an explicit response protocol twice, which the
+      // browser client rejects as a failed handshake.
+      if (header !== null) request.headers.set("sec-websocket-protocol", "auth");
+      return self.upgrade(request)
         ? undefined
         : new Response("expected websocket", { status: 400 });
     },
