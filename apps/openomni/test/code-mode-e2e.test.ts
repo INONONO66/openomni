@@ -207,9 +207,9 @@ test("a cell batches delegation into one turn", async () => {
 
   const answer = (JSON.parse(String((await reply).data)) as { text: string }).text;
 
-  // The machine was attached, so the machine-placed tool was offered.
+  // The catalog is stable; the daemon enforces machine availability at execution.
   expect(answer).toContain(
-    "offered=[approval,await_delegation,cancel_delegation,delegate,provision,run_code]",
+    "offered=[approval,await_delegation,bash,cancel_delegation,delegate,edit,list,provision,read,run_code,search,write]",
   );
   // Three workers ran and their answers came back inside the cell. The value
   // is the cell's final expression as Python rendered it, quotes included.
@@ -234,7 +234,7 @@ test("a cell batches delegation into one turn", async () => {
   );
 }, 60_000);
 
-test("the machine tool is not offered while nothing is attached", async () => {
+test("the catalog remains available while machine execution refuses without attachment", async () => {
   let offered: string[] = [];
 
   const app = await suite.boot({
@@ -247,8 +247,7 @@ test("the machine tool is not offered while nothing is attached", async () => {
       resolveModel: fakeProviderModel,
       run: async (input: RunInput, sink: Sink) => {
         offered = (input.tools ?? []).map((tool) => tool.name);
-        // Naming it anyway must be refused, not served: what the fold declined
-        // to offer it also declines to run.
+        // Availability is an endpoint precondition, not a second catalog gate.
         const forced = requestToolStep(input, sink, {
           id: "call-1",
           tool: "run_code",
@@ -272,6 +271,7 @@ test("the machine tool is not offered while nothing is attached", async () => {
   const answer = (JSON.parse(String((await reply).data)) as { text: string }).text;
 
   expect(offered).toEqual([
+    "read", "write", "edit", "list", "search", "bash",
     "delegate",
     "await_delegation",
     "cancel_delegation",
@@ -279,7 +279,7 @@ test("the machine tool is not offered while nothing is attached", async () => {
     "provision",
     "run_code",
   ]);
-  // All tools are host-projected; the local default host reports live attachment failure.
+  // The raw machine endpoint reports live attachment failure.
   expect(answer).toContain("kernel_not_available");
 }, 30_000);
 
