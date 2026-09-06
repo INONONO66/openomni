@@ -22,6 +22,7 @@ export type MessagePolicyContext =
 		readonly fanout: number;
 		readonly depth: number;
 		readonly withinParentDeadline: boolean;
+		readonly actorSendAllowed?: boolean;
 	};
 
 export function matchesMessage(
@@ -62,8 +63,10 @@ export function matchesMessage(
 				case "deadline":
 					valid = context.withinParentDeadline;
 					break;
-				case "type":
 				case "actor_send":
+					valid = context.actorSendAllowed === true;
+					break;
+				case "type":
 					return true;
 				default:
 					return exhaustive(rule.check);

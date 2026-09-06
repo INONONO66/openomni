@@ -481,9 +481,12 @@ describe("createGatewayChatTransport", () => {
 		const failedSend = send(transport, [userMessage("first")]);
 		const failedSocket = ControlledSocket.instances[0];
 		if (failedSocket === undefined) throw new Error("failed socket was not constructed");
-		const rejected = expect(failedSend).rejects.toThrow("gateway socket failed");
+		const failure = failedSend.then(
+			() => { throw new Error("opening failure unexpectedly succeeded"); },
+			(error: Error) => error,
+		);
 		failedSocket.fail();
-		await rejected;
+		expect((await failure).message).toContain("gateway socket failed");
 
 		const retry = send(transport, [userMessage("retry")]);
 		const replacement = ControlledSocket.instances[1];

@@ -3,7 +3,6 @@ import {
   Ingress,
   NamedError,
   Wait,
-  extractSurfaceKey,
   resolveTarget,
   targetKey,
   type BusEvent,
@@ -243,6 +242,7 @@ function blacklistState(
 
 function resolveKernelRoute<Event extends Gateway.DeliveredEvent>(
   event: Event,
+  surfaceKey: string,
   traceId: string,
 ): KernelRouteResolution<Event> {
   const correlation = parseCorrelation(event);
@@ -251,8 +251,7 @@ function resolveKernelRoute<Event extends Gateway.DeliveredEvent>(
   const wait = routeWaitState(gatheredWait);
   const surfaceDefaultTarget = resolveTarget(event);
   const target = targetKey(surfaceDefaultTarget);
-  const surfaceSessionId =
-    event.activation?.durableSessionId ?? SurfaceKey.lookup(extractSurfaceKey(event));
+  const surfaceSessionId = SurfaceKey.lookup(surfaceKey);
   const blacklist = blacklistState(event, correlation);
   const channelResolution = resolveChannelGrant({
     surface: event.surface,
@@ -280,6 +279,11 @@ function resolveKernelRoute<Event extends Gateway.DeliveredEvent>(
       ...(surfaceSessionId === undefined ? {} : { surfaceSessionId }),
     },
   );
+  if (decision.outcome === "route" && decision.stage === "surface_default" && decision.sessionId === undefined) {
+    const id = SurfaceKey.claim(surfaceKey, crypto.randomUUID());
+    decision.sessionId = id;
+    decision.factsUsed = decision.factsUsed.map((fact) => fact === "surface.default:new" ? `surface.default:${id}` : fact);
+  }
   const waitExecution = kernelWaitExecution(gatheredWait, correlation, requestedAction);
   return {
     decision,
@@ -390,10 +394,11 @@ function recordRouteDecided(
 // lookup.
 export function resolveAndRecordRoute<Event extends Gateway.DeliveredEvent>(
   event: Event,
+  surfaceKey: string,
   traceId: string,
   publish: BusEvent.Sink["publish"],
 ): KernelRouteResolution<Event> {
-  const resolution = resolveKernelRoute(event, traceId);
+  const resolution = resolveKernelRoute(event, surfaceKey, traceId);
   const decision = Ingress.Events.RoutingDecision.schema.parse(
     pinReplyGrantEndpoint(resolution.decision, event),
   );

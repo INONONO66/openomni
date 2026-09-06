@@ -1,3 +1,4 @@
+import { z } from "zod";
 import {
 	Gateway,
 	MessagingEvents,
@@ -94,7 +95,10 @@ export type MessagingPorts = Readonly<{
 	publish: BusEvent.Sink["publish"];
 }>;
 
+type SendAuthorityInput = Pick<SendInput, "senderId" | "target" | "operation" | "at">;
+
 export type ExistingAgentMessaging = Readonly<{
+	preflight: (input: SendAuthorityInput) => MessageDenialCode | undefined;
 	send: (input: SendInput) => Promise<SendReceipt>;
 }>;
 
@@ -172,11 +176,12 @@ function resolveExistingTarget(target: MessageTarget): TargetResolution {
 
 const SEND_ADMITTED_FACT = "gateway.send.admitted";
 
-type SendAdmission = Readonly<{
-	signature: string;
-	budgeted: boolean;
-	sendClass: MessageClass;
-}>;
+const SendAdmission = z.object({
+	signature: z.string(),
+	budgeted: z.boolean(),
+	sendClass: Gateway.MessageClass,
+});
+type SendAdmission = z.infer<typeof SendAdmission>;
 
 class SendAdmissionConflict extends Error { }
 
@@ -196,26 +201,6 @@ function sendSignature(input: SendInput, target: DeliveryTarget): string {
 	});
 }
 
-function parseAdmission(data: unknown, streamId: string): SendAdmission {
-	if (
-		typeof data !== "object" ||
-		data === null ||
-		!("signature" in data) ||
-		typeof data.signature !== "string" ||
-		!("budgeted" in data) ||
-		typeof data.budgeted !== "boolean" ||
-		!("sendClass" in data) ||
-		(data.sendClass !== "notify" && data.sendClass !== "converse")
-	) {
-		throw new Error(`corrupt send admission fact on ${streamId}`);
-	}
-	return {
-		signature: data.signature,
-		budgeted: data.budgeted,
-		sendClass: data.sendClass,
-	};
-}
-
 function existingAdmission(input: SendInput, target: DeliveryTarget): SendAdmission | undefined {
 	const ledger = LedgerAppend.port();
 	if (ledger === undefined) {
@@ -227,7 +212,9 @@ function existingAdmission(input: SendInput, target: DeliveryTarget): SendAdmiss
 	if (fact.type !== SEND_ADMITTED_FACT) {
 		throw new Error(`unexpected fact type on send stream ${streamId}: ${fact.type}`);
 	}
-	const admission = parseAdmission(fact.data, streamId);
+	const parsed = SendAdmission.safeParse(fact.data);
+	if (!parsed.success) throw new Error(`corrupt send admission fact on ${streamId}`);
+	const admission = parsed.data;
 	if (admission.signature !== sendSignature(input, target)) {
 		throw new SendAdmissionConflict(
 			`message id ${input.messageId} was already admitted with different content`,
@@ -277,10 +264,10 @@ interface AuthorizedSend {
 
 /** Resolves sender authority and its exact allocated endpoint without mutating durable state. */
 function authorizeSend(
-	input: SendInput,
+	input: SendAuthorityInput,
 	ports: MessagingPorts,
-	deny: DenySend,
-): AuthorizedSend | SendReceipt {
+): { readonly ok: true; readonly target: DeliveryTarget; readonly grant: SenderTargetGrant }
+	| { readonly ok: false; readonly code: MessageDenialCode; readonly reason: string } {
 	const grants = ports.grants();
 	const claim = {
 		senderId: input.senderId,
@@ -290,33 +277,23 @@ function authorizeSend(
 	};
 	const grant = resolveSenderTargetGrant(grants, claim);
 	if (grant === undefined && !hasScopedSenderTargetCandidate(grants, claim)) {
-		return deny(
-			input,
-			"ungranted",
-			`no active sender-target grant covers ${input.senderId} -> ${input.target.actorId} (${input.operation})`,
-		);
+		return { ok: false, code: "ungranted",
+			reason: `no active sender-target grant covers ${input.senderId} -> ${input.target.actorId} (${input.operation})` };
 	}
 	const resolution = resolveExistingTarget(input.target);
-	if (!resolution.ok) return deny(input, resolution.code, resolution.reason);
+	if (!resolution.ok) return resolution;
 
 	if (grant === undefined) {
 		const surfaceKey = deliverySurfaceKey(resolution.target);
 		const scopedGrant = resolveScopedSenderTargetGrant(grants, { ...claim, surfaceKey });
 		if (scopedGrant === undefined) {
-			return deny(
-				input,
-				"ungranted",
-				`reply-scoped grant does not cover surface ${surfaceKey} — replies stay inside the initiating container`,
-			);
+			return { ok: false, code: "ungranted",
+				reason: `reply-scoped grant does not cover surface ${surfaceKey} — replies stay inside the initiating container` };
 		}
-		return { input, target: resolution.target, grant: scopedGrant };
+		return { ok: true, target: resolution.target, grant: scopedGrant };
 	}
 
-	return {
-		input,
-		target: resolution.target,
-		grant,
-	};
+	return { ok: true, target: resolution.target, grant };
 }
 
 /** Records all admission debits before the delivery effect. */
@@ -518,8 +495,9 @@ export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAge
 
 	async function send(rawInput: SendInput): Promise<SendReceipt> {
 		const input = SendInput.parse(rawInput);
-		const authorization = authorizeSend(input, ports, deny);
-		if ("kind" in authorization) return authorization;
+		const checked = authorizeSend(input, ports);
+		if (!checked.ok) return deny(input, checked.code, checked.reason);
+		const authorization = { input, target: checked.target, grant: checked.grant };
 		const { target } = authorization;
 
 		const admission = admitSend(authorization, ports, deny);
@@ -531,5 +509,11 @@ export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAge
 		return recordSent(authorization, wait, ports);
 	}
 
-	return { send };
+	return {
+		preflight(input) {
+			const checked = authorizeSend(input, ports);
+			return checked.ok ? undefined : checked.code;
+		},
+		send,
+	};
 }

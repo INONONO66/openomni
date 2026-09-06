@@ -1,106 +1,34 @@
-import { describe, expect, it } from "bun:test";
-import {
-  getRouter,
-  lastResolvedActor,
-  makeEvent,
-  registerOwnerEndpoint,
-  setupIngressActorResolverTest,
-} from "./_actor-resolver-fixture";
+import { describe, expect, test } from "bun:test";
+import { resolveIngressActor } from "../../src/router/actor-resolver";
+import { makeEvent, registerOwnerEndpoint, setupIngressActorResolverTest } from "./_actor-resolver-fixture";
 
 setupIngressActorResolverTest();
 
-describe("Ingress actor resolver", () => {
-  it("adds canonical actor fields for registered endpoints", async () => {
-    // Given
+describe("internal ingress actor projection", () => {
+  test("registered endpoint replaces claimed authority with canonical actor fields", () => {
     registerOwnerEndpoint("guild");
-    const router = getRouter();
-
-    // When
-    await router.ingest(
-      makeEvent("user-1", {
-        id: "user-1",
-        role: "manager",
-        type: "system",
-        trusted: true,
-        isTrustedManager: true,
-      }),
-    );
-    const capturedActor = lastResolvedActor();
-
-    // Then
-    expect(capturedActor).toMatchObject({
-      role: "user",
-      id: "user-1",
-      actorId: "act_owner",
-      kind: "human",
-      trustTier: "owner",
-      endpointId: "ep_discord_user_1",
+    const actor = resolveIngressActor(makeEvent("user-1", {
+      id: "user-1", role: "manager", type: "system", trusted: true, isTrustedManager: true,
+    })).meta?.actor;
+    expect(actor).toMatchObject({
+      role: "user", id: "user-1", actorId: "act_owner", kind: "human",
+      trustTier: "owner", endpointId: "ep_discord_user_1",
     });
-    expect(capturedActor).not.toHaveProperty("type");
-    expect(capturedActor).not.toHaveProperty("trusted");
-    expect(capturedActor).not.toHaveProperty("isTrustedManager");
+    for (const key of ["type", "trusted", "isTrustedManager"]) expect(actor).not.toHaveProperty(key);
   });
 
-  it("carries the resolved actor on the delivered event", async () => {
-    // Given
+  test.each(["guild-a", undefined])("workspace %s cannot resolve a guild endpoint", (workspace) => {
+    registerOwnerEndpoint(workspace);
+    const actor = resolveIngressActor(makeEvent("user-1", {
+      id: "user-1", role: "user", actorId: "spoofed", trustTier: "owner",
+    })).meta?.actor;
+    expect(actor).toEqual({ id: "user-1", role: "user" });
+  });
+
+  test("workspace match resolves the canonical endpoint", () => {
     registerOwnerEndpoint("guild");
-    const router = getRouter();
-
-    // When
-    await router.ingest(makeEvent("user-1"));
-    const projectedActor = lastResolvedActor();
-
-    // Then
-    expect(projectedActor).toMatchObject({
-      role: "user",
-      id: "user-1",
-      actorId: "act_owner",
-      kind: "human",
-      trustTier: "owner",
-      endpointId: "ep_discord_user_1",
-    });
-  });
-
-  it("strips canonical actor fields when endpoint workspace does not match", async () => {
-    // Given
-    registerOwnerEndpoint("guild-a");
-    const router = getRouter();
-    const event = {
-      ...makeEvent("user-1", {
-        role: "user",
-        id: "user-1",
-        actorId: "act_spoofed",
-        kind: "system",
-        type: "system",
-        trustTier: "owner",
-        trusted: true,
-        isTrustedManager: true,
-      }),
-      workspace: "guild-b",
-    };
-
-    // When
-    await router.ingest(event);
-    const capturedActor = lastResolvedActor();
-
-    // Then
-    expect(capturedActor).toEqual({ role: "user", id: "user-1", trustTier: "owner" });
-  });
-
-  it("resolves actor identity when endpoint workspace matches", async () => {
-    // Given
-    registerOwnerEndpoint("guild");
-    const router = getRouter();
-
-    // When
-    await router.ingest(makeEvent("user-1"));
-    const capturedActor = lastResolvedActor();
-
-    // Then
-    expect(capturedActor).toMatchObject({
-      actorId: "act_owner",
-      endpointId: "ep_discord_user_1",
-      trustTier: "owner",
+    expect(resolveIngressActor(makeEvent("user-1")).meta?.actor).toMatchObject({
+      actorId: "act_owner", endpointId: "ep_discord_user_1", trustTier: "owner",
     });
   });
 });

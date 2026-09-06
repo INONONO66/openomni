@@ -1,125 +1,29 @@
-import { describe, expect, test } from "bun:test";
-import type { Policy } from "@openomni/protocol";
-import { IngressAuthorityMiddleware } from "../../src/router/authority.js";
-import { makeInboundEvent } from "./_router-fixture.js";
+import { expect, test } from "bun:test";
+import type { Ingress } from "@openomni/protocol";
+import { isAuthorizedTopLevelActor } from "../../src/router/authority-actor";
+import { makeInboundEvent } from "./_router-fixture";
 
-// Moved from openomni test/policy/middleware-integration.test.ts at the #707
-// seam flip: runRoutedPreRun parses Gateway.DeliveredEvent (no brain-owned
-// `agent`) and takes no coordinator — presence checks are brain-side.
+test.each(["owner", "co_owner", "manager"] as const)("canonical %s has top-level standing", (trustTier) => {
+  expect(isAuthorizedTopLevelActor(makeInboundEvent({ meta: { actor: { trustTier } } }))).toBe(true);
+});
 
-// Authorization is a pure trust-tier check: the pre-split role fallbacks and
-// worker-control action rules were unreachable (every routed pre-run event
-// carries a resolved trustTier by routing time) and were removed. An untiered
-// actor — whatever its self-reported role or action — fails closed here.
-describe("IngressAuthorityMiddleware integration", () => {
-  test("allows a top-level trust-tier actor to create inbound work", async () => {
-    const event = makeInboundEvent({
-      meta: { actor: { actorId: "act_owner", trustTier: "owner" } },
-    });
+test.each(["observer", "collaborator", "assigned_worker"] as const)("canonical %s cannot acquire authority from privileged legacy role", (trustTier) => {
+  expect(isAuthorizedTopLevelActor(makeInboundEvent({ meta: { actor: { trustTier, role: "resident", trusted: true } } }))).toBe(false);
+});
 
-    const result = await IngressAuthorityMiddleware.runRoutedPreRun({ event });
+test.each([
+  {}, { role: "user" }, { role: "worker" }, { role: "sub_persona" },
+  { role: "manager", trusted: false }, { role: "manager", trusted: true },
+] satisfies Ingress.Actor[])("untiered claims confer no top-level authority: %j", (actor) => {
+  expect(isAuthorizedTopLevelActor(makeInboundEvent({ meta: { actor, action: "spawn" } }))).toBe(false);
+});
 
-    expect(result.event.id).toBe("evt-1");
-    expect(result.mode).toBe("direct");
-  });
+test.each(["collaborator", "observer"] as const)("%s evidence may reach a resident, never a worker", (trustTier) => {
+  const event = makeInboundEvent({ meta: { actor: { trustTier }, inboundTreatment: "evidence_only" } });
+  expect(isAuthorizedTopLevelActor(event)).toBe(true);
+  expect(isAuthorizedTopLevelActor({ ...event, target: { kind: "worker" } })).toBe(false);
+});
 
-  test("allows an evidence_only collaborator delivered to the resident", async () => {
-    const event = makeInboundEvent({
-      target: { kind: "resident" },
-      meta: {
-        actor: { actorId: "act_collab", trustTier: "collaborator" },
-        inboundTreatment: "evidence_only",
-      },
-    });
-
-    const result = await IngressAuthorityMiddleware.runRoutedPreRun({ event });
-
-    expect(result.target.kind).toBe("resident");
-  });
-
-  test("denies an untiered actor regardless of self-reported role", async () => {
-    const event = makeInboundEvent({
-      meta: { actor: { role: "user" } },
-    });
-
-    await expect(IngressAuthorityMiddleware.runRoutedPreRun({ event })).rejects.toThrow(
-      "not authorized to create top-level inbound work",
-    );
-  });
-
-  test("denies an untiered worker-role actor with a control action", async () => {
-    const event = makeInboundEvent({
-      meta: { actor: { role: "worker" }, action: "spawn" },
-    });
-
-    await expect(IngressAuthorityMiddleware.runRoutedPreRun({ event })).rejects.toThrow(
-      "not authorized to create top-level inbound work",
-    );
-  });
-
-  test("fans the authority decision to the observer with the trust label", async () => {
-    const decisions: Policy.PolicyDecision[] = [];
-    const event = makeInboundEvent({
-      meta: { actor: { actorId: "act_owner", trustTier: "owner" } },
-    });
-
-    await IngressAuthorityMiddleware.runRoutedPreRun({
-      event,
-      onDecision: (decision) => {
-        decisions.push(decision);
-      },
-    });
-
-    expect(decisions.some((decision) => decision.factsUsed?.includes("trust.owner"))).toBe(true);
-  });
-
-  test("denies untrusted sub-persona actor", async () => {
-    const event = makeInboundEvent({
-      meta: { actor: { role: "sub_persona" } },
-    });
-
-    await expect(IngressAuthorityMiddleware.runRoutedPreRun({ event })).rejects.toMatchObject({
-      name: "Error",
-      message: "actor is not authorized to create top-level inbound work",
-    });
-  });
-
-  test("denies manager actor without trusted flag", async () => {
-    const event = makeInboundEvent({
-      meta: { actor: { role: "manager", trusted: false } },
-    });
-
-    await expect(IngressAuthorityMiddleware.runRoutedPreRun({ event })).rejects.toMatchObject({
-      name: "Error",
-      message: "actor is not authorized to create top-level inbound work",
-    });
-  });
-
-  test("denies self-reported trusted manager without store trust tier", async () => {
-    const event = makeInboundEvent({
-      meta: { actor: { role: "manager", trusted: true } },
-    });
-
-    await expect(IngressAuthorityMiddleware.runRoutedPreRun({ event })).rejects.toMatchObject({
-      name: "Error",
-      message: "actor is not authorized to create top-level inbound work",
-    });
-  });
-
-  test("allows canonical manager trust tier without legacy trusted flag", async () => {
-    const decisions: Policy.PolicyDecision[] = [];
-    const event = makeInboundEvent({
-      meta: { actor: { actorId: "act_manager", trustTier: "manager" } },
-    });
-
-    const result = await IngressAuthorityMiddleware.runRoutedPreRun({
-      event,
-      onDecision: (decision) => {
-        decisions.push(decision);
-      },
-    });
-
-    expect(result.event.id).toBe("evt-1");
-    expect(decisions.some((decision) => decision.factsUsed?.includes("trust.manager"))).toBe(true);
-  });
+test("missing actor fails closed", () => {
+  expect(isAuthorizedTopLevelActor(makeInboundEvent())).toBe(false);
 });

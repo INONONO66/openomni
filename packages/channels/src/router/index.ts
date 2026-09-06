@@ -18,7 +18,7 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
 		publish: ports.sink,
 	});
 	const messaging = messagingPorts === undefined ? undefined : createExistingAgentMessaging({
-		grants: () => [...messagingPorts.grants(), ...replyGrants.list()],
+		grants: () => [...messagingPorts.grants(), ...replyGrants.list(clock())],
 		...(messagingPorts.budgets === undefined ? {} : { budgets: messagingPorts.budgets }),
 		publish: ports.sink,
 		deliver: (message) => {
@@ -47,6 +47,11 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
 			const prepared = ports.prepare(sender, send, target, proposedId);
 			const messageId = prepared.messageId ?? proposedId;
 			const handle = { messageId, target: prepared.target };
+			const actorSendAllowed = send.to.kind !== "actor" || (messaging !== undefined && messaging.preflight({
+				senderId: sender.kind === "session" ? sender.id : sender.externalId,
+				target: { actorId: send.to.actorId },
+				operation: send.deadline === undefined ? "fire_and_forget" : "awaited", at: startedAt,
+			}) === undefined);
 			let commitMs = 0;
 			let committed: Inbox.Row | undefined;
 			const result = await ports.run(sender, {
@@ -54,7 +59,8 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
 				op: "sendMessage",
 				intent: { messageId, sender, ...send },
 				effect: { type: "message", target: prepared.target },
-				message: external === undefined ? prepared.message : {
+				message: external === undefined ? (prepared.message.sender === "session"
+					? { ...prepared.message, actorSendAllowed } : prepared.message) : {
 					...external.message,
 					eventIdUnique: prepared.message.sender === "external" && prepared.message.eventIdUnique,
 				},
@@ -94,11 +100,7 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
 							}
 						}),
 					});
-					if (receipt.kind === "denied") return {
-						status: "blocked_pre",
-						reason: `actor send denied: ${receipt.code}`,
-						handle,
-					};
+					if (receipt.kind === "denied") throw new Error(`actor send admission changed: ${receipt.code}`);
 					if (send.deadline !== undefined && sender.kind === "session") ports.armDeadline?.({
 						messageId, sessionId: sender.id, sourceActionId: intent.action.id,
 						fireAt: send.deadline, createdAt: startedAt,
@@ -137,6 +139,8 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
 						replyGrants.admit({
 							actorId: actor.actorId, endpoint: actor.endpoint,
 							surface: external.event.surface, traceId: external.event.traceId,
+							...(external.event.workspace === undefined ? {} : { workspace: external.event.workspace }),
+							...(external.event.channel === undefined ? {} : { channel: external.event.channel }),
 							at: startedAt, sourceId: messageId,
 						});
 					}

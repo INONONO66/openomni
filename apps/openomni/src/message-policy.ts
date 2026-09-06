@@ -25,8 +25,12 @@ const internal = (["resident", "worker"] as const).flatMap((senderRole) => [
 ]);
 const denials = [
 	Gateway.RuleTableB.parse({
-		id: "message.worker.actor", table: "B", sender: "session", senderRole: "worker",
+		id: "message.resident.actor_grant", table: "B", sender: "session", senderRole: "resident",
 		targetKind: "actor", check: { kind: "actor_send" }, effect: "deny",
+	}),
+	Gateway.RuleTableB.parse({
+		id: "message.worker.actor", table: "B", sender: "session", senderRole: "worker",
+		targetKind: "actor", check: { kind: "type" }, effect: "deny",
 	}),
 	Gateway.RuleTableB.parse({
 		id: "message.worker.allocate", table: "B", sender: "session", senderRole: "worker",

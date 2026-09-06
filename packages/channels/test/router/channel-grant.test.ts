@@ -1,75 +1,27 @@
-import { describe, expect, it } from "bun:test";
+import { beforeEach, expect, test } from "bun:test";
 import { ChannelGrantStore } from "@openomni/ledger";
-import {
-  deliveries,
-  getRouter,
-  makeEvent,
-  registerOwnerEndpoint,
-  setupIngressActorResolverTest,
-} from "./_actor-resolver-fixture";
+import { commits, kernelRouter, ownerFacts, ownerSender, registerOwnerDm, resetRouterState, routingDecisions } from "./_router-fixture";
 
-setupIngressActorResolverTest();
+beforeEach(() => { resetRouterState(); registerOwnerDm(); });
 
-describe("Ingress channel grants", () => {
-  it("blocks inbound events when no channel grant matches", async () => {
-    ChannelGrantStore.remove("grant-discord-guild-dev");
-    registerOwnerEndpoint("guild");
-    const router = getRouter();
+test("registered Owner still needs a channel grant", async () => {
+  ChannelGrantStore.remove("grant-owner-dm");
+  expect(await kernelRouter().ingest(ownerSender, ownerFacts)).toMatchObject({ status: "blocked_pre" });
+  expect(commits).toEqual([]);
+});
 
-    let caughtError: Error | undefined;
-    try {
-      await router.ingest(makeEvent("user-1"));
-    } catch (err) {
-      if (!(err instanceof Error)) throw err;
-      caughtError = err;
-    }
+test("blocked channel overrides registered Owner authority", async () => {
+  ChannelGrantStore.put({ id: "grant-owner-dm", surface: "discord", workspace: "owner-workspace", channel: "owner-dm", kind: "blocked_channel", createdBy: "owner" });
+  expect(await kernelRouter().ingest(ownerSender, ownerFacts)).toMatchObject({ status: "blocked_pre" });
+  expect(routingDecisions()[0]).toMatchObject({ outcome: "block", inboundTreatment: "drop" });
+  expect(commits).toEqual([]);
+});
 
-    expect(caughtError?.message).toContain("channel_grant.missing");
-    expect(deliveries).toHaveLength(0);
-  });
-
-  it("drops blocked channels before resident execution", async () => {
-    ChannelGrantStore.put({
-      id: "grant-discord-guild-dev",
-      surface: "discord",
-      workspace: "guild",
-      channel: "dev",
-      kind: "blocked_channel",
-      createdBy: "act_owner",
-    });
-    registerOwnerEndpoint("guild");
-    const router = getRouter();
-
-    let caughtError: Error | undefined;
-    try {
-      await router.ingest(makeEvent("user-1"));
-    } catch (err) {
-      if (!(err instanceof Error)) throw err;
-      caughtError = err;
-    }
-
-    expect(caughtError?.message).toContain("channel_grant.blocked_channel.drop");
-    expect(deliveries).toHaveLength(0);
-  });
-
-  it("allows broadcast channels as evidence-only inbound treatment", async () => {
-    ChannelGrantStore.put({
-      id: "grant-discord-guild-dev",
-      surface: "discord",
-      workspace: "guild",
-      channel: "dev",
-      kind: "broadcast_channel",
-      defaultTier: "observer",
-      createdBy: "act_owner",
-    });
-    const router = getRouter();
-
-    const result = await router.ingest(makeEvent("unknown-user"));
-
-    expect(result.mode).toBe("direct");
-    expect(deliveries).toHaveLength(1);
-    // The treated event rides the delivery (the projection audit that used to
-    // observe inboundTreatment is brain-side, past the seam).
-    expect(deliveries[0]?.event.meta?.inboundTreatment).toBe("evidence_only");
-  });
+test("broadcast channel floors the Owner to evidence-only content", async () => {
+  ChannelGrantStore.put({ id: "grant-owner-dm", surface: "discord", workspace: "owner-workspace", channel: "owner-dm", kind: "broadcast_channel", createdBy: "owner" });
+  expect((await kernelRouter().ingest(ownerSender, ownerFacts)).status).toBe("executed");
+  expect(routingDecisions()[0]).toMatchObject({ outcome: "route", inboundTreatment: "evidence_only" });
+  expect(commits).toHaveLength(1);
+  expect(commits[0]?.content).not.toBe(ownerFacts.render);
+  expect(commits[0]?.content.endsWith(ownerFacts.render)).toBe(true);
 });

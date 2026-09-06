@@ -4,6 +4,7 @@ import { Channel, type Gateway } from "@openomni/protocol";
 import { newTraceId } from "../support/trace";
 import { resolveChannelGrant } from "./channel-grant";
 import { resolveIngressActor } from "./actor-resolver";
+import { isAuthorizedTopLevelActor } from "./authority-actor";
 import { resolveAndRecordRoute } from "./routing-resolution";
 import type { GatewayRouterPorts } from "./message-ports";
 
@@ -50,7 +51,7 @@ export function externalMessage(
 			},
 		},
 	});
-	const route = resolveAndRecordRoute(event, event.traceId, sink);
+	const route = resolveAndRecordRoute(event, surfaceKey, event.traceId, sink);
 	const identities = facts.addressees.flatMap((addressee) => {
 		const resolved = ActorRegistry.resolveEndpoint(sender.surface, addressee.externalId, facts.workspaceId);
 		return resolved === undefined ? [] : [resolved.identity];
@@ -62,7 +63,8 @@ export function externalMessage(
 		...(route.decision.trustTier === undefined ? {} : { senderTier: route.decision.trustTier }),
 		addressee,
 		identity: route.decision.outcome === "route",
-		grantTier: route.decision.outcome === "route",
+		grantTier: route.decision.outcome === "route"
+			&& (route.waitExecution.kind === "wait" || isAuthorizedTopLevelActor(route.event)),
 		egressBudget: true,
 		eventIdUnique: true,
 		replyCorrelation: route.decision.outcome !== "ambiguous",
