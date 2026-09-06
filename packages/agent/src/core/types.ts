@@ -106,7 +106,7 @@ export interface ChatAgentConfig {
   steeringPending?: () => boolean;
   llm?: {
     run?: (input: RunInput, sink: Sink) => Promise<import("@openomni/llm").Run.Outcome>;
-    resolveProviderModel?: (model: Model.Ref) => Promise<Provider.Model>;
+    resolveModel?: (model: Model.Ref) => Promise<Provider.Model>;
   };
 }
 

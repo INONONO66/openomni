@@ -27,7 +27,7 @@ const OPERATOR_TRANSPORT = {
   headers: { "x-tenant": "acme" },
 } as const;
 
-const resolveProviderModel = async (model: { provider: string; id: string }) => ({
+const resolveModel = async (model: { provider: string; id: string }) => ({
   id: model.id,
   name: model.id,
   providerID: model.provider,
@@ -116,7 +116,7 @@ describe("operator transport reaches every model caller", () => {
       apiKey: "test-key",
       transport: OPERATOR_TRANSPORT,
       llm: {
-        resolveProviderModel,
+        resolveModel,
         run: async (input: RunInput, sink: Sink) => {
           seen = input;
           sink.onMessage(assistantMessage(input, { call: 1, text: "done" }));
@@ -156,7 +156,7 @@ describe("operator transport reaches every model caller", () => {
       tools: {},
       targets: () => [],
       llm: {
-        resolveProviderModel,
+        resolveModel,
         run: async (input, sink: Sink) => {
           seen = input;
           sink.onMessage(assistantMessage(input, { call: 1 }));
@@ -175,7 +175,7 @@ describe("operator transport reaches every model caller", () => {
     const port = createLlmToolPort(
       { provider: "fake", id: "port-test", apiKey: "port-key", transport: OPERATOR_TRANSPORT },
       {
-        resolveProviderModel,
+        resolveModel,
         run: async (input, sink) => {
           seen = input;
           sink.onMessage(assistantMessage(input, { call: 1, text: "answered" }));

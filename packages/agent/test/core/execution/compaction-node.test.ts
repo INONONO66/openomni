@@ -162,7 +162,7 @@ it("commits a reversible compaction result before completion observations and th
         onSummarize: async () => "checkpoint",
       },
       llm: {
-        resolveProviderModel: async () => ({
+        resolveModel: async () => ({
           id: "model",
           name: "model",
           providerID: "provider",

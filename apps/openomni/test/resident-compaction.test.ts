@@ -59,7 +59,7 @@ describe("Resident compaction", () => {
       tools: {},
       targets: () => [],
       llm: {
-        resolveProviderModel: async (model) => ({
+        resolveModel: async (model) => ({
           id: model.id,
           name: model.id,
           providerID: model.provider,
@@ -93,7 +93,7 @@ describe("Resident compaction", () => {
       tools: {},
       targets: () => [],
       llm: {
-        resolveProviderModel: async (model) => ({
+        resolveModel: async (model) => ({
           id: model.id,
           name: model.id,
           providerID: model.provider,

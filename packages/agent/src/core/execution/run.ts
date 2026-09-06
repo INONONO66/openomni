@@ -8,7 +8,7 @@ import {
   prepareCompactionAfterContinue,
   drainStepBoundary,
 } from "./turn";
-import { ModelsDev, Provider, Retry as LlmRetry, Run, run as llmRun } from "@openomni/llm";
+import { Provider, Retry as LlmRetry, Run, run as llmRun } from "@openomni/llm";
 import type { Sink } from "@openomni/llm";
 import { Placement } from "@openomni/placement";
 import { CompactionSession } from "../../compaction";
@@ -265,7 +265,7 @@ async function prepareAttempt(
 ): Promise<AttemptContext> {
   recordRunAttempt(state, progress.attempt);
   const attemptModel = selectAttemptModel(config, state, progress);
-  const providerModel = await (config.llm?.resolveProviderModel ?? resolveProviderModel)(
+  const providerModel = await (config.llm?.resolveModel ?? Provider.resolveModel)(
     attemptModel,
   );
   recordRunWindow(state, providerModel.limit?.context ?? 0);
@@ -456,7 +456,7 @@ async function resolveConnectionModel(
   ) {
     return { model: providerModel, runInput: turn.runInput };
   }
-  const model = await (config.llm?.resolveProviderModel ?? resolveProviderModel)(overrideModel);
+  const model = await (config.llm?.resolveModel ?? Provider.resolveModel)(overrideModel);
   const overrideWindow = model.limit?.context ?? 0;
   const yieldAt =
     overrideWindow > 0 && state.windowYieldDisarmed !== true
@@ -476,7 +476,8 @@ async function resolveConnectionModel(
     runInput: {
       ...restInput,
       model,
-      auth: model.providerID === config.model.provider ? config.auth : undefined,
+      auth: config.auth,
+      authProvider: config.model.provider,
       ...(yieldAt === undefined ? {} : { yieldAtInputTokens: yieldAt }),
     },
   };
@@ -545,39 +546,4 @@ function assertKnownOutcome(value: never): never {
   }
   const type = Reflect.get(value as object, "type");
   throw new Error(`Unknown outcome type: ${typeof type === "string" ? type : "unknown"}`);
-}
-
-async function resolveProviderModel(model: {
-  provider: string;
-  id: string;
-}): Promise<Provider.Model> {
-  const data = await ModelsDev.get();
-  const providerData = data[model.provider];
-
-  if (!providerData) {
-    throw new Error(`Provider not found: ${model.provider}`);
-  }
-
-  const rawModel = providerData.models?.[model.id];
-  if (rawModel) {
-    return Provider.fromModelsDevModel(providerData, rawModel as ModelsDev.Model);
-  }
-
-  // A failed proxy listing is NOT "model not found": swallowing it here
-  // reported an auth/network failure as a missing model (#audit L2). The
-  // listing failure is surfaced in the thrown message so the operator sees
-  // the real fault.
-  let proxyModels: Awaited<ReturnType<typeof Provider.listModels>>;
-  try {
-    proxyModels = await Provider.listModels(model.provider, "proxy");
-  } catch (error) {
-    const cause = error instanceof Error ? error.message : String(error);
-    throw new Error(
-      `Model lookup failed for ${model.id} (provider ${model.provider}): proxy model listing failed: ${cause}`,
-    );
-  }
-  const match = proxyModels.find((m) => m.id === model.id);
-  if (match) return match;
-
-  throw new Error(`Model not found: ${model.id} for provider ${model.provider}`);
 }

@@ -36,7 +36,7 @@ function fallbackHarness(errorMessage: string) {
     resolved,
     llm: {
       run,
-      resolveProviderModel: async (model: Model.Ref) => {
+      resolveModel: async (model: Model.Ref) => {
         resolved.push(model);
         return { id: model.id, name: model.id, providerID: model.provider };
       },
@@ -91,7 +91,7 @@ describe("model fallback via placement", () => {
         sink.onMessage(stepSnapshot("third", "done", "stop"));
         return createStopOutcome();
       }) as MockLlmFn,
-      resolveProviderModel: async (model: Model.Ref) => ({
+      resolveModel: async (model: Model.Ref) => ({
         id: model.id,
         name: model.id,
         providerID: model.provider,

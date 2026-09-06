@@ -25,6 +25,8 @@ export interface RunInput {
   signal?: AbortSignal;
   model: Provider.Model;
   auth?: Auth.Info;
+  /** Provider to which the explicit credential belongs; absent binds it to model. */
+  authProvider?: string;
   /**
    * Operator-supplied endpoint and headers for this call. Resolved by the
    * host from its own config surface and handed down like `auth`, so this
@@ -231,14 +233,7 @@ export async function run(
 
   const createStream: Processor.ProcessorOptions["createStream"] = async (streamInput) => {
     const ai = await import("ai");
-    const auth =
-      input.auth ??
-      (input.allowAuthFallback === false ? undefined : await Auth.get(model.providerID));
-    if (!auth) {
-      throw new Error(
-        `No authentication found for provider: ${model.providerID}. Configure provider credentials or use a proxy auth provider first.`,
-      );
-    }
+    const auth = await Auth.resolve(model.providerID, input.auth, input.authProvider, input.allowAuthFallback);
 
     const languageModel = getLanguage(model, auth, input.transport);
 

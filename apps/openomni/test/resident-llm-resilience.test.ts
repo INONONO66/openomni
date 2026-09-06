@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
+import { Auth } from "@openomni/llm";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,6 +12,7 @@ import { assistantMessage } from "./helpers/assistant-message";
 const directories: string[] = [];
 
 afterEach(() => {
+  mock.restore();
   Storage.reset();
   for (const directory of directories.splice(0)) {
     rmSync(directory, { recursive: true, force: true });
@@ -62,7 +64,8 @@ describe("Resident model fallback wiring", () => {
   it("resolves the configured fallback on the retry after a transient failure", async () => {
     const sessionId = openSession("openomni-resident-fallback-");
     const resolved: Model.Ref[] = [];
-    const auths: unknown[] = [];
+    const auths: Auth.Info[] = [];
+    const credentials = spyOn(Auth, "get").mockResolvedValue({ type: "api", key: "fallback-key" });
     let calls = 0;
 
     const resident = createResident({
@@ -72,12 +75,12 @@ describe("Resident model fallback wiring", () => {
       tools: {},
       targets: () => [],
       llm: {
-        resolveProviderModel: async (model) => {
+        resolveModel: async (model) => {
           resolved.push(model);
           return { id: model.id, name: model.id, providerID: model.provider };
         },
         run: async (input, sink) => {
-          auths.push(input.auth);
+          auths.push(await Auth.resolve(input.model.providerID, input.auth, input.authProvider));
           calls += 1;
           if (calls === 1) {
             return { type: "error", error: { message: "transient blip", name: "Error" } };
@@ -91,7 +94,8 @@ describe("Resident model fallback wiring", () => {
     const result = await resident(delivery(sessionId));
 
     expect(resolved).toEqual([PRIMARY, FALLBACK]);
-    expect(auths).toEqual([{ type: "api", key: "test-key" }, undefined]);
+    expect(auths).toEqual([{ type: "api", key: "test-key" }, { type: "api", key: "fallback-key" }]);
+    expect(credentials.mock.calls).toEqual([[FALLBACK.provider]]);
     expect(result.kind).not.toBe("dropped");
   });
 
@@ -106,7 +110,7 @@ describe("Resident model fallback wiring", () => {
       tools: {},
       targets: () => [],
       llm: {
-        resolveProviderModel: async (model) => {
+        resolveModel: async (model) => {
           resolved.push(model);
           return { id: model.id, name: model.id, providerID: model.provider };
         },
@@ -150,7 +154,7 @@ function providerError(fields: {
 describe("Resident terminal LLM failure surfacing", () => {
   function alwaysFailing(error: Error) {
     return {
-      resolveProviderModel: async (model: Model.Ref) => ({
+      resolveModel: async (model: Model.Ref) => ({
         id: model.id,
         name: model.id,
         providerID: model.provider,
@@ -280,7 +284,7 @@ describe("Resident terminal LLM failure surfacing", () => {
       tools: {},
       targets: () => [],
       llm: {
-        resolveProviderModel: async () => {
+        resolveModel: async () => {
           throw new Error("catalog invariant failed");
         },
       },

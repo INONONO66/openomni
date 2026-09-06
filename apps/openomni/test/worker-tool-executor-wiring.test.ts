@@ -76,7 +76,7 @@ test("a worker tool call is executed and observed through the durable executor",
         })(),
       },
       llm: {
-        resolveProviderModel: async (model) => ({
+        resolveModel: async (model) => ({
           id: model.id,
           name: model.id,
           providerID: model.provider,

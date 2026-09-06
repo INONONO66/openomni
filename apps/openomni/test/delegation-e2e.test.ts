@@ -19,7 +19,7 @@ test("a Resident turn hands work to an inline worker and reports what came back"
       model: { provider: "fake", id: "delegation-test", apiKey: "test-key" },
     }),
     llm: {
-      resolveProviderModel: fakeProviderModel,
+      resolveModel: fakeProviderModel,
       run: async (input: RunInput, sink: Sink) => {
         const isWorker = SessionHandleStore.row(input.trace.sessionId).role === "worker";
         seen.push(isWorker ? "worker" : "resident");

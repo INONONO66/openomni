@@ -53,7 +53,7 @@ describe("compaction composition configuration", () => {
     const app = await suite.boot({
       config,
       llm: {
-        resolveProviderModel: async (model) => ({
+        resolveModel: async (model) => ({
           ...(await fakeProviderModel(model)),
           limit: { context: constrained ? 100 : 100_000 },
         }),

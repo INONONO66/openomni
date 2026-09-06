@@ -67,7 +67,7 @@ export function createMockLlmConfig(options: {
 }): NonNullable<ChatAgentConfig["llm"]> {
   return {
     run: options.run,
-    resolveProviderModel: async () => {
+    resolveModel: async () => {
       await options.getModels();
       return options.fromModelsDevModel();
     },

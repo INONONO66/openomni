@@ -106,7 +106,7 @@ test("real provider returns calls before any app tool body starts", async () => 
       },
     }),
     llm: {
-      resolveProviderModel: async () => ({
+      resolveModel: async () => ({
         id: "wave",
         name: "wave",
         providerID: "anthropic",
@@ -219,7 +219,7 @@ async function waveApp(
     toolDefinitions: definitions,
     sessionRuntime,
     llm: {
-      resolveProviderModel: async () => ({
+      resolveModel: async () => ({
         id: "wave",
         name: "wave",
         providerID: "anthropic",

@@ -35,7 +35,7 @@ describe("boot tool catalog", () => {
     const app = await suite.boot({
       config: suite.config("openomni-boot-catalog-", { wsToken: "boot-catalog-token" }),
       llm: {
-        resolveProviderModel: fakeProviderModel,
+        resolveModel: fakeProviderModel,
         run: async (input: RunInput, sink: Sink) => {
           resolveToolNames(input.tools.map((tool) => tool.name));
           sink.onMessage(assistantMessage(input, { id: "boot-catalog-reply", text: "ready" }));
@@ -63,7 +63,7 @@ test("967 boot preserves promoted expired session", async () => {
   const options = {
     config,
     llm: {
-      resolveProviderModel: fakeProviderModel,
+      resolveModel: fakeProviderModel,
       run: async (input: RunInput, sink: Sink) => {
         calls += 1;
         sink.onMessage(assistantMessage(input, { text: "recovered" }));

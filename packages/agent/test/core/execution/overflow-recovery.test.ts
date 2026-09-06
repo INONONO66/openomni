@@ -46,7 +46,7 @@ describe("context overflow recovery", () => {
       events: collector(),
       model: { provider: "provider", id: "model" },
       llm: {
-        resolveProviderModel: async () => model,
+        resolveModel: async () => model,
         run: async () => {
           calls += 1;
           return { type: "error", error: original };
@@ -72,7 +72,7 @@ describe("context overflow recovery", () => {
         onSummarize: async () => "overflow checkpoint",
       },
       llm: {
-        resolveProviderModel: async () => model,
+        resolveModel: async () => model,
         run: async (input) => {
           calls += 1;
           seen.push(input.messages.length);
@@ -111,7 +111,7 @@ describe("context overflow recovery", () => {
         onSummarize: async () => "overflow checkpoint",
       },
       llm: {
-        resolveProviderModel: async () => model,
+        resolveModel: async () => model,
         run: async () => {
           calls += 1;
           return { type: "error", error: calls === 1 ? first : second };

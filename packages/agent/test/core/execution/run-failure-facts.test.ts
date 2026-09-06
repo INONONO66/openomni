@@ -91,7 +91,7 @@ describe("terminal failure facts", () => {
         await runAgent(runInput([{ role: "user", content: "hi" }]), {
           events: Bus,
           model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-          llm: { resolveProviderModel: async () => { throw new Error("catalog invariant failed"); } },
+          llm: { resolveModel: async () => { throw new Error("catalog invariant failed"); } },
         });
       } catch (caught) {
         if (caught instanceof Error) return caught;

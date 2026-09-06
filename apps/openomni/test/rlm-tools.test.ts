@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { placementGatedExecutor } from "@openomni/agent";
 import { Placement } from "@openomni/placement";
 import { createTools, collectToolSpecs } from "../src/tools/core/catalog";
@@ -7,9 +7,10 @@ import {
   createLlmToolPort,
   LLM_TOOL_NAME,
   MAX_LLM_CALLS,
-  resolveLlmToolModel,
 } from "../src/tools/execution/llm";
-import type { RunInput } from "@openomni/llm";
+import { Auth, ModelsDev, Provider, type RunInput } from "@openomni/llm";
+
+afterEach(() => mock.restore());
 import { assistantMessage } from "./helpers/assistant-message";
 import { executor } from "./helpers/executor";
 import { dispatchModelTool, modelToolOutput } from "./helpers/tool-dispatch";
@@ -99,7 +100,7 @@ describe("the llm tool", () => {
     expect(result.output).toBe("llm failed: provider on fire");
   });
 
-  it("refuses an unlisted model instead of guessing an SDK for it", () => {
+  it("refuses an unlisted model instead of guessing an SDK for it", async () => {
     // The defect this pins: a bare fallback model dropped the provider's npm
     // wiring, and the LLM package then routed an anthropic credential to the
     // OpenAI SDK. Unlisted must be a per-call error.
@@ -114,19 +115,24 @@ describe("the llm tool", () => {
           listed: { id: "listed", name: "Listed" },
         },
       },
-    } as never;
-
-    expect(resolveLlmToolModel(catalog, { provider: "anthropic", id: "listed" })).toMatchObject({
+    };
+    spyOn(ModelsDev, "get").mockResolvedValue(catalog);
+    spyOn(Auth, "get").mockResolvedValue(undefined);
+    const run = mock(async () => ({ type: "stop" as const }));
+    expect(await Provider.resolveModel({ provider: "anthropic", id: "listed" })).toMatchObject({
       id: "listed",
       providerID: "anthropic",
       api: { npm: "@ai-sdk/anthropic" },
     });
-    expect(() =>
-      resolveLlmToolModel(catalog, { provider: "anthropic", id: "claude-unlisted" }),
-    ).toThrow('llm failed: model "claude-unlisted" is not listed under provider "anthropic"');
-    expect(() => resolveLlmToolModel(catalog, { provider: "nowhere", id: "listed" })).toThrow(
-      "llm failed:",
-    );
+    for (const [provider, id, reason] of [
+      ["anthropic", "claude-unlisted", "model_not_found"],
+      ["nowhere", "listed", "provider_not_found"],
+    ] as const) {
+      await expect(createLlmToolPort({ provider, id, apiKey: "key" }, { run })("hello")).rejects.toMatchObject({
+        data: { reason, provider, model: id },
+      });
+    }
+    expect(run).not.toHaveBeenCalled();
   });
 
   it("is host-placed: it survives the cell-door fold against the brain alone", async () => {
@@ -148,7 +154,7 @@ describe("the llm tool", () => {
 
 describe("the llm tool port", () => {
   const MODEL = { provider: "fake", id: "port-test", apiKey: "port-key" } as const;
-  const resolveProviderModel = async (model: { provider: string; id: string }) => ({
+  const resolveModel = async (model: { provider: string; id: string }) => ({
     id: model.id,
     name: model.id,
     providerID: model.provider,
@@ -157,7 +163,7 @@ describe("the llm tool port", () => {
   it("runs one toolless step under its own trace and returns the assistant text", async () => {
     let seen: RunInput | undefined;
     const port = createLlmToolPort(MODEL, {
-      resolveProviderModel,
+      resolveModel,
       run: async (input, sink) => {
         seen = input;
         sink.onMessage(assistantMessage(input, { id: "sub-reply", text: "the answer" }));
@@ -178,7 +184,7 @@ describe("the llm tool port", () => {
 
   it("ignores non-assistant messages when reading the answer", async () => {
     const port = createLlmToolPort(MODEL, {
-      resolveProviderModel,
+      resolveModel,
       run: async (input, sink) => {
         const echo = input.messages[0];
         if (echo !== undefined) sink.onMessage(echo);
@@ -195,7 +201,7 @@ describe("the llm tool port", () => {
 
   it("throws the provider's failure instead of returning it as data", async () => {
     const port = createLlmToolPort(MODEL, {
-      resolveProviderModel,
+      resolveModel,
       run: async () => ({ type: "error", error: new Error("provider on fire") }),
     });
 
@@ -204,7 +210,7 @@ describe("the llm tool port", () => {
 
   it("names the outcome when a non-stop run carries no error", async () => {
     const port = createLlmToolPort(MODEL, {
-      resolveProviderModel,
+      resolveModel,
       run: async () => ({ type: "aborted" }),
     });
 

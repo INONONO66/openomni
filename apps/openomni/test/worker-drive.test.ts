@@ -68,7 +68,7 @@ function bootRunner(run: (input: RunInput, sink: Sink) => Promise<{ type: "stop"
     model: { provider: "fake", id: "drive-test" },
     apiKey: "test-key",
     llm: {
-      resolveProviderModel: async (model) => ({
+      resolveModel: async (model) => ({
         id: model.id,
         name: model.id,
         providerID: model.provider,

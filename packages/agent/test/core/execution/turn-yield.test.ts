@@ -43,7 +43,7 @@ describe("window and steering yield", () => {
       events: collector(),
       model: { provider: "provider", id: "model" },
       llm: {
-        resolveProviderModel: async () => ({ id: "model", name: "model", providerID: "provider", limit: { context: 1000, output: 100 } }),
+        resolveModel: async () => ({ id: "model", name: "model", providerID: "provider", limit: { context: 1000, output: 100 } }),
         run: async (input) => {
           arms.push(input.yieldAtInputTokens);
           return { type: "stop" };
@@ -60,7 +60,7 @@ describe("window and steering yield", () => {
       events: collector(),
       model: { provider: "provider", id: "model" },
       llm: {
-        resolveProviderModel: async () => ({ id: "model", name: "model", providerID: "provider", limit: { context: 1000, output: 100 } }),
+        resolveModel: async () => ({ id: "model", name: "model", providerID: "provider", limit: { context: 1000, output: 100 } }),
         run: async (input, sink: Sink) => {
           calls += 1;
           arms.push(input.yieldAtInputTokens);
@@ -95,7 +95,7 @@ describe("window and steering yield", () => {
           onSummarize: async () => "window checkpoint",
         },
         llm: {
-          resolveProviderModel: async () => ({ id: "model", name: "model", providerID: "provider", limit: { context: 1000, output: 100 } }),
+          resolveModel: async () => ({ id: "model", name: "model", providerID: "provider", limit: { context: 1000, output: 100 } }),
           run: async (input, sink: Sink) => {
             calls += 1;
             seen.push(input.messages.length);
@@ -137,7 +137,7 @@ describe("window and steering yield", () => {
         },
       },
       llm: {
-        resolveProviderModel: async () => ({ id: "model", name: "model", providerID: "provider", limit: { context: 100_000, output: 100 } }),
+        resolveModel: async () => ({ id: "model", name: "model", providerID: "provider", limit: { context: 100_000, output: 100 } }),
         run: async (_input, sink: Sink) => {
           sink.onMessage(assistant("stop", 55_000));
           return { type: "stop" };
@@ -155,7 +155,7 @@ describe("window and steering yield", () => {
       model: { provider: "provider", id: "model" },
       budget: { maxToolCalls: -1 },
       llm: {
-        resolveProviderModel: async () => ({
+        resolveModel: async () => ({
           id: "model",
           name: "model",
           providerID: "provider",
@@ -182,7 +182,7 @@ describe("window and steering yield", () => {
       model: { provider: "provider", id: "model" },
       steeringPending: () => pending,
       llm: {
-        resolveProviderModel: async () => ({ id: "model", name: "model", providerID: "provider" }),
+        resolveModel: async () => ({ id: "model", name: "model", providerID: "provider" }),
         run: async (input, sink: Sink) => {
           calls += 1;
           if (calls === 1) {
@@ -206,7 +206,7 @@ describe("window and steering yield", () => {
       budget: { maxToolCalls: 1 },
       steeringPending: () => true,
       llm: {
-        resolveProviderModel: async () => ({ id: "model", name: "model", providerID: "provider" }),
+        resolveModel: async () => ({ id: "model", name: "model", providerID: "provider" }),
         run: async (input, sink: Sink) => {
           calls += 1;
           input.shouldYield?.();
@@ -240,7 +240,7 @@ describe("window and steering yield", () => {
           onSummarize: async () => "must not run",
         },
         llm: {
-          resolveProviderModel: async () => ({
+          resolveModel: async () => ({
             id: "model",
             name: "model",
             providerID: "provider",
@@ -270,7 +270,7 @@ describe("window and steering yield", () => {
       model: { provider: "provider", id: "model" },
       budget: { maxToolCalls: 1 },
       llm: {
-        resolveProviderModel: async () => ({ id: "model", name: "model", providerID: "provider" }),
+        resolveModel: async () => ({ id: "model", name: "model", providerID: "provider" }),
         run: async (_input, sink: Sink) => {
           sink.onMessage(assistant("tool-calls"));
           return { type: "stop" };

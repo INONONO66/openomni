@@ -38,7 +38,7 @@ function agent(run: MockLlmFn, steeringPending?: () => boolean) {
   return ChatAgent.create({
     events: Bus,
     model: { provider: "anthropic", id: providerModel.id },
-    llm: { run, resolveProviderModel: async () => providerModel },
+    llm: { run, resolveModel: async () => providerModel },
     ...(steeringPending === undefined ? {} : { steeringPending }),
   });
 }

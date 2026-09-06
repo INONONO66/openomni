@@ -45,7 +45,7 @@ function createAgent(signal?: AbortSignal) {
     signal,
     llm: {
       run: (input, sink) => llmRun(input, sink, { createStream: createProviderStream }),
-      resolveProviderModel: async (model: Model.Ref) => {
+      resolveModel: async (model: Model.Ref) => {
         attempt += 1;
         return { id: model.id, name: model.id, providerID: model.provider, api: { npm: "@ai-sdk/anthropic" } };
       },
@@ -112,7 +112,7 @@ async function classified(providerFailure: InstanceType<typeof Run.FailureError>
     await ChatAgent.create({
       events: Bus,
       model: { provider: "anthropic", id: "model" },
-      llm: { resolveProviderModel: async () => ({ id: "model", name: "model", providerID: "anthropic" }), run: async () => { calls += 1; return { type: "error", error: providerFailure }; } },
+      llm: { resolveModel: async () => ({ id: "model", name: "model", providerID: "anthropic" }), run: async () => { calls += 1; return { type: "error", error: providerFailure }; } },
     }).run(runInput([{ role: "user", content: "hello" }]));
   } catch (error) {
     if (error instanceof Error) thrown = error;

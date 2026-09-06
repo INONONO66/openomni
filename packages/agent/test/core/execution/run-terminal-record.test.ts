@@ -162,7 +162,7 @@ describe("one terminal record per started run", () => {
       const running = runAgent(runInput([{ role: "user", content: "hi" }]), {
         events: Bus,
         model,
-        llm: { resolveProviderModel: async () => { throw Symbol.for("terminal"); } },
+        llm: { resolveModel: async () => { throw Symbol.for("terminal"); } },
       });
       await expect(running).rejects.toBe(Symbol.for("terminal"));
       expect((await failed.promise).error).toBe("Symbol(terminal)");

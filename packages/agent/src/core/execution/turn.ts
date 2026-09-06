@@ -92,10 +92,8 @@ export async function buildTurn(
         system,
         signal: config.signal,
         model: providerModel,
-        // The configured API key belongs to the primary provider. A
-        // cross-provider fallback must resolve that provider's credential in
-        // llm.run rather than forwarding the primary key to it.
-        auth: providerModel.providerID === config.model.provider ? config.auth : undefined,
+        auth: config.auth,
+        authProvider: config.model.provider,
         ...(config.transport === undefined ? {} : { transport: config.transport }),
         allowAuthFallback: config.allowAuthFallback,
         toolChoice: configuredToolChoice,

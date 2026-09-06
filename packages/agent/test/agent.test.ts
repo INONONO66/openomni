@@ -1,5 +1,5 @@
 import { describe, expect, it, mock, spyOn } from "bun:test";
-import { Provider } from "@openomni/llm";
+import { Auth } from "@openomni/llm";
 import type { Tool } from "@openomni/protocol";
 import { createAssistantMessage } from "../src/core/message-factory";
 import { RunEvents } from "../src/core/execution/events";
@@ -146,7 +146,7 @@ describe("ChatAgent public run contract", () => {
         capturedContext = context;
         return { id: "result-1", toolCallId: call.id, output: "found" };
       },
-      llm: { resolveProviderModel: async () => mockProviderModel },
+      llm: { resolveModel: async () => mockProviderModel },
     }).run(runInput([{ role: "user", content: "hello" }]));
 
     expect(capturedContext?.signal).toBe(controller.signal);
@@ -232,11 +232,12 @@ describe("ChatAgent provider boundary failures", () => {
         model: { provider: "missing-provider", id: "missing-model" },
         signal: AbortSignal.abort(),
       }).run(runInput([{ role: "user", content: "lookup" }])),
-    ).rejects.toThrow("Provider not found: missing-provider");
+    ).rejects.toMatchObject({ data: { reason: "provider_not_found", provider: "missing-provider" } });
   });
 
   it("reports a non-Error proxy listing failure", async () => {
-    const listing = spyOn(Provider, "listModels").mockRejectedValue("proxy offline");
+    const auth = spyOn(Auth, "get").mockResolvedValue({ type: "proxy", baseURL: "https://agent-missing-proxy.example" });
+    const listing = spyOn(globalThis, "fetch").mockRejectedValue("proxy offline");
     try {
       await expect(
         ChatAgent.create({
@@ -244,11 +245,10 @@ describe("ChatAgent provider boundary failures", () => {
           model: { provider: "anthropic", id: "missing-proxy-model" },
           signal: AbortSignal.abort(),
         }).run(runInput([{ role: "user", content: "lookup" }])),
-      ).rejects.toThrow(
-        "Model lookup failed for missing-proxy-model (provider anthropic): proxy model listing failed: proxy offline",
-      );
+      ).rejects.toMatchObject({ data: { reason: "proxy_listing_failed" }, cause: { cause: "proxy offline" } });
     } finally {
       listing.mockRestore();
+      auth.mockRestore();
     }
   });
 
@@ -259,7 +259,7 @@ describe("ChatAgent provider boundary failures", () => {
         model: { provider: "anthropic", id: "missing-model" },
         signal: AbortSignal.abort(),
       }).run(runInput([{ role: "user", content: "lookup" }])),
-    ).rejects.toThrow("Model not found: missing-model for provider anthropic");
+    ).rejects.toMatchObject({ data: { reason: "model_not_found", model: "missing-model" } });
   });
 
   it("resolves a known model through the default provider path", async () => {

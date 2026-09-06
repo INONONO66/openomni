@@ -50,7 +50,7 @@ async function exercise(
       ? { toolWave: (calls: readonly Tool.Call[]) => Promise.all(calls.map(body)) }
       : {}),
     llm: {
-      resolveProviderModel: async () => ({ id: "model", name: "model", providerID: "test" }),
+      resolveModel: async () => ({ id: "model", name: "model", providerID: "test" }),
       run: async (modelInput, sink) => {
         catalogs.push(modelInput.tools.map((tool) => tool.name));
         const message = createAssistantMessage("", "", "session-placement");

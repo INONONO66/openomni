@@ -1,4 +1,4 @@
-import { ModelsDev, Provider, Run, run as llmRun, type RunInput, type Sink } from "@openomni/llm";
+import { Provider, Run, run as llmRun, type RunInput, type Sink } from "@openomni/llm";
 import type { Message, Model } from "@openomni/protocol";
 import { Bus, newTraceId } from "@openomni/agent";
 import { z } from "zod";
@@ -68,7 +68,7 @@ export function createLlmTool(llm: LlmPort) {
  */
 export interface LlmIo {
   readonly run?: typeof llmRun;
-  readonly resolveProviderModel?: (model: Model.Ref) => Promise<Provider.Model>;
+  readonly resolveModel?: (model: Model.Ref) => Promise<Provider.Model>;
 }
 
 /**
@@ -106,10 +106,7 @@ export async function runResolvedText(call: ResolvedTextCall, io: LlmIo = {}): P
     onToolResult: () => undefined,
   };
   const ref: Model.Ref = { provider: call.model.provider, id: call.model.id };
-  const resolved =
-    io.resolveProviderModel === undefined
-      ? resolveLlmToolModel(await ModelsDev.get(), ref)
-      : await io.resolveProviderModel(ref);
+  const resolved = await (io.resolveModel ?? Provider.resolveModel)(ref);
   const outcome = await (io.run ?? llmRun)(
     {
       messages: call.messages,
@@ -118,6 +115,7 @@ export async function runResolvedText(call: ResolvedTextCall, io: LlmIo = {}): P
       maxSteps: 1,
       model: resolved,
       auth: { type: "api", key: call.model.apiKey },
+      authProvider: call.model.provider,
       ...(call.model.transport === undefined ? {} : { transport: call.model.transport }),
       ...(call.signal === undefined ? {} : { signal: call.signal }),
       ...(call.maxTokens === undefined ? {} : { maxTokens: call.maxTokens }),
@@ -169,18 +167,4 @@ export function createLlmToolPort(model: ResolvedTextCall["model"], io: LlmIo = 
     };
     return runResolvedText({ model, messages: [request], sessionId }, io);
   };
-}
-
-export function resolveLlmToolModel(
-  data: Record<string, ModelsDev.Provider>,
-  model: { readonly provider: string; readonly id: string },
-): Provider.Model {
-  const provider = data[model.provider];
-  const raw = provider?.models?.[model.id];
-  if (provider === undefined || raw === undefined) {
-    throw new Error(
-      `llm failed: model "${model.id}" is not listed under provider "${model.provider}" in the models.dev catalog, so its SDK wiring is unknown`,
-    );
-  }
-  return Provider.fromModelsDevModel(provider, raw as ModelsDev.Model);
 }
