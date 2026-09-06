@@ -23,7 +23,7 @@ import { SessionTree } from "../src/renderer/shell/session-tree";
  * agree with the rows that actually rendered, rather than to match a literal.
  *
  * Behavior driven by real key events is covered by search-keyboard.test.ts (the
- * reducer) and showcase/probe-search.ts (the browser).
+ * reducer) and script/probe-search.ts (the browser).
  */
 const signals: Signals = {
   now,

@@ -124,8 +124,8 @@ describe("the shell density type scale", () => {
   });
 
   test("Given the shell block, When inspected, Then it re-points type and rhythm only", () => {
-    // Density is not a theme. The System and Shell tabs must stay one color
-    // system, or the showcase is comparing two design systems.
+    // Density is not a theme: the shell block may re-point type and rhythm,
+    // never color, or the app is running two design systems.
     expect(SHELL).not.toContain("--color-");
     expect(SHELL).not.toContain("--radius-");
   });

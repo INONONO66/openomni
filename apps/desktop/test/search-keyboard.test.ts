@@ -16,7 +16,7 @@ import {
  * STATE — what Esc means when the field has text versus when it is empty, where
  * focus lands after Enter — and a decision expressed as state can be replayed.
  * The DOM half (a real ⌘K keydown reaching the document, focus actually moving)
- * is verified in the browser by showcase/probe-search.ts.
+ * is verified in the browser by script/probe-search.ts.
  */
 const SEQUENCE = ["first", "second", "third"] as const;
 

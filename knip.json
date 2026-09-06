@@ -77,20 +77,8 @@
       "project": ["src/**/*.ts", "test/**/*.ts"]
     },
     "packages/ui": {
-      "entry": [
-        "src/index.ts",
-        "test/**/*.test.{ts,tsx}",
-        "showcase/main.tsx",
-        "showcase/vite.config.ts",
-        "showcase/shoot*.ts",
-        "showcase/probe-*.ts"
-      ],
-      "project": [
-        "src/**/*.{ts,tsx}",
-        "test/**/*.{ts,tsx}",
-        "showcase/**/*.{ts,tsx}"
-      ],
-      "ignoreDependencies": ["tailwindcss"]
+      "entry": ["src/index.ts", "test/**/*.test.{ts,tsx}"],
+      "project": ["src/**/*.{ts,tsx}", "test/**/*.{ts,tsx}"]
     }
   }
 }

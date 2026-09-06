@@ -14,7 +14,7 @@ import { UI_NAMES } from "../names";
 const END_EPSILON = 2;
 
 /**
- * DESIGN.md 4/7 — ScrollArea. The named scroll owner: the Root is the bounded
+ * ScrollArea. The named scroll owner: the Root is the bounded
  * box, the Viewport is the only element that scrolls, and the native scrollbar
  * is replaced by a hairline thumb that appears on hover/scroll. Every column
  * that scrolls in the console uses this instead of a bare `overflow-y-auto`.

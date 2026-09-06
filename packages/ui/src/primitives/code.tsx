@@ -5,7 +5,7 @@ import { Text } from "./surface";
 export type CodeTone = "plain" | "keyword" | "string" | "number" | "comment" | "fn" | "punct";
 
 /**
- * DESIGN.md 7 — CodeToken. Syntax color is the achromatic ramp: the accent is
+ * CodeToken. Syntax color is the achromatic ramp: the accent is
  * reserved for live state, so a code fence has no chroma to spend and reads by
  * weight and tone alone. This is what stops a fence from becoming the loudest
  * region on a text-first surface.

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { ApprovalTray, Composer, type ComposerAction, Console, composerKey } from "../src";
+import { ApprovalTray, Composer, type ComposerAction, composerKey } from "../src/composer";
+import { Console } from "../src/console";
 
 /**
  * The composer's keyboard contract and the approval tray's shape.

@@ -10,12 +10,8 @@ import { Timeline } from "./timeline/timeline";
 /**
  * The console: the whole product surface, as ONE component.
  *
- * This exists because the showcase and the app were drawing the same screen
- * twice, so the showcase could sit green through an entire redesign of the
- * surface it claimed to document. There is one composition now and both
- * consumers render it. The rule the Owner set is the one enforced here: **the
- * shell IS the ui package, composed** — not a thing the ui package can be used
- * to build.
+ * The rule the Owner set is the one enforced here: **the shell IS the ui
+ * package, composed** — not a thing the ui package can be used to build.
  *
  * ## The three-band main column
  *
@@ -35,7 +31,7 @@ import { Timeline } from "./timeline/timeline";
  *
  * The navigator's CONTENT. The tree renders the attention engine's ranking and
  * the search engine's results — two engines whose every type names a session or
- * a project, which BOUNDARY.md puts squarely in the app. Pulling the tree in
+ * a project, which belongs squarely to the app. Pulling the tree in
  * here would drag both engines across the boundary with it, and a design system
  * that ranks sessions by unread count is not a design system.
  *

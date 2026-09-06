@@ -1,5 +1,5 @@
 /**
- * DESIGN.md 7 — State. A status word is TEXT. The word is the readout, and it
+ * State. A status word is TEXT. The word is the readout, and it
  * is never replaced by a shape: no badge, no colour-coded pill, no `✓`/`✗`
  * standing in for a sentence a reader would otherwise be able to read aloud.
  *
@@ -161,22 +161,6 @@ export function StatusDot({
           </>
         ) : null}
       </svg>
-    </span>
-  );
-}
-
-export function State({ label, tier }: { readonly label: string; readonly tier: StateTier }) {
-  return (
-    // `Row.Status` rather than `State`: the word is what a ROW says about
-    // itself, and that is the address the Owner reaches for when they mean the
-    // second line of a session row. The component keeps its own name because
-    // `State` is what it is; `Row.Status` is where it lives.
-    <span
-      className={`shrink-0 font-mono text-micro ${TONE[tier]}`}
-      data-state={label}
-      data-ui={UI_NAMES.RowStatus}
-    >
-      {label}
     </span>
   );
 }

@@ -12,8 +12,7 @@
 /* No `color-scheme`, no background, no font here. All three are tokens, and the
    theme is carried by the design system's `[data-theme]` contract; a value
    restated at the app level is a second source of truth that silently wins over
-   the token whenever the two drift. `apps/desktop/test/design-tokens.test.ts`
-   is the gate: this file may not name a color. */
+   the token whenever the two drift. This file names no color. */
 
 body {
   margin: 0;
