@@ -625,6 +625,23 @@ prints what it is handed and knows nothing about models or context windows.
   Both halves are enforced by `apps/desktop/test/shell-density.test.tsx`, as two separate
   assertions; the scale's token VALUES are pinned in `packages/ui/test/density.test.ts`.
 - `packages/ui` must not import from `apps/desktop`. The showcase carries its own fixtures.
+
+### AI SDK transcript adapter
+
+`apps/desktop/src/renderer/chat/adapter.ts` is the single pure crossing from AI SDK `UIMessage`
+parts to the data-blind `TranscriptNode` contract. It preserves arrival order, derives costs and
+pending approvals from the same message list the app renders, and keeps `ai` and `@ai-sdk/react`
+out of `packages/ui`.
+
+| AI SDK tool state | Transcript tool status |
+| --- | --- |
+| `input-streaming`, `input-available` | `running` |
+| `approval-requested` | `waiting` |
+| `approval-responded` | `running` when approved; `denied` when rejected |
+| `output-error` | `failed` |
+| `output-denied` | `denied` |
+| `output-available` | omitted (settled success) |
+
 - **`packages/ui` owns the transcript's presentation; `apps/desktop` owns ordering, search, and
   data.** The timeline, the tool rows and their folding, the three voices, the composer, the
   approval tray, the anchor gutter, the markdown block, and the pure logic under them (`gapAbove`,

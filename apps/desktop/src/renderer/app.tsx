@@ -1,7 +1,12 @@
+import { Chat, useChat } from "@ai-sdk/react";
 import { Console } from "@openomni/ui";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { applyAtBoundary, orderByAttention } from "./attention";
 import type { Boundary, Held, ProjectSessionFacts, Signals } from "./attention";
+import { uiMessagesToTranscript } from "./chat/adapter";
+import type { OpenOmniUIMessage } from "./chat/message";
+import { createMockChatTransport } from "./chat/mock-transport";
+import type { SessionId } from "./mock/console";
 import {
   lastReadAt,
   now,
@@ -11,7 +16,7 @@ import {
   sessions,
   snoozes,
 } from "./mock/console";
-import { approvals, timelines, turnCosts } from "./mock/timelines";
+import { timelines } from "./mock/timelines";
 import { SessionTree } from "./shell/session-tree";
 
 /**
@@ -21,10 +26,11 @@ import { SessionTree } from "./shell/session-tree";
  * spends a fifth of the window on nothing, and the surface this system is
  * building keeps content centered with the sides deliberately clear.
  *
- * The composer and the approval tray are wired to LOCAL STATE only. There is no
- * kernel behind this shell yet, so sending clears the draft and approving drops
- * the decision from the pending list — enough for the controls to be real and
- * reviewable, and honest about the fact that nothing is executed.
+ * The composer and the approval tray are wired to a real `Chat` from the AI
+ * SDK, one per session, over a mock transport. Sending streams a reply and
+ * approving posts a tool-approval response — the same calls the gateway build
+ * will make, with only the transport swapped. Nothing is executed on a machine
+ * yet, and that is the transport's honesty to keep, not this file's.
  *
  * Ordering runs through `attention` and is applied at a focus boundary only —
  * here, a selection change. Between boundaries the previous order is held, so
@@ -50,20 +56,38 @@ export function App() {
   // The draft is per session: switching away and back must not hand the Owner
   // a half-written message addressed to a different agent.
   const [drafts, setDrafts] = useState<Readonly<Record<string, string>>>({});
-  const [decided, setDecided] = useState<ReadonlySet<string>>(() => new Set());
+
+  // One `Chat` per session, kept in a ref so a re-render never rebuilds one and
+  // drops a stream mid-turn. A session the Owner has never opened has no chat
+  // at all: constructing seven of them up front would attach seven transports
+  // to keep six idle conversations warm.
+  const chats = useRef<Map<SessionId, Chat<OpenOmniUIMessage>>>(new Map());
+  const chat = chatFor(chats.current, selected);
+
+  // Unconditional, on every render, with the selected chat chosen ABOVE it —
+  // `useChat` is a hook, and selecting inside it would make the hook order
+  // depend on which session is open.
+  const { messages, sendMessage, status, stop, addToolApprovalResponse } = useChat({ chat });
 
   const session = sessions.find((candidate) => candidate.id === selected);
-  const nodes = useMemo(() => timelines[selected] ?? [], [selected]);
-  const costs = useMemo(() => turnCosts[selected] ?? {}, [selected]);
-  const pending = useMemo(
-    () => (approvals[selected] ?? []).filter((entry) => !decided.has(entry.toolId)),
-    [selected, decided],
-  );
+  const { nodes, costs, pending } = useMemo(() => uiMessagesToTranscript(messages), [messages]);
+  // `submitted` is the window between the send and the first chunk; without it
+  // the composer unlocks for exactly as long as the request takes to reach the
+  // transport, which is where a double-send comes from.
+  const sending = status === "submitted" || status === "streaming";
 
-  // Both decisions resolve the same way here, because with no kernel behind the
-  // shell the only honest effect either one can have is to stop asking.
-  const decide = (toolId: string) =>
-    setDecided((was) => new Set(was).add(toolId));
+  const send = () => {
+    const text = drafts[selected]?.trim() ?? "";
+    if (text === "") return;
+    void sendMessage({ text });
+    setDrafts((was) => ({ ...was, [selected]: "" }));
+  };
+
+  // The tray hands back the APPROVAL's id, because that is what the adapter put
+  // on the row and the only identifier the SDK will accept a decision under.
+  const decide = (approved: boolean) => (approvalId: string) => {
+    void addToolApprovalResponse({ id: approvalId, approved });
+  };
 
   // Selection change IS the breakpoint: the Owner has just finished deciding
   // what to look at, so a new order costs them nothing — UNLESS the decision
@@ -85,11 +109,17 @@ export function App() {
         draft={drafts[selected] ?? ""}
         emptyLabel="No turns in this session yet."
         nodes={nodes}
-        onApprove={decide}
-        onDeny={decide}
+        onApprove={decide(true)}
+        onDeny={decide(false)}
         onDraftChange={(value) => setDrafts((was) => ({ ...was, [selected]: value }))}
-        onSubmit={() => setDrafts((was) => ({ ...was, [selected]: "" }))}
+        // Per SESSION, because `stop` belongs to the chat the hook is currently
+        // subscribed to: it aborts the turn the Owner is watching, and switching
+        // sessions mid-stream leaves the other one running, which is what one
+        // chat per session is for.
+        onStop={() => void stop()}
+        onSubmit={send}
         pending={pending}
+        sending={sending}
         sessionId={selected}
         sidebar={
           <SessionTree
@@ -106,6 +136,63 @@ export function App() {
     </div>
   );
 }
+
+/**
+ * The chat for a session, created on first sight and never again.
+ *
+ * The fixture is the chat's INITIAL messages rather than a separate rendering
+ * path, so the moment the Owner sends, the streamed reply lands in the same
+ * list the fixture is in and the transcript keeps one source. Everything the
+ * surface draws is derived from that list.
+ */
+function chatFor(
+  chats: Map<SessionId, Chat<OpenOmniUIMessage>>,
+  sessionId: SessionId,
+): Chat<OpenOmniUIMessage> {
+  const existing = chats.get(sessionId);
+  if (existing !== undefined) return existing;
+
+  const created = new Chat<OpenOmniUIMessage>({
+    id: sessionId,
+    messages: [...(timelines[sessionId] ?? [])],
+    transport,
+    generateId,
+  });
+  chats.set(sessionId, created);
+  return created;
+}
+
+/**
+ * ONE transport for every chat.
+ *
+ * The gateway build will hold a single socket for the whole window, so the
+ * shape is the same one now: sessions share a connection and are told apart by
+ * the chat they belong to. A transport per chat would make that swap a
+ * rewrite instead of a substitution.
+ */
+// One chunk per paint keeps the mock's in-flight state visible in the real
+// renderer instead of collapsing the whole reply into one React render.
+const transport = createMockChatTransport({
+  replies: [
+    "The mock transport is streaming this reply through the Console so the in-flight assistant answer remains visible before the chat returns to ready.",
+  ],
+  chunkSize: 4,
+  tick: () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
+});
+
+/**
+ * Message ids, from a counter rather than the SDK's random default.
+ *
+ * The renderer's tests render the shell to static markup and assert on it, and
+ * an id that changes per run turns any such assertion into a coin flip. The
+ * counter is per window and never leaves it — nothing downstream treats a
+ * message id as globally unique.
+ */
+let nextId = 0;
+const generateId = () => {
+  nextId += 1;
+  return `m${nextId}`;
+};
 
 /**
  * The engine's input. `now` is the mock's fixed instant rather than the wall

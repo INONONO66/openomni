@@ -227,6 +227,25 @@ function ComposerSpecimen() {
           value={draft}
         />
       </div>
+      {/* The same composer with a turn in flight, because the primary action is
+          not the same control in both states and the swap is the thing worth
+          reviewing: the field is locked, send would be dead, and the slot is
+          holding Stop instead. This is also the only place `Composer.Stop` can
+          be looked at — the Shell tab's console is idle by construction. */}
+      <div className="pt-section" data-density="shell">
+        <Text className="px-section pb-2" level="micro" mono tone="subtle">
+          sending, with a stop handler
+        </Text>
+        <Composer
+          hint="claude-sonnet-4-6"
+          meta="streaming"
+          onStop={() => undefined}
+          onSubmit={() => undefined}
+          onValueChange={() => undefined}
+          sending
+          value=""
+        />
+      </div>
     </Section>
   );
 }

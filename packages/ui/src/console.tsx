@@ -54,6 +54,7 @@ export function Console({
   draft = "",
   onDraftChange,
   onSubmit,
+  onStop,
   sending,
   composerHint,
   composerMeta,
@@ -78,6 +79,8 @@ export function Console({
   readonly draft?: string;
   readonly onDraftChange?: ((value: string) => void) | undefined;
   readonly onSubmit?: (() => void) | undefined;
+  /** Interrupt the turn in flight. The composer's primary action while sending. */
+  readonly onStop?: (() => void) | undefined;
   readonly sending?: boolean;
   readonly composerHint?: string | undefined;
   readonly composerMeta?: string | undefined;
@@ -127,6 +130,7 @@ export function Console({
             onApprove={onApprove}
             onDeny={onDeny}
             onNext={onNextApproval}
+            onStop={onStop}
             onSubmit={onSubmit}
             onValueChange={onDraftChange}
             pending={pending}
