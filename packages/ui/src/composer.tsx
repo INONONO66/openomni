@@ -191,6 +191,7 @@ export function Composer({
   value,
   onValueChange,
   onSubmit,
+  onStop,
   sending = false,
   hint,
   meta,
@@ -204,6 +205,13 @@ export function Composer({
   readonly onValueChange: (value: string) => void;
   /** Called on Enter and on the send affordance. Never with an empty value. */
   readonly onSubmit: () => void;
+  /**
+   * Interrupt the turn in flight. When present, the primary action becomes a
+   * Stop while `sending` — see the control below for why it replaces send
+   * rather than joining it. Optional, because a surface whose transport cannot
+   * be cancelled must not be handed a control that does nothing.
+   */
+  readonly onStop?: (() => void) | undefined;
   /** Locks the field and the send control while a turn is in flight. */
   readonly sending?: boolean;
   /** Left meta: the model, the session — the surface's words, not ours. */
@@ -274,38 +282,78 @@ export function Composer({
             rows={1}
             value={value}
           />
-          {/* Drawn, on a 16-unit grid, for the same reason the chevron is: an
-              icon set's stroke does not survive being scaled to this size. It
-              is disabled rather than hidden when there is nothing to send, so
-              the row's geometry does not change as the Owner types the first
-              character. */}
-          <button
-            aria-label="Send"
-            className="focus-ring -mb-0.5 shrink-0 rounded-sm p-1 text-fg/40 transition-quiet hover:text-fg disabled:pointer-events-none disabled:opacity-40"
-            data-send
-            data-ui={UI_NAMES.ComposerSend}
-            disabled={!sendable}
-            onClick={onSubmit}
-            type="button"
-          >
-            {/* biome-ignore lint/a11y/noSvgWithoutTitle: aria-hidden; the button carries the name */}
-            <svg
-              aria-hidden
-              className="size-4"
-              fill="none"
-              height="16"
-              viewBox="0 0 16 16"
-              width="16"
+          {/* ONE primary action, and which one depends on whether a turn is in
+              flight. While the agent is writing, send is dead — the field is
+              locked and there is nothing to submit — so the slot is the only
+              place a stop can go without adding a second control beside a
+              disabled one. It is also where the Owner's hand already is, which
+              is the whole reason the composer owns the send affordance in the
+              first place.
+
+              A surface with no `onStop` keeps the disabled send exactly as
+              before: the swap is bound to the SURFACE's ability to interrupt,
+              never to a hidden guess about the transport. */}
+          {sending && onStop !== undefined ? (
+            <button
+              aria-label="Stop response"
+              className="focus-ring -mb-0.5 shrink-0 rounded-sm p-1 text-fg/70 transition-quiet hover:text-fg"
+              data-stop
+              data-ui={UI_NAMES.ComposerStop}
+              onClick={onStop}
+              type="button"
             >
-              <path
-                d="M8 13V3.5M8 3.5 L4 7.5M8 3.5 L12 7.5"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="1.5"
-              />
-            </svg>
-          </button>
+              {/* The same 16-unit grid and the same 16px box as send, so the
+                  row does not resize at the moment a turn starts. A filled
+                  square rather than an outlined one: this is the one control on
+                  the row that is always live, and a hairline square at 10px
+                  reads as a checkbox. It takes no accent — the accent budget is
+                  spent on Approve, and stopping one's own agent is routine. */}
+              {/* biome-ignore lint/a11y/noSvgWithoutTitle: aria-hidden; the button carries the name */}
+              <svg
+                aria-hidden
+                className="size-4"
+                fill="none"
+                height="16"
+                viewBox="0 0 16 16"
+                width="16"
+              >
+                <rect fill="currentColor" height="8" rx="1" width="8" x="4" y="4" />
+              </svg>
+            </button>
+          ) : (
+            /* Drawn, on a 16-unit grid, for the same reason the chevron is: an
+               icon set's stroke does not survive being scaled to this size. It
+               is disabled rather than hidden when there is nothing to send, so
+               the row's geometry does not change as the Owner types the first
+               character. */
+            <button
+              aria-label="Send"
+              className="focus-ring -mb-0.5 shrink-0 rounded-sm p-1 text-fg/40 transition-quiet hover:text-fg disabled:pointer-events-none disabled:opacity-40"
+              data-send
+              data-ui={UI_NAMES.ComposerSend}
+              disabled={!sendable}
+              onClick={onSubmit}
+              type="button"
+            >
+              {/* biome-ignore lint/a11y/noSvgWithoutTitle: aria-hidden; the button carries the name */}
+              <svg
+                aria-hidden
+                className="size-4"
+                fill="none"
+                height="16"
+                viewBox="0 0 16 16"
+                width="16"
+              >
+                <path
+                  d="M8 13V3.5M8 3.5 L4 7.5M8 3.5 L12 7.5"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="1.5"
+                />
+              </svg>
+            </button>
+          )}
         </div>
         {/* One meta line under the field. Left: what is answering. Right: what
             the turn has cost. Both in the meta voice, both dim, because neither

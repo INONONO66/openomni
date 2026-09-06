@@ -1,6 +1,6 @@
 # PROJECT KNOWLEDGE BASE
 
-Session authority verified against `kernel/967-session`: 2026-09-06 (legacy Session namespace, CRUD/message adapters and boot TTL removed; canonical handles and recovery retained). Archive/retired-owner cutover verified on `kernel/967-data` (2026-09-06): explicit native archive confirmation and guarded migration 0034; session-owned Wait remains live and message/part disposition is deferred. Other ownership remains as verified on `kernel/936` (2026-09-05). Keep this stamp current when editing (doc-state sync law). Desktop/ui verified against `feat/desktop-shell-mock` (2026-09-06): `packages/ui/src/names.ts` owns every `data-ui` address and `packages/ui/COMPONENTS.md` documents them 1:1.
+Session authority verified against `kernel/967-session`: 2026-09-06 (legacy Session namespace, CRUD/message adapters and boot TTL removed; canonical handles and recovery retained). Archive/retired-owner cutover verified on `kernel/967-data` (2026-09-06): explicit native archive confirmation and guarded migration 0034; session-owned Wait remains live and message/part disposition is deferred. Other ownership remains as verified on `kernel/936` (2026-09-05). Keep this stamp current when editing (doc-state sync law). Desktop/ui verified against `feat/desktop-ai-sdk` (2026-09-06): apps/desktop owns AI SDK chat state while `packages/ui/src/names.ts` owns every `data-ui` address and `packages/ui/COMPONENTS.md` documents them 1:1.
 
 ## OVERVIEW
 
@@ -12,7 +12,7 @@ OpenOmni is a single-Owner Agent OS: one Resident delegates through durable cont
 openomni/
 ├── apps/
 │   ├── openomni/        # sole deployable app: Resident, gateway composition, machines, delegation, memory
-│   └── desktop/         # Electron console skeleton (setup + build infra only; no product features yet)
+│   └── desktop/         # Electron console: shell/build pipeline plus app-owned AI SDK chat state
 ├── packages/
 │   ├── protocol/        # Zod schemas and cross-package contracts
 │   ├── policy/          # pure policy engine and effect composition
@@ -81,7 +81,7 @@ ui <- apps/desktop
 | `packages/machines` | Machine attach and cell execution driver | Enrollment policy or product judgment |
 | `packages/channels` | Drivers plus perimeter routing, waits, and admission | Session content or product execution |
 | `apps/openomni` | Product composition: Resident, gateway, delegation, memory, code mode, boot/shutdown | Reimplementation of package primitives |
-| `apps/desktop` | Electron shell: main/preload/renderer build pipeline, window security defaults; the attention ordering engine, the search engine, mock fixtures, session-selection state, and per-session draft and approval-decision state | Kernel logic; anything beyond protocol contracts; **transcript presentation — that is `packages/ui`'s** |
+| `apps/desktop` | Electron shell: main/preload/renderer build pipeline, window security defaults; AI SDK chat state and transports; the attention ordering engine, the search engine, mock fixtures, session-selection state, and per-session draft and approval-decision state | Kernel logic; anything beyond protocol contracts; **transcript presentation — that is `packages/ui`'s** |
 | `packages/ui` | The design system: tokens, primitives, window chrome, the transcript's presentation (timeline, the three voices, tool rows and their folding, the composer, the approval tray, anchors), the one `Console` composition both the renderer and the showcase render, and the component NAMES the Owner reviews by — `src/names.ts` is the single owner of every `data-ui` address, documented 1:1 in `COMPONENTS.md` | Any data or kernel vocabulary — it may not name a session, project, agent, or run state |
 
 ## WHERE TO LOOK

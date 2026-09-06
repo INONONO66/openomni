@@ -49,6 +49,7 @@ order" is a `Timeline` note, because ordering is not something a row decides abo
 | `Composer` | `src/composer.tsx` | The input zone: the hairline, the field, the meta line | The hairline above it, its padding, that it shares the transcript's measure |
 | `Composer.Input` | `src/composer.tsx` | The auto-growing textarea | Placeholder tone, prose voice, the one-to-eight-line growth |
 | `Composer.Send` | `src/composer.tsx` | The send affordance | Its 40% rest tone, that it is disabled rather than hidden when empty |
+| `Composer.Stop` | `src/composer.tsx` | What the send affordance becomes while a turn is in flight | Its box matching Send's, the filled square, that it holds no accent |
 | `Composer.Meta` | `src/composer.tsx` | The line under the field: what is answering, what the turn cost | Its dim, the space above and below, left/right split |
 | `ApprovalTray` | `src/composer.tsx` | The pending-decision tray, docked above the composer | Its one-line shape, the `+N` queue count, the gap to the field |
 | `ApprovalTray.Approve` | `src/composer.tsx` | The screen's ONE accent-filled control | The fill, its size, the printed `⌘↩` beside it |
@@ -79,6 +80,7 @@ and the condition is what makes it appear in the product surface. The list lives
 | `Input` | a bordered form field. The console's two fields are SearchLine and Composer.Input, both of which own their own geometry |
 | `Row.Status` | a Row whose surface passes a State word. The navigator's second line is currently plain Text, so this renders on the System page only |
 | `Caret` | the tail of an assistant block while it is STREAMING |
+| `Composer.Stop` | the composer while a turn is in flight AND the surface passed a stop handler. It takes Composer.Send's place rather than sitting beside it, so the idle console never shows both |
 | `Rule` | a vertical split inside a flex row. The console splits its columns with a Panel edge instead |
 | `AnchorGutter` | a transcript row whose surface passes an anchor-copy handler |
 

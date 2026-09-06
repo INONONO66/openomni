@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { App } from "../src/renderer/app";
 import type { ProjectSessionFacts, Signals } from "../src/renderer/attention";
 import { orderByAttention } from "../src/renderer/attention";
+import { uiMessagesToTranscript } from "../src/renderer/chat/adapter";
 import {
   lastReadAt,
   now,
@@ -82,8 +83,10 @@ describe("selection drives the main header", () => {
 describe("selection drives the transcript", () => {
   test("Given the initial selection, When the app renders, Then its own timeline is shown", () => {
     const html = renderToStaticMarkup(<App />);
-    const timeline = timelines[selectedSessionId] ?? [];
-    const prompt = timeline.find((node) => node.kind === "prompt");
+    // Through the adapter, because that is the path the shell itself takes:
+    // the fixture is SDK messages and the column is transcript nodes.
+    const { nodes } = uiMessagesToTranscript(timelines[selectedSessionId] ?? []);
+    const prompt = nodes.find((node) => node.kind === "prompt");
 
     expect(prompt).toBeDefined();
     if (prompt?.kind === "prompt") {

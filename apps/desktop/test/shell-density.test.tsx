@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { Timeline } from "@openomni/ui";
 import { renderToStaticMarkup } from "react-dom/server";
 import { App } from "../src/renderer/app";
+import { uiMessagesToTranscript } from "../src/renderer/chat/adapter";
 import { timelines } from "../src/renderer/mock/timelines";
 
 /**
@@ -24,10 +25,22 @@ import { timelines } from "../src/renderer/mock/timelines";
 
 const SHELL = renderToStaticMarkup(<App />);
 
+/**
+ * The fixtures are SDK messages, so the nodes this file asserts on are the
+ * ADAPTER'S output — the same crossing `App` makes. Rendering a hand-built node
+ * array here would let the shell and this gate disagree about what the column
+ * actually contains.
+ */
+function nodesOf(id: string) {
+  const messages = timelines[id];
+  if (!messages) throw new Error(`no timeline fixture for ${id}`);
+  return uiMessagesToTranscript(messages).nodes;
+}
+
 function transcript(id: string): string {
-  const nodes = timelines[id];
-  if (!nodes) throw new Error(`no timeline fixture for ${id}`);
-  return renderToStaticMarkup(<Timeline emptyLabel="empty" nodes={nodes} sessionId={id} />);
+  return renderToStaticMarkup(
+    <Timeline emptyLabel="empty" nodes={nodesOf(id)} sessionId={id} />,
+  );
 }
 
 /**
@@ -117,14 +130,35 @@ describe("the transcript sets exactly three voices", () => {
     // The fence is the one place a size is set on a container rather than per
     // node, and that is deliberate: code is a block of uniform text, and a
     // fence whose tokens each carried their own size would ripple.
-    const withCode = IDS.find((id) =>
-      (timelines[id] ?? []).some(
-        (node) => node.kind === "assistant" && node.blocks.some((b) => b.kind === "code"),
-      ),
+    //
+    // The node is BUILT here rather than found in a fixture. The session
+    // fixtures are SDK messages now and the adapter renders assistant text as
+    // prose blocks, so no fixture reaches a fence — and a rule this file is the
+    // only gate for must not quietly stop running because its example moved.
+    const html = renderToStaticMarkup(
+      <Timeline
+        emptyLabel="empty"
+        nodes={[
+          {
+            kind: "assistant",
+            id: "fence",
+            streaming: false,
+            blocks: [
+              {
+                kind: "code",
+                lang: "rust",
+                startLine: 138,
+                lines: [
+                  { tokens: [{ text: "async fn append(&self) {", tone: "keyword" }] },
+                  { tokens: [{ text: "  let lease = acquire();", tone: "plain" }], mark: "add" },
+                ],
+              },
+            ],
+          },
+        ]}
+        sessionId="fence"
+      />,
     );
-    if (!withCode) throw new Error("no code fixture");
-
-    const html = transcript(withCode);
     const pre = html.slice(html.indexOf("<pre"), html.indexOf("</pre>"));
     expect(pre).toContain("font-mono");
     // And the size it owns is the CODE voice specifically — without this the
@@ -138,7 +172,7 @@ describe("the transcript sets exactly three voices", () => {
     // two-line layout, no status column — those belonged to the grammar this
     // replaced, and the row is the transcript's densest element becoming its
     // most decorated one the moment any of them come back.
-    const withTool = IDS.find((id) => (timelines[id] ?? []).some((node) => node.kind === "tool"));
+    const withTool = IDS.find((id) => nodesOf(id).some((node) => node.kind === "tool"));
     if (!withTool) throw new Error("no tool fixture");
 
     const html = transcript(withTool);
@@ -149,9 +183,7 @@ describe("the transcript sets exactly three voices", () => {
   });
 
   test("Given the transcript, When prose is rendered, Then it is the prose voice", () => {
-    const withPrompt = IDS.find((id) =>
-      (timelines[id] ?? []).some((node) => node.kind === "prompt"),
-    );
+    const withPrompt = IDS.find((id) => nodesOf(id).some((node) => node.kind === "prompt"));
     if (!withPrompt) throw new Error("no prompt fixture");
 
     expect(transcript(withPrompt)).toContain(PROSE);
@@ -160,9 +192,7 @@ describe("the transcript sets exactly three voices", () => {
   test("Given a user message, When rendered, Then it is a right-aligned block with no fill", () => {
     // The one asymmetry that tells two speakers apart. It must stay geometry:
     // a background or a border here is the chat bubble the column rejected.
-    const withPrompt = IDS.find((id) =>
-      (timelines[id] ?? []).some((node) => node.kind === "prompt"),
-    );
+    const withPrompt = IDS.find((id) => nodesOf(id).some((node) => node.kind === "prompt"));
     if (!withPrompt) throw new Error("no prompt fixture");
 
     const html = transcript(withPrompt);

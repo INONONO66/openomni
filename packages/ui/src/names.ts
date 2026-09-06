@@ -95,6 +95,8 @@ export const UI_NAMES = {
   ComposerInput: "Composer.Input",
   /** The send affordance. */
   ComposerSend: "Composer.Send",
+  /** What the send affordance becomes while a turn is being interrupted. */
+  ComposerStop: "Composer.Stop",
   /** The line under the field: what is answering, what the turn has cost. */
   ComposerMeta: "Composer.Meta",
   /** The pending-decision tray, docked above the composer. */
@@ -157,6 +159,8 @@ export const CONDITIONAL_NAMES: Readonly<Partial<Record<UiName, string>>> = {
   [UI_NAMES.RowStatus]:
     "a Row whose surface passes a State word. The navigator's second line is currently plain Text, so this renders on the System page only",
   [UI_NAMES.Caret]: "the tail of an assistant block while it is STREAMING",
+  [UI_NAMES.ComposerStop]:
+    "the composer while a turn is in flight AND the surface passed a stop handler. It takes Composer.Send's place rather than sitting beside it, so the idle console never shows both",
   [UI_NAMES.Rule]:
     "a vertical split inside a flex row. The console splits its columns with a Panel edge instead",
   [UI_NAMES.AnchorGutter]: "a transcript row whose surface passes an anchor-copy handler",

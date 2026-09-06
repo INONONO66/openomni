@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { ApprovalTray, Composer, type ComposerAction, composerKey } from "../src";
+import { ApprovalTray, Composer, type ComposerAction, Console, composerKey } from "../src";
 
 /**
  * The composer's keyboard contract and the approval tray's shape.
@@ -118,6 +118,65 @@ describe("the composer surface", () => {
     const at = composer().indexOf("data-send");
 
     expect(composer().slice(at - 200, at + 200)).toContain("disabled");
+  });
+
+  test("Given a turn in flight and a way to stop it, When rendered, Then the primary action is Stop", () => {
+    // The send affordance is DISABLED while a turn streams, so a composer with
+    // no stop control leaves the Owner with no way to interrupt a run except
+    // closing the window. The primary slot is the only place a stop can go: it
+    // is where the hand already is, and adding a second control beside a dead
+    // one would put two buttons on the row to express one available action.
+    const html = composer({ sending: true, onStop: () => undefined });
+
+    expect(html).toContain('aria-label="Stop response"');
+    expect(html).toContain("data-stop");
+    expect(html).toContain("Stop");
+    expect(html).not.toContain('aria-label="Send"');
+    expect(html).not.toContain("data-send");
+  });
+
+  test("Given a turn in flight and no stop handler, When rendered, Then the row is unchanged", () => {
+    // `onStop` is optional and the composer stays data-blind about why: a
+    // surface with no cancellable transport must not be given a control that
+    // does nothing when pressed.
+    const html = composer({ sending: true });
+
+    expect(html).toContain('aria-label="Send"');
+    expect(html).not.toContain("data-stop");
+    expect(html).not.toContain("Stop response");
+  });
+
+  test("Given a stop handler and nothing in flight, When rendered, Then send is what is offered", () => {
+    // The swap is bound to the TURN's state, not to the prop's presence. A
+    // shell wires `onStop` once, for the whole session, and an idle composer
+    // that offered Stop would be offering to interrupt nothing.
+    const html = composer({ value: "ship it", onStop: () => undefined });
+
+    expect(html).toContain('aria-label="Send"');
+    expect(html).not.toContain("data-stop");
+  });
+
+  test("Given the Console, When a turn is in flight, Then the stop handler reaches the composer", () => {
+    // The prop has to CROSS the console, because that is the only composer the
+    // app mounts. A `Composer` that supports stop behind a `Console` that drops
+    // the prop is a control that exists in the package and not in the product.
+    const html = renderToStaticMarkup(
+      <Console
+        detail="claude-sonnet-4-6"
+        draft=""
+        nodes={[]}
+        onDraftChange={() => undefined}
+        onStop={() => undefined}
+        onSubmit={() => undefined}
+        sending
+        sessionId="stop"
+        sidebar={null}
+        title="Session"
+      />,
+    );
+
+    expect(html).toContain('aria-label="Stop response"');
+    expect(html).not.toContain('aria-label="Send"');
   });
 
   test("Given the hint and meta, When supplied, Then both sit on one line", () => {

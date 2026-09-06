@@ -8,12 +8,15 @@
     "dev": "electron-vite dev",
     "build": "rm -rf dist && electron-vite build",
     "preview": "electron-vite preview",
+    "shoot:chat": "bun run scripts/shoot-chat.ts",
     "test": "bun test",
     "lint": "bunx biome check ./src ./test",
     "check-types": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.test.json"
   },
   "dependencies": {
+    "@ai-sdk/react": "4.0.96",
     "@openomni/ui": "workspace:*",
+    "ai": "7.0.93",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },
@@ -27,6 +30,7 @@
     "electron": "^44.1.1",
     "electron-vite": "^5.0.0",
     "oxc-transform-react": "^0.148.0",
+    "playwright": "1.62.1",
     "tailwindcss": "^4.3.3",
     "vite": "^8.2.2"
   }
