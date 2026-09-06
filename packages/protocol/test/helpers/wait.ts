@@ -7,7 +7,7 @@ import { Wait } from "../../src/wait/index.js";
 export function buildWaitRecord(overrides: Partial<Wait.Record> = {}): Wait.Record {
   return Wait.Record.parse({
     id: "wait-1",
-    ownerRef: { kind: "workItem", id: "wi-1" },
+    ownerRef: { kind: "session", id: "session-1" },
     originMessageId: "out-msg-1",
     correlation: {
       endpointId: "telegram:seller-1",

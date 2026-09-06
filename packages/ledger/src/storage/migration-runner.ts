@@ -2,6 +2,8 @@ import type { Database } from "bun:sqlite";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
+import { U967Error, U967_MIGRATION } from "./u967-preflight";
+import { inspect967Projections } from "./u967-projection";
 
 export namespace Migration {
   export const Definition = z.object({
@@ -10,11 +12,13 @@ export namespace Migration {
 
   export type Definition = z.infer<typeof Definition>;
 
-  export function applyOrdered(db: Database, migrationDir: string, migrations: Definition[]): void {
+  export type Preparation967 = (db: Database) => void;
+
+  export function applyOrdered(db: Database, migrationDir: string, migrations: Definition[], prepare967?: Preparation967): void {
     db.exec("CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY)");
 
     for (const migration of migrations.map((item) => Definition.parse(item))) {
-      applyMigration(db, migrationDir, migration);
+      applyMigration(db, migrationDir, migration, prepare967);
     }
   }
 }
@@ -37,11 +41,26 @@ function migrationStatements(sql: string): string[] {
     .filter((statement) => statement.length > 0);
 }
 
-function applyMigration(db: Database, migrationDir: string, migration: Migration.Definition): void {
+function applyMigration(db: Database, migrationDir: string, migration: Migration.Definition, prepare967?: Migration.Preparation967): void {
   db.exec("BEGIN IMMEDIATE TRANSACTION");
-  try {
+  let committed = false;
+  // Native disposal preserves both failures as SuppressedError if rollback
+  // also throws. The caller must close and inspect this indeterminate outcome.
+  using _rollback = {
+    [Symbol.dispose]() {
+      if (!committed) db.exec("ROLLBACK");
+    },
+  };
+  {
     const applied = db.query("SELECT 1 FROM _migrations WHERE name = ?").get(migration.name);
     if (!applied) {
+      if (migration.name === U967_MIGRATION) {
+        if (prepare967) prepare967(db);
+        else {
+          const projection = inspect967Projections(db, Date.now());
+          if (projection.blocked.length > 0 || projection.candidates.length > 0) throw new U967Error("approval_required");
+        }
+      }
       const sql = readFileSync(join(migrationDir, migration.name), "utf-8");
       for (const statement of migrationStatements(sql)) {
         db.run(statement);
@@ -49,12 +68,6 @@ function applyMigration(db: Database, migrationDir: string, migration: Migration
       db.query("INSERT INTO _migrations (name) VALUES (?)").run(migration.name);
     }
     db.exec("COMMIT");
-  } catch (err) {
-    try {
-      db.exec("ROLLBACK");
-    } catch (_rollbackErr) {
-      void _rollbackErr;
-    }
-    throw err;
+    committed = true;
   }
 }

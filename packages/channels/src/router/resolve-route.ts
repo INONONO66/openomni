@@ -126,8 +126,7 @@ function resolveWait(inbound: RouteInbound, wait: RouteWait, common: RouteCommon
   const action = inbound.requestedAction;
   if (action === undefined || !wait.allowed.includes(action)) {
     // Fail closed: a matched durable wait never falls through to
-    // surface routing — a disallowed action is a typed block, mirroring
-    // the owner gate below.
+    // surface routing — a disallowed action is a typed block.
     return {
       decision: {
         ...common,
@@ -138,25 +137,6 @@ function resolveWait(inbound: RouteInbound, wait: RouteWait, common: RouteCommon
           `wait:${wait.key}`,
           `wait.action:${action ?? "missing"}`,
           "wait.action:disallowed",
-        ],
-      },
-    };
-  }
-  if (wait.owner.kind !== "session") {
-    // Fail closed: a matched wait must never fall through to surface
-    // routing, and workItem-owned resumption has no ingress delivery
-    // path yet (#216/#217 wire it).
-    return {
-      decision: {
-        ...common,
-        stage: "wait_correlation",
-        outcome: "block",
-        reason: "Matched wait owner has no ingress delivery path",
-        factsUsed: [
-          `wait:${wait.key}`,
-          `wait.action:${action}`,
-          `wait.owner:${wait.owner.kind}:${wait.owner.id}`,
-          "wait.owner:unsupported_ingress_delivery",
         ],
       },
     };

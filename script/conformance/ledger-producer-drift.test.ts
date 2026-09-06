@@ -1,4 +1,4 @@
-import { Database } from "bun:sqlite";
+import { createDispositionFixture } from "../../packages/ledger/test/helpers/disposition-967";
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { buildLedgerArchiveManifest } from "../generate-ledger-archive-manifest";
@@ -116,18 +116,14 @@ describe("ledger producer drift", () => {
     }
   });
 
-  test("producer and archive manifests agree on the frozen-table set", () => {
-    const db = new Database(":memory:");
-    try {
-      db.run("CREATE TABLE _migrations (name TEXT NOT NULL)");
-      db.run("INSERT INTO _migrations VALUES ('test')");
-      db.run("CREATE TABLE worker_run_state (run_id TEXT PRIMARY KEY)");
-      const archived = buildLedgerArchiveManifest(db).tables.map((entry) => entry.table);
-      expect(
-        LEDGER_PRODUCER_MANIFEST.frozenTableWriters.map((entry) => entry.table).sort(),
-      ).toEqual(archived.sort());
-    } finally {
-      db.close();
-    }
+  test("the archive includes frozen writers without inventing writers for retired targets", () => {
+    using fixture = createDispositionFixture();
+    const archived = buildLedgerArchiveManifest(fixture.db).tables.map((entry) => entry.table);
+    const writers = LEDGER_PRODUCER_MANIFEST.frozenTableWriters.map((entry) => entry.table);
+    expect(writers).toEqual(["worker_run_state"]);
+    expect(archived).toEqual(expect.arrayContaining([...writers, "bus_event", "wait", "message", "part"]));
+    expect(writers).not.toContain("bus_event");
+    expect(writers).not.toContain("message");
+    expect(writers).not.toContain("part");
   });
 });

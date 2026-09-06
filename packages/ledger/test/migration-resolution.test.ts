@@ -4,6 +4,8 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { initializeSqliteDatabase } from "../src/storage/sqlite-schema-lifecycle";
+import { Migration } from "../src/storage/migration-runner";
+import { snapshotDatabase } from "./helpers/disposition-967";
 
 /**
  * #502 rename proof: migration lookup is relative to `import.meta.dir` inside
@@ -92,7 +94,7 @@ describe("moved migration resolution (#502)", () => {
     }
   });
 
-  test("forward migration drops WorkItem tables from an upgraded database", () => {
+  test("unsupported boot preserves retired tables before the historical runner characterization", () => {
     const db = new Database(join(tmpDir, "upgraded.db"), { create: true });
     try {
       initializeSqliteDatabase(db);
@@ -103,7 +105,10 @@ describe("moved migration resolution (#502)", () => {
       db.query("DELETE FROM _migrations WHERE name = ?").run(
         "0030_drop_retired_tables/migration.sql",
       );
-      initializeSqliteDatabase(db);
+      const before = snapshotDatabase(db);
+      expect(() => initializeSqliteDatabase(db)).toThrow("unsupported_upgrade");
+      expect(snapshotDatabase(db)).toEqual(before);
+      Migration.applyOrdered(db, MIGRATION_DIR, [{ name: "0030_drop_retired_tables/migration.sql" }]);
       expect(
         db.query<{ name: string }, []>("SELECT name FROM sqlite_master WHERE name = 'work_item'").get(),
       ).toBeNull();

@@ -6,7 +6,7 @@ import { Storage } from "./storage";
  * records `route.decided` through THIS pair — `append` + `headFact` (the
  * #510 C3 record-before-act write and its replay read) — never through the
  * master `Storage` entry, whose adapter reaches every brain surface
- * (session content, work items, transcripts). Exposing exactly the two
+ * (canonical sessions and action history). Exposing exactly the two
  * methods makes gateway-design §6's "named perimeter surfaces plus a scoped
  * append port" literally true and lets the S8 named-import pin drop
  * `Storage` from the router allowlist.

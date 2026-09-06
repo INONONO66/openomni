@@ -32,6 +32,12 @@ Single source of truth for current wiring between accepted design and running co
 | Drive-loop worker policy | implemented and wired | `apps/openomni/src/delegation/drive-loop.ts`, `apps/openomni/src/delegation/worker-loop.ts` | Native workers use the same session machine as Resident: each is a real role=`worker` row keyed by its durable delegation identity, linked through `parentId`, and owns an independent fence/revision/generation set. The adapter retains goal-style continuation policy (cap 8, repetition/stall/blocked bounds); it does not construct `ChatAgent`, catalogs, or synthetic `delegation-*` session IDs. Channel delegation is not a native worker run. |
 | IPC transport | implemented and wired | `packages/ipc/`, `packages/machines/`, `apps/openomni/src/delegation/process-driver.ts` | Thin bidirectional transport used by machines and process delegation. |
 
+## #967 archive and retired-owner disposition
+
+The existing archive CLI now creates a native SQLite image and a v2 all-table receipt at explicit `--db`, `--out`, and `--backup` paths. `--verify` restores an exclusive temporary copy without opening the operator archive writable. Both artifacts are retained indefinitely. Supplemental table digests do not substitute for native-value equality: integer, BLOB and text-byte comparisons are independent of JavaScript number conversion.
+
+`--dispose-967 --approve-manifest-sha256 <manifest-bytes-sha256>` prepares migration `0034_u967_archive_disposition` inside the existing runner's `BEGIN IMMEDIATE`: it revalidates the receipt/archive/source, removes only approved eligible retired Wait projections and archived bus rows, and drops the empty bus table with the marker in the same commit. Ordinary boot does not archive implicitly; nonempty targets refuse. Older/partial/tampered initialized schemas refuse before predecessor SQL. Public Wait owners are session-only; the existing session-owned correlation/delegation/wake path remains live. The Wait table, canonical actions/history, frozen worker rows, and message/part bytes are not rebuilt or deleted. Message/part's final disposition waits for #937; #967 remains open.
+
 ## Durable contracts retained in core packages
 
 | Contract | Status after #792 | Notes |

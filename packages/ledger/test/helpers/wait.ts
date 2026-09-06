@@ -8,7 +8,7 @@ import { type Storage, WaitStore } from "../../src/index";
 export function buildWaitCreate(overrides: Partial<Wait.Create> = {}): Wait.Create {
   return {
     id: "wait-1",
-    ownerRef: { kind: "workItem", id: "wi-1" },
+    ownerRef: { kind: "session", id: "session-1" },
     originMessageId: "out-msg-1",
     correlation: {
       endpointId: "telegram:seller-1",

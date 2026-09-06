@@ -1,6 +1,6 @@
 # PROJECT KNOWLEDGE BASE
 
-Session authority verified against `kernel/967-session`: 2026-09-06 (legacy Session namespace, CRUD/message adapters and boot TTL removed; canonical handles and recovery retained). Other ownership remains as verified on `kernel/936` (2026-09-05). Keep this stamp current when editing (doc-state sync law).
+Session authority verified against `kernel/967-session`: 2026-09-06 (legacy Session namespace, CRUD/message adapters and boot TTL removed; canonical handles and recovery retained). Archive/retired-owner cutover verified on `kernel/967-data` (2026-09-06): explicit native archive confirmation and guarded migration 0034; session-owned Wait remains live and message/part disposition is deferred. Other ownership remains as verified on `kernel/936` (2026-09-05). Keep this stamp current when editing (doc-state sync law).
 
 ## OVERVIEW
 

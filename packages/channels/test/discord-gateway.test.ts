@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import type { ServerWebSocket } from "bun";
 import { DiscordGateway } from "../src/provider/discord/gateway";
 import { GatewayOp } from "../src/provider/discord/types";
+import type { SocketReconnectShell } from "../src/support/socket-shell";
 import type { PublishPort } from "../src/types";
 
 const noopPublish: PublishPort = () => undefined;
@@ -17,13 +18,19 @@ const noopPublish: PublishPort = () => undefined;
 
 type Payload = { op: number; d?: unknown; s?: number | null; t?: string | null };
 
+type NativeClose = { code: number; reason: string; wasClean: boolean; phase: string };
+const serverTraces = new WeakMap<ServerWebSocket<unknown>, (event: string, data: object) => void>();
+
 type FakeGateway = {
   url: string;
   received: Payload[];
   closes: number[];
   clients: Set<ServerWebSocket<unknown>>;
+  nativeCloses: NativeClose[];
+  record(event: string, data: object): void;
   waitFor(predicate: (payload: Payload) => boolean, count?: number): Promise<Payload>;
   waitForClose(): Promise<number>;
+  pendingCloseWaiters(): number;
   stop(): void;
 };
 
@@ -56,6 +63,10 @@ class EventStream<Value> {
     });
   }
 
+  pending(): number {
+    return this.subscribers.size;
+  }
+
   emit(value: Value): void {
     for (const subscriber of this.subscribers) {
       if (!subscriber.predicate(value)) continue;
@@ -73,25 +84,43 @@ const immediateDelay = () => Promise.resolve();
 function createFakeGateway(options: {
   heartbeatIntervalMs: number;
   ackHeartbeats: boolean;
+  rejectUpgrade?: boolean;
   onIdentify?: (ws: ServerWebSocket<unknown>) => void;
   onResume?: (ws: ServerWebSocket<unknown>, payload: Payload) => void;
 }): FakeGateway {
   const received: Payload[] = [];
   const closes: number[] = [];
   const clients = new Set<ServerWebSocket<unknown>>();
+  const nativeCloses: NativeClose[] = [];
+  const events: object[] = [];
+  const record = (event: string, data: object) => {
+    events.push({ time: performance.now(), event, ...data });
+  };
   const payloadEvents = new EventStream<Payload>();
   const closeEvents = new EventStream<number>();
-  const send = (ws: ServerWebSocket<unknown>, payload: Payload) => ws.send(JSON.stringify(payload));
+  const send = (ws: ServerWebSocket<unknown>, payload: Payload) => {
+    record("server.send", payload);
+    return ws.send(JSON.stringify(payload));
+  };
 
   const server = Bun.serve({
     port: 0,
     fetch(req, srv) {
-      if (srv.upgrade(req)) return;
+      record("server.request", { url: req.url, key: req.headers.get("sec-websocket-key") });
+      if (options.rejectUpgrade) {
+        record("server.rejectUpgrade", { status: 200 });
+        return new Response("upgrade rejected", { status: 200 });
+      }
+      const upgraded = srv.upgrade(req);
+      record("server.upgrade", { upgraded });
+      if (upgraded) return;
       return new Response("expected websocket", { status: 400 });
     },
     websocket: {
       open(ws) {
         clients.add(ws);
+        serverTraces.set(ws, record);
+        record("server.open", {});
         send(ws, {
           op: GatewayOp.HELLO,
           d: { heartbeat_interval: options.heartbeatIntervalMs },
@@ -102,6 +131,7 @@ function createFakeGateway(options: {
       message(ws, message) {
         const payload = JSON.parse(String(message)) as Payload;
         received.push(payload);
+        record("server.receive", payload);
         if (payload.op === GatewayOp.HEARTBEAT && options.ackHeartbeats) {
           send(ws, { op: GatewayOp.HEARTBEAT_ACK, s: null, t: null });
         }
@@ -116,23 +146,120 @@ function createFakeGateway(options: {
       close(ws, code) {
         clients.delete(ws);
         closes.push(code);
+        record("server.close", { code });
         closeEvents.emit(code);
       },
     },
   });
 
+  const url = `ws://127.0.0.1:${server.port}`;
   return {
-    url: `ws://127.0.0.1:${server.port}`,
+    url,
     received,
     closes,
     clients,
+    nativeCloses,
+    record,
     waitFor: (predicate, count) => payloadEvents.waitFor(predicate, count),
     waitForClose: () => closeEvents.waitFor(() => true),
-    stop: () => server.stop(true),
+    pendingCloseWaiters: () => closeEvents.pending(),
+    stop: () => {
+      server.stop(true);
+      console.error("discord gateway fixture trace", JSON.stringify({ url, events }));
+    },
+  };
+}
+
+function createTracedGateway(
+  local: FakeGateway,
+  ...args: ConstructorParameters<typeof DiscordGateway>
+) {
+  const gateway = new DiscordGateway(...args);
+  // Per-instance wire interception: never patch the native constructor or a global prototype.
+  const shell = Reflect.get(gateway, "shell") as SocketReconnectShell;
+  const openWebSocket = shell.openWebSocket.bind(shell);
+  let connection = 0;
+  shell.openWebSocket = (url, wire) => {
+    const id = ++connection;
+    let phase = "connecting";
+    local.record("client.connect", { id, url });
+    return openWebSocket(url, (ws, settle) => {
+      ws.addEventListener("open", () => {
+        phase = "open";
+        local.record("client.open", { id });
+      });
+      ws.addEventListener("message", (event) => {
+        local.record("client.message", { id, data: String(event.data) });
+      });
+      ws.addEventListener("close", (event) => {
+        const close = { code: event.code, reason: event.reason, wasClean: event.wasClean, phase };
+        local.nativeCloses.push(close);
+        local.record("client.close", { id, ...close });
+        console.error("discord gateway native close", JSON.stringify({ url, id, ...close }));
+      });
+      wire(ws, {
+        ...settle,
+        resolveOnce: () => {
+          phase = "ready";
+          local.record("client.ready", { id });
+          settle.resolveOnce();
+        },
+      });
+    });
+  };
+  return gateway;
+}
+
+function createMissedAckHarness(local: FakeGateway) {
+  const backoffStarted = Promise.withResolvers<void>();
+  const releaseBackoff = Promise.withResolvers<void>();
+  let clientClosed: Promise<number> | undefined;
+  const gateway = createTracedGateway(
+    local,
+    "test-token",
+    () => Promise.resolve(local.url),
+    {
+      onDispatch: () => undefined,
+      onReady: () => {
+        // Subscribe synchronously before READY settles start and before any
+        // watchdog tick; a failed handshake must not allocate this waiter.
+        clientClosed = local.waitForClose();
+      },
+    },
+    noopPublish,
+    () => {
+      backoffStarted.resolve();
+      return releaseBackoff.promise;
+    },
+  );
+
+  return {
+    gateway,
+    backoffStarted: backoffStarted.promise,
+    get clientClosed() {
+      return clientClosed;
+    },
+    get nativeClose() {
+      return local.nativeCloses.at(-1);
+    },
+    async start() {
+      try {
+        await gateway.start();
+      } catch (error) {
+        console.error("discord gateway test start failure", JSON.stringify(local.nativeCloses.at(-1)));
+        throw error;
+      }
+    },
+    stop() {
+      // Stop before releasing backoff, including when start/assertions fail.
+      gateway.stop();
+      releaseBackoff.resolve();
+    },
   };
 }
 
 function sendReady(ws: ServerWebSocket<unknown>, url: string, sessionId: string): void {
+  serverTraces.get(ws)?.("server.ready", { url, sessionId });
   ws.send(
     JSON.stringify({
       op: GatewayOp.DISPATCH,
@@ -165,7 +292,8 @@ describe("discord gateway state machine (#520)", () => {
       onIdentify: (ws) => sendReady(ws, local.url, "sess-1"),
     });
     fake = local;
-    gateway = new DiscordGateway(
+    gateway = createTracedGateway(
+      local,
       "test-token",
       () => Promise.resolve(local.url),
       {
@@ -202,33 +330,22 @@ describe("discord gateway state machine (#520)", () => {
       onIdentify: (ws) => sendReady(ws, local.url, "sess-2"),
     });
     fake = local;
-    const backoffStarted = Promise.withResolvers<void>();
-    const releaseBackoff = Promise.withResolvers<void>();
-    gateway = new DiscordGateway(
-      "test-token",
-      () => Promise.resolve(local.url),
-      {
-        onDispatch: () => undefined,
-        onReady: () => undefined,
-      },
-      noopPublish,
-      () => {
-        backoffStarted.resolve();
-        return releaseBackoff.promise;
-      },
-    );
-
-    const clientClosed = local.waitForClose();
-    await gateway.start();
-    const closeCode = await clientClosed;
-    await backoffStarted.promise;
-    // Stop before releasing the backoff so the reconnect loop cannot race the
-    // teardown; the resume path itself is pinned by the next test.
-    gateway.stop();
-    releaseBackoff.resolve();
-    expect(closeCode).toBe(4000);
-    const heartbeats = local.received.filter((p) => p.op === GatewayOp.HEARTBEAT);
-    expect(heartbeats.length).toBe(1);
+    const harness = createMissedAckHarness(local);
+    gateway = harness.gateway;
+    try {
+      await harness.start();
+      expect(harness.clientClosed).toBeDefined();
+      const closeCode = await harness.clientClosed;
+      await harness.backoffStarted;
+      // Stop before releasing the backoff so the reconnect loop cannot race
+      // teardown; the resume path itself is pinned by the next test.
+      harness.stop();
+      expect(closeCode).toBe(4000);
+      const heartbeats = local.received.filter((p) => p.op === GatewayOp.HEARTBEAT);
+      expect(heartbeats.length).toBe(1);
+    } finally {
+      harness.stop();
+    }
   });
 
   it("resumes with the real token, session id, and sequence after a server-requested reconnect", async () => {
@@ -249,7 +366,8 @@ describe("discord gateway state machine (#520)", () => {
     });
     fake = local;
     const sessionResumed = Promise.withResolvers<void>();
-    gateway = new DiscordGateway(
+    gateway = createTracedGateway(
+      local,
       "test-token",
       () => Promise.resolve(local.url),
       {
@@ -307,7 +425,8 @@ describe("discord gateway state machine (#520)", () => {
     };
 
     const ready = Promise.withResolvers<void>();
-    gateway = new DiscordGateway(
+    gateway = createTracedGateway(
+      local,
       "test-token",
       fetchGatewayUrl,
       {
@@ -356,7 +475,8 @@ describe("discord gateway state machine (#520)", () => {
       return Promise.resolve();
     };
 
-    gateway = new DiscordGateway(
+    gateway = createTracedGateway(
+      local,
       "test-token",
       fetchGatewayUrl,
       {
@@ -395,7 +515,8 @@ describe("discord gateway state machine (#520)", () => {
     });
     fake = local;
     const readyEvents = new EventStream<void>();
-    gateway = new DiscordGateway(
+    gateway = createTracedGateway(
+      local,
       "test-token",
       () => Promise.resolve(local.url),
       {
@@ -411,5 +532,29 @@ describe("discord gateway state machine (#520)", () => {
     await secondReady;
     expect(identifies).toBe(2);
     expect(local.received.filter((p) => p.op === GatewayOp.RESUME)).toHaveLength(0);
+  });
+
+  it("does not leave a server-close waiter after a pre-ready start failure", async () => {
+    const local = createFakeGateway({
+      heartbeatIntervalMs: 40,
+      ackHeartbeats: false,
+      rejectUpgrade: true,
+    });
+    fake = local;
+    const harness = createMissedAckHarness(local);
+    gateway = harness.gateway;
+    try {
+      await expect(harness.start()).rejects.toThrow("WebSocket closed before ready: 1002");
+      expect(harness.nativeClose).toMatchObject({ code: 1002, wasClean: false, phase: "connecting" });
+      expect(harness.nativeClose?.reason.length).toBeGreaterThan(0);
+      expect(local.clients.size).toBe(0);
+      expect(local.received).toHaveLength(0);
+      expect(local.closes).toHaveLength(0);
+      // Inspect the actual subscription state; do not wait ten seconds for its rejection.
+      expect(local.pendingCloseWaiters()).toBe(0);
+      expect(harness.clientClosed).toBeUndefined();
+    } finally {
+      harness.stop();
+    }
   });
 });

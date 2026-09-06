@@ -9,7 +9,7 @@
  * of strict equality.
  *
  * A busy error at BEGIN IMMEDIATE (or inside the transaction body) means the
- * write unit never committed — the wait/work-item stores map it to their
+ * write unit never committed — the durable stores map it to their
  * typed `unavailable` error so callers get a retriable taxonomy instead of a
  * raw driver error. Retrying is the CALLER's decision, mirroring the append
  * core's cas_conflict contract.

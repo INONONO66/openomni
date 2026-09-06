@@ -389,7 +389,7 @@ describe("SQLite adapter contract guards", () => {
 });
 
 describe("migration rollback preservation", () => {
-  test("preserves the migration failure when rollback itself fails", () => {
+  test("surfaces both the migration failure and failed rollback", () => {
     const directory = mkdtempSync(join(tmpdir(), "ledger-migration-rollback-"));
     directories.push(directory);
     writeFileSync(join(directory, "broken.sql"), "CREATE TABLE broken (id TEXT)");
@@ -415,7 +415,7 @@ describe("migration rollback preservation", () => {
     } as unknown as Database;
 
     expect(() => Migration.applyOrdered(fake, directory, [{ name: "broken.sql" }])).toThrow(
-      migrationFailure,
+      SuppressedError,
     );
     expect(calls.at(-1)).toBe("ROLLBACK");
   });

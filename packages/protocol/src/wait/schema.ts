@@ -2,7 +2,7 @@ import { z } from "zod";
 import { NamedError } from "../error/index.js";
 import { EpochMs } from "../time.js";
 
-export const OwnerKind = z.enum(["workItem", "session"]);
+export const OwnerKind = z.enum(["session"]);
 export type OwnerKind = z.infer<typeof OwnerKind>;
 
 export const OwnerRef = z

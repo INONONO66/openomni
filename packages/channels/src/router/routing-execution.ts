@@ -175,8 +175,7 @@ export async function executeWaitRoute<Event extends Gateway.DeliveredEvent>(
   // "already_resolved" (channel redelivery of the resolving reply) falls
   // through on purpose: the owner delivery repeats idempotently with the
   // recorded resolution — no state change, no revision bump.
-  // resolve-route routed this decision, so the owner is a session
-  // (workItem owners fail closed at the wait_correlation stage).
+  // The matched Wait resumes its owning session.
   return {
     kind: "continue",
     event: projectWaitOwnerEvent(resolution.event, wait.record.ownerRef.id),

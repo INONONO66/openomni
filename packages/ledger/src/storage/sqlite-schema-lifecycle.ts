@@ -1,6 +1,8 @@
 import type { Database } from "bun:sqlite";
 import { join } from "node:path";
 import { Migration } from "./migration-runner";
+import { preflight967, U967Error, U967_MIGRATION } from "./u967-preflight";
+import { inspect967Projections } from "./u967-projection";
 
 const MIGRATION_DIR = join(import.meta.dir, "../../migration");
 const retiredDomain = ["work", "item"].join("_");
@@ -40,6 +42,7 @@ const ORDERED_MIGRATIONS: Migration.Definition[] = [
   { name: "0031_l0_ledger_base/migration.sql" },
   { name: "0032_drop_dormant_tables/migration.sql" },
   { name: "0033_fenced_session_handles/migration.sql" },
+  { name: U967_MIGRATION },
 ];
 
 const CLEAR_ORDER = [
@@ -59,7 +62,6 @@ const CLEAR_ORDER = [
   "egress_debit",
   "worker_grant",
   "worker_run_state",
-  "bus_event",
 
   "surface_key",
   "part",
@@ -67,13 +69,23 @@ const CLEAR_ORDER = [
   "session",
 ] as const;
 
-export function initializeSqliteDatabase(db: Database): void {
+export function preflightSqliteDatabase(db: Database) {
+  return preflight967(db, ORDERED_MIGRATIONS);
+}
+
+export function initializeSqliteDatabase(db: Database, prepare967?: Migration.Preparation967): void {
+  const state = preflightSqliteDatabase(db);
+  if (state === "pending" && prepare967 === undefined) {
+    const projection = inspect967Projections(db, Date.now());
+    if (projection.blocked.length > 0 || projection.candidates.length > 0
+      || db.query("SELECT 1 FROM bus_event LIMIT 1").get()) throw new U967Error("approval_required");
+  }
   // The primary connection owns every decision-class write (ledger appends +
   // projections share its transactions), so it runs at synchronous=FULL: a
   // committed append survives power loss, which is what "no record, no
   // action" durably means (#510 D1).
   applyConnectionPragmas(db, "FULL");
-  Migration.applyOrdered(db, MIGRATION_DIR, ORDERED_MIGRATIONS);
+  Migration.applyOrdered(db, MIGRATION_DIR, ORDERED_MIGRATIONS, prepare967);
 }
 
 /** @internal Test-only fixture reset (Adapter.clear) — no production caller. */
