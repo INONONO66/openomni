@@ -74,7 +74,12 @@ export function createWorkerSessionRunner(
   const bindings = new SessionBindingCache<WorkerBinding>();
   const runtime = options.sessionRuntime ?? { observations: Bus };
 
-  function createBinding(sessionId: string, parentId: string | null, depth: number): WorkerBinding {
+  function createBinding(
+    sessionId: string,
+    parentId: string | null,
+    depth: number,
+    recoverySignal?: AbortSignal,
+  ): WorkerBinding {
     const definitions = createTools(
       { delegation: options.kernel() },
       { role: "worker", depth, sessionId },
@@ -120,10 +125,23 @@ export function createWorkerSessionRunner(
         };
       },
     });
-    const runner: SessionRunner = (input) =>
-      DelegationStore.get(sessionId)?.settled?.status === "cancelled"
+    const runner: SessionRunner = (input) => {
+      // Subscribe once recovery owns the turn, and stay connected through
+      // its terminal seal, not just chatRunner's return. Every settlement
+      // (or host stop) aborts this one-shot transport signal. A committed
+      // terminal needs no new interrupt and must remain unchanged.
+      recoverySignal?.addEventListener(
+        "abort",
+        () => {
+          const open = SessionHandleStore.openTurns(SessionHandleStore.tree(sessionId));
+          if (open.some((turn) => turn.turnId === input.turnId)) interruptWorker(handle);
+        },
+        { once: true },
+      );
+      return DelegationStore.get(sessionId)?.settled?.status === "cancelled"
         ? Promise.resolve({ kind: "interrupted" })
         : chatRunner(input);
+    };
     const handle = session(
       {
         id: sessionId,
@@ -145,11 +163,7 @@ export function createWorkerSessionRunner(
     const { binding } = lease;
     const prompt = renderInstruction(input.instruction, input.acceptanceCriteria);
     let lastRunId = input.workerRunId ?? input.delegationId;
-    const interrupt = (): void => {
-      // The abort signal is authoritative; a simultaneous lease loss or close
-      // must not surface as an unhandled rejection from this best-effort doorbell.
-      void binding.handle.interrupt().catch(() => undefined);
-    };
+    const interrupt = () => interruptWorker(binding.handle);
     input.signal.addEventListener("abort", interrupt, { once: true });
     try {
       input.signal.throwIfAborted();
@@ -172,7 +186,7 @@ export function createWorkerSessionRunner(
 
   return Object.assign(run, {
     runnerFor: (row: LedgerSession.Row) => {
-      const binding = createBinding(row.id, row.parentId, 1);
+      const binding = createBinding(row.id, row.parentId, 1, options.kernel().signalFor(row.id));
       const settled = DelegationStore.get(row.id)?.settled;
       // Cancellation's CAS precedes process termination. Reconstruct its inbox
       // interrupt even if the host died between that CAS and killing the child.
@@ -195,6 +209,12 @@ export function createWorkerSessionRunner(
       return binding.runner;
     },
   });
+}
+
+function interruptWorker(handle: SessionHandle): void {
+  // The abort signal is authoritative; a simultaneous lease loss or close
+  // must not surface as an unhandled rejection from this best-effort doorbell.
+  void handle.interrupt().catch(() => undefined);
 }
 
 /** Transport waits for a future session terminal; it never invokes another agent loop. */
