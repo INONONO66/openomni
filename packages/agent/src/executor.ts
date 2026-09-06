@@ -104,7 +104,7 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
     body: (intent: LedgerAction.Receipt) => Promise<T>,
   ): Promise<ExecutionResult> {
     const results = await runBatch([{ request, body }], {
-      signal: waveBodyScope.getStore() ?? new AbortController().signal,
+      signal: waveBodyScope.getStore()?.signal ?? new AbortController().signal,
     });
     const result = results[0];
     if (result === undefined) throw new Error("single execution lost its result");
@@ -119,9 +119,19 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
     control: WaveControl,
   ): Promise<readonly ExecutionBatchResult[]> {
     const controller = new AbortController();
-    const signal = AbortSignal.any([control.signal, controller.signal]);
+    const inherited = waveBodyScope.getStore();
+    const signal = AbortSignal.any([
+      control.signal,
+      controller.signal,
+      ...(options.signal === undefined ? [] : [options.signal]),
+      ...(inherited === undefined ? [] : [inherited.signal]),
+    ]);
     try {
-      return await executeBatch(items, { ...control, signal });
+      return await executeBatch(items, {
+        signal,
+        // A captured executor keeps its turn's owner outside the ambient scope.
+        retain: options.retainEffect ?? inherited?.retain ?? control.retain,
+      });
     } finally {
       controller.abort();
     }
@@ -131,7 +141,7 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
     items: readonly ExecutionBatchItem[],
     control: WaveControl,
   ): Promise<readonly ExecutionBatchResult[]> {
-    waveBodyScope.getStore()?.throwIfAborted();
+    waveBodyScope.getStore()?.signal.throwIfAborted();
     // Salvaged staged-pre algorithm: every decision precedes every intent/body.
     const stages: {
       item: ExecutionBatchItem;

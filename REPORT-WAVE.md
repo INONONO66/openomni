@@ -4,7 +4,7 @@
 
 The session-owned per-model-step/tool-wave vertical slice is implemented and verified on `kernel/937-integration`. Provider I/O returns pending ordered calls and has no tool execution capability. The existing session/executor owns the three drains, all-pre barrier, whole-wave authenticated approval, positional settlements, sequential barriers, immediate cancellation release and late-commit fencing. Resident and existing native worker callers consume this path.
 
-This completes the assigned wave increment, not full #937. Retry/model ownership, stop-chain migration, durable history recovery and worker/drive deletion remain subsequent work. Original compaction commits are preserved. No root config/CI, other worktrees, shared builds, push, PR or comments were touched.
+Review found that the original `5c96d522` increment did not retain nested raw bodies transitively. The additive R1 correction and failing-first proof are recorded in `REPORT-WAVE-R2.md`; incremental re-review remains required. This is not full #937. Retry/model ownership, stop-chain migration, durable history recovery and worker/drive deletion remain subsequent work. Original compaction commits are preserved. No root config/CI, other worktrees, shared builds, push, PR or comments were touched.
 
 ## Contract and implementation
 
@@ -21,7 +21,7 @@ This completes the assigned wave increment, not full #937. Retry/model ownership
 
 Approval captures the original action ID, call ID, parsed invocation/hash, actual turn/session, pinned policy/tools generation and hash, pre-decision ID and revision. The app binds approval evidence to its existing Owner-tier WebSocket token via constant-time credential comparison, never caller actor prose or an authenticated boolean. Wrong credentials, altered requests, duplicate answers, canceled requests and inclusive-deadline answers fail closed. Configured deadlines refuse only the pending slot; no implicit timeout value is invented. The injected scheduler test advances the exact expiry event without sleeping. Approval never invokes the model again or uses session resume.
 
-Cancellation freezes unsettled slots at the abort event, cooperatively signals bodies, releases the wave immediately, and commits canceled slots in original order. A body resolving from the abort callback cannot replace its canceled slot. The session waits for active wave settlement before its terminal while retaining the heartbeat/lease until noncooperative external bodies actually settle. Nested executor callbacks inherit the aborted scope; captured session ledgers reject changed fences or sealed turns. This does not claim to roll back an external effect.
+Cancellation freezes unsettled slots at the abort event, cooperatively signals bodies, releases the wave immediately, and commits canceled slots in original order. A body resolving from the abort callback cannot replace its canceled slot. With the R1 correction, the per-turn executor binds cancellation and raw-effect retention, and nested execution inherits both capabilities. The existing session retains its heartbeat/lease until those raw bodies settle, rather than until their abort-raced wrappers settle. Real current/captured executor regressions now prove contender refusal before raw settlement and acquisition afterward, with immediate SDK interruption and zero stale body starts/commits. This does not claim to roll back an external effect.
 
 ## Real surfaces and clause map
 
@@ -36,6 +36,7 @@ Cancellation freezes unsettled slots at the abort event, cooperatively signals b
 | Approval B holds A/C, original invocation, refuse only B | authenticated approve/refuse table cases; wrong credential/altered hash/duplicate answer assertions |
 | Interrupt pending approval cancels every unstarted slot | `interrupting pending B cancels every unstarted positional slot` |
 | Noncooperative wave release, retained lease, late nested commit rejection | `noncooperative bodies release the wave but retain the lease and cannot commit late` |
+| Transitive raw-body retention, including captured out-of-context doors | Six `nested raw effects retain the lease through ...` cases; `REPORT-WAVE-R2.md` records RED, mutation discrimination and both Bun versions |
 | Prompt IDs/order survive approval wait and enter next model | `approval-time prompts retain durable identities and enter the next model separately in order` |
 | Exact timeout refuses only B | `an exact approval deadline refuses only B and cannot grant late authority` |
 | After-wave drain precedes another model step | `an interrupt after wave results drains before another provider step` |

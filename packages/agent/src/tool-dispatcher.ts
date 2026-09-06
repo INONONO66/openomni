@@ -325,6 +325,7 @@ export function createDispatcher(
  * instead of being copied per role.
  */
 export interface TurnDispatchInput {
+  readonly signal?: AbortSignal;
   readonly sessionId: string;
   readonly role: LedgerSession.Role;
   readonly actionId: string;
@@ -360,6 +361,8 @@ export function createTurnDispatcher(
   runtime: TurnDispatchRuntime,
 ): Dispatcher & { readonly executor: Executor } {
   const executor = createExecutor({
+    signal: input.signal,
+    retainEffect: input.retainEffect,
     policy: input.policy,
     authorizeApproval: runtime.authorizeApproval,
     approvalTimeoutMs: runtime.approvalTimeoutMs,

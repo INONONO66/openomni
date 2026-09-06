@@ -1,12 +1,13 @@
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { existsSync } from "node:fs";
-import { dirname } from "node:path";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import {
   Bus,
   defineTool,
   eraseTool,
   currentExecutor,
+  createDispatcher,
   type ExecutionApprovalRequest,
   type SessionHandle,
 } from "@openomni/agent";
@@ -537,6 +538,166 @@ test("noncooperative bodies release the wave but retain the lease and cannot com
     gate.resolve();
   }
 });
+
+for (const door of ["current-run", "current-batch", "captured-run", "captured-batch", "captured-cell", "captured-wave"] as const) {
+  test(`nested raw effects retain the lease through ${door} after caller interruption`, async () => {
+    // Given: the review countercase, through the real app/SDK/SSE and file SQLite.
+    const captured = Promise.withResolvers<ReturnType<typeof currentExecutor>>();
+    const entered = Promise.withResolvers<void>();
+    const gate = Promise.withResolvers<void>();
+    const completed = Promise.withResolvers<void>();
+    const outerDone = Promise.withResolvers<void>();
+    const parentSettled = Promise.withResolvers<void>();
+    const wrapperSettled = Promise.withResolvers<string>();
+    const directory = suite.tempDir("openomni-937-nested-effect-");
+    const marker = join(directory, "effect.bin");
+    const bytes = new Uint8Array([9, 3, 7]);
+    const rawBody = async () => {
+      entered.resolve();
+      await gate.promise;
+      writeFileSync(marker, bytes);
+      completed.resolve();
+      return "effect";
+    };
+    const request = { kind: "tool", op: "nested-effect", intent: {}, effect: {} };
+    const isCurrent = door.startsWith("current-");
+    let signal = new AbortController().signal;
+    let sessionId = "";
+    const invoke = async (executor: ReturnType<typeof currentExecutor>): Promise<string> => {
+      try {
+        switch (door) {
+          case "current-run":
+          case "captured-run":
+            await executor.run(request, rawBody);
+            return "executed";
+          case "current-batch":
+          case "captured-batch": {
+            if (executor.runBatch === undefined) throw new Error("missing batch executor");
+            const results = await executor.runBatch([{ request, body: rawBody }], { signal });
+            return results.map((result) => result.terminal).join(",");
+          }
+          case "captured-cell":
+          case "captured-wave": {
+            const dispatcher = createDispatcher([waveTool("inner", rawBody)], { executor });
+            const call = { id: "inner-call", tool: "inner", input: { slot: "inner" } };
+            const context = { sessionId, turnId: "captured-turn", signal };
+            if (door === "captured-cell") {
+              await dispatcher.executeCell(call, context);
+              return "executed";
+            }
+            const results = await dispatcher.executeWave([call], context);
+            return results.every((result) => result.isError) ? "cancelled" : "executed";
+          }
+        }
+      } catch (error) {
+        if (!(error instanceof Error)) throw error;
+        return error.name;
+      }
+    };
+    const { app, socket, received, cleanup } = await waveApp([
+      waveTool("A", async () => "A", true),
+      waveTool("outer", async (turnSignal) => {
+        signal = turnSignal;
+        const executor = currentExecutor();
+        captured.resolve(executor);
+        try {
+          if (isCurrent) wrapperSettled.resolve(await invoke(currentExecutor()));
+          else await outerDone.promise;
+        } finally {
+          parentSettled.resolve();
+        }
+        return "outer";
+      }),
+    ], ["A", "outer"]);
+    const reply = nextMessage(socket, 5000);
+    let handle: SessionHandle | undefined;
+    let competitorFence: number | undefined;
+    try {
+      socket.send(JSON.stringify({ type: "message", text: "run nested effect" }));
+      const executor = await bounded(captured.promise);
+      const row = activeRow();
+      sessionId = row.id;
+      handle = app.sessions.get(row.id);
+      if (handle === undefined) throw new Error("missing live SDK handle");
+      if (!isCurrent) {
+        // This continuation was registered outside both ambient execution scopes.
+        expect(() => currentExecutor()).toThrow("executor context is required");
+        void invoke(executor).then(wrapperSettled.resolve, wrapperSettled.reject);
+      }
+      await bounded(entered.promise);
+      // When: interrupt returns and the parent unwinds while the raw effect is gated.
+      if (isCurrent) await bounded(handle.interrupt());
+      else {
+        // Finish the top-level body first, so it cannot mask missing captured retention.
+        const interrupted = Promise.withResolvers<void>();
+        suite.defer(Bus.subscribe(LlmCall.Events.Completed, () => {
+          if (received.length !== 2 || handle === undefined) return;
+          void handle.interrupt().then(interrupted.resolve, interrupted.reject);
+        }));
+        outerDone.resolve();
+        await bounded(interrupted.promise);
+      }
+      await bounded(parentSettled.promise);
+      expect(await bounded(wrapperSettled.promise)).toBe(
+        door === "captured-batch" || door === "captured-wave" ? "cancelled" : "AbortError",
+      );
+      expect(existsSync(marker)).toBe(false);
+      expect(signal.aborted).toBe(true);
+      expect(toolResults(row.id).filter((result) => result.callId.startsWith("call-")).map(
+        (result) => [result.callId, result.terminal],
+      )).toEqual([["call-A", "executed"], ["call-outer", isCurrent ? "cancelled" : "executed"]]);
+      const held = SessionHandleStore.row(row.id);
+      const now = Date.now();
+      const competitor = SessionHandleStore.acquireLease({
+        sessionId: row.id, owner: "nested-contender", expectedFence: held.leaseFence,
+        now, expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
+      });
+      if (competitor.ok) competitorFence = competitor.fence;
+      // Then: abort-raced wrapper settlement cannot transfer the live effect's lease.
+      expect(competitor).toMatchObject({ ok: false });
+      expect(held.leaseOwner).toBe(row.leaseOwner);
+      const beforeActions = SessionHandleStore.tree(row.id).length;
+      let staleBodyStarts = 0;
+      const stale = () => executor.run(request, async () => { staleBodyStarts += 1; return null; });
+      await expect(stale()).rejects.toMatchObject({ name: "SessionCommitError" });
+      expect(staleBodyStarts).toBe(0);
+      expect(SessionHandleStore.tree(row.id)).toHaveLength(beforeActions);
+      gate.resolve();
+      await bounded(completed.promise);
+      // The channel's binding close joins retention before replying; SDK interrupt above does not.
+      await reply;
+      expect(readFileSync(marker)).toEqual(Buffer.from(bytes));
+      const released = SessionHandleStore.row(row.id);
+      expect(released.leaseOwner).toBeNull();
+      const next = SessionHandleStore.acquireLease({
+        sessionId: row.id, owner: "nested-contender", expectedFence: released.leaseFence,
+        now: Date.now(), expiresAt: Date.now() + SessionHandleStore.LEASE_TTL_MS,
+      });
+      if (next.ok) competitorFence = next.fence;
+      expect(next).toMatchObject({ ok: true, fence: row.leaseFence + 1 });
+      await expect(stale()).rejects.toMatchObject({ name: "SessionCommitError" });
+      expect(staleBodyStarts).toBe(0);
+      expect(SessionHandleStore.tree(row.id)).toHaveLength(beforeActions);
+      expect(received).toHaveLength(isCurrent ? 1 : 2);
+    } finally {
+      outerDone.resolve();
+      gate.resolve();
+      await bounded(completed.promise);
+      await bounded(wrapperSettled.promise);
+      await bounded(handle?.close() ?? Promise.resolve());
+      if (competitorFence !== undefined) {
+        const row = SessionHandleStore.row(sessionId);
+        expect(SessionHandleStore.commit({
+          sessionId, owner: "nested-contender", fence: competitorFence, now: Date.now(),
+          expectedRevision: row.revision, actions: [], consumeInboxIds: [],
+          state: row.state, releaseLease: true,
+        }).ok).toBe(true);
+      }
+      await cleanup();
+      expect(existsSync(directory)).toBe(false);
+    }
+  }, 15000);
+}
 
 test("approval-time prompts retain durable identities and enter the next model separately in order", async () => {
   // Given: a real model invocation suspended on its original B approval.

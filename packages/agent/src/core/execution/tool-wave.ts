@@ -5,8 +5,8 @@ import type { ChatAgentConfig } from "../types";
 import { recordToolCall } from "../budget";
 import type { RunState, TurnArtifacts } from "./state";
 
-/** Nested executor calls inherit cancellation even after an external body detaches. */
-export const waveBodyScope = new AsyncLocalStorage<AbortSignal>();
+/** Nested calls inherit ownership as well as cancellation after a body detaches. */
+export const waveBodyScope = new AsyncLocalStorage<WaveControl>();
 
 export type WaveBodyOutcome =
   | { readonly status: "fulfilled"; readonly value: PlainValue }
@@ -39,7 +39,7 @@ export async function runWaveBodies(
   control.signal.addEventListener("abort", abort, { once: true });
   if (control.signal.aborted) abort();
   const start = (item: WaveBody, index: number): Promise<void> => {
-    const effect = waveBodyScope.run(control.signal, async () => {
+    const effect = waveBodyScope.run(control, async () => {
       try {
         control.signal.throwIfAborted();
         const value = await item.run();

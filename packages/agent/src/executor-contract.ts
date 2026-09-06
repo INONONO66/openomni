@@ -136,6 +136,8 @@ export interface DurableExecutor extends Executor {
 }
 
 export interface ExecutorOptions {
+  readonly signal?: AbortSignal;
+  readonly retainEffect?: (effect: Promise<void>) => void;
   readonly approvalTimeoutMs?: number;
   readonly scheduleApprovalTimeout?: (expire: () => void, delayMs: number) => () => void;
   readonly policy: CompiledPolicySnapshot;

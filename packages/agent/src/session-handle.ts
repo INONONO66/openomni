@@ -888,6 +888,8 @@ function createController(
     const policy = pinPolicy(input.generation.policyGeneration);
     const ledger = createExecutionLedger(input.turnId);
     const execution = createExecutor({
+      signal: turnController.signal,
+      retainEffect,
       policy,
       ledger,
       observations: runtime.observations,
@@ -975,7 +977,7 @@ function createController(
                   boundary,
                 });
               } finally {
-                await Promise.allSettled([...effects]);
+                while (effects.size > 0) await Promise.allSettled([...effects]);
               }
             })();
             try {

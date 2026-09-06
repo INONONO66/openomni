@@ -1,5 +1,50 @@
 import { expect, it } from "bun:test";
 import { runWaveBodies } from "../../../src/core/execution/tool-wave";
+import { recordingExecutor } from "../../helpers/compiled-policy";
+
+it("inherits raw-body retention through nested executors without a bound turn owner", async () => {
+  // Given: ownership supplied only at the enclosing wave, not on either executor.
+  const controller = new AbortController();
+  const entered = Promise.withResolvers<void>();
+  const gate = Promise.withResolvers<null>();
+  const parentSettled = Promise.withResolvers<void>();
+  const effects = new Set<Promise<void>>();
+  const outer = recordingExecutor().executor;
+  const inner = recordingExecutor().executor;
+  const request = { kind: "tool", op: "nested", intent: {}, effect: {} };
+  const wave = runWaveBodies([{
+    async run() {
+      try {
+        await outer.run(request, async () => {
+          if (inner.runBatch === undefined) throw new Error("missing batch executor");
+          await inner.runBatch([{ request, body: () => {
+            entered.resolve();
+            return gate.promise;
+          } }], { signal: new AbortController().signal });
+          return null;
+        });
+      } catch (error) {
+        if (!(error instanceof DOMException) || error.name !== "AbortError") throw error;
+      } finally {
+        parentSettled.resolve();
+      }
+      return null;
+    },
+  }], { signal: controller.signal, retain(effect) { effects.add(effect); } });
+  try {
+    await entered.promise;
+    // When: the wave cancels and both executor wrappers unwind before the raw body.
+    controller.abort();
+    expect(await wave).toEqual([{ status: "cancelled" }]);
+    await parentSettled.promise;
+    // Then: all three actual bodies, not just the outer raced wrapper, were retained.
+    expect(effects.size).toBe(3);
+  } finally {
+    gate.resolve(null);
+    await wave;
+    await Promise.all(effects);
+  }
+}, 5000);
 
 it("freezes unsettled slots as canceled at the abort event, even if a body resolves in that event", async () => {
   // Given: the actual scheduler and a body that returns late success from its abort callback.

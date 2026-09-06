@@ -21,7 +21,7 @@ export function createExecutionRecord(
   options: Pick<ExecutorOptions, "ledger" | "observations" | "identity" | "clock" | "entropy">,
 ) {
   async function commit(action: LedgerAction.Append): Promise<LedgerAction.Receipt> {
-    waveBodyScope.getStore()?.throwIfAborted();
+    waveBodyScope.getStore()?.signal.throwIfAborted();
     const receipt = await options.ledger.commit(action);
     options.observations.publish(L0Observation.ActionCommittedEvent, {
       id: receipt.action.id,
