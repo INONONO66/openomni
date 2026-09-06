@@ -1,6 +1,6 @@
 # PROJECT KNOWLEDGE BASE
 
-Session authority verified against `kernel/967-session`: 2026-09-06 (legacy Session namespace, CRUD/message adapters and boot TTL removed; canonical handles and recovery retained). Archive/retired-owner cutover verified on `kernel/967-data` (2026-09-06): explicit native archive confirmation and guarded migration 0034; session-owned Wait remains live and message/part disposition is deferred. Other ownership remains as verified on `kernel/936` (2026-09-05). Keep this stamp current when editing (doc-state sync law).
+Session authority verified against `kernel/967-session`: 2026-09-06 (legacy Session namespace, CRUD/message adapters and boot TTL removed; canonical handles and recovery retained). Archive/retired-owner cutover verified on `kernel/967-data` (2026-09-06): explicit native archive confirmation and guarded migration 0034; session-owned Wait remains live and message/part disposition is deferred. Other ownership remains as verified on `kernel/936` (2026-09-05). Keep this stamp current when editing (doc-state sync law). Desktop/ui verified against `feat/desktop-shell-mock` (2026-09-06): `packages/ui/src/names.ts` owns every `data-ui` address and `packages/ui/COMPONENTS.md` documents them 1:1.
 
 ## OVERVIEW
 
@@ -45,6 +45,7 @@ placement <- agent, apps/openomni
 agent <- apps/openomni
 machines <- apps/openomni
 channels <- apps/openomni
+ui <- apps/desktop
 ```
 
 | Workspace | May depend on |
@@ -59,7 +60,8 @@ channels <- apps/openomni
 | `machines` | protocol, ipc |
 | `channels` | protocol, policy, ledger; `src/` may depend on protocol, policy, ledger |
 | `apps/openomni` | protocol, channels, ipc, agent, llm, ledger, policy, placement, machines |
-| `apps/desktop` | protocol |
+| `ui` | none |
+| `apps/desktop` | protocol, ui |
 <!-- END GENERATED TOPOLOGY -->
 
 `script/check-deps.ts` is the executable contract. Product meaning is composed in `apps/openomni`; core packages remain independently consumable primitives.
@@ -79,7 +81,8 @@ channels <- apps/openomni
 | `packages/machines` | Machine attach and cell execution driver | Enrollment policy or product judgment |
 | `packages/channels` | Drivers plus perimeter routing, waits, and admission | Session content or product execution |
 | `apps/openomni` | Product composition: Resident, gateway, delegation, memory, code mode, boot/shutdown | Reimplementation of package primitives |
-| `apps/desktop` | Electron shell: main/preload/renderer build pipeline, window security defaults | Kernel logic; anything beyond protocol contracts |
+| `apps/desktop` | Electron shell: main/preload/renderer build pipeline, window security defaults; the attention ordering engine, the search engine, mock fixtures, session-selection state, and per-session draft and approval-decision state | Kernel logic; anything beyond protocol contracts; **transcript presentation — that is `packages/ui`'s** |
+| `packages/ui` | The design system: tokens, primitives, window chrome, the transcript's presentation (timeline, the three voices, tool rows and their folding, the composer, the approval tray, anchors), the one `Console` composition both the renderer and the showcase render, and the component NAMES the Owner reviews by — `src/names.ts` is the single owner of every `data-ui` address, documented 1:1 in `COMPONENTS.md` | Any data or kernel vocabulary — it may not name a session, project, agent, or run state |
 
 ## WHERE TO LOOK
 

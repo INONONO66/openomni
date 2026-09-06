@@ -15,6 +15,13 @@ function renderDependencies(dependencies: DependencyBand): string {
   if (dependencies === "any-except-self") {
     return "any workspace except itself";
   }
+  // An empty allow-list is the same claim as the `none` sentinel and must read
+  // the same. `packages/ui` states it as `[]` because it is a real, enforced
+  // constraint — the design system may depend on nothing — and rendering that
+  // as a blank cell would look like an omission rather than the rule it is.
+  if (dependencies.length === 0) {
+    return "none";
+  }
   return dependencies.map(shortPackageName).join(", ");
 }
 

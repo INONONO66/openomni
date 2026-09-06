@@ -179,11 +179,30 @@ export const TOPOLOGY = [
     tsconfigVerify: true,
   },
   {
+    key: "ui",
+    displayName: "ui design system",
+    dir: "packages/ui",
+    packageName: "@openomni/ui",
+    // None, and that is the whole rule: the design system may not depend on the
+    // app it dresses, nor on any kernel package. It owns tokens, primitives,
+    // window chrome, the transcript's presentation, and the one `Console`
+    // composition — all of it data-blind. See DESIGN.md 10.
+    allowedDeps: [],
+    testLane: true,
+    // Deliberate: the surface's claim is visual and is reviewed through the
+    // showcase shots; there is no approved line-coverage baseline yet.
+    coverageLane: false,
+    knipWorkspace: true,
+    tsconfigVerify: true,
+  },
+  {
     key: "desktopApp",
     displayName: "desktop app",
     dir: "apps/desktop",
     packageName: "@openomni/desktop",
-    allowedDeps: ["@openomni/protocol"],
+    // `@openomni/ui` is the renderer's design system: it renders `Console` and
+    // composes primitives, and names no color of its own.
+    allowedDeps: ["@openomni/protocol", "@openomni/ui"],
     testLane: true,
     // Deliberate: Electron scaffold has no approved coverage baseline yet.
     coverageLane: false,

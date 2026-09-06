@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["bun"]
+  },
+  "include": [
+    "showcase/shoot.ts",
+    "showcase/shoot-detail.ts",
+    "showcase/shoot-transcript.ts",
+    "showcase/shoot-diff-crop.ts",
+    "showcase/probe-search.ts",
+    "showcase/probe-density.ts",
+    "showcase/probe-transcript-tail.ts",
+    "showcase/probe-turn-time.ts"
+  ]
+}
