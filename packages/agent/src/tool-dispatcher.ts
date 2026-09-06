@@ -438,14 +438,16 @@ function failed(call: Tool.Call, output: string, errorKind: ToolErrorKind): Tool
 
 function truncate(output: string): string {
   if (output.length <= MODEL_OUTPUT_MAX_CHARS) return output;
-  // Reserve the marker's final width, including the digits of the dropped count.
+  const originalBytes = Buffer.byteLength(output, "utf8");
+  // Reserve the marker's final width and never split a supplementary code point.
   let kept = MODEL_OUTPUT_MAX_CHARS;
-  let marker: string;
   for (;;) {
-    marker = `\n[truncated: ${output.length - kept} chars dropped; ${output.length} chars original]`;
+    if ((output.codePointAt(kept - 1) ?? 0) > 0xffff) kept -= 1;
+    const prefix = output.slice(0, kept);
+    const droppedBytes = originalBytes - Buffer.byteLength(prefix, "utf8");
+    const marker = `\n[truncated: ${droppedBytes} bytes dropped; ${originalBytes} bytes original]`;
     const available = MODEL_OUTPUT_MAX_CHARS - marker.length;
-    if (available === kept) break;
+    if (kept <= available) return `${prefix}${marker}`;
     kept = available;
   }
-  return `${output.slice(0, kept)}${marker}`;
 }

@@ -205,9 +205,12 @@ remote deadlines, cancellation limitations and transport byte limits. No new
 machine authority check is added to these adapters.
 
 Query category alone derives `safe`; write/edit/bash are sequential mutation or
-execution tools. The dispatcher alone caps model rendering at 32,000 characters,
-including `\n[truncated: N chars dropped; M chars original]`. It drops overflow,
-never spills artifacts, and does not cap typed cell results. Final catalog and
+execution tools. The dispatcher alone caps model rendering at 32,000 UTF-16 code
+units, including `\n[truncated: N bytes dropped; M bytes original]`. The marker
+counts original and omitted UTF-8 bytes, excluding the marker itself from both
+counts. A retained prefix ends at a Unicode code-point boundary and can be one
+code unit shorter than the cap rather than splitting a surrogate pair. It drops
+overflow, never spills artifacts, and does not cap typed cell results. Final catalog and
 naming convergence is stage 2 after messaging and monitor land.
 
 ## 4. Turn termination, not task satisfaction

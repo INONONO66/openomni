@@ -219,7 +219,7 @@ for (const remote of [false, true]) {
         const rendered = await model("read", { path: path("large") });
         expect(rendered.output).toHaveLength(32_000);
         expect(rendered.output).toContain("truncated:");
-        expect(rendered.output).toContain("1100000 chars original");
+        expect(rendered.output).toContain("1100000 bytes original");
       });
     });
     test("bash returns stdout, stderr, exit status and has no persistent cwd", async () => {
@@ -295,6 +295,23 @@ test.each([
     } finally {
       process.chdir(cwd);
     }
+  });
+});
+
+test("R3 real daemon Unicode read preserves cells and reports exact dropped bytes to the model", async () => {
+  await fixture(true, async ({ root, path, cell, model }) => {
+    const content = `a${"\u{1F600}".repeat(25_000)}`;
+    await writeFile(join(root, "unicode"), content);
+    expect((await cell("read", { path: path("unicode") })).output).toEqual({
+      content,
+      bytes: 100_001,
+    });
+    const result = await model("read", { path: path("unicode") });
+    expect(result.isError).toBeUndefined();
+    expect(result.output).toBe(
+      `a${"\u{1F600}".repeat(15_971)}\n[truncated: 36116 bytes dropped; 100001 bytes original]`,
+    );
+    expect(Buffer.from(result.output, "utf8").toString("utf8")).toBe(result.output);
   });
 });
 
