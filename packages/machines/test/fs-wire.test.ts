@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createIpcServer, typedCall } from "@openomni/ipc";
@@ -51,6 +51,21 @@ describe("real machine consumer surface", () => {
         await expect(host.get("m-1").fs.write(join(root, "no"), Buffer.from("no"))).rejects.toMatchObject({ name: "MachineRefusalError", data: { reason: "fs_not_available" } });
         expect(await host.get("m-1").exec("echo no", root)).toEqual({ status: "refused", reason: "exec_not_available" });
         expect(await host.get("m-1").runCode({ cellId: "no", code: "no", timeoutMs: 1000 })).toEqual({ status: "refused", reason: "kernel_not_available" });
+      } finally { await daemon.close(); host.close(); }
+    });
+  });
+
+  test("exec documents pathname TOCTOU after an export symlink swap", async () => {
+    await fixture(async (base) => {
+      const first = join(base, "first"); const moved = join(base, "moved"); const second = join(base, "second"); const link = join(base, "root");
+      mkdirSync(first); mkdirSync(second); writeFileSync(join(first, "mark"), "FIRST"); writeFileSync(join(second, "mark"), "SECOND"); symlinkSync(first, link);
+      const path = socketPath();
+      const host = await createMachineHost({ socketPath: path, enrollment, events: silent, now: () => 3 });
+      const daemon = await attachMachineDaemon({ socketPath: path, offer: offer(link), fsExports: new Map([["docs", link]]) });
+      try {
+        renameSync(first, moved); rmSync(link); symlinkSync(second, link);
+        // Contract: exec re-resolves and spawns by pathname, so the accepted TOCTOU follows SECOND.
+        await expect(host.get("m-1").exec("cat mark", link)).resolves.toMatchObject({ status: "completed", stdout: Buffer.from("SECOND") });
       } finally { await daemon.close(); host.close(); }
     });
   });
@@ -121,6 +136,23 @@ describe("daemon boundary cannot be bypassed by a rogue host", () => {
       try {
         expect(await typedCall(host, "machine.fs_op", { op: "write", export: "docs", path: "file", data: "eA==" })).toMatchObject({ status: "refused", reason: "export_not_available" });
         expect(await typedCall(host, "machine.exec", { cmd: "true", cwd: root })).toEqual({ status: "refused", reason: "path_escapes_export" });
+        if (missing === "offer") {
+          expect(await typedCall(host, "machine.exec", { cmd: "true", cwd: root })).toEqual({ status: "refused", reason: "path_escapes_export" });
+        }
+      } finally { await daemon.close(); host.close(); }
+    });
+  });
+
+  test("refuses exec when the offered root disagrees with daemon configuration", async () => {
+    await fixture(async (root) => {
+      const outside = `${root}-outside`;
+      mkdirSync(outside);
+      const path = socketPath();
+      const host = await createIpcServer(path, (_method, _params, respond) => respond({ status: "attached", effectiveCapabilities: capabilities, effectiveExports: ["data"] }));
+      const daemon = await attachMachineDaemon({ socketPath: path, offer: { ...offer(root), exports: [{ name: "data", path: root }] }, fsExports: new Map([["data", outside]]) });
+      try {
+        expect(await typedCall(host, "machine.exec", { cmd: "true", cwd: root })).toEqual({ status: "refused", reason: "path_escapes_export" });
+        expect(await typedCall(host, "machine.exec", { cmd: "true", cwd: outside })).toEqual({ status: "refused", reason: "path_escapes_export" });
       } finally { await daemon.close(); host.close(); }
     });
   });

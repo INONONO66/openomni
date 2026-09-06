@@ -79,12 +79,12 @@ the same raw endpoint; the plain-tool locus door belongs to #949.
   JSON wire bytes are lossless base64, never lossy UTF-8 or model previews.
   Reads retain the 262144-byte window cap and lists the 1000-entry cap, both
   with explicit truncation facts.
-- `shell.exec` grants machine shell authority, but the daemon confines the
-  requested cwd to an effective export using the same effective export and
-  canonical containment checks as filesystem requests; escaping or
-  symlinked-out cwd values refuse with `path_escapes_export`. The shell cwd is
-  handed to the OS by pathname after that check (the OS does not provide a
-  portable descriptor-backed cwd on all supported platforms). This is path confinement only: a shell running as the
+- `shell.exec` grants machine shell authority. For each call, the daemon
+  re-resolves the effective export root pathname and validates the requested
+  cwd before spawning `/bin/sh` by pathname. Exec does not share the fs
+  branch's pinned-root invariant: a symlink swap between validation and spawn
+  is a bounded, accepted TOCTOU for now (follow-up #938 in `docs/SLOP.md`).
+  This is path validation, not an OS shell sandbox: a shell running as the
   daemon OS user remains arbitrary within that user's normal OS authority
   (including absolute paths and `cd` elsewhere). The Owner grants `exec`
   knowingly. Every execution requires an absolute cwd; no cwd persists between
