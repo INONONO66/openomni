@@ -117,6 +117,7 @@ function resolveSpecifier(
     `${base}.ts`,
     `${base}.tsx`,
     join(base, "index.ts"),
+    join(base, "index.tsx"),
   ];
   return candidates.find((candidate) => /\.tsx?$/.test(candidate) && existsSync(candidate));
 }

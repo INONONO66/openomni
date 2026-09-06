@@ -49,15 +49,22 @@ describe("verify-tsconfig-inheritance", () => {
     expect(result.code).toBeNull();
   });
 
-  test("CLI --fixture --json exits nonzero with a machine-readable code", async () => {
-    const proc = Bun.spawn(
-      ["bun", "run", verifierPath, "--fixture", join(fixturesDir, "missing-base.json"), "--json"],
-      { stdout: "pipe", stderr: "pipe" },
+  test("CLI --fixture --json exits nonzero with a machine-readable code", () => {
+    const proc = Bun.spawnSync(
+      [
+        process.execPath,
+        "run",
+        verifierPath,
+        "--fixture",
+        join(fixturesDir, "missing-base.json"),
+        "--json",
+      ],
+      { stdin: "ignore", stdout: "pipe", stderr: "pipe", timeout: 10_000, killSignal: "SIGKILL" },
     );
-    const [stdout, exitCode] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
-    expect(exitCode).not.toBe(0);
-    const parsed = JSON.parse(stdout) as { ok: boolean; code: string };
+    expect(proc.exitCode).toBe(1);
+    expect(proc.stderr.toString()).toBe("");
+    const parsed = JSON.parse(proc.stdout.toString()) as { ok: boolean; code: string };
     expect(parsed.ok).toBe(false);
     expect(parsed.code).toBe("missing_base_config");
-  });
+  }, 15_000);
 });

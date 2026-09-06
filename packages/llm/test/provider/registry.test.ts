@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { Auth } from "../../src/auth";
 import { Provider } from "../../src/provider";
 import { getSDK } from "../../src/provider/sdk";
+import { usePrivateCatalog } from "../helpers/catalog";
 
 function makeModel(providerID: string, npm: string, id = "test-model"): Provider.Model {
   return { id, providerID, name: "Test Model", api: { npm } };
@@ -67,6 +68,8 @@ const modelListCases: Array<{
 ];
 
 describe("Provider Registry", () => {
+  usePrivateCatalog();
+
   describe("public surface", () => {
     it("does not expose removed dead provider namespace members", async () => {
       const providerSource = await Bun.file(

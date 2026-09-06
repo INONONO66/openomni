@@ -48,10 +48,12 @@ async function main(): Promise<void> {
   const gateOutputPath = Bun.argv[3] ?? DEFAULT_GATE_OUTPUT;
   const statsOutputPath = Bun.argv[4] ?? DEFAULT_STATS_OUTPUT;
   const summaryOutputPath = Bun.argv[5] ?? DEFAULT_SUMMARY_OUTPUT;
-  const expectedRuns = Number.parseInt(process.env.BENCHMARK_RUNS ?? "", 10);
-  if (!Number.isSafeInteger(expectedRuns) || expectedRuns < 1) {
+  const countInput = process.env.BENCHMARK_RUNS ?? "";
+  const expectedRuns = Number(countInput);
+  if (!/^\d+$/.test(countInput) || !Number.isSafeInteger(expectedRuns) || expectedRuns < 1) {
     throw new Error("BENCHMARK_RUNS must be a positive integer");
   }
+  if (Bun.argv[2] === "--validate-input") return;
 
   const metrics = validateBenchmarkRuns(await readBenchmarkRuns(inputDir), expectedRuns);
   const stats = summarizeMetrics(metrics);
@@ -198,9 +200,9 @@ function renderSummary(stats: readonly BenchmarkStats[]): string {
   return [
     "# Benchmark Summary",
     "",
-    "The CI gate compares the p50 column through github-action-benchmark. Tail latency remains visible in p95.",
+    "Values summarize the per-run means. The comparison uses their p50; p95 is a percentile across run means, not operation tail latency.",
     "",
-    "| Benchmark | Runs | p50 ns/op | p95 ns/op | mean ns/op | min ns/op | max ns/op |",
+    "| Benchmark | Runs | p50 of run means ns/op | p95 of run means ns/op | mean ns/op | min ns/op | max ns/op |",
     "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
     ...rows,
     "",

@@ -50,6 +50,7 @@
 
 import { Glob } from "bun";
 import { join } from "node:path";
+import ts from "typescript";
 
 interface LedgerStreamProducer {
   /** Stream class key owned by this producer manifest. */
@@ -151,7 +152,7 @@ export const LEDGER_PRODUCER_MANIFEST: LedgerProducerManifest = {
 };
 
 /** Production source files scanned by the gate: packages/apps src trees, tests excluded. */
-const SOURCE_GLOB = new Glob("{packages,apps}/*/src/**/*.ts");
+const SOURCE_GLOB = new Glob("{packages,apps}/*/src/**/*.{ts,tsx}");
 /** Runtime-executed migration SQL (the migration runner applies these on boot). */
 const MIGRATION_SQL_GLOB = new Glob("packages/*/migration/**/*.sql");
 
@@ -191,8 +192,10 @@ const COMMIT_EXECUTOR_MODULE = "packages/ledger/src/storage/commit-coordinator.t
 
 function tableWriteSqlPattern(tables: readonly string[]): RegExp {
   const table = `(?:${tables.join("|")})`;
+  const identifier = '(?:[\\w$]+|"(?:[^"]|"")+"|`(?:[^`]|``)+`|\\[[^\\]]+\\]|\'(?:[^\']|\'\')+\')';
+  const target = `(?:${table}(?![\\w$])|"${table}"|\`${table}\`|\\[${table}\\]|'${table}')`;
   return new RegExp(
-    `\\b(?:insert(?:\\s+or\\s+\\w+)?\\s+into|replace\\s+into|update(?:\\s+or\\s+\\w+)?|delete\\s+from)\\s+${table}\\b`,
+    `\\b(?:insert(?:\\s+or\\s+\\w+)?\\s+into|replace\\s+into|update(?:\\s+or\\s+\\w+)?|delete\\s+from)\\s+(?:${identifier}\\s*\\.\\s*)?${target}`,
     "i",
   );
 }
@@ -256,12 +259,25 @@ export function matchesCommitExecutorCall(tsSource: string): boolean {
 
 /** True when TS source contains write SQL against ledger_event/ledger_head. */
 export function matchesLedgerTableWriteSql(tsSource: string): boolean {
-  return LEDGER_TABLE_WRITE_SQL.test(normalizeTsSource(tsSource));
+  return matchesTsSql(tsSource, LEDGER_TABLE_WRITE_SQL);
 }
 
 /** True when TS source contains write SQL against a frozen legacy table. */
 export function matchesFrozenTableWriteSql(tsSource: string): boolean {
-  return FROZEN_TABLE_WRITE_SQL.test(normalizeTsSource(tsSource));
+  return matchesTsSql(tsSource, FROZEN_TABLE_WRITE_SQL);
+}
+
+function matchesTsSql(source: string, pattern: RegExp): boolean {
+  const file = ts.createSourceFile("source.tsx", source, ts.ScriptTarget.Latest, false, ts.ScriptKind.TSX);
+  function visit(node: ts.Node): boolean {
+    // Literal text is decoded by TypeScript, including escaped SQL quotes.
+    // Template fragments stay separate: dynamically assembled names are not inferred.
+    if (ts.isStringLiteral(node) || ts.isTemplateLiteralToken(node)) {
+      return pattern.test(normalizeSqlSource(node.text));
+    }
+    return ts.forEachChild(node, visit) ?? false;
+  }
+  return visit(file);
 }
 
 /** True when migration SQL contains write SQL against any manifested table. */
@@ -287,7 +303,7 @@ export async function scanLedgerProducers(rootDir: string): Promise<LedgerProduc
   const frozenTableWriters: string[] = [];
   const migrationSqlWriters: string[] = [];
   const sourceFiles = [...SOURCE_GLOB.scanSync({ cwd: rootDir })].filter(
-    (file) => !file.endsWith(".test.ts"),
+    (file) => !/\.(?:test|spec)\.tsx?$/.test(file) && !/\/(?:test|tests|__tests__|node_modules|dist)\//.test(file),
   );
   sourceFiles.sort();
   for (const file of sourceFiles) {

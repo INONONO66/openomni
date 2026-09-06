@@ -98,19 +98,33 @@ describe("IPC client transport edges", () => {
   });
 
   test("an oversized server frame fails a pending call as a protocol error", async () => {
+    // Three-byte UTF-8 keeps the wire oversized but the character count below the cap.
+    // It also avoids the costly repeated scans of 17 MiB of ASCII in Bun 1.3.6.
+    const frame = "\u0800".repeat(Math.ceil((17 * 1024 * 1024) / 3));
+    const payload = Buffer.from(frame);
+    expect(payload.byteLength).toBe(17 * 1024 * 1024 + 1);
+    expect(frame.length).toBeLessThan(16 * 1024 * 1024);
+
     const requestReceived = deferred();
+    let serverSocket: net.Socket | undefined;
     const path = await listenRaw((socket) => {
+      serverSocket = socket;
       socket.once("data", () => {
         requestReceived.resolve();
-        socket.write("x".repeat(17 * 1024 * 1024));
+        socket.write(payload);
       });
     });
     const client = await connectIpcClient(path);
     clients.push(client);
 
-    const call = client.call("edge", {}, 30_000);
-    await within(requestReceived.promise, "raw server receiving request");
-    await expect(call).rejects.toBeInstanceOf(IpcProtocolError);
-    expect(client.connected).toBe(false);
+    try {
+      const call = client.call("edge", {}, 30_000);
+      await within(requestReceived.promise, "raw server receiving request");
+      await expect(call).rejects.toBeInstanceOf(IpcProtocolError);
+      expect(client.connected).toBe(false);
+    } finally {
+      client.close();
+      serverSocket?.destroy();
+    }
   }, 35_000);
 });

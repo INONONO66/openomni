@@ -114,6 +114,10 @@ ui <- apps/desktop
 
 ## COMMANDS
 
+CI selection and verification verified on `chore/optimize-ci-verification`,
+2026-09-06. See `docs/ci.md` for dependency-aware PR lanes, full runs, and
+fail-closed completion checks.
+
 ```bash
 bun install
 bun run build
@@ -131,6 +135,10 @@ bun test --timeout 15000
 
 # After the coverage-producing package test commands used by CI:
 bun run script/check-coverage-ratchet.ts
+
+# Reproduce one CI lane, including its fresh coverage gate:
+bun run ci test --lane agent
+bun run ci test --lane scripts
 
 # Sole deployable app
 bun run --cwd apps/openomni dev
