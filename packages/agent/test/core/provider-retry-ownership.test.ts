@@ -1,8 +1,8 @@
+import { createTestAgent } from "../helpers/test-agent";
 import { afterEach, describe, expect, it, jest } from "bun:test";
 import { Run, run as llmRun, type run } from "@openomni/llm";
 import type { Model } from "@openomni/protocol";
 import { RunEvents } from "../../src/core/execution/events";
-import { ChatAgent } from "../../src/core/chat-agent";
 import { Bus } from "../../src/index";
 import { failureFacts } from "../../src/core/retry";
 import { runInput } from "../helpers/run-input";
@@ -16,7 +16,15 @@ const createProviderStream: NonNullable<Parameters<typeof run>[2]>["createStream
   providerCalls += 1;
   if (attempt > 0) callsByAttempt[attempt - 1] = (callsByAttempt[attempt - 1] ?? 0) + 1;
   const failure = providerFailure(providerCalls);
-  return { fullStream: (async function* () { if (failure !== undefined) throw failure; yield { type: "finish" as const }; })() };
+  return {
+    fullStream: (async function* () {
+      if (failure !== undefined) throw failure;
+      yield { type: "text-start" };
+      yield { type: "text-delta", text: "completed" };
+      yield { type: "text-end" };
+      yield { type: "finish" as const };
+    })(),
+  };
 };
 
 afterEach(() => Bus.reset());
@@ -38,16 +46,21 @@ function resetProvider(failure: (call: number) => Error | undefined): void {
 }
 
 function createAgent(signal?: AbortSignal) {
-  return ChatAgent.create({
+  return createTestAgent({
     events: Bus,
     model: { provider: "anthropic", id: "retry-owner-model" },
     auth: { type: "api", key: "test-key" },
     signal,
     llm: {
       run: (input, sink) => llmRun(input, sink, { createStream: createProviderStream }),
-      resolveProviderModel: async (model: Model.Ref) => {
+      resolveModel: async (model: Model.Ref) => {
         attempt += 1;
-        return { id: model.id, name: model.id, providerID: model.provider, api: { npm: "@ai-sdk/anthropic" } };
+        return {
+          id: model.id,
+          name: model.id,
+          providerID: model.provider,
+          api: { npm: "@ai-sdk/anthropic" },
+        };
       },
     },
   });
@@ -58,7 +71,7 @@ describe("provider retry ownership", () => {
     jest.useFakeTimers();
     const retry = Promise.withResolvers<void>();
     const unsubscribe = Bus.subscribe(RunEvents.ErrorRetry, () => retry.resolve());
-    resetProvider((call) => call === 1 ? providerError("provider overloaded", true) : undefined);
+    resetProvider((call) => (call === 1 ? providerError("provider overloaded", true) : undefined));
     try {
       const running = createAgent().run(runInput([{ role: "user", content: "retry" }]));
       await retry.promise;
@@ -75,44 +88,81 @@ describe("provider retry ownership", () => {
     resetProvider(() => undefined);
     const controller = new AbortController();
     controller.abort();
-    await expect(createAgent(controller.signal).run(runInput([{ role: "user", content: "abort" }]))).rejects.toThrow("aborted");
+    await expect(
+      createAgent(controller.signal).run(runInput([{ role: "user", content: "abort" }])),
+    ).rejects.toThrow("aborted");
     expect(providerCalls).toBe(0);
   });
 
   it("does not add an agent attempt for a non-retryable provider failure", async () => {
     resetProvider(() => providerError("validation failed", false));
-    await expect(createAgent().run(runInput([{ role: "user", content: "invalid" }]))).rejects.toThrow("validation failed");
+    await expect(
+      createAgent().run(runInput([{ role: "user", content: "invalid" }])),
+    ).rejects.toThrow("validation failed");
     expect(callsByAttempt).toEqual([1]);
   });
 
-  it("keeps standalone llm transport retries finite", async () => {
+  it("standalone llm runs exactly one provider attempt", async () => {
     resetProvider(() => providerError("provider overloaded", true));
-    const outcome = await llmRun({
-      events: Bus,
-      messages: [],
-      tools: [],
-      model: { id: "standalone", name: "standalone", providerID: "anthropic", api: { npm: "@ai-sdk/anthropic" } },
-      auth: { type: "api", key: "test-key" },
-      trace: { traceId: "trace", sessionId: "session", runId: "run" },
-    }, { onMessage: () => undefined, onToolCall: () => undefined, onToolResult: () => undefined }, { createStream: createProviderStream });
+    const outcome = await llmRun(
+      {
+        events: Bus,
+        messages: [],
+        tools: [],
+        model: {
+          id: "standalone",
+          name: "standalone",
+          providerID: "anthropic",
+          api: { npm: "@ai-sdk/anthropic" },
+        },
+        auth: { type: "api", key: "test-key" },
+        trace: { traceId: "trace", sessionId: "session", runId: "run" },
+      },
+      { onMessage: () => undefined, onToolCall: () => undefined, onToolResult: () => undefined },
+      { createStream: createProviderStream },
+    );
     expect(outcome.type).toBe("error");
-    expect(providerCalls).toBe(11);
+    expect(providerCalls).toBe(1);
   });
 });
 
-const zeroUsage = { inputTokens: 0, outputTokens: 0, reasoningTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
-function failure(overrides: Partial<ConstructorParameters<typeof Run.FailureError>[0]>, cause?: Error) {
-  return new Run.FailureError({ message: "opaque provider failure", usage: zeroUsage, aborted: false, contextOverflow: false, ...overrides }, cause === undefined ? undefined : { cause });
+const zeroUsage = {
+  inputTokens: 0,
+  outputTokens: 0,
+  reasoningTokens: 0,
+  cacheReadTokens: 0,
+  cacheWriteTokens: 0,
+};
+function failure(
+  overrides: Partial<ConstructorParameters<typeof Run.FailureError>[0]>,
+  cause?: Error,
+) {
+  return new Run.FailureError(
+    {
+      message: "opaque provider failure",
+      usage: zeroUsage,
+      aborted: false,
+      contextOverflow: false,
+      ...overrides,
+    },
+    cause === undefined ? undefined : { cause },
+  );
 }
 
 async function classified(providerFailure: InstanceType<typeof Run.FailureError>) {
   let calls = 0;
   let thrown: Error | undefined;
   try {
-    await ChatAgent.create({
+    await createTestAgent({
       events: Bus,
       model: { provider: "anthropic", id: "model" },
-      llm: { resolveProviderModel: async () => ({ id: "model", name: "model", providerID: "anthropic" }), run: async () => { calls += 1; return { type: "error", error: providerFailure }; } },
+      llm: {
+        resolveModel: async () => ({ id: "model", name: "model", providerID: "anthropic" }),
+        run: async () => {
+          calls += 1;
+          return { type: "error", error: providerFailure };
+        },
+      },
     }).run(runInput([{ role: "user", content: "hello" }]));
   } catch (error) {
     if (error instanceof Error) thrown = error;

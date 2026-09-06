@@ -24,6 +24,9 @@ const HANDLE: Delegation.Handle = {
 function kernel(overrides: Partial<DelegationKernel>): DelegationKernel {
   return {
     now: () => 0,
+    signalFor: () => {
+      throw new Error("model-facing tools must not access transport signals");
+    },
     delegate: () => Promise.resolve({ handle: HANDLE }),
     awaitDelegation: () => Promise.resolve({ kind: "timeout", delegationId: "d-1", deadline: 100 }),
     cancelDelegation: () =>

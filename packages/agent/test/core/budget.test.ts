@@ -4,7 +4,6 @@ import { Bus, collector } from "../../src/index";
 import { captureBusEvents } from "../helpers/bus-event";
 import {
   BUDGET_DEFAULTS,
-  checkBudget,
   describeBudgetRemaining,
   createBudgetState,
   effectiveBudgetThresholds,
@@ -73,31 +72,31 @@ describe("effectiveBudgetThresholds", () => {
   });
 });
 
-describe("checkBudget 4-state", () => {
+describe("budget telemetry 4-state", () => {
   it("returns ok when below reassurance threshold", () => {
     const s = { ...createBudgetState(), turns: 12 };
-    expect(checkBudget(s, { maxTurns: 24 })).toBe("ok");
+    expect(publishBudgetTelemetry(s, TEST_RUN, collector(), { maxTurns: 24 })).toBe("ok");
   });
 
   it("returns reassurance when between reassurance and warning thresholds", () => {
     const s = { ...createBudgetState(), turns: 15 };
-    expect(checkBudget(s, { maxTurns: 24 })).toBe("reassurance");
+    expect(publishBudgetTelemetry(s, TEST_RUN, collector(), { maxTurns: 24 })).toBe("reassurance");
   });
 
   it("returns warning when between warning and exceeded thresholds", () => {
     const s = { ...createBudgetState(), turns: 20 };
-    expect(checkBudget(s, { maxTurns: 24 })).toBe("warning");
+    expect(publishBudgetTelemetry(s, TEST_RUN, collector(), { maxTurns: 24 })).toBe("warning");
   });
 
   it("returns exceeded when at limit", () => {
     const s = { ...createBudgetState(), turns: 24 };
-    expect(checkBudget(s, { maxTurns: 24 })).toBe("exceeded");
+    expect(publishBudgetTelemetry(s, TEST_RUN, collector(), { maxTurns: 24 })).toBe("exceeded");
   });
 
   it("returns exceeded when tool runtime reaches its limit", () => {
     const s = { ...createBudgetState(), toolRuntimeMs: 500 };
     expect(
-      checkBudget(s, {
+      publishBudgetTelemetry(s, TEST_RUN, collector(), {
         maxTurns: -1,
         maxToolCalls: -1,
         maxWallTimeMs: -1,
@@ -108,18 +107,20 @@ describe("checkBudget 4-state", () => {
 
   it("maxTurns -1 allows unlimited turns", () => {
     const s = { ...createBudgetState(), turns: 1000 };
-    expect(checkBudget(s, { maxTurns: -1 })).toBe("ok");
+    expect(publishBudgetTelemetry(s, TEST_RUN, collector(), { maxTurns: -1 })).toBe("ok");
   });
 
   it("maxTurns -1 with maxToolCalls limit uses only toolCalls ratio", () => {
     const s = { ...createBudgetState(), turns: 1000, toolCalls: 9 };
-    expect(checkBudget(s, { maxTurns: -1, maxToolCalls: 10 })).toBe("warning");
+    expect(
+      publishBudgetTelemetry(s, TEST_RUN, collector(), { maxTurns: -1, maxToolCalls: 10 }),
+    ).toBe("warning");
   });
 
   it("all limits -1 always returns ok", () => {
     const s = { ...createBudgetState(), turns: 1000, toolCalls: 1000, toolRuntimeMs: 1000000 };
     expect(
-      checkBudget(s, {
+      publishBudgetTelemetry(s, TEST_RUN, collector(), {
         maxTurns: -1,
         maxToolCalls: -1,
         maxWallTimeMs: -1,
@@ -129,23 +130,27 @@ describe("checkBudget 4-state", () => {
   });
 
   it("backward compat: undefined budget uses defaults", () => {
-    expect(checkBudget(createBudgetState())).toBe("ok");
+    expect(publishBudgetTelemetry(createBudgetState(), TEST_RUN, collector())).toBe("ok");
   });
 
   it("custom thresholds override defaults", () => {
     const s = { ...createBudgetState(), turns: 18 };
-    expect(checkBudget(s, { maxTurns: 24, warningThreshold: 0.9, reassuranceThreshold: 0.7 })).toBe(
-      "reassurance",
-    );
+    expect(
+      publishBudgetTelemetry(s, TEST_RUN, collector(), {
+        maxTurns: 24,
+        warningThreshold: 0.9,
+        reassuranceThreshold: 0.7,
+      }),
+    ).toBe("reassurance");
   });
 });
 
-describe("checkBudget is a pure query (query/command split)", () => {
+describe("budget telemetry does not publish outside its supplied sink", () => {
   it("emits no telemetry even called twice at the warning threshold", async () => {
     const s = { ...createBudgetState(), turns: 20 };
     const emits = await countGlobalOperationalEmits(() => {
-      checkBudget(s, { maxTurns: 24 });
-      checkBudget(s, { maxTurns: 24 });
+      publishBudgetTelemetry(s, TEST_RUN, collector(), { maxTurns: 24 });
+      publishBudgetTelemetry(s, TEST_RUN, collector(), { maxTurns: 24 });
     });
     expect(emits).toBe(0);
   });
@@ -153,7 +158,7 @@ describe("checkBudget is a pure query (query/command split)", () => {
   it("emits no telemetry at the exceeded threshold", async () => {
     const s = { ...createBudgetState(), turns: 24 };
     const emits = await countGlobalOperationalEmits(() => {
-      checkBudget(s, { maxTurns: 24 });
+      publishBudgetTelemetry(s, TEST_RUN, collector(), { maxTurns: 24 });
     });
     expect(emits).toBe(0);
   });
@@ -229,21 +234,21 @@ describe("defaults are written once — narration agrees with enforcement", () =
   // reintroduce a drifting literal on either side and the pair splits.
   it("at the default turn ceiling: enforcement says exceeded, narration says 0 remaining", () => {
     const s = { ...createBudgetState(), turns: BUDGET_DEFAULTS.maxTurns };
-    expect(checkBudget(s)).toBe("exceeded");
+    expect(publishBudgetTelemetry(s, TEST_RUN, collector())).toBe("exceeded");
     expect(describeBudgetRemaining(s)).toContain("0 turns remaining");
 
     const oneBelow = { ...createBudgetState(), turns: BUDGET_DEFAULTS.maxTurns - 1 };
-    expect(checkBudget(oneBelow)).not.toBe("exceeded");
+    expect(publishBudgetTelemetry(oneBelow, TEST_RUN, collector())).not.toBe("exceeded");
     expect(describeBudgetRemaining(oneBelow)).toContain("1 turn remaining");
   });
 
   it("at the default tool-call ceiling: enforcement says exceeded, narration says 0 remaining", () => {
     const s = { ...createBudgetState(), toolCalls: BUDGET_DEFAULTS.maxToolCalls };
-    expect(checkBudget(s)).toBe("exceeded");
+    expect(publishBudgetTelemetry(s, TEST_RUN, collector())).toBe("exceeded");
     expect(describeBudgetRemaining(s)).toContain("0 tool calls remaining");
 
     const oneBelow = { ...createBudgetState(), toolCalls: BUDGET_DEFAULTS.maxToolCalls - 1 };
-    expect(checkBudget(oneBelow)).not.toBe("exceeded");
+    expect(publishBudgetTelemetry(oneBelow, TEST_RUN, collector())).not.toBe("exceeded");
     expect(describeBudgetRemaining(oneBelow)).toContain("1 tool call remaining");
   });
 

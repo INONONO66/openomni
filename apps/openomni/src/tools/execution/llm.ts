@@ -1,6 +1,6 @@
-import { ModelsDev, Provider, Run, run as llmRun, type RunInput, type Sink } from "@openomni/llm";
+import { Provider, run as llmRun, type RunInput, type Sink } from "@openomni/llm";
 import type { Message, Model } from "@openomni/protocol";
-import { Bus, newTraceId } from "@openomni/agent";
+import { Bus, newTraceId, currentExecutor } from "@openomni/agent";
 import { z } from "zod";
 import { defineTool, ToolRefused } from "@openomni/agent";
 
@@ -68,7 +68,7 @@ export function createLlmTool(llm: LlmPort) {
  */
 export interface LlmIo {
   readonly run?: typeof llmRun;
-  readonly resolveProviderModel?: (model: Model.Ref) => Promise<Provider.Model>;
+  readonly resolveModel?: (model: Model.Ref) => Promise<Provider.Model>;
 }
 
 /**
@@ -106,42 +106,64 @@ export async function runResolvedText(call: ResolvedTextCall, io: LlmIo = {}): P
     onToolResult: () => undefined,
   };
   const ref: Model.Ref = { provider: call.model.provider, id: call.model.id };
-  const resolved =
-    io.resolveProviderModel === undefined
-      ? resolveLlmToolModel(await ModelsDev.get(), ref)
-      : await io.resolveProviderModel(ref);
-  const outcome = await (io.run ?? llmRun)(
+  const resolved = await (io.resolveModel ?? Provider.resolveModel)(ref);
+  const input: RunInput = {
+    messages: call.messages,
+    tools: [],
+    toolChoice: "none",
+    maxSteps: 1,
+    model: resolved,
+    auth: { type: "api", key: call.model.apiKey },
+    authProvider: call.model.provider,
+    ...(call.model.transport === undefined ? {} : { transport: call.model.transport }),
+    ...(call.signal === undefined ? {} : { signal: call.signal }),
+    ...(call.maxTokens === undefined ? {} : { maxTokens: call.maxTokens }),
+    ...(call.providerOptions === undefined ? {} : { providerOptions: call.providerOptions }),
+    trace: { traceId: newTraceId(), sessionId: call.sessionId, runId: crypto.randomUUID() },
+    events: Bus,
+  };
+  const invoke = async () => {
+    const outcome = await (io.run ?? llmRun)(input, sink);
+    if (outcome.type === "stop") return { text: answer };
+    if (outcome.type === "error") throw outcome.error;
+    if (outcome.type === "aborted") throw new DOMException("sub-model aborted", "AbortError");
+    throw new Error("sub-model returned continue");
+  };
+  const executor = currentExecutor();
+  const runAttempts = executor.runAttempts;
+  if (runAttempts === undefined) throw new Error("sub-model requires session attempt authority");
+  const result = await executor.run(
     {
-      messages: call.messages,
-      tools: [],
-      toolChoice: "none",
-      maxSteps: 1,
-      model: resolved,
-      auth: { type: "api", key: call.model.apiKey },
-      ...(call.model.transport === undefined ? {} : { transport: call.model.transport }),
-      ...(call.signal === undefined ? {} : { signal: call.signal }),
-      ...(call.maxTokens === undefined ? {} : { maxTokens: call.maxTokens }),
-      ...(call.providerOptions === undefined ? {} : { providerOptions: call.providerOptions }),
-      trace: { traceId: newTraceId(), sessionId: call.sessionId, runId: crypto.randomUUID() },
-      events: Bus,
+      kind: "llm",
+      op: "text",
+      intent: { provider: resolved.providerID, model: resolved.id },
+      effect: {},
     },
-    sink,
+    (parent) =>
+      runAttempts(parent, {
+        prepare: async (attempt) => ({
+          request: {
+            op: "text",
+            intent: { attempt, provider: resolved.providerID, model: resolved.id },
+            effect: {},
+          },
+          admit: async () => {
+            call.signal?.throwIfAborted();
+          },
+          body: invoke,
+        }),
+      }),
   );
-  if (outcome.type === "stop") return answer;
-  if (outcome.type === "aborted") {
-    const error = new Error("llm failed: the sub-model run ended as aborted", {
-      ...(outcome.error === undefined ? {} : { cause: outcome.error }),
-    });
-    error.name = "AbortError";
-    throw error;
-  }
-  if (outcome.type === "continue") {
-    throw new Error("llm failed: the sub-model run ended as continue");
-  }
-  const reason = outcome.error.message;
-  const failure: unknown = outcome.error;
-  if (Run.FailureError.isInstance(failure)) throw failure;
-  throw new Error(`llm failed: ${reason}`, { cause: failure });
+  if (result.terminal !== "executed") throw new Error(`sub-model refused: ${result.reason}`);
+  const value = result.value;
+  if (
+    value === null ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    typeof value.text !== "string"
+  )
+    throw new Error("invalid sub-model result");
+  return value.text;
 }
 
 export function createLlmToolPort(model: ResolvedTextCall["model"], io: LlmIo = {}): LlmPort {
@@ -169,18 +191,4 @@ export function createLlmToolPort(model: ResolvedTextCall["model"], io: LlmIo = 
     };
     return runResolvedText({ model, messages: [request], sessionId }, io);
   };
-}
-
-export function resolveLlmToolModel(
-  data: Record<string, ModelsDev.Provider>,
-  model: { readonly provider: string; readonly id: string },
-): Provider.Model {
-  const provider = data[model.provider];
-  const raw = provider?.models?.[model.id];
-  if (provider === undefined || raw === undefined) {
-    throw new Error(
-      `llm failed: model "${model.id}" is not listed under provider "${model.provider}" in the models.dev catalog, so its SDK wiring is unknown`,
-    );
-  }
-  return Provider.fromModelsDevModel(provider, raw as ModelsDev.Model);
 }

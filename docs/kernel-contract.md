@@ -269,6 +269,16 @@ The structural gate runs first for cost shape: an evidence-less bluff is rejecte
 
 **Retry policy.** Defaults live on the executor profile (internal workers: 3; installed apps: per connector definition; humans: not retries but a reminder policy under the social budget), overridable per item via `maxAttempts`. Exhaustion is kernel-enforced: the item gains a `waiting_input` blocker and escalates to the Owner ("attempted N times, still failing — change approach?"). This is the structural backstop against cost-burning retry loops.
 
+## Session L3 execution contract (#937)
+
+The session invokes stateless runAgent; every model step drains inbox before LLM, after LLM before tools, and after the tool wave, then compacts and evaluates stop policy. Tool waves retain whole-wave preflight/approval, positional results, sequential barriers, and immediate abort release without freeing live raw effects' controlling lease.
+
+One logical `llm` owns ordered attempt children. Only the executor retries and re-admits policy/context; the provider processor performs one attempt. Visible assistant text or a tool call makes a later provider failure terminal. Failed billing remains in attempt evidence and additive usage, while failed partial messages never enter active history. Model/auth resolution, provider classification, retry-after and backoff belong to `@openomni/llm`; cross-provider fallback resolves its own credentials.
+
+Stop policy is ordered: abort/deadline/budget, terminal text and completion gate, exact-output repetition, toolless stall, blocked recurrence, live wait, continuation. Thresholds come from captured compiled obligations, not role-specific constants. Progress is committed effect/state change, not tool invocation. The neutral openIntent reader and pending executor approvals prevent premature completion. Only a still-armed action created in the current turn permits `waiting/live_wait`; waiting is not approval suspension or a successful result. Generic channel Wait remains a separate lifecycle boundary.
+
+Full assistant/tool snapshots and compaction projections are append-only action results. Terminal resume gets new IDs/latest generation; crash-open recovery uses existing IDs/captured generation. A missing or changed captured executable catalog fails closed rather than substituting the newest definition. No WorkItem/Attempt domain, public fact callback, legacy Session or physical history migration is introduced.
+
 ## 4. Governor Contract
 
 ### Access contract

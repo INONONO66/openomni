@@ -140,7 +140,7 @@ try {
       ),
     ],
     llm: {
-      resolveProviderModel: async () => model,
+      resolveModel: async () => model,
       run: (input, sink) =>
         run(input, {
           onMessage(message) {

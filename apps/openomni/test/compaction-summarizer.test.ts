@@ -2,7 +2,16 @@ import { describe, expect, it } from "bun:test";
 import type { LlmIo } from "../src/tools/execution/llm";
 import { Run } from "@openomni/llm";
 import type { Message } from "@openomni/protocol";
-import { createCompactionSummarizer, SummarizerError } from "../src/compaction/summarizer";
+import {
+  createCompactionSummarizer as summarizer,
+  SummarizerError,
+} from "../src/compaction/summarizer";
+import { admittedOperation } from "./helpers/admitted-operation";
+
+function createCompactionSummarizer(config: Parameters<typeof summarizer>[0]) {
+  const run = summarizer(config);
+  return (...args: Parameters<typeof run>) => admittedOperation(() => run(...args));
+}
 
 const MODEL = { provider: "fake", id: "summary-model", apiKey: "key" };
 const BUDGET = { contextWindowTokens: 100_000, maxInputTokens: 50_000, maxOutputTokens: 20_000 };
@@ -31,7 +40,7 @@ function answer(text: string): Message.WithParts {
   return message("answer", text);
 }
 
-const resolveProviderModel: NonNullable<LlmIo["resolveProviderModel"]> = async (model) => ({
+const resolveModel: NonNullable<LlmIo["resolveModel"]> = async (model) => ({
   id: model.id,
   name: model.id,
   providerID: model.provider,
@@ -60,7 +69,7 @@ describe("production compaction summarizer", () => {
       sink.onMessage(answer("dense merged summary"));
       return { type: "stop" };
     };
-    const summarize = createCompactionSummarizer({ model: MODEL, io: { run, resolveProviderModel } });
+    const summarize = createCompactionSummarizer({ model: MODEL, io: { run, resolveModel } });
 
     await expect(summarize([message("m1", "new span")], "prior anchor", BUDGET)).resolves.toBe(
       "dense merged summary",
@@ -78,9 +87,11 @@ describe("production compaction summarizer", () => {
       sink.onMessage(answer("   "));
       return { type: "stop" };
     };
-    const summarize = createCompactionSummarizer({ model: MODEL, io: { run, resolveProviderModel } });
+    const summarize = createCompactionSummarizer({ model: MODEL, io: { run, resolveModel } });
 
-    const error = await summarize([message("m1", "span")], undefined, BUDGET).catch((caught: unknown) => caught);
+    const error = await summarize([message("m1", "span")], undefined, BUDGET).catch(
+      (caught: unknown) => caught,
+    );
     expect(error).toBeInstanceOf(SummarizerError);
     expect((error as SummarizerError).kind).toBe("empty");
   });
@@ -92,7 +103,7 @@ describe("production compaction summarizer", () => {
       inputLengths.push(input.messages.length);
       return { type: "error", error: failure };
     };
-    const summarize = createCompactionSummarizer({ model: MODEL, io: { run, resolveProviderModel } });
+    const summarize = createCompactionSummarizer({ model: MODEL, io: { run, resolveModel } });
 
     const error = await summarize(
       [message("m1", "oldest"), message("m2", "middle"), message("m3", "newest")],
@@ -111,7 +122,7 @@ describe("production compaction summarizer", () => {
       calls += 1;
       return { type: "error", error: failure };
     };
-    const summarize = createCompactionSummarizer({ model: MODEL, io: { run, resolveProviderModel } });
+    const summarize = createCompactionSummarizer({ model: MODEL, io: { run, resolveModel } });
 
     const error = await summarize([message("m1", "span")], undefined, BUDGET).catch(
       (caught: unknown) => caught,
@@ -127,7 +138,7 @@ describe("production compaction summarizer", () => {
       expect(input.signal).toBe(controller.signal);
       return { type: "aborted" };
     };
-    const summarize = createCompactionSummarizer({ model: MODEL, io: { run, resolveProviderModel } });
+    const summarize = createCompactionSummarizer({ model: MODEL, io: { run, resolveModel } });
 
     const error = await summarize(
       [message("m1", "span")],

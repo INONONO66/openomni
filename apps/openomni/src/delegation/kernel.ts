@@ -230,6 +230,8 @@ function controlError(code: "not_found" | "not_open", delegationId: string): Nam
 
 export interface DelegationKernel {
   readonly now: () => number;
+  /** The same terminal/stop signal used by the admitted transport, including recovery. */
+  signalFor(delegationId: string): AbortSignal;
   delegate(candidate: unknown, origin: DelegationOrigin): Promise<DelegationResult>;
   awaitDelegation(delegationId: string, timeoutMs?: number): Promise<DelegationAwaitResult>;
   cancelDelegation(delegationId: string): Promise<Delegation.Settled>;
@@ -592,6 +594,22 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
     return { handle, settled: settled.settlement };
   }
 
+  function controllerFor(delegationId: string): AbortController {
+    let controller = controllers.get(delegationId);
+    if (controller === undefined) {
+      controller = new AbortController();
+      controllers.set(delegationId, controller);
+    }
+    return controller;
+  }
+
+  function signalFor(delegationId: string): AbortSignal {
+    const record = store.get(delegationId);
+    if (record === undefined) throw controlError("not_found", delegationId);
+    if (stopped || record.status === "settled") return AbortSignal.abort();
+    return controllerFor(delegationId).signal;
+  }
+
   function startDelegation(
     admission: Admitted,
     handle: Delegation.Handle,
@@ -599,8 +617,7 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
   ): DelegationResult | Promise<DelegationResult> {
     publishAdmitted(record);
     arm(record);
-    const controller = new AbortController();
-    controllers.set(handle.delegationId, controller);
+    const controller = controllerFor(handle.delegationId);
     const completion = dispatch(admission, handle, controller);
     if (handle.transport === "inline" || handle.operation === "notify") {
       return awaitImmediate(handle);
@@ -777,6 +794,7 @@ export function createDelegationKernel(options: DelegationKernelOptions): Delega
 
   const kernel: DelegationKernel = {
     now: options.now,
+    signalFor,
     delegate,
     awaitDelegation,
     cancelDelegation,

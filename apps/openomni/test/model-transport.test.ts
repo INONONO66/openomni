@@ -8,10 +8,11 @@ import type { Gateway } from "@openomni/protocol";
 import { modelTransport, type OpenOmniConfig } from "../src/config";
 import type { DelegationKernel } from "../src/delegation/kernel";
 import { createChildKernel, ProcessWorkerRequest } from "../src/delegation/process-entry";
-import { createInlineWorkerRunner } from "../src/delegation/worker-loop";
+import { createWorkerSessionRunner } from "../src/composition/worker-session";
 import { createResident } from "../src/resident";
 import { createLlmToolPort } from "../src/tools/execution/llm";
 import { assistantMessage } from "./helpers/assistant-message";
+import { admittedOperation } from "./helpers/admitted-operation";
 
 const directories: string[] = [];
 
@@ -27,7 +28,7 @@ const OPERATOR_TRANSPORT = {
   headers: { "x-tenant": "acme" },
 } as const;
 
-const resolveProviderModel = async (model: { provider: string; id: string }) => ({
+const resolveModel = async (model: { provider: string; id: string }) => ({
   id: model.id,
   name: model.id,
   providerID: model.provider,
@@ -111,12 +112,12 @@ describe("operator transport reaches every model caller", () => {
     });
     let seen: RunInput | undefined;
     let kernel: DelegationKernel;
-    const runner = createInlineWorkerRunner({
+    const runner = createWorkerSessionRunner({
       model: { provider: "fake", id: "worker-test" },
       apiKey: "test-key",
       transport: OPERATOR_TRANSPORT,
       llm: {
-        resolveProviderModel,
+        resolveModel,
         run: async (input: RunInput, sink: Sink) => {
           seen = input;
           sink.onMessage(assistantMessage(input, { call: 1, text: "done" }));
@@ -156,7 +157,7 @@ describe("operator transport reaches every model caller", () => {
       tools: {},
       targets: () => [],
       llm: {
-        resolveProviderModel,
+        resolveModel,
         run: async (input, sink: Sink) => {
           seen = input;
           sink.onMessage(assistantMessage(input, { call: 1 }));
@@ -175,7 +176,7 @@ describe("operator transport reaches every model caller", () => {
     const port = createLlmToolPort(
       { provider: "fake", id: "port-test", apiKey: "port-key", transport: OPERATOR_TRANSPORT },
       {
-        resolveProviderModel,
+        resolveModel,
         run: async (input, sink) => {
           seen = input;
           sink.onMessage(assistantMessage(input, { call: 1, text: "answered" }));
@@ -184,7 +185,7 @@ describe("operator transport reaches every model caller", () => {
       },
     );
 
-    await port("summarize");
+    await admittedOperation(() => port("summarize"));
 
     expect(seen?.transport).toEqual(OPERATOR_TRANSPORT);
   });

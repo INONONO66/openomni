@@ -8,6 +8,7 @@ import {
 } from "@openomni/protocol";
 import type { ExecutionRequest, ExecutorOptions } from "./executor";
 import { waveBodyScope } from "./core/execution/tool-wave";
+import { Run } from "@openomni/llm";
 
 export type ToolObservationStatus = "success" | "error" | "timed_out";
 type ToolObservationIdentity = NonNullable<ExecutionRequest["toolObservation"]>;
@@ -38,6 +39,7 @@ export function createExecutionRecord(
     effect: PlainValue,
     caught: Caught,
     callId?: string,
+    toolResult?: Tool.Result,
   ): Promise<void> {
     const error = caught instanceof Error ? caught : new Error(String(caught));
     await appendResult(subject, parentId, {
@@ -45,7 +47,9 @@ export function createExecutionRecord(
       terminal: "failed",
       effect,
       error: { name: error.name },
+      ...(caught instanceof Run.FailureError ? { failure: caught.data } : {}),
       ...(callId === undefined ? {} : { callId }),
+      ...(toolResult === undefined ? {} : { toolResult }),
     });
   }
 

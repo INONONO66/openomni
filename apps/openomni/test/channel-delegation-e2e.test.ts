@@ -57,7 +57,7 @@ test("the Resident delegates to an external actor over the channel and reports t
       ],
     },
     llm: {
-      resolveProviderModel: fakeProviderModel,
+      resolveModel: fakeProviderModel,
       run: async (input: RunInput, sink: Sink) => {
         const lastUser = [...input.messages].reverse().find((entry) => entry.info.role === "user");
         const asked = (lastUser?.parts ?? [])

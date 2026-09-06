@@ -14,7 +14,7 @@ export namespace Token {
    * input + output tokens; reasoning/cache counters are auxiliary dimensions,
    * not extra additive fields.
    */
-  export const Usage = z.object({
+  const Usage = z.object({
     inputTokens: Count,
     outputTokens: Count,
     totalTokens: Count.optional(),
@@ -22,7 +22,6 @@ export namespace Token {
     cacheReadTokens: Count.optional(),
     cacheWriteTokens: Count.optional(),
   });
-  export type Usage = z.infer<typeof Usage>;
 
   /**
    * Agent-runtime accounting requires `totalTokens` so budget and execution
@@ -37,8 +36,5 @@ export namespace Token {
    * Provider-facing usage omits `totalTokens` because many SDK responses expose
    * only split token counters.
    */
-  export const ProviderUsage = Usage.omit({
-    totalTokens: true,
-  });
-  export type ProviderUsage = z.infer<typeof ProviderUsage>;
+  export type ProviderUsage = Omit<z.infer<typeof Usage>, "totalTokens">;
 }

@@ -59,7 +59,7 @@ describe("Resident compaction", () => {
       tools: {},
       targets: () => [],
       llm: {
-        resolveProviderModel: async (model) => ({
+        resolveModel: async (model) => ({
           id: model.id,
           name: model.id,
           providerID: model.provider,
@@ -87,17 +87,17 @@ describe("Resident compaction", () => {
       model: { provider: "fake", id: "resident-test" },
       apiKey: "test-key",
       compaction: {
-        contextWindowTokens: 100,
+        contextWindowTokens: 700,
         elideToolOutputs: { minOutputChars: 4000, keepHeadChars: 500 },
       },
       tools: {},
       targets: () => [],
       llm: {
-        resolveProviderModel: async (model) => ({
+        resolveModel: async (model) => ({
           id: model.id,
           name: model.id,
           providerID: model.provider,
-          limit: { context: 100 },
+          limit: { context: 700 },
         }),
         run: async (input, sink: Sink) => {
           calls += 1;
@@ -106,7 +106,7 @@ describe("Resident compaction", () => {
             assistantMessage(input, {
               call: calls,
               reason: calls === 1 ? "tool-calls" : "stop",
-              tokens: { input: 90, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+              tokens: { input: 650, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
             }),
           );
           return { type: "stop" };

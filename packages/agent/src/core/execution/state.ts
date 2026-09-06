@@ -1,11 +1,11 @@
-import type { RunInput } from "@openomni/llm";
+import { accumulateUsage, type RunInput } from "@openomni/llm";
 import type { Sink } from "@openomni/llm";
 import type { Message, Policy, TraceContext } from "@openomni/protocol";
 import { createBudgetState, recordTokenUsage, recordTurn, type BudgetState } from "../budget";
 import type { AgentResult, AgentStep, ChatAgentInput, TokenUsage } from "../types";
-import type { TerminalReason } from "../retry";
 import { createUserMessage, createAssistantMessage, withMessageId } from "../message-factory";
 import type { CompactionYield } from "../../compaction/geometry";
+import { stopState, type StopState } from "./stop-chain";
 
 function toMessagesWithParts(
   messages: ChatAgentInput["messages"],
@@ -93,6 +93,9 @@ export interface AgentRunBase {
 }
 
 export interface RunState {
+  stop: StopState;
+  readonly modelFailureReasons: string[];
+  modelKey?: string;
   readonly sessionId: string;
   budgetState: BudgetState;
   messages: Message.WithParts[];
@@ -181,31 +184,17 @@ export type BuildTurnResult =
   | { type: "ready"; turn: TurnArtifacts }
   | { type: "complete"; result: AgentResult };
 
-/** What the terminal record needs. Emitted by the runner, which owns it. */
-export interface RunFailureFacts {
-  readonly reason: TerminalReason;
-  readonly attempt: number;
-  readonly maxAttempts: number;
-}
-
-/**
- * What the run does after an attempt raised. `complete` carries the result a
- * guard settled on. The other two carry what the terminal record would need,
- * because the runner owns that record and the wait between attempts: a run
- * aborted mid-backoff has to report the reason and ceiling that were decided,
- * not ones re-derived from the abort.
- */
-export type ErrorDecision =
-  | { action: "retry"; backoffMs: number; failure: RunFailureFacts }
-  | { action: "complete"; result: AgentResult }
-  | { action: "throw"; error: Error; failure: RunFailureFacts };
-
 export function createRunState(input: ChatAgentInput & { traceContext: RunTrace }): RunState {
   const sessionId = input.traceContext.sessionId;
   return {
     sessionId,
+    stop: stopState(),
+    modelFailureReasons: [],
     budgetState: createBudgetState(),
-    messages: toMessagesWithParts(input.messages, sessionId),
+    messages:
+      input.history === undefined
+        ? toMessagesWithParts(input.messages, sessionId)
+        : structuredClone([...input.history]),
     lastAssistantText: "",
     steps: [],
     totalUsage: {
@@ -272,13 +261,10 @@ export function resetModelWindowGuards(state: RunState): void {
 
 export function recordAssistantTokenDelta(
   state: RunState,
-  inputTokens: number,
-  outputTokens: number,
+  usage: import("@openomni/protocol").Token.ProviderUsage,
 ): void {
-  state.totalUsage.inputTokens += inputTokens;
-  state.totalUsage.outputTokens += outputTokens;
-  state.totalUsage.totalTokens += inputTokens + outputTokens;
-  state.budgetState = recordTokenUsage(state.budgetState, inputTokens, outputTokens);
+  accumulateUsage(state.totalUsage, usage);
+  state.budgetState = recordTokenUsage(state.budgetState, usage.inputTokens, usage.outputTokens);
 }
 
 export function setLastAssistantText(state: RunState, text: string): void {

@@ -1,7 +1,7 @@
+import { createTestAgent } from "../../helpers/test-agent";
 import { beforeEach, describe, expect, it } from "bun:test";
 import type { Machine, Tool } from "@openomni/protocol";
 import { Bus } from "../../../src/index";
-import { ChatAgent } from "../../../src/core/chat-agent";
 import { createAssistantMessage } from "../../../src/core/message-factory";
 import type { ChatAgentConfig, ChatAgentInput } from "../../../src/core/types";
 
@@ -50,10 +50,10 @@ async function exercise(
       ? { toolWave: (calls: readonly Tool.Call[]) => Promise.all(calls.map(body)) }
       : {}),
     llm: {
-      resolveProviderModel: async () => ({ id: "model", name: "model", providerID: "test" }),
+      resolveModel: async () => ({ id: "model", name: "model", providerID: "test" }),
       run: async (modelInput, sink) => {
         catalogs.push(modelInput.tools.map((tool) => tool.name));
-        const message = createAssistantMessage("", "", "session-placement");
+        const message = createAssistantMessage("placement completed", "", "session-placement");
         const call = options.call;
         if (!requested && call !== undefined) {
           requested = true;
@@ -72,7 +72,7 @@ async function exercise(
       },
     },
   };
-  await ChatAgent.create(config).run(input, {
+  await createTestAgent(config).run(input, {
     onMessage: () => undefined,
     onToolCall: () => undefined,
     onToolResult: (result) => results.push(result),

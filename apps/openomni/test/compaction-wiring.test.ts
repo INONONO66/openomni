@@ -53,9 +53,9 @@ describe("compaction composition configuration", () => {
     const app = await suite.boot({
       config,
       llm: {
-        resolveProviderModel: async (model) => ({
+        resolveModel: async (model) => ({
           ...(await fakeProviderModel(model)),
-          limit: { context: constrained ? 100 : 100_000 },
+          limit: { context: constrained ? 700 : 100_000 },
         }),
         run: async (input: RunInput, sink: Sink) => {
           calls += 1;
@@ -66,7 +66,7 @@ describe("compaction composition configuration", () => {
               reason: constrained && messageCounts.length === 1 ? "tool-calls" : "stop",
               text: `answer ${calls} ${"filler ".repeat(30)}`,
               tokens: constrained
-                ? { input: 90, output: 1, reasoning: 0, cache: { read: 0, write: 0 } }
+                ? { input: 650, output: 1, reasoning: 0, cache: { read: 0, write: 0 } }
                 : undefined,
             }),
           );
@@ -74,7 +74,10 @@ describe("compaction composition configuration", () => {
         },
       },
     });
-    const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "root-compaction-token"]);
+    const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, [
+      "auth",
+      "root-compaction-token",
+    ]);
     for (let index = 0; index < 6; index += 1) {
       const reply = nextMessage(ws);
       ws.send(JSON.stringify({ type: "message", text: `seed ${index} ${"filler ".repeat(30)}` }));
@@ -88,5 +91,4 @@ describe("compaction composition configuration", () => {
     expect(messageCounts).toHaveLength(2);
     expect(messageCounts[1]).toBeLessThan(messageCounts[0] ?? 0);
   });
-
 });

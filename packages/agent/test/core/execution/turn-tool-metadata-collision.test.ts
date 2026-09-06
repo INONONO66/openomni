@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { Bus } from "../../../src/index";
-import { runAgent } from "../../../src/core/execution/run";
+import { runTestAgent } from "../../helpers/test-agent";
 import type { ChatAgentConfig } from "../../../src/core/types";
 import {
   createMockLlmConfig,
@@ -48,7 +48,7 @@ function spec(name: string) {
 describe("tool metadata key collisions", () => {
   it("refuses a catalog where a_b's alias collides with a tool named a.b", async () => {
     await expect(
-      runAgent(runInput([{ role: "user", content: "hi" }]), config([spec("a_b"), spec("a.b")])),
+      runTestAgent(runInput([{ role: "user", content: "hi" }]), config([spec("a_b"), spec("a.b")])),
     ).rejects.toThrow('tool metadata collision: "a.b" is claimed by both "a_b" and "a.b"');
   });
 
@@ -57,12 +57,12 @@ describe("tool metadata key collisions", () => {
     // "same name, no conflict" and let the later tool answer the earlier
     // tool's policy lookups.
     await expect(
-      runAgent(runInput([{ role: "user", content: "hi" }]), config([spec("a.b"), spec("a.b")])),
+      runTestAgent(runInput([{ role: "user", content: "hi" }]), config([spec("a.b"), spec("a.b")])),
     ).rejects.toThrow('tool metadata collision: "a.b" is claimed by both "a.b" and "a.b"');
   });
 
   it("a single tool claiming its own alias keys stays legal", async () => {
-    const result = await runAgent(
+    const result = await runTestAgent(
       runInput([{ role: "user", content: "hi" }]),
       config([spec("a_b")]),
     );

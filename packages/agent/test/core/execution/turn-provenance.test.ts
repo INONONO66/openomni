@@ -1,14 +1,19 @@
 import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
-import { runAgent } from "../../../src/core/execution/run";
+import { runTestAgent } from "../../helpers/test-agent";
 import { Bus } from "../../../src/index";
-import { createMockLlmConfig, createStopOutcome, mockProviderData, mockProviderModel } from "../../helpers/mock-llm";
+import {
+  createMockLlmConfig,
+  createStopOutcome,
+  mockProviderData,
+  mockProviderModel,
+} from "../../helpers/mock-llm";
 import { runInput } from "../../helpers/run-input";
 
 describe("turn provenance", () => {
   it("preserves hydrated assistant role and parent linkage in model history", async () => {
     let messages: readonly Message.WithParts[] = [];
-    await runAgent(
+    await runTestAgent(
       runInput([
         { role: "user", content: "parent request" },
         { role: "assistant", content: "child result" },
@@ -19,7 +24,10 @@ describe("turn provenance", () => {
         llm: createMockLlmConfig({
           getModels: async () => mockProviderData,
           fromModelsDevModel: () => mockProviderModel,
-          run: async (input) => { messages = [...(input.messages as readonly Message.WithParts[])]; return createStopOutcome(); },
+          run: async (input) => {
+            messages = [...(input.messages as readonly Message.WithParts[])];
+            return createStopOutcome();
+          },
         }),
       },
     );

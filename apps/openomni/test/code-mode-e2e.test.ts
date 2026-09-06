@@ -87,7 +87,7 @@ test("a cell batches delegation into one turn", async () => {
   const app = await suite.boot({
     config,
     llm: {
-      resolveProviderModel: fakeProviderModel,
+      resolveModel: fakeProviderModel,
       run: async (input: RunInput, sink: Sink) => {
         if (SessionHandleStore.row(input.trace.sessionId).role === "worker") {
           // Each worker answers with the instruction it was actually given, so
@@ -184,7 +184,7 @@ test("the machine tool is not offered while nothing is attached", async () => {
       machines: { socketPath: testSocketPath(), enrolled: [enrollment] },
     }),
     llm: {
-      resolveProviderModel: fakeProviderModel,
+      resolveModel: fakeProviderModel,
       run: async (input: RunInput, sink: Sink) => {
         offered = (input.tools ?? []).map((tool) => tool.name);
         // Naming it anyway must be refused, not served: what the fold declined

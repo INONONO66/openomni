@@ -1,22 +1,20 @@
 import type { Delegation } from "@openomni/protocol";
 import type { Admitted, DelegationOrigin } from "./admission";
 import type { DelegationDriver, DriverOutcome, DriverReport } from "./kernel";
-import { WorkerRunError } from "./worker-loop";
+import { WorkerRunError } from "../composition/worker-session";
 
 /** Runs one isolated in-process worker turn. */
-export type InlineWorkerRunner = (
-  input: {
-    readonly delegationId: string;
-    /** Run identity allocated before commissioning, when this is an assigned worker. */
-    readonly workerRunId?: string;
-    readonly operation: Delegation.Operation;
-    readonly instruction: string;
-    readonly acceptanceCriteria: readonly string[];
-    /** Admission-stamped worker identity and delegation lineage. */
-    readonly origin: DelegationOrigin;
-    readonly signal: AbortSignal;
-  },
-) => Promise<{ readonly text: string; readonly tokens: number; readonly runId?: string }>;
+export type InlineWorkerRunner = (input: {
+  readonly delegationId: string;
+  /** Run identity allocated before commissioning, when this is an assigned worker. */
+  readonly workerRunId?: string;
+  readonly operation: Delegation.Operation;
+  readonly instruction: string;
+  readonly acceptanceCriteria: readonly string[];
+  /** Admission-stamped worker identity and delegation lineage. */
+  readonly origin: DelegationOrigin;
+  readonly signal: AbortSignal;
+}) => Promise<{ readonly text: string; readonly tokens: number; readonly runId?: string }>;
 
 /**
  * The volatile inline transport. The kernel still records it before this runs,
@@ -45,7 +43,8 @@ export function createInlineDriver(run: InlineWorkerRunner): DelegationDriver {
       try {
         output = await run(input);
       } catch (error) {
-        if (error instanceof WorkerRunError) return { status: "failed", error: error.message, workerRunId: error.runId };
+        if (error instanceof WorkerRunError)
+          return { status: "failed", error: error.message, workerRunId: error.runId };
         throw error;
       }
 

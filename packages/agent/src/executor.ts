@@ -1,10 +1,10 @@
-import type { LedgerAction, PlainValue } from "@openomni/protocol";
+import type { LedgerAction, PlainObject, PlainValue } from "@openomni/protocol";
 import { canonicalDigest } from "@openomni/protocol";
 import type { PolicyEvaluation, PolicyEvaluationInput } from "@openomni/policy";
 
 import { runWaveBodies, waveBodyScope, type WaveControl } from "./core/execution/tool-wave";
 
-const CORE_KINDS = new Set(["prompt", "turn", "llm", "tool", "compaction"]);
+const CORE_KINDS = new Set(["prompt", "turn", "llm", "tool", "compaction", "message"]);
 import { createExecutionRecord, type ToolObservationStatus } from "./executor-record";
 
 export class UnregisteredExecutionKindError extends Error {
@@ -17,7 +17,6 @@ export class UnregisteredExecutionKindError extends Error {
 }
 
 import type {
-  AttemptRequest,
   DurableExecutor,
   ExecutionBatchItem,
   ExecutionBatchResult,
@@ -26,6 +25,8 @@ import type {
   ExecutorOptions,
 } from "./executor-contract";
 import { createExecutionApprovals } from "./executor-approval";
+import { createAttemptRunner } from "./executor-attempts";
+import { createStopJudge } from "./executor-stop";
 export { ExecutionApprovalError } from "./executor-contract";
 export type {
   DurableExecutor,
@@ -57,6 +58,7 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
     request: ExecutionRequest,
     phase: "pre" | "post",
     value: PlainValue,
+    parentId = options.identity.parentActionId,
   ): Promise<PolicyEvaluation & { readonly receipt: LedgerAction.Receipt }> {
     // Compaction is the existing turn.post/compaction policy operation,
     // even though its durable evidence has the dedicated compaction kind.
@@ -73,13 +75,14 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
     const decision = options.policy.evaluate(input);
     const receipt = await commit({
       id: options.entropy(),
-      parentId: options.identity.parentActionId,
+      parentId,
       sessionId: options.identity.sessionId,
       kind: "policy.decision",
       intent: {
         encodingVersion: 1,
         value: {
           hook: `${point.kind}.${point.phase}`,
+          op: request.op,
           generation: decision.generation,
           matchedRuleIds: [...decision.matchedRuleIds],
           verdict: decision.verdict,
@@ -222,6 +225,7 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
             phase: "result",
             terminal: "cancelled",
             callId: stage.request.toolObservation?.callId ?? null,
+            ...projectToolResult(stage.request, { terminal: "cancelled" }),
           });
         publishToolTerminal(stage.request, started.get(index), "error");
         results.push({ terminal: "cancelled" });
@@ -238,6 +242,7 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
             terminal: "blocked_pre",
             reason,
             callId: stage.request.toolObservation?.callId ?? null,
+            ...projectToolResult(stage.request, { terminal: "blocked_pre", reason }),
           });
         results.push({ terminal: "blocked_pre", reason });
       } else if (intent === undefined) throw new Error("wave lost admitted intent");
@@ -248,6 +253,7 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
           stage.request.effect,
           outcome.error,
           stage.request.toolObservation?.callId,
+          stage.request.toolResult?.({ terminal: "failed", error: outcome.error }),
         );
         publishToolTerminal(stage.request, started.get(index), "error");
         results.push({ terminal: "failed", error: outcome.error });
@@ -282,37 +288,33 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
     return applyPostPolicy(request, clonePlainValue(await body()));
   }
 
-  async function runAttempt<T extends PlainValue>(
-    parent: LedgerAction.Receipt,
-    request: AttemptRequest,
-    body: () => Promise<T>,
-  ): Promise<T> {
-    const intent = await appendIntent({
-      kind: "attempt",
-      op: request.op,
-      parentId: parent.action.id,
-      value: request.intent,
-    });
-    const outcome = await body().then(
-      (value) => ({ status: "fulfilled" as const, value }),
-      (caught) => ({ status: "rejected" as const, caught }),
-    );
-    if (outcome.status === "rejected") {
-      await appendFailure(
-        { kind: "attempt", op: request.op },
-        intent.action.id,
-        request.effect,
-        outcome.caught,
-      );
-      throw outcome.caught;
-    }
-    await appendResult({ kind: "attempt", op: request.op }, intent.action.id, {
-      phase: "result",
-      terminal: "executed",
-      effect: request.effect,
-    });
-    return outcome.value;
-  }
+  const runAttempts = createAttemptRunner(
+    options,
+    { appendIntent, appendResult, appendFailure },
+    (request, parent) =>
+      decide({ kind: "llm", ...request }, "pre", request.intent, parent.action.id),
+    (request, intent, admission) =>
+      awaitApproval(
+        {
+          id: intent.action.id,
+          sessionId: options.identity.sessionId,
+          turnId: options.identity.turnId ?? options.identity.parentActionId,
+          callId: intent.action.id,
+          inputHash: canonicalDigest(request.intent),
+          generation: admission.generation,
+          revision: admission.receipt.revision,
+          policyDecisionId: admission.receipt.action.id,
+          intent: request.intent,
+          ...(options.identity.toolsHash === undefined
+            ? {}
+            : { toolsHash: options.identity.toolsHash }),
+          ...(options.identity.toolsGeneration === undefined
+            ? {}
+            : { toolsGeneration: options.identity.toolsGeneration }),
+        },
+        options.signal ?? waveBodyScope.getStore()?.signal ?? new AbortController().signal,
+      ),
+  );
 
   function registeredKind(request: ExecutionRequest): LedgerAction.Kind {
     if (!kinds.has(request.kind)) throw new UnregisteredExecutionKindError(request.kind);
@@ -342,7 +344,9 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
             terminal: outcome.terminal,
             effect: request.effect,
             resultHash: canonicalDigest(outcome.value),
-            ...(request.kind === "compaction" || request.kind === "tool"
+            ...(request.kind === "compaction" ||
+            request.kind === "tool" ||
+            request.kind === "message"
               ? { result: outcome.value }
               : {}),
             ...(request.toolObservation ? { callId: request.toolObservation.callId } : {}),
@@ -350,7 +354,7 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
     await appendResult(
       { kind, op: request.op },
       intentId,
-      effect,
+      { ...effect, ...projectToolResult(request, outcome) },
       outcome.terminal === "executed" ? request.revertData?.() : undefined,
     );
     const status =
@@ -378,7 +382,16 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
     return { terminal: "blocked_post", disposition, reason };
   }
 
-  return { run, runAttempt, runExisting, runBatch, approvals };
+  const judgeStop = createStopJudge(
+    options,
+    (op, value) => decide({ kind: "turn", op, intent: value, effect: {} }, "post", value),
+    commit,
+  );
+  return { run, runAttempts, runExisting, runBatch, approvals, judgeStop };
+}
+
+function projectToolResult(request: ExecutionRequest, outcome: ExecutionBatchResult): PlainObject {
+  return request.toolResult === undefined ? {} : { toolResult: request.toolResult(outcome) };
 }
 
 function blocks(decision: PolicyEvaluation): boolean {

@@ -61,7 +61,7 @@ async function bootWithConfig(config: OpenOmniConfig): Promise<{ port: number }>
   const app = await suite.boot({
     config,
     llm: {
-      resolveProviderModel: fakeProviderModel,
+      resolveModel: fakeProviderModel,
       run: async (input, sink: Sink) => {
         sink.onMessage(assistantMessage(input, { id: "fake-assistant-message", text: REPLY }));
         return { type: "stop" };
@@ -139,7 +139,7 @@ describe("OpenOmni Resident WebSocket", () => {
     const app = await suite.boot({
       config,
       llm: {
-        resolveProviderModel: fakeProviderModel,
+        resolveModel: fakeProviderModel,
         run: async (input, sink: Sink) => {
           providerCalls += 1;
           sink.onMessage(assistantMessage(input, { text: REPLY }));

@@ -1388,6 +1388,39 @@ describe("session crash recovery and observation", () => {
     expect(SessionHandleStore.openTurns(SessionHandleStore.tree("crashed-turn"))).toEqual([]);
   });
 
+  test("boot sweep seals a durable interrupt before admitting an open turn", async () => {
+    commitOpenTurn({ sessionId: "cancelled-turn", resultId: "cancelled-result", resumeCount: 0 });
+    SessionHandleStore.commitInbox({
+      id: "cancel-request",
+      sessionId: "cancelled-turn",
+      kind: "interrupt",
+      content: "",
+      createdAt: now,
+      origin: { encodingVersion: 1, value: { kind: "sdk" } },
+      parentActionId: "cancelled-turn:turn",
+    });
+    const prefix = SessionHandleStore.tree("cancelled-turn");
+    let runnerEntries = 0;
+    await bounded(
+      sweepSessions(
+        () => async () => {
+          runnerEntries += 1;
+          return { kind: "result", text: "must not run" };
+        },
+        runtime,
+      ),
+      "cancelled open turn seal",
+    );
+    expect(runnerEntries).toBe(0);
+    const actions = SessionHandleStore.tree("cancelled-turn");
+    expect(actions.slice(0, prefix.length)).toEqual(prefix);
+    expect(
+      SessionHandleStore.turnTerminal(actions.find((action) => action.id === "cancelled-result")),
+    ).toMatchObject({ kind: "interrupted", turnId: "cancelled-turn:turn", resumeCount: 0 });
+    expect(SessionHandleStore.pendingInbox("cancelled-turn")).toEqual([]);
+    expect(SessionHandleStore.row("cancelled-turn").leaseOwner).toBeNull();
+  });
+
   test("boot sweep seals error at resume budget ten without entering the runner", async () => {
     commitOpenTurn({ sessionId: "poison-turn", resultId: "poison-result", resumeCount: 10 });
     let runnerEntries = 0;

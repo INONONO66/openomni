@@ -108,7 +108,7 @@ export const RunEvents = {
       attempt: z.number(),
       maxAttempts: z.number(),
       error: z.string(),
-      /** Why the error was judged retryable — see `Retry.classifyRetryReason`. */
+      /** Why the error was judged retryable — see the canonical LLM decision. */
       reason: z.enum([
         "timeout",
         "tool_error",

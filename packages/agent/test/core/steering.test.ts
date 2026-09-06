@@ -1,10 +1,16 @@
+import { providerFailure } from "../helpers/mock-llm";
+import { createTestAgent } from "../helpers/test-agent";
 import { describe, expect, it, jest } from "bun:test";
 import type { Message } from "@openomni/protocol";
 import { RunEvents } from "../../src/core/execution/events";
 import { createAssistantMessage } from "../../src/core/message-factory";
-import { ChatAgent } from "../../src/core/chat-agent";
 import { Bus } from "../../src/index";
-import { createMockLlmConfig, createStopOutcome, mockProviderData, mockProviderModel } from "../helpers/mock-llm";
+import {
+  createMockLlmConfig,
+  createStopOutcome,
+  mockProviderData,
+  mockProviderModel,
+} from "../helpers/mock-llm";
 import { runInput } from "../helpers/run-input";
 
 function stepSnapshot(id: string, text: string, reason: "tool-calls" | "stop"): Message.WithParts {
@@ -14,7 +20,15 @@ function stepSnapshot(id: string, text: string, reason: "tool-calls" | "stop"): 
     info: { ...message.info, id },
     parts: [
       ...message.parts.map((part) => ({ ...part, messageID: id })),
-      { id: `${id}-step`, sessionID: "session", messageID: id, type: "step-finish", reason, cost: 0, tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } } },
+      {
+        id: `${id}-step`,
+        sessionID: "session",
+        messageID: id,
+        type: "step-finish",
+        reason,
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      },
     ],
   };
 }
@@ -26,7 +40,7 @@ describe("mid-turn steering", () => {
     let pending = true;
     const yielded: Array<boolean | undefined> = [];
     let calls = 0;
-    const result = await ChatAgent.create({
+    const result = await createTestAgent({
       events: Bus,
       model,
       steeringPending: () => pending,
@@ -36,8 +50,10 @@ describe("mid-turn steering", () => {
         run: async (input, sink) => {
           calls += 1;
           yielded.push(input.shouldYield?.());
-          if (calls === 1) { pending = false; sink.onMessage(stepSnapshot("first", "working", "tool-calls")); }
-          else sink.onMessage(stepSnapshot("second", "done", "stop"));
+          if (calls === 1) {
+            pending = false;
+            sink.onMessage(stepSnapshot("first", "working", "tool-calls"));
+          } else sink.onMessage(stepSnapshot("second", "done", "stop"));
           return createStopOutcome();
         },
       }),
@@ -50,13 +66,16 @@ describe("mid-turn steering", () => {
 
   it("passes no steering callback when steering is absent", async () => {
     let callback: (() => boolean) | undefined;
-    await ChatAgent.create({
+    await createTestAgent({
       events: Bus,
       model,
       llm: createMockLlmConfig({
         getModels: async () => mockProviderData,
         fromModelsDevModel: () => mockProviderModel,
-        run: async (input) => { callback = input.shouldYield; return createStopOutcome(); },
+        run: async (input) => {
+          callback = input.shouldYield;
+          return createStopOutcome();
+        },
       }),
     }).run(runInput([{ role: "user", content: "start" }]));
     expect(callback).toBeUndefined();
@@ -66,17 +85,24 @@ describe("mid-turn steering", () => {
     jest.useFakeTimers();
     const indices: number[] = [];
     const retry = Promise.withResolvers<void>();
-    const unsubscribeTurn = Bus.subscribe(RunEvents.TurnStart, (event) => indices.push(event.turnIndex));
+    const unsubscribeTurn = Bus.subscribe(RunEvents.TurnStart, (event) =>
+      indices.push(event.turnIndex),
+    );
     const unsubscribeRetry = Bus.subscribe(RunEvents.ErrorRetry, () => retry.resolve());
     let calls = 0;
     try {
-      const running = ChatAgent.create({
+      const running = createTestAgent({
         events: Bus,
         model,
         llm: createMockLlmConfig({
           getModels: async () => mockProviderData,
           fromModelsDevModel: () => mockProviderModel,
-          run: async () => { calls += 1; return calls === 1 ? { type: "error", error: { message: "transient blip", name: "Error" } } : createStopOutcome(); },
+          run: async () => {
+            calls += 1;
+            return calls === 1
+              ? { type: "error", error: providerFailure("transient blip") }
+              : createStopOutcome();
+          },
         }),
       }).run(runInput([{ role: "user", content: "start" }]));
       await retry.promise;

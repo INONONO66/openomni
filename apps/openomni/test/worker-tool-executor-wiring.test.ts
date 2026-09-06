@@ -6,7 +6,7 @@ import { initialize, SessionHandleStore, Storage } from "@openomni/ledger";
 import type { RunInput, Sink } from "@openomni/llm";
 import { Tool, type BusEvent, type ObservationSink, type PlainValue } from "@openomni/protocol";
 import { createDelegationKernel } from "../src/delegation/kernel";
-import { createInlineWorkerRunner } from "../src/delegation/worker-loop";
+import { createWorkerSessionRunner } from "../src/composition/worker-session";
 import { requestToolStep, assistantMessage } from "./helpers/assistant-message";
 
 function field(value: PlainValue, name: string): PlainValue | undefined {
@@ -63,7 +63,7 @@ test("a worker tool call is executed and observed through the durable executor",
   });
 
   try {
-    const runner = createInlineWorkerRunner({
+    const runner = createWorkerSessionRunner({
       model: { provider: "fake", id: "worker-test" },
       apiKey: "test-key",
       kernel: () => kernel,
@@ -76,7 +76,7 @@ test("a worker tool call is executed and observed through the durable executor",
         })(),
       },
       llm: {
-        resolveProviderModel: async (model) => ({
+        resolveModel: async (model) => ({
           id: model.id,
           name: model.id,
           providerID: model.provider,

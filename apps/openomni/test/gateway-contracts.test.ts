@@ -95,7 +95,7 @@ function testResident(run: ResidentRun) {
     tools: {},
     targets: () => [{ kind: "host", id: "brain", capabilities: [] }],
     llm: {
-      resolveProviderModel: async (model) => ({
+      resolveModel: async (model) => ({
         id: model.id,
         name: model.id,
         providerID: model.provider,

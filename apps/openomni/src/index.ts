@@ -53,7 +53,7 @@ import {
 import { delegationTraceId } from "./delegation/trace";
 import { createWakeDeliveryQueue } from "./delegation/wake-delivery";
 import { createProcessDriver } from "./delegation/process-driver";
-import { createInlineWorkerRunner } from "./delegation/worker-loop";
+import { createWorkerSessionRunner } from "./composition/worker-session";
 import { createMountedChannelGrantRegistrar, createResidentGateway } from "./gateway";
 import { createComposer, rollbackToCause } from "./composition/composer";
 import { buildInboundEvent } from "./inbound";
@@ -65,7 +65,7 @@ import type { CellPorts } from "./tools/execution/run-code";
 interface StartOptions {
   readonly sessionRuntime?: Pick<
     SessionRuntime,
-    "clock" | "approvalTimeoutMs" | "scheduleApprovalTimeout"
+    "clock" | "approvalTimeoutMs" | "scheduleApprovalTimeout" | "waitRetry" | "openIntent"
   >;
   readonly config?: OpenOmniConfig;
   readonly llm?: ChatAgentConfig["llm"];
@@ -273,7 +273,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
     // Boot-rescan wakes arrive before the Resident's deliver chain can be
     // bound; they wait in this queue until the arm call below.
     const wakeDelivery = createWakeDeliveryQueue();
-    const runner = createInlineWorkerRunner({
+    const runner = createWorkerSessionRunner({
       model: config.model,
       apiKey: config.model.apiKey,
       compaction: configuredCompaction(config, options.llm ?? {}),

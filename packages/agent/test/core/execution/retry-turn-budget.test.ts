@@ -1,10 +1,16 @@
+import { providerFailure } from "../../helpers/mock-llm";
 import { describe, expect, it, jest } from "bun:test";
 import { Operational } from "@openomni/protocol";
 import { RunEvents } from "../../../src/core/execution/events";
-import { runAgent } from "../../../src/core/execution/run";
+import { runTestAgent } from "../../helpers/test-agent";
 import { advanceRunTurn, createRunState, recordRunTurn } from "../../../src/core/execution/state";
 import { Bus } from "../../../src/index";
-import { createMockLlmConfig, createStopOutcome, mockProviderData, mockProviderModel } from "../../helpers/mock-llm";
+import {
+  createMockLlmConfig,
+  createStopOutcome,
+  mockProviderData,
+  mockProviderModel,
+} from "../../helpers/mock-llm";
 import { runInput } from "../../helpers/run-input";
 
 describe("turn budget across retries", () => {
@@ -29,7 +35,7 @@ describe("turn budget across retries", () => {
       if (event.msg === "agent.run.completed") completed.resolve(event);
     });
     try {
-      const running = runAgent(runInput([{ role: "user", content: "hi" }]), {
+      const running = runTestAgent(runInput([{ role: "user", content: "hi" }]), {
         events: Bus,
         model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
         llm: createMockLlmConfig({
@@ -37,7 +43,7 @@ describe("turn budget across retries", () => {
           fromModelsDevModel: () => mockProviderModel,
           run: async () => {
             calls += 1;
-            if (calls === 1) throw new Error("transient provider hiccup");
+            if (calls === 1) throw providerFailure("transient provider hiccup");
             return createStopOutcome();
           },
         }),

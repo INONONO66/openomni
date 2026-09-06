@@ -18,7 +18,6 @@ async function returnedCalls(
       tools: names.map((name) => ({ name, inputSchema: { type: "object" } })),
       trace: { traceId: "trace", sessionId: "session", runId: "run" },
       events: { publish: () => undefined },
-      maxRetryAttempts: 0,
     },
     {
       onMessage(message) {

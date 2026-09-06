@@ -1,6 +1,7 @@
 import { executeToolBody, ToolBodyOutcome } from "./tool-body";
 import type { Placement } from "@openomni/placement";
-import { AsyncLocalStorage } from "node:async_hooks";
+import { activeExecutor, ExecutorContextError } from "./executor-context";
+export { currentExecutor, ExecutorContextError } from "./executor-context";
 import type { CompiledPolicySnapshot } from "@openomni/policy";
 import {
   type AnyToolDefinition,
@@ -9,6 +10,7 @@ import {
   type ObservationSink,
   type PlainValue,
   PlainValueSchema,
+  canonicalDigest,
   SessionGeneration,
   type Tool,
   type ToolCategory,
@@ -107,31 +109,6 @@ export function toolInputSchema(definition: AnyToolDefinition): JsonSchemaObject
     throw new Error(`${definition.name} input schema root must be an object`);
   }
   return projected;
-}
-
-const activeExecutor = new AsyncLocalStorage<Executor>();
-
-export class ExecutorContextError extends Error {
-  readonly code = "executor_context_missing";
-
-  constructor() {
-    super("executor context is required");
-    this.name = "ExecutorContextError";
-  }
-}
-
-/**
- * The executor of the enclosing execution, for a consumer that must capture it
- * synchronously and inject it into a dispatcher invoked later out of context
- * (the code-mode cell door, whose kernel callbacks arrive after the run_code
- * turn has returned). Fails closed when called with no active execution.
- */
-export function currentExecutor(): Executor {
-  const executor = activeExecutor.getStore();
-  if (executor === undefined) {
-    throw new ExecutorContextError();
-  }
-  return executor;
 }
 
 export function createDispatcher(
@@ -260,11 +237,25 @@ export function createDispatcher(
       } satisfies ToolDispatchResult | CellToolDispatchResult;
       return result;
     };
+    let modelResult: ToolDispatchResult | undefined;
     return {
       kind: "ready",
-      request,
+      request: {
+        ...request,
+        ...(door === "model"
+          ? {
+              toolResult: (execution: ExecutionBatchResult): Tool.Result => {
+                const result = finish(execution);
+                if (typeof result.output !== "string")
+                  throw new Error("model tool output must be rendered text");
+                modelResult = { ...result, output: result.output };
+                return modelResult;
+              },
+            }
+          : {}),
+      },
       body,
-      finish,
+      finish: (execution) => modelResult ?? finish(execution),
       ...(definition.sequential ? { sequential: true } : {}),
     };
   }
@@ -342,6 +333,7 @@ export interface TurnDispatchInput {
 
 /** The runtime clock/entropy/observation sink shared across a session's turns. */
 export interface TurnDispatchRuntime {
+  readonly waitRetry?: ExecutorOptions["waitRetry"];
   readonly approvalTimeoutMs?: ExecutorOptions["approvalTimeoutMs"];
   readonly scheduleApprovalTimeout?: ExecutorOptions["scheduleApprovalTimeout"];
   readonly observations: ObservationSink | BusEvent.Sink;
@@ -360,7 +352,17 @@ export function createTurnDispatcher(
   input: TurnDispatchInput,
   runtime: TurnDispatchRuntime,
 ): Dispatcher & { readonly executor: Executor } {
+  for (const captured of input.tools ?? []) {
+    const definition = definitions.find((candidate) => candidate.name === captured.name);
+    if (
+      definition === undefined ||
+      canonicalDigest(sessionTool(definition)) !== canonicalDigest(captured)
+    ) {
+      throw new Error(`captured catalog mismatch: ${captured.name}`);
+    }
+  }
   const executor = createExecutor({
+    waitRetry: runtime.waitRetry,
     signal: input.signal,
     retainEffect: input.retainEffect,
     policy: input.policy,
@@ -372,7 +374,7 @@ export function createTurnDispatcher(
     identity: {
       sessionId: input.sessionId,
       role: input.role,
-      parentActionId: input.actionId,
+      parentActionId: input.turnId ?? input.actionId,
       turnId: input.turnId,
       toolsGeneration: input.toolsGeneration,
       toolsHash: input.toolsHash,

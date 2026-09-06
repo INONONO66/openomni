@@ -1,105 +1,60 @@
-import { describe, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import { Policy } from "@openomni/protocol";
-import { Run } from "../src/run";
+import { Run, run } from "../src/run";
 
-// #500 C1: moved from packages/protocol/test/run.test.ts (schema suite) and
-// packages/protocol/test/policy/input-schema-{parity,isolation}.test.ts (the
-// Run.Outcome cases) — the canonical schema lives here now, and protocol
-// cannot import llm to keep pinning it from its old home.
+const input = {
+  messages: [],
+  tools: [],
+  model: { id: "model", name: "model", providerID: "provider" },
+  trace: { traceId: "trace", sessionId: "session", runId: "run" },
+  events: { publish: () => undefined },
+};
+const sink = {
+  onMessage: () => undefined,
+  onToolCall: () => undefined,
+  onToolResult: () => undefined,
+};
 
-describe("Run.Outcome", () => {
-  test("parses stop", () => {
-    expect(Run.Outcome.parse({ type: "stop" })).toEqual({ type: "stop" });
+test("the provider produces typed failure facts, never a legacy error shape", async () => {
+  const cause = new Error("provider failure");
+  const result = await run(input, sink, {
+    createStream: async () => {
+      throw cause;
+    },
   });
-
-  test("parses aborted", () => {
-    expect(Run.Outcome.parse({ type: "aborted" })).toEqual({ type: "aborted" });
+  expect(result.type).toBe("error");
+  if (result.type !== "error") throw new Error("missing failure");
+  expect(result.error).toBeInstanceOf(Run.FailureError);
+  expect(result.error.data).toMatchObject({
+    aborted: false,
+    contextOverflow: false,
+    visibleOutput: false,
+    usage: { inputTokens: 0, outputTokens: 0 },
   });
-
-  test("parses error with message only", () => {
-    const outcome = Run.Outcome.parse({
-      type: "error",
-      error: { message: "boom" },
-    }) as Extract<Run.Outcome, { type: "error" }>;
-
-    expect(outcome.error).toEqual({ message: "boom" });
-  });
-
-  test("parses error with name and stack", () => {
-    const outcome = Run.Outcome.parse({
-      type: "error",
-      error: {
-        message: "boom",
-        name: "BoomError",
-        stack: "stack trace",
-      },
-    }) as Extract<Run.Outcome, { type: "error" }>;
-
-    expect(outcome.error).toEqual({
-      message: "boom",
-      name: "BoomError",
-      stack: "stack trace",
-    });
-  });
-
-  test("rejects error without message", () => {
-    expect(() =>
-      Run.Outcome.parse({
-        type: "error",
-        error: {},
-      }),
-    ).toThrow();
-  });
-
-  test("rejects unknown outcome type", () => {
-    expect(() => Run.Outcome.parse({ type: "other" })).toThrow();
-  });
+  expect(result.error.cause).toBe(cause);
 });
 
-describe("Run.Outcome vs the run.lifecycle.post policy input schema", () => {
-  const embed = (runOutcome: unknown) => ({ sessionId: "session-1", runId: "run-1", runOutcome });
-  const policy = Policy.PolicyPoint.InputSchemas["run.lifecycle.post"];
-
-  test("policy duplicate stays in parity for every canonical candidate", () => {
-    const candidates: readonly unknown[] = [
-      { type: "stop" },
-      { type: "continue" },
-      { type: "error", error: { message: "failed", name: "Error", stack: "stack" } },
-      { type: "invalid" },
-      { type: "error" },
-      { type: "error", error: {} },
-      { type: "error", error: { message: "failed", name: 1 } },
-      { type: "stop", extra: true },
-    ];
-    for (const candidate of candidates) {
-      expect(policy.safeParse(embed(candidate)).success).toBe(
-        Run.Outcome.safeParse(candidate).success,
-      );
-    }
+test("stop and aborted are produced by the real attempt entry", async () => {
+  const stop = await run(input, sink, {
+    createStream: async () => ({
+      fullStream: (async function* () {
+        yield { type: "finish" };
+      })(),
+    }),
   });
+  expect(stop).toEqual({ type: "stop" });
+  expect(await run({ ...input, signal: AbortSignal.abort() }, sink)).toEqual({ type: "aborted" });
+});
 
-  test("max-steps exists only at the agent lifecycle policy boundary", () => {
-    expect(policy.safeParse(embed({ type: "max-steps" })).success).toBe(true);
-    expect(Run.Outcome.safeParse({ type: "max-steps" }).success).toBe(false);
+test("policy owns persisted lifecycle validation independently of the static provider outcome", () => {
+  const schema = Policy.PolicyPoint.InputSchemas["run.lifecycle.post"];
+  const embed = (runOutcome: { type: string }) => ({
+    sessionId: "session",
+    runId: "run",
+    runOutcome,
   });
-
-  test("the policy validator is isolated from mutation of the shared canonical schema", () => {
-    // Zod 4 keeps discriminated-union members on the internal def; removing the
-    // "stop" arm from the canonical schema must not reach the policy validator.
-    const internals = Reflect.get(Run.Outcome, "_zod") as {
-      def: { options: Array<{ _zod: { def: { shape: { type: { value?: unknown } } } } }> };
-    };
-    const options = internals.def.options;
-    const stopIndex = options.findIndex((option) => option._zod.def.shape.type.value === "stop");
-    expect(stopIndex).toBeGreaterThanOrEqual(0);
-    const [removed] = options.splice(stopIndex, 1);
-    expect(removed).toBeDefined();
-    let validStopAccepted = false;
-    try {
-      validStopAccepted = policy.safeParse(embed({ type: "stop" })).success;
-    } finally {
-      options.splice(stopIndex, 0, removed as (typeof options)[number]);
-    }
-    expect(validStopAccepted).toBe(true);
-  });
+  expect(schema.safeParse(embed({ type: "stop" })).success).toBe(true);
+  expect(schema.safeParse(embed({ type: "max-steps" })).success).toBe(true);
+  expect(schema.safeParse(embed({ type: "invalid" })).success).toBe(false);
+  expect("Outcome" in Run).toBe(false);
 });

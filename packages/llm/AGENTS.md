@@ -33,6 +33,12 @@ src/
     └── models-snapshot.json # Bundled trusted catalog snapshot — the weekly workflow regenerates THIS file (#471)
 ```
 
+## #937 ownership update (2026-09-06)
+
+This section supersedes older retry/SDK-tool descriptions below. `run()` and Processor perform exactly one provider attempt; no maxRetryAttempts or nested retry loop remains. The receiving session executor owns attempt scheduling, re-admission and durable failed-usage records. `Retry.decide`, `Retry.attemptReason`, `Retry.isContextOverflow`, `observeRetry`, and `accumulateUsage` are canonical consumer surfaces. `Run.Outcome` is a static union; failures are `Run.FailureError`, with explicit visible-output/abort/overflow facts. SDK tools are schemas only, never execution closures. Processor retains immutable internal Transcript folds; tool stream projection is in `processor/tool-events.ts`.
+
+`Provider.resolveModel` owns trusted catalog/proxy lookup and typed errors. `Auth.resolve` validates explicit credentials and binds them to their provider; fallback resolves through `Auth.get` for the selected provider. Agent, cell and summarizer all consume these owners. D5 token extraction/zero/alias/cache semantics remain unchanged.
+
 ## KEY PATTERNS
 
 - **Narrow root public API**: `src/index.ts` exports only `Auth`, `Provider`, `ModelsDev`, `run`, package-owned `Run`, `RunInput`, and the `Sink` type. Errors and helpers remain internal. Do not add session/protocol helpers, `ProviderTransform`, proxy-model helpers, `Processor`, `Retry`, message conversion, or `TokenTracker` to the root barrel.

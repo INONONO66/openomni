@@ -1,12 +1,8 @@
 import type { Message } from "@openomni/protocol";
-import {
-  isWarmCandidateValid,
-  latestCompactionAnchorId,
-  planAnchoredCut,
-  prepareSummarizerInput,
-  withSummarizerDeadline,
-  type CompactionOptions,
-} from "./compact";
+import { isWarmCandidateValid, latestCompactionAnchorId, planAnchoredCut } from "./candidate";
+import { prepareSummarizerInput } from "./estimate";
+import { withSummarizerDeadline } from "./summary";
+import type { CompactionOptions } from "./compact";
 
 /** A warm summary is pinned to the cut anchor, not to later appends. */
 export interface CompactionCandidate {
@@ -16,7 +12,6 @@ export interface CompactionCandidate {
   readonly compactionAnchorId: string | undefined;
   readonly anchorBody: string;
 }
-
 
 const MAX_PREPARE_FAILURES = 2;
 
@@ -39,10 +34,7 @@ export class CompactionSession {
     readonly summarizerDeadlineMs?: number;
   }) {
     this.#protectRecentMessages = config.protectRecentMessages;
-    this.#summarize = withSummarizerDeadline(
-      config.summarize,
-      config.summarizerDeadlineMs,
-    );
+    this.#summarize = withSummarizerDeadline(config.summarize, config.summarizerDeadlineMs);
   }
 
   prepare(

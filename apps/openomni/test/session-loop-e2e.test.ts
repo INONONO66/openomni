@@ -78,7 +78,7 @@ test("real app SSE compaction commits reversible evidence through the session ex
     api: { npm: "@ai-sdk/anthropic", url: config.model.baseUrl },
     limit: { context: 10000 },
   };
-  const app = await suite.boot({ config, llm: { resolveProviderModel: async () => model } });
+  const app = await suite.boot({ config, llm: { resolveModel: async () => model } });
   const socket = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "fixture-token"]);
   expect(socket.protocol).toBe("auth");
   // When: enough completed turns cross the actual compaction threshold.

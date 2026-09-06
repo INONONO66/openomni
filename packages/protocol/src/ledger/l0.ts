@@ -338,7 +338,7 @@ export namespace SessionTurn {
     .strict();
   export type TerminalIntent = z.infer<typeof TerminalIntent>;
 
-  export const TerminalKind = z.enum(["result", "interrupted", "error"]);
+  export const TerminalKind = z.enum(["result", "interrupted", "error", "waiting"]);
   export type TerminalKind = z.infer<typeof TerminalKind>;
 
   export const Terminal = z
@@ -346,11 +346,35 @@ export namespace SessionTurn {
       phase: z.literal("terminal"),
       turnId: Identifier,
       kind: TerminalKind,
+      reason: z.literal("live_wait").optional(),
+      alarmIds: z.array(Identifier).min(1).optional(),
       text: z.string(),
       boundaryActionId: NullableIdentifier,
       resumeCount: z.number().int().nonnegative(),
     })
-    .strict();
+    .strict()
+    .superRefine((terminal, context) => {
+      if (
+        terminal.kind === "waiting" &&
+        (terminal.reason !== "live_wait" || terminal.alarmIds === undefined)
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["alarmIds"],
+          message: "waiting requires live alarm identities",
+        });
+      }
+      if (
+        terminal.kind !== "waiting" &&
+        (terminal.reason !== undefined || terminal.alarmIds !== undefined)
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["kind"],
+          message: "only waiting carries live-wait evidence",
+        });
+      }
+    });
   export type Terminal = z.infer<typeof Terminal>;
 
   export const Delivery = z

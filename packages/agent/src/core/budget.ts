@@ -70,10 +70,9 @@ export function effectiveMaxToolCalls(budget?: AgentBudget): number {
 /**
  * Sole evaluator of the 4-state budget verdict and the facts telemetry
  * needs (reads the clock, mutates nothing, emits nothing) — see
- * {@link checkBudget} (query)
- * and {@link publishBudgetTelemetry} (command) for the split callers.
+ * {@link publishBudgetTelemetry}, the single production consumer.
  */
-function evaluateBudget(state: BudgetState, budget?: AgentBudget): BudgetEvaluation {
+export function evaluateBudget(state: BudgetState, budget?: AgentBudget): BudgetEvaluation {
   const maxWallTimeMs = budget?.maxWallTimeMs ?? BUDGET_DEFAULTS.maxWallTimeMs;
   const maxTurns = budget?.maxTurns ?? BUDGET_DEFAULTS.maxTurns;
   const maxToolCalls = effectiveMaxToolCalls(budget);
@@ -109,16 +108,6 @@ function evaluateBudget(state: BudgetState, budget?: AgentBudget): BudgetEvaluat
   if (maxRatio >= warningRatio) return { status: "warning", elapsedMs, maxRatio };
   if (maxRatio >= reassuranceRatio) return { status: "reassurance", elapsedMs, maxRatio };
   return { status: "ok", elapsedMs, maxRatio };
-}
-
-/**
- * Query: the budget status. Emits nothing — callers that want the
- * observability telemetry call {@link publishBudgetTelemetry}. This split
- * lets the run.turn.pre budget builtins read the status as a predicate
- * without each re-emitting the per-turn telemetry event (double-effect).
- */
-export function checkBudget(state: BudgetState, budget?: AgentBudget): BudgetStatus {
-  return evaluateBudget(state, budget).status;
 }
 
 /**

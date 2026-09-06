@@ -782,21 +782,6 @@
     "reasoningTokens",
     "totalTokens"
   ],
-  "Token.ProviderUsage": [
-    "cacheReadTokens",
-    "cacheWriteTokens",
-    "inputTokens",
-    "outputTokens",
-    "reasoningTokens"
-  ],
-  "Token.Usage": [
-    "cacheReadTokens",
-    "cacheWriteTokens",
-    "inputTokens",
-    "outputTokens",
-    "reasoningTokens",
-    "totalTokens"
-  ],
   "Tool.Call": ["id", "input", "tool"],
   "Tool.Config": ["agentTools", "mcpTools", "systemTools", "workspaceRoot"],
   "Tool.Result": [

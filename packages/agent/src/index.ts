@@ -1,6 +1,5 @@
 // Agent package public API: only surfaces consumed by product composition.
-export type { AgentExecutionLifecycle, ChatAgentConfig } from "./core/types";
-export { RunReasonCode } from "./core/policy/reason-codes";
+export type { ChatAgentConfig } from "./core/types";
 export { failureFacts } from "./core/retry";
 export { placementGatedExecutor } from "./core/execution/tool-placement";
 export type { CompactionOptions } from "./compaction";

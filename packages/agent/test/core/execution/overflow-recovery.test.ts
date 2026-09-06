@@ -1,6 +1,7 @@
+import { providerFailure } from "../../helpers/mock-llm";
 import { describe, expect, it } from "bun:test";
-import { runAgent } from "../../../src/core/execution/run";
-import { isContextOverflow } from "../../../src/core/retry";
+import { runTestAgent } from "../../helpers/test-agent";
+import { Retry } from "@openomni/llm";
 import { collector } from "../../../src/observation/bus";
 import { runInput } from "../../helpers/run-input";
 
@@ -31,22 +32,25 @@ describe("context overflow recovery", () => {
       "The input token count exceeds the maximum number of tokens allowed.",
       "Input is too long for requested model.",
     ]) {
-      expect(isContextOverflow(new Error(message))).toBe(true);
+      expect(Retry.isContextOverflow(new Error(message))).toBe(true);
     }
-    expect(isContextOverflow(new Error("exceeded token rate limit of your current tier"))).toBe(
-      false,
-    );
-    expect(isContextOverflow(new Error("context deadline exceeded"))).toBe(false);
+    expect(
+      Retry.isContextOverflow(new Error("exceeded token rate limit of your current tier")),
+    ).toBe(false);
+    expect(Retry.isContextOverflow(new Error("context deadline exceeded"))).toBe(false);
   });
 
   it("does not blindly retry when compaction is unavailable and preserves the failure", async () => {
-    const original = new Error("prompt is too long");
+    const original = providerFailure("prompt is too long", {
+      contextOverflow: true,
+      retryable: false,
+    });
     let calls = 0;
-    const running = runAgent(history, {
+    const running = runTestAgent(history, {
       events: collector(),
       model: { provider: "provider", id: "model" },
       llm: {
-        resolveProviderModel: async () => model,
+        resolveModel: async () => model,
         run: async () => {
           calls += 1;
           return { type: "error", error: original };
@@ -62,7 +66,7 @@ describe("context overflow recovery", () => {
     const seen: number[] = [];
     let sawAnchor = false;
     let calls = 0;
-    const result = await runAgent(history, {
+    const result = await runTestAgent(history, {
       events: collector(),
       model: { provider: "provider", id: "model" },
       compaction: {
@@ -72,7 +76,7 @@ describe("context overflow recovery", () => {
         onSummarize: async () => "overflow checkpoint",
       },
       llm: {
-        resolveProviderModel: async () => model,
+        resolveModel: async () => model,
         run: async (input) => {
           calls += 1;
           seen.push(input.messages.length);
@@ -84,7 +88,13 @@ describe("context overflow recovery", () => {
               ),
             );
           return calls === 1
-            ? { type: "error", error: new Error("prompt is too long") }
+            ? {
+                type: "error",
+                error: providerFailure("prompt is too long", {
+                  contextOverflow: true,
+                  retryable: false,
+                }),
+              }
             : { type: "stop" };
         },
       },
@@ -98,10 +108,16 @@ describe("context overflow recovery", () => {
   });
 
   it("stops after the one compacting retry and preserves the second overflow", async () => {
-    const first = new Error("prompt is too long on first call");
-    const second = new Error("prompt is too long on second call");
+    const first = providerFailure("prompt is too long on first call", {
+      contextOverflow: true,
+      retryable: false,
+    });
+    const second = providerFailure("prompt is too long on second call", {
+      contextOverflow: true,
+      retryable: false,
+    });
     let calls = 0;
-    const running = runAgent(history, {
+    const running = runTestAgent(history, {
       events: collector(),
       model: { provider: "provider", id: "model" },
       compaction: {
@@ -111,7 +127,7 @@ describe("context overflow recovery", () => {
         onSummarize: async () => "overflow checkpoint",
       },
       llm: {
-        resolveProviderModel: async () => model,
+        resolveModel: async () => model,
         run: async () => {
           calls += 1;
           return { type: "error", error: calls === 1 ? first : second };

@@ -75,6 +75,10 @@ export function withMessageId(
   if (id === undefined) return message;
   return {
     info: { ...message.info, id },
-    parts: message.parts.map((part) => ({ ...part, messageID: id })),
+    parts: message.parts.map((part, index) => ({
+      ...part,
+      id: `${id}:part:${index}`,
+      messageID: id,
+    })),
   };
 }
