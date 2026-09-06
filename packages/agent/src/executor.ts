@@ -1,4 +1,4 @@
-import type { LedgerAction, PlainValue } from "@openomni/protocol";
+import type { LedgerAction, PlainObject, PlainValue } from "@openomni/protocol";
 import { canonicalDigest } from "@openomni/protocol";
 import type { PolicyEvaluation, PolicyEvaluationInput } from "@openomni/policy";
 
@@ -225,6 +225,7 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
             phase: "result",
             terminal: "cancelled",
             callId: stage.request.toolObservation?.callId ?? null,
+            ...projectToolResult(stage.request, { terminal: "cancelled" }),
           });
         publishToolTerminal(stage.request, started.get(index), "error");
         results.push({ terminal: "cancelled" });
@@ -241,6 +242,7 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
             terminal: "blocked_pre",
             reason,
             callId: stage.request.toolObservation?.callId ?? null,
+            ...projectToolResult(stage.request, { terminal: "blocked_pre", reason }),
           });
         results.push({ terminal: "blocked_pre", reason });
       } else if (intent === undefined) throw new Error("wave lost admitted intent");
@@ -251,6 +253,7 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
           stage.request.effect,
           outcome.error,
           stage.request.toolObservation?.callId,
+          stage.request.toolResult?.({ terminal: "failed", error: outcome.error }),
         );
         publishToolTerminal(stage.request, started.get(index), "error");
         results.push({ terminal: "failed", error: outcome.error });
@@ -351,7 +354,7 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
     await appendResult(
       { kind, op: request.op },
       intentId,
-      effect,
+      { ...effect, ...projectToolResult(request, outcome) },
       outcome.terminal === "executed" ? request.revertData?.() : undefined,
     );
     const status =
@@ -385,6 +388,10 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
     commit,
   );
   return { run, runAttempts, runExisting, runBatch, approvals, judgeStop };
+}
+
+function projectToolResult(request: ExecutionRequest, outcome: ExecutionBatchResult): PlainObject {
+  return request.toolResult === undefined ? {} : { toolResult: request.toolResult(outcome) };
 }
 
 function blocks(decision: PolicyEvaluation): boolean {

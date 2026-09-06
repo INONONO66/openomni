@@ -237,11 +237,25 @@ export function createDispatcher(
       } satisfies ToolDispatchResult | CellToolDispatchResult;
       return result;
     };
+    let modelResult: ToolDispatchResult | undefined;
     return {
       kind: "ready",
-      request,
+      request: {
+        ...request,
+        ...(door === "model"
+          ? {
+              toolResult: (execution: ExecutionBatchResult): Tool.Result => {
+                const result = finish(execution);
+                if (typeof result.output !== "string")
+                  throw new Error("model tool output must be rendered text");
+                modelResult = { ...result, output: result.output };
+                return modelResult;
+              },
+            }
+          : {}),
+      },
       body,
-      finish,
+      finish: (execution) => modelResult ?? finish(execution),
       ...(definition.sequential ? { sequential: true } : {}),
     };
   }

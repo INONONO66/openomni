@@ -39,6 +39,7 @@ export function createExecutionRecord(
     effect: PlainValue,
     caught: Caught,
     callId?: string,
+    toolResult?: Tool.Result,
   ): Promise<void> {
     const error = caught instanceof Error ? caught : new Error(String(caught));
     await appendResult(subject, parentId, {
@@ -48,6 +49,7 @@ export function createExecutionRecord(
       error: { name: error.name },
       ...(caught instanceof Run.FailureError ? { failure: caught.data } : {}),
       ...(callId === undefined ? {} : { callId }),
+      ...(toolResult === undefined ? {} : { toolResult }),
     });
   }
 

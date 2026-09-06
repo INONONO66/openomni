@@ -4,6 +4,7 @@ import type {
   LedgerSession,
   ObservationSink,
   PlainValue,
+  Tool,
 } from "@openomni/protocol";
 import type { CompiledPolicySnapshot } from "@openomni/policy";
 import type { WaveControl } from "./core/execution/tool-wave";
@@ -43,6 +44,8 @@ export interface ExecutionRequest {
   /** Result-dependent evidence for a reversible durable projection. */
   readonly revertData?: () => PlainValue | undefined;
   readonly toolObservation?: ToolObservationIdentity;
+  /** Model-facing settlement, committed atomically with the tool's effect evidence. */
+  readonly toolResult?: (outcome: ExecutionBatchResult) => Tool.Result;
 }
 
 export interface AttemptRequest {
