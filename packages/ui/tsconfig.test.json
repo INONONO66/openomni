@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"]
+  },
+  // `showcase/fixture.tsx` is included because the timeline tests render the
+  // SAME transcript the Shell shots do. Sharing it is the point: a fixture the
+  // screenshots use but the assertions never see is a case nobody checked.
+  "include": ["src", "test", "showcase/fixture.tsx"]
+}

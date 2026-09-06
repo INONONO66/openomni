@@ -1,0 +1,601 @@
+/* @openomni/ui — tokens, base, and window-chrome utilities for OpenOmni
+   surfaces. Import AFTER `@import "tailwindcss"` in the consuming stylesheet.
+
+   Contract: apps/desktop/DESIGN.md. Text and whitespace carry the interface;
+   one chromatic accent, everything else achromatic; hierarchy by typography,
+   not by lines and boxes. No value may be introduced in a component — extend
+   this block first. */
+
+/* Fonts ship as npm assets; nothing is fetched over the network at runtime.
+   Pretendard arrives as its dynamic subset (92 `unicode-range` faces) so a
+   Latin console with Korean intent lines pulls ~3 chunks instead of one 2.0 MB
+   file. JetBrains Mono's `wght.css` is the upright axis only. */
+@import "pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css";
+@import "@fontsource-variable/jetbrains-mono/wght.css";
+
+@theme {
+  --font-sans:
+    "Pretendard Variable", -apple-system, BlinkMacSystemFont, "SF Pro Text",
+    system-ui, sans-serif;
+  --font-mono:
+    "JetBrains Mono Variable", ui-monospace, "SF Mono", SFMono-Regular, Menlo,
+    monospace;
+
+  /* ---- Achromatic ramp -------------------------------------------------- */
+  /* Perceptually even in oklch, zero chroma. Components never reference a raw
+     step; they use the semantic tokens below.
+
+     Every step here is claimed by a semantic token in one theme or the other.
+     A spare step is a palette waiting to be misused, which is the thing this
+     reset removed — so the ramp carries exactly what the system spends.
+
+     The mid-range carries FOUR steps rather than the symmetric two, because
+     the two themes do not read the same tone at the same distance from their
+     surface: dark needs its quiet tones lighter than light needs its quiet
+     tones dark. Each step below is placed to clear a measured WCAG floor on
+     the surfaces it actually appears on — bg, sunken, AND raised — asserted in
+     test/tokens.test.ts, not eyeballed. The ratios are tabulated in
+     .omo/reports/design-system-reset/REPORT.md. */
+  --color-neutral-0: oklch(0% 0 0); /* #000000 dark bg */
+  --color-neutral-50: oklch(14.5% 0 0); /* #0a0a0a dark sunken */
+  --color-neutral-100: oklch(21.8% 0 0); /* #1a1a1a dark raised + line */
+  --color-neutral-150: oklch(26% 0 0); /* #212121 dark surface hairline */
+  --color-neutral-200: oklch(47.1% 0 0); /* #5b5b5b light fg-muted */
+  --color-neutral-300: oklch(52.8% 0 0); /* #6b6b6b dark faint / light subtle */
+  --color-neutral-400: oklch(60% 0 0); /* #808080 light fg-faint */
+  --color-neutral-500: oklch(63.7% 0 0); /* #8b8b8b dark fg-subtle */
+  --color-neutral-600: oklch(70% 0 0); /* #9e9e9e dark fg-muted */
+  --color-neutral-700: oklch(93% 0 0); /* #e8e8e8 light hairline */
+  --color-neutral-800: oklch(96% 0 0); /* #f2f2f2 light raised */
+  --color-neutral-900: oklch(98.5% 0 0); /* #fafafa light sunken */
+  --color-neutral-1000: oklch(100% 0 0); /* #ffffff dark fg + light bg */
+
+  /* ---- Semantic surfaces (dark default) --------------------------------- */
+  --color-bg: var(--color-neutral-0);
+  --color-sunken: var(--color-neutral-50);
+  --color-raised: var(--color-neutral-100);
+  --color-hover: --alpha(#fff / 5%);
+  --color-active: --alpha(#fff / 8%);
+
+  /* ---- Semantic foreground ---------------------------------------------- */
+  /* fg / muted / subtle clear 4.5:1 and faint clears 3:1 on every surface the
+     tone is used on. `faint` is the ambient tier — timestamps and reason lines
+     — so it takes the large-text/non-essential floor and nothing quieter
+     exists: a tone below 3:1 is not quiet, it is missing. */
+  --color-fg: var(--color-neutral-1000);
+  --color-fg-muted: var(--color-neutral-600);
+  --color-fg-subtle: var(--color-neutral-500);
+  --color-fg-faint: var(--color-neutral-300);
+
+  /* ---- Hairlines -------------------------------------------------------- */
+  /* TWO line tokens, and the split is the design decision: they edge different
+     kinds of thing and must not share a value.
+
+     `line` is the COLUMN SPLIT — the one place the layout genuinely divides
+     into independently scrolling regions.
+
+     `line-surface` is the edge of an interactive RECTANGLE: a selected or
+     hovered row, a code fence, a tool row under the pointer. It exists because
+     a fill-only surface at this system's tonal ceiling (<1.4:1 from bg) has no
+     edge at all — the row reads as a smudge that fades out rather than as a
+     defined object, which is what made the selected row look soft-focused
+     against the sidebar. A 1px edge is what gives a quiet fill a boundary
+     without raising its fill toward the grey-box failure.
+
+     It is deliberately NOT `fg-faint`. Faint is a TEXT tier (3.94:1 dark,
+     3.95:1 light on bg) and a border at text contrast draws a hard outline
+     around every row — the boxed-in surface this system removed. `line-surface`
+     sits in the surface tier instead: 1.35:1 on bg in dark, 1.23:1 in light,
+     measured in test/tokens.test.ts against every surface it can edge. */
+  --color-line: var(--color-neutral-100);
+  --color-line-surface: var(--color-neutral-150);
+
+  /* ---- The one chromatic accent ----------------------------------------- */
+  /* Moroly's system blue in oklch. This is the only chroma in the system: it
+     marks the live state and the primary action, and nothing else may use it.
+
+     One token serves two jobs — accent AS TEXT (a `running` row) and accent AS
+     FILL (the primary button), and those pull lightness in opposite
+     directions. `--color-accent-fg` is what resolves it per theme rather than a
+     second blue: dark's accent is light enough to read as text on #1a1a1a, so
+     the text ON it is black (5.75:1); light's accent is dark enough to carry
+     white (5.42:1). Light is #0266d6 — #007AFF darkened in oklch from 60.3% to
+     53%, because at 60.3% the accent read 4.13:1 on white and 3.6:1 on a
+     selected row, so `running` failed exactly where it matters most. */
+  --color-accent: oklch(62.4% 0.206 255.5); /* #0984ff */
+  --color-accent-fg: var(--color-neutral-0);
+  --color-focus: var(--color-accent);
+
+  /* ---- Diff semantics: the ONE exception to the single-accent law -------- */
+  /* Two more chromatic values, and they are an exception rather than a second
+     palette. Green-is-added / red-is-removed is not this system's invention and
+     not a decoration it chose — it is the universal diff convention, carried by
+     git, every review tool, and every editor the Owner already reads diffs in.
+     A diff rendered achromatically is the one place where refusing color makes
+     the surface HARDER to read than the convention it is quoting, because the
+     reader arrives already trained on the mapping.
+
+     The exception is scoped as tightly as it can be stated: these two tokens may
+     be spent ONLY inside a code block's diff rows, only on the change marker and
+     the `+`/`-` sign, and never on the code text itself. A test in
+     `apps/desktop/test/design-tokens.test.ts` fails if either name appears
+     outside `primitives/gutter.tsx`, which keeps the exception from generalising
+     into the state palette this reset deleted.
+
+     Both are measured against all three surfaces in BOTH themes and clear
+     4.5:1, asserted in `test/tokens.test.ts` — the marker is a 2px bar and the
+     sign is a single glyph, so a tone that merely looks green is a tone that
+     disappears at that size. Chroma is held below the accent's so the accent
+     stays the loudest chromatic thing on screen: a fence is quoted material, and
+     it must not outrank a live claim. */
+  --color-diff-add: oklch(76% 0.17 150); /* #4fce74 — 10.44:1 on bg */
+  --color-diff-remove: oklch(70% 0.18 25); /* #fa6863 — 7.25:1 on bg */
+
+  /* ---- Type scale (400 read / 500 interact / 590 announce) -------------- */
+  /* Tuned for Pretendard: larger x-height than Geist, so tracking is halved
+     against a Geist ramp and line-heights gain ~0.05 — Hangul is full-height
+     with no descender relief and reads clipped at Latin leading. */
+  --text-display: 20px;
+  --text-display--line-height: 1.35;
+  --text-display--letter-spacing: -0.012em;
+  --text-title: 15px;
+  --text-title--line-height: 1.45;
+  --text-title--letter-spacing: -0.008em;
+  --text-heading: 13px;
+  --text-heading--line-height: 1.5;
+  --text-heading--letter-spacing: -0.004em;
+  --text-body: 13px;
+  --text-body--line-height: 1.7;
+  --text-label: 12px;
+  --text-label--line-height: 1.45;
+  --text-meta: 11px;
+  --text-meta--line-height: 1.5;
+  --text-micro: 10px;
+  --text-micro--line-height: 1.35;
+  --text-micro--letter-spacing: 0.02em;
+  --text-overline: 10px;
+  --text-overline--line-height: 1.35;
+  --text-overline--letter-spacing: 0.09em;
+
+  /* ---- Radii ------------------------------------------------------------ */
+  /* `sm` is the mark scale — an elbow's corner, a gutter's cut. `md` is the
+     SURFACE scale: every interactive rectangle in the system (a row, a fence, a
+     tool row's hover, a focus ring) lands on 6px, so the softening reads as one
+     decision rather than as three components each picking a corner. Nothing
+     larger exists: past 6px at this density a row stops being a line in a
+     ledger and starts being a card. */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+
+  /* ---- Spacing rhythm (8px baseline; named steps are layout intent) ----- */
+  /* Every vertical step is a multiple of 8 so rows, headers, and timeline
+     blocks land on one grid instead of three. The old 30px row and 10px inset
+     were off-grid by 2, which is invisible per element and visible as drift
+     down a column of forty rows. `group-gap` is the ONE step looser than
+     `section`, spent between a group header and its first row. */
+  --spacing-gutter: 16px;
+  --spacing-section: 24px;
+  --spacing-group-gap: 8px;
+  --spacing-titlebar: 56px;
+  --spacing-tree: 264px;
+  --spacing-detail: 320px;
+  --spacing-row: 32px;
+  --spacing-control-sm: 24px;
+  --spacing-control-md: 32px;
+  --spacing-inset: 8px;
+  --spacing-row-inset: 8px;
+  /* The reading measure, and the transcript's ONE column.
+
+     68ch of the prose face, which lands near the 60–75 character line the
+     typographic literature converges on and which this surface has no reason to
+     argue with: past it the eye loses the start of the next line on the return
+     sweep, and a transcript is read in long runs. It is stated in `ch` rather
+     than px so it tracks the type scale — a column pinned at 640px stops being
+     a measure the moment the font size moves.
+
+     Everything in the main column shares it: the transcript, the composer, the
+     approval tray, and the header above them. A composer wider than the prose it
+     answers is two columns pretending to be one. */
+  --spacing-measure: 68ch;
+
+  /* ---- Indentation ------------------------------------------------------ */
+  /* One indent step, spent per level of the navigator's PROJECT → SESSION
+     hierarchy, and the one horizontal rhythm in the system. A list whose levels
+     all start at the same x has no hierarchy in it: the depth has to be visible
+     in the geometry, because this system has no lines and no icons to draw it
+     with. `indent-slot` is the chevron column, reserved at EVERY level whether
+     or not a chevron lands in it, so text x within a level is one value rather
+     than two. */
+  --spacing-indent: 12px;
+  --spacing-indent-slot: 16px;
+
+  /* ---- The character grid ----------------------------------------------- */
+  /* One character cell of the mono face, for the places that have to sit on the
+     same grid as the mono text beside them — the gap between a tool row's
+     chevron and its verb, the status dot's own column.
+
+     `ch` is resolved against the element that USES it, so the token only means
+     what it says on a mono element. It is a metric, not a typeface. */
+  --spacing-cell: 1ch;
+
+  /* ---- Motion ----------------------------------------------------------- */
+  /* ONE motion token, and it is a shorthand pair rather than a duration and an
+     easing that a component could mix and match. Every transition in the system
+     — hover, surface, the disclosure chevron's rotate, a collapse — runs
+     `--motion-fast`, so "how fast does this surface answer me" has exactly one
+     answer and a second speed cannot be introduced by a component picking a
+     different pairing.
+
+     120ms, not the previous 150ms: at 150 a hover surface on a 24px ledger row
+     is still arriving after the eye has moved on, which reads as lag rather
+     than as feedback. `cubic-bezier(.2,0,0,1)` is a hard-out curve — it commits
+     immediately and settles, so a short duration still reads as motion instead
+     of as a jump cut.
+
+     Motion answers input; nothing animates on its own. `prefers-reduced-motion`
+     removes all of it (bottom of this file). */
+  --motion-fast-duration: 120ms;
+  --motion-fast-ease: cubic-bezier(0.2, 0, 0, 1);
+  --motion-fast: var(--motion-fast-duration) var(--motion-fast-ease);
+}
+
+/* Dark is the shipped default. Light re-points the same semantic tokens, so no
+   component knows which theme is active. */
+:root {
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  /* Tone hierarchy in light is FOUR quiet steps away from white, not two loud
+     ones: bg #ffffff, sunken #fafafa (the sidebar), raised #f2f2f2 (a selected
+     row), hairline #e8e8e8. Each step is ~1.05–1.12:1 against the one above
+     it, which is enough to separate a region and not enough to read as a grey
+     box — the defect the previous #e5e5e5 `raised` produced on both the
+     selected row and every code fence. `raised` is also no longer the same
+     value as `line`: a surface and a border are different jobs, and sharing
+     one step is what made selection look outlined. */
+  --color-bg: var(--color-neutral-1000);
+  --color-sunken: var(--color-neutral-900);
+  --color-raised: var(--color-neutral-800);
+  --color-hover: --alpha(#000 / 4%);
+  --color-active: --alpha(#000 / 6%);
+
+  /* The four steps mirror the dark ramp's SEPARATION, not its lightness: on a
+     white surface a tone that cannot be read is not a tone. Same floors as
+     dark — 4.5:1 down to `subtle`, 3:1 for `faint` — on bg, sunken, and
+     raised alike. */
+  --color-fg: var(--color-neutral-0);
+  --color-fg-muted: var(--color-neutral-200);
+  --color-fg-subtle: var(--color-neutral-300);
+  --color-fg-faint: var(--color-neutral-400);
+
+  --color-line: var(--color-neutral-700);
+  /* Light's surface hairline is the SAME step as its column split, and that is
+     correct rather than lazy: on white the ramp is compressed at the top, and
+     the next step down (`neutral-600`, 2.67:1) is a text tone that would outline
+     every row. Dark has the headroom for its own step and takes one; light does
+     not, and inventing one would mean a step nothing else can claim. */
+  --color-line-surface: var(--color-neutral-700);
+
+  --color-accent: oklch(53% 0.19 257.4); /* #0266d6 */
+  --color-accent-fg: var(--color-neutral-1000);
+
+  /* Light's diff pair is DARKENED rather than re-hued: the convention is the
+     hue, and the lightness is what has to move to stay legible on white. At
+     dark's lightness both tones measured under 2:1 on `bg` — a green that reads
+     as a highlight rather than as a mark. */
+  --color-diff-add: oklch(50% 0.14 152); /* #007938 — 5.57:1 on bg */
+  --color-diff-remove: oklch(50% 0.19 27); /* #b7191c — 6.62:1 on bg */
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  font-feature-settings:
+    "liga" 1,
+    "calt" 1;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Shell density: a Unix-terminal reading of the SAME tokens. It re-points the
+   type scale and the vertical rhythm only — the color system is untouched, so
+   a surface cannot acquire a second palette by changing density.
+
+   The scale is MONO-FIRST and anchored on a 13px body, because the transcript
+   is a ledger of machine truth read in long columns, not prose: paths, tool
+   names, durations, and code are the majority of its glyphs, and setting them
+   in the sans ramp at prose leading is what made this surface read as a chat
+   client instead of a console.
+
+   Only three sizes exist here, and the steps between them are deliberate:
+
+     body  13px  the transcript's own text, and the largest thing in it
+     meta  12px  a tool row, a reason line, a second line — one step quieter
+     micro 10px  ambient numerics (inherited): timestamps, durations
+
+   `title` is body + ONE step (14px), not the sans ramp's 15px display jump. A
+   session name is a label on the column it heads, not a headline: past one
+   step above body it stops ranking the header and starts shouting over the
+   content, which is the defect the owner reported. `heading` and `label` SHARE
+   the body size and rank by weight alone — in a mono column at this density a
+   size step below 13px reads as a different tier of information rather than a
+   heading, and the weight ramp (400/500/590) is already carrying rank.
+
+   Line heights are tight (1.3–1.45) because mono glyphs have uniform advance
+   and no descender relief to buy back: prose leading at 1.7 spends a third of
+   the column on air a ledger does not need. */
+[data-density="shell"] {
+  --text-display: 15px;
+  --text-title: 14px;
+  --text-title--line-height: 1.3;
+  --text-heading: 13px;
+  --text-heading--line-height: 1.35;
+  --text-body: 13px;
+  --text-body--line-height: 1.45;
+  --text-label: 13px;
+  --text-label--line-height: 1.3;
+  --text-meta: 12px;
+  --text-meta--line-height: 1.3;
+
+  --spacing-gutter: 8px;
+  --spacing-section: 16px;
+  --spacing-group-gap: 8px;
+  --spacing-row: 24px;
+  --spacing-control-md: 24px;
+
+  font-family: var(--font-mono);
+}
+
+/* Custom window chrome: header rows drag the window, controls inside opt out. */
+@utility drag-region {
+  -webkit-app-region: drag;
+  user-select: none;
+}
+@utility no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* The one shared transition, and the ONLY place a component may acquire one.
+
+   The property list is closed on purpose: `color`, `background-color`,
+   `border-color`, `opacity`, and `transform` are the five the compositor can
+   drive without laying out or repainting the page. Height is absent — a
+   collapse animates `grid-template-rows` through Base UI's own panel machinery
+   below, which is the one layout-shaped transition in the system and is scoped
+   to a disclosure rather than available to anything that asks. */
+@utility transition-quiet {
+  transition-property:
+    color, background-color, border-color, opacity, transform;
+  transition-duration: var(--motion-fast-duration);
+  transition-timing-function: var(--motion-fast-ease);
+}
+
+/* Focus-first: one ring, identical on every interactive primitive.
+
+   An INSET ring, not a browser outline. Three reasons, and each was visible:
+
+     - An `outline` with a positive offset draws OUTSIDE the element's box, so
+       on a sidebar row indented to its own level the ring spilled past the
+       row's fill and over the column edge. An inset shadow is painted within
+       the border box, so a focused row is the same rectangle as a selected one.
+     - `outline` does not follow `border-radius` consistently across the corner
+       joins at 1px, so a 2px ring on a 6px surface read as a square-ish frame
+       around a soft rectangle. `box-shadow` follows the radius exactly.
+     - 1px, not 2px: at this density a 2px accent ring is heavier than the
+       selected row's own fill, so focus outranked selection.
+
+   The radius is bound to the surface scale, so a focused row and a hovered row
+   are the same shape — focus reports focus, never a different geometry. */
+@utility focus-ring {
+  &:focus-visible {
+    outline: none;
+    border-radius: var(--radius-md);
+    box-shadow: inset 0 0 0 1px var(--color-focus);
+  }
+}
+
+/* ---- The one moving element in the system, DRAWN --------------------------
+
+   Six dots on a braille cell's geometry, lit in turn. Each circle runs the SAME
+   800ms cycle offset by its own index, so the lit position steps around the
+   ring: one keyframe set for all six rather than six sequences to keep in sync.
+
+   `opacity` only. No transform, no `content` swap, no filter — it is the one
+   property the compositor can animate without touching layout or paint, which
+   is what lets the single permitted animation in the product cost nothing.
+
+   `steps(6, end)` makes the advance DISCRETE. A continuously interpolated fade
+   would read as a soft pulse; the grammar's indicator advances cell by cell,
+   and the step function is what preserves that reading with drawn dots. */
+.spinner-dots circle {
+  opacity: 0.25;
+  animation: spinner-step 800ms steps(6, end) infinite;
+  animation-delay: calc(var(--dot) * -133.33ms);
+}
+
+/* Lit for one sixth of the cycle, dim for the rest. The two stops at 16.67%
+   and 16.68% are what make the drop instantaneous inside a stepped timeline
+   rather than a ramp across the remaining five steps. */
+@keyframes spinner-step {
+  0% {
+    opacity: 1;
+  }
+  16.67% {
+    opacity: 1;
+  }
+  16.68% {
+    opacity: 0.25;
+  }
+  100% {
+    opacity: 0.25;
+  }
+}
+
+/* The turn's time has NO rule here, and that is the point.
+
+   It used to be `opacity: 0` at rest, revealed on `:hover` and `:focus-within`.
+   That mechanism is deleted: a fact that only exists while the pointer is inside
+   the turn cannot have its PLACEMENT ruled on, because there is no resting state
+   to place it in. It now renders at rest as the last line of the agent's block,
+   in the meta voice at 40% — quiet by type and tone rather than by absence.
+
+   Nothing replaces this block. The time is styled entirely by `Voice` and the
+   spacing law in `timeline.tsx`, so a reveal cannot be reintroduced here without
+   the component asking for one. */
+
+/* The two animations in the system that are NOT a response to input, and the
+   only two. Both report the same fact from different surfaces: something is
+   happening right now, on its own, without me. That is the single claim the
+   system lets motion make unprompted — and it is exactly the claim the accent
+   budget already reserves, which is why both are accent-toned and why nothing
+   else may animate at rest.
+
+   Both are opacity-only. Opacity is compositor-driven, so a running session
+   pulsing in the sidebar for an hour costs no layout and no paint, and a caret
+   blinking under a streaming token never competes with the text arriving. */
+
+/* 2s, and slow is the whole point. A fast pulse is a WARNING — it demands the
+   eye and pulls attention off the transcript. A 2s breath at partial opacity
+   reads as ongoing rather than as urgent: legible when looked at, ignorable
+   when not. It never reaches 0 — the dot must not disappear, or the status
+   column flickers empty and the row's shape blinks. */
+@keyframes status-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.status-dot-pulse {
+  animation: status-pulse 2s ease-in-out infinite;
+}
+
+.streaming-caret {
+  animation: caret-blink 1s steps(1, end) infinite;
+}
+
+/* A terminal cursor's cadence, and a hard step rather than a fade: a caret that
+   eases between states reads as a pulsing shape, while a caret that snaps reads
+   as a cursor. `steps(1, end)` holds each half of the second flat. */
+@keyframes caret-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* At rest the word is available to assistive technology and invisible on
+   screen: the dots are the visual readout while motion is allowed. */
+.spinner-word {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  /* The swap: a STATIC DOT and the word, not a frozen animation.
+
+     A stopped spinner reads as a hung process, which is the opposite of what
+     the row means, so the ring collapses to its single first dot and the word
+     becomes the readout. Hiding five of the six circles is what leaves one
+     mark in the column, so the row keeps its width and nothing reflows when a
+     tool goes live. */
+  .spinner-dots circle:not([data-dot="0"]) {
+    display: none;
+  }
+
+  .spinner-dots circle[data-dot="0"] {
+    opacity: 1;
+  }
+
+  /* The blanket `animation: none` above stops the pulse and the blink, but an
+     animation that is cancelled reverts the element to its UNANIMATED style —
+     and for these two that is whatever opacity the rule happens to declare, not
+     necessarily a visible one. Both are pinned fully opaque here so the
+     reduced-motion readout is a solid accent dot and a solid caret: the state is
+     still reported, it has simply stopped moving. A `running` session must never
+     become indistinguishable from a settled one just because the reader asked
+     the interface to hold still. */
+  [data-status-dot="running"],
+  [data-caret][data-streaming="true"] {
+    opacity: 1;
+  }
+
+  .spinner-word {
+    position: static;
+    width: auto;
+    height: auto;
+    margin: 0;
+    overflow: visible;
+    clip-path: none;
+  }
+}
+
+/* Ligatures are a PROSE feature, and they are switched off wherever the mono
+   face is used.
+
+   The body sets `liga`/`calt` for the sans ramp, and that inherits into every
+   mono column unless it is stopped here. In a ledger it is actively wrong: the
+   coding face fuses `!=` into `≠`, `->` into an arrow, and `--` into an em
+   dash, so the screen shows characters the source does not contain. That breaks
+   the grammar's central promise — a glyph column is TEXT, it copies as text,
+   and what is read back is what was written. It also smuggles arrows and math
+   symbols onto surfaces whose glyph set is supposed to be frozen, without any
+   of them appearing in the source for the allowlist gate to catch.
+
+   `font-variant-ligatures` is the property that does the work, not
+   `font-feature-settings`. The two set the same OpenType features, but
+   `font-feature-settings` is all-or-nothing per declaration: any descendant
+   that declares it at all replaces the whole inherited list, so a token span
+   deep in a code fence silently got `normal` back and re-fused its operators.
+   `font-variant-ligatures: none` is the high-level property, it inherits
+   cleanly, and it is not clobbered by unrelated feature declarations.
+
+   `.font-mono *`, not just `.font-mono`: the substitution happens wherever the
+   text actually RENDERS, which for a code fence is the innermost token span,
+   several elements below the one that named the family.
+
+   Keyed on `.font-mono` alone rather than also on a bare `pre` element
+   selector. Every mono surface in the system goes through the same utility, so
+   the class already covers them, and a bare `pre` would be a low-specificity
+   rule that any later class-based declaration silently outranks — the exact
+   fragility that let the tokens re-fuse in the first place. Prose in the sans
+   face is untouched: it wants its ligatures and has no operators to fuse.
+
+   Tabular figures are unaffected — those change glyph WIDTH, not glyph
+   identity, through a different property. */
+.font-mono,
+.font-mono * {
+  font-variant-ligatures: none;
+}

@@ -43,3 +43,6 @@ dist-npm
 .agents
 skills-lock.json
 *.local.ts
+
+# TypeScript incremental state
+*.tsbuildinfo

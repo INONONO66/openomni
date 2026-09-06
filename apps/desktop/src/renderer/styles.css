@@ -1,12 +1,20 @@
 @import "tailwindcss";
+@import "@openomni/ui/styles.css";
 
-:root {
-  color-scheme: dark;
-}
+/* Tailwind only emits utilities it can SEE. The renderer's own markup is
+   scanned automatically, but every class this app actually renders now lives in
+   `packages/ui` — the renderer composes `Console` and names no utility of its
+   own. Without this the design system's classes (`h-row`, `size-3`, the token
+   colors) are referenced by the shipped components and emitted by nothing, and
+   the app renders as unstyled text with a 24px row that is 79px tall. */
+@source "../../../../packages/ui/src";
+
+/* No `color-scheme`, no background, no font here. All three are tokens, and the
+   theme is carried by the design system's `[data-theme]` contract; a value
+   restated at the app level is a second source of truth that silently wins over
+   the token whenever the two drift. `apps/desktop/test/design-tokens.test.ts`
+   is the gate: this file may not name a color. */
 
 body {
   margin: 0;
-  background: #0b0d10;
-  color: #e6e8eb;
-  font-family: system-ui, -apple-system, sans-serif;
 }
