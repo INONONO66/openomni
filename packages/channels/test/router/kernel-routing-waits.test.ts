@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { extractSurfaceKey, Ingress, type Gateway, type Wait } from "@openomni/protocol";
+import { extractSurfaceKey, Ingress, type Gateway, Wait } from "@openomni/protocol";
 import { ActorRegistry, BlacklistStore, Storage, SurfaceKey, WaitStore } from "@openomni/ledger";
 import { Bus } from "../helpers/observation";
 import { IngressRoutingError } from "../../src/router/routing-resolution";
@@ -375,28 +375,13 @@ describe("GatewayRouter durable wait routing", () => {
     expect(record?.replies).toHaveLength(0);
   });
 
-  test("fails closed for a workItem-owned wait: no ingress delivery path yet", async () => {
-    registerResponder("actor-external-worker", "seller-1");
-    openSessionWait("wait-work-item", { ownerRef: { kind: "workItem", id: "wi-1" } });
-
-    const error = await captureError(kernelRouter().ingest(replyEvent("inbound-wait-work-item")));
-
-    expect(error).toBeInstanceOf(IngressRoutingError);
-    expect((error as IngressRoutingError).code).toBe("route_blocked");
-    expect(error?.message).toBe("Matched wait owner has no ingress delivery path");
-    expect(routingDecisions()[0]).toMatchObject({
-      stage: "wait_correlation",
-      outcome: "block",
-      factsUsed: [
-        "wait:wait:wait-work-item",
-        "wait.action:report_result",
-        "wait.owner:workItem:wi-1",
-        "wait.owner:unsupported_ingress_delivery",
-      ],
-    });
-    const record = WaitStore.get("wait-work-item");
-    expect(record).toMatchObject({ status: "open" });
-    expect(record?.replies).toHaveLength(0);
+  test("refuses a retired owner before it can enter routing", () => {
+    expect(() => openSessionWait("wait-retired", {
+      ownerRef: Wait.OwnerRef.parse({ kind: "workItem", id: "wi-1" }),
+    })).toThrow();
+    expect(WaitStore.get("wait-retired")).toBeUndefined();
+    expect(routingDecisions()).toEqual([]);
+    expect(deliveries).toEqual([]);
   });
 
   test("resolves an awaited 2-of-3 send through router replies from two distinct responder endpoints", async () => {

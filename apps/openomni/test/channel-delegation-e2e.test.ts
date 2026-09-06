@@ -4,11 +4,22 @@ import { SessionHandleStore } from "@openomni/ledger";
 import { assistantMessage } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { nextFrame } from "./helpers/ws";
+import { createDispositionFixture, seedRetiredWait } from "../../../packages/ledger/test/helpers/disposition-967";
+import { archiveAndVerify, disposeCli } from "../../../packages/ledger/test/helpers/disposition-967-cli";
 
 const WS_TOKEN = "channel-delegation-e2e-token";
 const suite = residentSuite();
 
 test("the Resident delegates to an external actor over the channel and reports the reply", async () => {
+  const fixture = createDispositionFixture();
+  await using _resources = {
+    async [Symbol.asyncDispose]() {
+      try { await suite.cleanup(); } finally { fixture[Symbol.dispose](); }
+    },
+  };
+  seedRetiredWait(fixture.db);
+  archiveAndVerify(fixture);
+  expect(disposeCli(fixture).exitCode).toBe(0);
   const residentTexts: string[] = [];
   let ownerSessionId: string | undefined;
   let wake!: () => void;
@@ -17,7 +28,10 @@ test("the Resident delegates to an external actor over the channel and reports t
   });
 
   const app = await suite.boot({
-    config: suite.config("openomni-channel-delegation-", {
+    config: {
+      dbPath: fixture.path,
+      host: "127.0.0.1",
+      wsPort: 0,
       wsToken: WS_TOKEN,
       model: { provider: "fake", id: "channel-delegation-test", apiKey: "test-key" },
       actors: [{ actorId: "alice", externalId: "alice", trustTier: "collaborator", kind: "human" }],
@@ -30,7 +44,7 @@ test("the Resident delegates to an external actor over the channel and reports t
           cooldownMs: 0,
         },
       ],
-    }),
+    },
     llm: {
       resolveProviderModel: fakeProviderModel,
       run: async (input: RunInput, sink: Sink) => {

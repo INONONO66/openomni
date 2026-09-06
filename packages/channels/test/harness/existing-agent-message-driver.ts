@@ -1,6 +1,6 @@
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { existsSync } from "node:fs";
+import { createDispositionFixture, seedRetiredWait } from "../../../ledger/test/helpers/disposition-967";
+import { archiveCli, disposeCli } from "../../../ledger/test/helpers/disposition-967-cli";
 import { Wait, type Gateway } from "@openomni/protocol";
 import {
   ActorRegistry,
@@ -183,25 +183,34 @@ function scenarioReceipt(
   });
 }
 
-const flushBus = () => new Promise<void>((resolve) => queueMicrotask(() => resolve()));
-
 // ---------------------------------------------------------------------------
 // Scenario: restart-quorum
 // ---------------------------------------------------------------------------
 
 async function runRestartQuorumScenario(): Promise<ScenarioReceipt> {
-  const directory = mkdtempSync(join(tmpdir(), "openomni-existing-agent-message-"));
-  const databasePath = join(directory, "wait.sqlite");
+  const fixture = createDispositionFixture(false);
+  const directory = fixture.directory;
+  const databasePath = fixture.path;
   const deliveries: OutboundMessage[] = [];
   let adapter: SqliteStorageAdapter | undefined;
   let fields: Readonly<Record<string, unknown>> | undefined;
   let ok = false;
   try {
+    seedRetiredWait(fixture.db);
+    const archived = archiveCli(fixture, [], false);
+    const verified = archiveCli(fixture, ["--verify"], false);
+    const disposed = disposeCli(fixture, false);
+    for (const receipt of [archived, verified, disposed]) {
+      if (receipt.exitCode !== 0) throw new Error(receipt.stderr);
+    }
     Bus.reset();
     adapter = new SqliteStorageAdapter(databasePath, Bus);
     Storage.configure(adapter);
     registerDriverActors();
     const baseline = allocationCount();
+    const priorWaitCount = WaitStore.list().length;
+    const preserved = WaitStore.get("preserved");
+    if (preserved?.correlation.replyToMessageId !== "preserved-platform-receipt") throw new Error("upgraded correlation was not preserved");
     const messaging = createExistingAgentMessaging({
       deliver: (message) => {
         deliveries.push(message);
@@ -219,7 +228,7 @@ async function runRestartQuorumScenario(): Promise<ScenarioReceipt> {
       at: DriverNow,
       traceId: "trace:qa:notify",
     });
-    const waitCountAfterFireAndForget = WaitStore.list().length;
+    const waitCountAfterFireAndForget = WaitStore.list().length - priorWaitCount;
 
     const awaited = await messaging.send({
       messageId: AwaitedMessageId,
@@ -245,21 +254,22 @@ async function runRestartQuorumScenario(): Promise<ScenarioReceipt> {
     adapter = new SqliteStorageAdapter(databasePath, Bus);
     Storage.configure(adapter);
 
-    const resumeReceipts: Array<Record<string, unknown>> = [];
-    Bus.observe((event, payload) => {
+    const resumeReceipts: { waitId: string; ownerRef: Wait.OwnerRef; resolvedAt: number }[] = [];
+    const resolved = Promise.withResolvers<void>();
+    const deadline = AbortSignal.timeout(10_000);
+    const timedOut = () => resolved.reject(new Error("resolution observation timed out"));
+    deadline.addEventListener("abort", timedOut, { once: true });
+    const unsubscribe = Bus.observe((event, payload) => {
       if (event.name !== "wait.resolved") return;
-      const data = payload as {
-        id: string;
-        ownerKind: string;
-        ownerId: string;
-        resolvedAt: number;
-      };
+      const data = Wait.Events.Resolved.schema.parse(payload);
       resumeReceipts.push({
         waitId: data.id,
         ownerRef: { kind: data.ownerKind, id: data.ownerId },
         resolvedAt: data.resolvedAt,
       });
+      resolved.resolve();
     });
+    using _witness = { [Symbol.dispose]() { unsubscribe(); deadline.removeEventListener("abort", timedOut); } };
 
     const reopened = WaitStore.get(AwaitedWaitId);
     if (reopened === undefined) throw new Error("persisted wait not found after restart");
@@ -268,7 +278,7 @@ async function runRestartQuorumScenario(): Promise<ScenarioReceipt> {
       replyKey: "reply:qa:r2",
       at: DriverNow + 20_000,
     });
-    await flushBus();
+    await resolved.promise;
 
     const final = WaitStore.get(AwaitedWaitId);
     if (final === undefined) throw new Error("wait vanished after resolution");
@@ -292,6 +302,7 @@ async function runRestartQuorumScenario(): Promise<ScenarioReceipt> {
       deliveries.length === 2;
 
     fields = {
+      disposition967: { archived, verified, disposed, preservedWait: preserved.id },
       allocationDelta,
       ownerRef: final.ownerRef,
       waitStatus: final.status,
@@ -327,7 +338,7 @@ async function runRestartQuorumScenario(): Promise<ScenarioReceipt> {
     adapter?.close();
     Storage.reset();
     Bus.reset();
-    rmSync(directory, { recursive: true, force: true });
+    fixture[Symbol.dispose]();
   }
   if (fields === undefined) throw new Error("restart-quorum scenario produced no receipt");
   return scenarioReceipt("restart-quorum", ok, "restart_quorum_resolved", "restart_quorum_failed", {

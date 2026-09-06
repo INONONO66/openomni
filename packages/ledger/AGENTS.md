@@ -38,6 +38,13 @@ src/
 - App boot retains open-turn/pending-inbox recovery. There is no legacy TTL sweep: expired historical JSON cannot delete promoted canonical history. Hibernation releases runtime resources, not durable rows.
 - SQL `session`, `action`, `inbox`, `alarm` and `policy` remain canonical. Nullable-role legacy rows and their JSON remain preserved until explicitly promoted or dispositioned. Message/part tables are retained without live adapters pending verified archival and the final post-#937 consumer/retention decision. No physical disposal is authorized by API deletion. Historical migrations are immutable; #967 remains open.
 
+## #967 archive cutover
+
+- Migration `0034_u967_archive_disposition` drops only empty `bus_event`; the existing runner's in-transaction preparation may first remove explicitly approved archived bus rows and eligible retired Wait projections. The Wait table is not rebuilt. Session-owned Wait delivery remains live until #969.
+- The existing `script/generate-ledger-archive-manifest.ts` requires explicit `--db`, `--out`, and `--backup`. Archive and `--verify` do not authorize deletion. `--dispose-967 --approve-manifest-sha256 <sha256-of-manifest-bytes>` is the sole per-database confirmation. Stop writers before the operator procedure; never run this against an uninspected live database.
+- Native SQLite archives and manifests are retained indefinitely. Verification opens only an exclusive byte-identical disposable restore copy, compares native values and integrity/FKs, checks unchanged image hashes, then closes/finalizes handles before deleting that copy. The operator archive is never opened writable.
+- Normal boot accepts genuinely fresh or complete known schemas only; partial/older/tampered history refuses before connection pragmas or earlier destructive migrations. Nonempty retired targets need the explicit command; pending, malformed, incoherent, follow-up-visible and linked pending-wake rows refuse unchanged. Message/part and canonical/history/delegation data are preserved; final message/part disposition still waits for #937.
+
 ## Store discipline
 
 - `Storage.get()` before initialize/configure fails closed. Branded production adapters must pass `Storage.assertComplete`; narrow test fakes may omit unrelated capabilities, and each store fails closed when its required capability is absent.

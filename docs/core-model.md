@@ -65,7 +65,7 @@ The rulebook:
 
 ### Waiting on the world
 
-Existing-agent messaging targets an already allocated actor/session and creates no WorkItem, Worker, executor, or budget. Fire-and-forget records a delivery outcome and creates no Wait. The awaited form opens one durable **Wait** owned by the waiting `workItem | session`; process exit releases compute while deterministic correlation, restart, timeout, cancellation, late/ambiguous/duplicate replies, and partial N-of-M resolution remain ledger state. One primitive absorbs PendingAsk, PendingInteraction, WorkItem blockers, and WorkerRun wait states (#215). The normative contract is [Kernel Contract § Wait and existing-agent messaging](kernel-contract.md#wait-and-existing-agent-messaging).
+Existing-agent messaging targets an already allocated actor/session and creates no WorkItem, Worker, executor, or budget. Fire-and-forget records a delivery outcome and creates no Wait. The awaited form opens one durable **Wait** owned by the waiting `session`; process exit releases compute while deterministic correlation, restart, timeout, cancellation, late/ambiguous/duplicate replies, and partial N-of-M resolution remain ledger state. One primitive absorbs PendingAsk, PendingInteraction, WorkItem blockers, and WorkerRun wait states (#215). The normative contract is [Kernel Contract § Wait and existing-agent messaging](kernel-contract.md#wait-and-existing-agent-messaging).
 
 ## The Ledger
 

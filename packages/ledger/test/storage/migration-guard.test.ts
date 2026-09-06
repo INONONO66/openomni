@@ -5,7 +5,10 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import { Migration } from "../../src/storage/migration-runner";
+import { createDispositionFixture } from "../helpers/disposition-967";
+import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage";
 import { initializeSqliteDatabase } from "../../src/storage/sqlite-schema-lifecycle";
+import "./u967-disposition-cases";
 
 /**
  * Migration 0025 drops the frozen pending_ask/pending_interaction tables and
@@ -64,12 +67,33 @@ afterEach(() => {
   rmSync(tmpDir, { recursive: true, force: true });
 });
 
+describe("967 atomic disposition", () => {
+  test("ordinary boot refuses nonempty retired targets without changing rows or markers", () => {
+    using fixture = createDispositionFixture();
+    const before = fixture.db.serialize();
+    expect(() => {
+      const adapter = new SqliteStorageAdapter(fixture.path);
+      adapter.close();
+    }).toThrow();
+    expect(fixture.db.serialize()).toEqual(before);
+  });
+
+  test("fresh boot drops the empty bus table and records the cutover once", () => {
+    const adapter = new SqliteStorageAdapter(join(tmpDir, "fresh.sqlite"));
+    adapter.close();
+    using raw = new Database(join(tmpDir, "fresh.sqlite"), { readonly: true });
+    expect(tableNames(raw)).not.toContain("bus_event");
+    expect(raw.query("SELECT name FROM _migrations WHERE name LIKE '0034%'").all()).toEqual([{ name: "0034_u967_archive_disposition/migration.sql" }]);
+  });
+});
+
 describe("migration 0025 pending-table drop guard", () => {
   test("non-empty pending_ask aborts the drop, keeps the rows, and records nothing", () => {
     bootstrapPre0025(db);
     seedPendingAskRow(db);
 
-    expect(() => initializeSqliteDatabase(db)).toThrow(/CHECK constraint failed/);
+    expect(() => initializeSqliteDatabase(db)).toThrow("unsupported_upgrade");
+    expect(() => Migration.applyOrdered(db, MIGRATION_DIR, [{ name: "0025_drop_pending_tables/migration.sql" }])).toThrow(/CHECK constraint failed/);
 
     // The wrapping transaction rolled back: rows survive, tables survive,
     // and 0025 was never recorded as applied.
@@ -86,7 +110,8 @@ describe("migration 0025 pending-table drop guard", () => {
   test("empty pending tables drop cleanly and 0025 is recorded", () => {
     bootstrapPre0025(db);
 
-    initializeSqliteDatabase(db);
+    expect(() => initializeSqliteDatabase(db)).toThrow("unsupported_upgrade");
+    Migration.applyOrdered(db, MIGRATION_DIR, [{ name: "0025_drop_pending_tables/migration.sql" }]);
 
     const tables = tableNames(db);
     expect(tables).not.toContain("pending_ask");

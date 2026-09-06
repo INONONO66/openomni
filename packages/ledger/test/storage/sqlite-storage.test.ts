@@ -6,6 +6,7 @@ import { LedgerSession } from "@openomni/protocol";
 import { Migration } from "../../src/storage/migration-runner";
 import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage";
 import { removeSqliteFiles, tempDbPath } from "../helpers/sqlite";
+import { createDispositionFixture, snapshotDatabase } from "../helpers/disposition-967";
 
 function makeSession(id: string, timeCreated = 1) {
   return {
@@ -105,7 +106,7 @@ describe("SqliteStorageAdapter", () => {
       expect(tables).toContain("part");
       expect(tables).toContain("surface_key");
       expect(tables).not.toContain("artifact");
-      expect(tables).toContain("bus_event");
+      expect(tables).not.toContain("bus_event");
       expect(tables).toContain("worker_run_state");
       expect(tables).toEqual(expect.arrayContaining(["action", "inbox", "alarm", "policy"]));
       expect(tables).toContain("_migrations");
@@ -126,7 +127,7 @@ describe("SqliteStorageAdapter", () => {
       }
     });
 
-    test("upgrading a lifecycle-era schema drops its retired tables", () => {
+    test("normal boot refuses a partial lifecycle history before the historical drop", () => {
       adapter.close();
 
       const legacyDb = new Database(dbPath);
@@ -138,8 +139,11 @@ describe("SqliteStorageAdapter", () => {
       );
       legacyDb.close();
 
-      const upgradedAdapter = new SqliteStorageAdapter(dbPath);
-      const upgradedDb = storageDb(upgradedAdapter);
+      using upgradedDb = new Database(dbPath);
+      const before = snapshotDatabase(upgradedDb);
+      expect(() => new SqliteStorageAdapter(dbPath)).toThrow("unsupported_upgrade");
+      expect(snapshotDatabase(upgradedDb)).toEqual(before);
+      Migration.applyOrdered(upgradedDb, join(import.meta.dir, "../../migration"), [{ name: "0030_drop_retired_tables/migration.sql" }]);
       const retired = upgradedDb
         .query<{ name: string }, []>(
           "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('conversation', 'lease', 'engagement') ORDER BY name",
@@ -152,13 +156,14 @@ describe("SqliteStorageAdapter", () => {
           .query<{ name: string }, [string]>("SELECT name FROM _migrations WHERE name = ?")
           .get("0030_drop_retired_tables/migration.sql"),
       ).toEqual({ name: "0030_drop_retired_tables/migration.sql" });
-      upgradedAdapter.close();
     });
 
     test("observability tables expose the expected columns", () => {
       const db = storageDb(adapter);
 
-      expect(tableColumns(db, "bus_event")).toEqual([
+      using historical = createDispositionFixture();
+      expect(tableColumns(db, "bus_event")).toEqual([]);
+      expect(tableColumns(historical.db, "bus_event")).toEqual([
         "id",
         "session_id",
         "run_id",
@@ -202,7 +207,9 @@ describe("SqliteStorageAdapter", () => {
     test("observability indexes are created", () => {
       const db = storageDb(adapter);
 
-      expect(indexNames(db, "bus_event")).toEqual(
+      using historical = createDispositionFixture();
+      expect(indexNames(db, "bus_event")).toEqual([]);
+      expect(indexNames(historical.db, "bus_event")).toEqual(
         expect.arrayContaining([
           "idx_bus_event_session_time",
           "idx_bus_event_run_time",
@@ -257,20 +264,18 @@ describe("SqliteStorageAdapter", () => {
       expect(tableColumns(legacyDb, "worker_run_state")).not.toContain("executor_kind");
       legacyDb.close();
 
-      const upgradedAdapter = new SqliteStorageAdapter(dbPath);
-      const upgradedDb = storageDb(upgradedAdapter);
-
+      expect(() => new SqliteStorageAdapter(dbPath)).toThrow("unsupported_upgrade");
+      using upgradedDb = new Database(dbPath);
+      Migration.applyOrdered(upgradedDb, join(import.meta.dir, "../../migration"), [{ name: "0005_worker_run_executor_kind/migration.sql" }]);
       expect(tableColumns(upgradedDb, "worker_run_state")).toContain("executor_kind");
       expect(
         upgradedDb
           .query("SELECT executor_kind FROM worker_run_state WHERE run_id = ?")
           .get("legacy-run"),
       ).toEqual({ executor_kind: "internal_chat_agent" });
-
-      upgradedAdapter.close();
     });
 
-    test("upgrading a database removes the artifact table and its rows", () => {
+    test("unsupported boot preserves artifacts before the historical drop is exercised explicitly", () => {
       adapter.close();
       removeSqliteFiles(dbPath);
 
@@ -284,9 +289,12 @@ describe("SqliteStorageAdapter", () => {
         .run("legacy-artifact", "legacy-session", "{}", "obsolete", 1, 1);
       legacyDb.close();
 
-      const upgradedAdapter = new SqliteStorageAdapter(dbPath);
-      expect(tableColumns(storageDb(upgradedAdapter), "artifact")).toEqual([]);
-      upgradedAdapter.close();
+      using upgradedDb = new Database(dbPath);
+      const before = snapshotDatabase(upgradedDb);
+      expect(() => new SqliteStorageAdapter(dbPath)).toThrow("unsupported_upgrade");
+      expect(snapshotDatabase(upgradedDb)).toEqual(before);
+      Migration.applyOrdered(upgradedDb, join(import.meta.dir, "../../migration"), [{ name: "0030_drop_artifact/migration.sql" }]);
+      expect(tableColumns(upgradedDb, "artifact")).toEqual([]);
     });
 
     test("0031 preserves a valid 0029 session whose agent id is not a role", () => {
@@ -308,6 +316,10 @@ describe("SqliteStorageAdapter", () => {
         .run(legacy.id, JSON.stringify(legacy), 1, 1);
       legacyDb.close();
 
+      expect(() => new SqliteStorageAdapter(dbPath)).toThrow("unsupported_upgrade");
+      using history = new Database(dbPath);
+      const successors = readdirSync(migrationRoot).filter((name) => name.startsWith("00") && name >= "0030").sort().map((name) => ({ name: `${name}/migration.sql` }));
+      Migration.applyOrdered(history, migrationRoot, successors);
       const upgraded = new SqliteStorageAdapter(dbPath);
       expect(
         storageDb(upgraded).query("SELECT data FROM session WHERE id = ?").get(legacy.id),
@@ -431,9 +443,11 @@ describe("SqliteStorageAdapter", () => {
       expect(adapter.surfaceKey?.lookup("channel:123")).toBe("s1");
     });
 
-    test("deleting session cascades to observability tables", () => {
-      adapter.sessions.create(canonicalRow("s1"));
-      const db = storageDb(adapter);
+    test("historical session deletion cascades to observability tables", () => {
+      using historical = createDispositionFixture();
+      using db = new Database(historical.path);
+      db.run("PRAGMA foreign_keys = ON");
+      db.run("INSERT INTO session (id, data, time_created, time_updated) VALUES ('s1', '{}', 1, 1)");
 
       db.query(
         `INSERT INTO bus_event
@@ -448,8 +462,8 @@ describe("SqliteStorageAdapter", () => {
 
       db.query("DELETE FROM session WHERE id = 's1'").run();
 
-      expect(db.query("SELECT COUNT(*) AS count FROM bus_event").get()).toEqual({ count: 0 });
-      expect(db.query("SELECT COUNT(*) AS count FROM worker_run_state").get()).toEqual({
+      expect(db.query("SELECT COUNT(*) AS count FROM bus_event WHERE session_id = 's1'").get()).toEqual({ count: 0 });
+      expect(db.query("SELECT COUNT(*) AS count FROM worker_run_state WHERE session_id = 's1'").get()).toEqual({
         count: 0,
       });
     });
