@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788717781716,
+  "lastUpdate": 1788719979887,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -66119,6 +66119,100 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 890984,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "58a973bfd4ff6f9c56dce5c78fbf84dc78384552",
+          "message": "feat(desktop): chat on Vercel AI SDK (#984)\n\nPut the desktop renderer chat on ai@7 + @ai-sdk/react@4 while\n@openomni/ui stays data-blind (zero SDK imports).\n\n- chat/message.ts: OpenOmniUIMessage (tools, data-epoch, TurnMetadata)\n- chat/adapter.ts: pure uiMessagesToTranscript -> {nodes, costs, pending}\n  keeping text/tool interleaving; tool-state map input-*->running,\n  approval-requested->waiting (+pending keyed approval.id),\n  output-error->failed, output-denied->denied, output-available->done\n- chat/gateway-transport.ts: ChatTransport over the openomni WS wire\n  ({text, replyToId?} in; response|message|error out) -> UI chunk\n  stream; queue-head replyTo correlation, abort lifecycle, socket\n  close isolation; tested against an in-process Bun WS server\n- chat/mock-transport.ts + fixtures rewritten as UIMessage[]; old\n  TranscriptNode fixtures deleted (grep-zero)\n- app.tsx on useChat: one Chat per session, submit->sendMessage,\n  stop while streaming, approve/deny->addToolApprovalResponse\n- packages/ui: data-blind Composer/Console `onStop` (Stop replaces\n  send while sending)\n- scripts/shoot-chat.ts: playwright evidence of mock streaming\n- docs: BOUNDARY.md, DESIGN.md s10, AGENTS.md, COMPONENTS.md synced",
+          "timestamp": "2026-09-06T18:38:22Z",
+          "tree_id": "5b45ca7b9fa58d7c1bee4479c344bce94a68361b",
+          "url": "https://github.com/INONONO66/openomni/commit/58a973bfd4ff6f9c56dce5c78fbf84dc78384552"
+        },
+        "date": 1788719979267,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1743,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 13069,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 6807,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1750729,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 464203,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 8302256,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 139,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1538,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 732,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 511572,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3444,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 19363,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 180731,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 889535,
             "unit": "ns/op"
           }
         ]
