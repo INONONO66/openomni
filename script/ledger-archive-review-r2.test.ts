@@ -149,8 +149,11 @@ describe("967 review R2-1 literal CLI eligibility probes", () => {
     // Then: retire only the retired projection; preserve all session/native protected values.
     expect({ exit: disposed.exitCode, code: resultCode(disposed) }).toEqual({ exit: 0, code: "disposed" });
     const after = snapshotDatabase(fixture.db);
-    expect(after.tables.filter(({ name }) => !["bus_event", "wait", "_migrations", "sqlite_sequence"].includes(name)))
-      .toEqual(before.tables.filter(({ name }) => !["bus_event", "wait", "_migrations", "sqlite_sequence"].includes(name)));
+    const migrated = ["bus_event", "wait", "_migrations", "sqlite_sequence", "delegation", "worker_grant", "worker_run_state", "reply_grant"];
+    expect(after.tables.filter(({ name }) => !migrated.includes(name)))
+      .toEqual(before.tables.filter(({ name }) => !migrated.includes(name)));
+    expect(after.tables.find(({ name }) => name === "reply_grant")?.rows).toEqual([]);
+    expect(after.tables.filter(({ name }) => ["delegation", "worker_grant", "worker_run_state"].includes(name))).toEqual([]);
     expect(after.tables.find(({ name }) => name === "wait")?.rows).toEqual(before.tables.find(({ name }) => name === "wait")?.rows.filter((row) => owner === "session" || row.id !== "retired"));
     expect(fileSha256(fixture.archive)).toBe(archiveHash);
     expect(readFileSync(fixture.manifest)).toEqual(receipt);

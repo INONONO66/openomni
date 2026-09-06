@@ -110,7 +110,7 @@ export class DiscordAdapter implements Channel.Surface {
 		const botId = this.botId;
 		if (!botId) return;
 
-		const inbound = this.normalizer.normalize(message, traceId);
+		const inbound = this.normalizer.normalize(message);
 		if (!inbound) return;
 
 		this.handleIncoming(inbound, message.channel_id, traceId).catch((err) => {

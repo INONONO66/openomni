@@ -20,15 +20,19 @@ describe("durable reply-grant current projection", () => {
 		const directory = mkdtempSync(join(tmpdir(), "reply-grant-race-"));
 		const path = join(directory, "ledger.sqlite");
 		const adapter = new SqliteStorageAdapter(path);
-		adapter.close();
 		const gate = new SharedArrayBuffer(4);
-		const workers = ["guest-1", "guest-2"].map((id) =>
-			new Worker(new URL("../helpers/reply-grant-race-worker.ts", import.meta.url), {
-				workerData: { path, id, gate },
-			}));
+		const workers: Worker[] = [];
 		try {
 			const signal = AbortSignal.timeout(10_000);
-			await Promise.all(workers.map((worker) => once(worker, "message", { signal })));
+			// Race grant claims, not connection startup/WAL recovery. Keep the
+			// initialized database open and await each worker's exact ready signal.
+			for (const id of ["guest-1", "guest-2"]) {
+				const worker = new Worker(new URL("../helpers/reply-grant-race-worker.ts", import.meta.url), {
+					workerData: { path, id, gate },
+				});
+				workers.push(worker);
+				expect(await once(worker, "message", { signal })).toEqual(["ready"]);
+			}
 			const results = workers.map((worker) => once(worker, "message", { signal }));
 
 			Atomics.store(new Int32Array(gate), 0, 1);
@@ -43,6 +47,7 @@ describe("durable reply-grant current projection", () => {
 			}
 		} finally {
 			await Promise.all(workers.map((worker) => worker.terminate()));
+			adapter.close();
 			rmSync(directory, { recursive: true, force: true });
 		}
 	});

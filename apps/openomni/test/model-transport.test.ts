@@ -2,9 +2,8 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { initialize, SessionHandleStore, Storage } from "@openomni/ledger";
+import { initialize, Storage } from "@openomni/ledger";
 import type { RunInput, Sink } from "@openomni/llm";
-import type { Gateway } from "@openomni/protocol";
 import { modelTransport, type OpenOmniConfig } from "../src/config";
 import { ProcessSessionRequest } from "../src/process-entry";
 import { residentRunner as createResident } from "./helpers/resident-runner";
@@ -35,36 +34,6 @@ const resolveModel = async (model: { provider: string; id: string }) => ({
 function createSession(): string {
 	// The real Resident materializes this gateway-minted identity on delivery.
 	return crypto.randomUUID();
-}
-
-function residentDelivery(sessionId: string): Gateway.Deliver {
-	const id = "inbound-transport";
-	const traceId = "1".padStart(32, "0");
-	return {
-		sessionId,
-		event: {
-			id,
-			traceId,
-			surface: "internal",
-			userId: "owner",
-			payload: "resident question",
-			target: { kind: "resident" },
-			mode: "direct",
-		},
-		decision: {
-			traceId,
-			time: Date.now(),
-			inboundId: id,
-			surface: "internal",
-			mode: "direct",
-			stage: "surface_default",
-			outcome: "route",
-			reason: "test",
-			factsUsed: [],
-			target: "resident",
-			sessionId,
-		},
-	};
 }
 
 describe("modelTransport", () => {

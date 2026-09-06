@@ -116,8 +116,8 @@ test("real provider returns calls before any app tool body starts", async () => 
     },
   });
   suite.defer(
-    Bus.subscribe(Tool.Events.Started, () => {
-      bodies += 1;
+    Bus.subscribe(Tool.Events.Started, (event) => {
+      if (event.toolName === "provision") bodies += 1;
     }),
   );
   suite.defer(
@@ -242,15 +242,28 @@ async function waveApp(
 function toolResults(sessionId: string) {
   const result = z.object({ phase: z.literal("result"), terminal: z.string(), callId: z.string() });
   return SessionHandleStore.tree(sessionId)
-    .filter((action) => action.kind === "tool")
+    .filter((action) => action.kind === "tool" && z.object({ op: z.string() }).parse(action.intent.value).op !== "sendMessage")
     .flatMap((action) => {
       const parsed = result.safeParse(action.effect.value);
       return parsed.success ? [parsed.data] : [];
     });
 }
 
+function nextTerminal(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => { stop(); reject(new Error("missing session terminal")); }, 5000);
+    const stop = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
+      if (event.sessionId === "gateway-ingress" || event.kind !== "turn") return;
+      const terminal = SessionHandleStore.tree(event.sessionId).find((action) => action.id === event.id);
+      if (terminal === undefined || SessionHandleStore.turnTerminal(terminal) === undefined) return;
+      clearTimeout(timer); stop(); resolve();
+    });
+    suite.defer(() => { clearTimeout(timer); stop(); });
+  });
+}
+
 function activeRow() {
-  const row = SessionHandleStore.listRows()[0];
+  const row = SessionHandleStore.listRows().find((row) => row.id !== "gateway-ingress");
   if (row === undefined) throw new Error("missing app session");
   return row;
 }
@@ -382,7 +395,7 @@ test("all pre decisions precede A B C and reverse completion preserves ledger/pr
     try {
       const persisted = db
         .query<{ effect: string }, []>(
-          "SELECT effect FROM action WHERE kind = 'tool' ORDER BY ordinal",
+          "SELECT effect FROM action WHERE kind = 'tool' AND json_extract(intent, '$.op') != 'sendMessage' ORDER BY ordinal",
         )
         .all();
       const decoded = persisted.flatMap((row) => {
@@ -508,7 +521,6 @@ test("noncooperative bodies release the wave but retain the lease and cannot com
     }),
   ];
   const { app, socket, received } = await waveApp(definitions, ["A", "B"]);
-  const channelSettled = nextMessage(socket, 5000);
   try {
     socket.send(JSON.stringify({ type: "message", text: "interrupt running wave" }));
     await bounded(entered.promise);
@@ -525,7 +537,7 @@ test("noncooperative bodies release the wave but retain the lease and cannot com
     expect(received).toHaveLength(1);
     gate.resolve();
     expect(await bounded(late.promise)).toBe("AbortError");
-    await channelSettled;
+    await bounded(handle.close());
     expect(SessionHandleStore.row(row.id).leaseOwner).toBeNull();
     expect(
       SessionHandleStore.tree(row.id).some(
@@ -609,7 +621,6 @@ for (const door of ["current-run", "current-batch", "captured-run", "captured-ba
         return "outer";
       }),
     ], ["A", "outer"]);
-    const reply = nextMessage(socket, 5000);
     let handle: SessionHandle | undefined;
     let competitorFence: number | undefined;
     try {
@@ -664,8 +675,8 @@ for (const door of ["current-run", "current-batch", "captured-run", "captured-ba
       expect(SessionHandleStore.tree(row.id)).toHaveLength(beforeActions);
       gate.resolve();
       await bounded(completed.promise);
-      // The channel's binding close joins retention before replying; SDK interrupt above does not.
-      await reply;
+      // Close joins the raw effect after its exact completion signal.
+      await bounded(handle.close());
       expect(readFileSync(marker)).toEqual(Buffer.from(bytes));
       const released = SessionHandleStore.row(row.id);
       expect(released.leaseOwner).toBeNull();
@@ -743,8 +754,7 @@ for (const door of ["current-cell", "current-wave", "captured-cell", "captured-w
           return "outer";
         }),
       ], ["A", "outer"]);
-      const reply = nextMessage(socket, 5000);
-      let handle: SessionHandle | undefined;
+        let handle: SessionHandle | undefined;
       let competitorFence: number | undefined;
       try {
         socket.send(JSON.stringify({ type: "message", text: "run timed nested effect" }));
@@ -784,7 +794,7 @@ for (const door of ["current-cell", "current-wave", "captured-cell", "captured-w
         const beforeActions = SessionHandleStore.tree(sessionId).length;
         const db = new Database(dbPath, { readonly: true });
         try {
-          expect(db.query<{ count: number }, []>("SELECT count(*) AS count FROM action").get()?.count)
+          expect(db.query<{ count: number }, [string]>("SELECT count(*) AS count FROM action WHERE session_id=?").get(sessionId)?.count)
             .toBe(beforeActions);
         } finally { db.close(); }
         let staleStarts = 0;
@@ -795,7 +805,7 @@ for (const door of ["current-cell", "current-wave", "captured-cell", "captured-w
         await expect(stale()).rejects.toMatchObject({ name: "SessionCommitError" });
         rawGate.resolve();
         await bounded(rawDone.promise);
-        await reply;
+        await bounded(handle?.close() ?? Promise.resolve());
         expect(readFileSync(marker)).toEqual(Buffer.from([9, 3, 7]));
         const released = SessionHandleStore.row(sessionId);
         expect(released.leaseOwner).toBeNull();
@@ -813,7 +823,7 @@ for (const door of ["current-cell", "current-wave", "captured-cell", "captured-w
         outerGate.resolve();
         rawGate.resolve();
         if (rawStarted) await bounded(rawDone.promise);
-        await reply;
+        await bounded(handle?.close() ?? Promise.resolve());
         await bounded(handle?.close() ?? Promise.resolve());
         if (competitorFence !== undefined) {
           const row = SessionHandleStore.row(sessionId);
@@ -956,7 +966,7 @@ test("a durable after-model inbox interrupt drains before tools without an eager
       });
     }),
   );
-  const response = nextMessage(socket, 5000);
+  const response = nextTerminal();
   socket.send(JSON.stringify({ type: "message", text: "interrupt at the drain" }));
   await response;
   expect(bodies).toBe(0);
@@ -983,7 +993,7 @@ test("an interrupt after wave results drains before another provider step", asyn
       });
     }),
   );
-  const response = nextMessage(socket, 5000);
+  const response = nextTerminal();
   socket.send(JSON.stringify({ type: "message", text: "stop after A" }));
   await response;
   expect(received).toHaveLength(1);

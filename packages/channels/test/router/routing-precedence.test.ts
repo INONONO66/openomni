@@ -187,7 +187,7 @@ describe("resolveRoute precedence", () => {
     expect(decisions.every((decision) => decision.sessionId === undefined)).toBe(true);
   });
 
-  it("classifies blacklist drops as accepted while block and ambiguity stay typed failures", () => {
+  it("refuses blacklist, block and ambiguity before the inbox body", () => {
     const decisions = [
       resolveRoute(inbound, {
         blacklist: { id: "blacklist-actor", kind: "actor", reason: "revoked" },
@@ -218,8 +218,7 @@ describe("resolveRoute precedence", () => {
     ) {
       throw new TypeError("missing accepted decision fixture");
     }
-    expect(requireRoutedDecision(accepted)).toBe(accepted);
-    const codes = decisions.slice(1).map((decision) => {
+    const codes = decisions.map((decision) => {
       try {
         requireRoutedDecision(decision);
         return "accepted";
@@ -227,7 +226,7 @@ describe("resolveRoute precedence", () => {
         return (error as { readonly code?: string }).code;
       }
     });
-    expect(codes).toEqual(["route_blocked", "route_ambiguous"]);
+    expect(codes).toEqual(["route_blocked", "route_blocked", "route_ambiguous"]);
   });
 
   it("classifies a blocked channel through the typed routing error", () => {

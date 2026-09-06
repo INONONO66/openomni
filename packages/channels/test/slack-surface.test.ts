@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { type Channel, type PlainObject, PlainValueSchema } from "@openomni/protocol";
+import { type Channel, Operational, type PlainObject, PlainValueSchema } from "@openomni/protocol";
 import { z } from "zod";
 import { SlackAdapter } from "../src/provider/slack/surface";
 import { SlackEndpointKeyError, SlackHandlerMissingError } from "../src/provider/slack/error";
@@ -22,7 +22,7 @@ function installSlackApi() {
       if (srv.upgrade(request, { data: {} })) return;
       return new Response("expected websocket", { status: 400 });
     },
-    websocket: { open: (socket) => opened.resolve(socket), message() {} },
+    websocket: { open: (socket) => opened.resolve(socket), message() { return; } },
   });
   globalThis.fetch = Object.assign(async (input: string | URL | Request, init?: RequestInit) => {
     const method = String(input).slice(String(input).lastIndexOf("/") + 1);
@@ -63,6 +63,35 @@ describe("SlackAdapter", () => {
         facts: { workspaceId: "T9", channelId: "C123", reply: { chain: ["1710.0001"] } },
       });
     } finally { adapter.stop("trace-stop"); await api.stop(); }
+  });
+
+  it("releases failed ingress for platform redelivery", async () => {
+    const api = installSlackApi();
+    const failed = Promise.withResolvers<void>();
+    const retried = Promise.withResolvers<void>();
+    let attempts = 0;
+    const adapter = new SlackAdapter({ botToken: "xoxb", appToken: "xapp" }, {}, (event) => {
+      if (event.name === Operational.Events.Error.name) failed.resolve();
+    });
+    adapter.onMessage(async () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("inbox refused");
+      retried.resolve();
+    });
+    try {
+      const started = adapter.start("boot");
+      const socket = await bounded(api.sockets);
+      socket.send(JSON.stringify({ type: "hello" }));
+      await bounded(started);
+      const frame = JSON.stringify({ type: "events_api", envelope_id: "retry", payload: {
+        event: { type: "message", channel: "C123", channel_type: "channel", user: "U77", text: "hello", ts: "1.2" },
+      } });
+      socket.send(frame);
+      await bounded(failed.promise);
+      socket.send(frame);
+      await bounded(retried.promise);
+      expect(attempts).toBe(2);
+    } finally { adapter.stop("stop"); await api.stop(); }
   });
 
   it("reports a delivery receipt and rejects an unscoped endpoint", async () => {

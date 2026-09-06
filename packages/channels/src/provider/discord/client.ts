@@ -32,21 +32,6 @@ export class DiscordClient implements ChannelClient {
     return message.id;
   }
 
-  async sendTyping(channelId: string, traceId: string): Promise<void> {
-    await fetch(`${BASE_URL}/channels/${channelId}/typing`, {
-      method: "POST",
-      headers: { Authorization: `Bot ${this.token}` },
-    }).catch((e) =>
-      this.publish(Operational.Events.Warn, {
-        traceId,
-        time: Date.now(),
-        component: "server",
-        msg: "discord typing indicator failed",
-        context: { err: String(e) },
-      }),
-    );
-  }
-
   async createDmChannel(recipientId: string, traceId: string): Promise<string> {
     const channel = await this.api(
       "/users/@me/channels",

@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { initialize, SessionHandleStore, Storage } from "@openomni/ledger";
-import type { Gateway, Model } from "@openomni/protocol";
+import type { Model } from "@openomni/protocol";
 import { createResidentGateway } from "../src/gateway";
 import { wakeSession } from "@openomni/agent";
 import { commitMessageInbox, prepareMessage } from "../src/composition/message-session";
@@ -31,36 +31,6 @@ function openSession(prefix: string): string {
 	initialize({ dbPath: join(directory, "chat.db") });
 	// Delivery, not fixture CRUD, owns real handle materialization.
 	return crypto.randomUUID();
-}
-
-function delivery(sessionId: string, meta?: Gateway.Deliver["event"]["meta"]): Gateway.Deliver {
-	const traceId = "0af7651916cd43dd8448eb211c80319c";
-	return {
-		sessionId,
-		event: {
-			id: "inbound-resilience",
-			traceId,
-			surface: "internal",
-			userId: "owner",
-			payload: "please answer",
-			target: { kind: "resident" },
-			mode: "direct",
-			...(meta === undefined ? {} : { meta }),
-		},
-		decision: {
-			traceId,
-			time: Date.now(),
-			inboundId: "inbound-resilience",
-			surface: "internal",
-			mode: "direct",
-			stage: "surface_default",
-			outcome: "route",
-			reason: "test",
-			factsUsed: [],
-			target: "resident",
-			sessionId,
-		},
-	};
 }
 
 describe("Resident model fallback wiring", () => {

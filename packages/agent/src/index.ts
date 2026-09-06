@@ -37,6 +37,5 @@ export type {
 	SessionHandle,
 	SessionRunner,
 	SessionRunnerInput,
-	SessionRunnerResult,
 	SessionRuntime,
 } from "./session-handle";

@@ -10,7 +10,7 @@ export interface TelegramNormalizerContext {
 export class TelegramNormalizer implements InboundNormalizer<TelegramMessage> {
 	constructor(private readonly ctx: TelegramNormalizerContext) { }
 
-	normalize(message: TelegramMessage, traceId: string): Channel.InboundMessage | null {
+	normalize(message: TelegramMessage): Channel.InboundMessage | null {
 		const text = message.text;
 		if (!text) return null;
 		if (!message.from) return null;

@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Sink } from "@openomni/llm";
 import { initialize, Storage } from "@openomni/ledger";
-import type { Gateway } from "@openomni/protocol";
 import { residentRunner as createResident } from "./helpers/resident-runner";
 import { assistantMessage } from "./helpers/assistant-message";
 
@@ -16,35 +15,6 @@ afterEach(() => {
 		rmSync(directory, { recursive: true, force: true });
 	}
 });
-
-function delivery(sessionId: string, payload: string, id: string): Gateway.Deliver {
-	const traceId = "0af7651916cd43dd8448eb211c80319c";
-	return {
-		sessionId,
-		event: {
-			id,
-			traceId,
-			surface: "internal",
-			userId: "owner",
-			payload,
-			target: { kind: "resident" },
-			mode: "direct",
-		},
-		decision: {
-			traceId,
-			time: Date.now(),
-			inboundId: id,
-			surface: "internal",
-			mode: "direct",
-			stage: "surface_default",
-			outcome: "route",
-			reason: "test",
-			factsUsed: [],
-			target: "resident",
-			sessionId,
-		},
-	};
-}
 
 describe("Resident compaction", () => {
 	it("replaces oversized hydrated history before continuing the Resident run", async () => {

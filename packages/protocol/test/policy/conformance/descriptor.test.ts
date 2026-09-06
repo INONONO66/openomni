@@ -85,9 +85,9 @@ const descriptorFixtures: Policy.Resource.Descriptor[] = [
     },
   }),
   Policy.Resource.Descriptor.parse({
-    id: "tool:agent:delegate",
+    id: "tool:agent:sendMessage",
     kind: "tool",
-    labels: ["source:agent", "delegation.worker"],
+    labels: ["source:agent", "message.session"],
     capabilities: ["worker.spawn"],
     effects: ["session.create"],
     source: { type: "agent", agentId: "main-persona", agentProfileRef: "agent-profile:main" },

@@ -1,4 +1,4 @@
-import { Bus, wakeSession } from "@openomni/agent";
+import { wakeSession } from "@openomni/agent";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { resolveChannelGrant } from "@openomni/channels";
 import type { RunInput } from "@openomni/llm";
@@ -140,7 +140,7 @@ describe("channel grant registration", () => {
 
 describe("authenticated gateway ingress", () => {
 	test("rejects invalid message types at the boundary without committing inbox state", async () => {
-		const resident = testResident(async () => { throw new Error("model must not run"); });
+		testResident(async () => { throw new Error("model must not run"); });
 		expect(() => Gateway.IngressFacts.parse({ eventId: "invalid", surface: "ws", render: "text" })).toThrow();
 		expect(SessionHandleStore.listRows()).toHaveLength(1);
 		expect(SessionHandleStore.inboxRows("gateway-ingress")).toEqual([]);
@@ -159,7 +159,7 @@ describe("authenticated gateway ingress", () => {
 	test("a normal prompt restores tool driving after an evidence-only turn", async () => {
 		const outputs: string[] = [];
 		const resident = testResident(async (input, sink) => {
-			const result = requestToolStep(input, sink, { id: "call:" + outputs.length, tool: "missing", input: {} });
+			const result = requestToolStep(input, sink, { id: `call:${outputs.length}`, tool: "missing", input: {} });
 			if (result === undefined) return { type: "stop" };
 			outputs.push(result.output ?? "");
 			sink.onMessage(assistantMessage(input, { id: crypto.randomUUID(), text: "noted" }));

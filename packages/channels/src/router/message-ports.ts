@@ -8,7 +8,7 @@ export type ChannelDeliveryRoute = (
 	idempotencyKey: string,
 ) => Promise<DeliveryReceipt>;
 
-export interface MessageExecution {
+interface MessageExecution {
 	readonly kind: "message";
 	readonly op: string;
 	readonly intent: PlainValue;
@@ -16,12 +16,12 @@ export interface MessageExecution {
 	readonly message: NonNullable<PolicyEvaluationInput["message"]>;
 }
 
-export type MessageExecutionResult = { readonly matchedRuleIds: readonly string[] } & (
+type MessageExecutionResult = { readonly matchedRuleIds: readonly string[] } & (
 	| { readonly terminal: "blocked_pre"; readonly reason: string }
 	| { readonly terminal: "executed"; readonly value: PlainValue }
 	| { readonly terminal: "blocked_post"; readonly reason: string });
 
-export interface PreparedMessage {
+interface PreparedMessage {
 	readonly target: string;
 	readonly messageId?: string;
 	readonly limits?: { readonly fanout: number; readonly depth: number };

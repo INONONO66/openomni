@@ -6,7 +6,7 @@ import {
 } from "@openomni/agent";
 import { initialize, SessionHandleStore } from "@openomni/ledger";
 import { compilePolicySnapshot } from "@openomni/policy";
-import { Gateway, LedgerAction, type LedgerSession } from "@openomni/protocol";
+import { type Gateway, LedgerAction, type LedgerSession } from "@openomni/protocol";
 import { createResidentGateway, type OutboundMessaging } from "../../src/gateway";
 import { commitMessageInbox, messageMaterialization, prepareMessage } from "../../src/composition/message-session";
 import { seedKernelPolicyRows } from "../../src/policy-seed";

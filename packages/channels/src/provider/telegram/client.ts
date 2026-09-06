@@ -69,21 +69,6 @@ export class TelegramClient implements ChannelClient {
     return message.message_id === undefined ? undefined : String(message.message_id);
   }
 
-  async sendTyping(channelId: string, traceId: string): Promise<void> {
-    await this.api("sendChatAction", traceId, z.boolean(), {
-      chat_id: channelId,
-      action: "typing",
-    }).catch((e) =>
-      this.publish(Operational.Events.Warn, {
-        traceId,
-        time: Date.now(),
-        component: "server",
-        msg: "telegram typing indicator failed",
-        context: { err: String(e) },
-      }),
-    );
-  }
-
   async getMe(traceId: string): Promise<TelegramUser> {
     return this.api("getMe", traceId, TelegramUserSchema);
   }

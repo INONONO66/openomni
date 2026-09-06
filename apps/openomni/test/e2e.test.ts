@@ -150,7 +150,7 @@ describe("OpenOmni Resident WebSocket", () => {
     const db = new Database(config.dbPath, { readonly: true });
     try {
       const refusal = await upgradeResponse(app.port, `/ws?token=${WS_TOKEN}`);
-      const before = db.query("SELECT COUNT(*) AS count FROM session").get();
+      const before = db.query("SELECT COUNT(*) AS count FROM session WHERE id != 'gateway-ingress'").get();
       console.log(
         "967-U1 HTTP",
         JSON.stringify({
@@ -164,17 +164,17 @@ describe("OpenOmni Resident WebSocket", () => {
       expect(refusal.status).toBe(401);
       expect(providerCalls).toBe(0);
       expect(before).toEqual({ count: 0 });
-      expect(db.query("SELECT COUNT(*) AS count FROM action").get()).toEqual({ count: 0 });
+      expect(db.query("SELECT COUNT(*) AS count FROM action WHERE session_id != 'gateway-ingress'").get()).toEqual({ count: 0 });
 
       const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", WS_TOKEN]);
       expect(ws.protocol).toBe("auth");
       const response = nextMessage(ws);
       ws.send(JSON.stringify({ type: "message", text: "967-U1 input" }));
       const reply = JSON.parse(String((await response).data));
-      expect(reply).toEqual({ type: "response", text: REPLY });
+      expect(reply).toMatchObject({ type: "message", text: REPLY });
       expect(providerCalls).toBe(1);
-      expect(SessionHandleStore.listRows()).toHaveLength(1);
-      const session = SessionHandleStore.listRows()[0];
+      expect(SessionHandleStore.listRows().filter((row) => row.id !== "gateway-ingress")).toHaveLength(1);
+      const session = SessionHandleStore.listRows().filter((row) => row.id !== "gateway-ingress")[0];
       if (session === undefined) throw new Error("resident session was not persisted");
       const snapshot = SessionHandleStore.getSnapshot(session.id);
       expect(snapshot).toMatchObject({ role: "resident", state: "idle" });
@@ -182,7 +182,7 @@ describe("OpenOmni Resident WebSocket", () => {
         { role: "user", text: "967-U1 input" },
         { role: "assistant", text: REPLY },
       ]);
-      const sessions = db.query("SELECT id, role, state, revision FROM session").all();
+      const sessions = db.query("SELECT id, role, state, revision FROM session WHERE id != 'gateway-ingress'").all();
       const actions = db
         .query("SELECT session_id, kind, ordinal FROM action ORDER BY ordinal")
         .all();
@@ -258,9 +258,9 @@ describe("OpenOmni Resident WebSocket", () => {
     ws.send(JSON.stringify({ type: "message", text: "Help me judge this." }));
 
     const event = await reply;
-    expect(JSON.parse(String(event.data))).toEqual({ type: "response", text: REPLY });
+    expect(JSON.parse(String(event.data))).toMatchObject({ type: "message", text: REPLY });
 
-    const sessions = SessionHandleStore.listRows();
+    const sessions = SessionHandleStore.listRows().filter((row) => row.id !== "gateway-ingress");
     expect(sessions).toHaveLength(1);
     const session = sessions[0];
     if (session === undefined) throw new Error("Expected one persisted session");
@@ -329,7 +329,7 @@ describe("OpenOmni Resident WebSocket", () => {
     await expect(
       suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "wrong-token"]),
     ).rejects.toThrow("WebSocket failed before opening");
-    expect(SessionHandleStore.listRows()).toHaveLength(0);
+    expect(SessionHandleStore.listRows().filter((row) => row.id !== "gateway-ingress")).toHaveLength(0);
   });
 
   it("rolls a failed boot back and leaves the next boot clean", async () => {

@@ -188,7 +188,7 @@ machines or filesystem tools.
 
 ## 4. Turn termination, not task satisfaction
 
-The old task-ticket, executor-kind, completion-admission and evidence-gate contracts were withdrawn by #940. There is no replacement ticket/evidence store or completion authority. The kernel records that a turn terminated; the model reading the returned letter judges satisfaction. Generic provider attempts remain children of model actions, not a revived task domain. The live delegation/gateway surfaces and unmerged messaging target are distinguished in [Implementation Status](implementation-status.md).
+The old task-ticket, executor-kind, completion-admission and evidence-gate contracts were withdrawn by #940. There is no replacement ticket/evidence store or completion authority. The kernel records that a turn terminated; the model reading the returned letter judges satisfaction. Generic provider attempts remain children of model actions, not a revived task domain. The gateway/session-inbox boundary and retained Wait/approval ownership are distinguished in [Implementation Status](implementation-status.md).
 
 ### Session L3 execution contract (#937)
 
@@ -196,7 +196,7 @@ The session invokes stateless runAgent; every model step drains inbox before LLM
 
 One logical `llm` owns ordered attempt children. Only the executor retries and re-admits policy/context; the provider processor performs one attempt. Visible assistant text or a tool call makes a later provider failure terminal. Failed billing remains in attempt evidence and additive usage, while failed partial messages never enter active history. Model/auth resolution, provider classification, retry-after and backoff belong to `@openomni/llm`; cross-provider fallback resolves its own credentials.
 
-Stop policy is ordered: abort/deadline/budget, terminal text and completion gate, exact-output repetition, toolless stall, blocked recurrence, live wait, continuation. Thresholds come from captured compiled obligations, not role-specific constants. Progress is committed effect/state change, not tool invocation. The neutral openIntent reader and pending executor approvals prevent premature completion. Only a still-armed action created in the current turn permits `waiting/live_wait`; waiting is not approval suspension or a successful result. Generic channel Wait remains a separate lifecycle boundary.
+Stop policy is ordered: abort/deadline/budget, terminal text, exact-output repetition, toolless stall, blocked recurrence, live wait, continuation. Thresholds come from captured compiled obligations, not role-specific constants. Progress is committed effect/state change, not tool invocation. The neutral openIntent reader and pending executor approvals prevent premature completion. Only a still-armed action created in the current turn permits `waiting/live_wait`; waiting is not approval suspension or a successful result. Generic channel Wait remains a separate lifecycle boundary.
 
 Full assistant/tool snapshots and compaction projections are append-only action results. Terminal resume gets new IDs/latest generation; crash-open recovery uses existing IDs/captured generation. A missing or changed captured executable catalog fails closed rather than substituting the newest definition. No retired task domain, public fact callback, legacy session API or physical history migration is introduced.
 

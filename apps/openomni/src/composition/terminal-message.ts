@@ -42,6 +42,7 @@ export function commitTerminalMessage(
 		});
 		const context: TerminalContext = { input, executor };
 		return terminalMessage.run(context, async () => {
+			const failures: Error[] = [];
 			try {
 				const origin = Inbox.ReplyOrigin.parse(reply.origin.value);
 				const admitted = await ingest({ kind: "session", id: commit.sessionId }, {
@@ -51,17 +52,25 @@ export function commitTerminalMessage(
 				if (admitted.status === "blocked_pre" || context.result === undefined) {
 					throw new Error("terminal gateway admission refused");
 				}
-				return context.result;
-			} finally {
-				if (commit.releaseLease) {
+			} catch (error) {
+				failures.push(error instanceof Error ? error : new Error(String(error)));
+			}
+			if (commit.releaseLease) {
+				try {
 					const row = SessionHandleStore.row(commit.sessionId);
 					const released = SessionHandleStore.commit({
 						...commit, now: clock(), expectedRevision: row.revision,
 						actions: [], consumeInboxIds: [], state: row.state, releaseLease: true,
 					});
 					if (!released.ok) throw new Error(`terminal message lease release ${released.reason}`);
+				} catch (error) {
+					failures.push(error instanceof Error ? error : new Error(String(error)));
 				}
 			}
+			if (failures.length === 1) throw failures[0];
+			if (failures.length > 1) throw new AggregateError(failures, "terminal delivery and lease release failed");
+			if (context.result === undefined) throw new Error("terminal message receipt missing");
+			return context.result;
 		});
 	};
 }

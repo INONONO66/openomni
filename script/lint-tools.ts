@@ -143,12 +143,9 @@ export interface ToolSurface {
   readonly inputSchema: Record<string, unknown>;
 }
 
-const TOOL_NAME_PATTERN = /^[a-z][a-z0-9]*(?:[._][a-z][a-z0-9]*){0,2}$/;
+// #946/#988 fixes the public sendMessage spelling; all other names retain the catalog grammar.
+const TOOL_NAME_PATTERN = /^(?:sendMessage|[a-z][a-z0-9]*(?:[._][a-z][a-z0-9]*){0,2})$/;
 const MAX_PUBLIC_FIELDS = 5;
-// delegate carries an addressing XOR (scope | actorId) that must be advertised
-// as one flat object: Anthropic-wire providers reject a root-level oneOf
-// input_schema, so the pair costs one extra top-level field.
-const FIELD_ALLOWANCE: Readonly<Record<string, number>> = { delegate: 6 };
 
 function localReference(
   root: Record<string, unknown>,
@@ -237,13 +234,13 @@ export function lintToolSurface(tool: ToolSurface): ToolLintFailure[] {
   if (!TOOL_NAME_PATTERN.test(tool.name)) {
     failures.push({
       rule: "tool-name",
-      message: "name must be snake_case (dot namespacing allowed), ≤3 segments",
+      message: "name must be sendMessage or snake_case (dot namespacing allowed), ≤3 segments",
     });
   }
   if (!tool.description || tool.description.trim().length === 0) {
     failures.push({ rule: "tool-description", message: "description is required" });
   }
-  const maxFields = FIELD_ALLOWANCE[tool.name] ?? MAX_PUBLIC_FIELDS;
+  const maxFields = MAX_PUBLIC_FIELDS;
   if (topLevelFieldCount(tool.inputSchema) > maxFields) {
     failures.push({
       rule: "tool-max-fields",

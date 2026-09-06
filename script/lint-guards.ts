@@ -31,7 +31,6 @@ const excludedSuffixes = [".d.ts", ".generated.ts", ".gen.ts"];
 // (@openomni/policy, the engine's owner since #498 W1).
 const canonicalPolicyEvaluator = new Set(["packages/policy/src/permission-evaluate.ts"]);
 const canonicalPolicyRequiredFiles = new Set([
-  "packages/channels/src/router/authority.ts",
   "packages/channels/src/authn/decision.ts",
 ]);
 
@@ -79,8 +78,6 @@ const runReasonCodeComparisonPattern =
 const policyPointsWithoutProductionRegistration = new Set([
   "connection.llm.pre",
   "connection.llm.post",
-  "delegation.worker.pre",
-  "delegation.worker.post",
   "dispatch.action.pre",
   "prompt.context.pre",
   "run.completion.pre",

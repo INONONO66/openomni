@@ -25,9 +25,9 @@ export function externalMessage(
 	const { chain: _chain, ...reply } = facts.reply ?? { chain: [] };
 	if (sender.surface === "ws" && ActorRegistry.resolveEndpoint("ws", sender.externalId) === undefined
 		&& resolveChannelGrant({ surface: "ws", sender: sender.externalId })?.grant.defaultTier === "owner") {
-		const actorId = "ws:owner:" + sender.externalId;
+		const actorId = `ws:owner:${sender.externalId}`;
 		ActorRegistry.registerIdentity({ id: actorId, kind: "human", trustTier: "owner" });
-		ActorRegistry.registerEndpoint({ id: "ws:" + sender.externalId, actorId, channel: "ws", externalId: sender.externalId });
+		ActorRegistry.registerEndpoint({ id: `ws:${sender.externalId}`, actorId, channel: "ws", externalId: sender.externalId });
 	}
 	const event = resolveIngressActor({
 		id: [facts.surface, facts.workspaceId ?? "", facts.channelId, facts.eventId].map(encodeURIComponent).join(":"),

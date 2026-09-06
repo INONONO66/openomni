@@ -112,8 +112,6 @@ function registerDriverActors(): void {
 	for (const responder of Responders) registerAgent(responder, []);
 }
 
-// Frozen worker_run_state archive statuses (#510 D2b / #498 K1) — counted at
-// the adapter layer; the store surface is session-internal.
 /** Session census: messaging must never allocate a session. */
 function allocationCount(): number {
 	return SessionHandleStore.listRows().length;

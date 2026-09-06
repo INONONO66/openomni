@@ -23,7 +23,7 @@ export const ProcessSessionRequest = z.object({
 export type ProcessSessionRequest = z.infer<typeof ProcessSessionRequest>;
 export const PROCESS_SESSION_NO_REQUEST_EXIT = 78;
 
-export async function serveProcessSession(
+async function serveProcessSession(
 	request: ProcessSessionRequest,
 	committed: (ids: readonly string[]) => void,
 ): Promise<void> {

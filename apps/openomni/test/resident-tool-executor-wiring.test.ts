@@ -8,7 +8,6 @@ import type { RunInput, Sink } from "@openomni/llm";
 import {
   Tool,
   type BusEvent,
-  type Gateway,
   type ObservationSink,
   type PlainValue,
 } from "@openomni/protocol";
@@ -25,35 +24,6 @@ afterEach(() => {
 function field(value: PlainValue, name: string): PlainValue | undefined {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return undefined;
   return value[name];
-}
-
-function delivery(sessionId: string): Gateway.Deliver {
-  const traceId = "1".padStart(32, "0");
-  return {
-    sessionId,
-    event: {
-      id: "inbound-tool-wiring",
-      traceId,
-      surface: "internal",
-      userId: "owner",
-      payload: "run the tool",
-      target: { kind: "resident" },
-      mode: "direct",
-    },
-    decision: {
-      traceId,
-      time: 1,
-      inboundId: "inbound-tool-wiring",
-      surface: "internal",
-      mode: "direct",
-      stage: "surface_default",
-      outcome: "route",
-      reason: "test",
-      factsUsed: [],
-      target: "resident",
-      sessionId,
-    },
-  };
 }
 
 test("a resident tool call is executed and observed through the durable executor", async () => {

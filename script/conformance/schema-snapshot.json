@@ -57,6 +57,14 @@
   "Actor.ProvisionalMintPolicy": ["max", "windowMs"],
   "Actor.ResolvedEndpoint": ["endpoint", "identity"],
   "Alarm.Arm": ["fireAt", "id", "kind", "sessionId", "spec"],
+  "Alarm.MessageDeadline": [
+    "createdAt",
+    "generation",
+    "kind",
+    "messageId",
+    "replyTo",
+    "sourceActionId"
+  ],
   "Alarm.Row": [
     "createdAt",
     "fireAt",
@@ -185,92 +193,6 @@
     "traceId",
     "turnId"
   ],
-  "Delegation.Handle": [
-    "address",
-    "deadline",
-    "delegationId",
-    "operation",
-    "parentDelegationId",
-    "rootDelegationId",
-    "transport",
-    "waitId"
-  ],
-  "Delegation.Origin": [
-    "depth",
-    "parentDelegationId",
-    "role",
-    "rootDelegationId",
-    "sessionId"
-  ],
-  "Delegation.Record": [
-    "address",
-    "createdAt",
-    "deadline",
-    "delegationId",
-    "instruction",
-    "operation",
-    "origin",
-    "parentDelegationId",
-    "rootDelegationId",
-    "settled",
-    "settledAt",
-    "status",
-    "transport",
-    "waitId",
-    "wokenAt"
-  ],
-  "Delegation.Request": [
-    "acceptanceCriteria",
-    "address",
-    "deadline",
-    "operation",
-    "payload"
-  ],
-  "Delegation.Settled#cancelled": [
-    "at",
-    "delegationId",
-    "reason",
-    "status",
-    "workerRunId"
-  ],
-  "Delegation.Settled#completed": [
-    "at",
-    "delegationId",
-    "output",
-    "status",
-    "usage",
-    "workerRunId"
-  ],
-  "Delegation.Settled#delivery_failed": [
-    "at",
-    "delegationId",
-    "reason",
-    "status",
-    "workerRunId"
-  ],
-  "Delegation.Settled#failed": [
-    "at",
-    "delegationId",
-    "error",
-    "status",
-    "workerRunId"
-  ],
-  "Delegation.Settled#interrupted": [
-    "at",
-    "delegationId",
-    "status",
-    "workerRunId"
-  ],
-  "Delegation.Settled#no_response": [
-    "at",
-    "deadline",
-    "delegationId",
-    "status",
-    "workerRunId"
-  ],
-  "Delegation.Settled#sent": ["at", "delegationId", "status"],
-  "Delegation.WorkerAddress#actor": ["actorId", "kind"],
-  "Delegation.WorkerAddress#core": ["kind", "scope"],
   "Gateway.ActorContext": [
     "actorId",
     "inboundTreatment",
@@ -450,11 +372,30 @@
   "Inbox.Commit": [
     "content",
     "createdAt",
+    "createSession",
     "id",
     "kind",
+    "limits",
     "origin",
     "parentActionId",
+    "sender",
     "sessionId"
+  ],
+  "Inbox.MessageOrigin": [
+    "deadline",
+    "kind",
+    "messageId",
+    "replyTo",
+    "senderSessionId",
+    "sourceActionId"
+  ],
+  "Inbox.ReplyOrigin": [
+    "childSessionId",
+    "kind",
+    "messageId",
+    "replyTo",
+    "sourceActionId",
+    "terminalKind"
   ],
   "Inbox.Row": [
     "consumedAt",
@@ -608,6 +549,7 @@
   "LedgerSession.Commit": [
     "actions",
     "consumeInboxIds",
+    "deliveries",
     "expectedRevision",
     "fence",
     "generation",
@@ -912,8 +854,6 @@
     "verdict"
   ],
   "Policy.PolicyEffect#audit.annotate": ["annotation", "severity", "type"],
-  "Policy.PolicyEffect#delegation.require_approval": ["reason", "type"],
-  "Policy.PolicyEffect#delegation.set_constraints": ["constraints", "type"],
   "Policy.PolicyEffect#model.override": ["id", "provider", "type"],
   "Policy.PolicyEffect#prompt.append_context": ["context", "type"],
   "Policy.PolicyEffect#prompt.inject_message": ["message", "role", "type"],

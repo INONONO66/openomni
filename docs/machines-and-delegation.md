@@ -171,54 +171,8 @@ A machine remains WHERE execution happens, not a messaging target. Actor deliver
 The machine axis of `@openomni/placement` folds candidate machines against
 `requires`; the model axis (#752) is unchanged.
 
-## 5. Delivery order
+## 5. Ownership boundaries
 
-1. **Contracts** (this document's schemas) — landed first.
-2. `packages/machines` daemon + localhost attach (driver band).
-3. `apps/openomni` slice 1: pure Resident chat loop (no memory, no delegation).
-4. **Agent-loop placement axis + tool catalog `requires` resolution — landed.**
-5. Code mode, in two slices because the substrate and the batching payoff are
-   independently verifiable:
-   - **5a — kernel substrate: landed.** A machine offering `kernel.py` runs
-     code cells with interpreter state persisting across cells, each cell
-     under a required deadline, behind the effective-capability gate. The
-     injected codemode runner keeps one interpreter PER TENANT (`CellRequest.tenant`, the
-     asking session): a Python process offers no in-process isolation, so
-     the process boundary is what keeps one session's state — and anything
-     a cell leaves running — out of another session's cells.
-   - **5b — the `tool.<name>()` bridge: landed.** A running cell calls back to
-     the host's tool port over the same attachment (`machine.call_tool`), so
-     one cell replaces N tool round trips. The host does not re-implement the
-     placement gate: the composition root injects the same placement-gated
-     executor the model-facing catalog uses, so a tool the fold refused cannot
-     be reached by spelling its name in code. A tool call is served only on an
-     attached connection and only for a cell the host itself dispatched and is
-     still awaiting. The `eval` tool spec that offers code mode to the
-     model belongs with the app that composes a catalog, and lands with it.
-6. ~~`DelegationPort` extraction from the agent loop.~~ **Nothing to extract.**
-   Re-checked against the tree at stage 6: `packages/agent/src` contains no
-   spawn, subagent, or delegation code at all — the loop already reaches
-   delegation the only way it reaches anything, as a tool in its catalog. The
-   legacy semantics belonged to the removed product tree, which the final app
-   replaces rather than extracts from. This step is struck rather than
-   deleted so the correction stays visible.
-7. DelegationKernel with the `inline` transport driver **(landed)**, then
-   `process` **(landed)**, then the `channel` driver on Wait resumption
-   **(landed)**. The `machine` driver was struck per the WHERE-never-WHO
-   fence above (#786) — machine execution ships as tool placement, not as a
-   delegation wire. The kernel lives in `apps/openomni/src/delegation/` because
-   who may commission whom is product meaning; admission owns the depth rule
-   and the address→transport resolution, and drivers own only the wire.
+The historical rollout sequence is retained in git history. Messaging now uses session inboxes and the shared executor, including from code-mode cells. Native and process child sessions use the same terminal-to-parent contract. Actor sends retain the channel grant/egress/Wait correlation kernel.
 
-   Ordered ahead of the `eval` wiring in step 5 on purpose: code mode earns
-   its keep by batching tool calls, and until the app had a real tool to
-   batch, wiring `eval` would have shipped an engine with no consumer.
-
-   The kernel's lifecycle is now async-first and durable (§3 "Async
-   lifecycle"): record-before-act into the ledger delegation store, the
-   Handle returned at admission for process/channel work, one kernel-owned
-   settlement fold, owner-session wakes, and a tested restart matrix. Native
-   worker execution enters the shared fenced session handle as a parent-linked
-   role=`worker` row; cross-session mail and removal of the delegation lifecycle
-   remain assigned to I06.
-8. Memory, last, referencing existing implementations.
+#947 owns continuous live due-alarm dispatch and monitoring. #969 owns unification of the retained generic Wait and approval lifecycles. Neither introduces a second messaging or execution authority in this cutover.

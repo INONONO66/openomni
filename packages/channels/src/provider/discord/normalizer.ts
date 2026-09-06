@@ -1,9 +1,9 @@
-import { Channel } from "@openomni/protocol";
+import type { Channel } from "@openomni/protocol";
 import type { InboundNormalizer } from "../../types";
 import type { DiscordMessage } from "./types";
 
 export class DiscordNormalizer implements InboundNormalizer<DiscordMessage> {
-	normalize(message: DiscordMessage, traceId: string): Channel.InboundMessage | null {
+	normalize(message: DiscordMessage): Channel.InboundMessage | null {
 		if (message.author.bot) return null;
 		if (!message.content) return null;
 

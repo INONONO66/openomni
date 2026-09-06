@@ -329,13 +329,13 @@ export async function startOpenOmni(options: StartOptions = {}) {
 			deliveryRoutes,
 			grants: () => SessionHandleStore.listRows().filter((row) => row.role === "resident")
 				.flatMap((row) => actors.map((actor) => ({
-					id: row.id + "->" + actor.actorId, senderId: row.id,
+					id: `${row.id}->${actor.actorId}`, senderId: row.id,
 					targetActorId: actor.actorId, operations: ["awaited" as const, "fire_and_forget" as const],
 				}))),
 			budgets: () => config.socialBudgets ?? [],
 			replyGrantRules: () => SessionHandleStore.listRows().filter((row) => row.role === "resident")
 				.flatMap((row) => [...deliveryRoutes.keys()].map((surface) => ({
-					id: "reply:" + row.id + ":" + surface, senderId: row.id, surface,
+					id: `reply:${row.id}:${surface}`, senderId: row.id, surface,
 					operations: ["fire_and_forget" as const, "awaited" as const],
 					instanceTtlMs: 86_400_000, maxLiveInstances: 64, createdBy: "resident",
 				}))),

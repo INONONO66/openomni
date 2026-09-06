@@ -107,10 +107,10 @@ export class SlackAdapter implements Channel.Surface {
 		if (acquisition.duplicate) return;
 		const dedupeToken = acquisition.token;
 
-		const inbound = normalizer.normalize(event, traceId);
+		const inbound = normalizer.normalize(event);
 		if (!inbound) return;
 
-		this.handleIncoming(inbound, event, traceId).catch((err) => {
+		this.handleIncoming(inbound).catch((err) => {
 			this.dedupe.forget(`${event.channel}:${event.ts}`, dedupeToken);
 			this.publish(Operational.Events.Error, {
 				traceId,
@@ -124,8 +124,6 @@ export class SlackAdapter implements Channel.Surface {
 
 	private async handleIncoming(
 		inbound: Channel.InboundMessage,
-		event: SlackMessageEvent,
-		traceId: string,
 	): Promise<void> {
 		await (this.handler as Channel.MessageHandler)(inbound);
 	}

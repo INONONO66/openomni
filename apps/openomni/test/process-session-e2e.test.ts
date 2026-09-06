@@ -51,7 +51,7 @@ test("startOpenOmni runs a process session and drains its atomic parent reply wi
 		config: suite.config("process-message-", {
 			wsToken: "token", model: {
 				provider: "anthropic", id: "claude-opus-4-5", apiKey: "process-key",
-				baseUrl: "http://127.0.0.1:" + provider.port + "/v1",
+				baseUrl: `http://127.0.0.1:${provider.port}/v1`,
 			}
 		}),
 		llm: {

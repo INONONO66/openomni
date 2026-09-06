@@ -1,4 +1,4 @@
-import { Channel } from "@openomni/protocol";
+import type { Channel } from "@openomni/protocol";
 import type { InboundNormalizer } from "../../types";
 import type { SlackMessageEvent } from "./types";
 
@@ -11,7 +11,7 @@ export interface SlackNormalizerContext {
 export class SlackNormalizer implements InboundNormalizer<SlackMessageEvent> {
 	constructor(private readonly ctx: SlackNormalizerContext) { }
 
-	normalize(event: SlackMessageEvent, traceId: string): Channel.InboundMessage | null {
+	normalize(event: SlackMessageEvent): Channel.InboundMessage | null {
 		// Bots (including this one) and subtyped frames (edits, joins, bot posts)
 		// are not user messages.
 		if (event.bot_id !== undefined || event.subtype !== undefined) return null;

@@ -10,7 +10,11 @@ const suite = residentSuite();
 
 test.each(["?actor=owner", ""])("startOpenOmni delivers the final response through an actor send for connection %s", async (query) => {
 	const app = await suite.boot({
-		config: suite.config("message-e2e-", { wsToken: "token" }),
+		config: suite.config("message-e2e-", {
+			wsToken: "token",
+			actors: [{ actorId: "known-owner", externalId: "owner", kind: "human", trustTier: "owner", displayName: "Owner" }],
+			socialBudgets: [{ id: "owner-budget", targetActorId: "known-owner", maxPerWindow: 10, windowMs: 1000, cooldownMs: 0 }],
+		}),
 		llm: {
 			resolveModel: fakeProviderModel,
 			run: async (input, sink) => {

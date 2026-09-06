@@ -78,8 +78,8 @@ const fullEnrollment = (): Machine.Enrollment => ({
 
 /**
  * The payoff, end to end and with a real daemon: one cell makes three
- * delegate calls that would otherwise be three turns, and the answers come
- * back inside the cell rather than to the model.
+ * sendMessage calls and gets three child handles inside the cell rather
+ * than joining the children's completion in the model turn.
  */
 test("app root runs machine read write shell and code through one run_code cell", async () => {
   const directory = mkdtempSync(join(tmpdir(), "om-app-machine-"));

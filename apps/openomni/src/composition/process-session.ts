@@ -15,7 +15,7 @@ export function createProcessSessionTransport(options: {
 			const existing = children.get(sessionId);
 			if (existing !== undefined) return existing.done;
 			const child = Bun.spawn([...options.command], { stdin: "pipe", stdout: "pipe", stderr: "inherit" });
-			child.stdin.write(JSON.stringify({ ...options.worker, sessionId }) + "\n");
+			child.stdin.write(`${JSON.stringify({ ...options.worker, sessionId })}\n`);
 			child.stdin.end();
 			const done = (async () => {
 				const reader = child.stdout.getReader();

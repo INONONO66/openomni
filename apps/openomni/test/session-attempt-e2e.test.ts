@@ -97,7 +97,7 @@ for (const visible of ["none", "text", "tool"] as const) {
     const reply = nextMessage(socket);
     socket.send(JSON.stringify({ type: "message", text: "attempt" }));
     await reply;
-    const sessionId = SessionHandleStore.listRows()[0]?.id;
+    const sessionId = SessionHandleStore.listRows().filter((row) => row.id !== "gateway-ingress")[0]?.id;
     if (sessionId === undefined) throw new Error("missing session");
     const db = new Database(config.dbPath, { readonly: true });
     try {
@@ -236,7 +236,7 @@ test("real cross-provider fallback sends only the fallback's stored credential",
     "Bearer fallback-key",
   ]);
   expect(authorization[1]?.path).toBe("/v1/responses");
-  const row = SessionHandleStore.listRows()[0];
+  const row = SessionHandleStore.listRows().filter((row) => row.id !== "gateway-ingress")[0];
   if (row === undefined) throw new Error("missing fallback session");
   expect(SessionHandleStore.getSnapshot(row.id).turns[0]?.terminal?.kind).toBe("result");
   expect(SessionHandleStore.getSnapshot(row.id).turns[0]?.messages.at(-1)?.text).toBe(

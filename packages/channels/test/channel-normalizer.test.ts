@@ -13,7 +13,6 @@ describe("channel normalizers", () => {
 				content: "tracking number",
 				message_reference: { message_id: "discord-out-1" },
 			},
-			"trace-test",
 		);
 
 		expect(message).toMatchObject({
@@ -48,7 +47,6 @@ describe("channel normalizers", () => {
 					text: "please report",
 				},
 			},
-			"trace-test",
 		);
 
 		expect(message).toMatchObject({

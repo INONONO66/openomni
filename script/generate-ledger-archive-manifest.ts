@@ -18,7 +18,7 @@ export function buildLedgerArchiveManifest(db: Database, generatedAt = Date.now(
   const sourceSchemaVersion = migrations.at(-1)?.name;
   if (sourceSchemaVersion === undefined) throw new U967Error("unsupported_upgrade");
   const tables = archiveTableEntries(db, sourceSchemaVersion);
-  const projection = tables.some((table) => table.table === "wait") && tables.some((table) => table.table === "delegation")
+  const projection = tables.some((table) => table.table === "wait")
     ? inspect967Projections(db, generatedAt) : { candidates: [], blocked: ["unsupported_upgrade"] };
   return { manifestVersion: 2 as const, generatedAt, migrations, schemaHash: canonicalDigest(sqliteSchema(db)), tables, ...projection };
 }

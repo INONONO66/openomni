@@ -20,7 +20,6 @@ describe("provider ingress facts", () => {
 					text: "please report",
 				},
 			},
-			"trace-tg",
 		);
 
 		expect(result?.facts).toMatchObject({
@@ -40,7 +39,6 @@ describe("provider ingress facts", () => {
 				author: { id: "owner-1", username: "Owner" },
 				content: "status?",
 			},
-			"trace-dm",
 		);
 
 		expect(result?.facts).toMatchObject({
@@ -62,7 +60,6 @@ describe("provider ingress facts", () => {
 				ts: "1710.0002",
 				thread_ts: "1710.0001",
 			},
-			"trace-sl",
 		);
 
 		expect(result?.facts).toMatchObject({

@@ -19,7 +19,6 @@ export class TelegramAdapter implements Channel.Surface {
 	private readonly outboundDedupe = new DedupeWindow<DeliveryReceipt>();
 	private normalizer: TelegramNormalizer | null = null;
 	private poller: TelegramPoller | null = null;
-	private botUsername = "";
 	private handler: Channel.MessageHandler | null = null;
 
 	constructor(
@@ -40,7 +39,6 @@ export class TelegramAdapter implements Channel.Surface {
 		const me = await this.client.getMe(traceId);
 		const botId = String(me.id);
 		const botUsername = me.username ?? "";
-		this.botUsername = botUsername;
 		this.publish(Operational.Events.Info, {
 			traceId,
 			time: Date.now(),
@@ -117,7 +115,7 @@ export class TelegramAdapter implements Channel.Surface {
 		if (!message.from) return;
 
 		const chatId = String(message.chat.id);
-		const inbound = this.normalizer.normalize(message, traceId);
+		const inbound = this.normalizer.normalize(message);
 		if (!inbound) return;
 
 		this.publish(Operational.Events.Debug, {

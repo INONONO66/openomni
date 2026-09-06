@@ -11,10 +11,8 @@ const pointIds = [
   "connection.llm.post",
   "tool.native.pre",
   "tool.mcp.pre",
-  "delegation.worker.pre",
   "tool.native.post",
   "tool.mcp.post",
-  "delegation.worker.post",
   "run.turn.post",
   "run.completion.pre",
   "run.lifecycle.post",
@@ -48,22 +46,15 @@ const validInputs = {
   "connection.llm.post": { sessionId, runId, modelId: "model-1", responseTokens: 1 },
   "tool.native.pre": { sessionId, runId, toolId: "tool-1", toolInput: {} },
   "tool.mcp.pre": { sessionId, runId, toolId: "tool-1", mcpServerId: "mcp-1", toolInput: {} },
-  "delegation.worker.pre": {
-    sessionId,
-    runId,
-    workerRunId: "worker-1",
-    workerProfile: { name: "worker" },
-  },
   "tool.native.post": { sessionId, runId, toolId: "tool-1", toolResult },
   "tool.mcp.post": { sessionId, runId, toolId: "tool-1", mcpServerId: "mcp-1", toolResult },
-  "delegation.worker.post": { sessionId, runId, workerRunId: "worker-1", workerResult: {} },
   "run.turn.post": { sessionId, runId, turnIndex: 0, turnResult: {} },
   "run.completion.pre": { sessionId, runId, completionCandidate: {} },
   "run.lifecycle.post": { sessionId, runId, runOutcome: { type: "stop" } },
   "run.error.error": { sessionId, runId, errorCode: "error", errorPhase: "turn" },
 } satisfies Policy.PolicyPointInputMap;
 
-function isObject(value: unknown): value is object {
+function isObject<Value>(value: Value): value is Value & object {
   return typeof value === "object" && value !== null;
 }
 

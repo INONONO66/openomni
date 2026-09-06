@@ -72,7 +72,7 @@ export class WebSocketHandler {
 					msg: "websocket message received",
 					context: { surfaceKey: ws.data.surfaceKey },
 				});
-				void self.handleMessage(ws, raw, traceId);
+				void self.handleMessage(ws, raw);
 			},
 			open(ws: WsConnection) {
 				self.connections.set(ws.data.externalId, ws);
@@ -145,7 +145,7 @@ export class WebSocketHandler {
 		return new Response("WebSocket upgrade failed", { status: 400 });
 	}
 
-	private async handleMessage(ws: WsConnection, raw: string, traceId: string): Promise<void> {
+	private async handleMessage(ws: WsConnection, raw: string): Promise<void> {
 		try {
 			const parsed = JSON.parse(raw) as {
 				type?: string;

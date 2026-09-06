@@ -1,6 +1,6 @@
 # Architecture - Core Packages and One App
 
-This document maps [Core Model](core-model.md) onto the post-#792 codebase. [Implementation Status](implementation-status.md) is authoritative for what is wired; [#459](https://github.com/INONONO66/openomni/issues/459) owns delivery ordering.
+This document maps [Core Model](core-model.md) onto the post-#792 codebase. [Implementation Status](implementation-status.md) is authoritative for what is wired; [#930](https://github.com/INONONO66/openomni/issues/930) owns kernel delivery ordering.
 
 ## Communication
 
@@ -47,11 +47,7 @@ Each package depends only on the allowlist in `script/check-deps.ts`. The app co
 
 A machine is WHERE execution happens, never WHO is delegated to. `packages/machines` exposes list/get and raw fs/exec/runCode handles over protocol/IPC contracts. `packages/codemode` consumes only the structural machines port and protocol, owning machine object handles and per-tenant interpreters. The composition root injects the returned runner into a machine daemon; the brain facade does not spawn Python. Authorization occurs at kernel `tool.pre` and daemon offered/negotiated capability and export enforcement, not in an app VFS. The retained `run_code` adapter calls `cell.run` once. `openomni machine attach` supplies the production daemon composition.
 
-Delegation addresses WHO:
-
-- `inline`: same-domain volatile child, awaited in turn;
-- `process`: independent local process through the app's process driver;
-- `channel`: registered external actor through the gateway send/Wait path.
+Messages address WHO: an existing session, a new parent-linked child session, or a registered external actor. Native and process are session runner choices, not parallel message lifecycles. A send returns a handle; there is no synchronous child-join tool.
 
 The removed local worker manager is not part of the final topology. Process session execution enters `apps/openomni/src/process-entry.ts`. Native Resident and worker execution is assembled once behind `@openomni/agent` session handles; app adapters provide role-specific tools, system text, and runner configuration.
 
