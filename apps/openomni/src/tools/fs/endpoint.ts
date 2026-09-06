@@ -1,5 +1,5 @@
 import { lstat, readFile, readdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { ToolRefused } from "@openomni/agent";
 import { MachineRefusalError, type MachineHost } from "@openomni/machines";
 import { parseLocus, type Locus } from "../locus";
@@ -81,7 +81,9 @@ export function filesystem(path: string, ports: FilePorts) {
 
 export function childPath(locus: Locus, name: string): string {
   const path = join(locus.path, name);
-  return locus.kind === "local" ? path : `${locus.machine}:${path}`;
+  if (locus.kind === "machine") return `${locus.machine}:${path}`;
+  // join removes './'; restore the local escape before a child is parsed again.
+  return isAbsolute(path) ? path : `./${path}`;
 }
 
 export function text(bytes: Uint8Array): string {

@@ -264,6 +264,40 @@ test("R1 bash rejects composite machine IDs before endpoint lookup even with an 
   });
 });
 
+test.each([
+  ".",
+  "./",
+])("R2 recursive search preserves local colon escapes under %s", async (path) => {
+  await fixture(false, async ({ root, cell, model, endpointCalls }) => {
+    await writeFile(join(root, "a:b"), "needle in file\n");
+    await mkdir(join(root, "d:e"));
+    await writeFile(join(root, "d:e", "f:g"), "needle in directory\n");
+    const absolute = await cell("search", { path: root, pattern: "needle" });
+    expect(absolute.output).toEqual([
+      { path: join(root, "a:b"), line: 1, text: "needle in file" },
+      { path: join(root, "d:e", "f:g"), line: 1, text: "needle in directory" },
+    ]);
+    const before = endpointCalls();
+    const cwd = process.cwd();
+    try {
+      process.chdir(root);
+      const relative = await cell("search", { path, pattern: "needle" });
+      expect(relative.isError).toBeUndefined();
+      const expected = [
+        { path: "./a:b", line: 1, text: "needle in file" },
+        { path: "./d:e/f:g", line: 1, text: "needle in directory" },
+      ];
+      expect(relative.output).toEqual(expected);
+      expect((await model("search", { path, pattern: "needle" })).output).toBe(
+        JSON.stringify(expected),
+      );
+      expect(endpointCalls()).toEqual(before);
+    } finally {
+      process.chdir(cwd);
+    }
+  });
+});
+
 test("daemon authority refuses writes and exec independently of the catalog", async () => {
   await fixture(
     true,
