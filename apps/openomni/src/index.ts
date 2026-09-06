@@ -9,7 +9,7 @@ import {
   getSessionHandle,
   ExecutionApprovalError,
   sweepSessions,
-	wakeSession,
+  wakeSession,
 } from "@openomni/agent";
 import {
   type ChannelDeliveryRoute,
@@ -25,7 +25,7 @@ import {
   initialize,
   PersonStore,
   SecretStore,
-	SessionHandleStore,
+  SessionHandleStore,
   Storage,
 } from "@openomni/ledger";
 
@@ -71,11 +71,15 @@ interface StartOptions {
  * do. Reading attachment per turn is what makes a machine that connects
  * between two messages offerable on the second one.
  */
-function attachedTargets(
-  host: MachineHost | undefined,
-): readonly Placement.ToolTarget[] {
+function attachedTargets(host: MachineHost | undefined): readonly Placement.ToolTarget[] {
   if (host === undefined) return [HOST_TARGET];
-  const machines = host.list().map((entry): Placement.ToolTarget => ({ kind: "machine", id: entry.machineId, capabilities: entry.capabilities }));
+  const machines = host.list().map(
+    (entry): Placement.ToolTarget => ({
+      kind: "machine",
+      id: entry.machineId,
+      capabilities: entry.capabilities,
+    }),
+  );
   return [HOST_TARGET, ...machines];
 }
 
@@ -144,7 +148,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
   // rollback and shutdown are the same reverse-order release, owned by the
   // stage that acquired the thing rather than restated by hand in two places.
   const composer = createComposer();
-	const doorbell = new AsyncResource("session-inbox");
+  const doorbell = new AsyncResource("session-inbox");
   try {
     await composer.mount("journal", (ctx) => {
       initialize({ dbPath: config.dbPath, observationSink: Bus });
@@ -154,9 +158,17 @@ export async function startOpenOmni(options: StartOptions = {}) {
 
     const sessionRuntime: SessionRuntime = {
       ...options.sessionRuntime,
-			commitTerminal: commitTerminalMessage((...args) => messages.ingest(...args), options.sessionRuntime?.clock ?? Date.now),
+      commitTerminal: commitTerminalMessage(
+        (...args) => messages.ingest(...args),
+        options.sessionRuntime?.clock ?? Date.now,
+      ),
       observations: Bus,
-			onInboxCommitted: (ids) => { for (const id of ids) doorbell.runInAsyncScope(() => { void wake(id); }); },
+      onInboxCommitted: (ids) => {
+        for (const id of ids)
+          doorbell.runInAsyncScope(() => {
+            void wake(id);
+          });
+      },
       async authorizeApproval(credential, request) {
         const expected = Buffer.from(config.wsToken ?? "");
         const presented = Buffer.from(credential);
@@ -180,10 +192,10 @@ export async function startOpenOmni(options: StartOptions = {}) {
     materializePersons();
 
     let gateway: GatewayRouter | undefined;
-		const messages = {
-			ingest: (...args: Parameters<GatewayRouter["ingest"]>) => {
-				if (gateway === undefined) throw new Error("gateway is not composed");
-				return gateway.ingest(...args);
+    const messages = {
+      ingest: (...args: Parameters<GatewayRouter["ingest"]>) => {
+        if (gateway === undefined) throw new Error("gateway is not composed");
+        return gateway.ingest(...args);
       },
     };
     // The catalog's approval lane (§6): Owner-consent requests plus the two
@@ -238,7 +250,10 @@ export async function startOpenOmni(options: StartOptions = {}) {
             enrollment: (machineId) => machines.enrolled.find((e) => e.machineId === machineId),
             events: Bus,
             now: () => Date.now(),
-            callTool: (call) => cells === undefined ? Promise.resolve({ status: "failed", error: "codemode is not composed" }) : cells.callTool(call),
+            callTool: (call) =>
+              cells === undefined
+                ? Promise.resolve({ status: "failed", error: "codemode is not composed" })
+                : cells.callTool(call),
           });
     if (host !== undefined) {
       const attachedHost = host;
@@ -257,7 +272,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       await composer.mount("codemode", (ctx) => ctx.effect(() => composed.close()));
     }
 
-		const resident = createResident({
+    const resident = createResident({
       toolDefinitions: options.toolDefinitions,
       model: config.model,
       ...(config.model.fallbacks === undefined ? {} : { modelFallbacks: config.model.fallbacks }),
@@ -265,7 +280,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       ...(transport === undefined ? {} : { transport }),
       compaction: configuredCompaction(config, options.llm ?? {}),
       tools: {
-				messages,
+        messages,
         ...(cells === undefined ? {} : { cells }),
         llm: llmPort,
         approvals: approvalPort,
@@ -276,13 +291,16 @@ export async function startOpenOmni(options: StartOptions = {}) {
       ...(options.llm === undefined ? {} : { llm: options.llm }),
     });
 
-		const routingHandler: Channel.MessageHandler = async ({ sender, facts }) => {
-			await messages.ingest(sender, facts);
+    const routingHandler: Channel.MessageHandler = async ({ sender, facts }) => {
+      const admission = await messages.ingest(sender, facts);
+      if (admission.status === "blocked_pre") {
+        throw new Error(`message admission refused: ${admission.reasonCode}`);
+      }
     };
     let wsHandler: WebSocketHandler | undefined;
-		const wsRoute = async (externalId: string, body: string, idempotencyKey: string) => {
+    const wsRoute = async (externalId: string, body: string, idempotencyKey: string) => {
       if (wsHandler === undefined) throw new Error("ws delivery used before composition finished");
-			return wsHandler.push(externalId, body, idempotencyKey);
+      return wsHandler.push(externalId, body, idempotencyKey);
     };
     // Live table: channel components register and revoke their own outbound
     // routes while the gateway keeps reading it per delivery.
@@ -303,46 +321,81 @@ export async function startOpenOmni(options: StartOptions = {}) {
       traceId: newTraceId,
     });
     channelSupervisor = supervisor;
-		const processSessions = createProcessSessionTransport({
-			command: [process.execPath, processEntryPath(import.meta.url)],
-			worker: {
-				dbPath: config.dbPath, model: config.model, apiKey: config.model.apiKey,
-				...(transport === undefined ? {} : { transport })
-          },
-			committed: (ids) => { for (const id of ids) doorbell.runInAsyncScope(() => { void wake(id); }); },
-		});
-		await composer.mount("session.processes", (ctx) => ctx.effect(() => processSessions.close()));
-		const wake = (id: string) => {
-			const row = SessionHandleStore.row(id);
-			const runner = SessionHandleStore.latestGeneration(SessionHandleStore.tree(id))
-				.systemBlocks.find((block) => block.id === "runner" && block.source === "app:runner")?.content;
-			return runner === "process" ? processSessions.wake(id)
-				: wakeSession(id, resident.runnerFor(row), sessionRuntime);
-		};
-		gateway = createResidentGateway({
-			inbox: { commit: commitMessageInbox },
-			prepare: prepareMessage(resident.materialize),
-			armDeadline: SessionHandleStore.armMessageDeadline,
-			committed: (row) => { doorbell.runInAsyncScope(() => { void wake(row.sessionId); }); },
-			clock: sessionRuntime.clock,
-		}, {
-			deliveryRoutes,
-			grants: () => SessionHandleStore.listRows().filter((row) => row.role === "resident")
-				.flatMap((row) => actors.map((actor) => ({
-					id: `${row.id}->${actor.actorId}`, senderId: row.id,
-					targetActorId: actor.actorId, operations: ["awaited" as const, "fire_and_forget" as const],
-				}))),
-			budgets: () => config.socialBudgets ?? [],
-			replyGrantRules: () => SessionHandleStore.listRows().filter((row) => row.role === "resident")
-				.flatMap((row) => [...deliveryRoutes.keys()].map((surface) => ({
-					id: `reply:${row.id}:${surface}`, senderId: row.id, surface,
-					operations: ["fire_and_forget" as const, "awaited" as const],
-					instanceTtlMs: 86_400_000, maxLiveInstances: 64, createdBy: "resident",
-				}))),
-		});
-		WaitService.sweepExpired(newTraceId(), Bus.publish);
-		for (const id of SessionHandleStore.expireMessageDeadlines((sessionRuntime.clock ?? Date.now)())) await wake(id);
-		await sweepSessions(resident.runnerFor, sessionRuntime);
+    const processSessions = createProcessSessionTransport({
+      command: [process.execPath, processEntryPath(import.meta.url)],
+      worker: {
+        dbPath: config.dbPath,
+        model: config.model,
+        apiKey: config.model.apiKey,
+        ...(transport === undefined ? {} : { transport }),
+      },
+      committed: (ids) => {
+        for (const id of ids)
+          doorbell.runInAsyncScope(() => {
+            void wake(id);
+          });
+      },
+    });
+    await composer.mount("session.processes", (ctx) => ctx.effect(() => processSessions.close()));
+    const wake = (id: string) => {
+      const row = SessionHandleStore.row(id);
+      const runner = SessionHandleStore.latestGeneration(
+        SessionHandleStore.tree(id),
+      ).systemBlocks.find(
+        (block) => block.id === "runner" && block.source === "app:runner",
+      )?.content;
+      return runner === "process"
+        ? processSessions.wake(id)
+        : wakeSession(id, resident.runnerFor(row), sessionRuntime);
+    };
+    gateway = createResidentGateway(
+      {
+        inbox: { commit: commitMessageInbox },
+        prepare: prepareMessage(resident.materialize),
+        armDeadline: SessionHandleStore.armMessageDeadline,
+        committed: (row) => {
+          doorbell.runInAsyncScope(() => {
+            void wake(row.sessionId);
+          });
+        },
+        clock: sessionRuntime.clock,
+      },
+      {
+        deliveryRoutes,
+        grants: () =>
+          SessionHandleStore.listRows()
+            .filter((row) => row.role === "resident")
+            .flatMap((row) =>
+              actors.map((actor) => ({
+                id: `${row.id}->${actor.actorId}`,
+                senderId: row.id,
+                targetActorId: actor.actorId,
+                operations: ["awaited" as const, "fire_and_forget" as const],
+              })),
+            ),
+        budgets: () => config.socialBudgets ?? [],
+        replyGrantRules: () =>
+          SessionHandleStore.listRows()
+            .filter((row) => row.role === "resident")
+            .flatMap((row) =>
+              [...deliveryRoutes.keys()].map((surface) => ({
+                id: `reply:${row.id}:${surface}`,
+                senderId: row.id,
+                surface,
+                operations: ["fire_and_forget" as const, "awaited" as const],
+                instanceTtlMs: 86_400_000,
+                maxLiveInstances: 64,
+                createdBy: "resident",
+              })),
+            ),
+      },
+    );
+    WaitService.sweepExpired(newTraceId(), Bus.publish);
+    for (const id of SessionHandleStore.expireMessageDeadlines(
+      (sessionRuntime.clock ?? Date.now)(),
+    ))
+      await wake(id);
+    await sweepSessions(resident.runnerFor, sessionRuntime);
 
     await composer.mount("channels", async (ctx) => {
       ctx.effect(() => supervisor.stopAll());
@@ -375,7 +428,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
     });
     return {
       port: boundPort,
-			gateway,
+      gateway,
       sessions: { get: (id: string) => getSessionHandle(id, sessionRuntime) },
       // The boot's honest channel record: where config came from and why each
       // declared row did or did not mount (provision_status reads this later).
