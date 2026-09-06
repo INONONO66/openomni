@@ -54,3 +54,7 @@ skills-lock.json
 
 # TypeScript incremental state
 *.tsbuildinfo
+
+# Local CI plans and build-transfer archives
+/ci-plan.json
+/workspace-dist.tar

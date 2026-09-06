@@ -298,17 +298,19 @@ export function ciTestSteps(topology: readonly WorkspaceTopology[] = TOPOLOGY): 
           : "bun test --timeout 15000"),
       dir: workspace.dir,
       displayName: workspace.displayName,
+      key: workspace.key,
     }));
   const scriptStep = {
     command: "bun test --timeout 15000 --coverage --coverage-reporter=lcov --coverage-dir=coverage",
     dir: SCRIPT_COVERAGE_LANE.dir,
     displayName: SCRIPT_COVERAGE_LANE.displayName,
+    key: "scripts",
   };
 
   return [...workspaceSteps, scriptStep]
     .map(
-      ({ command, dir, displayName }) =>
-        `      - name: Test (${displayName})\n        run: ${command}\n        working-directory: ${dir}`,
+      ({ command, dir, displayName, key }) =>
+        `      - name: Test (${displayName})\n        if: matrix.key == '${key}'\n        run: ${command}\n        working-directory: ${dir}`,
     )
     .join("\n");
 }
