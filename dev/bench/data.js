@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788702864031,
+  "lastUpdate": 1788709717146,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -65743,6 +65743,100 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 694590,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "161ed2309566dbd26d93316134c9087124f277da",
+          "message": "feat(desktop): @openomni/ui design system, transcript console, attention ordering (#979)\n\n* feat(desktop): @openomni/ui design system, transcript console, attention ordering\n\nDesign system reset for the desktop console (apps/desktop + new packages/ui):\n\n- packages/ui: one achromatic design system (12-step ramp, dark default +\n  light, single accent #0A84FF/#0266d6, diff +/- as the one fenced\n  exception), @base-ui/react primitives, Console composition (Timeline,\n  Turn, ToolGroup fold N=3, CodeFence gutter, Composer + ApprovalTray,\n  ScrollArea pinToEnd), stable data-ui addresses from names.ts with\n  COMPONENTS.md kept 1:1 by test, showcase (System/Shell tabs, Alt-hover\n  inspector, probe/shoot gates).\n- apps/desktop renderer: attention ordering engine (class > recency decay\n  6h + residue 24h, applied only at focus boundaries), ⌘K search scorer,\n  project -> session sidebar, Electron wiring; app composes ui as-is\n  (drift gate).\n- Spacing law: 16px inside a turn, 40px between turns (>=2.5x gate);\n  AI time/elapsed at bottom-left of the response block, none on prompts.\n- Hygiene: stop tracking apps/desktop *.tsbuildinfo.\n\nVerification: build, turbo check-types 17/17, script tsc, check-deps,\nimport-cycles, topology, lint, ultracite, dead-exports all exit 0;\nbun test 3748 pass (npm-package staging test fails locally only under\nthe mise bun shim + overridden HOME, passes with the real binary).\n\n* chore(ui): narrow barrel to consumed exports, drop dead anchor/voice helpers\n\ncheck-dead-exports flagged 39 barrel exports with no consumer outside\npackages/ui; the barrel now re-exports only what apps/desktop, the\nshowcase, or tests import. parseAnchor/rowCounter/voiceClass had no\ncaller anywhere and are deleted; the four turn-part interfaces become\nmodule-internal.\n\n* fix(desktop): declare @openomni/ui workspace dependency\n\nThe renderer imported @openomni/ui but apps/desktop/package.json never\ndeclared it; locally a stale symlink resolved it, in CI the fresh\ninstall had no link and build/check-types failed.\n\n* test(ui): read Highlight text without a tag-stripping regex\n\nCodeQL flagged the tag-stripping regex as incomplete sanitization; the\ntest only reads text content, so split on tag boundaries instead.",
+          "timestamp": "2026-09-07T00:47:28+09:00",
+          "tree_id": "125cd04f53939c10451165589a59ced9c1f8818a",
+          "url": "https://github.com/INONONO66/openomni/commit/161ed2309566dbd26d93316134c9087124f277da"
+        },
+        "date": 1788709716396,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1758,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 13064,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 6995,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1725824,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 441898,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 8274670,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 139,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1534,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 730,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 520536,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3612,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 18858,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 180907,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 909589,
             "unit": "ns/op"
           }
         ]
