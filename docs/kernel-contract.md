@@ -170,8 +170,10 @@ The machine endpoint is a raw WHERE surface: `MachineHost.list()` and stable
 `shell.exec` is distinct from filesystem capabilities and is required for
 `exec`. For each exec call the daemon re-resolves the effective export root pathname,
 checks cwd containment, and spawns by pathname. Exec does not share the fs
-branch's pinned-root invariant: a symlink swap between check and spawn is a
-bounded, accepted TOCTOU for now (follow-up #938 in `docs/SLOP.md`). This is
+branch's pinned-root invariant: replacing the export-root pathname before a
+request changes where exec actually starts (fs keeps reading the root pinned at
+attach), and a symlink swap between check and spawn is a bounded, accepted
+TOCTOU for now (follow-up #938 in `docs/SLOP.md`). This is
 not an OS shell sandbox: commands run as
 the daemon user and may exercise that user's other OS authority once started;
 Owner grants shell execution knowingly. Codemode consumes these handles through

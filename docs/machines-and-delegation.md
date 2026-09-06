@@ -82,8 +82,11 @@ the same raw endpoint; the plain-tool locus door belongs to #949.
 - `shell.exec` grants machine shell authority. For each call, the daemon
   re-resolves the effective export root pathname and validates the requested
   cwd before spawning `/bin/sh` by pathname. Exec does not share the fs
-  branch's pinned-root invariant: a symlink swap between validation and spawn
-  is a bounded, accepted TOCTOU for now (follow-up #938 in `docs/SLOP.md`).
+  branch's pinned-root invariant: replacing the export-root pathname before a
+  request changes the directory exec actually starts in (fs requests keep
+  reading the root pinned at attach), and a symlink swap between validation
+  and spawn is a bounded, accepted TOCTOU for now (follow-up #938 in
+  `docs/SLOP.md`).
   This is path validation, not an OS shell sandbox: a shell running as the
   daemon OS user remains arbitrary within that user's normal OS authority
   (including absolute paths and `cd` elsewhere). The Owner grants `exec`
