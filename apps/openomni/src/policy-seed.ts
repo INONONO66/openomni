@@ -5,10 +5,25 @@ import { Storage } from "@openomni/ledger";
 export function seedKernelPolicyRows(): number {
   const policies = Storage.get().policies;
   if (policies === undefined) throw new Error("L0 storage capability is unavailable: policies");
-  const generations = policies.rows().map((row) => row.generation);
-  if (generations.length > 0) return Math.max(...generations);
-  const generation = 1;
-  for (const row of SEEDED_POLICY_ROWS) {
+  const current = policies.rows();
+  const latest = Math.max(0, ...current.map((row) => row.generation));
+  if (current.some((row) => row.generation === latest && row.name === "monitor-wake-budget"))
+    return latest;
+  const generation = latest + 1;
+  const base =
+    latest === 0 ? SEEDED_POLICY_ROWS : current.filter((row) => row.generation === latest);
+  const budget = {
+    name: "monitor-wake-budget",
+    kind: "tool",
+    phase: "pre" as const,
+    priority: 900,
+    match: { encodingVersion: 1 as const, value: { op: "monitor" } },
+    verdict: {
+      encodingVersion: 1 as const,
+      value: { type: "obligation", name: "budget_clamp", metric: "notifications", limit: 8 },
+    },
+  };
+  for (const row of [...base, budget]) {
     if (!policies.append({ ...row, generation })) {
       throw new Error(`could not seed policy row: ${row.name}`);
     }

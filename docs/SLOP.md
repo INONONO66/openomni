@@ -8,6 +8,20 @@ This is the tracked successor for the #948 rows formerly recorded in `.omo/repor
 
 The Owner-approved #945/#948 amendment overrides stale campaign labels and E4 parking. Deletion evidence, remaining quality acceptance, and the parked #950 successor are separate. This is not a zero-failure/final-convergence receipt and does not close #945 or the full #948 acceptance.
 
+## #947 stage-1 alarm contribution (unmerged)
+
+| Row | Receipt |
+| --- | --- |
+| B4 | Not closed here. Delegation source is untouched; #946 owns deletion and stage 2 wires its deadline consumer to the existing `at` alarm owner. |
+| E8 | Additive `monitor` registration and strict create/rearm/cancel schema implemented; no claim about unrelated vocabulary. |
+| Alarm quality | Focused 30 tests pass, including real PTY exit/dedupe, exact timeout, budget pause/rearm, path create/modify/cancel, atomic rollback, SQLite reopen, and hibernation/live-wait. |
+| Full-suite blocker | `bun test --timeout 15000`: 3375 pass, 1 fail; `monitor path: subscribed create and modify, then cancellation fences callbacks` times out awaiting create. Focused/app-lane success is not a reliable full-suite receipt. |
+| Coverage | All 11 coverage-producing lanes pass, then the unchanged ratchet passes: app 96.8%, agent 97.73%, ledger 99.34%; no floors lowered. |
+| Gate blocker | `bun run lint:tools` exits 1: `[tool-max-fields] public input schema exceeds 5 top-level fields`. The requested flat monitor ABI has nine fields; no lint exception or floor reduction was added. |
+| Lifecycle campaign | No #969-#973 transition/deletion/test receipt is consumed by stage 1. |
+
+Decisions and operator contracts: [alarm-monitor-stage-1.md](alarm-monitor-stage-1.md).
+
 ## A rows: already-absent production domains
 
 | Rows | Target | Classification at source HEAD | Merged deletion |

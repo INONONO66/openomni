@@ -6,6 +6,26 @@ Single source of truth for current wiring, not a declaration that every target i
 
 Machine/codemode wiring is updated by #938/#939 in PR #991, rebased onto `5b3ff997` including #987's deletion receipts and #988's protocol-only messaging contracts. The source pin above identifies the retained #948 historical receipt, not the new machine implementation.
 
+## #947 stage-1 branch receipt (2026-09-06)
+
+The stage-1 branch extends the existing alarm owner with fenced evaluation,
+atomic fired/prompt delivery, persistent PTY and path sources, durable dedupe,
+policy-budget pause/rearm, and boot discovery. The additive `monitor` tool uses
+`op:create|rearm|cancel`. The app band outlives session hibernation; its committed
+inbox doorbell re-enters the existing session controller, not a second loop.
+The focused 30-test run passes, including a real PTY, SQLite reopen and a
+one-model-call waiting terminal followed by a hibernated-session wake.
+
+This is not a merged/full-gate receipt: the full suite reports 3375 pass and
+one filesystem-create timeout in `monitor-tool-boundaries.test.ts`, despite the
+focused and app-lane runs passing. That source/test readiness issue remains
+unresolved. `lint:tools` also refuses the issue's flat nine-field monitor schema
+under its five-field cap. No exemption or lowered
+floor is included. [Decisions and operational limits](alarm-monitor-stage-1.md)
+include the at-most-once restart gap. Stage 2 after #946 still owes only the
+message-deadline consumer -> `at` alarm migration, its answer/deadline CAS and
+restart tests, and B4 deletion proof. #969-#973 receipts remain unconsumed.
+
 ## Deployed shape
 
 | Component | Current wiring | Source |

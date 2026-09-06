@@ -1,5 +1,55 @@
 [
   {
+    "name": "monitor",
+    "description": "Watch command output in a PTY or an absolute path outside the session. Create a persistent or timed watch, rearm a paused watch, or cancel it.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "enum": ["create", "rearm", "cancel"]
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "command": {
+          "type": "string",
+          "minLength": 1
+        },
+        "filter": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "event": {
+          "type": "string",
+          "enum": ["create", "modify"]
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "persistent": {
+          "type": "boolean",
+          "const": true
+        },
+        "timeout_ms": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["op"],
+      "additionalProperties": false
+    },
+    "safe": false,
+    "sequential": true,
+    "placement": "host"
+  },
+  {
     "name": "delegate",
     "description": "Start durable delegated work. Inline ask waits in this turn; process/channel work returns a handle immediately and its settlement arrives as a message.",
     "inputSchema": {

@@ -3,6 +3,7 @@ import { collectToolSpecs, TOOL_DEFINITIONS } from "./catalog";
 import { toolInputSchema } from "@openomni/agent";
 
 const EXPECTED = [
+  "monitor",
   "delegate",
   "await_delegation",
   "cancel_delegation",

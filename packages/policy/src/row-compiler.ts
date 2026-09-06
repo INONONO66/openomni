@@ -144,6 +144,7 @@ const ObligationVerdict = z
       "toolless_stall",
       "blocked_recurrence",
       "resume",
+      "notifications",
     ]),
     limit: z.number().int().positive(),
   })

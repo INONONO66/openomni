@@ -86,7 +86,11 @@ export function initializeSqliteDatabase(db: Database, prepare967?: Migration.Pr
   // committed append survives power loss, which is what "no record, no
   // action" durably means (#510 D1).
   applyConnectionPragmas(db, "FULL");
-  Migration.applyOrdered(db, MIGRATION_DIR, ORDERED_MIGRATIONS, prepare967);
+  // An archive approval authorizes only its frozen disposition, not later migrations.
+  const migrations = prepare967 === undefined
+    ? ORDERED_MIGRATIONS
+    : ORDERED_MIGRATIONS.slice(0, ORDERED_MIGRATIONS.findIndex((migration) => migration.name === U967_MIGRATION) + 1);
+  Migration.applyOrdered(db, MIGRATION_DIR, migrations, prepare967);
 }
 
 /** @internal Test-only fixture reset (Adapter.clear) — no production caller. */

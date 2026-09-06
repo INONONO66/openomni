@@ -4,7 +4,7 @@ export { failureFacts } from "./core/retry";
 export { placementGatedExecutor } from "./core/execution/tool-placement";
 export type { CompactionOptions } from "./compaction";
 export { createSessionChatRunner } from "./session-chat-runner";
-export { closeSessions, getSessionHandle, session, sweepSessions } from "./session-handle";
+export { closeSessions, getSessionHandle, session, sweepSessions, wakeSession } from "./session-handle";
 export { createExecutor, ExecutionApprovalError, UnregisteredExecutionKindError } from "./executor";
 export { SEEDED_POLICY_ROWS } from "@openomni/policy";
 export type {

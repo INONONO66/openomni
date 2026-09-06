@@ -20,7 +20,8 @@ No delegation file or deadline consumer is changed in stage 1.
   line batches are suppressed by their durable digest, including after restart.
 - A match does not finish a watch. Natural process exit and timeout produce one
   JSON summary with alarm id, epoch, reason and exit code. Cancel and pause
-  notifications are the control terminal; stale process exit cannot add a wake.
+  fence the source first; only pause sends a final prompt. A stale process exit
+  cannot add a wake.
 - Exactly one of persistent:true and positive timeout_ms is required. Timeout
   is an absolute watch-row deadline, not a session timer or another alarm row.
 - Wake budget is an immutable compiled policy obligation, scoped to an alarm
@@ -39,6 +40,25 @@ No delegation file or deadline consumer is changed in stage 1.
   firing commits alarm.fired, prompt action and inbox row atomically; the bus
   and session doorbell follow the transaction. The action revision advances for
   each action, not each transaction.
+
+## Operations
+
+The normal app boot mounts the alarm band after session recovery and before
+channel binding. Shutdown invalidates source fences before closing the PTY or
+filesystem handle; it does not cancel durable armed rows. One-second due scans
+recover missed bus observations and process-worker-created rows. Operators
+inspect the existing alarm row and action/inbox history, not a second watcher
+registry. Source and wake errors are reported by the app. A timed watch lost
+across worker restart produces a restart summary rather than rerunning effects;
+a persistent watch starts from now, preserving its epoch and dedupe digest.
+Only explicitly idempotent polling commands should be relied on for repeated
+external effects. The band assumes one active app per database; unified
+multi-owner evaluator leasing is #971's separate target.
+
+`monitor` uses the flat issue-defined fields `op`, `id`, `command`, `filter`,
+`path`, `event`, `description`, `persistent`, `timeout_ms`. Exactly one source
+and lifetime is accepted on create; controls accept only op and id. The current
+five-field lint cap blocks this nine-field ABI. Stage 1 adds no exemption.
 
 ## Boundaries
 

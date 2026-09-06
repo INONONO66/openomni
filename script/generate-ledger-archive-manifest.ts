@@ -140,10 +140,8 @@ function dispose(db: Database, command: Command): string {
   } finally {
     db.run("ROLLBACK");
   }
-  if (applied) {
-    initializeSqliteDatabase(db);
-    return "already_applied";
-  }
+  // A verified historical acknowledgement cannot authorize later migrations.
+  if (applied) return "already_applied";
   initializeSqliteDatabase(db, (locked) => {
     // The exact same validation and DELETE share the runner's BEGIN IMMEDIATE.
     const { manifest, projection } = verifyDisposition(locked, command);

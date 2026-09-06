@@ -1,4 +1,5 @@
 import type { AnyToolDefinition, Tool } from "@openomni/protocol";
+import { monitorTool } from "../mutation/monitor";
 import type { DelegationOrigin } from "../../delegation/admission";
 import type { DelegationKernel } from "../../delegation/kernel";
 import { createApprovalTool, type ApprovalPort } from "../authority/approval";
@@ -27,6 +28,7 @@ export function createTools(
   origin: DelegationOrigin,
 ): readonly AnyToolDefinition[] {
   const tools: AnyToolDefinition[] = [];
+  tools.push(eraseTool(monitorTool));
   if (ports.delegation !== undefined) {
     tools.push(
       eraseTool(createDelegateTool(ports.delegation, origin.role, origin.depth)),

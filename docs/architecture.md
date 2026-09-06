@@ -22,6 +22,12 @@ Resident and native workers enter the same session machine. The same-domain inli
 
 `bus.publish` remains observation, not authorization or persistence. L0 action append commits before its injected observation sink is called. Record-before-act paths must commit through a durable store or append surface before the external action. `session.get()` reads authoritative state without waking a runner; `session.watch()` is at-most-once notification, and a revision gap requires a fresh `get()`.
 
+The alarm evaluator belongs to the app composition band, outside session
+residency. PTY and path observations feed the existing ledger alarm transaction;
+only its committed inbox row wakes the existing agent session controller.
+There is no second watch store or runner. Stage-1 status and remaining deadline
+consumer work are recorded in [Implementation Status](implementation-status.md).
+
 ## Policy
 
 `packages/policy` is the generic actor-agnostic engine. `packages/agent` dispatches the loop points it consumes. `packages/channels` owns perimeter policy. `apps/openomni` owns product composition and may select registrations without moving product semantics into the engine.
