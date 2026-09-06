@@ -1,5 +1,6 @@
 import { Chat, useChat } from "@ai-sdk/react";
 import { Console } from "@openomni/ui";
+import type { ChatTransport, UIMessage } from "ai";
 import { useMemo, useRef, useState } from "react";
 import { applyAtBoundary, orderByAttention } from "./attention";
 import type { Boundary, Held, ProjectSessionFacts, Signals } from "./attention";
@@ -27,10 +28,13 @@ import { SessionTree } from "./shell/session-tree";
  * building keeps content centered with the sides deliberately clear.
  *
  * The composer and the approval tray are wired to a real `Chat` from the AI
- * SDK, one per session, over a mock transport. Sending streams a reply and
- * approving posts a tool-approval response — the same calls the gateway build
- * will make, with only the transport swapped. Nothing is executed on a machine
- * yet, and that is the transport's honesty to keep, not this file's.
+ * SDK, one per session, over whichever transport this window was handed.
+ * Sending streams a reply and approving posts a tool-approval response — the
+ * same calls either way, which is what makes the gateway a substitution rather
+ * than a second code path. Which wire that is, is decided in
+ * `chat/select-transport.ts` and passed IN: a component that reached for
+ * `window.desktop` itself could not be rendered by the showcase, by the
+ * screenshot script, or by a test.
  *
  * Ordering runs through `attention` and is applied at a focus boundary only —
  * here, a selection change. Between boundaries the previous order is held, so
@@ -47,7 +51,11 @@ import { SessionTree } from "./shell/session-tree";
  * is selected, how the list is ranked, and what the product's words are. It
  * composes the shell; it does not draw one.
  */
-export function App() {
+export function App({ transport }: { readonly transport?: ChatTransport<UIMessage> }) {
+  // The mock surface and the live one are told apart ONCE, here, and the same
+  // answer decides both the wire and the transcript's starting contents.
+  const wire = transport ?? MOCK_TRANSPORT;
+  const seeded = transport === undefined;
   const [selected, setSelected] = useState(selectedSessionId);
   const [held, setHeld] = useState<Held>(() => ({
     shown: idealOrder(selectedSessionId),
@@ -62,7 +70,7 @@ export function App() {
   // at all: constructing seven of them up front would attach seven transports
   // to keep six idle conversations warm.
   const chats = useRef<Map<SessionId, Chat<OpenOmniUIMessage>>>(new Map());
-  const chat = chatFor(chats.current, selected);
+  const chat = chatFor(chats.current, selected, wire, seeded);
 
   // Unconditional, on every render, with the selected chat chosen ABOVE it —
   // `useChat` is a hook, and selecting inside it would make the hook order
@@ -140,21 +148,31 @@ export function App() {
 /**
  * The chat for a session, created on first sight and never again.
  *
- * The fixture is the chat's INITIAL messages rather than a separate rendering
- * path, so the moment the Owner sends, the streamed reply lands in the same
- * list the fixture is in and the transcript keeps one source. Everything the
- * surface draws is derived from that list.
+ * On the MOCK surface the fixture is the chat's INITIAL messages rather than a
+ * separate rendering path, so the moment the Owner sends, the streamed reply
+ * lands in the same list the fixture is in and the transcript keeps one source.
+ * Everything the surface draws is derived from that list.
+ *
+ * Over the GATEWAY the chat starts EMPTY, and that is the load-bearing half.
+ * Seeding a live session with the fixture would open the transcript on tool
+ * calls that never ran, a cost that was never spent, and a pending approval the
+ * Owner could click Approve on — a fabricated conversation wearing a real
+ * connection, which is the one failure a transport swap must not introduce. The
+ * session list above it is still the mock's; what this guarantees is that
+ * nothing fabricated is ever attributed to the wire.
  */
 function chatFor(
   chats: Map<SessionId, Chat<OpenOmniUIMessage>>,
   sessionId: SessionId,
+  transport: ChatTransport<UIMessage>,
+  seeded: boolean,
 ): Chat<OpenOmniUIMessage> {
   const existing = chats.get(sessionId);
   if (existing !== undefined) return existing;
 
   const created = new Chat<OpenOmniUIMessage>({
     id: sessionId,
-    messages: [...(timelines[sessionId] ?? [])],
+    messages: seeded ? [...(timelines[sessionId] ?? [])] : [],
     transport,
     generateId,
   });
@@ -163,16 +181,16 @@ function chatFor(
 }
 
 /**
- * ONE transport for every chat.
+ * ONE transport for every chat, and the default when nothing hands one in.
  *
- * The gateway build will hold a single socket for the whole window, so the
- * shape is the same one now: sessions share a connection and are told apart by
- * the chat they belong to. A transport per chat would make that swap a
- * rewrite instead of a substitution.
+ * The gateway holds a single socket for the whole window, so the shape is the
+ * same either way: sessions share a connection and are told apart by the chat
+ * they belong to. A transport per chat would have made the swap a rewrite
+ * instead of a substitution.
  */
 // One chunk per paint keeps the mock's in-flight state visible in the real
 // renderer instead of collapsing the whole reply into one React render.
-const transport = createMockChatTransport({
+const MOCK_TRANSPORT = createMockChatTransport({
   replies: [
     "The mock transport is streaming this reply through the Console so the in-flight assistant answer remains visible before the chat returns to ready.",
   ],

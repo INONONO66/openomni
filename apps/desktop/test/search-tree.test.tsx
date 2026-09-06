@@ -118,9 +118,52 @@ describe("the tree still reads as a tree under the search field", () => {
     expect(html.match(/aria-current="true"/g)).toHaveLength(1);
   });
 
+  test("Given a running session, When rendered, Then the dot is the readout and the word is gone", () => {
+    // The fixture has to contain the case, or the two assertions below are
+    // satisfied by an empty column.
+    const unphrased = ordered.projects.flatMap((group) =>
+      group.live.filter((entry) => entry.reason === ""),
+    );
+    expect(unphrased.length).toBeGreaterThan(0);
+    expect(
+      unphrased.every((entry) => sessions.find((s) => s.id === entry.id)?.state === "running"),
+    ).toBe(true);
+
+    // The accent dot already says "right now" — it is the one thing in the
+    // column allowed to make that claim — so the word beside it was the same
+    // fact printed twice, on precisely the rows that are busiest.
+    expect(html).not.toContain(">running</");
+    expect(html).toContain('data-status-dot="running"');
+  });
+
+  test("Given a dot with no phrase beside it, When read by assistive technology, Then the state is still announced", () => {
+    // Dropping the word from the screen must not drop it from the accessibility
+    // tree: a dot that only exists visually is a state a screen reader cannot
+    // report at all. The row's status cell carries the name, because
+    // `StatusDot` is `aria-hidden` by contract.
+    //
+    // Counted over rows whose reason is EMPTY rather than over running sessions:
+    // a pinned session is also running, and it prints "pinned" — a phrase, which
+    // is a readout, so that row needs no substitute name.
+    const unphrased = ordered.projects.flatMap((group) =>
+      group.live.filter((entry) => entry.reason === ""),
+    );
+
+    expect(html.match(/title="running"/g) ?? []).toHaveLength(unphrased.length);
+    expect(html.match(/aria-label="running"/g) ?? []).toHaveLength(unphrased.length);
+    // The role is what makes the label land: a bare span is `generic`, and a
+    // `generic` element's accessible name is not exposed by any mapping — the
+    // attribute reads correctly in the markup and announces nothing.
+    expect(html).toMatch(/<span aria-label="running" role="img" title="running">/);
+  });
+
   test("Given every live row, When rendered, Then its reason is still the second line", () => {
     for (const group of ordered.projects) {
-      for (const entry of group.live) expect(html).toContain(entry.reason);
+      // A running row's reason is empty by design (see below), and `toContain`
+      // on an empty string asserts nothing at all.
+      for (const entry of group.live.filter((live) => live.reason !== "")) {
+        expect(html).toContain(entry.reason);
+      }
     }
   });
 

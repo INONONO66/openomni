@@ -116,6 +116,16 @@ Enforced by `packages/ui/test/transcript-law.test.tsx`, which fails if either to
 Two families: **Pretendard** (`--font-sans`) for language, **JetBrains Mono Variable**
 (`--font-mono`) for machine truth — paths, tool names, durations, ids, state.
 
+Both ship as **npm packages** (`pretendard`, `@fontsource-variable/jetbrains-mono`), imported by
+`packages/ui/src/styles.css` and bundled into the renderer. **No font is fetched over the network**,
+and `packages/ui/test/fonts.test.ts` fails on any absolute URL the stylesheet would resolve: a
+remote `@import` is one invisible line that makes the surface depend on a network the console may
+not have and reports every window opened to a third party. Each token names its family first and a
+system stack after it, so a face that fails to decode falls back to a real family rather than to
+Times. Pretendard arrives as its 92-face dynamic subset, so a Latin console pulls a few chunks
+instead of one 2 MB file; the renderer's CSP admits `font-src data:` because the build inlines the
+smallest of those subsets.
+
 The shell density scope sets **mono as the inherited default**, because most of what the shell
 shows is machine truth. Prose therefore opts *out*, per element, via `<Text sans>` — never by
 re-pointing the density block's `--font-*`, which a test forbids precisely so the split stays a
@@ -556,10 +566,22 @@ group reads top-down as a block instead of a header having equal claim on the gr
 Each session row is two lines:
 
 1. The session name, with its `State` on the right.
-2. The ordering engine's **reason**, in the faint tone.
+2. A `StatusDot`, then the ordering engine's **reason**, in the faint tone.
 
 An order the Owner cannot interrogate is one they must re-derive by opening things. The reason line
 is what makes the ranking answerable.
+
+**A running row's reason line is the dot alone.** Its reason for sitting where it does is that it is
+running right now, and the pulsing accent mark on that very line is already the system's one way of
+saying so (§2, the accent budget). The word `running` beside it was that mark's caption — the same
+fact twice, spent on the only rows in the column that are alive, and the only rows whose second line
+had nothing else to carry. Every other class keeps its phrase, because every other class is ranked on
+a fact the dot cannot state: an age, a pin, a wake time.
+
+The word survives where the mark cannot go. `StatusDot` is `aria-hidden` by contract — everywhere
+else in the system a word sits beside it — so a dot with no phrase beside it takes the state as its
+cell's `aria-label` and `title`: reportable to a screen reader, recoverable on hover, printed
+nowhere. A state that exists only in pixels is a state a reader cannot get at.
 
 Settled sessions collapse into a per-project `settled · N` disclosure at L1: finished work stays
 reachable without spending a row of attention. A closed group prints the count it is hiding and an

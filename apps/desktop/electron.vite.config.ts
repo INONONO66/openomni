@@ -12,7 +12,18 @@ export default defineConfig({
     // Sandboxed preloads must be CommonJS: Electron only loads ESM preloads with sandbox:false.
     build: {
       lib: { entry: "src/preload/index.ts", formats: ["cjs"] },
-      rollupOptions: { output: { entryFileNames: "[name].cjs" } },
+      rollupOptions: {
+        // `electron` is resolved by the RUNTIME, never bundled. Without this the
+        // bundler follows the npm package's main field — which is the CLI shim
+        // that returns a path to the binary — and inlines it, so `contextBridge`
+        // and `ipcRenderer` resolve to `undefined` on a string. The preload then
+        // throws before exposing anything and the renderer sees no bridge at
+        // all, silently: nothing fails at build time, and the window still
+        // opens. `externalizeDepsPlugin` does not cover it because `electron` is
+        // a devDependency, which is where it belongs.
+        external: ["electron"],
+        output: { entryFileNames: "[name].cjs" },
+      },
       outDir: "dist/preload",
     },
   },

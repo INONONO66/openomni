@@ -213,6 +213,18 @@ export function SessionTree({
  * marks that line rather than adding a column — the eye runs the dots down the
  * sidebar to find what is live, then reads the line it landed on.
  *
+ * A RUNNING row is the exception, and it is where the argument above inverts:
+ * its reason is empty, so the pulsing accent dot is the entire readout. There
+ * is no age to add and no second fact to carry — "running" beside a mark that
+ * already means running is a caption on the one row in the column that needs no
+ * caption, and it spends the accent twice to say one thing.
+ *
+ * What the dot cannot do is be read aloud: `StatusDot` is `aria-hidden` by
+ * contract, because everywhere else in the system a word sits beside it. Here
+ * the word is gone, so the row's status cell carries it as an accessible name
+ * and as the pointer's `title` — the state stays reportable to a screen reader
+ * and recoverable on hover, without being printed.
+ *
  * `active` is the arrow-key cursor while searching. It reuses the SELECTION
  * fill rather than inventing a second highlight: two different marks for "the
  * one you are on" is one mark too many in a column this quiet.
@@ -261,12 +273,29 @@ function SessionRow({
           tone={entry.spans.length > 0 || !(current || active) ? "muted" : "fg"}
         />
         <span className="flex w-full min-w-0 items-center">
-          <StatusDot shape={RUN_STATE_SHAPE[session.state]} tier={RUN_STATE_TIER[session.state]} />
-          <Text
-            className="min-w-0 flex-1 truncate"
-            level="meta"
-            tone={session.state === "running" ? "accent" : "faint"}
-          >
+          {/* `role="img"` is what makes the name land. A bare `span` is a
+              `generic` role, and a `generic` element's `aria-label` is not
+              exposed by any of the mappings — the attribute looks correct in
+              the markup and announces nothing. `img` is the role for a
+              graphical element with a text alternative, which is exactly what a
+              drawn dot standing in for a word is. `title` carries the same
+              string for the pointer.
+
+              Both are conditional on there being no phrase: when the reason
+              line says "interrupted · 3h", a labelled wrapper around it would
+              make a screen reader announce the state and then read the line
+              that already contains it. */}
+          {entry.reason === "" ? (
+            <span aria-label={session.state} role="img" title={session.state}>
+              <StatusDot
+                shape={RUN_STATE_SHAPE[session.state]}
+                tier={RUN_STATE_TIER[session.state]}
+              />
+            </span>
+          ) : (
+            <StatusDot shape={RUN_STATE_SHAPE[session.state]} tier={RUN_STATE_TIER[session.state]} />
+          )}
+          <Text className="min-w-0 flex-1 truncate" level="meta" tone="faint">
             {entry.reason}
           </Text>
         </span>

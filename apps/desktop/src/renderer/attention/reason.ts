@@ -7,6 +7,15 @@ import type { AttentionClass, EpochMs, SessionFacts, Signals } from "./score";
  * ranking is not something the Owner can trust or correct. That constraint is
  * the reason this module exists next to the scorer instead of inside the view:
  * a class that cannot produce a reason string is a class that should not exist.
+ *
+ * `running` is the one class whose phrase is EMPTY, and that is the constraint
+ * being honoured rather than waived. Its reason is that it is running right
+ * now, and the row already carries that claim as the system's one accent mark
+ * beside the very line the phrase would occupy (DESIGN.md §2, the accent
+ * budget). Printing the word too is the same fact stated twice, on precisely
+ * the rows that are busiest — so the mark keeps the claim and the line stays
+ * empty. The word survives in the accessibility tree, where the mark cannot go
+ * (`shell/session-tree.tsx`).
  */
 export function reasonFor(
   attentionClass: AttentionClass,
@@ -28,7 +37,7 @@ export function reasonFor(
     case "finished":
       return `finished · ${age(signals.now - facts.lastEventAt)}`;
     case "running":
-      return "running";
+      return "";
     case "settled":
       return `done · ${age(signals.now - facts.lastEventAt)}`;
     default:

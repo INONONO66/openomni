@@ -1,6 +1,6 @@
 # PROJECT KNOWLEDGE BASE
 
-Verified against merged `c4fb774869fb060859bbdc2f58ce37ee3a3072c9` (PR #985), 2026-09-06. Resident and native workers share the session-owned loop; legacy session CRUD/TTL and the I09 deletion surfaces are absent. Native archive confirmation and guarded migration 0034 are wired; session-owned Wait and physical message/part retention remain. Deletion and outstanding quality receipts: `docs/SLOP.md`. Keep this stamp current when editing (doc-state sync law).
+Verified against merged `c4fb774869fb060859bbdc2f58ce37ee3a3072c9` (PR #985), 2026-09-06. Resident and native workers share the session-owned loop; legacy session CRUD/TTL and the I09 deletion surfaces are absent. Native archive confirmation and guarded migration 0034 are wired; session-owned Wait and physical message/part retention remain. Deletion and outstanding quality receipts: `docs/SLOP.md`. Keep this stamp current when editing (doc-state sync law). Gateway transport wiring verified on `feat/desktop-gateway-transport` (2026-09-06): the endpoint is resolved in Electron main from env and reaches the renderer over one `contextBridge` call.
 
 ## OVERVIEW
 
@@ -82,7 +82,7 @@ ui <- apps/desktop
 | `packages/machines` | Machine attach and cell execution driver | Enrollment policy or product judgment |
 | `packages/channels` | Drivers plus perimeter routing, waits, and admission | Session content or product execution |
 | `apps/openomni` | Product composition: Resident, gateway, delegation, code mode, boot/shutdown | Reimplementation of package primitives |
-| `apps/desktop` | Electron shell: main/preload/renderer build pipeline, window security defaults; AI SDK chat state and transports; the attention ordering engine, the search engine, mock fixtures, session-selection state, and per-session draft and approval-decision state | Kernel logic; anything beyond protocol contracts; **transcript presentation — that is `packages/ui`'s** |
+| `apps/desktop` | Electron shell: main/preload/renderer build pipeline, window security defaults, the gateway endpoint resolved from env in main and handed to the renderer over one `contextBridge` call; AI SDK chat state and transports; the attention ordering engine, the search engine, mock fixtures, session-selection state, and per-session draft and approval-decision state | Kernel logic; anything beyond protocol contracts; **transcript presentation — that is `packages/ui`'s** |
 | `packages/ui` | The design system: tokens, primitives, window chrome, the transcript's presentation (timeline, the three voices, tool rows and their folding, the composer, the approval tray, anchors), the one `Console` composition both the renderer and the showcase render, and the component NAMES the Owner reviews by — `src/names.ts` is the single owner of every `data-ui` address, documented 1:1 in `COMPONENTS.md` | Any data or kernel vocabulary — it may not name a session, project, agent, or run state |
 
 ## WHERE TO LOOK
@@ -152,7 +152,7 @@ Coverage baselines are updated after coverage-producing test runs with `bun run 
 
 ## NOTES
 
-- `apps/openomni` is the kernel composition root. `apps/desktop` owns Electron and AI SDK chat state and imports `packages/ui`; its dependency band permits `protocol` and `ui`, not kernel implementation packages.
+- `apps/openomni` is the kernel composition root. `apps/desktop` owns Electron and AI SDK chat state and imports `packages/ui`; its dependency band permits `protocol` and `ui`, not kernel implementation packages. It speaks to the daemon over the gateway's WebSocket rather than importing it: main resolves `OPENOMNI_WS_URL`, else `ws://127.0.0.1:<OPENOMNI_WS_PORT or 3000>/ws`, and `OPENOMNI_WS_TOKEN`, with the port default and the `/ws` path copied as literals from `apps/openomni/src/config.ts` and `apps/openomni/src/index.ts` and the source named at each — the dependency the console must not take is the reason the copy exists.
 - `packages/channels` is the perimeter gateway; `apps/openomni` injects delivery and observation ports. Conversation windows, send leases, and engagement lifecycles were removed in issue #943; ordinary sends use grants, egress budgets, idempotency, and Wait correlation.
 - `packages/agent` coordinates generic session handles through `SessionHandleStore`; `packages/ledger` owns the durable facts, while product-specific session identity, routing, and lifecycle policy remain in `apps/openomni`.
 - Shipped-state claims, including Stakes, effective authority, and connector consumers, belong only in `docs/implementation-status.md`; other docs define target contracts or historical context and defer to it.
