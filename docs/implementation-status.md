@@ -32,6 +32,12 @@ Single source of truth for current wiring between accepted design and running co
 | Drive-loop worker policy | implemented and wired | `apps/openomni/src/delegation/drive-loop.ts`, `apps/openomni/src/delegation/worker-loop.ts` | Native workers use the same session machine as Resident: each is a real role=`worker` row keyed by its durable delegation identity, linked through `parentId`, and owns an independent fence/revision/generation set. The adapter retains goal-style continuation policy (cap 8, repetition/stall/blocked bounds); it does not construct `ChatAgent`, catalogs, or synthetic `delegation-*` session IDs. Channel delegation is not a native worker run. |
 | IPC transport | implemented and wired | `packages/ipc/`, `packages/machines/`, `apps/openomni/src/delegation/process-driver.ts` | Thin bidirectional transport used by machines and process delegation. |
 
+## #937 compaction increment (integration branch)
+
+Verified on `kernel/937-integration`, 2026-09-06: session-owned compaction executes through the existing executor using the pinned `turn.post/compaction` policy point. Successful cuts persist their summary, original in-memory boundary, range/content digest and lossless revert payload before completion observation or active projection replacement. Even a zero protected-tail setting retains an original atomic call/result entry. Session cancellation reaches an in-flight summarizer, and a failed durable result commit leaves the active history unchanged.
+
+This is partial #937 implementation, not deterministic-loop closure. Durable session hydration does not yet replay these compaction records or preserve canonical tool-bearing history across turns. Whole-wave approval, per-model-step drains, exclusive executor retries, policy-row stop judgment and worker/drive removal remain open. The real SSE provider/app/SQLite compaction surface and unchanged channel/archive regression pass; no full mutation or global quality-threshold claim is made.
+
 ## #967 archive and retired-owner disposition
 
 The existing archive CLI now creates a native SQLite image and a v2 all-table receipt at explicit `--db`, `--out`, and `--backup` paths. `--verify` restores an exclusive temporary copy without opening the operator archive writable. Both artifacts are retained indefinitely. Supplemental table digests do not substitute for native-value equality: integer, BLOB and text-byte comparisons are independent of JavaScript number conversion.
