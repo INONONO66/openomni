@@ -1,6 +1,7 @@
 import { beforeEach, expect, test } from "bun:test";
-import { existsSync } from "node:fs";
-import { dirname } from "node:path";
+import { existsSync, mkdtempSync, mkdirSync, rmSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { tmpdir } from "node:os";
 import { interpreterWitness } from "./helpers/interpreter-witness";
 import { SessionHandleStore } from "@openomni/ledger";
 import { Bus } from "@openomni/agent";
@@ -69,11 +70,74 @@ const enrollment: Machine.Enrollment = {
   enrolledAt: 0,
 };
 
+const fullEnrollment = (root: string): Machine.Enrollment => ({
+  ...enrollment,
+  allowedCapabilities: ["fs.read", "fs.write", "shell.exec", "kernel.py"],
+  allowedExports: ["data"],
+});
+
 /**
  * The payoff, end to end and with a real daemon: one cell makes three
  * delegate calls that would otherwise be three turns, and the answers come
  * back inside the cell rather than to the model.
  */
+test("app root runs machine read write shell and code through one run_code cell", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "om-app-machine-"));
+  const root = join(directory, "data");
+  mkdirSync(root);
+  const socketPath = testSocketPath();
+  const appEnrollment = fullEnrollment(root);
+  const config = suite.config("openomni-app-machine-", {
+    wsToken: WS_TOKEN,
+    model: { provider: "fake", id: "app-machine-test", apiKey: "test-key" },
+    machines: { socketPath, enrolled: [appEnrollment] },
+  });
+  const app = await suite.boot({
+    config,
+    llm: {
+      resolveModel: fakeProviderModel,
+      run: async (input: RunInput, sink: Sink) => {
+        const call = requestToolStep(input, sink, {
+          id: "machine-cell",
+          tool: "run_code",
+          input: {
+            code: [
+              `m = codemode.getMachine('${MACHINE_ID}')`,
+              `m.write(${JSON.stringify(join(root, "value"))}, bytes([0, 255, 128, 65]))`,
+              `readback = list(m.read(${JSON.stringify(join(root, "value"))})['data'])`,
+              `shell = m.shell('printf shell; exit 7', ${JSON.stringify(root)})`,
+              `code = m.run('6 * 7')`,
+              "(readback, shell['stdout'], shell['exitCode'], code['value'])",
+            ].join("\n"),
+            timeoutMs: 15_000,
+          },
+        });
+        if (call === undefined) return { type: "stop" };
+        sink.onMessage(assistantMessage(input, { text: call.output }));
+        return { type: "stop" };
+      },
+    },
+  });
+  const daemon = await attachMachineDaemon({ socketPath, fsExports: new Map([["data", root]]), offer: {
+    machineId: MACHINE_ID,
+    offeredCapabilities: appEnrollment.allowedCapabilities,
+    exports: [{ name: "data", path: root }],
+    daemonVersion: "test",
+    platform: `${process.platform}-${process.arch}`,
+    offeredAt: 1,
+  }});
+  suite.defer(() => daemon.close());
+  const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", WS_TOKEN]);
+  const reply = nextMessage(ws, 15_000);
+  ws.send(JSON.stringify({ type: "message", text: "exercise machine" }));
+  const answer = (JSON.parse(String((await reply).data)) as { text: string }).text;
+  expect(answer).toContain("[0, 255, 128, 65]");
+  expect(answer).toContain("b'shell'");
+  expect(answer).toContain("7");
+  expect(answer).toContain("'42'");
+  rmSync(directory, { recursive: true, force: true });
+}, 30_000);
+
 test("a cell batches delegation into one turn", async () => {
   const socketPath = testSocketPath();
   const residentTurns: string[] = [];
