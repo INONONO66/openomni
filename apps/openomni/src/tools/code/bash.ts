@@ -24,10 +24,11 @@ export function createBashTool(ports: FilePorts) {
         ctx.signal.throwIfAborted();
         if (args.machine !== undefined) {
           const locus = parseLocus(`${args.machine}:/`);
-          if (locus.kind !== "machine") throw new ToolRefused("bash", "invalid machine id");
+          if (locus.kind !== "machine" || locus.machine !== args.machine || locus.path !== "/")
+            throw new ToolRefused("bash", "invalid machine id");
           const target = ports.machines?.get(locus.machine);
           if (target === undefined) throw new ToolRefused("bash", "machine host is not configured");
-          const result = await target.exec(args.cmd, locus.path);
+          const result = await target.exec(args.cmd, "/");
           if (result.status !== "completed")
             throw new ToolRefused(
               "bash",

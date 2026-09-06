@@ -1,9 +1,9 @@
 import { describe, expect, spyOn, test } from "bun:test";
-import { mkdtemp, mkdir, rm, symlink, writeFile, readFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, symlink, writeFile, readFile, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createDispatcher, ToolRefused } from "@openomni/agent";
-import { attachMachineDaemon, createMachineHost } from "@openomni/machines";
+import { attachMachineDaemon, createMachineHost, type MachineHandle } from "@openomni/machines";
 import type { PlainValue } from "@openomni/protocol";
 import { createTools } from "../src/tools/core/catalog";
 import { parseLocus } from "../src/tools/locus";
@@ -46,6 +46,8 @@ async function fixture(
   remote: boolean,
   run: (api: {
     root: string;
+    rawExec: MachineHandle["exec"];
+    endpointCalls: () => { get: number; exec: number };
     path: (name: string) => string;
     cell: (
       tool: string,
@@ -92,6 +94,7 @@ async function fixture(
   });
   const handle = host.get("c");
   const spies = {
+    get: spyOn(host, "get"),
     read: spyOn(handle.fs, "read"),
     write: spyOn(handle.fs, "write"),
     list: spyOn(handle.fs, "list"),
@@ -128,6 +131,11 @@ async function fixture(
     let call = 0;
     await run({
       root,
+      rawExec: handle.exec,
+      endpointCalls: () => ({
+        get: spies.get.mock.calls.length,
+        exec: spies.exec.mock.calls.length,
+      }),
       path: (name) => `${remote ? "c:" : ""}${join(root, name)}`,
       cell: (tool, input) =>
         observe(tool, () => dispatcher.executeCell({ id: `cell-${++call}`, tool, input }, context)),
@@ -232,6 +240,29 @@ for (const remote of [false, true]) {
     });
   });
 }
+
+test("R1 bash rejects composite machine IDs before endpoint lookup even with an allowed cwd", async () => {
+  await fixture(true, async ({ root, rawExec, endpointCalls, model }) => {
+    const injected = join(root, "injected:");
+    await mkdir(injected);
+    const cmd = "printf '%s' \"$PWD\"";
+    // Prove the real daemon would allow the malformed locus's cwd: denial must be in the adapter.
+    expect(await rawExec(cmd, injected)).toMatchObject({
+      status: "completed",
+      stdout: Buffer.from(await realpath(injected)),
+      exitCode: 0,
+    });
+    for (const machine of [`c:${root}/injected`, "c:/", "c/path", "./c"]) {
+      const before = endpointCalls();
+      expect(await model("bash", { machine, cmd })).toMatchObject({
+        isError: true,
+        errorKind: "precondition_failed",
+      });
+      expect(endpointCalls()).toEqual(before);
+    }
+    expect((await model("bash", { machine: "c", cmd })).isError).toBeUndefined();
+  });
+});
 
 test("daemon authority refuses writes and exec independently of the catalog", async () => {
   await fixture(
