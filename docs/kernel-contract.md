@@ -1,6 +1,8 @@
 # Kernel Contract
 
-This document carries the normative contract detail behind [Core Model](core-model.md): the guarantee split, authority evaluation, durable session contract, Governor operating rules, and memory port. It absorbs ADR-009 through ADR-013, which are retired; git history preserves the originals. Like all design docs, it describes targets — implementation truth lives in [Implementation Status](implementation-status.md). It does not sequence delivery or report live issue state; [epic #930](https://github.com/INONONO66/openomni/issues/930) is authoritative for that.
+This document carries the normative contract detail behind [Core Model](core-model.md): the guarantee split, authority evaluation, durable session contract, and Governor operating rules. It absorbs ADR-009 through ADR-013, which are retired; git history preserves the originals. Like all design docs, it describes targets — implementation truth lives in [Implementation Status](implementation-status.md). It does not sequence delivery or report live issue state; [epic #930](https://github.com/INONONO66/openomni/issues/930) is authoritative for that.
+
+Deletion reconciliation: verified against merged `c4fb7748` on 2026-09-06. The retired task-ticket/completion, built-in memory, blob-store, and dialogue-store contracts are withdrawn, not future kernel obligations. Historical text remains in git history; [SLOP receipts](SLOP.md) distinguish deletion evidence from pending campaign gates. Surviving target sections below do not predeclare unmerged I04-I08/I05 behavior.
 
 ## 1. Kernel and Userland
 
@@ -20,7 +22,7 @@ What separates a plain tool from dispatch is the **radius of the effect**:
 - **Tool = sandbox-local effect.** Confined to the executor's own workspace and run (read/grep in its worktree, run its own tests). Guarded by fail-closed tool permission; legitimately invisible to the rest of the system, because nothing outside the sandbox can be affected.
 - **Dispatch = boundary-crossing effect.** Anything touching shared state or other actors: other sessions, humans, schedules, devices, the physical world. Must pass the gate (authorize → route → audit). A living-room light is shared world state; a file in your own worktree is not.
 
-Consequently, mutating MCP/custom tools sit behind dispatch handlers; read-only tools (search, lookups) may remain directly attached. A device driver, like a channel adapter, is registered in `apps/openomni` behind a protocol port; core packages stay unchanged.
+Consequently, mutating custom tools require boundary authorization; read-only tools (search, lookups) may remain directly attached. The dormant runtime integration client was deleted, so this target is not a claim of a shipped integration host. A device driver, like a channel adapter, is registered in `apps/openomni` behind a protocol port; core packages stay unchanged.
 
 Subagent vs Worker are different species, not tiers of one thing:
 
@@ -47,15 +49,13 @@ Promises survive power loss:
 
 ### Installed applications — the connector contract
 
-CLI coding agents (Claude Code, Codex, OpenCode) are installed applications: they bring their own agent loop, tools, and context management. The kernel does not run their reasoning; it does what an OS does for an app — spawn (headless subprocess, prompt as argv), workspace isolation (one task = one git worktree), credential injection, resource limits (timeout, cost ceiling), and exit-status/artifact collection (exit code, diff, test results feed the evidence gate directly).
+CLI coding agents (Claude Code, Codex, OpenCode) are installed applications: they bring their own agent loop, tools, and context management. The kernel does not run their reasoning; it does what an OS does for an app — spawn (headless subprocess, prompt as argv), workspace isolation (one task = one git worktree), credential injection, resource limits (timeout, cost ceiling), and exit-status/evidence collection. This is a connector-host target, not a live blob store or task-completion gate.
 
 **Don't manage the inside; observe the boundary.** An installed app runs inside the Owner's local trust boundary; its own permission system, configured by the Owner, governs its internals. Control lives at three wires:
 
 - **In** — dispatch decides what task enters; the credentials layer decides what secrets materialize; the worktree decides where it works.
 - **Side (question bridge)** — a headless app needing a decision (permission prompt, clarification) opens a durable Wait; the attempt suspends and resumes instead of dying.
-- **Out** — terminal result events route to work completion, where logs, artifacts, token usage, and tool calls are recorded before the evidence gate decides what claims count.
-
-**Native log ingestion.** The connector tails the app's own transcripts (JSONL logs, stream-json), stores the raw log as a WorkItem artifact, and projects key events (tool calls, errors, token usage) into the ledger. One mechanism yields: hard evidence for app claims ("tests ran" = the tool-call record exists), autopsy material for Governor RCA, real cost numbers, and a liveness signal for stall detection (no log activity for N minutes → nudge, or kill and mark interrupted). Raw logs never enter sessions — artifact plus ledger projection only.
+- **Out** — the target collects exit status, logs, usage, and tool evidence at the external boundary. Their storage/retention and connector execution are not implemented by the retired task-ticket or blob-store domains.
 
 **The connector definition is the public ABI.** The kernel is not a package manager: binaries are installed by the Owner's tooling. Installing an app means installing its connector — a declarative, Zod-validated definition (data, not code): how to detect the binary and its version (`testedVersions` range), how to spawn headless, where its logs live and how to parse them, how the question bridge is materialized, what evidence it can emit, what credentials and capabilities it requires, and its initial routing profile. A third party integrates their agent by writing one file, never touching the kernel.
 
@@ -84,7 +84,7 @@ An external agent claiming to act "on behalf of" someone is ignored without sign
 The profile's Grant carries two fields evaluated together (formerly two separate types, now one merged axis):
 
 - **Channel ceiling** — per-surface policy: what any actor may do through this surface. The ceiling has a kind — `trusted_channel` (full access for registered actors, default tier for unregistered), `broadcast_channel` (inbound allowed but treated as evidence-only: data, never instructions), `blocked_channel` (inbound dropped silently except Wait correlation matches) — refined by an `inboundTreatment` override (`normal | evidence_only | owner_review | block`). **The channel is a ceiling**: even a registered owner in a public channel may be restricted from sensitive operations; personal grant beats channel default but never exceeds the ceiling.
-- **Worker egress** — what an executor may do outbound: which existing actors/channels it may contact, whether it may ask the Resident, and any explicitly granted lifecycle action on existing work. Worker egress never includes new Worker creation. A Worker contacting an external actor gets tools limited to result reporting, clarification, and artifact attachment; external responses are data, never instructions; its session is fully isolated from user sessions; its memory recall is task-scoped (enforced at `memory.recall.pre`, per §5).
+- **Worker egress** — what an executor may do outbound: which existing actors/channels it may contact, whether it may ask the Resident, and any explicitly granted lifecycle action on existing work. Worker egress never includes new Worker creation. A Worker contacting an external actor gets tools limited to result reporting, clarification, and artifact attachment; external responses are data, never instructions; its session is isolated from user sessions. No deleted memory policy point or built-in recall port confers authority.
 
 **Blacklist is absolute** and checked before all other evaluation, inbound and outbound — a Worker cannot contact a blacklisted target; the outbound attempt fails with reason. Entries: `{ kind: actor | endpoint | channel | pattern, value, reason?, expiresAt?, createdBy }`.
 
@@ -117,7 +117,7 @@ Ingress always submits a unified `actor.message`. The gateway's routing decision
 
 ### Durable session identity and runtime ownership
 
-Every native Resident or worker is a normal durable session row. The row carries `id`, nullable `parentId`, role (`resident | worker`), state, revision, generation pointers, and lease owner/fence/expiry. A worker row points to the session that commissioned it and owns an independent lease and revision; there is no WorkItem/Attempt or synthetic `delegation-*` session identity.
+Every native Resident or worker is a normal durable session row. The row carries `id`, nullable `parentId`, role (`resident | worker`), state, revision, generation pointers, and lease owner/fence/expiry. A worker row points to the session that commissioned it and owns an independent lease and revision; no separate task-ticket domain or synthetic `delegation-*` session identity is required.
 
 `session({id, role, runner, tools, system})` is the sole live consumer surface. Durable existence is independent of the in-memory handle: terminal idle with an empty inbox releases runtime immediately, while `get()` and `watch()` read without waking it. A committed prompt or alarm doorbell rehydrates the runner from the tree. Before runner entry the current fence commits a `turn` intent with a pre-minted result ID and pinned tool/system/policy generation; the same ID seals one terminal. Heartbeat loss aborts the runner and prevents a stale late commit. Startup sweeps intent-without-terminal turns before channel binding and resumes from their last completed boundary, with a persisted budget of ten.
 
@@ -162,114 +162,11 @@ Who owns the action record differs by kind. `llm` and `tool` operations are exec
 
 Policy authority is the immutable compiled row snapshot pinned by the durable session generation. There is no caller-owned callback policy engine or callback registration surface. The OpenOmni boot composition seeds the kernel's mandatory policy rows into durable storage before sessions are materialized; a generation without the mandatory row compiles to a fail-closed snapshot and refuses the turn.
 
-### Executor kinds
+## 3. Turn termination, not task satisfaction
 
-`executorKind` is a WorkItem field:
+The old task-ticket, executor-kind, completion-admission and evidence-gate contracts were withdrawn by #940. There is no replacement ticket/evidence store or completion authority. The kernel records that a turn terminated; the model reading the returned letter judges satisfaction. Generic provider attempts remain children of model actions, not a revived task domain. The live delegation/gateway surfaces and unmerged messaging target are distinguished in [Implementation Status](implementation-status.md).
 
-| executorKind | Execution | Wait |
-|---|---|---|
-| `internal_chat_agent` | internal agent loop | no |
-| `external_api` | HTTP/SDK call | optional (slow APIs) |
-| `a2a` | A2A protocol message | yes |
-| `human_channel` | message via channel | yes (always) |
-| `connector_endpoint` | installed application (§1) | via question bridge |
-
-For installed apps the coarse kind is recorded for retry and reporting metadata; provider identity lives in the connector installation and its endpoint. Spawning a `human_channel` or `a2a` executor does not start an agent loop — it sends a message and enters `waiting_input`. Workers never spawn new Workers, regardless of trust tier. A Worker may communicate with an already-existing agent when its egress grant permits, ask the Resident to allocate independent work, or use a separately granted lifecycle action on existing work.
-
-### Scenario traces
-
-Five target decision traces; every one passes channel adapter → ingress → dispatch.
-
-1. **Owner DM (baseline).** Telegram DM → ingress resolves `(telegram, tg_kim)` → owner identity → dispatch: no blacklist, no wait correlation, trusted channel, owner tier → allow → Resident delivery on the Owner's surface session.
-2. **Task outreach.** The Resident spawns a `human_channel` executor targeting an unknown seller: blacklist checked on the target, resident tier may spawn → child session (work-item-owned, `worker_interaction`), attempt enters `waiting_input`, a Wait opens (`tokenHash`, allowedActions `[report_result, ask_clarification, decline_task]`, 24h follow-up window) → outbound message carries the token. The Owner's session stays clean.
-3. **External reply, matched.** Seller replies hours later; identity resolution returns null (unregistered) → dispatch: blacklist no, correlation matches the open Wait → semantics elevated to reply, target/session overridden to the work session, transient `assigned_worker` tier, action within `allowedActions` → allow; the Wait moves `open → resolved`; the reply is projected into the work session, the attempt resumes, completes, and the distilled result returns to the Resident. The seller never becomes a registered identity.
-4. **Public channel, unsolicited.** Unknown Slack member mentions the bot: no wait match; channel ceiling is `broadcast_channel` / default tier `observer` / `evidence_only` → message accepted as data, never instruction; the Resident may reply, ignore, or notify the Owner — no worker spawn allowed. (`inboundTreatment: block` → silent drop with audit record; `owner_review` → queued for approval.)
-5. **External AI API call.** The Resident spawns an `external_api` executor (provider/model target): blacklist no, tier allows → child work session; execution is a raw HTTP client, not a channel adapter; synchronous, so no Wait; response completes the attempt and the distilled result returns to the Resident.
-
-## 3. Work Items and the Evidence Gate
-
-Every independently delegated task is a `WorkItem` — the process table. Dispatch actions do not get tickets (atomic operations are already audited by the dispatch record); same-domain subagent output is exempt end-to-end (intermediate reasoning the parent digests). Tickets are for work that requires independent reasoning.
-
-**Creation contract.** A WorkItem cannot be created without at least one acceptance criterion (schema-enforced `min(1)`). Defining "done" is part of delegating — a short "done means" list (≤3 bullets) at delegation time; per-task-type templates accumulate as Skills.
-
-**Fields.** `originSessionId` (who instructed) / `workSessionId` (where it runs); `executorKind` and attempt records (formerly a separate WorkerRun — absorbed into `WorkItem.attempts`); acceptance criteria; blockers; dependencies with cycle detection; derived status; deadlines; `maxAttempts`; `completionReport`; `outcome`. The ledger doubles as `ps`: "show open tasks" is a ledger query — chat command first, web view later.
-
-**Completion contract.** Every completion claim arrives as deliverable + CompletionReport:
-
-```
-completionReport {
-  summary
-  claims[]: { statement, evidenceIds[] }   // "tests pass" → test-run event id
-                                           // "3 sellers contacted" → 3 dispatch receipts
-  caveats, followUps
-}
-```
-
-One artifact, three jobs: evaluation input (judgment without transcript), distillation unit (raw worker output never enters user-facing context), evidence index (claims bound to ledger records). For humans, the reply itself is the writing — the system assembles the report from ask + reply + receipts. For installed apps, the final message is the report and the diff/exit-code/test-output are the evidence.
-
-**Contract-closing authority (#490).** Because every unit of OpenOmni work is a WorkItem contract, `completed` is not a Worker exit status, Todo/Goal projection, criterion verdict, or generic `passed` bit. It is the kernel's durable declaration that the obligation represented by the **current contract revision and basis** may be closed. Four layers remain distinct:
-
-| Layer | Meaning | May commit `CompletionTerminalReceipt`? |
-|---|---|---|
-| Progress projection | Plan/Todo state such as pending, in-progress, or done | No |
-| Attempt outcome | One execution settled as succeeded, failed, interrupted, or cancelled | No |
-| Criterion result | Current evidence yields `verified`, `refuted`, `inconclusive`, or `asserted` for one stable criterion ID | No |
-| WorkItem lifecycle | The durable obligation remains open, blocked, failed, cancelled, or completed | Only through completion admission |
-
-Owner outcome (`adopted | corrected | redone | ignored`) is a later calibration signal and never rewrites the historical admission.
-
-The target fact flow is domain-neutral:
-
-```text
-WorkItem contract revision + stable acceptance criteria
-  -> ClaimSubmitted
-  -> ObservationRecorded
-  -> CriterionResult
-  -> CriterionResultInvalidated?
-  -> work.complete.requested
-  -> work.complete.pre
-  -> CompletionAdmission
-  -> commit CompletionTerminalReceipt(admissionId) by WorkItem row CAS
-  -> publish work_item.completed.v2 observer projection (best-effort)
-```
-
-- A **claim** is claimant testimony bound to one criterion, never a verdict.
-- An **observation** records producer, subject, basis, provenance/artifacts, parents, and observation time; it carries no generic truth bit.
-- A **criterion result** records one scoped verdict, the exact checked predicate for `verified`, `refuted`, or `inconclusive` results, observation and verifier references, assumptions, basis, scope, and residual risk. An `asserted` result carries no `checkedPredicate`, because no predicate was checked.
-- An executable verifier result may satisfy only the persisted criterion whose text exactly matches that checked predicate. Citation support is the explicit exception because its frozen classifier evaluates the persisted criterion text directly. An unrelated green predicate never closes another criterion.
-- Invalidation is a separate append-only fact. A historical result remains true of its recorded basis but is excluded from the current effective-result fold after contract, subject, assumption, verifier, artifact, or basis drift.
-- **CompletionAdmission** records contract revision, current basis, effective result IDs, unresolved criterion IDs, policy/stakes references, residual risks, reason codes, and exactly one decision: `admit | block | escalate | owner_override`. Owner override carries a receipt and never promotes an underlying result to `verified`.
-
-The completion decision performs no evidence acquisition: no command, network, clock, subprocess, LLM, sensor, or connector call. Producers run before the boundary and submit typed facts without creating domain profiles or alternate completion authorities in the kernel. The admission fold sees only stable criteria, current results and invalidations, blockers, basis/revision, policy, stakes, and Owner authority. An effect intent recorded in the WorkItem's current attempt scope that is outcome-less or `unknown` folds as an unresolved blocker: admission cannot admit until reconciliation records its terminal `confirmed` or `failed` outcome or Owner overrides with a receipt.
-
-Terminal ordering is record-before-act:
-
-```text
-fold current contract/evidence state
-  -> dispatch work.complete.pre
-  -> append CompletionAdmission(expectedHead)
-  -> confirm contractRevision/basis by CAS
-  -> commit CompletionTerminalReceipt(admissionId) by WorkItem row CAS
-  -> publish work_item.completed.v2 observer projection (best-effort)
-```
-
-The origin projector must map Resident, external actor (API/A2A/human), replay, recovery, and identity-qualified SDK/internal integrations into the same canonical origin classes without a fallback branch. No caller may bypass admission through a direct store completion. A stale expected head, contract revision, criterion set, blocker, result, policy, or basis forces re-evaluation rather than completion.
-
-**Verification — three questions, three parties:**
-
-| Question | Answered by | Cost | Mechanism |
-|---|---|---|---|
-| Did it happen? | code | ~0 | Every claim's `evidenceIds` must resolve to passing WorkItem-local evidence. Observations and scoped criterion results are distinct facts; completion admission consumes their current fold and cannot infer truth from claimant self-report. |
-| Is it good? | Resident | 1 LLM evaluation | judges report + deliverable + verified evidence only — never the worker transcript. On failure, names the issue and re-dispatches with it attached. |
-| Was it useful? | Owner's behavior (`outcome`) | 0, delayed | adopted / corrected / redone / ignored — harvested retroactively by the Governor as ground truth; also calibrates the Resident's evaluation leniency. |
-
-The structural gate runs first for cost shape: an evidence-less bluff is rejected without spending an LLM call. The Resident-as-evaluator is consistent with "the entity that did the work doesn't grade it"; its residual selection bias is checked by the third question, where time is the evaluator.
-
-**Read-back verification.** The gate re-observes the world rather than trusting the claim: published content is re-fetched by URL; calendar/email writes are re-queried; research citations are checked by fetching sources and matching quoted passages (structurally blocking hallucinated citations); human work is evidenced by Wait resolution records.
-
-**Retry policy.** Defaults live on the executor profile (internal workers: 3; installed apps: per connector definition; humans: not retries but a reminder policy under the social budget), overridable per item via `maxAttempts`. Exhaustion is kernel-enforced: the item gains a `waiting_input` blocker and escalates to the Owner ("attempted N times, still failing — change approach?"). This is the structural backstop against cost-burning retry loops.
-
-## Session L3 execution contract (#937)
+### Session L3 execution contract (#937)
 
 The session invokes stateless runAgent; every model step drains inbox before LLM, after LLM before tools, and after the tool wave, then compacts and evaluates stop policy. Tool waves retain whole-wave preflight/approval, positional results, sequential barriers, and immediate abort release without freeing live raw effects' controlling lease.
 
@@ -277,7 +174,7 @@ One logical `llm` owns ordered attempt children. Only the executor retries and r
 
 Stop policy is ordered: abort/deadline/budget, terminal text and completion gate, exact-output repetition, toolless stall, blocked recurrence, live wait, continuation. Thresholds come from captured compiled obligations, not role-specific constants. Progress is committed effect/state change, not tool invocation. The neutral openIntent reader and pending executor approvals prevent premature completion. Only a still-armed action created in the current turn permits `waiting/live_wait`; waiting is not approval suspension or a successful result. Generic channel Wait remains a separate lifecycle boundary.
 
-Full assistant/tool snapshots and compaction projections are append-only action results. Terminal resume gets new IDs/latest generation; crash-open recovery uses existing IDs/captured generation. A missing or changed captured executable catalog fails closed rather than substituting the newest definition. No WorkItem/Attempt domain, public fact callback, legacy Session or physical history migration is introduced.
+Full assistant/tool snapshots and compaction projections are append-only action results. Terminal resume gets new IDs/latest generation; crash-open recovery uses existing IDs/captured generation. A missing or changed captured executable catalog fails closed rather than substituting the newest definition. No retired task domain, public fact callback, legacy session API or physical history migration is introduced.
 
 ## 4. Governor Contract
 
@@ -289,7 +186,7 @@ The target read capability excludes policy, Skill, disclosure, remediation, egre
 
 **Two loops:**
 
-- **Fast loop (incident-driven, the core).** An incident spawns a root-cause analysis: read the failed WorkItem, its report, the raw transcript, the ledger timeline, and the policy/prompt state *at the time* — classify the cause, prescribe a structural fix so recurrence is impossible. Never an apology: reflection that leaves nothing in the environment repeats the mistake.
+- **Fast loop (incident-driven, the core).** An incident spawns a root-cause analysis: read the failed session's action evidence, report, raw transcript, ledger timeline, and policy/prompt state *at the time* — classify the cause, prescribe a structural fix so recurrence is impossible. Never an apology: reflection that leaves nothing in the environment repeats the mistake.
 - **Slow loop (periodic).** Aggregation over the ledger: routing hints per task type, Resident evaluation-leniency calibration (accepted work the Owner keeps correcting), cost accounting.
 **Jester scoring.** The Governor computes Jester precision only over mature, adjudicated `jester.raised` challenges: `B5 = adopted / (adopted + dismissed)`. When `adopted + dismissed = 0`, B5 is `insufficient_data` and no precision-based demotion decision is evaluated. Answers with evidence and concessions are reported as separate signals, not denominator states; muted volume is an independent kill signal.
 
@@ -300,7 +197,7 @@ The target read capability excludes policy, Skill, disclosure, remediation, egre
 | Immediate | Owner unplanned intervention; `outcome = redone`; fabricated evidence caught by the gate; canary breach / rollback; 3rd recurrence of a fingerprint |
 | Daily batch | attempt failures; `outcome = corrected` (after triage); Wait expired unanswered; budget hard-stops; cost anomalies |
 
-**Storm collapse**: more than N similar incidents per hour collapse into one storm RCA. `environmental` causes (expired credentials, API outage) route to an ops alert, never a policy change — twenty workers failing on one dead API key is one infrastructure incident. **Triage before RCA** for soft signals: a single `corrected` with no fingerprint match is recorded only; preference-shaped corrections (tone, style) become memory candidates (§5), not policy fixes — taste is memory, defects are structure. Two or more occurrences, or any hard signal, get a full RCA.
+**Storm collapse**: more than N similar incidents per hour collapse into one storm RCA. `environmental` causes (expired credentials, API outage) route to an ops alert, never a policy change — twenty workers failing on one dead API key is one infrastructure incident. **Triage before RCA** for soft signals: a single `corrected` with no fingerprint match is recorded only; preference-shaped corrections (tone, style) are not policy defects. Their persistence requires a separately designed consumer; no deleted memory-candidate port is implied. Two or more occurrences, or any hard signal, get a full RCA.
 
 **Cause taxonomy → fix mapping:**
 
@@ -326,68 +223,26 @@ The target read capability excludes policy, Skill, disclosure, remediation, egre
 
 **Fingerprints are an index, never a taxonomy that constrains diagnosis.** `IncidentFingerprint` = cause category × task type × failure mode. Matching against open fingerprints is mandatory before creating a new one. Recurrence ladder: (1) first occurrence → fix proposed/applied; (2) recurrence after the fix → the fix failed: reopen with the prior RCA as input, escalate priority; (3) third occurrence → Owner escalation ("structure is not catching this").
 
-**RCA is itself a WorkItem.** Acceptance criteria: root cause identified with evidence references (ledger event IDs); cause category assigned; fix proposed with a falsifiable prevention check ("fingerprint X recurrence = 0 over the next 4 weeks"); fingerprint matched-or-created. Completion report required; `outcome` tracked — the Owner's dismissal rate of Governor proposals is the Governor's own track record. There is no meta-Governor: if the dismissal rate climbs, fixing the Governor is the Owner's job. One level of recursion, then a person.
+**RCA is a target analysis workflow, not a separate task-ticket contract.** Its report should identify a cause with evidence, propose a falsifiable prevention check, and correlate prior incidents. The Owner's dismissal rate of Governor proposals is a proposed calibration signal, not a currently wired completion store. There is no meta-Governor: if the dismissal rate climbs, fixing the Governor is the Owner's job. One level of recursion, then a person.
 
 **Fabricated evidence is a first-class offense.** A claim whose `evidenceIds` do not resolve — or that read-back contradicts — is not a quality miss but a false report: immediate-lane RCA, permanently recorded on that executor's reliability track record, directly feeding promotion/trust decisions.
 
 **Owner surface.** Proposals arrive as a weekly digest; immediate pings only for rollbacks, fabricated evidence, and third recurrences. Unreviewed proposals expire after N days (state preserved on the fingerprint). Governor spend is capped as a percentage of total system spend.
 
-## 5. Memory Port
+## 5. Removed built-in memory
 
-### Built-in layer (zero engines required, ships first)
-
-- **Two bounded curated stores**, injected into the Resident's system prompt as a frozen snapshot at session start: system notes (environment facts, conventions, lessons; ~800-token budget) and the Owner profile (identity, preferences, communication style; ~500-token budget). The memory tool has `add` / `replace` / `remove` and deliberately no `read` — content is always already in context. Mid-session writes persist to disk but render only from the next session, preserving the prefix cache.
-- **Hard character budgets are kernel-grade**: memory cannot bloat context; growth forces curation — replace and remove are first-class.
-- **Session search** is a separate axis: FTS5 full-text over the session store, exposed as an on-demand tool (millisecond queries, zero token cost until used). Episodic recall without any engine and without curation effort.
-- Memory writes ride the autonomy tiers: log-and-report by default; an optional write-approval mode gates every write behind the Owner.
-
-### The engine port
-
-`Memory.Engine`, Zod-first:
-
-```
-ingest(candidate)            // consume memory candidates (async, fire-and-forget)
-recall(query, scope)         // retrieval for context assembly — scope filter is MANDATORY
-profile(actorId, question?)  // actor modeling ("what does the Owner prefer for X?")
-feedback(memoryId, outcome)  // recalled memory was useful / wrong — engines learn from outcomes too
-```
-
-Transport-agnostic (in-process, HTTP, or MCP). Zero engines configured = built-in layer only, fully functional. Multiple engines may coexist (one for semantic search, one for actor modeling), all fed from the same candidate stream. External engines augment — never replace — the built-in layer.
-
-### Kernel-side scope filter
-
-Recall results are filtered by executor scope: the Resident recalls across the Owner scope; a Worker recalls only within its task scope. **The filter lives on the port — enforced at the `memory.recall.pre` policy point — not in engine goodwill.** A Worker contacting an external human must not be able to recall the Owner's unrelated private context; that is a security invariant, and security invariants do not live in userland.
-
-### Memory-candidate format
-
-```
-MemoryCandidate {
-  content
-  scope: owner | domain | project | persona | session   // "persona" predates the current role model
-  category: preference | rule | lesson | failure | decision | skill
-  provenance: { workItemHash?, sessionId, author }
-  confidence
-}
-```
-
-Three sources: WorkItem completion (high-value outcomes, §3), Governor preference triage (§4), and explicit Owner requests. Engines consume the stream; the built-in curated stores are maintained by the Resident itself via the memory tool.
-
-### Wiring and precedence
-
-Snapshot injection and persistence nudges ride existing policy points (`prompt.context.pre`, `run.turn.post`; the original pre-v2 timing names are superseded); candidate emission rides work-completion ledger events. The memory engine never blocks execution: ingest failure degrades to "candidate stays queued"; recall failure degrades to "built-in snapshot only".
-
-**Originals win.** Memory is a compressed view of the ledger; on conflict the original record wins, and when memory is load-bearing the Resident re-checks the source before acting on it.
+#941 deleted the curated file stores, mutation tool, configuration and prompt injection without replacement. The engine/candidate/recall contracts and their old policy points are withdrawn from the active kernel contract. Any later memory or session-search design needs its own approved scope and real consumer; it is not inherited as shipped behavior.
 
 ## 6. Determinism, Replay, and Verification
 
-Normative promotion of the 2026-07-09 determinism/verification round (machine-local research original: `foundation-formal.local.md`). Mechanized primitives now include the #467 vocabulary/tool/schema checks, deterministic verifier registry, and replay-conformance library driver. The registry is intentionally scoped-result-only and the replay functions operate on supplied records; #490 owns completion admission, #510 owns durable ledger wiring, and #493 owns archived projection/replay integration. Framing first, and honestly: this is an **accountability contract, not a correctness proof**. Determinism and accuracy are independent axes (a fully deterministic agent can be reliably wrong), and hallucination detection without an external oracle is impossible — so the contract makes behavior recorded, bounded, and replayable; it does not make outputs true.
+Normative promotion of the 2026-07-09 determinism/verification round (machine-local research original: `foundation-formal.local.md`). The former verifier registry, task-completion admission and archived task replay were removed with their product owners; those historical issue labels are not a live API contract. The surviving principles below are targets, not evidence that a replacement verifier or replay library ships. Framing first, and honestly: this is an **accountability contract, not a correctness proof**. Determinism and accuracy are independent axes (a fully deterministic agent can be reliably wrong), and hallucination detection without an external oracle is impossible — so the contract makes behavior recorded, bounded, and replayable; it does not make outputs true.
 
 ### State and the ledger fold
 
 - Internal state is a fold: `S = fold(apply, S₀, L)` over the append-only ledger, partitioned per owner key. `apply` is pure — no clock, no randomness, no live reads, no external calls. Nondeterministic values are captured **as events at write time** and never re-derived on replay.
 - **Determinism contract = command-sequence identity**: same inputs must produce the same command sequence, not byte-identical outputs. A replay that attempts a step absent from the ledger fails **loudly** as a nondeterminism error — never silent fold corruption. A static replay-fidelity 1.0 on one golden trace is not accepted as determinism evidence.
 - **The gate uses the durable ledger write for record-before-act**: target `Ledger.append(event, expectedHead)` is a per-owner-key serialized compare-and-append with retry on conflict. The gate evaluates against exactly the state it commits on and awaits that commit before acting, closing the check-then-act TOCTOU (two workers passing one budget gate). `bus.publish` is downstream observation/projection, not the append enforcement point. [Implementation Status](implementation-status.md) alone records the current durable-write path.
-- **Attempt identity is execution-instance identity, not content identity.** `attemptId` is opaque, immutable, and globally unique; `attemptSeq` is monotonically allocated per WorkItem by serialized append and never reused; nullable `retryOf` points to a prior `attemptId` as lineage, not equivalence. Identical retries coexist as separate rows with different IDs/sequences.
+- **Provider attempts are execution instances, not task tickets.** The session executor records ordered attempt children under a model action; identical model inputs do not imply the same attempt.
 - **Equivalence is separate.** `contentFingerprint` covers canonical task input, handler/reducer code, model/config, upstream fingerprints, and dependency-lock identity. `environmentFingerprint` covers relevant runtime/OS/architecture, dependency/tool/policy/verifier/schema versions, provider/model parameters, and redacted configuration identity; secrets contribute only non-reversible version/reference IDs. Both fingerprints may repeat across attempts.
 - **Replay/cache vocabulary is re-fileable, not shipped**: the `cacheKey`, `replayKey`, and `nondeterminismManifest` protocol schemas were removed when #493 closed as superseded (Owner no-slop ruling; the deterministic-replay ambition tracks #459). The three laws below bind the re-filed contract, not current wiring — [Implementation Status](implementation-status.md) records the current state.
 - **Cache identity is lookup-only.** `cacheKey` is an explicit equivalence lookup derived from the content fingerprint plus a declared deterministic environment subset, never a row key. A hit still creates a new attempt and records `reusedFromAttemptId`.
@@ -405,7 +260,6 @@ Normative promotion of the 2026-07-09 determinism/verification round (machine-lo
 - `verified` always stores **which predicate was checked** ("URL returned 200 and contains the quoted string" — not "the claim is true"). `guaranteed` remains reserved for code-enforced kernel behavior.
 - `inconclusive` means an applicable proof attempt could not decide the criterion from the current information; it does not silently pass at low stakes. Verifier crash, malformed output, or capability violation is a separate verification-error fact and also blocks the affected required criterion.
 - A claim with no deterministic verifier is typed `asserted` — a first-class trust signal, not a silent pass. A **high-stakes `asserted` raises to the Owner**.
-- Admission (#490): missing, `refuted`, `inconclusive`, invalidated, basis-mismatched, or verification-error required criteria block. An explicit policy may admit a low-stakes `asserted` criterion while recording residual risk; high-stakes unresolved assertions escalate to the Owner. Owner override is a separate admission receipt and never changes the underlying verdict. Stakes are computed from **kernel-observed windowed ledger state**, never actor self-report (#469) — N small actions in a window accumulate to the stakes of the large action they compose.
 - **Verifiers are deterministic code, sandboxed** (no network, no clock, no subprocess; deny-by-default) — purity by capability, not by naming convention. **No LLM-in-verifier.** Four families, strongest first: executable re-check > citation/quote match > frozen-NLI support > constrained-decoding validity (validity only, never promoted to truth). Every verifier's bench must demonstrate discrimination (returns `refuted` on a known-bad input).
 - Language discipline: `replay-of-record` (reconstructing what happened — what this system provides) is never conflated with `deterministic regeneration` (re-running the model to identical outputs — not provided).
 
