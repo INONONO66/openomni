@@ -301,6 +301,68 @@
     "lastSendAt",
     "notifyInWindow"
   ],
+  "Gateway.IngestResult#blocked_post": ["handle", "reasonCode", "status"],
+  "Gateway.IngestResult#blocked_pre": ["reasonCode", "status"],
+  "Gateway.IngestResult#executed": ["delivery", "handle", "status"],
+  "Gateway.IngestSender#external": ["externalId", "kind", "surface"],
+  "Gateway.IngestSender#session": ["id", "kind"],
+  "Gateway.IngressFacts": [
+    "addressees",
+    "channelId",
+    "dm",
+    "eventId",
+    "payload",
+    "render",
+    "reply",
+    "surface",
+    "workspaceId"
+  ],
+  "Gateway.MessageObservation#message.admitted": [
+    "ingestMs",
+    "kind",
+    "matchedRuleIds",
+    "messageId",
+    "verdict"
+  ],
+  "Gateway.MessageObservation#message.committed": [
+    "commitMs",
+    "kind",
+    "messageId"
+  ],
+  "Gateway.MessageObservation#message.drained": [
+    "boundary",
+    "kind",
+    "messageId",
+    "queueMs"
+  ],
+  "Gateway.MessageObservation#message.rejected": [
+    "ingestMs",
+    "kind",
+    "matchedRuleIds",
+    "messageId",
+    "verdict"
+  ],
+  "Gateway.MessageObservation#message.replied": [
+    "childTurnMs",
+    "kind",
+    "messageId",
+    "replyTo",
+    "roundTripMs",
+    "tokens"
+  ],
+  "Gateway.MessageObservation#message.sent": [
+    "bytes",
+    "kind",
+    "messageId",
+    "sender",
+    "targetKind",
+    "type"
+  ],
+  "Gateway.MessageObservation#message.timed_out": [
+    "kind",
+    "messageId",
+    "waitedMs"
+  ],
   "Gateway.MessageTarget": ["actorId", "endpointId"],
   "Gateway.Origin": ["externalId", "surface"],
   "Gateway.ReplyGrantRule": [
@@ -315,6 +377,26 @@
     "surface",
     "updatedAt",
     "workspace"
+  ],
+  "Gateway.RuleTableA": [
+    "addressee",
+    "check",
+    "effect",
+    "id",
+    "sender",
+    "senderTier",
+    "table"
+  ],
+  "Gateway.RuleTableB": [
+    "check",
+    "effect",
+    "id",
+    "sender",
+    "senderRole",
+    "table",
+    "targetKind",
+    "targetRole",
+    "type"
   ],
   "Gateway.SenderTargetGrant": [
     "expiresAt",
@@ -336,6 +418,8 @@
     "traceId",
     "waitSpec"
   ],
+  "Gateway.SendMessage": ["content", "deadline", "replyTo", "to", "type"],
+  "Gateway.SendMessageHandle": ["messageId", "target"],
   "Gateway.SocialBudget": [
     "classCaps",
     "cooldownMs",

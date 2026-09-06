@@ -4,6 +4,7 @@ import { Events as IngressEvents } from "../event/ingress.js";
 import { Ingress } from "../ingress/index.js";
 import { Wait } from "../wait/index.js";
 import { EpochMs } from "../time.js";
+import { MessageContract } from "./message.js";
 
 /**
  * Gateway contracts (docs/gateway-design.md §2, stage 0 — #706).
@@ -374,6 +375,31 @@ const WaitControlSchema = z
   .strict();
 
 export namespace Gateway {
+  /** #946 stage 1: schemas only; consumers and legacy removal follow in stage 2. */
+  export const SendMessage = MessageContract.Send;
+  export type SendMessage = z.infer<typeof SendMessage>;
+
+  export const SendMessageHandle = MessageContract.Handle;
+  export type SendMessageHandle = z.infer<typeof SendMessageHandle>;
+
+  export const IngestSender = MessageContract.Sender;
+  export type IngestSender = z.infer<typeof IngestSender>;
+
+  export const IngressFacts = MessageContract.IngressFacts;
+  export type IngressFacts = z.infer<typeof IngressFacts>;
+
+  export const IngestResult = MessageContract.Result;
+  export type IngestResult = z.infer<typeof IngestResult>;
+
+  export const RuleTableA = MessageContract.RuleTableA;
+  export type RuleTableA = z.infer<typeof RuleTableA>;
+
+  export const RuleTableB = MessageContract.RuleTableB;
+  export type RuleTableB = z.infer<typeof RuleTableB>;
+
+  export const MessageObservation = MessageContract.Observation;
+  export type MessageObservation = z.infer<typeof MessageObservation>;
+
   export const Origin = OriginSchema;
   export type Origin = z.infer<typeof OriginSchema>;
 
