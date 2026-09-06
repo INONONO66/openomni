@@ -3,7 +3,7 @@ import { Database } from "bun:sqlite";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createObservationBus } from "@openomni/agent";
+import { Bus, defineTool, eraseTool } from "@openomni/agent";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { run, type Provider } from "@openomni/llm";
 import { LlmCall, type Message, type Tool } from "@openomni/protocol";
@@ -95,7 +95,7 @@ const model: Provider.Model = {
   providerID: "anthropic",
   api: { npm: "@ai-sdk/anthropic", url: `http://127.0.0.1:${provider.port}/v1` },
 };
-const events = createObservationBus();
+const events = Bus;
 const messages: Message.WithParts[] = [];
 const calls: Tool.Call[] = [];
 const results: Tool.Result[] = [];
@@ -104,62 +104,12 @@ let ws: WebSocket | undefined;
 let appPort: number | undefined;
 let unsubscribe: (() => void) | undefined;
 try {
-  // Given: a tool step that bills usage, a failed next HTTP request, then a successful retry.
-  const completed = new Promise<{ input: number; output: number }>((resolve) => {
-    unsubscribe = events.subscribe(LlmCall.Events.Completed, (event) => {
-      resolve({ input: event.inputTokens, output: event.outputTokens });
-    });
+  // Given: actual provider calls bill one tool step, fail the next request, then retry.
+  const billed = { input: 0, output: 0 };
+  unsubscribe = events.subscribe(LlmCall.Events.Completed, (event) => {
+    billed.input += event.inputTokens;
+    billed.output += event.outputTokens;
   });
-  const outcome = await run(
-    {
-      model,
-      auth: { type: "api", key: "fixture-key" },
-      events,
-      trace: { traceId: "967-provider", sessionId: "967-provider", runId: "967-provider" },
-      system: "Answer using the supplied tool.",
-      messages: [],
-      tools: [
-        {
-          name: "lookup",
-          description: "Fixture lookup",
-          inputSchema: { type: "object", properties: {} },
-        },
-      ],
-      maxRetryAttempts: 1,
-      toolExecutor: async (call) => ({ id: "result", toolCallId: call.id, output: "42" }),
-    },
-    {
-      onMessage: (message) => messages.push(message),
-      onToolCall: (call) => calls.push(call),
-      onToolResult: (result) => results.push(result),
-    },
-  );
-  assert.deepEqual(outcome, { type: "stop" });
-  const billed = await completed;
-  assert.deepEqual(billed, { input: 16, output: 20 });
-  assert.equal(requests, 3);
-  assert.deepEqual(calls, [{ id: "paired", tool: "lookup", input: {} }]);
-  assert.equal(results.length, 1);
-  assert.equal(results[0]?.toolCallId, "paired");
-  assert.equal(results[0]?.output, "42");
-  const terminals = messages.filter(
-    (message) => message.info.role === "assistant" && message.info.finish !== undefined,
-  );
-  assert.deepEqual(
-    terminals.map((message) => (message.info.role === "assistant" ? message.info.finish : null)),
-    ["error", "stop"],
-  );
-  assert.equal(messages[0]?.info.role === "assistant" ? messages[0].info.tokens.input : -1, 0);
-  assert.deepEqual(
-    messages
-      .at(-1)
-      ?.parts.filter((part) => part.type === "text")
-      .map((part) => part.text),
-    ["retained reply"],
-  );
-  assert.equal(terminals[0]?.parts.find((part) => part.type === "tool")?.state.status, "completed");
-  console.log("967 provider", JSON.stringify({ requests, billed, calls, results, terminals }));
-
   // When: the production app calls the same real SDK through its configured transport.
   const app = await startOpenOmni({
     config: {
@@ -167,6 +117,7 @@ try {
       host: "127.0.0.1",
       wsPort: 0,
       wsToken: "fixture-token",
+      compactionSummarizer: false,
       model: {
         provider: "anthropic",
         id: "fixture",
@@ -174,7 +125,38 @@ try {
         baseUrl: model.api?.url,
       },
     },
-    llm: { resolveProviderModel: async () => model },
+    toolDefinitions: [
+      eraseTool(
+        defineTool({
+          name: "lookup",
+          description: "Fixture lookup",
+          category: "query",
+          visibility: { model: ["resident"], cell: [] },
+          input: z.object({}),
+          output: z.string(),
+          execute: async () => "42",
+          render: (_input, value) => value,
+        }),
+      ),
+    ],
+    llm: {
+      resolveProviderModel: async () => model,
+      run: (input, sink) =>
+        run(input, {
+          onMessage(message) {
+            messages.push(message);
+            sink.onMessage(message);
+          },
+          onToolCall(call) {
+            calls.push(call);
+            sink.onToolCall(call);
+          },
+          onToolResult(result) {
+            results.push(result);
+            sink.onToolResult(result);
+          },
+        }),
+    },
   });
   stopApp = app.stop;
   appPort = app.port;
@@ -187,11 +169,46 @@ try {
 
   // Then: the transport reply and committed SQLite terminal agree.
   assert.deepEqual(reply, { type: "response", text: "retained reply" });
-  assert.equal(requests, 4);
+  assert.equal(requests, 3);
+  assert.deepEqual(billed, { input: 16, output: 20 });
+  assert.deepEqual(calls, [{ id: "paired", tool: "lookup", input: {} }]);
+  assert.deepEqual(results, []); // Provider I/O no longer fabricates or executes tool results.
+  const terminals = messages.filter(
+    (message) => message.info.role === "assistant" && message.info.finish !== undefined,
+  );
+  assert.deepEqual(
+    terminals.map((message) => (message.info.role === "assistant" ? message.info.finish : null)),
+    ["stop", "error", "stop"],
+  );
+  assert.equal(messages[0]?.info.role === "assistant" ? messages[0].info.tokens.input : -1, 0);
+  assert.equal(terminals[0]?.parts.find((part) => part.type === "tool")?.state.status, "pending");
+  assert.deepEqual(
+    messages
+      .at(-1)
+      ?.parts.filter((part) => part.type === "text")
+      .map((part) => part.text),
+    ["retained reply"],
+  );
+  console.log("967 provider", JSON.stringify({ requests, billed, calls, results, terminals }));
   const rows = SessionHandleStore.listRows();
   assert.equal(rows.length, 1);
   const row = rows[0];
   assert.ok(row);
+  const toolResults = SessionHandleStore.tree(row.id)
+    .filter((action) => action.kind === "tool")
+    .flatMap((action) => {
+      const parsed = z
+        .object({
+          phase: z.literal("result"),
+          callId: z.string(),
+          result: z.object({ status: z.literal("success"), output: z.string() }),
+        })
+        .safeParse(action.effect.value);
+      return parsed.success ? [parsed.data] : [];
+    });
+  assert.deepEqual(toolResults, [
+    { phase: "result", callId: "paired", result: { status: "success", output: "42" } },
+  ]);
   const snapshot = SessionHandleStore.getSnapshot(row.id);
   assert.equal(snapshot.state, "idle");
   assert.deepEqual(snapshot.turns.at(-1)?.messages, [

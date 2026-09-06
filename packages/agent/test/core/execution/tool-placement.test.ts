@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from "bun:test";
-import type { RunInput } from "@openomni/llm";
 import type { Machine, Tool } from "@openomni/protocol";
 import { Bus } from "../../../src/index";
 import { ChatAgent } from "../../../src/core/chat-agent";
+import { createAssistantMessage } from "../../../src/core/message-factory";
 import type { ChatAgentConfig, ChatAgentInput } from "../../../src/core/types";
 
 const gatedTool: Tool.Spec = {
@@ -11,10 +11,7 @@ const gatedTool: Tool.Spec = {
   placement: "machine",
   requires: ["screen.read"],
 };
-const freeTool: Tool.Spec = {
-  name: "network.fetch",
-  inputSchema: { type: "object" },
-};
+const freeTool: Tool.Spec = { name: "network.fetch", inputSchema: { type: "object" } };
 const input: ChatAgentInput = {
   messages: [{ role: "user", content: "inspect" }],
   traceContext: {
@@ -24,143 +21,109 @@ const input: ChatAgentInput = {
   },
 };
 
-function config(
-  machineCapabilities: readonly Machine.CapabilityId[],
-  catalogs: string[][],
-  executed: string[] = [],
-  forge?: (input: RunInput) => Promise<unknown>,
-): ChatAgentConfig {
-  return {
+async function exercise(
+  options: {
+    capabilities?: readonly Machine.CapabilityId[];
+    call?: Tool.Call;
+    tools?: Tool.Spec[];
+    wave?: boolean;
+  } = {},
+) {
+  const catalogs: string[][] = [];
+  const executed: string[] = [];
+  const results: Tool.Result[] = [];
+  let requested = false;
+  const body = async (call: Tool.Call): Promise<Tool.Result> => {
+    executed.push(call.tool);
+    return { id: call.id, toolCallId: call.id, output: "result" };
+  };
+  const config: ChatAgentConfig = {
     events: Bus,
-    model: { provider: "test", id: "test-model" },
-    tools: [gatedTool, freeTool],
+    model: { provider: "test", id: "model" },
+    tools: options.tools ?? [gatedTool, freeTool],
     toolTargets: [
       { kind: "host", capabilities: [] },
-      { kind: "machine", id: "attached-machine", capabilities: machineCapabilities },
+      { kind: "machine", id: "machine", capabilities: options.capabilities ?? [] },
     ],
-    toolExecutor: async (call) => {
-      executed.push(call.tool);
-      return { id: "result-unused", toolCallId: call.id, output: "unused" };
-    },
+    toolExecutor: body,
+    ...(options.wave
+      ? { toolWave: (calls: readonly Tool.Call[]) => Promise.all(calls.map(body)) }
+      : {}),
     llm: {
-      resolveProviderModel: async () => ({
-        id: "test-model",
-        name: "Test Model",
-        providerID: "test",
-      }),
-      run: async (runInput: RunInput) => {
-        catalogs.push(runInput.tools.map((tool) => tool.name));
-        if (forge !== undefined) await forge(runInput);
+      resolveProviderModel: async () => ({ id: "model", name: "model", providerID: "test" }),
+      run: async (modelInput, sink) => {
+        catalogs.push(modelInput.tools.map((tool) => tool.name));
+        const message = createAssistantMessage("", "", "session-placement");
+        const call = options.call;
+        if (!requested && call !== undefined) {
+          requested = true;
+          message.parts.push({
+            id: "tool-part",
+            messageID: message.info.id,
+            sessionID: "session-placement",
+            type: "tool",
+            callID: call.id,
+            tool: call.tool,
+            state: { status: "pending", input: call.input },
+          });
+        }
+        sink.onMessage(message);
         return { type: "stop" };
       },
     },
   };
+  await ChatAgent.create(config).run(input, {
+    onMessage: () => undefined,
+    onToolCall: () => undefined,
+    onToolResult: (result) => results.push(result),
+  });
+  return { catalogs, executed, results };
 }
 
 describe("agent tool placement catalog", () => {
   beforeEach(() => Bus.reset());
-
-  it("hands the llm only tools whose required capability is held", async () => {
-    const withoutCapability: string[][] = [];
-    await ChatAgent.create(config([], withoutCapability)).run(input);
-
-    const withCapability: string[][] = [];
-    await ChatAgent.create(config(["screen.read"], withCapability)).run(input);
-
-    expect(withoutCapability).toEqual([["network.fetch"]]);
-    expect(withCapability).toEqual([["screen.capture", "network.fetch"]]);
+  it("offers only tools whose capability is held", async () => {
+    expect((await exercise()).catalogs).toEqual([["network.fetch"]]);
+    expect((await exercise({ capabilities: ["screen.read"] })).catalogs).toEqual([
+      ["screen.capture", "network.fetch"],
+    ]);
   });
-
-  it("refuses a forged call to a filtered tool instead of executing it", async () => {
-    const executed: string[] = [];
-    let refusal: Tool.Result | undefined;
-    await ChatAgent.create(
-      config([], [], executed, async (runInput) => {
-        refusal = await runInput.toolExecutor?.(
-          { id: "forged", tool: gatedTool.name, input: {} },
-          { signal: new AbortController().signal },
-        );
-      }),
-    ).run(input);
-
-    expect(executed).toEqual([]);
-    expect(refusal).toMatchObject({
-      toolCallId: "forged",
-      toolName: gatedTool.name,
-      isError: true,
-      output: 'tool "screen.capture" requires capabilities no attached target holds: screen.read',
-    });
-  });
-
-  it("refuses the underscore alias executors register for a filtered dotted tool", async () => {
-    const executed: string[] = [];
-    let refusal: Tool.Result | undefined;
-    await ChatAgent.create(
-      config([], [], executed, async (runInput) => {
-        refusal = await runInput.toolExecutor?.(
-          { id: "forged", tool: "screen_capture", input: {} },
-          { signal: new AbortController().signal },
-        );
-      }),
-    ).run(input);
-
-    expect(executed).toEqual([]);
-    expect(refusal).toMatchObject({
-      toolCallId: "forged",
-      toolName: "screen_capture",
-      isError: true,
-      output: 'tool "screen_capture" requires capabilities no attached target holds: screen.read',
-    });
-  });
-
-  it.each([
-    ["refused first", [gatedTool, { name: "screen_capture", inputSchema: { type: "object" } }]],
-    ["offerable first", [{ name: "screen_capture", inputSchema: { type: "object" } }, gatedTool]],
-  ])(
-    "fails closed on an alias collision regardless of catalog order (%s)",
-    async (_label, tools) => {
-      const executed: string[] = [];
-      let refusal: Tool.Result | undefined;
-      const base = config([], [], executed, async (runInput) => {
-        refusal = await runInput.toolExecutor?.(
-          { id: "collide", tool: "screen_capture", input: {} },
-          { signal: new AbortController().signal },
-        );
+  for (const wave of [false, true]) {
+    for (const name of ["screen.capture", "screen_capture"]) {
+      it(`refuses filtered ${name} at the ${wave ? "wave" : "single"} execution door`, async () => {
+        const observed = await exercise({ wave, call: { id: "forged", tool: name, input: {} } });
+        expect(observed.executed).toEqual([]);
+        expect(observed.results).toMatchObject([
+          { toolCallId: "forged", toolName: name, isError: true },
+        ]);
       });
-      await ChatAgent.create({ ...base, tools: tools as Tool.Spec[] }).run(input);
-
-      expect(executed).toEqual([]);
-      expect(refusal).toMatchObject({ toolName: "screen_capture", isError: true });
-    },
-  );
-
-  it("leaves an unrelated dynamic name to the tool executor", async () => {
-    const executed: string[] = [];
-    await ChatAgent.create(
-      config([], [], executed, async (runInput) => {
-        await runInput.toolExecutor?.(
-          { id: "dynamic", tool: "mcp.relay.thing", input: {} },
-          { signal: new AbortController().signal },
-        );
-      }),
-    ).run(input);
-
-    expect(executed).toEqual(["mcp.relay.thing"]);
-  });
-
-  it("still executes an offerable tool through the placement gate", async () => {
-    const executed: string[] = [];
-    let allowed: Tool.Result | undefined;
-    await ChatAgent.create(
-      config(["screen.read"], [], executed, async (runInput) => {
-        allowed = await runInput.toolExecutor?.(
-          { id: "real", tool: gatedTool.name, input: {} },
-          { signal: new AbortController().signal },
-        );
-      }),
-    ).run(input);
-
-    expect(executed).toEqual([gatedTool.name]);
-    expect(allowed).toMatchObject({ toolCallId: "real", output: "unused" });
-  });
+    }
+    for (const tools of [
+      [gatedTool, { name: "screen_capture", inputSchema: { type: "object" } }],
+      [{ name: "screen_capture", inputSchema: { type: "object" } }, gatedTool],
+    ]) {
+      it(`refuses a colliding alias at the ${wave ? "wave" : "single"} door regardless of catalog order`, async () => {
+        const observed = await exercise({
+          wave,
+          tools,
+          call: { id: "collision", tool: "screen_capture", input: {} },
+        });
+        expect(observed.executed).toEqual([]);
+        expect(observed.results).toMatchObject([{ toolCallId: "collision", isError: true }]);
+      });
+    }
+    it(`leaves dynamic resolution and permitted calls to the ${wave ? "wave" : "single"} executor`, async () => {
+      expect(
+        (await exercise({ wave, call: { id: "dynamic", tool: "mcp.relay.thing", input: {} } }))
+          .executed,
+      ).toEqual(["mcp.relay.thing"]);
+      const permitted = await exercise({
+        wave,
+        capabilities: ["screen.read"],
+        call: { id: "real", tool: "screen.capture", input: {} },
+      });
+      expect(permitted.executed).toEqual(["screen.capture"]);
+      expect(permitted.results).toMatchObject([{ toolCallId: "real", output: "result" }]);
+    });
+  }
 });

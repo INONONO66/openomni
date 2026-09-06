@@ -210,7 +210,9 @@ describe("durable session handle", () => {
     sink.onCommit = (committed) => {
       if (committed.kind !== "policy.decision") return;
       observedDecisionIds.add(committed.id);
-      if (!SessionHandleStore.tree("policy-topology").some((action) => action.id === committed.id)) {
+      if (
+        !SessionHandleStore.tree("policy-topology").some((action) => action.id === committed.id)
+      ) {
         observedBeforeCommit.push(committed.id);
       }
     };
@@ -464,9 +466,7 @@ describe("durable session handle", () => {
         const result = await handle.prompt("start the turn");
 
         const tree = SessionHandleStore.tree(handle.id);
-        const hooks = tree
-          .filter((action) => action.kind === "policy.decision")
-          .map(policyHook);
+        const hooks = tree.filter((action) => action.kind === "policy.decision").map(policyHook);
         expect(result).toMatchObject({
           kind: "error",
           cause: { name: "SessionPolicyRefusal", reason: `turn ${phase} refused` },
@@ -517,7 +517,7 @@ describe("durable session handle", () => {
     let active = 0;
     let maximumActive = 0;
     let runs = 0;
-    const drained: SessionTurn.Message[][] = [];
+    const drained: SessionRunnerInput["messages"][] = [];
     const runner: SessionRunner = async (input) => {
       const treeAtEntry = SessionHandleStore.tree(input.sessionId);
       const intent = treeAtEntry.find((action) => action.id === input.turnId);
@@ -543,11 +543,13 @@ describe("durable session handle", () => {
 
     expect(runs).toBe(1);
     expect(maximumActive).toBe(1);
-    expect(firstInput.messages).toEqual([{ role: "user", text: "first prompt" }]);
+    expect(firstInput.messages).toEqual([
+      { id: SessionHandleStore.inboxRows(handle.id)[0]?.id, role: "user", text: "first prompt" },
+    ]);
     expect(drained).toEqual([
       [
-        { role: "user", text: "second prompt" },
-        { role: "user", text: "third prompt" },
+        { id: SessionHandleStore.inboxRows(handle.id)[1]?.id, role: "user", text: "second prompt" },
+        { id: SessionHandleStore.inboxRows(handle.id)[2]?.id, role: "user", text: "third prompt" },
       ],
     ]);
     expect(SessionHandleStore.inboxRows(handle.id).map((row) => [row.content, row.status])).toEqual(
@@ -663,7 +665,13 @@ describe("durable session handle", () => {
 
     expect(inputs).toHaveLength(1);
     expect(inputs[0]?.resumeCount).toBe(0);
-    expect(inputs[0]?.messages).toEqual([{ role: "user", text: "run afterward" }]);
+    expect(inputs[0]?.messages).toEqual([
+      {
+        id: SessionHandleStore.inboxRows(handle.id).find((row) => row.kind === "prompt")?.id,
+        role: "user",
+        text: "run afterward",
+      },
+    ]);
   });
 
   test("consumes a running interrupt and seals interrupted rather than error", async () => {

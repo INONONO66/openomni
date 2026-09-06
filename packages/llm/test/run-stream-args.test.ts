@@ -82,7 +82,7 @@ describe("run() streamText arguments", () => {
 
     expect(streamArgs.toolChoice).toBe("required");
     expect(streamArgs.maxRetries).toBe(0);
-    expect(aiCapture.__openomniAiStepCount).toBe(7);
+    expect(aiCapture.__openomniAiStepCount).toBe(1);
 
     // stopWhen is a condition list since the window yield joined the cap.
     const conditions = streamArgs.stopWhen as Array<(input: { steps: unknown[] }) => boolean>;
@@ -90,7 +90,7 @@ describe("run() streamText arguments", () => {
     const stepCap = conditions[0] as (input: { steps: unknown[] }) => boolean;
     expect(stepCap({ steps: [] })).toBe(false);
     expect(stepCap({ steps: [1, 2, 3, 4, 5, 6] })).toBe(false);
-    expect(stepCap({ steps: [1, 2, 3, 4, 5, 6, 7] })).toBe(true);
+    expect(stepCap({ steps: [1] })).toBe(true);
   });
 
   test("uses default stepCountIs threshold when maxSteps is not provided", async () => {
@@ -113,13 +113,13 @@ describe("run() streamText arguments", () => {
 
     expect(aiCapture.__openomniAiStreamArgs).toBeDefined();
     const streamArgs = aiCapture.__openomniAiStreamArgs as { stopWhen?: unknown };
-    expect(aiCapture.__openomniAiStepCount).toBe(24);
+    expect(aiCapture.__openomniAiStepCount).toBe(1);
 
     const conditions = streamArgs.stopWhen as Array<(input: { steps: unknown[] }) => boolean>;
     expect(conditions).toBeArrayOfSize(1);
     const stepCap = conditions[0] as (input: { steps: unknown[] }) => boolean;
     expect(stepCap({ steps: Array.from({ length: 23 }) })).toBe(false);
-    expect(stepCap({ steps: Array.from({ length: 24 }) })).toBe(true);
+    expect(stepCap({ steps: [1] })).toBe(true);
   });
 
   test("arms a window-yield condition only when yieldAtInputTokens is set", async () => {
@@ -376,12 +376,6 @@ describe("run() streamText arguments", () => {
         tools: [
           { name: "message.send", description: "message.send", inputSchema: { type: "object" } },
         ],
-        toolExecutor: async (call) => ({
-          id: "result-send",
-          toolCallId: call.id,
-          output: "sent",
-          isError: false,
-        }),
         auth: { type: "api", key: "test-key-run" },
         model: {
           id: "gpt-4o",

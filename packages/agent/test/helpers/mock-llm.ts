@@ -5,7 +5,6 @@ type MockLlmInput = {
   readonly messages?: readonly unknown[];
   readonly maxSteps?: number;
   readonly signal?: ChatAgentConfig["signal"];
-  readonly toolExecutor?: ChatAgentConfig["toolExecutor"];
   /** The steering stop condition the loop passes when config.steeringPending is set (#751). */
   readonly shouldYield?: () => boolean;
   /** The window-yield arm point — undefined when the yield is disarmed or the window unknown. */

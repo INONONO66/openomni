@@ -105,13 +105,11 @@ describe("ChatAgent.run() streaming", () => {
   });
 
   it("streams tool calls and their results to the sink", async () => {
-    mockRunFn = async (input, sink) => {
+    let step = 0;
+    mockRunFn = async (_input, sink) => {
+      step += 1;
       const call = { id: "call-1", tool: "test_tool", input: { q: "test" } };
-      if (input.toolExecutor) {
-        sink.onToolCall(call);
-        const result = await input.toolExecutor(call);
-        sink.onToolResult(result);
-      }
+      if (step === 1) sink.onToolCall(call);
       sink.onMessage({
         info: {
           id: "msg-2",
@@ -132,6 +130,19 @@ describe("ChatAgent.run() streaming", () => {
           },
         },
         parts: [
+          ...(step === 1
+            ? [
+                {
+                  id: "tool-part",
+                  sessionID: "test",
+                  messageID: "msg-2",
+                  type: "tool" as const,
+                  callID: call.id,
+                  tool: call.tool,
+                  state: { status: "pending" as const, input: call.input },
+                },
+              ]
+            : []),
           {
             id: "p2",
             sessionID: "test",

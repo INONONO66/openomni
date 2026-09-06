@@ -1,15 +1,10 @@
 import type { RunInput } from "@openomni/llm";
 import type { Sink } from "@openomni/llm";
 import type { Message, Policy, TraceContext } from "@openomni/protocol";
-import {
-  createBudgetState,
-  recordTokenUsage,
-  recordTurn,
-  type BudgetState,
-} from "../budget";
+import { createBudgetState, recordTokenUsage, recordTurn, type BudgetState } from "../budget";
 import type { AgentResult, AgentStep, ChatAgentInput, TokenUsage } from "../types";
 import type { TerminalReason } from "../retry";
-import { createUserMessage, createAssistantMessage } from "../message-factory";
+import { createUserMessage, createAssistantMessage, withMessageId } from "../message-factory";
 import type { CompactionYield } from "../../compaction/geometry";
 
 function toMessagesWithParts(
@@ -21,15 +16,18 @@ function toMessagesWithParts(
   for (const message of messages) {
     const parentID = output.at(-1)?.info.id ?? "";
     output.push(
-      message.role === "user"
-        ? createUserMessage(message.content, source, message.partMetadata, message.time)
-        : createAssistantMessage(
-            message.content,
-            parentID,
-            source,
-            message.partMetadata,
-            message.time,
-          ),
+      withMessageId(
+        message.role === "user"
+          ? createUserMessage(message.content, source, message.partMetadata, message.time)
+          : createAssistantMessage(
+              message.content,
+              parentID,
+              source,
+              message.partMetadata,
+              message.time,
+            ),
+        message.id,
+      ),
     );
   }
 
@@ -146,6 +144,11 @@ export interface RunState {
 }
 
 export interface TurnArtifacts {
+  readonly refusedTools?: ReadonlyMap<
+    string,
+    NonNullable<import("@openomni/protocol").Tool.Spec["requires"]>
+  >;
+  readonly toolExecutor?: import("../types").ChatAgentConfig["toolExecutor"];
   readonly runInput: RunInput;
   readonly trackingSink: Sink;
   /**
@@ -298,10 +301,7 @@ function replaceRunMessages(state: RunState, messages: Message.WithParts[]): voi
   state.lastCallContextTokens = undefined;
 }
 
-export function applyCompactionMessages(
-  state: RunState,
-  messages: Message.WithParts[],
-): number {
+export function applyCompactionMessages(state: RunState, messages: Message.WithParts[]): number {
   const messagesBefore = state.messages.length;
   replaceRunMessages(state, messages);
   state.compactionCount += 1;

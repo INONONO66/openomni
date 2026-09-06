@@ -46,6 +46,7 @@ export namespace Processor {
     model: Provider.Model;
     abort: AbortSignal;
     maxRetryAttempts?: number;
+    externalTools?: boolean;
     /**
      * Local usage estimator (#933). Substituted field-wise for unusable
      * required provider counts at step finish. Absent keeps the package
@@ -226,6 +227,7 @@ export namespace Processor {
             note: debugNote,
             promptText: streamInput.promptText,
             estimateUsage,
+            externalTools: options.externalTools,
             ...(toolNames !== undefined && { toolNames }),
           };
 
@@ -285,7 +287,10 @@ export namespace Processor {
             // Clean stream end: the AI SDK can stop (stepCountIs) after
             // emitting tool-call events whose results will never arrive —
             // settle them, then close the attempt.
-            settleAttempt(eventState, eventContext, { aborted: false });
+            settleAttempt(eventState, eventContext, {
+              aborted: false,
+              preserveTools: options.externalTools,
+            });
             finishAttempt(mapFinishReason(eventState.finishReason));
             return;
           } catch (e: unknown) {

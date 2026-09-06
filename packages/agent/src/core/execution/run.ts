@@ -1,12 +1,12 @@
+import { assertToolExecutor, assertUnambiguousToolMetadata } from "./tool-placement";
 import type { PlainValue } from "@openomni/protocol";
 import {
-  assertToolExecutor,
-  assertUnambiguousToolMetadata,
   buildTurn,
   handleContinue,
   handleError,
   handleStop,
   prepareCompactionAfterContinue,
+  drainStepBoundary,
 } from "./turn";
 import { ModelsDev, Provider, Retry as LlmRetry, Run, run as llmRun } from "@openomni/llm";
 import type { Sink } from "@openomni/llm";
@@ -327,6 +327,7 @@ async function prepareTurn(
   agentBase: AgentRunBase,
   context: AttemptContext,
 ): Promise<BuildTurnResult> {
+  await drainStepBoundary(state, config, "before_llm");
   const budgetStatus = publishBudgetTelemetry(
     state.budgetState,
     agentBase,
@@ -378,7 +379,11 @@ async function runConnection(
     {
       kind: "llm",
       op: "chat",
-      intent: { provider: context.providerModel.providerID, model: context.providerModel.id },
+      intent: {
+        provider: context.providerModel.providerID,
+        model: context.providerModel.id,
+        messageIds: state.messages.map((message) => message.info.id),
+      },
       effect: {},
     },
     async (llmIntent) => {

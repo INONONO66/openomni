@@ -14,12 +14,18 @@ import {
 } from "@openomni/protocol";
 import type { AgentExecutionLifecycle } from "./core/types";
 import { RunReasonCode } from "./core/policy/reason-codes";
-import { createExecutor } from "./executor";
+import {
+  createExecutor,
+  ExecutionApprovalError,
+  type ExecutionApprovals,
+  type ExecutorOptions,
+} from "./executor";
 
 interface SessionTool {
   readonly name: string;
   readonly inputSchema: SessionGeneration.Tool["inputSchema"];
   readonly category: SessionGeneration.ToolCategory;
+  readonly sequential?: true;
 }
 
 interface SessionSystem {
@@ -51,12 +57,15 @@ export interface SessionRunnerInput {
   readonly turnId: string;
   readonly actionId: string;
   readonly ledger: SessionActionCommitPort;
+  readonly retainEffect?: (effect: Promise<void>) => void;
+  readonly trackWave?: (wave: Promise<void>) => void;
+  readonly bindApprovals?: (approvals: ExecutionApprovals) => void;
   readonly policy: CompiledPolicySnapshot;
   readonly execution?: AgentExecutionLifecycle;
   readonly resultId: string;
   readonly parentActionId: string | null;
   readonly boundaryActionId: string | null;
-  readonly messages: readonly SessionTurn.Message[];
+  readonly messages: readonly (SessionTurn.Message & { readonly id?: string })[];
   readonly tools: readonly SessionGeneration.Tool[];
   readonly toolsGeneration: number;
   readonly toolsHash: string;
@@ -69,7 +78,7 @@ export interface SessionRunnerInput {
 }
 
 interface SessionBoundaryResult {
-  readonly messages: readonly SessionTurn.Message[];
+  readonly messages: readonly (SessionTurn.Message & { readonly id?: string })[];
   readonly interrupted: boolean;
 }
 
@@ -98,11 +107,14 @@ export type SessionRunnerResult =
 export type SessionRunner = (input: SessionRunnerInput) => Promise<SessionRunnerResult>;
 
 export interface SessionRuntime {
+  readonly approvalTimeoutMs?: ExecutorOptions["approvalTimeoutMs"];
+  readonly scheduleApprovalTimeout?: ExecutorOptions["scheduleApprovalTimeout"];
   readonly clock?: () => number;
   readonly entropy?: () => string;
   readonly processId?: string;
   readonly observations: ObservationSink;
   readonly authorizeConfigure?: SessionHandleStore.ConfigureAuthority;
+  readonly authorizeApproval?: ExecutorOptions["authorizeApproval"];
   /**
    * Lease contract. The durable lease is a fenced single-writer guarantee:
    * every commit carries the fence of the executor that owns the lease, so a
@@ -140,6 +152,7 @@ interface SessionSystemBlocksHandle {
 
 export interface SessionHandle {
   readonly id: string;
+  readonly approvals: ExecutionApprovals;
   readonly tools: SessionToolsHandle;
   readonly system: { readonly blocks: SessionSystemBlocksHandle };
   prompt(content: string, origin?: Inbox.Origin): Promise<SessionRunnerResult | undefined>;
@@ -201,6 +214,10 @@ export function session(options: SessionCreateOptions, runtime: SessionRuntime):
   return registry.declare(options);
 }
 
+export function getSessionHandle(id: string, runtime: SessionRuntime): SessionHandle | undefined {
+  return registries.get(runtime)?.get(id);
+}
+
 export async function sweepSessions(
   resolveRunner: (row: LedgerSession.Row) => SessionRunner,
   runtime: SessionRuntime,
@@ -235,6 +252,10 @@ class SessionRegistry {
 
   pinPolicy(generation: number): CompiledPolicySnapshot {
     return this.policies.pin(generation);
+  }
+
+  get(id: string): SessionHandle | undefined {
+    return this.entries.get(id)?.controller.handle;
   }
 
   declare(options: SessionCreateOptions): SessionHandle {
@@ -379,8 +400,16 @@ function createController(
     },
   };
 
+  let activeApprovals: ExecutionApprovals | undefined;
   const handle: SessionHandle = {
     id: sessionId,
+    approvals: {
+      pending: () => activeApprovals?.pending() ?? [],
+      async answer(answer) {
+        if (activeApprovals === undefined) throw new ExecutionApprovalError("stale_approval");
+        await activeApprovals.answer(answer);
+      },
+    },
     tools,
     system: { blocks },
     prompt(content, origin = internalOrigin(sessionId)) {
@@ -683,10 +712,24 @@ function createController(
     return committed;
   }
 
-  function createExecutionLedger(): SessionActionCommitPort {
+  function createExecutionLedger(turnId?: string): SessionActionCommitPort {
+    const executionFence = fence;
     return {
       async commit(action) {
         const current = SessionHandleStore.row(sessionId);
+        const sealed =
+          turnId !== undefined &&
+          SessionHandleStore.tree(sessionId).some(
+            (node) => SessionHandleStore.turnTerminal(node)?.turnId === turnId,
+          );
+        if (current.leaseFence !== executionFence || sealed) {
+          throw new SessionCommitError({
+            ok: false,
+            reason: "stale",
+            currentFence: current.leaseFence,
+            currentRevision: current.revision,
+          });
+        }
         const receipt = commitSession({
           expectedRevision: current.revision,
           actions: [action],
@@ -829,8 +872,21 @@ function createController(
     let boundaryActionId = input.boundaryActionId;
     let result: SessionRunnerResult;
     let interruptedRunner: Promise<SessionRunnerResult> | undefined;
+    const effects = new Set<Promise<void>>();
+    const waves = new Set<Promise<void>>();
+    const retainEffect = (effect: Promise<void>) => {
+      effects.add(effect);
+      void effect.then(() => effects.delete(effect));
+    };
+    const trackWave = (wave: Promise<void>) => {
+      waves.add(wave);
+      void wave.then(
+        () => waves.delete(wave),
+        () => waves.delete(wave),
+      );
+    };
     const policy = pinPolicy(input.generation.policyGeneration);
-    const ledger = createExecutionLedger();
+    const ledger = createExecutionLedger(input.turnId);
     const execution = createExecutor({
       policy,
       ledger,
@@ -840,6 +896,7 @@ function createController(
       entropy,
     });
     const boundary = async (kind: SessionTurn.Boundary): Promise<SessionBoundaryResult> => {
+      if (turnController.signal.aborted) return { messages: [], interrupted: true };
       const drained = await drainBoundary(
         input.turnId,
         input.resultId,
@@ -857,7 +914,11 @@ function createController(
       const aborted = new Promise<SessionRunnerResult>((resolve) => {
         turnController.signal.addEventListener(
           "abort",
-          () => resolve({ kind: "interrupted", text: "" }),
+          () => {
+            void Promise.allSettled([...waves]).then(() =>
+              resolve({ kind: "interrupted", text: "" }),
+            );
+          },
           { once: true },
         );
       });
@@ -884,28 +945,39 @@ function createController(
           if (turnController.signal.aborted) {
             runnerResult = { kind: "interrupted", text: "" };
           } else {
-            running = runner({
-              sessionId,
-              role: row.role,
-              turnId: input.turnId,
-              actionId: input.parentActionId,
-              ledger,
-              policy,
-              execution,
-              resultId: input.resultId,
-              parentActionId,
-              boundaryActionId,
-              messages: sessionMessages(SessionHandleStore.tree(sessionId)),
-              tools: input.generation.tools,
-              toolsGeneration: input.generation.generation,
-              toolsHash: input.generation.toolsHash,
-              system: input.generation.systemValue,
-              systemHash: input.generation.systemHash,
-              policyGeneration: input.generation.policyGeneration,
-              resumeCount: input.resumeCount,
-              signal: turnController.signal,
-              boundary,
-            });
+            running = (async () => {
+              try {
+                return await runner({
+                  sessionId,
+                  role: row.role,
+                  turnId: input.turnId,
+                  actionId: input.parentActionId,
+                  ledger,
+                  retainEffect,
+                  trackWave,
+                  bindApprovals: (approvals) => {
+                    activeApprovals = approvals;
+                  },
+                  policy,
+                  execution,
+                  resultId: input.resultId,
+                  parentActionId,
+                  boundaryActionId,
+                  messages: sessionMessages(SessionHandleStore.tree(sessionId)),
+                  tools: input.generation.tools,
+                  toolsGeneration: input.generation.generation,
+                  toolsHash: input.generation.toolsHash,
+                  system: input.generation.systemValue,
+                  systemHash: input.generation.systemHash,
+                  policyGeneration: input.generation.policyGeneration,
+                  resumeCount: input.resumeCount,
+                  signal: turnController.signal,
+                  boundary,
+                });
+              } finally {
+                await Promise.allSettled([...effects]);
+              }
+            })();
             try {
               runnerResult = await Promise.race([running, aborted]);
             } catch (error) {
@@ -1024,7 +1096,7 @@ function createController(
     parentActionId: string,
     policy: CompiledPolicySnapshot,
   ): Promise<{
-    readonly messages: SessionTurn.Message[];
+    readonly messages: (SessionTurn.Message & { readonly id?: string })[];
     readonly interrupted: boolean;
     readonly parentActionId: string;
     readonly boundaryActionId: string;
@@ -1057,14 +1129,14 @@ function createController(
       expectedRevision: current.revision,
       actions: [checkpoint, ...deliveries],
       consumeInboxIds: pending.map((item) => item.id),
-      state: "running",
+      state: current.state === "interrupted" ? "interrupted" : "running",
       releaseLease: false,
     });
     requireCommit(committed);
     const interrupted = pending.some((item) => item.kind === "interrupt");
     const messages = pending
       .filter((item) => item.kind === "prompt")
-      .map((item) => ({ role: "user" as const, text: item.content }));
+      .map((item) => ({ id: item.id, role: "user" as const, text: item.content }));
     return {
       messages,
       interrupted,
@@ -1315,16 +1387,18 @@ function latestTerminal(
   return undefined;
 }
 
-function sessionMessages(actions: readonly LedgerAction.Node[]): SessionTurn.Message[] {
-  const messages: SessionTurn.Message[] = [];
+function sessionMessages(
+  actions: readonly LedgerAction.Node[],
+): (SessionTurn.Message & { readonly id: string })[] {
+  const messages: (SessionTurn.Message & { readonly id: string })[] = [];
   for (const action of actions) {
     const delivered = SessionHandleStore.delivery(action);
     if (delivered?.kind === "prompt") {
-      messages.push({ role: "user", text: delivered.content });
+      messages.push({ id: delivered.inboxId, role: "user", text: delivered.content });
     }
     const terminal = SessionHandleStore.turnTerminal(action);
     if (terminal !== undefined && terminal.text.length > 0) {
-      messages.push({ role: "assistant", text: terminal.text });
+      messages.push({ id: action.id, role: "assistant", text: terminal.text });
     }
   }
   return messages;

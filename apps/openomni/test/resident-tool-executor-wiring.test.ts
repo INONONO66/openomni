@@ -13,7 +13,7 @@ import {
 } from "@openomni/protocol";
 import { createCellRegistry } from "../src/tools/cell-registry";
 import { createResident } from "../src/resident";
-import { assistantMessage } from "./helpers/assistant-message";
+import { requestToolStep, assistantMessage } from "./helpers/assistant-message";
 
 const directory = mkdtempSync(join(tmpdir(), "openomni-resident-tool-wiring-"));
 
@@ -114,11 +114,12 @@ test("a resident tool call is executed and observed through the durable executor
         providerID: model.provider,
       }),
       run: async (input: RunInput, sink: Sink) => {
-        const result = await input.toolExecutor?.({
+        const result = requestToolStep(input, sink, {
           id: "call-1",
           tool: "run_code",
           input: { code: "1", timeoutMs: 1000 },
         });
+        if (result === undefined) return { type: "stop" };
         sink.onMessage(assistantMessage(input, { text: String(result?.output ?? "missing") }));
         return { type: "stop" };
       },
@@ -144,6 +145,8 @@ test("a resident tool call is executed and observed through the durable executor
   expect(toolResult?.parentId).toBe(toolIntent?.id);
   expect(decisions.map((action) => field(action.intent.value, "hook")).sort()).toEqual([
     "llm.post",
+    "llm.post",
+    "llm.pre",
     "llm.pre",
     "prompt.post",
     "prompt.pre",

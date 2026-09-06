@@ -66,3 +66,15 @@ export function createAssistantMessage(
 
   return { info, parts: [textPart] };
 }
+
+/** Preserve durable prompt/result identity when hydrating its model projection. */
+export function withMessageId(
+  message: Message.WithParts,
+  id: string | undefined,
+): Message.WithParts {
+  if (id === undefined) return message;
+  return {
+    info: { ...message.info, id },
+    parts: message.parts.map((part) => ({ ...part, messageID: id })),
+  };
+}

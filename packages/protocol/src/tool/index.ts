@@ -15,7 +15,10 @@ export interface ToolExecutionContext {
 }
 
 /** Protocol shape only; definition validation and dispatch live in agent. */
-export interface ToolDefinition<In extends z.ZodType = z.ZodType, Out extends z.ZodType = z.ZodType> {
+export interface ToolDefinition<
+  In extends z.ZodType = z.ZodType,
+  Out extends z.ZodType = z.ZodType,
+> {
   readonly name: string;
   readonly description: string;
   readonly category: ToolCategory;
@@ -192,6 +195,7 @@ export namespace Tool {
     description: z.string().optional(),
     inputSchema: z.record(z.string(), z.unknown()),
     safe: z.boolean().optional(),
+    sequential: z.literal(true).optional(),
     labels: z.array(z.string()).optional(),
     prompt: z.string().optional(),
     placement: Placement.optional(),

@@ -28,6 +28,7 @@ export type StreamEventContext = {
    * record the name verbatim.
    */
   readonly toolNames?: ReadonlyMap<string, string>;
+  readonly externalTools?: boolean;
   /**
    * The step's prompt text as it crossed to the provider. The local estimator's
    * input-token source when the provider's own input count is unusable (#933).
@@ -360,10 +361,9 @@ function handleToolCall(
     state: { status: "pending", input },
   };
   appendPart(part, context);
-  // The AI SDK executes the tool between tool-call and tool-result, so the
-  // call event is the execution start: advance to running here so the result
-  // can report a real duration.
-  advancePart(part.id, { to: "running", at: Date.now() }, context);
+  // Paired standalone traces enter running here. A session-owned provider
+  // step returns pending data; its receiving executor owns execution timing.
+  if (!context.externalTools) advancePart(part.id, { to: "running", at: Date.now() }, context);
   state.pendingTools.set(callID, part.id);
   context.sink.onToolCall({ id: callID, tool: part.tool, input });
 }
@@ -408,6 +408,7 @@ function handleToolResult(
   }
 
   state.pendingTools.delete(toolCallId);
+  if (context.externalTools) advancePart(partId, { to: "running", at: Date.now() }, context);
   advancePart(
     partId,
     isError
@@ -470,6 +471,7 @@ function handleStepFinish(
   if (mapFinishReason(finishReason) === "length") {
     const at = Date.now();
     for (const [callID, partId] of state.pendingTools) {
+      if (context.externalTools) advancePart(partId, { to: "running", at }, context);
       advancePart(
         partId,
         { to: "error", at, error: "truncated output: tool call incomplete" },
@@ -539,14 +541,16 @@ function normalizeOutputPayload(event: StreamEvent): { output: string; isError: 
 export function settleAttempt(
   state: StreamEventState,
   context: StreamEventContext,
-  options: { aborted: boolean },
+  options: { aborted: boolean; preserveTools?: boolean },
 ): void {
   finishText(state, context);
   for (const reasoningId of [...state.reasoning.keys()]) {
     finishReasoning({ type: "reasoning-end", id: reasoningId }, state, context);
   }
+  if (options.preserveTools) return;
   const at = Date.now();
   for (const [callID, partId] of state.pendingTools) {
+    if (context.externalTools) advancePart(partId, { to: "running", at }, context);
     advancePart(
       partId,
       options.aborted

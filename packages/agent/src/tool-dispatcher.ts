@@ -1,3 +1,4 @@
+import { executeToolBody, ToolBodyOutcome } from "./tool-body";
 import type { Placement } from "@openomni/placement";
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { CompiledPolicySnapshot } from "@openomni/policy";
@@ -15,7 +16,15 @@ import {
   type ToolExecutionContext,
 } from "@openomni/protocol";
 import { z } from "zod";
-import { createExecutor, type ExecutionLedger, type Executor } from "./executor";
+import {
+  createExecutor,
+  type ExecutionLedger,
+  type Executor,
+  type ExecutionBatchResult,
+  type ExecutionRequest,
+  type ExecutionApprovals,
+  type ExecutorOptions,
+} from "./executor";
 
 const MODEL_OUTPUT_MAX_CHARS = 32_000;
 export const HOST_TARGET: Placement.ToolTarget = { kind: "host", capabilities: [] };
@@ -49,6 +58,8 @@ type CellToolDispatchResult = Omit<ToolDispatchResult, "output"> & {
 export interface DispatcherOptions {
   readonly executor: Executor;
   readonly timeoutMs?: number;
+  readonly retainEffect?: (effect: Promise<void>) => void;
+  readonly trackWave?: (wave: Promise<void>) => void;
 }
 
 interface DispatchContext {
@@ -61,6 +72,10 @@ export interface Dispatcher {
   readonly executor?: Executor;
   readonly specs: readonly Tool.Spec[];
   execute(call: Tool.Call, context: DispatchContext): Promise<ToolDispatchResult>;
+  executeWave(
+    calls: readonly Tool.Call[],
+    context: DispatchContext,
+  ): Promise<readonly ToolDispatchResult[]>;
   executeCell(call: Tool.Call, context: DispatchContext): Promise<CellToolDispatchResult>;
 }
 
@@ -135,15 +150,29 @@ export function createDispatcher(
   const resolveExecutor = (): Executor | undefined =>
     options?.executor ?? activeExecutor.getStore();
   const known = new Map(definitions.map((definition) => [definition.name, definition]));
-  async function dispatch(
+  type Prepared =
+    | { readonly kind: "refused"; readonly result: ToolDispatchResult }
+    | {
+        readonly kind: "ready";
+        readonly request: ExecutionRequest;
+        readonly body: () => Promise<PlainValue>;
+        readonly sequential?: true;
+        readonly finish: (
+          result: ExecutionBatchResult,
+        ) => ToolDispatchResult | CellToolDispatchResult;
+      };
+  function prepare(
     call: Tool.Call,
     providedContext: DispatchContext,
     door: "model" | "cell",
-  ): Promise<ToolDispatchResult | CellToolDispatchResult> {
+  ): Prepared {
     const context = executionContext(call, providedContext);
     const definition = known.get(call.tool);
     if (definition === undefined) {
-      return failed(call, `unregistered tool: ${call.tool}`, "unregistered_tool");
+      return {
+        kind: "refused",
+        result: failed(call, `unregistered tool: ${call.tool}`, "unregistered_tool"),
+      };
     }
     const parsedInput = definition.input.safeParse(call.input);
     if (!parsedInput.success) {
@@ -155,89 +184,134 @@ export function createDispatcher(
           : path === ""
             ? issue.message
             : `${path}: ${issue.message}`;
-      return failed(call, `${definition.name} refused: ${reason}`, "invalid_input");
+      return {
+        kind: "refused",
+        result: failed(call, `${definition.name} refused: ${reason}`, "invalid_input"),
+      };
     }
 
     const executor = resolveExecutor();
     if (executor === undefined) {
       throw new ExecutorContextError();
     }
-    const execution = await executor
-      .run(
-        {
-          kind: "tool",
-          op: definition.name,
-          intent: PlainValueSchema.parse(call.input),
-          effect: { category: definition.category },
-          toolObservation: {
-            turnId: context.turnId,
-            callId: call.id,
-            ...(options?.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
-          },
-        },
-        () =>
-          activeExecutor.run(executor, async () =>
-            PlainValueSchema.parse(
-              await executeToolBody(definition, parsedInput.data, context, options?.timeoutMs),
-            ),
-          ),
-      )
-      .catch((error: CaughtValue) => {
-        throw toError(error);
+    const request: ExecutionRequest = {
+      kind: "tool",
+      op: definition.name,
+      intent: PlainValueSchema.parse(parsedInput.data),
+      effect: { category: definition.category },
+      toolObservation: {
+        turnId: context.turnId,
+        callId: call.id,
+        ...(options?.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
+      },
+    };
+    const body = () =>
+      activeExecutor.run(executor, async () =>
+        PlainValueSchema.parse(
+          await executeToolBody(definition, parsedInput.data, context, options?.timeoutMs),
+        ),
+      );
+    const finish = (
+      execution: ExecutionBatchResult,
+    ): ToolDispatchResult | CellToolDispatchResult => {
+      if (execution.terminal === "cancelled")
+        return failed(call, "tool execution cancelled", "execution_failed");
+      if (execution.terminal === "failed")
+        return failed(call, execution.error.message, "execution_failed");
+      if (execution.terminal !== "executed") {
+        const refusal = new ToolRefused(definition.name, execution.reason);
+        if (door === "cell") throw refusal;
+        return failed(call, refusal.message, "precondition_failed");
+      }
+
+      const parsedOutcome = ToolBodyOutcome.safeParse(execution.value);
+      if (!parsedOutcome.success) {
+        const result = failed(call, `${definition.name} produced invalid output`, "invalid_output");
+        return result;
+      }
+      const outcome = parsedOutcome.data;
+      if (outcome.status === "timed_out") {
+        const result = failed(call, `${definition.name} timed out`, "execution_failed");
+        return result;
+      }
+      if (outcome.status === "error") {
+        const result = failed(call, outcome.message, outcome.errorKind);
+        return result;
+      }
+
+      const transformedOutput = definition.output.safeParse(outcome.output);
+      if (!transformedOutput.success) {
+        const result = failed(call, `${definition.name} produced invalid output`, "invalid_output");
+        return result;
+      }
+      const output = PlainValueSchema.safeParse(transformedOutput.data);
+      if (!output.success) {
+        const result = failed(call, `${definition.name} produced invalid output`, "invalid_output");
+        return result;
+      }
+      const result = {
+        toolCallId: call.id,
+        id: call.id,
+        toolName: call.tool,
+        output:
+          door === "cell"
+            ? output.data
+            : truncate(definition.render(parsedInput.data, output.data)),
+      } satisfies ToolDispatchResult | CellToolDispatchResult;
+      return result;
+    };
+    return {
+      kind: "ready",
+      request,
+      body,
+      finish,
+      ...(definition.sequential ? { sequential: true } : {}),
+    };
+  }
+
+  async function dispatch(call: Tool.Call, context: DispatchContext, door: "model" | "cell") {
+    const prepared = prepare(call, context, door);
+    if (prepared.kind === "refused") return prepared.result;
+    const executor = resolveExecutor();
+    if (executor === undefined) throw new ExecutorContextError();
+    return prepared.finish(await executor.run(prepared.request, prepared.body));
+  }
+
+  function executeWave(
+    calls: readonly Tool.Call[],
+    context: DispatchContext,
+  ): Promise<readonly ToolDispatchResult[]> {
+    const execute = async (): Promise<readonly ToolDispatchResult[]> => {
+      const prepared = calls.map((call) => prepare(call, context, "model"));
+      const ready = prepared.filter(
+        (item): item is Extract<Prepared, { kind: "ready" }> => item.kind === "ready",
+      );
+      const executor = resolveExecutor();
+      if (executor?.runBatch === undefined) throw new ExecutorContextError();
+      const results = await executor.runBatch(ready, {
+        signal: context.signal ?? new AbortController().signal,
+        retain: options?.retainEffect,
       });
-
-    if (execution.terminal !== "executed") {
-      const refusal = new ToolRefused(definition.name, execution.reason);
-      if (door === "cell") throw refusal;
-      return failed(call, refusal.message, "precondition_failed");
-    }
-
-    const parsedOutcome = ToolBodyOutcome.safeParse(execution.value);
-    if (!parsedOutcome.success) {
-      const result = failed(call, `${definition.name} produced invalid output`, "invalid_output");
-      return result;
-    }
-    const outcome = parsedOutcome.data;
-    if (outcome.status === "timed_out") {
-      const result = failed(call, `${definition.name} timed out`, "execution_failed");
-      return result;
-    }
-    if (outcome.status === "error") {
-      const result = failed(call, outcome.message, outcome.errorKind);
-      return result;
-    }
-
-    const transformedOutput = definition.output.safeParse(outcome.output);
-    if (!transformedOutput.success) {
-      const result = failed(call, `${definition.name} produced invalid output`, "invalid_output");
-      return result;
-    }
-    const output = PlainValueSchema.safeParse(transformedOutput.data);
-    if (!output.success) {
-      const result = failed(call, `${definition.name} produced invalid output`, "invalid_output");
-      return result;
-    }
-    const result = {
-      toolCallId: call.id,
-      id: call.id,
-      toolName: call.tool,
-      output:
-        door === "cell" ? output.data : truncate(definition.render(parsedInput.data, output.data)),
-    } satisfies ToolDispatchResult | CellToolDispatchResult;
-    return result;
+      let index = 0;
+      return prepared.map((item) => {
+        if (item.kind === "refused") return item.result;
+        const result = results[index++];
+        if (result === undefined) throw new Error("wave result missing");
+        const finished = item.finish(result);
+        if (typeof finished.output !== "string")
+          throw new Error("model tool output must be rendered text");
+        return { ...finished, output: finished.output };
+      });
+    };
+    const wave = Promise.resolve().then(execute);
+    options?.trackWave?.(wave.then(() => undefined));
+    return wave;
   }
 
   return {
     ...(options?.executor === undefined ? {} : { executor: options.executor }),
-    specs: definitions
-      .filter((definition) => definition.visibility.model.length > 0)
-      .map((definition) => ({
-        name: definition.name,
-        description: definition.description,
-        inputSchema: toolInputSchema(definition),
-        safe: toolIsSafe(definition.category),
-        placement: "host",
-      })),
+    specs: definitions.filter((definition) => definition.visibility.model.length > 0).map(toolSpec),
+    executeWave,
     execute: (call, context) => dispatch(call, context, "model") as Promise<ToolDispatchResult>,
     executeCell: (call, context) =>
       dispatch(call, context, "cell") as Promise<CellToolDispatchResult>,
@@ -254,15 +328,25 @@ export interface TurnDispatchInput {
   readonly sessionId: string;
   readonly role: LedgerSession.Role;
   readonly actionId: string;
+  readonly turnId?: string;
+  readonly tools?: readonly SessionGeneration.Tool[];
+  readonly toolsGeneration?: number;
+  readonly toolsHash?: string;
   readonly policy: CompiledPolicySnapshot;
   readonly ledger: ExecutionLedger;
+  readonly retainEffect?: (effect: Promise<void>) => void;
+  readonly trackWave?: (wave: Promise<void>) => void;
+  readonly bindApprovals?: (approvals: ExecutionApprovals) => void;
 }
 
 /** The runtime clock/entropy/observation sink shared across a session's turns. */
 export interface TurnDispatchRuntime {
+  readonly approvalTimeoutMs?: ExecutorOptions["approvalTimeoutMs"];
+  readonly scheduleApprovalTimeout?: ExecutorOptions["scheduleApprovalTimeout"];
   readonly observations: ObservationSink | BusEvent.Sink;
   readonly clock?: () => number;
   readonly entropy?: () => string;
+  readonly authorizeApproval?: ExecutorOptions["authorizeApproval"];
 }
 
 /**
@@ -277,17 +361,37 @@ export function createTurnDispatcher(
 ): Dispatcher & { readonly executor: Executor } {
   const executor = createExecutor({
     policy: input.policy,
+    authorizeApproval: runtime.authorizeApproval,
+    approvalTimeoutMs: runtime.approvalTimeoutMs,
+    scheduleApprovalTimeout: runtime.scheduleApprovalTimeout,
     ledger: input.ledger,
     observations: runtime.observations,
     identity: {
       sessionId: input.sessionId,
       role: input.role,
       parentActionId: input.actionId,
+      turnId: input.turnId,
+      toolsGeneration: input.toolsGeneration,
+      toolsHash: input.toolsHash,
     },
     clock: runtime.clock ?? Date.now,
     entropy: runtime.entropy ?? (() => crypto.randomUUID()),
   });
-  return { ...createDispatcher(definitions, { executor }), executor };
+  if (executor.approvals !== undefined) input.bindApprovals?.(executor.approvals);
+  const pinnedNames =
+    input.tools === undefined ? undefined : new Set(input.tools.map((tool) => tool.name));
+  const pinnedDefinitions =
+    pinnedNames === undefined
+      ? definitions
+      : definitions.filter((definition) => pinnedNames.has(definition.name));
+  return {
+    ...createDispatcher(pinnedDefinitions, {
+      executor,
+      retainEffect: input.retainEffect,
+      trackWave: input.trackWave,
+    }),
+    executor,
+  };
 }
 
 export function sessionTool(definition: AnyToolDefinition): SessionGeneration.Tool {
@@ -295,6 +399,7 @@ export function sessionTool(definition: AnyToolDefinition): SessionGeneration.To
     name: definition.name,
     inputSchema: toolInputSchema(definition),
     category: definition.category,
+    ...(definition.sequential ? { sequential: true } : {}),
   });
 }
 
@@ -304,6 +409,7 @@ export function toolSpec(definition: AnyToolDefinition): Tool.Spec {
     description: definition.description,
     inputSchema: toolInputSchema(definition),
     safe: toolIsSafe(definition.category),
+    ...(definition.sequential ? { sequential: true } : {}),
     placement: "host",
   };
 }
@@ -317,84 +423,6 @@ function executionContext(call: Tool.Call, context: DispatchContext): ToolExecut
   };
 }
 
-const ToolBodyOutcome = z.discriminatedUnion("status", [
-  z.object({ status: z.literal("timed_out") }).strict(),
-  z
-    .object({
-      status: z.literal("error"),
-      message: z.string(),
-      errorKind: z.enum(["precondition_failed", "execution_failed", "invalid_output"]),
-    })
-    .strict(),
-  z.object({ status: z.literal("success"), output: PlainValueSchema }).strict(),
-]);
-type ToolBodyOutcome = z.infer<typeof ToolBodyOutcome>;
-
-async function executeToolBody<In extends z.ZodType, Out extends z.ZodType>(
-  definition: ToolDefinition<In, Out>,
-  input: z.output<In>,
-  context: ToolExecutionContext,
-  timeoutMs: number | undefined,
-): Promise<ToolBodyOutcome> {
-  const outcome = await executeDefinition(definition, input, context, timeoutMs);
-  if (outcome.timedOut) return { status: "timed_out" };
-  if (outcome.error !== undefined) {
-    return {
-      status: "error",
-      message: outcome.error.message,
-      errorKind: isToolRefusal(outcome.error) ? "precondition_failed" : "execution_failed",
-    };
-  }
-  const parsedOutput = definition.output.safeParse(outcome.value);
-  const jsonOutput = parsedOutput.success
-    ? PlainValueSchema.safeParse(parsedOutput.data)
-    : parsedOutput;
-  if (!(parsedOutput.success && jsonOutput.success)) {
-    return {
-      status: "error",
-      message: `${definition.name} produced invalid output`,
-      errorKind: "invalid_output",
-    };
-  }
-  return { status: "success", output: jsonOutput.data };
-}
-
-async function executeDefinition<In extends z.ZodType, Out extends z.ZodType>(
-  definition: ToolDefinition<In, Out>,
-  input: z.output<In>,
-  context: ToolExecutionContext,
-  timeoutMs: number | undefined,
-): Promise<{
-  readonly timedOut: boolean;
-  readonly value?: z.output<Out>;
-  readonly error?: Error;
-}> {
-  if (timeoutMs === undefined) {
-    return Promise.resolve(definition.execute(input, context)).then(
-      (value) => ({ timedOut: false, value }) as const,
-      (error) => ({ timedOut: false, error: toError(error) }) as const,
-    );
-  }
-
-  const controller = new AbortController();
-  const forwardAbort = () => controller.abort(context.signal.reason);
-  context.signal.addEventListener("abort", forwardAbort, { once: true });
-  const scopedContext = { ...context, signal: controller.signal };
-  const execution = Promise.resolve(definition.execute(input, scopedContext)).then(
-    (value) => ({ timedOut: false, value }) as const,
-    (error) => ({ timedOut: false, error: toError(error) }) as const,
-  );
-  const timeout = Promise.withResolvers<{ readonly timedOut: true }>();
-  const timer = setTimeout(() => {
-    controller.abort(new Error(`tool timed out after ${timeoutMs}ms`));
-    timeout.resolve({ timedOut: true });
-  }, timeoutMs);
-  return Promise.race([execution, timeout.promise]).finally(() => {
-    clearTimeout(timer);
-    context.signal.removeEventListener("abort", forwardAbort);
-  });
-}
-
 function failed(call: Tool.Call, output: string, errorKind: ToolErrorKind): ToolDispatchResult {
   return {
     toolCallId: call.id,
@@ -404,16 +432,6 @@ function failed(call: Tool.Call, output: string, errorKind: ToolErrorKind): Tool
     isError: true,
     errorKind,
   };
-}
-
-function isToolRefusal(error: Error): boolean {
-  return error.name === "ToolRefused";
-}
-
-type CaughtValue = PlainValue | Error | bigint | symbol | undefined | ((...args: never[]) => void);
-
-function toError(error: CaughtValue): Error {
-  return error instanceof Error ? error : new Error(String(error));
 }
 
 function truncate(output: string): string {

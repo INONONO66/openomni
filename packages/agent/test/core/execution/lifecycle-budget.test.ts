@@ -58,16 +58,20 @@ describe("run budget terminal facts", () => {
             modelCalls += 1;
             input.shouldYield?.();
             const call = { id: `call-${modelCalls}`, tool: "lookup", input: {} };
-            try {
-              await input.toolExecutor?.(call);
-            } catch (error) {
-              expect(error).toEqual(new Error("tool failed"));
-            }
             const message = createAssistantMessage("", "", "session");
             sink.onMessage({
               ...message,
               parts: [
                 ...message.parts,
+                {
+                  id: `tool-${modelCalls}`,
+                  sessionID: "session",
+                  messageID: message.info.id,
+                  type: "tool",
+                  callID: call.id,
+                  tool: call.tool,
+                  state: { status: "pending", input: call.input },
+                },
                 {
                   id: `step-${modelCalls}`,
                   sessionID: "session",

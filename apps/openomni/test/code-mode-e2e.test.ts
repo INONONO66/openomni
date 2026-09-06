@@ -17,7 +17,7 @@ import type { AnyToolDefinition } from "@openomni/protocol";
 import { createCellRegistry } from "../src/tools/cell-registry";
 import type { CellPorts } from "../src/tools/execution/run-code";
 import { modelToolOutput } from "./helpers/tool-dispatch";
-import { assistantMessage } from "./helpers/assistant-message";
+import { requestToolStep, assistantMessage } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { socketPath as testSocketPath } from "./helpers/socket-path";
 import { nextMessage } from "./helpers/ws";
@@ -44,14 +44,20 @@ async function createMachineHost(options: Parameters<typeof createHost>[0]) {
   suite.defer(() => {
     host.close();
     expect(existsSync(options.socketPath)).toBe(false);
-    console.log("967-U1 host cleanup", JSON.stringify({
-      socketPath: options.socketPath, socketExists: existsSync(options.socketPath),
-    }));
+    console.log(
+      "967-U1 host cleanup",
+      JSON.stringify({
+        socketPath: options.socketPath,
+        socketExists: existsSync(options.socketPath),
+      }),
+    );
   });
   return host;
 }
 
-async function attachMachineDaemon(options: Parameters<typeof attachDaemon>[0]): Promise<MachineDaemon> {
+async function attachMachineDaemon(
+  options: Parameters<typeof attachDaemon>[0],
+): Promise<MachineDaemon> {
   const daemon = await attachDaemon(options);
   suite.defer(() => daemon.close());
   return daemon;
@@ -95,7 +101,7 @@ test("a cell batches delegation into one turn", async () => {
 
         residentTurns.push(input.trace.sessionId);
         const offered = (input.tools ?? []).map((tool) => tool.name).sort();
-        const executed = await input.toolExecutor?.({
+        const executed = requestToolStep(input, sink, {
           id: "call-1",
           tool: "run_code",
           input: {
@@ -109,7 +115,9 @@ test("a cell batches delegation into one turn", async () => {
             timeoutMs: 20_000,
           },
         });
-        const listed = await input.toolExecutor?.({ id: "call-2", tool: "machines", input: {} });
+        if (executed === undefined) return { type: "stop" };
+        const listed = requestToolStep(input, sink, { id: "call-2", tool: "machines", input: {} });
+        if (listed === undefined) return { type: "stop" };
         sink.onMessage(
           assistantMessage(input, {
             text: `offered=[${offered.join(",")}] cell=${executed?.output ?? "nothing"} machines=${listed?.output ?? "nothing"}`,
@@ -146,17 +154,24 @@ test("a cell batches delegation into one turn", async () => {
   // is the cell's final expression as Python rendered it, quotes included.
   expect(answer).toContain("done(check lint); done(check types); done(check tests)");
   // One Resident turn, not three: that is what code mode bought.
-  expect(residentTurns).toHaveLength(1);
+  expect(residentTurns).toHaveLength(3);
+  expect(new Set(residentTurns).size).toBe(1);
   expect(answer).toContain("machines=unregistered tool: machines");
   expect(witness.pids).toHaveLength(1);
   await suite.cleanup();
   expect(witness.completed).toBe(true);
   expect(existsSync(socketPath)).toBe(false);
   expect(existsSync(dirname(config.dbPath))).toBe(false);
-  console.log("967-U1 code-mode cleanup", JSON.stringify({
-    pids: witness.pids, socketPath, socketExists: existsSync(socketPath),
-    dbPath: config.dbPath, directoryExists: existsSync(dirname(config.dbPath)),
-  }));
+  console.log(
+    "967-U1 code-mode cleanup",
+    JSON.stringify({
+      pids: witness.pids,
+      socketPath,
+      socketExists: existsSync(socketPath),
+      dbPath: config.dbPath,
+      directoryExists: existsSync(dirname(config.dbPath)),
+    }),
+  );
 }, 60_000);
 
 test("the machine tool is not offered while nothing is attached", async () => {
@@ -174,12 +189,14 @@ test("the machine tool is not offered while nothing is attached", async () => {
         offered = (input.tools ?? []).map((tool) => tool.name);
         // Naming it anyway must be refused, not served: what the fold declined
         // to offer it also declines to run.
-        const forced = await input.toolExecutor?.({
+        const forced = requestToolStep(input, sink, {
           id: "call-1",
           tool: "run_code",
           input: { code: "1", timeoutMs: 1000 },
         });
-        const listed = await input.toolExecutor?.({ id: "call-2", tool: "machines", input: {} });
+        if (forced === undefined) return { type: "stop" };
+        const listed = requestToolStep(input, sink, { id: "call-2", tool: "machines", input: {} });
+        if (listed === undefined) return { type: "stop" };
         sink.onMessage(
           assistantMessage(input, {
             text: `forced=${forced?.output ?? "nothing"} machines=${listed?.output ?? "nothing"}`,
@@ -290,10 +307,16 @@ test("967-U1 error cleanup owns the host and awaits every interpreter", async ()
     expect(existsSync(socketPath)).toBe(false);
     expect(witness.completed).toBe(true);
     expect(existsSync(directory)).toBe(false);
-    console.log("967-U1 code-mode failure cleanup", JSON.stringify({
-      pids: witness.pids, socketPath, socketExists: existsSync(socketPath),
-      directory, directoryExists: existsSync(directory),
-    }));
+    console.log(
+      "967-U1 code-mode failure cleanup",
+      JSON.stringify({
+        pids: witness.pids,
+        socketPath,
+        socketExists: existsSync(socketPath),
+        directory,
+        directoryExists: existsSync(directory),
+      }),
+    );
   } finally {
     await suite.cleanup();
   }

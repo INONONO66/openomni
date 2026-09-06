@@ -102,6 +102,12 @@ export function createInlineWorkerRunner(options: WorkerLoopOptions): SessionInl
             toolTargets: [HOST_TARGET],
             toolChoice: tools.length === 0 ? "none" : "auto",
             toolExecutor: toolExecutorForTurn(dispatcher, input),
+            toolWave: (calls, signal) =>
+              dispatcher.executeWave(calls, {
+                sessionId: input.sessionId,
+                turnId: input.turnId,
+                signal,
+              }),
             model: options.model,
             ...(options.compaction === undefined ? {} : { compaction: options.compaction }),
             ...chatProviderConfig(options),

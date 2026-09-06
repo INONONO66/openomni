@@ -1,11 +1,17 @@
 import { expect, test } from "bun:test";
 import type { RunInput, Sink } from "@openomni/llm";
 import { SessionHandleStore } from "@openomni/ledger";
-import { assistantMessage } from "./helpers/assistant-message";
+import { requestToolStep, assistantMessage } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { nextFrame } from "./helpers/ws";
-import { createDispositionFixture, seedRetiredWait } from "../../../packages/ledger/test/helpers/disposition-967";
-import { archiveAndVerify, disposeCli } from "../../../packages/ledger/test/helpers/disposition-967-cli";
+import {
+  createDispositionFixture,
+  seedRetiredWait,
+} from "../../../packages/ledger/test/helpers/disposition-967";
+import {
+  archiveAndVerify,
+  disposeCli,
+} from "../../../packages/ledger/test/helpers/disposition-967-cli";
 
 const WS_TOKEN = "channel-delegation-e2e-token";
 const suite = residentSuite();
@@ -14,13 +20,18 @@ test("the Resident delegates to an external actor over the channel and reports t
   const fixture = createDispositionFixture();
   await using _resources = {
     async [Symbol.asyncDispose]() {
-      try { await suite.cleanup(); } finally { fixture[Symbol.dispose](); }
+      try {
+        await suite.cleanup();
+      } finally {
+        fixture[Symbol.dispose]();
+      }
     },
   };
   seedRetiredWait(fixture.db);
   archiveAndVerify(fixture);
   expect(disposeCli(fixture).exitCode).toBe(0);
   const residentTexts: string[] = [];
+  const seenTurns = new Set<string>();
   let ownerSessionId: string | undefined;
   let wake!: () => void;
   const wakeSeen = new Promise<void>((resolve) => {
@@ -52,7 +63,10 @@ test("the Resident delegates to an external actor over the channel and reports t
         const asked = (lastUser?.parts ?? [])
           .map((part) => ("text" in part && typeof part.text === "string" ? part.text : ""))
           .join("");
-        residentTexts.push(asked);
+        if (!seenTurns.has(input.trace.runId)) {
+          residentTexts.push(asked);
+          seenTurns.add(input.trace.runId);
+        }
         if (
           ownerSessionId === undefined &&
           SessionHandleStore.row(input.trace.sessionId).role === "resident"
@@ -61,7 +75,7 @@ test("the Resident delegates to an external actor over the channel and reports t
         }
 
         if (asked.includes("please ask alice")) {
-          const executed = await input.toolExecutor?.({
+          const executed = requestToolStep(input, sink, {
             id: "call-1",
             tool: "delegate",
             input: {
@@ -72,6 +86,7 @@ test("the Resident delegates to an external actor over the channel and reports t
               timeoutMs: 10_000,
             },
           });
+          if (executed === undefined) return { type: "stop" };
           sink.onMessage(
             assistantMessage(input, {
               text: `delegation started: ${executed?.output ?? "nothing"}`,
@@ -135,7 +150,17 @@ test("the Resident delegates to an external actor over the channel and reports t
   // Settlement wakes exactly one Resident turn in the origin session. The
   // wake is internal, so it is observed through the provider and transcript,
   // not as a second channel response to the actor's reply.
-  await wakeSeen;
+  let wakeTimer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      wakeSeen,
+      new Promise<never>((_resolve, reject) => {
+        wakeTimer = setTimeout(() => reject(new Error("settlement wake deadline")), 10000);
+      }),
+    ]);
+  } finally {
+    clearTimeout(wakeTimer);
+  }
   expect(residentTexts.filter((text) => text.includes("please ask alice"))).toHaveLength(1);
   expect(residentTexts.filter((text) => text.includes("bob butting in"))).toHaveLength(1);
   expect(
@@ -147,8 +172,15 @@ test("the Resident delegates to an external actor over the channel and reports t
     .filter((entry) => entry?.kind === "prompt" && entry.content.includes(" settled:"));
   expect(wakeDeliveries).toHaveLength(1);
   expect(wakeDeliveries[0]?.origin.value).toMatchObject({ systemKind: "delegation.settled" });
-  console.log("967-U1 actor correlation", JSON.stringify({
-    messageId: delivered.messageId, ownerSessionId, wakeDeliveries,
-    ownerProtocol: owner.protocol, aliceProtocol: alice.protocol, bobProtocol: bob.protocol,
-  }));
+  console.log(
+    "967-U1 actor correlation",
+    JSON.stringify({
+      messageId: delivered.messageId,
+      ownerSessionId,
+      wakeDeliveries,
+      ownerProtocol: owner.protocol,
+      aliceProtocol: alice.protocol,
+      bobProtocol: bob.protocol,
+    }),
+  );
 });
