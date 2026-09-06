@@ -2,9 +2,24 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8">
+    <!-- The document stays locked to its own origin; two subresource kinds are
+         admitted by scheme and nothing is admitted by host.
+
+         connect-src ws: wss: - the gateway is a websocket to a loopback port or
+         to whatever OPENOMNI_WS_URL names, and `default-src 'self'` covers
+         neither: a socket from a file:// document is cross-origin under every
+         rule the browser applies. A host allowlist is impossible here because
+         the endpoint is the operator's to configure.
+
+         font-src data: - the build inlines the smallest font subsets as data
+         URLs. Under 'self' alone each one is refused and the surface silently
+         falls back to a system face.
+
+         No http(s) origin appears in this policy, and a test asserts it stays
+         that way: every asset this console renders ships with it. -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self' ws: wss:"
     >
     <title>OpenOmni Desktop</title>
   </head>
