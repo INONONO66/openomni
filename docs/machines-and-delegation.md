@@ -79,8 +79,14 @@ the same raw endpoint; the plain-tool locus door belongs to #949.
   JSON wire bytes are lossless base64, never lossy UTF-8 or model previews.
   Reads retain the 262144-byte window cap and lists the 1000-entry cap, both
   with explicit truncation facts.
-- `shell.exec` grants machine shell authority, not an export sandbox. Every
-  execution requires an absolute cwd; no cwd persists between calls. Results
+- `shell.exec` grants machine shell authority, but the daemon confines the
+  requested cwd to an effective export using its pinned descriptor/openat
+  no-follow path; escaping or symlinked-out cwd values refuse with
+  `path_escapes_export`. This is path confinement only: a shell running as the
+  daemon OS user remains arbitrary within that user's normal OS authority
+  (including absolute paths and `cd` elsewhere). The Owner grants `exec`
+  knowingly. Every execution requires an absolute cwd; no cwd persists between
+  calls. Results
   retain raw stdout/stderr bytes, nullable exitCode/signal, and truncation.
   The combined output socket cap is 262144 bytes; reaching it kills the
   process group. A 30000ms deadline and attachment close also kill the group.

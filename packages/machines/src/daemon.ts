@@ -1,3 +1,5 @@
+import { realpathSync } from "node:fs";
+import { posix } from "node:path";
 import { type IpcClient, connectIpcClient, typedCall } from "@openomni/ipc";
 import { Machine } from "@openomni/protocol";
 import { MachineRefusalError } from "./errors";
@@ -53,6 +55,26 @@ export async function attachMachineDaemon(options: MachineDaemonOptions): Promis
   function has(capability: string): boolean {
     return attachment.status === "attached" && attachment.effectiveCapabilities.includes(capability) && offer.offeredCapabilities.includes(capability);
   }
+  function confinedCwd(cwd: string): boolean {
+    const absolute = posix.normalize(cwd);
+    for (const root of options.fsExports?.values() ?? []) {
+      let canonicalRoot: string;
+      try {
+        canonicalRoot = posix.normalize(realpathSync(root)).replace(/\/+$/, "") || "/";
+      } catch {
+        continue;
+      }
+      if (absolute !== root && !absolute.startsWith(`${posix.normalize(root).replace(/\/+$/, "")}/`)) continue;
+      try {
+        const resolved = posix.normalize(realpathSync(absolute));
+        if (resolved === canonicalRoot || resolved.startsWith(`${canonicalRoot}/`)) return true;
+      } catch {
+        // A missing cwd remains export-confined; spawn reports its typed I/O refusal.
+        return true;
+      }
+    }
+    return false;
+  }
   function requireClient(): IpcClient {
     if (client === undefined) throw new MachineRefusalError({ reason: "closed", message: "daemon connection is closed" });
     return client;
@@ -81,6 +103,10 @@ export async function attachMachineDaemon(options: MachineDaemonOptions): Promis
           const request = Machine.ExecRequest.parse(params);
           if (!has(Machine.WellKnownCapability.shellExec)) {
             respond({ status: "refused", reason: "exec_not_available" } satisfies Machine.ExecResult);
+            return;
+          }
+          if (!confinedCwd(request.cwd)) {
+            respond({ status: "refused", reason: "path_escapes_export" } satisfies Machine.ExecResult);
             return;
           }
           const execution = execute(request, lifetime.signal);

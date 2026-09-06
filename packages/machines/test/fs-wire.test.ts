@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createIpcServer, typedCall } from "@openomni/ipc";
@@ -61,14 +61,17 @@ describe("real machine consumer surface", () => {
       mkdirSync(a); mkdirSync(b); writeFileSync(join(a, "mark"), "A"); writeFileSync(join(b, "mark"), "B");
       const path = socketPath();
       const host = await createMachineHost({ socketPath: path, enrollment, events: silent, now: () => 3 });
-      const daemon = await attachMachineDaemon({ socketPath: path, offer: offer(root) });
+      const daemon = await attachMachineDaemon({ socketPath: path, offer: offer(root), fsExports: new Map([["docs", root]]) });
       try {
         const target = host.get("m-1");
+        await expect(target.exec("true", "/tmp")).resolves.toEqual({ status: "refused", reason: "path_escapes_export" });
         expect(await target.exec("cat mark; printf err >&2; cd /; exit 7", a)).toEqual({ status: "completed", stdout: Buffer.from("A"), stderr: Buffer.from("err"), exitCode: 7, signal: null, truncated: false });
         expect(await target.exec("cat mark", b)).toMatchObject({ status: "completed", stdout: Buffer.from("B"), exitCode: 0 });
         expect(await target.exec("cat mark", a)).toMatchObject({ status: "completed", stdout: Buffer.from("A") });
         expect(await target.exec("kill -TERM $$", a)).toMatchObject({ status: "completed", exitCode: null, signal: "SIGTERM" });
         expect(await target.exec("true", join(root, "absent"))).toEqual({ status: "refused", reason: "io_error" });
+        symlinkSync("/tmp", join(root, "outside"));
+        await expect(target.exec("true", join(root, "outside"))).resolves.toEqual({ status: "refused", reason: "path_escapes_export" });
         const capped = await target.exec("yes x", root);
         expect(capped.status).toBe("completed");
         if (capped.status !== "completed") throw new Error("expected a capped execution result");

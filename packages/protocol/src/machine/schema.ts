@@ -359,7 +359,7 @@ export const ExecResult = z.discriminatedUnion("status", [
     signal: z.string().nullable(),
     truncated: z.boolean(),
   }).strict(),
-  z.object({ status: z.literal("refused"), reason: z.enum(["machine_not_attached", "exec_not_available", "io_error"]) }).strict(),
+  z.object({ status: z.literal("refused"), reason: z.enum(["machine_not_attached", "exec_not_available", "path_escapes_export", "io_error"]) }).strict(),
   z.object({ status: z.enum(["timed_out", "cancelled"]) }).strict(),
 ]);
 export type ExecResult = z.infer<typeof ExecResult>;

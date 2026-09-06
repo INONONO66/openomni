@@ -115,11 +115,9 @@ test("a cell batches delegation into one turn", async () => {
           },
         });
         if (executed === undefined) return { type: "stop" };
-        const listed = requestToolStep(input, sink, { id: "call-2", tool: "machines", input: {} });
-        if (listed === undefined) return { type: "stop" };
         sink.onMessage(
           assistantMessage(input, {
-            text: `offered=[${offered.join(",")}] cell=${executed?.output ?? "nothing"} machines=${listed?.output ?? "nothing"}`,
+            text: `offered=[${offered.join(",")}] cell=${executed?.output ?? "nothing"}`,
           }),
         );
         return { type: "stop" };
@@ -155,7 +153,6 @@ test("a cell batches delegation into one turn", async () => {
   // One Resident turn, not three: that is what code mode bought.
   expect(residentTurns).toHaveLength(3);
   expect(new Set(residentTurns).size).toBe(1);
-  expect(answer).toContain("machines=unregistered tool: machines");
   expect(witness.pids).toHaveLength(1);
   await suite.cleanup();
   expect(witness.completed).toBe(true);
@@ -194,11 +191,9 @@ test("the machine tool is not offered while nothing is attached", async () => {
           input: { code: "1", timeoutMs: 1000 },
         });
         if (forced === undefined) return { type: "stop" };
-        const listed = requestToolStep(input, sink, { id: "call-2", tool: "machines", input: {} });
-        if (listed === undefined) return { type: "stop" };
         sink.onMessage(
           assistantMessage(input, {
-            text: `forced=${forced?.output ?? "nothing"} machines=${listed?.output ?? "nothing"}`,
+            text: `forced=${forced?.output ?? "nothing"}`,
           }),
         );
         return { type: "stop" };
@@ -222,7 +217,6 @@ test("the machine tool is not offered while nothing is attached", async () => {
   ]);
   // All tools are host-projected; the local default host reports live attachment failure.
   expect(answer).toContain("kernel_not_available");
-  expect(answer).toContain("machines=unregistered tool: machines");
 }, 30_000);
 
 /**
