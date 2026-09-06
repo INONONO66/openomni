@@ -1,14 +1,7 @@
 import { describe, expect, it, spyOn } from "bun:test";
 import { Retry } from "@openomni/llm";
 
-import {
-  abortError,
-  calculateBackoffMs,
-  classifyRetryReason,
-  isAbort,
-  type RetryPolicy,
-  shouldRetry,
-} from "../../src/core/retry";
+import { abortError, isAbort } from "../../src/core/retry";
 
 describe("Retry.sleep", () => {
   it("rejects immediately when the signal is already aborted", async () => {
@@ -78,33 +71,6 @@ describe("Retry.sleep", () => {
   });
 });
 
-/**
- * These were unreachable from any test until #613 made them pure: they
- * reported their own decisions to the Bus, so "it emitted something" stood in
- * for "it decided correctly". Now the decision is only visible through the
- * return value, which is the thing worth pinning anyway.
- */
-describe("classifyRetryReason", () => {
-  it.each([
-    ["connection timeout", "timeout"],
-    // Audit M4 (pinned-wrong-behavior rows changed with the fix): "aborted"
-    // and "budget exceeded" substrings used to classify as the retryable
-    // "timeout". Aborts are decided by identity via `isAbort`, never by
-    // message; budget exhaustion never throws. Both fall through here.
-    ["run aborted by guard", "transient_error"],
-    ["budget exceeded: turns", "transient_error"],
-    ["tool execution failed", "tool_error"],
-    ["schema validation failed", "validation_error"],
-    // "tool" is checked before "validation", so a message carrying both is a
-    // tool error. Rows that mention only one cannot pin that order.
-    ["tool input validation failed", "tool_error"],
-    ["upstream 503", "transient_error"],
-    ["TIMEOUT IN CAPS", "timeout"],
-  ] as const)("classifies %j as %s", (message, expected) => {
-    expect(classifyRetryReason(message)).toBe(expected);
-  });
-});
-
 describe("isAbort (audit M4)", () => {
   it("recognizes an aborted signal regardless of the error message", () => {
     const controller = new AbortController();
@@ -120,47 +86,5 @@ describe("isAbort (audit M4)", () => {
   it("does NOT classify by message substring: a tool error mentioning 'aborted' is not an abort", () => {
     const controller = new AbortController();
     expect(isAbort(new Error("tool run aborted by remote host"), controller.signal)).toBe(false);
-  });
-});
-
-describe("shouldRetry", () => {
-  const policy: RetryPolicy = {
-    maxAttempts: 3,
-    backoffMs: { initial: 10, multiplier: 2, max: 100 },
-    retryOn: ["timeout"],
-  };
-
-  it("stops at the attempt ceiling", () => {
-    expect(shouldRetry({ ...policy }, "timeout", 3)).toBe(false);
-    expect(shouldRetry({ ...policy }, "timeout", 2)).toBe(true);
-  });
-
-  it("refuses a reason the filter excludes", () => {
-    expect(shouldRetry({ ...policy }, "tool_error", 1)).toBe(false);
-  });
-
-  it("treats an absent or empty filter as no filter", () => {
-    const noFilter = { maxAttempts: 3, backoffMs: policy.backoffMs };
-    expect(shouldRetry(noFilter, "validation_error", 1)).toBe(true);
-    expect(shouldRetry({ ...noFilter, retryOn: [] }, "validation_error", 1)).toBe(true);
-  });
-});
-
-describe("calculateBackoffMs", () => {
-  const policy = { maxAttempts: 5, backoffMs: { initial: 100, multiplier: 2, max: 500 } };
-
-  it("grows geometrically from the first attempt", () => {
-    expect(calculateBackoffMs(policy, 1)).toBe(100);
-    expect(calculateBackoffMs(policy, 2)).toBe(200);
-    expect(calculateBackoffMs(policy, 3)).toBe(400);
-  });
-
-  it("clamps at max", () => {
-    expect(calculateBackoffMs(policy, 4)).toBe(500);
-    expect(calculateBackoffMs(policy, 40)).toBe(500);
-  });
-
-  it("does not go below the initial delay", () => {
-    expect(calculateBackoffMs(policy, 0)).toBe(100);
   });
 });

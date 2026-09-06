@@ -1,4 +1,5 @@
-import { beforeAll, describe, expect, it, mock } from "bun:test";
+import { createTestAgent } from "../helpers/test-agent";
+import { describe, expect, it, mock } from "bun:test";
 import type { RunInput, Sink } from "@openomni/llm";
 import { Bus } from "../../src/index";
 import {
@@ -23,12 +24,6 @@ const mockLlm = createMockLlmConfig({
   },
 });
 
-let ChatAgent: typeof import("../../src/core/chat-agent").ChatAgent;
-
-beforeAll(async () => {
-  ({ ChatAgent } = await import("../../src/core/chat-agent"));
-});
-
 const baseConfig = {
   events: Bus,
   model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
@@ -39,7 +34,7 @@ describe("operator transport config threading", () => {
   it("hands the configured baseUrl and headers to the llm call", async () => {
     calls = 0;
     seenTransport = undefined as RunInput["transport"];
-    const agent = ChatAgent.create({
+    const agent = createTestAgent({
       ...baseConfig,
       transport: {
         baseUrl: "https://gateway.internal/v1",
@@ -59,7 +54,7 @@ describe("operator transport config threading", () => {
   it("leaves transport absent when the host configured none", async () => {
     calls = 0;
     seenTransport = { baseUrl: "never-read" };
-    const agent = ChatAgent.create(baseConfig);
+    const agent = createTestAgent(baseConfig);
 
     await agent.run(runInput([{ role: "user", content: "hi" }]));
 

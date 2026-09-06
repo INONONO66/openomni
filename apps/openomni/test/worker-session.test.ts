@@ -5,7 +5,7 @@ import type { RunInput, Sink } from "@openomni/llm";
 import type { Message } from "@openomni/protocol";
 import type { DelegationKernel } from "../src/delegation/kernel";
 import { createChildKernel } from "../src/delegation/process-entry";
-import { createInlineWorkerRunner, WorkerRunError } from "../src/delegation/worker-loop";
+import { createWorkerSessionRunner, WorkerRunError } from "../src/composition/worker-session";
 
 const ORIGIN = { role: "worker", depth: 1, sessionId: "session-drive" } as const;
 
@@ -64,7 +64,7 @@ function reply(input: RunInput, text: string): Message.WithParts {
 function bootRunner(run: (input: RunInput, sink: Sink) => Promise<{ type: "stop" }>) {
   let kernel: DelegationKernel;
   let kernelLookups = 0;
-  const runner = createInlineWorkerRunner({
+  const runner = createWorkerSessionRunner({
     model: { provider: "fake", id: "drive-test" },
     apiKey: "test-key",
     llm: {
@@ -84,7 +84,7 @@ function bootRunner(run: (input: RunInput, sink: Sink) => Promise<{ type: "stop"
   return { runner, stop: () => kernel.stop(), kernelLookups: () => kernelLookups };
 }
 
-test("an assigned worker claiming BLOCKED is re-driven and believed only on the third recurrence", async () => {
+test("an assignment uses one session turn and never treats BLOCKED prose as a runtime verdict", async () => {
   const prompts: string[][] = [];
   const { runner, stop } = bootRunner(async (input, sink) => {
     prompts.push(input.messages.map((m) => JSON.stringify(m)));
@@ -100,16 +100,15 @@ test("an assigned worker claiming BLOCKED is re-driven and believed only on the 
     signal: new AbortController().signal,
   });
   stop();
-  expect(prompts.length).toBe(3);
-  expect(prompts[1]?.some((m) => m.includes("Re-verify the blocker"))).toBe(true);
-  expect(output.text).toBe("[drive stopped: blocked]\nBLOCKED: the registry is unreachable");
+  expect(prompts.length).toBe(1);
+  expect(output.text).toBe("BLOCKED: the registry is unreachable");
   // Spend accumulates across driven runs: 9 tokens per stubbed run.
-  expect(output.tokens).toBe(27);
+  expect(output.tokens).toBe(9);
   expect(SessionHandleStore.row("d-drive-1")).toMatchObject({
     parentId: ORIGIN.sessionId,
     role: "worker",
     leaseOwner: null,
-    leaseFence: 3,
+    leaseFence: 1,
   });
   expect(SessionHandleStore.row(ORIGIN.sessionId).leaseFence).toBe(0);
 });
@@ -143,18 +142,22 @@ test("a later worker-run failure carries the active run id", async () => {
     sink.onMessage(reply(input, "BLOCKED: retry me"));
     return { type: "stop" };
   });
-  const output = await runner({
+  const input = {
     delegationId: "d-drive-failure",
-    operation: "assign",
-    instruction: "retry the task",
-    acceptanceCriteria: ["task complete"],
+    operation: "assign" as const,
+    instruction: "work",
+    acceptanceCriteria: ["complete"],
     origin: ORIGIN,
     signal: new AbortController().signal,
-  });
+  };
+  await runner(input);
+  const failure = await runner(input).catch((error: Error) => error);
   stop();
-  expect(runIds.length).toBeGreaterThan(1);
-  expect(output.runId).toBe(runIds.at(-1));
-  expect(output.runId).not.toBe(runIds[0]);
+  expect(failure).toBeInstanceOf(WorkerRunError);
+  if (!(failure instanceof WorkerRunError)) throw new Error("missing worker failure");
+  expect(runIds).toHaveLength(2);
+  expect(runIds.at(-1)).toBe(failure.runId);
+  expect(failure.runId).not.toBe(runIds[0]);
 });
 
 test("a settled worker binding is released before the durable session runs again", async () => {

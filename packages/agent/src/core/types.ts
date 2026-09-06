@@ -17,15 +17,11 @@ export type TokenUsage = Token.AgentUsage;
 
 export type AgentBudget = Actor.Profile.Budget;
 
-export interface AgentExecutionLifecycle {
-  runAttempt<T extends PlainValue>(
+interface AgentExecutionLifecycle {
+  judgeStop: import("../executor-contract").DurableExecutor["judgeStop"];
+  runAttempts<T extends PlainValue>(
     parent: LedgerAction.Receipt,
-    request: {
-      readonly op: string;
-      readonly intent: PlainValue;
-      readonly effect: PlainValue;
-    },
-    body: () => Promise<T>,
+    attempts: import("../executor-contract").LlmAttempts<T>,
   ): Promise<T>;
 }
 
@@ -40,6 +36,12 @@ export interface ChatAgentConfig {
    * fail-closed ledger append from the lossy bus without touching the loop.
    */
   events: BusEvent.Sink;
+  stopEvidence?: () => Promise<{
+    readonly progress: boolean;
+    readonly blocked: boolean;
+    readonly openIntent: readonly string[];
+    readonly alarmIds: readonly string[];
+  }>;
   /** The session owns inbox claims; this loop invokes its three model-step boundaries. */
   boundary?: import("../session-handle").SessionRunnerInput["boundary"];
   toolWave?: (calls: readonly Tool.Call[], signal?: AbortSignal) => Promise<readonly Tool.Result[]>;
@@ -111,6 +113,7 @@ export interface ChatAgentConfig {
 }
 
 export interface ChatAgentInput {
+  readonly history?: readonly import("@openomni/protocol").Message.WithParts[];
   /**
    * Hydrated history. `partMetadata`, when present, rides onto the rebuilt
    * text part verbatim — hydration must not strip structural identity
@@ -150,6 +153,7 @@ export interface AgentResult {
   // The phantom "tool-calls"/"handoff" members (and handoffTarget) forced
   // every consumer to handle states that could not occur (#606 audit).
   finishReason: "stop" | "max-steps" | "stalled";
+  waiting?: { readonly reason: "live_wait"; readonly alarmIds: readonly string[] };
   compactionCount?: number;
   guardAborted?: boolean;
 }

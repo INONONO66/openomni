@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { initialize, SessionHandleStore, Storage } from "@openomni/ledger";
+import { seedKernelPolicyRows } from "../src/policy-seed";
 import type { RunInput, Sink } from "@openomni/llm";
 import {
   Tool,
@@ -66,15 +67,7 @@ test("a resident tool call is executed and observed through the durable executor
   initialize({ dbPath: join(directory, "chat.db"), observationSink: observations });
   const policies = Storage.get().policies;
   if (policies === undefined) throw new Error("policy rows unavailable");
-  policies.append({
-    name: "compaction",
-    kind: "turn",
-    phase: "post",
-    match: { encodingVersion: 1, value: { op: "compaction" } },
-    verdict: { encodingVersion: 1, value: { type: "allow" } },
-    priority: 1000,
-    generation: 1,
-  });
+  seedKernelPolicyRows();
   const sessionId = "resident-tool-wiring";
   let bodyRuns = 0;
   const resident = createResident({
@@ -143,7 +136,12 @@ test("a resident tool call is executed and observed through the durable executor
   expect(turn).toBeDefined();
   expect(toolIntent?.parentId).toBe(turn?.id);
   expect(toolResult?.parentId).toBe(toolIntent?.id);
-  expect(decisions.map((action) => field(action.intent.value, "hook")).sort()).toEqual([
+  const core = decisions.filter(
+    (action) =>
+      ["chat", "session", "run_code"].includes(String(field(action.intent.value, "op"))) ||
+      String(field(action.intent.value, "hook")).startsWith("prompt."),
+  );
+  expect(core.map((action) => field(action.intent.value, "hook")).sort()).toEqual([
     "llm.post",
     "llm.post",
     "llm.pre",
@@ -163,7 +161,11 @@ test("a resident tool call is executed and observed through the durable executor
   expect(
     decisions
       .filter((action) => !String(field(action.intent.value, "hook")).startsWith("prompt."))
-      .every((action) => action.parentId === turn?.id),
+      .every(
+        (action) =>
+          action.parentId === turn?.id ||
+          tree.some((parent) => parent.id === action.parentId && parent.kind === "llm"),
+      ),
   ).toBe(true);
   expect(eventNames.filter((name) => name === Tool.Events.Started.name)).toHaveLength(1);
   expect(eventNames.filter((name) => name === Tool.Events.Completed.name)).toHaveLength(1);

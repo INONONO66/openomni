@@ -1,4 +1,5 @@
-import { beforeAll, describe, expect, it, mock } from "bun:test";
+import { createTestAgent } from "../helpers/test-agent";
+import { describe, expect, it, mock } from "bun:test";
 import type { Sink } from "@openomni/llm";
 import type { Tool } from "@openomni/protocol";
 import {
@@ -17,12 +18,6 @@ const mockLlm = createMockLlmConfig({
   getModels: mock(async () => mockProviderData),
   fromModelsDevModel: mock(() => mockProviderModel),
   run: (input, sink: Sink) => mockRunFn(input, sink),
-});
-
-let ChatAgent: typeof import("../../src/core/chat-agent").ChatAgent;
-
-beforeAll(async () => {
-  ({ ChatAgent } = await import("../../src/core/chat-agent"));
 });
 
 const defaultConfig = {
@@ -97,7 +92,7 @@ describe("ChatAgent.run() streaming", () => {
     };
 
     const sink = collectingSink();
-    const result = await ChatAgent.create(defaultConfig).run(defaultInput, sink);
+    const result = await createTestAgent(defaultConfig).run(defaultInput, sink);
 
     expect(sink.texts).toEqual(["Hello world"]);
     expect(result.finishReason).toBe("stop");
@@ -155,7 +150,7 @@ describe("ChatAgent.run() streaming", () => {
       return createStopOutcome();
     };
 
-    const agent = ChatAgent.create({
+    const agent = createTestAgent({
       ...defaultConfig,
       toolExecutor: async (call) => ({
         id: crypto.randomUUID(),

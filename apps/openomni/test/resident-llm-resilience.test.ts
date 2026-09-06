@@ -1,3 +1,4 @@
+import { providerFailure } from "./helpers/provider-failure";
 import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { Auth } from "@openomni/llm";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -83,7 +84,7 @@ describe("Resident model fallback wiring", () => {
           auths.push(await Auth.resolve(input.model.providerID, input.auth, input.authProvider));
           calls += 1;
           if (calls === 1) {
-            return { type: "error", error: { message: "transient blip", name: "Error" } };
+            return { type: "error", error: providerFailure("transient blip") };
           }
           sink.onMessage(assistantMessage(input, { call: calls, text: "recovered" }));
           return { type: "stop" };
@@ -94,7 +95,10 @@ describe("Resident model fallback wiring", () => {
     const result = await resident(delivery(sessionId));
 
     expect(resolved).toEqual([PRIMARY, FALLBACK]);
-    expect(auths).toEqual([{ type: "api", key: "test-key" }, { type: "api", key: "fallback-key" }]);
+    expect(auths).toEqual([
+      { type: "api", key: "test-key" },
+      { type: "api", key: "fallback-key" },
+    ]);
     expect(credentials.mock.calls).toEqual([[FALLBACK.provider]]);
     expect(result.kind).not.toBe("dropped");
   });
@@ -117,7 +121,7 @@ describe("Resident model fallback wiring", () => {
         run: async (input, sink) => {
           calls += 1;
           if (calls === 1) {
-            return { type: "error", error: { message: "transient blip", name: "Error" } };
+            return { type: "error", error: providerFailure("transient blip") };
           }
           sink.onMessage(assistantMessage(input, { call: calls, text: "recovered" }));
           return { type: "stop" };
@@ -159,7 +163,7 @@ describe("Resident terminal LLM failure surfacing", () => {
         name: model.id,
         providerID: model.provider,
       }),
-      run: async () => ({ type: "error" as const, error }),
+      run: async () => ({ type: "error" as const, error: providerFailure(error.message, error) }),
     };
   }
 

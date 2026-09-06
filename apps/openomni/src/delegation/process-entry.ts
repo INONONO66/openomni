@@ -4,7 +4,7 @@ import { Bus } from "@openomni/agent";
 import { z } from "zod";
 import { createDelegationKernel, type DelegationKernel } from "./kernel";
 import { createInlineDriver, type InlineWorkerRunner } from "./inline-driver";
-import { createInlineWorkerRunner, WorkerRunError } from "./worker-loop";
+import { createWorkerSessionRunner, WorkerRunError } from "../composition/worker-session";
 import { seedKernelPolicyRows } from "../policy-seed";
 
 /** Child-process wire: parse, acknowledge delivery, then report one outcome. */
@@ -110,7 +110,7 @@ function processWorkerRun(
     seedKernelPolicyRows();
   }
   let kernel: DelegationKernel;
-  const runner = createInlineWorkerRunner({
+  const runner = createWorkerSessionRunner({
     model: request.model,
     apiKey: request.apiKey,
     ...(request.transport === undefined ? {} : { transport: request.transport }),

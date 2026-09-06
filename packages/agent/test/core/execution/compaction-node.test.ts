@@ -1,6 +1,7 @@
+import { providerFailure } from "../../helpers/mock-llm";
 import { expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
-import { runAgent } from "../../../src/core/execution/run";
+import { runTestAgent } from "../../helpers/test-agent";
 import { compiledPolicy, recordingExecutor } from "../../helpers/compiled-policy";
 import { runInput } from "../../helpers/run-input";
 import { RunEvents } from "../../../src/core/execution/events";
@@ -140,7 +141,7 @@ it("commits a reversible compaction result before completion observations and th
   const committedRecord = () =>
     recording.committed.some((action) => action.kind === "compaction" && "revert" in action);
   // When: the production run loop recovers through its compaction path.
-  await runAgent(
+  await runTestAgent(
     runInput([
       { role: "user", content: "goal" },
       { role: "assistant", content: "prior evidence ".repeat(200) },
@@ -170,7 +171,14 @@ it("commits a reversible compaction result before completion observations and th
         }),
         run: async () => {
           calls += 1;
-          if (calls === 1) return { type: "error", error: new Error("prompt is too long") };
+          if (calls === 1)
+            return {
+              type: "error",
+              error: providerFailure("prompt is too long", {
+                contextOverflow: true,
+                retryable: false,
+              }),
+            };
           durableAtNextCall = committedRecord();
           return { type: "stop" };
         },

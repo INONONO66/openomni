@@ -1,5 +1,6 @@
 import { canonicalDigest, PlainValueSchema, type BusEvent } from "@openomni/protocol";
 import type { Executor } from "../executor";
+import { activeExecutor } from "../executor-context";
 import { RunEvents } from "../core/execution/events";
 import { Compaction } from "./compact";
 
@@ -36,13 +37,10 @@ export async function executeCompaction(input: CompactionExecution): Promise<Com
   };
   const calculate = async () => {
     input.signal?.throwIfAborted();
-    const result = await Compaction.compact(
-      snapshot,
-      input.options,
-      input.identity,
-      events,
-      { ...input.dispatch, signal: input.signal },
-    );
+    const result = await Compaction.compact(snapshot, input.options, input.identity, events, {
+      ...input.dispatch,
+      signal: input.signal,
+    });
     input.signal?.throwIfAborted();
     return result;
   };
@@ -60,14 +58,19 @@ export async function executeCompaction(input: CompactionExecution): Promise<Com
           result?.record === undefined ? undefined : PlainValueSchema.parse(result.record.revert),
       },
       async () => {
-        result = await calculate();
-        return PlainValueSchema.parse(result.record ?? null);
+        result = await activeExecutor.run(input.executor as Executor, calculate);
+        return PlainValueSchema.parse(
+          result.record === undefined ? null : { ...result.record, projection: result.messages },
+        );
       },
     );
     if (execution.terminal !== "executed") throw new CompactionExecutionError(execution.reason);
     if (
       result === undefined ||
-      canonicalDigest(execution.value) !== canonicalDigest(result.record ?? null)
+      canonicalDigest(execution.value) !==
+        canonicalDigest(
+          result.record === undefined ? null : { ...result.record, projection: result.messages },
+        )
     ) {
       throw new CompactionExecutionError("invalid_output");
     }

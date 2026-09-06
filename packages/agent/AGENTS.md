@@ -4,6 +4,8 @@
 
 ## Execution contract
 
+Updated for #937 continuation (2026-09-06): `session-chat-runner` alone invokes production `runAgent`. Session ownership is split by registry/handle, controller lifetime, admission/recovery, running turn, configuration/lease, and durable record projection; none is a second session implementation. `executor-attempts` owns retries and approval re-admission; llm owns failure decisions and usage. `executor-stop` evaluates policy in fixed stop order. Assistant history and reversible compaction projections are durable actions. Native worker assembly shares this loop; it has no separate drive policy.
+
 Every durable `prompt`, `turn`, `llm`, and `tool` operation runs through the per-turn `Executor`, which evaluates the pinned compiled row snapshot and commits a `policy.decision` action per hook. `run()` owns the record for `llm` and `tool`: intent before body, one linked terminal result after, plus a child `attempt` pair per retried model call. `runExisting()` decides over records the session machine already committed, the inbox action for `prompt` and the turn envelope for `turn`, and appends no second intent or result. Callers do not register policy callbacks. Tool definitions are data plus a body; both model and cell doors use the same executor and output schema.
 
 Observations are lossy projections after durable commits. Session and turn identity come from the session runtime, never tool payloads.

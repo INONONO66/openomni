@@ -4,7 +4,7 @@ import { Placement } from "@openomni/placement";
 import { createTools, collectToolSpecs } from "../src/tools/core/catalog";
 import { createDispatcher, HOST_TARGET, toolSpec } from "@openomni/agent";
 import {
-  createLlmToolPort,
+  createLlmToolPort as llmToolPort,
   LLM_TOOL_NAME,
   MAX_LLM_CALLS,
 } from "../src/tools/execution/llm";
@@ -12,8 +12,16 @@ import { Auth, ModelsDev, Provider, type RunInput } from "@openomni/llm";
 
 afterEach(() => mock.restore());
 import { assistantMessage } from "./helpers/assistant-message";
+import { providerFailure } from "./helpers/provider-failure";
 import { executor } from "./helpers/executor";
 import { dispatchModelTool, modelToolOutput } from "./helpers/tool-dispatch";
+
+import { admittedOperation } from "./helpers/admitted-operation";
+
+function createLlmToolPort(...args: Parameters<typeof llmToolPort>) {
+  const port = llmToolPort(...args);
+  return (prompt: string) => admittedOperation(() => port(prompt));
+}
 
 const RESIDENT = { role: "resident", depth: 0, sessionId: "session-origin" } as const;
 
@@ -128,7 +136,9 @@ describe("the llm tool", () => {
       ["anthropic", "claude-unlisted", "model_not_found"],
       ["nowhere", "listed", "provider_not_found"],
     ] as const) {
-      await expect(createLlmToolPort({ provider, id, apiKey: "key" }, { run })("hello")).rejects.toMatchObject({
+      await expect(
+        createLlmToolPort({ provider, id, apiKey: "key" }, { run })("hello"),
+      ).rejects.toMatchObject({
         data: { reason, provider, model: id },
       });
     }
@@ -202,10 +212,10 @@ describe("the llm tool port", () => {
   it("throws the provider's failure instead of returning it as data", async () => {
     const port = createLlmToolPort(MODEL, {
       resolveModel,
-      run: async () => ({ type: "error", error: new Error("provider on fire") }),
+      run: async () => ({ type: "error", error: providerFailure("provider on fire") }),
     });
 
-    await expect(port("q")).rejects.toThrow("llm failed: provider on fire");
+    await expect(port("q")).rejects.toThrow("provider on fire");
   });
 
   it("names the outcome when a non-stop run carries no error", async () => {
@@ -214,7 +224,7 @@ describe("the llm tool port", () => {
       run: async () => ({ type: "aborted" }),
     });
 
-    await expect(port("q")).rejects.toThrow("llm failed: the sub-model run ended as aborted");
+    await expect(port("q")).rejects.toMatchObject({ name: "AbortError" });
   });
 });
 

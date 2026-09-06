@@ -9,20 +9,20 @@ import {
   type SessionRunner,
   type SessionRunnerInput,
   type SessionRuntime,
+  type SessionRunnerResult,
 } from "@openomni/agent";
 import type { LedgerSession, Model } from "@openomni/protocol";
 import { Bus, newTraceId } from "@openomni/agent";
-import { chatProviderConfig } from "../composition/chat-provider";
-import { SessionBindingCache } from "../composition/session-bindings";
+import { chatProviderConfig } from "./chat-provider";
+import { SessionBindingCache } from "./session-bindings";
 import { observeComponent } from "../observation/component";
 import { buildAgentPrompt } from "../prompt/build";
 import { WORKER_PRESET } from "../prompt/roles";
 import { seedKernelPolicyRows } from "../policy-seed";
 import { createTools } from "../tools/core/catalog";
-import { decideDrive, initialDriveState, type DriveState } from "./drive-loop";
-import { renderInstruction } from "./instruction";
-import type { InlineWorkerRunner } from "./inline-driver";
-import type { DelegationKernel } from "./kernel";
+import { renderInstruction } from "../delegation/instruction";
+import type { InlineWorkerRunner } from "../delegation/inline-driver";
+import type { DelegationKernel } from "../delegation/kernel";
 
 export function toolExecutorForTurn(
   dispatcher: Pick<ReturnType<typeof createTurnDispatcher>, "execute">,
@@ -46,7 +46,7 @@ export class WorkerRunError extends Error {
   }
 }
 
-export interface WorkerLoopOptions {
+export interface WorkerSessionOptions {
   readonly model: Model.Ref;
   readonly apiKey: string;
   readonly transport?: ChatAgentConfig["transport"];
@@ -66,7 +66,9 @@ interface WorkerBinding {
   readonly release: () => void;
 }
 
-export function createInlineWorkerRunner(options: WorkerLoopOptions): SessionInlineWorkerRunner {
+export function createWorkerSessionRunner(
+  options: WorkerSessionOptions,
+): SessionInlineWorkerRunner {
   seedKernelPolicyRows();
   const bindings = new SessionBindingCache<WorkerBinding>();
   const runtime = options.sessionRuntime ?? { observations: Bus };
@@ -136,9 +138,7 @@ export function createInlineWorkerRunner(options: WorkerLoopOptions): SessionInl
       createBinding(input.delegationId, input.origin.sessionId, input.origin.depth),
     );
     const { binding } = lease;
-    let tokens = 0;
-    let state: DriveState = initialDriveState();
-    let prompt = renderInstruction(input.instruction, input.acceptanceCriteria);
+    const prompt = renderInstruction(input.instruction, input.acceptanceCriteria);
     let lastRunId = input.workerRunId ?? input.delegationId;
     const interrupt = (): void => {
       // The abort signal is authoritative; a simultaneous lease loss or close
@@ -147,39 +147,18 @@ export function createInlineWorkerRunner(options: WorkerLoopOptions): SessionInl
     };
     input.signal.addEventListener("abort", interrupt, { once: true });
     try {
-      for (;;) {
-        if (input.signal.aborted) throw new WorkerRunError("worker run aborted", lastRunId);
-        const result = await binding.handle.prompt(prompt);
-        const actionId = binding.handle.get().turns.at(-1)?.terminal?.actionId;
-        if (actionId !== undefined) lastRunId = actionId;
-        if (result === undefined) {
-          throw new WorkerRunError("worker session produced no terminal result", lastRunId);
-        }
-        if (result.kind === "interrupted") {
-          throw new WorkerRunError("worker run aborted", lastRunId);
-        }
-        if (result.kind === "error") {
-          throw new WorkerRunError(result.cause?.message ?? result.text, lastRunId);
-        }
-        tokens += result.usage?.totalTokens ?? 0;
-        if (input.operation !== "assign") {
-          return { text: result.text, tokens, runId: lastRunId };
-        }
-        const decision = decideDrive(state, {
-          text: result.text,
-          finishReason: result.finishReason ?? "stop",
-        });
-        if (decision.action === "done") return { text: result.text, tokens, runId: lastRunId };
-        if (decision.action === "stop") {
-          return {
-            text: `[drive stopped: ${decision.reason}]\n${result.text}`,
-            tokens,
-            runId: lastRunId,
-          };
-        }
-        state = decision.state;
-        prompt = decision.prompt;
-      }
+      input.signal.throwIfAborted();
+      let result = await binding.handle.prompt(prompt);
+      if (result?.kind === "waiting") result = await awaitWorkerWake(binding.handle, input.signal);
+      const actionId = binding.handle.get().turns.at(-1)?.terminal?.actionId;
+      if (actionId !== undefined) lastRunId = actionId;
+      if (result === undefined)
+        throw new WorkerRunError("worker session produced no terminal result", lastRunId);
+      if (result.kind === "interrupted") throw new WorkerRunError("worker run aborted", lastRunId);
+      if (result.kind === "error")
+        throw new WorkerRunError(result.cause?.message ?? result.text, lastRunId);
+      if (result.kind === "waiting") throw new Error("worker wake returned a waiting result");
+      return { text: result.text, tokens: result.usage?.totalTokens ?? 0, runId: lastRunId };
     } finally {
       input.signal.removeEventListener("abort", interrupt);
       await lease.release();
@@ -188,5 +167,36 @@ export function createInlineWorkerRunner(options: WorkerLoopOptions): SessionInl
 
   return Object.assign(run, {
     runnerFor: (row: LedgerSession.Row) => createBinding(row.id, row.parentId, 1).runner,
+  });
+}
+
+/** Transport waits for a future session terminal; it never invokes another agent loop. */
+function awaitWorkerWake(handle: SessionHandle, signal: AbortSignal): Promise<SessionRunnerResult> {
+  const watch = handle.watch();
+  return new Promise((resolve, reject) => {
+    const release = () => {
+      unsubscribe();
+      watch.unsubscribe();
+      signal.removeEventListener("abort", abort);
+    };
+    const abort = () => {
+      release();
+      reject(new DOMException("worker aborted", "AbortError"));
+    };
+    const inspect = () => {
+      const turn = handle.get().turns.at(-1);
+      if (turn?.terminal === undefined || turn.terminal.kind === "waiting") return;
+      const kind = turn.terminal.kind;
+      const text =
+        turn.messages.filter((message) => message.role === "assistant").at(-1)?.text ?? "";
+      release();
+      resolve(
+        kind === "result" ? { kind, text } : kind === "error" ? { kind, text } : { kind, text },
+      );
+    };
+    const unsubscribe = watch.subscribe(inspect);
+    signal.addEventListener("abort", abort, { once: true });
+    if (signal.aborted) abort();
+    else inspect();
   });
 }

@@ -71,7 +71,7 @@ describe("Processor fold-based emission (#545 T2)", () => {
     // Given: a billed failed attempt, then a text/tool response.
     const cap = capture();
     let attempts = 0;
-    const processor = createProcessor(cap, {
+    const options: Partial<Processor.ProcessorOptions> = {
       createStream: async () => ({
         fullStream: (async function* () {
           attempts += 1;
@@ -96,9 +96,10 @@ describe("Processor fold-based emission (#545 T2)", () => {
           yield { type: "finish" };
         })(),
       }),
-    });
-
-    // When: the real processor folds both attempts.
+    };
+    const failed = createProcessor(cap, options);
+    await expect(failed.process({ system: "", promptText: "" })).rejects.toBeInstanceOf(Error);
+    const processor = createProcessor(cap, options);
     await processor.process({ system: "", promptText: "" });
 
     // Then: immutable snapshots, paired callbacks and all billed usage survive.
@@ -118,9 +119,10 @@ describe("Processor fold-based emission (#545 T2)", () => {
     ]);
     expect(cap.toolCalls).toEqual([{ id: "paired", tool: "lookup", input: {} }]);
     expect(cap.toolResults).toMatchObject([{ toolCallId: "paired", output: "42" }]);
+    expect(failed.usageTotals).toMatchObject({ input: 5, output: 7 });
     expect(processor.usageTotals).toEqual({
-      input: 16,
-      output: 20,
+      input: 11,
+      output: 13,
       reasoning: 0,
       cache: { read: 0, write: 0 },
     });
@@ -187,7 +189,7 @@ describe("Processor fold-based emission (#545 T2)", () => {
   test("failed-attempt parts do not re-emit into the retry attempt", async () => {
     let attemptCount = 0;
     const cap = capture();
-    const processor = createProcessor(cap, {
+    const options: Partial<Processor.ProcessorOptions> = {
       createStream: async () => ({
         fullStream: (async function* () {
           attemptCount++;
@@ -202,8 +204,10 @@ describe("Processor fold-based emission (#545 T2)", () => {
           yield { type: "finish" };
         })(),
       }),
-    });
-
+    };
+    const failed = createProcessor(cap, options);
+    await expect(failed.process({ system: "", promptText: "" })).rejects.toBeInstanceOf(Error);
+    const processor = createProcessor(cap, options);
     await processor.process({ system: "", promptText: "" });
 
     expect(attemptCount).toBe(2);
@@ -217,7 +221,7 @@ describe("Processor fold-based emission (#545 T2)", () => {
   test("retry closes the failed attempt with finish error before the next attempt starts", async () => {
     let attemptCount = 0;
     const cap = capture();
-    const processor = createProcessor(cap, {
+    const options: Partial<Processor.ProcessorOptions> = {
       createStream: async () => ({
         fullStream: (async function* () {
           attemptCount++;
@@ -229,8 +233,10 @@ describe("Processor fold-based emission (#545 T2)", () => {
           yield { type: "finish" };
         })(),
       }),
-    });
-
+    };
+    const failed = createProcessor(cap, options);
+    await expect(failed.process({ system: "", promptText: "" })).rejects.toBeInstanceOf(Error);
+    const processor = createProcessor(cap, options);
     await processor.process({ system: "", promptText: "" });
 
     expect(attemptCount).toBe(2);

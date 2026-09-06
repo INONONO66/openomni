@@ -244,6 +244,8 @@ reaches it only through tools in its catalog (`delegate`, `await_delegation`,
 
 ### Session identity boundary
 
+Native inline and process execution now bind through `composition/worker-session.ts`. One instruction invokes one session-owned runAgent loop; there is no worker drive loop or prose-based BLOCKED policy. The shared executor reads continuation/repetition/stall/blocked limits from the captured policy generation. A waiting worker observes the session terminal instead of invoking a second loop. Process entry retains ACK-before-work, worker result identity, operator transport and shared SQLite; recursive children remain restricted to the permitted inline transport. Channel delegation and its existing Wait/wake lifecycle remain separate until their own cutover.
+
 Resident and native worker execution share `@openomni/agent`'s session handle
 and its per-turn L2 executor. The app retains only catalog data and endpoint
 bindings; prompt, turn, model, and both model/cell tool doors are decided

@@ -1,19 +1,5 @@
 import { Run } from "@openomni/llm";
 
-/**
- * The loop's retry policy. `retryOn` uses the same closed reason vocabulary
- * as the retry event record.
- */
-export interface RetryPolicy {
-  maxAttempts: number;
-  backoffMs: {
-    initial: number;
-    multiplier: number;
-    max: number;
-  };
-  retryOn?: RetryReason[];
-}
-
 export type RetryReason =
   | "timeout"
   | "tool_error"
@@ -27,71 +13,6 @@ export type RetryReason =
  * so it can appear on `agent.run.failed` but never on `agent.error.retry`.
  */
 export type TerminalReason = RetryReason | "aborted";
-
-export const DEFAULT_RETRY_POLICY: RetryPolicy = {
-  maxAttempts: 3,
-  backoffMs: { initial: 1000, multiplier: 2, max: 30_000 },
-  retryOn: ["timeout", "tool_error", "transient_error"],
-};
-
-export function calculateBackoffMs(policy: RetryPolicy, attempt: number): number {
-  const rawDelay =
-    policy.backoffMs.initial * policy.backoffMs.multiplier ** Math.max(0, attempt - 1);
-  return Math.min(rawDelay, policy.backoffMs.max);
-}
-
-/**
- * Aborts are NOT classified here (#audit M4): "aborted" as a message
- * substring used to map to the retryable "timeout", so an abort mid-run
- * emitted a retry promise and then died in `Retry.sleep` — and a tool error
- * that merely mentioned "aborted" triggered a bogus retry. Abort is decided
- * by identity ({@link isAbort}: signal state or the typed error), before any
- * message classification runs. Likewise "budget exceeded" matched here for a
- * condition that never throws — budget exhaustion ends the run with a
- * result, not an error.
- *
- */
-export function classifyRetryReason(errorMessage: string): RetryReason {
-  const normalized = errorMessage.toLowerCase();
-  if (normalized.includes("timeout")) {
-    return "timeout";
-  }
-  if (normalized.includes("tool")) {
-    return "tool_error";
-  }
-  if (normalized.includes("validation")) {
-    return "validation_error";
-  }
-  return "transient_error";
-}
-
-/**
- * Provider context-overflow, decided by message text (compaction-design L5;
- * pattern list adopted from pss-runtime's loop-overflow classifier). Checked
- * BEFORE the generic classification: an overflow is recoverable exactly once
- * per run by re-entering the compaction seam, never by blind retry — the
- * same prompt fails the same way.
- */
-export function isContextOverflow(error: Error): boolean {
-  const failure = asLlmFailure(error);
-  if (failure !== undefined) return failure.data.contextOverflow;
-  const normalized = error.message.toLowerCase();
-  return (
-    normalized.includes("context_length_exceeded") ||
-    normalized.includes("context length") ||
-    normalized.includes("context limit") ||
-    normalized.includes("context window") ||
-    normalized.includes("maximum context") ||
-    normalized.includes("prompt is too long") ||
-    normalized.includes("too many tokens") ||
-    normalized.includes("token limit") ||
-    // Gemini: "The input token count (N) exceeds the maximum number of
-    // tokens allowed (M)."; Bedrock-Anthropic: "Input is too long for
-    // requested model." (#726 review F3)
-    normalized.includes("exceeds the maximum number of tokens") ||
-    normalized.includes("input is too long")
-  );
-}
 
 /**
  * The typed abort the loop throws when it observes its own signal. The name
@@ -165,14 +86,4 @@ export function failureFacts(error: unknown): AgentFailureFacts | undefined {
   if (typeof error !== "object" || error === null) return undefined;
   const carried = (error as Record<symbol, unknown>)[FAILURE_FACTS];
   return carried === undefined ? undefined : (carried as AgentFailureFacts);
-}
-
-/**
- * Whether this attempt may be retried. An empty or absent `retryOn` means no
- * filter, so every reason is retryable up to `maxAttempts`.
- */
-export function shouldRetry(policy: RetryPolicy, reason: RetryReason, attempt: number): boolean {
-  if (attempt >= policy.maxAttempts) return false;
-  if (policy.retryOn === undefined || policy.retryOn.length === 0) return true;
-  return policy.retryOn.includes(reason);
 }

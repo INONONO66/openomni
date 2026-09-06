@@ -8,10 +8,11 @@ import type { Gateway } from "@openomni/protocol";
 import { modelTransport, type OpenOmniConfig } from "../src/config";
 import type { DelegationKernel } from "../src/delegation/kernel";
 import { createChildKernel, ProcessWorkerRequest } from "../src/delegation/process-entry";
-import { createInlineWorkerRunner } from "../src/delegation/worker-loop";
+import { createWorkerSessionRunner } from "../src/composition/worker-session";
 import { createResident } from "../src/resident";
 import { createLlmToolPort } from "../src/tools/execution/llm";
 import { assistantMessage } from "./helpers/assistant-message";
+import { admittedOperation } from "./helpers/admitted-operation";
 
 const directories: string[] = [];
 
@@ -111,7 +112,7 @@ describe("operator transport reaches every model caller", () => {
     });
     let seen: RunInput | undefined;
     let kernel: DelegationKernel;
-    const runner = createInlineWorkerRunner({
+    const runner = createWorkerSessionRunner({
       model: { provider: "fake", id: "worker-test" },
       apiKey: "test-key",
       transport: OPERATOR_TRANSPORT,
@@ -184,7 +185,7 @@ describe("operator transport reaches every model caller", () => {
       },
     );
 
-    await port("summarize");
+    await admittedOperation(() => port("summarize"));
 
     expect(seen?.transport).toEqual(OPERATOR_TRANSPORT);
   });

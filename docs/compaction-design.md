@@ -2,6 +2,14 @@
 
 Last verified against `feat/compaction-hardening`: 2026-09-02 (P0 production summarizer and speculation wiring). Design target document; [`docs/implementation-status.md`](implementation-status.md) alone says what is wired. Supersedes the two open Phase 3 rows of the archived agent-core rewrite receipt ("cut planning, incremental summarization" and "speculative overlap (D8)"; git history, `docs/agent-core-rewrite.md`) — those rows resolve here.
 
+## Session-loop contract (#937 continuation)
+
+The session hydrates full assistant/tool snapshots from append-only `message` actions, preserving their original IDs. Compaction runs through the same executor under `turn.post/compaction`; its result contains the replacement projection, summary, unchanged first-kept entry, inclusive discarded range, canonical SHA-256 digest, and complete revert entries. The durable result precedes observations and projection replacement. Reopen applies recorded projections without deleting original actions. Prompts committed while the summarizer runs remain separate inbox rows and enter the next loop boundary in durable order.
+
+`compact.ts` owns the observation bracket, `cut.ts` chooses the pair-safe cut, `summary.ts` produces anchors and verbatim-user carriage, `candidate.ts` validates speculative reuse, and `estimate.ts` owns local context estimates. Provider usage extraction retains D5 semantics; valid zero counts are not clamped. Overflow enters compaction rather than generic provider retry. Summary calls use the ambient session executor and its attempt journal, including speculative calls; failed/aborted summaries retain the existing deterministic fallback/cancellation behavior.
+
+The historical design below describes additional target features; implementation status remains authoritative.
+
 ## Outcome
 
 The context window stops being managed state and becomes an **issued view over the ledger**: compaction never destroys information (everything elided or cut remains addressable in the ledger), user messages survive every compression byte-identical, summarization maintains one persistent structured anchor instead of regenerating prose, and the expensive summary work runs speculatively in the background so the apply seam almost never waits on a model call. Resume becomes projection recomputation, dissolving the class of defects behind [#702](https://github.com/INONONO66/openomni/issues/702).

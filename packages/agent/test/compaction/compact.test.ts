@@ -2,12 +2,12 @@ import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
 import { RunEvents } from "../../src/core/execution/events";
 import { Bus } from "../../src/index";
+import { Compaction } from "../../src/compaction/compact";
 import {
-  Compaction,
   estimateMessagesTokens,
   isIneffectiveCompaction,
   prepareSummarizerInput,
-} from "../../src/compaction/compact";
+} from "../../src/compaction/estimate";
 import { captureBusEvents } from "../helpers/bus-event";
 
 /** Compaction rewrites a run's history; the record carries that run's trace. */

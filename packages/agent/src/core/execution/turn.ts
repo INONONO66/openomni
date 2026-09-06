@@ -1,16 +1,17 @@
 import { buildSystemPrompt, prepareTurnTools } from "./tool-placement";
-import type { RunInput, Sink } from "@openomni/llm";
-import { type Message, type BusEvent, Operational } from "@openomni/protocol";
-import { effectiveMaxToolCalls } from "../budget";
+import { accumulateUsage, type RunInput, type Sink } from "@openomni/llm";
+import { Message, type BusEvent, Operational, PlainValueSchema } from "@openomni/protocol";
+import { effectiveMaxToolCalls, publishBudgetTelemetry } from "../budget";
 import { Compaction, type CompactionSession } from "../../compaction";
 import { executeCompaction } from "../../compaction/execute-cut";
 import { resolveCompactionGeometry } from "../../compaction/geometry";
 import { measuredContextTokens } from "../../compaction/measure";
 import { createAssistantMessage, createUserMessage, withMessageId } from "../message-factory";
 import { settleModelTools } from "./tool-wave";
+import { AgentStopError } from "./stop-chain";
 import * as Retry from "../retry";
 import type { AgentResult, ChatAgentConfig, TokenUsage } from "../types";
-import { emitErrorRetry, emitTurnComplete, runResult } from "./run-events";
+import { emitTurnComplete, runResult } from "./run-events";
 import {
   advanceRunTurn,
   applyCompactionMessages,
@@ -23,7 +24,6 @@ import {
   setLastAssistantText,
   type AgentRunBase,
   type BuildTurnResult,
-  type ErrorDecision,
   type RunState,
   type RunTrace,
   type TurnArtifacts,
@@ -98,10 +98,6 @@ export async function buildTurn(
         allowAuthFallback: config.allowAuthFallback,
         toolChoice: configuredToolChoice,
         maxSteps: stepCap,
-        // Agent owns retry attempts, their backoff, and fallback selection.
-        // Disable llm.run's nested transport retries for this orchestrated path;
-        // standalone callers retain llm's bounded default when this is absent.
-        maxRetryAttempts: 0,
         // Yield at the same ratio the compaction trigger defaults to: the
         // loop stops at a step boundary once the window fills, the seam
         // below gets its chance on every path — Resident and tool loops
@@ -138,6 +134,7 @@ function createTrackingSink(
 ): Sink {
   let prevInputTokens = 0;
   let prevOutputTokens = 0;
+  let previousAux = { reasoning: 0, read: 0, write: 0 };
 
   return {
     onMessage: (message: Message.WithParts) => {
@@ -154,11 +151,27 @@ function createTrackingSink(
         const deltaOutput = tokens.output - prevOutputTokens;
         prevInputTokens = tokens.input;
         prevOutputTokens = tokens.output;
-        if (deltaInput > 0 || deltaOutput > 0) {
-          turnUsage.inputTokens += deltaInput;
-          turnUsage.outputTokens += deltaOutput;
-          turnUsage.totalTokens += deltaInput + deltaOutput;
-          recordAssistantTokenDelta(state, deltaInput, deltaOutput);
+        const delta = {
+          inputTokens: deltaInput,
+          outputTokens: deltaOutput,
+          reasoningTokens: tokens.reasoning - previousAux.reasoning,
+          cacheReadTokens: tokens.cache.read - previousAux.read,
+          cacheWriteTokens: tokens.cache.write - previousAux.write,
+        };
+        previousAux = {
+          reasoning: tokens.reasoning,
+          read: tokens.cache.read,
+          write: tokens.cache.write,
+        };
+        if (
+          deltaInput > 0 ||
+          deltaOutput > 0 ||
+          delta.reasoningTokens > 0 ||
+          delta.cacheReadTokens > 0 ||
+          delta.cacheWriteTokens > 0
+        ) {
+          accumulateUsage(turnUsage, delta);
+          recordAssistantTokenDelta(state, delta);
           const measured = measuredContextTokens(message);
           if (measured !== undefined) recordCallContext(state, measured);
         }
@@ -173,6 +186,20 @@ function createTrackingSink(
     onToolCall: (call) => sink?.onToolCall(call),
     onToolResult: (result) => sink?.onToolResult(result),
   };
+}
+
+async function recordAssistant(
+  config: ChatAgentConfig,
+  message: Message.WithParts,
+): Promise<Message.WithParts> {
+  if (config.executor === undefined) throw new Error("missing message authority");
+  const result = await config.executor.run(
+    { kind: "message", op: "assistant", intent: { messageId: message.info.id }, effect: {} },
+    async () => PlainValueSchema.parse(message),
+  );
+  if (result.terminal !== "executed")
+    throw new Error(`assistant persistence refused: ${result.reason}`);
+  return Message.WithParts.parse(result.value);
 }
 
 export type StopOutcome = AgentResult | "continue";
@@ -212,11 +239,20 @@ export async function handleStop(
   compaction: CompactionSession | undefined,
 ): Promise<StopOutcome> {
   const assistantIndex = state.messages.length;
-  const initialAssistant = resolveTurnAssistant(config.events, state, turn, agentBase);
+  const initialAssistant = await recordAssistant(
+    config,
+    resolveTurnAssistant(config.events, state, turn, agentBase),
+  );
+  turn.turnAssistant.message = initialAssistant;
   appendRunMessages(state, [initialAssistant]);
   const afterModelPrompts = await drainStepBoundary(state, config, "after_llm");
   const toolCalls = await settleModelTools(turn, config, state);
   const afterWavePrompts = await drainStepBoundary(state, config, "after_tools");
+  if (toolCalls > 0)
+    turn.turnAssistant.message = await recordAssistant(
+      config,
+      turn.turnAssistant.message ?? initialAssistant,
+    );
   emitTurnComplete(config.events, state, agentBase, turn.turnUsage);
   const turnText = assistantTextOf(turn.turnAssistant.message);
   const step = { type: "text" as const, content: turnText };
@@ -226,29 +262,46 @@ export async function handleStop(
   state.messages[assistantIndex] = assistantMessage;
   prepareCompactionAfterContinue(state, config, compaction);
 
-  if (toolCalls > 0 || afterModelPrompts + afterWavePrompts > 0) {
-    await applyCompaction(state, config, agentBase, compaction, "threshold");
-    advanceRunTurn(state);
-    return "continue";
-  }
-  const yielded = turnYield(turn, assistantMessage);
-  if (yielded === "steer") {
-    advanceRunTurn(state);
-    return "continue";
-  }
-  if (yielded === "window") {
-    const result = await applyCompaction(state, config, agentBase, compaction, "yield");
-    if (result === "none" || state.lastCompactionIneffective === true) disarmWindowYield(state);
-    advanceRunTurn(state);
-    return "continue";
-  }
-  if (yielded !== "steps") {
-    await applyCompaction(state, config, agentBase, compaction, "threshold");
-  }
-  return runResult(state, {
-    finishReason: yielded === "steps" ? "max-steps" : "stop",
+  const yielded = toolCalls > 0 ? null : turnYield(turn, assistantMessage);
+  const compacted = await applyCompaction(
+    state,
+    config,
+    agentBase,
+    compaction,
+    yielded === "window" ? "yield" : "threshold",
+  );
+  if (yielded === "window" && (compacted === "none" || state.lastCompactionIneffective))
+    disarmWindowYield(state);
+  const evidence = (await config.stopEvidence?.()) ?? {
+    progress: false,
+    blocked: false,
+    openIntent: [],
+    alarmIds: [],
+  };
+  if (config.execution === undefined) throw new Error("missing stop authority");
+  const judgment = await config.execution.judgeStop(state.stop, {
+    ...evidence,
     text: turnText,
+    toolCalls,
+    continueRequested:
+      yielded === "window" || yielded === "steer" || afterModelPrompts + afterWavePrompts > 0,
+    interrupted: config.signal?.aborted === true,
+    exhausted:
+      yielded === "steps" ||
+      publishBudgetTelemetry(state.budgetState, agentBase, config.events, config.budget) ===
+        "exceeded",
   });
+  state.stop = judgment.state;
+  if (judgment.verdict.kind === "interrupted") throw Retry.abortError();
+  if (judgment.verdict.kind === "error") throw new AgentStopError(judgment.verdict.reason);
+  if (judgment.verdict.kind === "continue") {
+    advanceRunTurn(state);
+    return "continue";
+  }
+  const result = runResult(state, { text: turnText });
+  return judgment.verdict.kind === "waiting"
+    ? { ...result, waiting: { reason: "live_wait", alarmIds: judgment.verdict.alarmIds } }
+    : result;
 }
 
 /**
@@ -275,91 +328,6 @@ export function handleContinue(
 ): void {
   emitTurnComplete(events, state, agentBase, turnUsage);
   advanceRunTurn(state);
-}
-
-type ErrorRetryPolicy = Parameters<typeof Retry.shouldRetry>[0];
-
-export function handleError(
-  state: RunState,
-  config: ChatAgentConfig,
-  agentBase: AgentRunBase,
-  error: Error,
-  attempt: number,
-  retryPolicy: ErrorRetryPolicy,
-  compaction: CompactionSession | undefined,
-): Promise<ErrorDecision>;
-export function handleError(
-  config: ChatAgentConfig,
-  agentBase: AgentRunBase,
-  error: Error,
-  attempt: number,
-  retryPolicy: ErrorRetryPolicy,
-): Promise<ErrorDecision>;
-export async function handleError(
-  stateOrConfig: RunState | ChatAgentConfig,
-  configOrAgent: ChatAgentConfig | AgentRunBase,
-  agentOrError: AgentRunBase | Error,
-  errorOrAttempt: Error | number,
-  attemptOrPolicy: number | ErrorRetryPolicy,
-  retryPolicy?: ErrorRetryPolicy,
-  compaction?: CompactionSession,
-): Promise<ErrorDecision> {
-  const hasState = "messages" in stateOrConfig;
-  const state = hasState ? stateOrConfig : undefined;
-  const config = (hasState ? configOrAgent : stateOrConfig) as ChatAgentConfig;
-  const agentBase = (hasState ? agentOrError : configOrAgent) as AgentRunBase;
-  const error = (hasState ? errorOrAttempt : agentOrError) as Error;
-  const attempt = (hasState ? attemptOrPolicy : errorOrAttempt) as number;
-  const policy = (hasState ? retryPolicy : attemptOrPolicy) as ErrorRetryPolicy;
-
-  if (Retry.isAbort(error, config.signal)) {
-    return {
-      action: "throw",
-      error,
-      failure: { reason: "aborted", attempt, maxAttempts: policy.maxAttempts },
-    };
-  }
-  if (Retry.isContextOverflow(error)) {
-    const failure = {
-      reason: "context_overflow" as const,
-      attempt,
-      maxAttempts: policy.maxAttempts,
-    };
-    if (state !== undefined && state.overflowCompactionAttempted !== true) {
-      state.overflowCompactionAttempted = true;
-      const result = await applyCompaction(state, config, agentBase, compaction, "yield");
-      if (result === "compacted") {
-        emitErrorRetry(config.events, agentBase, {
-          ...failure,
-          error: error.message,
-          backoffMs: 0,
-        });
-        return { action: "retry", backoffMs: 0, failure };
-      }
-    }
-    return { action: "throw", error, failure };
-  }
-  const reason = Retry.classifyRetryReason(error.message);
-  if (Retry.shouldRetry(policy, reason, attempt)) {
-    const backoffMs = Retry.calculateBackoffMs(policy, attempt);
-    emitErrorRetry(config.events, agentBase, {
-      attempt,
-      maxAttempts: policy.maxAttempts,
-      error: error.message,
-      reason,
-      backoffMs,
-    });
-    return {
-      action: "retry",
-      backoffMs,
-      failure: { reason, attempt, maxAttempts: policy.maxAttempts },
-    };
-  }
-  return {
-    action: "throw",
-    error,
-    failure: { reason, attempt, maxAttempts: policy.maxAttempts },
-  };
 }
 
 type CompactionApplyResult = "compacted" | "deferred" | "none";
@@ -404,7 +372,7 @@ function compactionGeometry(
   });
 }
 
-async function applyCompaction(
+export async function applyCompaction(
   state: RunState,
   config: ChatAgentConfig,
   agentBase: AgentRunBase,

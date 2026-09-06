@@ -12,7 +12,7 @@ import {
   ProcessWorkerRequest,
   serveProcessWorker,
 } from "../src/delegation/process-entry";
-import { WorkerRunError } from "../src/delegation/worker-loop";
+import { WorkerRunError } from "../src/composition/worker-session";
 import { RESIDENT, useDelegationStore } from "./helpers/delegation";
 
 useDelegationStore();

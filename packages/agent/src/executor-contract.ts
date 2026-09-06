@@ -51,6 +51,27 @@ export interface AttemptRequest {
   readonly effect: PlainValue;
 }
 
+export interface LlmAttempts<T extends PlainValue> {
+  prepare(
+    attempt: number,
+    failureReasons: readonly string[],
+  ): Promise<{
+    readonly request: AttemptRequest;
+    readonly fallbackAvailable?: boolean;
+    admit(): Promise<void>;
+    body(): Promise<T>;
+  }>;
+  recoverOverflow?(error: Error): Promise<boolean>;
+  onRetry?(decision: {
+    readonly attempt: number;
+    readonly maxAttempts: number;
+    readonly delayMs: number;
+    readonly decision: import("@openomni/llm").Retry.Decision;
+    readonly error: Error;
+    readonly reason: string;
+  }): void;
+}
+
 export type ExecutionResult =
   | { readonly terminal: "blocked_pre"; readonly reason: string }
   | { readonly terminal: "executed"; readonly value: PlainValue }
@@ -112,6 +133,11 @@ export type ExecutionBatchResult =
   | { readonly terminal: "failed"; readonly error: Error };
 
 export interface Executor {
+  runAttempts?<T extends PlainValue>(
+    parent: LedgerAction.Receipt,
+    attempts: LlmAttempts<T>,
+  ): Promise<T>;
+  readonly judgeStop?: DurableExecutor["judgeStop"];
   readonly approvals?: ExecutionApprovals;
   runBatch?(
     items: readonly ExecutionBatchItem[],
@@ -124,18 +150,25 @@ export interface Executor {
 }
 
 export interface DurableExecutor extends Executor {
+  judgeStop(
+    state: import("./core/execution/stop-chain").StopState,
+    observation: import("./core/execution/stop-chain").StopObservation,
+  ): Promise<{
+    state: import("./core/execution/stop-chain").StopState;
+    verdict: import("./core/execution/stop-chain").StopVerdict;
+  }>;
   runExisting<T extends PlainValue>(
     request: ExecutionRequest,
     body: () => Promise<T>,
   ): Promise<ExecutionResult>;
-  runAttempt<T extends PlainValue>(
+  runAttempts<T extends PlainValue>(
     parent: LedgerAction.Receipt,
-    request: AttemptRequest,
-    body: () => Promise<T>,
+    attempts: LlmAttempts<T>,
   ): Promise<T>;
 }
 
 export interface ExecutorOptions {
+  readonly waitRetry?: (delayMs: number, signal?: AbortSignal) => Promise<void>;
   readonly signal?: AbortSignal;
   readonly retainEffect?: (effect: Promise<void>) => void;
   readonly approvalTimeoutMs?: number;

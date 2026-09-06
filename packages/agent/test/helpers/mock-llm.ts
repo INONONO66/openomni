@@ -1,5 +1,6 @@
-import type { Run, Sink } from "@openomni/llm";
+import { Run, type Sink } from "@openomni/llm";
 import type { ChatAgentConfig } from "../../src/core/types";
+import { modelFixture } from "./model-fixture";
 
 type MockLlmInput = {
   readonly messages?: readonly unknown[];
@@ -19,8 +20,37 @@ export function createStopOutcome(): Run.Outcome {
   return { type: "stop" };
 }
 
-function _createErrorOutcome(message: string): Run.Outcome {
-  return { type: "error", error: { message, name: "Error", stack: "" } };
+export function providerFailure(
+  message: string,
+  options: {
+    retryable?: boolean;
+    statusCode?: number;
+    contextOverflow?: boolean;
+    aborted?: boolean;
+  } = {},
+): Run.Failure {
+  const cause = Object.assign(new Error(message), {
+    name: "AI_APICallError",
+    isRetryable: options.retryable ?? true,
+    statusCode: options.statusCode ?? 529,
+    responseHeaders: { "retry-after-ms": "0" },
+  });
+  return new Run.FailureError(
+    {
+      message,
+      aborted: options.aborted ?? false,
+      contextOverflow: options.contextOverflow ?? false,
+      visibleOutput: false,
+      usage: {
+        inputTokens: 0,
+        outputTokens: 0,
+        reasoningTokens: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+      },
+    },
+    { cause },
+  );
 }
 
 export const mockProviderData = {
@@ -66,7 +96,7 @@ export function createMockLlmConfig(options: {
   readonly run: MockLlmFn;
 }): NonNullable<ChatAgentConfig["llm"]> {
   return {
-    run: options.run,
+    run: modelFixture(options.run),
     resolveModel: async () => {
       await options.getModels();
       return options.fromModelsDevModel();

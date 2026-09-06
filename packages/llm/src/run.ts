@@ -40,11 +40,6 @@ export interface RunInput {
   maxTokens?: number;
   maxSteps?: number;
   /**
-   * Transport retries performed inside this single run call. Absent keeps the
-   * bounded standalone default; orchestrators that own retry attempts set 0.
-   */
-  maxRetryAttempts?: number;
-  /**
    * Step-boundary yield: stop the step loop once the last finished step's
    * input tokens (the ai SDK's cache-inclusive prompt total) reach this.
    * The loop ends gracefully at a step boundary — tool pairs complete, the
@@ -75,7 +70,7 @@ export interface RunInput {
   events: BusEvent.Sink;
 }
 
-export interface RunDependencies {
+interface RunDependencies {
   /** Overrides provider stream creation for an isolated caller or test harness. */
   createStream?: Processor.ProcessorOptions["createStream"];
 }
@@ -110,29 +105,16 @@ export namespace Run {
       usage: FailureUsage,
       aborted: z.boolean(),
       contextOverflow: z.boolean(),
+      visibleOutput: z.boolean().default(false),
     }),
   );
   export type Failure = InstanceType<typeof FailureError>;
 
-  const LegacyError = z.object({
-    message: z.string(),
-    name: z.string().optional(),
-    stack: z.string().optional(),
-  });
-
-  export const Outcome = z.discriminatedUnion("type", [
-    z.object({ type: z.literal("stop") }),
-    z.object({ type: z.literal("continue") }),
-    z.object({
-      type: z.literal("aborted"),
-      error: z.instanceof(FailureError).optional(),
-    }),
-    z.object({
-      type: z.literal("error"),
-      error: z.union([z.instanceof(FailureError), LegacyError]),
-    }),
-  ]);
-  export type Outcome = z.infer<typeof Outcome>;
+  export type Outcome =
+    | { readonly type: "stop" }
+    | { readonly type: "continue" }
+    | { readonly type: "aborted"; readonly error?: Failure }
+    | { readonly type: "error"; readonly error: Failure };
 }
 
 /**
@@ -233,7 +215,12 @@ export async function run(
 
   const createStream: Processor.ProcessorOptions["createStream"] = async (streamInput) => {
     const ai = await import("ai");
-    const auth = await Auth.resolve(model.providerID, input.auth, input.authProvider, input.allowAuthFallback);
+    const auth = await Auth.resolve(
+      model.providerID,
+      input.auth,
+      input.authProvider,
+      input.allowAuthFallback,
+    );
 
     const languageModel = getLanguage(model, auth, input.transport);
 
@@ -345,7 +332,6 @@ export async function run(
     abort: abortSignal,
     sink,
     toolNames: originalByWire,
-    maxRetryAttempts: input.maxRetryAttempts,
     externalTools: true,
     trace: {
       traceId,
@@ -415,7 +401,8 @@ export async function run(
           cacheWriteTokens: usage.cache.write,
         },
         aborted,
-        contextOverflow: sourceFacts.contextOverflow === true,
+        contextOverflow: sourceFacts.contextOverflow ?? Retry.isContextOverflow(err),
+        visibleOutput: processor.visibleOutput,
       },
       { cause: source },
     );

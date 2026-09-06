@@ -357,7 +357,7 @@ describe("run", () => {
     expect(textParts.some((part) => part.text === "")).toBe(false);
   });
 
-  test("LlmCall.Events.Completed reports usage summed across retried attempts", async () => {
+  test("a failed single attempt retains billing and a subsequent invocation reports its own usage", async () => {
     // Regression (#audit M3): Completed read processor.message.tokens — the
     // final attempt's fold — so a retried attempt's billed usage vanished
     // from telemetry.
@@ -413,15 +413,31 @@ describe("run", () => {
       mockSink,
     );
 
-    expect(outcome.type).toBe("stop");
+    expect(outcome).toMatchObject({
+      type: "error",
+      error: { data: { usage: { inputTokens: 100, outputTokens: 40 } } },
+    });
+    expect(call).toBe(1);
+    const second = await run(
+      {
+        trace: TEST_TRACE,
+        events: collected,
+        messages: [],
+        tools: [],
+        model: testModel,
+        auth: testAuth,
+      },
+      mockSink,
+    );
+    expect(second.type).toBe("stop");
     expect(call).toBe(2);
     const completed = collected.named(LlmCall.Events.Completed.name) as Array<{
       inputTokens: number;
       outputTokens: number;
     }>;
     expect(completed).toHaveLength(1);
-    expect(completed[0]?.inputTokens).toBe(300);
-    expect(completed[0]?.outputTokens).toBe(100);
+    expect(completed[0]?.inputTokens).toBe(200);
+    expect(completed[0]?.outputTokens).toBe(60);
   });
 
   /**

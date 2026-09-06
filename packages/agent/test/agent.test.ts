@@ -1,9 +1,9 @@
+import { createTestAgent } from "./helpers/test-agent";
 import { describe, expect, it, mock, spyOn } from "bun:test";
 import { Auth } from "@openomni/llm";
 import type { Tool } from "@openomni/protocol";
 import { createAssistantMessage } from "../src/core/message-factory";
 import { RunEvents } from "../src/core/execution/events";
-import { ChatAgent } from "../src/core/chat-agent";
 import { Bus } from "../src/index";
 import {
   createMockLlmConfig,
@@ -16,7 +16,7 @@ import { runInput } from "./helpers/run-input";
 
 const model = { provider: "anthropic", id: "claude-3-haiku-20240307" };
 function agent(run: MockLlmFn) {
-  return ChatAgent.create({
+  return createTestAgent({
     events: Bus,
     model,
     llm: createMockLlmConfig({
@@ -53,7 +53,7 @@ describe("ChatAgent public run contract", () => {
     let observed: Parameters<MockLlmFn>[0] | undefined;
     const transport = { baseURL: "https://proxy.test", headers: { "x-route": "test" } };
     const controller = new AbortController();
-    await ChatAgent.create({
+    await createTestAgent({
       events: Bus,
       model,
       auth: { type: "api", key: "secret" },
@@ -76,13 +76,12 @@ describe("ChatAgent public run contract", () => {
       transport,
       providerOptions: { temperature: 0 },
       toolChoice: "none",
-      maxRetryAttempts: 0,
     });
   });
 
   it("invokes onStepFinish with the exact returned step", async () => {
     const seen: Array<{ type: "text"; content: string }> = [];
-    const result = await ChatAgent.create({
+    const result = await createTestAgent({
       events: Bus,
       model,
       onStepFinish: (step) => {
@@ -122,12 +121,17 @@ describe("ChatAgent public run contract", () => {
           providerSteps += 1;
           if (providerSteps === 1)
             yield { type: "tool-call", toolCallId: "call-1", toolName: "lookup", input: {} };
+          else {
+            yield { type: "text-start" };
+            yield { type: "text-delta", text: "completed" };
+            yield { type: "text-end" };
+          }
           yield { type: "finish" };
         })(),
       }),
     }));
     const controller = new AbortController();
-    await ChatAgent.create({
+    await createTestAgent({
       events: Bus,
       model,
       signal: controller.signal,
@@ -156,7 +160,7 @@ describe("ChatAgent public run contract", () => {
     let calls = 0;
     const retries: number[] = [];
     const unsubscribe = Bus.subscribe(RunEvents.ErrorRetry, () => retries.push(1));
-    const configured = ChatAgent.create({
+    const configured = createTestAgent({
       events: Bus,
       model,
       tools: [
@@ -197,16 +201,16 @@ describe("ChatAgent provider boundary failures", () => {
       outcome: { type: "error", error: { code: "provider_failed" } },
       message: "[object Object]",
     },
-    { name: "an object without a type", outcome: {}, message: "Unknown outcome type: unknown" },
+    { name: "an object without a type", outcome: {}, message: "invalid llm execution result" },
     {
       name: "an object with an unknown type",
       outcome: { type: "unexpected" },
-      message: "Unknown outcome type: unexpected",
+      message: "invalid llm execution result",
     },
-    { name: "a primitive", outcome: 0, message: "Unknown outcome type: unknown" },
+    { name: "a primitive", outcome: 0, message: "invalid llm execution result" },
   ])("rejects $name", async ({ outcome, message }) => {
     const controller = new AbortController();
-    const malformed = ChatAgent.create({
+    const malformed = createTestAgent({
       events: Bus,
       model,
       signal: controller.signal,
@@ -214,7 +218,6 @@ describe("ChatAgent provider boundary failures", () => {
         getModels: async () => mockProviderData,
         fromModelsDevModel: () => mockProviderModel,
         run: async () => {
-          controller.abort();
           return outcome as never;
         },
       }),
@@ -227,25 +230,31 @@ describe("ChatAgent provider boundary failures", () => {
 
   it("reports a missing default provider", async () => {
     await expect(
-      ChatAgent.create({
+      createTestAgent({
         events: Bus,
         model: { provider: "missing-provider", id: "missing-model" },
-        signal: AbortSignal.abort(),
       }).run(runInput([{ role: "user", content: "lookup" }])),
-    ).rejects.toMatchObject({ data: { reason: "provider_not_found", provider: "missing-provider" } });
+    ).rejects.toMatchObject({
+      data: { reason: "provider_not_found", provider: "missing-provider" },
+    });
   });
 
   it("reports a non-Error proxy listing failure", async () => {
-    const auth = spyOn(Auth, "get").mockResolvedValue({ type: "proxy", baseURL: "https://agent-missing-proxy.example" });
+    const auth = spyOn(Auth, "get").mockResolvedValue({
+      type: "proxy",
+      baseURL: "https://agent-missing-proxy.example",
+    });
     const listing = spyOn(globalThis, "fetch").mockRejectedValue("proxy offline");
     try {
       await expect(
-        ChatAgent.create({
+        createTestAgent({
           events: Bus,
           model: { provider: "anthropic", id: "missing-proxy-model" },
-          signal: AbortSignal.abort(),
         }).run(runInput([{ role: "user", content: "lookup" }])),
-      ).rejects.toMatchObject({ data: { reason: "proxy_listing_failed" }, cause: { cause: "proxy offline" } });
+      ).rejects.toMatchObject({
+        data: { reason: "proxy_listing_failed" },
+        cause: { cause: "proxy offline" },
+      });
     } finally {
       listing.mockRestore();
       auth.mockRestore();
@@ -254,16 +263,15 @@ describe("ChatAgent provider boundary failures", () => {
 
   it("reports a missing model in a known provider", async () => {
     await expect(
-      ChatAgent.create({
+      createTestAgent({
         events: Bus,
         model: { provider: "anthropic", id: "missing-model" },
-        signal: AbortSignal.abort(),
       }).run(runInput([{ role: "user", content: "lookup" }])),
     ).rejects.toMatchObject({ data: { reason: "model_not_found", model: "missing-model" } });
   });
 
   it("resolves a known model through the default provider path", async () => {
-    const result = await ChatAgent.create({
+    const result = await createTestAgent({
       events: Bus,
       model: { provider: "anthropic", id: "claude-opus-4-5" },
       llm: { run: async () => createStopOutcome() },
@@ -280,7 +288,7 @@ describe("ChatAgent loop controls", () => {
 
   it("passes the remaining tool-call budget as the model step cap", async () => {
     let maxSteps: number | undefined;
-    await ChatAgent.create({
+    await createTestAgent({
       events: Bus,
       model,
       budget: { maxToolCalls: 7 },
@@ -301,7 +309,7 @@ describe("ChatAgent loop controls", () => {
     controller.abort();
     let calls = 0;
     await expect(
-      ChatAgent.create({
+      createTestAgent({
         events: Bus,
         model,
         signal: controller.signal,

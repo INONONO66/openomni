@@ -1,6 +1,6 @@
 import { describe, expect, it, jest } from "bun:test";
 import { Operational, type Tool } from "@openomni/protocol";
-import { runAgent } from "../../../src/core/execution/run";
+import { runTestAgent } from "../../helpers/test-agent";
 import { createAssistantMessage } from "../../../src/core/message-factory";
 import { Bus, collector } from "../../../src/index";
 import {
@@ -30,7 +30,7 @@ describe("run budget terminal facts", () => {
     };
 
     try {
-      const result = await runAgent(runInput([{ role: "user", content: "hi" }]), {
+      const result = await runTestAgent(runInput([{ role: "user", content: "hi" }]), {
         events,
         model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
         budget: {
@@ -91,9 +91,9 @@ describe("run budget terminal facts", () => {
             return createStopOutcome();
           },
         }),
-      });
+      }).catch((error: Error) => error);
 
-      expect(result.finishReason).toBe("max-steps");
+      expect(result).toMatchObject({ code: "agent_stop", reason: "budget" });
       expect(modelCalls).toBe(2);
       expect(executions).toBe(2);
       expect(events.named(Operational.Events.Warn.name)).toContainEqual(
@@ -109,7 +109,7 @@ describe("run budget terminal facts", () => {
 
   it("ends before model execution when the turn budget is exhausted", async () => {
     let calls = 0;
-    const result = await runAgent(runInput([{ role: "user", content: "hi" }]), {
+    const result = await runTestAgent(runInput([{ role: "user", content: "hi" }]), {
       events: Bus,
       model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
       budget: { maxTurns: 0 },
@@ -121,8 +121,8 @@ describe("run budget terminal facts", () => {
           return createStopOutcome();
         },
       }),
-    });
-    expect(result.finishReason).toBe("max-steps");
+    }).catch((error: Error) => error);
+    expect(result).toMatchObject({ code: "agent_stop", reason: "budget" });
     expect(calls).toBe(0);
   });
 
@@ -132,7 +132,7 @@ describe("run budget terminal facts", () => {
     const unsubscribe = Bus.observe((event) => busEvents.push(event.name));
     let calls = 0;
     try {
-      const result = await runAgent(runInput([{ role: "user", content: "hi" }]), {
+      const result = await runTestAgent(runInput([{ role: "user", content: "hi" }]), {
         events,
         model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
         budget: { maxWallTimeMs: 0 },
@@ -144,9 +144,9 @@ describe("run budget terminal facts", () => {
             return createStopOutcome();
           },
         }),
-      });
+      }).catch((error: Error) => error);
 
-      expect(result.finishReason).toBe("max-steps");
+      expect(result).toMatchObject({ code: "agent_stop", reason: "budget" });
       expect(calls).toBe(0);
       expect(events.named(Operational.Events.Warn.name)).toHaveLength(1);
       expect(events.named(Operational.Events.Warn.name)[0]).toMatchObject({
@@ -164,7 +164,7 @@ describe("run budget terminal facts", () => {
     const warning = Promise.withResolvers<{ traceId: string; sessionId?: string; msg: string }>();
     const unsubscribe = Bus.subscribe(Operational.Events.Warn, warning.resolve);
     try {
-      await runAgent(input, {
+      await runTestAgent(input, {
         events: Bus,
         model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
         budget: { maxTurns: 0 },
@@ -173,7 +173,7 @@ describe("run budget terminal facts", () => {
           fromModelsDevModel: () => mockProviderModel,
           run: async () => createStopOutcome(),
         }),
-      });
+      }).catch((error: Error) => error);
       expect(await warning.promise).toMatchObject({
         traceId: input.traceContext.traceId,
         sessionId: input.traceContext.sessionId,

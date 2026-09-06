@@ -3,7 +3,7 @@ import type { Delegation } from "@openomni/protocol";
 import { admit, type Admitted } from "../src/delegation/admission";
 import { createChannelDriver } from "../src/delegation/channel-driver";
 import { createInlineDriver } from "../src/delegation/inline-driver";
-import { WorkerRunError } from "../src/delegation/worker-loop";
+import { WorkerRunError } from "../src/composition/worker-session";
 
 const NOW = 100;
 const request = {

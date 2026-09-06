@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
 import { RunEvents } from "../../../src/core/execution/events";
 import { createAssistantMessage } from "../../../src/core/message-factory";
-import { runAgent } from "../../../src/core/execution/run";
+import { runTestAgent } from "../../helpers/test-agent";
 import { Bus } from "../../../src/index";
 import { createMockLlmConfig, mockProviderData, mockProviderModel } from "../../helpers/mock-llm";
 import { runInput } from "../../helpers/run-input";
@@ -29,7 +29,7 @@ describe("canonical lifecycle audit facts", () => {
     });
     let calls = 0;
     try {
-      await runAgent(runInput([{ role: "user", content: "continue once" }]), {
+      await runTestAgent(runInput([{ role: "user", content: "continue once" }]), {
         events: Bus,
         model: { provider: "test", id: "model" },
         llm: createMockLlmConfig({

@@ -1,3 +1,4 @@
+import { providerFailure } from "./helpers/mock-llm";
 import { describe, expect, it, spyOn } from "bun:test";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { Retry as LlmRetry } from "@openomni/llm";
@@ -11,12 +12,11 @@ import {
   createTurnDispatcher,
   noopSink,
   session,
-  type AgentExecutionLifecycle,
   type Executor,
   type SessionRunnerInput,
   type SessionRuntime,
 } from "../src/index";
-import { allowAllPolicy, recordingLedger } from "./helpers/compiled-policy";
+import { recordingLedger } from "./helpers/compiled-policy";
 import {
   createMockLlmConfig,
   createStopOutcome,
@@ -29,12 +29,6 @@ const policy = compilePolicySnapshot({
   generation: 0,
   rows: SEEDED_POLICY_ROWS.map((row) => ({ ...row, generation: 0 })),
 });
-
-const directExecution: AgentExecutionLifecycle = {
-  async runAttempt(_parent, _request, body) {
-    return body();
-  },
-};
 
 function input(
   boundary: SessionRunnerInput["boundary"],
@@ -51,7 +45,6 @@ function input(
       },
     },
     policy,
-    execution: directExecution,
     resultId: "result-1",
     parentActionId: null,
     boundaryActionId: null,
@@ -71,7 +64,7 @@ function input(
 function testExecutor(): Executor {
   const recording = recordingLedger();
   return createExecutor({
-    policy: allowAllPolicy,
+    policy,
     ledger: recording.ledger,
     observations: noopSink(),
     identity: { sessionId: "session-1", role: "resident", parentActionId: "turn-1" },
@@ -127,7 +120,10 @@ async function runDurably(run: MockLlmFn): Promise<DurableRun> {
         traceContext,
       }),
     });
-    const handle = session({ id: "boundary-session", role: "resident", runner: chatRunner }, runtime);
+    const handle = session(
+      { id: "boundary-session", role: "resident", runner: chatRunner },
+      runtime,
+    );
 
     try {
       const result = await handle.prompt("run the durable turn");
@@ -176,12 +172,14 @@ describe("session chat runner", () => {
       }),
     });
 
-    const result = await runner(input(async (boundary) => {
-      boundaries.push(boundary);
-      return boundary === "before_llm"
-        ? { messages: [{ role: "user", text: "steered" }], interrupted: false }
-        : { messages: [], interrupted: false };
-    }));
+    const result = await runner(
+      input(async (boundary) => {
+        boundaries.push(boundary);
+        return boundary === "before_llm"
+          ? { messages: [{ role: "user", text: "steered" }], interrupted: false }
+          : { messages: [], interrupted: false };
+      }),
+    );
 
     expect(boundaries).toEqual(["before_llm", "after_llm", "after_tools"]);
     expect(modelInputs[0]).toContain('"role":"user"');
@@ -206,12 +204,14 @@ describe("session chat runner", () => {
       }),
     });
 
-    const result = await runner(input(async (boundary) => {
-      if (boundary === "after_llm" && afterLlm++ === 0) {
-        return { messages: [{ role: "user", text: "continue" }], interrupted: false };
-      }
-      return { messages: [], interrupted: false };
-    }));
+    const result = await runner(
+      input(async (boundary) => {
+        if (boundary === "after_llm" && afterLlm++ === 0) {
+          return { messages: [{ role: "user", text: "continue" }], interrupted: false };
+        }
+        return { messages: [], interrupted: false };
+      }),
+    );
 
     expect(modelInputs).toHaveLength(2);
     expect(modelInputs[1]).toContain('"role":"assistant"');
@@ -227,10 +227,12 @@ describe("session chat runner", () => {
       const runner = createSessionChatRunner({
         prepare: () => ({ config: config(async () => createStopOutcome()), traceContext }),
       });
-      const result = await runner(input(async (boundary) => ({
-        messages: [],
-        interrupted: boundary === interruptedAt,
-      })));
+      const result = await runner(
+        input(async (boundary) => ({
+          messages: [],
+          interrupted: boundary === interruptedAt,
+        })),
+      );
       expect(result.kind).toBe("interrupted");
     }
   });
@@ -263,10 +265,7 @@ describe("session chat runner", () => {
     expect(turnTerminals).toHaveLength(1);
     const turnIntent = turnIntents[0];
     if (turnIntent === undefined) throw new Error("missing durable turn intent");
-    expect(llmIntents.map((action) => action.parentId)).toEqual([
-      turnIntent.id,
-      turnIntent.id,
-    ]);
+    expect(llmIntents.map((action) => action.parentId)).toEqual([turnIntent.id, turnIntent.id]);
     expect(llmResults.map((action) => action.parentId)).toEqual(
       llmIntents.map((action) => action.id),
     );
@@ -284,7 +283,7 @@ describe("session chat runner", () => {
       const { actions } = await runDurably(async () => {
         calls += 1;
         return calls === 1
-          ? { type: "error", error: new Error("transient provider outage") }
+          ? { type: "error", error: providerFailure("transient provider outage") }
           : createStopOutcome();
       });
 
@@ -305,10 +304,7 @@ describe("session chat runner", () => {
       );
       const llmIntent = llmIntents[0];
       if (llmIntent === undefined) throw new Error("missing logical llm intent");
-      expect(attempts.map((action) => action.parentId)).toEqual([
-        llmIntent.id,
-        llmIntent.id,
-      ]);
+      expect(attempts.map((action) => action.parentId)).toEqual([llmIntent.id, llmIntent.id]);
     } finally {
       sleep.mockRestore();
     }
@@ -325,9 +321,9 @@ describe("session chat runner", () => {
       prepare: () => ({ config: preparedConfig, traceContext }),
     });
 
-    await expect(
-      runner(input(async () => ({ messages: [], interrupted: false }))),
-    ).rejects.toThrow("executor");
+    await expect(runner(input(async () => ({ messages: [], interrupted: false })))).rejects.toThrow(
+      "executor",
+    );
     expect(calls).toBe(0);
   });
 
@@ -337,7 +333,7 @@ describe("session chat runner", () => {
       prepare: () => {
         throw cause;
       },
-      reportError: (error) => error === cause ? "reported" : undefined,
+      reportError: (error) => (error === cause ? "reported" : undefined),
     });
     const unreported = createSessionChatRunner({
       prepare: () => {

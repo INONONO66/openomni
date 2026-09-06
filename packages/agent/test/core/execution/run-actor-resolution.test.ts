@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { RunEvents } from "../../../src/core/execution/events";
 import { Bus, newTraceId } from "../../../src/index";
-import { runAgent } from "../../../src/core/execution/run";
+import { runTestAgent } from "../../helpers/test-agent";
 import type { RunTrace } from "../../../src/core/execution/state";
 import {
   createMockLlmConfig,
@@ -23,7 +23,7 @@ async function observedActorId(trace: RunTrace): Promise<string> {
     actorIds.push((payload as { actorId: string }).actorId);
   });
   try {
-    await runAgent(
+    await runTestAgent(
       // The metadata side-channel is gone from ChatAgentInput entirely —
       // smuggling an actorId through it is now a compile error, not merely
       // ignored at runtime.

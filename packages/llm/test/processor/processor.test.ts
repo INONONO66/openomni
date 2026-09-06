@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, jest, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { LlmCall, Operational, type Message, type Tool } from "@openomni/protocol";
 import type { Sink } from "../../src/sink";
 import { collector } from "../helpers/observation";
@@ -15,14 +15,6 @@ type OperationalInfoPayload = {
   msg: string;
   context?: Record<string, unknown>;
 };
-
-function deferred(): { promise: Promise<void>; resolve: () => void } {
-  let resolve!: () => void;
-  const promise = new Promise<void>((done) => {
-    resolve = done;
-  });
-  return { promise, resolve };
-}
 
 function streamOf(chunks: Array<Record<string, unknown>>) {
   return async () => ({
@@ -627,7 +619,7 @@ describe("Processor", () => {
       });
     });
 
-    test("settles the failed attempt's tool calls before retrying", async () => {
+    test("settles the failed attempt's tool calls before surfacing the failure", async () => {
       let attemptCount = 0;
       const capture = capturingSink();
       const processor = createProcessor({
@@ -653,9 +645,9 @@ describe("Processor", () => {
         }),
       });
 
-      await processor.process({ system: "", promptText: "" });
+      await expect(processor.process({ system: "", promptText: "" })).rejects.toBeInstanceOf(Error);
 
-      expect(attemptCount).toBe(2);
+      expect(attemptCount).toBe(1);
       // The failed attempt's tool part settles as error inside that attempt's
       // snapshots and never re-emits into the retry attempt (#545 T2).
       const settledToolStates = capture.messages
@@ -663,7 +655,7 @@ describe("Processor", () => {
         .filter((part): part is Message.ToolPart => part.type === "tool")
         .map((part) => part.state.status);
       expect(settledToolStates).toContain("error");
-      expect(capture.finalParts().some((part) => part.type === "tool")).toBe(false);
+      expect(capture.finalParts().some((part) => part.type === "tool")).toBe(true);
       expect(capture.toolResults).toHaveLength(1);
       expect(capture.toolResults[0]).toMatchObject({
         toolCallId: "call-attempt-1",
@@ -709,49 +701,22 @@ describe("Processor", () => {
       expect(order).toEqual(["finish", "idle", "queued"]);
     });
 
-    test("starts a zero-delay retry after one microtask hop", async () => {
-      jest.useFakeTimers();
-      try {
-        let attempts = 0;
-        let secondAttemptHop = -1;
-        const retryError = new APIError({
-          message: "retry",
-          isRetryable: true,
-          responseHeaders: { "retry-after-ms": "0" },
-        });
-        const processor = createProcessor({
-          maxRetryAttempts: 1,
-          createStream: () => {
-            attempts += 1;
-            if (attempts === 1) throw retryError;
-            return Promise.resolve({
-              fullStream: (async function* () {
-                yield { type: "finish" };
-              })(),
-            });
-          },
-        });
-
-        const processing = processor.process({ system: "", promptText: "" });
-        await Promise.resolve();
-        expect(attempts).toBe(1);
-        let hop = 0;
-        let ladder = Promise.resolve();
-        for (let i = 0; i < 4; i += 1) {
-          ladder = ladder.then(() => {
-            hop += 1;
-            if (attempts === 2 && secondAttemptHop === -1) secondAttemptHop = hop;
-          });
-        }
-        jest.runAllTimers();
-        await ladder;
-        await processing;
-        // The first createStream continuation and the timer continuation are
-        // included in this ladder; the retry itself adds exactly one hop.
-        expect(secondAttemptHop).toBe(3);
-      } finally {
-        jest.useRealTimers();
-      }
+    test("a synchronous provider refusal settles without scheduling another attempt", async () => {
+      let calls = 0;
+      const error = new APIError({
+        message: "retry",
+        isRetryable: true,
+        responseHeaders: { "retry-after-ms": "0" },
+      });
+      const processor = createProcessor({
+        createStream: () => {
+          calls += 1;
+          throw error;
+        },
+      });
+      await expect(processor.process({ system: "", promptText: "" })).rejects.toBe(error);
+      expect(calls).toBe(1);
+      expect(statusStates(events)).toEqual(["busy", "idle"]);
     });
 
     test("projects sink callbacks onto the events port", async () => {
@@ -885,56 +850,21 @@ describe("Processor", () => {
       }
     });
 
-    test("warns when an inferred ratelimit reset above the cap demotes to backoff", async () => {
-      // #audit: Decision.retryAfterOverCap was produced and unit-tested but
-      // consumed by nobody — the demotion now surfaces as Operational.Events.Warn.
+    test("retains inferred-reset failure for the executor without owning backoff", async () => {
+      const error = new APIError({
+        message: "slow down",
+        isRetryable: true,
+        statusCode: 429,
+        responseHeaders: { "anthropic-ratelimit-requests-reset": "120s" },
+      });
       const processor = createProcessor({
-        createStream: async () => ({
-          fullStream: (async function* () {
-            yield* [];
-            throw new APIError({
-              message: "slow down",
-              isRetryable: true,
-              statusCode: 429,
-              responseHeaders: { "anthropic-ratelimit-requests-reset": "120s" },
-            });
-          })(),
-        }),
+        createStream: async () => {
+          throw error;
+        },
       });
-
-      const warnPublished = deferred();
-      const originalPublish = events.publish;
-      events.publish = (event, data) => {
-        originalPublish(event, data);
-        if (
-          event.name === Operational.Events.Warn.name &&
-          (data as OperationalInfoPayload).component === "llm.retry"
-        ) {
-          warnPublished.resolve();
-        }
-      };
-
-      const settled = processor.process({ system: "", promptText: "" }).then(
-        () => undefined,
-        (error: unknown) => error,
-      );
-      // The warn publishes before the backoff sleep; abort on that exact event.
-      await warnPublished.promise;
-      abortController.abort();
-      await settled;
-      events.publish = originalPublish;
-
-      const warns = () =>
-        events
-          .named(Operational.Events.Warn.name)
-          .map((event) => event as OperationalInfoPayload)
-          .filter((data) => data.component === "llm.retry");
-      expect(warns()).toHaveLength(1);
-      expect(warns()[0]).toMatchObject({
-        component: "llm.retry",
-        msg: "ratelimit reset above cap; demoted to backoff",
-      });
-      expect((warns()[0]?.context as { backoffMs?: number })?.backoffMs).toBeGreaterThan(0);
+      await expect(processor.process({ system: "", promptText: "" })).rejects.toBe(error);
+      expect(events.named(LlmCall.Events.RetryDecided.name)).toEqual([]);
+      expect(processor.message.finish).toBe("error");
     });
 
     test("retries raw AI SDK provider errors (AI_APICallError shape)", async () => {
@@ -961,9 +891,9 @@ describe("Processor", () => {
         }),
       });
 
-      await processor.process({ system: "", promptText: "" });
+      await expect(processor.process({ system: "", promptText: "" })).rejects.toBeInstanceOf(Error);
 
-      expect(attemptCount).toBe(2);
+      expect(attemptCount).toBe(1);
     });
 
     test("published part snapshots are frozen at publish time", async () => {
@@ -1019,109 +949,38 @@ describe("Processor", () => {
         }),
       });
 
-      await processor.process({ system: "", promptText: "" });
+      await expect(processor.process({ system: "", promptText: "" })).rejects.toBeInstanceOf(Error);
 
-      expect(attemptCount).toBe(2);
+      expect(attemptCount).toBe(1);
     });
 
-    test("publishes structured retry and rate-limit events", async () => {
-      let attemptCount = 0;
-      const retries: Array<{ runId?: string; reason: string; backoffMs: number }> = [];
-      const rateLimits: Array<{ runId?: string; provider: string; retryAfterMs: number }> = [];
-
+    test("leaves retry publication to the executor and closes a rate-limited attempt", async () => {
+      const error = new APIError({ message: "rate limit", isRetryable: true, statusCode: 429 });
       const processor = createProcessor({
-        trace: {
-          traceId: "trace-processor-retry",
-          sessionId: "session-456",
-          runId: "run-processor-retry",
-          provider: "anthropic",
+        createStream: async () => {
+          throw error;
         },
-        createStream: async () => ({
-          fullStream: (async function* () {
-            attemptCount++;
-            if (attemptCount === 1) {
-              throw new APIError({
-                message: JSON.stringify({
-                  type: "error",
-                  error: { type: "too_many_requests" },
-                }),
-                isRetryable: true,
-              });
-            }
-            yield { type: "finish" };
-          })(),
-        }),
       });
-
-      await processor.process({ system: "", promptText: "" });
-      retries.push(
-        ...events.named(LlmCall.Events.RetryDecided.name).map((event) => event as never),
-      );
-      rateLimits.push(
-        ...events.named(LlmCall.Events.RateLimited.name).map((event) => event as never),
-      );
-
-      expect(retries).toHaveLength(1);
-      expect(retries[0]).toMatchObject({
-        runId: "run-processor-retry",
-        // The wire value is the typed Retry.Reason literal — a subset of the
-        // protocol's z.string(), so no schema change.
-        reason: "rate_limit",
-      });
-      expect(retries[0]?.backoffMs).toBeGreaterThan(0);
-      expect(rateLimits).toHaveLength(1);
-      expect(rateLimits[0]).toMatchObject({
-        runId: "run-processor-retry",
-        provider: "anthropic",
-        retryAfterMs: retries[0]?.backoffMs,
-      });
+      await expect(processor.process({ system: "", promptText: "" })).rejects.toBe(error);
+      expect(events.named(LlmCall.Events.RetryDecided.name)).toEqual([]);
+      expect(events.named(LlmCall.Events.RateLimited.name)).toEqual([]);
+      expect(statusStates(events)).toEqual(["busy", "idle"]);
     });
 
-    test("publishes RateLimited for a real Anthropic 429 rate_limit_error body", async () => {
-      // Pin (#532-3): Anthropic sends {type:"error",error:{type:"rate_limit_error"}}
-      // with status 429. Under prose classification the generic body.error
-      // sniff outranked the 429 status ("Provider Server Error"), so the
-      // string-matched RateLimited publish silently skipped a genuine rate
-      // limit. The typed reason switch must catch it.
-      let attemptCount = 0;
-      const rateLimits: Array<{ provider: string; retryAfterMs: number }> = [];
-
-      const processor = createProcessor({
-        trace: {
-          traceId: "trace-processor-429",
-          sessionId: "session-456",
-          provider: "anthropic",
-        },
-        createStream: async () => ({
-          fullStream: (async function* () {
-            attemptCount++;
-            if (attemptCount === 1) {
-              throw new APIError({
-                message: JSON.stringify({
-                  type: "error",
-                  error: {
-                    type: "rate_limit_error",
-                    message: "Number of request tokens has exceeded your per-minute rate limit",
-                  },
-                }),
-                statusCode: 429,
-                isRetryable: true,
-                responseHeaders: { "retry-after-ms": "1" },
-              });
-            }
-            yield { type: "finish" };
-          })(),
-        }),
+    test("preserves the Anthropic 429 identity for canonical retry classification", async () => {
+      const error = new APIError({
+        message: JSON.stringify({ type: "error", error: { type: "rate_limit_error" } }),
+        statusCode: 429,
+        isRetryable: true,
+        responseHeaders: { "retry-after-ms": "1" },
       });
-
-      await processor.process({ system: "", promptText: "" });
-      rateLimits.push(
-        ...events.named(LlmCall.Events.RateLimited.name).map((event) => event as never),
-      );
-
-      expect(attemptCount).toBe(2);
-      expect(rateLimits).toHaveLength(1);
-      expect(rateLimits[0]).toMatchObject({ provider: "anthropic", retryAfterMs: 1 });
+      const processor = createProcessor({
+        createStream: async () => {
+          throw error;
+        },
+      });
+      await expect(processor.process({ system: "", promptText: "" })).rejects.toBe(error);
+      expect(processor.message.finish).toBe("error");
     });
 
     test("throws original error instance for non-retryable errors and settles cleanly", async () => {
@@ -1221,7 +1080,7 @@ describe("Processor", () => {
       expect(processor.message.tokens.output).toBe(5000);
     });
 
-    test("usageTotals accumulates billed usage across retried attempts", async () => {
+    test("usageTotals retains billed usage on a failed attempt", async () => {
       // Regression (#audit M3): LlmCall.Events.Completed read message.tokens — the
       // final attempt's fold — so a retried attempt's billed tokens vanished
       // from telemetry. usageTotals must carry every attempt.
@@ -1254,16 +1113,16 @@ describe("Processor", () => {
         }),
       });
 
-      await processor.process({ system: "", promptText: "" });
+      await expect(processor.process({ system: "", promptText: "" })).rejects.toBeInstanceOf(Error);
 
-      expect(attemptCount).toBe(2);
+      expect(attemptCount).toBe(1);
       // message.tokens reflects only the final attempt's fold...
-      expect(processor.message.tokens.input).toBe(200);
-      expect(processor.message.tokens.output).toBe(60);
+      expect(processor.message.tokens.input).toBe(100);
+      expect(processor.message.tokens.output).toBe(40);
       // ...while the billed total includes the retried attempt.
       expect(processor.usageTotals).toEqual({
-        input: 300,
-        output: 100,
+        input: 100,
+        output: 40,
         reasoning: 0,
         cache: { read: 0, write: 0 },
       });

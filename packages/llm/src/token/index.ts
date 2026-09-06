@@ -30,6 +30,19 @@ export const estimateUsage: EstimateUsage = (serializedPrompt, emittedAssistant)
   outputTokens: Math.ceil(emittedAssistant.length / 4),
 });
 
+/** Add corrected billed usage, including failed attempts; auxiliary counters are not billed twice. */
+export function accumulateUsage(total: Token.AgentUsage, usage: Token.ProviderUsage): void {
+  total.inputTokens += usage.inputTokens;
+  total.outputTokens += usage.outputTokens;
+  total.totalTokens += usage.inputTokens + usage.outputTokens;
+  if ((usage.reasoningTokens ?? 0) > 0)
+    total.reasoningTokens = (total.reasoningTokens ?? 0) + (usage.reasoningTokens ?? 0);
+  if ((usage.cacheReadTokens ?? 0) > 0)
+    total.cacheReadTokens = (total.cacheReadTokens ?? 0) + (usage.cacheReadTokens ?? 0);
+  if ((usage.cacheWriteTokens ?? 0) > 0)
+    total.cacheWriteTokens = (total.cacheWriteTokens ?? 0) + (usage.cacheWriteTokens ?? 0);
+}
+
 export namespace TokenTracker {
   /**
    * Provider accounting whose required counts may be unusable.
@@ -104,12 +117,7 @@ export namespace TokenTracker {
     // The required counts have no zero default by construction: `requiredCount`
     // returns `undefined` for unusable accounting and the fold estimates it.
     return {
-      inputTokens: requiredCount([
-        "inputTokens",
-        "input_tokens",
-        "promptTokens",
-        "prompt_tokens",
-      ]),
+      inputTokens: requiredCount(["inputTokens", "input_tokens", "promptTokens", "prompt_tokens"]),
       outputTokens: requiredCount([
         "outputTokens",
         "output_tokens",

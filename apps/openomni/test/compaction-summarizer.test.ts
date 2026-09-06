@@ -2,7 +2,16 @@ import { describe, expect, it } from "bun:test";
 import type { LlmIo } from "../src/tools/execution/llm";
 import { Run } from "@openomni/llm";
 import type { Message } from "@openomni/protocol";
-import { createCompactionSummarizer, SummarizerError } from "../src/compaction/summarizer";
+import {
+  createCompactionSummarizer as summarizer,
+  SummarizerError,
+} from "../src/compaction/summarizer";
+import { admittedOperation } from "./helpers/admitted-operation";
+
+function createCompactionSummarizer(config: Parameters<typeof summarizer>[0]) {
+  const run = summarizer(config);
+  return (...args: Parameters<typeof run>) => admittedOperation(() => run(...args));
+}
 
 const MODEL = { provider: "fake", id: "summary-model", apiKey: "key" };
 const BUDGET = { contextWindowTokens: 100_000, maxInputTokens: 50_000, maxOutputTokens: 20_000 };
@@ -80,7 +89,9 @@ describe("production compaction summarizer", () => {
     };
     const summarize = createCompactionSummarizer({ model: MODEL, io: { run, resolveModel } });
 
-    const error = await summarize([message("m1", "span")], undefined, BUDGET).catch((caught: unknown) => caught);
+    const error = await summarize([message("m1", "span")], undefined, BUDGET).catch(
+      (caught: unknown) => caught,
+    );
     expect(error).toBeInstanceOf(SummarizerError);
     expect((error as SummarizerError).kind).toBe("empty");
   });

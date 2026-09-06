@@ -17,7 +17,7 @@ import { Bus, newTraceId } from "@openomni/agent";
 import { chatProviderConfig } from "./composition/chat-provider";
 import { SessionBindingCache } from "./composition/session-bindings";
 import type { DelegationOrigin } from "./delegation/admission";
-import { toolExecutorForTurn } from "./delegation/worker-loop";
+import { toolExecutorForTurn } from "./composition/worker-session";
 import { classifyTurnFailure } from "./observation/llm-failure";
 import { observeComponent } from "./observation/component";
 import { buildAgentPrompt } from "./prompt/build";
@@ -249,7 +249,12 @@ export function createResident(options: ResidentOptions): ResidentDelivery {
         sessionId: turn.sessionId,
         result: {
           output: result.text ?? "",
-          finishReason: result.kind === "error" ? "error" : (result.finishReason ?? "stop"),
+          finishReason:
+            result.kind === "error"
+              ? "error"
+              : result.kind === "waiting"
+                ? "waiting"
+                : (result.finishReason ?? "stop"),
         },
       };
     } finally {
