@@ -257,6 +257,23 @@ it("freezes unsettled slots as canceled at the abort event, even if a body resol
   expect(await pending).toEqual([{ status: "cancelled" }]);
 });
 
+it("does not let a late body fulfillment overwrite cancellation", async () => {
+  const controller = new AbortController();
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<null>();
+  const wave = runWaveBodies([{
+    async run() {
+      entered.resolve();
+      return release.promise;
+    },
+  }], { signal: controller.signal });
+
+  await entered.promise;
+  controller.abort();
+  release.resolve(null);
+  await expect(wave).resolves.toEqual([{ status: "cancelled" }]);
+});
+
 it("does not enter a body when cancellation predates the wave", async () => {
   const controller = new AbortController();
   controller.abort();
@@ -274,6 +291,38 @@ it("does not enter a body when cancellation predates the wave", async () => {
   );
   expect(result).toEqual([{ status: "cancelled" }]);
   expect(entered).toBe(0);
+});
+
+it("keeps a sequential barrier after preceding rejection and runs later work", async () => {
+  const entered: string[] = [];
+  const wave = runWaveBodies([
+    {
+      async run() {
+        entered.push("parallel");
+        throw new Error("parallel failed");
+      },
+    },
+    {
+      sequential: true,
+      async run() {
+        entered.push("barrier");
+        return null;
+      },
+    },
+    {
+      async run() {
+        entered.push("following");
+        return null;
+      },
+    },
+  ], { signal: new AbortController().signal });
+
+  await expect(wave).resolves.toEqual([
+    { status: "rejected", error: new Error("parallel failed") },
+    { status: "fulfilled", value: null },
+    { status: "fulfilled", value: null },
+  ]);
+  expect(entered).toEqual(["parallel", "barrier", "following"]);
 });
 
 it("joins preceding work and blocks following work at a sequential barrier", async () => {
