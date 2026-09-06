@@ -48,7 +48,12 @@
       "ignore": ["test/typed-facade-fixtures/**"]
     },
     "packages/ledger": {
-      "entry": ["src/index.ts", "test/**/*.test.ts"],
+      "entry": [
+        "src/index.ts",
+        "test/**/*.test.ts",
+        "test/helpers/disposition-967-archive-fault.ts",
+        "test/helpers/disposition-967-fault.ts"
+      ],
       "project": ["src/**/*.ts", "test/**/*.ts"]
     },
     "packages/llm": {
