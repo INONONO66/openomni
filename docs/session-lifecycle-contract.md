@@ -1,107 +1,106 @@
 # Unified session lifecycle and transition ownership
 
-**Status: target design freeze for #968; current behavior is marked _shipped_.** This document is the contract that #969-#973 implement and test. It does not introduce another engine, policy evaluator, approval system, watcher, WorkItem, or Attempt domain.
+**Contract version 1, target freeze for #968.** This freezes the existing action/session schema's decision, apply, and dispatch boundaries for #969-#973: session, turn, prompt/reply, approval, operation/wave, alarm, monitor occurrence, lease, and delegation-child terminal lifetimes. It freezes the traces below as expected products, not as a claim that all target cutovers have shipped. Canonical vocabulary and broad invariants remain in [kernel-contract.md](kernel-contract.md) and [core-model.md](core-model.md); this document is only their versioned transition/ownership delta.
 
-## 1. State set
+## 1. State products (shipped vs target)
 
-A session has one durable identity (`id`, `role`, `parentId`) and one durable scalar lifecycle: `idle | running | interrupted` (_shipped_: `packages/protocol/src/ledger/l0.ts:79-80`). Its durable row also carries revision, fenced lease owner/fence/expiry, and latest generation pointers (_shipped_: `packages/protocol/src/ledger/l0.ts:82-103`). The action tree is append-only; the row is an operational projection, not a second history (_shipped_: `packages/agent/src/session-history.ts:5-14`).
+The **shipped** session row is `idle | running | interrupted`, with identity, revision, generation pointers, and fenced lease fields (`packages/protocol/src/ledger/l0.ts:79-103`). The action tree is append-only and projected by `session-history` (`packages/agent/src/session-history.ts:5-14`). The target product is the following orthogonal tuple, not a giant enum:
 
-The complete target state is a product, not a giant enum:
+* **Lifecycle:** `idle`, `running`, `interrupted`; a turn is `open -> result | waiting | interrupted | error`, keyed by `turnId` and `resultId` (`packages/agent/src/session-contract.ts:79-105`).
+* **Residency lease:** `free`, `held(owner,fence,expiry)`, or **retained** (`held` after an interrupt while an abort-ignoring runner/effect is alive). Live means owner/fence match and expiry is not past; expired permits takeover, but release is not a hand-off (`packages/agent/src/session-contract.ts:124-143`; `packages/agent/src/session-configuration.ts:105-123`).
+* **Intake/scheduling:** inbox `prompt | interrupt | resume`; one active drive; an open turn may drain prompt delivery at its boundary; interrupted input waits for explicit resume; idle control-only input is consumed as a no-op (`packages/agent/src/session-controller.ts:255-302`; `packages/agent/src/session-turn.ts:314-368`; `packages/agent/src/session-admission.ts:346-362`).
+* **Operation/effect (shipped):** `pre -> intent? -> approval? -> body -> post -> result`; terminals are `executed`, `blocked_pre`, **`blocked_post`**, `cancelled`, and `failed`. `blocked_post` additionally carries disposition `reverted | irreversible`; a registered reverter is best effort, never universal rollback (`packages/agent/src/executor.ts:260-273`, `:324-382`; `packages/agent/src/executor-contract.ts:78-85`). Policy-decision facts and session prompt/turn records are distinct products, not recursively admitted operations (`packages/agent/src/executor.ts:57-102`).
+* **Alarm/control (shipped where waiting depends on it):** an alarm has stable identity, `at | watch`, and operational state `armed | cancelled | fired | paused` (`packages/protocol/src/ledger/l0.ts:508-530`). Arm is append-plus-row creation; cancel is an atomic `armed -> cancelled` CAS, and cancelled alarms are not due (`packages/ledger/src/storage/sqlite-l0-adapter.ts:577-628`). Waiting requires `live_wait` and nonempty alarm IDs (`packages/protocol/src/ledger/l0.ts:341-377`).
+* **Occurrence (target, with shipped inputs):** each monitor/evaluator/request/reply occurrence has an immutable `occurrenceId`, parent session/turn/action, pinned generation and input hash, an open/terminal product, and an authenticated source. Its evaluator lease is separate from the session lease. #971 owns adding the action vocabulary and evaluator fold; current shipped waiting evidence is armed alarms plus current-turn actions (`packages/agent/src/session-stop-evidence.ts:29-39`).
+* **Request/reply and child settlement (target):** a request has one invocation identity, deadline, answer binding, and outbound obligation; its child terminal becomes a durable parent inbox message. Physical accepted/rejected/unknown transport receipts may remain, but logical completion is the canonical action/session fold. This supersedes the independent logical settlement/wake/await path described below.
 
-* **Lifecycle:** `idle`, `running`, `interrupted`; each turn has `open -> result | waiting | interrupted | error` and is identified by `turnId` plus pre-minted `resultId` (_shipped_: `packages/agent/src/session-contract.ts:79-105`; _shipped_: `packages/agent/src/session-admission.ts:73-99`).
-* **Residency lease:** `free` or `held(fence, owner, expiry)`, with fenced single-flight ownership. A stale fence cannot commit (_shipped_: `packages/agent/src/session-contract.ts:124-134`; _shipped_: `packages/agent/src/session-admission.ts:216-243`).
-* **Intake/scheduling:** inbox rows `prompt | interrupt | resume`; pending rows are consumed exactly by a commit, and at most one controller drive is active (_shipped_: `packages/agent/src/session-controller.ts:205-253`).
-* **Operation/effect:** each model/tool/policy operation has `pre -> intent? -> approval? -> body -> result`, with terminals `executed`, `blocked_pre`, `cancelled`, or `failed`; waves preserve positional output and sequential barriers (_shipped_: `packages/agent/src/executor.ts:148-173`, `:174-215`, `:217-273`).
+## 2. Reusable decision/apply contract
 
-Approval is a nonterminal suspension of the original operation: the original intent and its policy generation remain pinned while approval resolves (_shipped_: `packages/agent/src/executor.ts:174-198`). It is never generic interrupt/resume and never reconstructs a model invocation. Whole-wave gating is normative target: all pre-verdicts first; no body starts while any required approval is pending. Refusal/timeout blocks only that call; interrupt cancels the wave.
+Version 1 uses existing action schemas and one generic executor/session commit boundary:
 
-History projection is read-only reconstruction: it folds committed actions, assistant messages, compaction projections, and tool results; it never re-executes an open call (_shipped_: `packages/agent/src/session-history.ts:45-90`, `:124-141`). Provider attempts remain provider/LLM evidence, not session lifecycle state; no WorkItem/Attempt revival (_shipped_: `packages/agent/src/core/execution/run.ts:47-57`, `:116-120`).
+1. **Decision:** the named owner validates `(region, current snapshot/revision, input, pinned generation, deadline evidence, lease fence)` and returns either a typed refusal or an immutable `Decision` containing action kind/op/value, expected revision/fence, IDs, and an effect plan. No effect runs here.
+2. **Apply:** the sole durable store commit validates expected revision, fence, inbox IDs, and terminal uniqueness, then appends actions/consumes inbox/updates operational rows atomically. A stale fence, revision, already-sealed turn, expired approval, or invalid transition returns a typed refusal (`packages/agent/src/session-admission.ts:216-243`; storage validation `packages/ledger/src/storage/sqlite-l0-adapter.ts:369-464`).
+3. **Dispatch:** only after a successful receipt does the owner run the effect plan. The effect must append its result through the same fenced commit; post-policy denial is `blocked_post` and records disposition. Replay runs decision validation and apply-fold reconstruction only: it dispatches zero effects (`packages/agent/src/session-history.ts:124-141`).
 
-## 2. Transition ownership
+The action vocabulary is: inbox `prompt|interrupt|resume`; turn `intent|resume|terminal`; operation `policy.decision`, operation intent/result; approval `request|answer|timeout`; alarm `arm|cancel`; occurrence `open|terminal`; and parent inbox delivery. Existing event/ID payloads are reused: inbox IDs, turn/result IDs, action IDs, alarm IDs, approval IDs, occurrence IDs, and delegation IDs. A bus/watch observation is emitted only after commit and is never a command or truth source.
 
-Every transition has exactly one owner. Validation, durable commit, and effect dispatch are separate phases; replay performs validation/fold only and dispatches zero effects.
+## 3. Total transition table
 
-| Region | Legal transition/product | Sole owner | Not owned here |
-|---|---|---|---|
-| lifecycle | create `absent -> idle`; `idle -> running`; `running -> idle`; `running -> interrupted`; `interrupted -> running`; open turn -> one terminal | **Session admission/turn authority** (`session-admission.ts` + `session-turn.ts`) | drivers, UI, bus, history projection |
-| residency-lease | acquire/takeover, heartbeat renewal, fenced commit, release/hibernate | **Session handle/controller + ledger session kernel** | runner, worker transport, watcher |
-| intake-scheduling | append prompt/interrupt/resume; consume inbox; serialize drive; wake/reconcile | **Session handle/controller** | callers changing row state directly, bus as queue |
-| operation-effect | policy pre/post decision; append intent/result; approval request/answer/timeout; body dispatch; wave cancellation | **Agent executor** | session scalar lifecycle, transport drivers, approval UI |
+Each row names the **decision owner** first, then its apply collaborator and dispatch owner. “Target move” is explicit where a child must relocate authority.
 
-The session controller wires the owners but does not duplicate their folds (_shipped_: `packages/agent/src/session-controller.ts:46-90`). A terminal CAS winner is the only winner; late, duplicate, stale-fence, and invalid transitions fail closed. Events and watchers are after-commit observations, never authority.
+| Current product and input | Legal result/guard | Decision owner (current boundary or target move) |
+|---|---|---|
+| absent -> idle | create identity/configuration; no runner effect | **Shipped:** `session-handle.ts:82-110` -> ledger initialization `ledger/src/session/kernel.ts:39-71`; #968 retains this boundary. |
+| idle + prompt | acquire live lease, policy-admit prompt, consume inbox, append turn intent, then run | **Shipped:** admission `session-admission.ts:58-130`; apply `SessionHandleStore.commit` `:89-100`; dispatch runner `session-turn.ts:65-176`. |
+| idle + interrupt/resume | consume as no-op; no turn | **Shipped:** controller `session-controller.ts:255-302`; apply admission `session-admission.ts:346-362`. |
+| running + prompt | append/consume at same turn boundary; preserve IDs; execute only after boundary | **Shipped:** turn boundary `session-turn.ts:314-368`; apply same session commit. |
+| running + interrupt | commit row `running -> interrupted`, abort controller; later seal terminal; stale result cannot commit | **Shipped decision boundary:** controller `session-controller.ts:222-239`; **target clarification:** #969 may move this CAS decision into the common session transition function, but must delete the direct duplicate, leaving one owner; apply remains ledger CAS. |
+| interrupted + queued prompt without resume | retain queued prompt; do not dispatch | **Shipped:** controller `session-controller.ts:255-302`. |
+| interrupted + resume | acquire only after retained runner settles; mint new turn/result IDs and latest generation | **Shipped:** admission `session-admission.ts:298-343`; retained guard `session-admission.ts:237-309`. |
+| crash-open | reuse turn/result IDs and captured generation; bounded resume; pending interrupt seals interrupted; exhausted budget seals error | **Shipped:** admission `session-admission.ts:247-295`; apply turn commit/seal. |
+| interrupted terminal + retained effect | keep heartbeat/lease; release only when runner/effects settle, then hibernate | **Shipped:** turn `session-turn.ts:237-309`; controller close/hibernate `session-controller.ts:287-302`. |
+| open operation + pre deny | append intent only where required, append `blocked_pre`; no body | **Shipped:** executor `executor.ts:148-173`, `:232-247`. |
+| open operation + approval | retain original parsed intent/hash/generation; all wave approvals resolve before any body | **Shipped:** executor `executor.ts:174-215`. |
+| approval + refuse/timeout | `blocked_pre`; admitted siblings proceed in original order | **Shipped:** executor `executor.ts:232-247`; approval expiry eligibility `executor-approval.ts:22-56`. |
+| body + post deny | `blocked_post(disposition=reverted|irreversible)`; run only registered reverter, never rollback by assumption | **Shipped:** executor `executor.ts:260-273`, `:324-382`. |
+| body + result/failure/cancel | append one terminal result; positional wave output; sequential barriers remain | **Shipped:** executor `executor.ts:217-275`. |
+| alarm arm/cancel | arm creates row/action; cancel CAS only from armed; due excludes cancelled | **Shipped:** ledger adapter `sqlite-l0-adapter.ts:577-628`; target evaluator ownership #971. |
+| occurrence open/evaluate/terminal | evaluator lease + pinned generation; one terminal CAS; wake admission only after commit | **Target:** #971 moves decision into occurrence action fold; current live-wait evidence remains `session-stop-evidence.ts:29-39`. |
+| child terminal | append durable outbound obligation, idempotently deliver parent inbox message; receiving executor admits it | **Target:** #969 moves this from delegation logical settlement/wake to canonical request fold. |
+| deadline / late input | see §4; eligibility precedes CAS | **Shipped approval boundary:** `executor-approval.ts:22-56`; **target request boundary:** #969 canonical fold. |
+| configuration | new generation only after policy authorization; preserve running lease if owner still holds it | **Shipped:** `session-configuration.ts:17-89`; apply session kernel generation actions. |
+| any stale fence/revision/closed terminal | typed refusal; no effect, no state mutation | **Shipped apply:** ledger CAS `sqlite-l0-adapter.ts:369-464`; executor guard `session-admission.ts:216-243`. |
 
-## 3. Legal transition table and precedence
+## 4. Deadline, precedence, and concrete traces
 
-| Pre-state | Input/race | Result | CAS/effect rule |
-|---|---|---|---|
-| `idle` | prompt admitted with live lease | `running`, open turn | commit inbox consumption + turn intent before runner effect (_shipped_: `packages/agent/src/session-admission.ts:58-99`) |
-| `running` | interrupt | `interrupted`, then terminal interrupt | interrupt row/row transition wins; abort effect; no late result may seal (_shipped_: `packages/agent/src/session-controller.ts:222-239`; _shipped_: `packages/agent/src/session-admission.ts:101-120`) |
-| `running` | runner returns result/wait/error | corresponding terminal | first fenced seal wins; duplicate or stale seal is rejected (_shipped_: `packages/agent/src/session-admission.ts:216-243`) |
-| `interrupted` | resume after terminal interrupt | new `turnId`, new `resultId`, latest generation | terminal interrupt never reuses execution IDs; target invariant |
-| crash-open | recovery | same `turnId`, same `resultId`, pinned generation; resume action increments bounded count | recovery must not replay settled effects; _shipped_ resume path: `packages/agent/src/session-admission.ts:247-295` |
-| any | approval required | operation remains pending | no wave body until all pre approvals resolve (_shipped_: `packages/agent/src/executor.ts:174-215`) |
-| approval pending | approve | original operation body | same intent/generation; no reconstruction |
-| approval pending | refuse/timeout | `blocked_pre` for that call | siblings admitted in original order may proceed (_shipped_: `packages/agent/src/executor.ts:232-247`) |
-| wave active | interrupt | all uncompleted effects cancelled | cancellation result is recorded; no unrecorded body (_shipped_: `packages/agent/src/executor.ts:217-231`) |
-| open operation | late reply/duplicate result | existing terminal unchanged | terminal CAS winner only; target invariant |
+Eligibility is checked against the authoritative clock **before** CAS arbitration. An approval answer arriving at or after its expiry is `stale_approval`, even if the timeout callback has not fired; a valid pre-expiry answer may win if its authenticated answer commit reaches the fold first (`packages/agent/src/executor-approval.ts:22-56`). The timeout records its own action separately (`packages/agent/src/executor-approval.ts:113-138`). A generic request late answer never reopens the old request: #969 records a late/unknown receipt and, if policy permits, creates a new inbox input with a new occurrence ID. A duplicate answer/result is an idempotent no-op returning the existing terminal. Cancel versus reply uses the same eligibility and first successful terminal commit; a loser gets the existing terminal. Changed fence or sealed turn yields `SessionCommitError(reason="stale")` (`packages/agent/src/session-admission.ts:216-243`).
 
-Precedence is: durable terminal CAS > stale-fence refusal > interrupt cancellation > approval refusal/timeout > ordinary result. A timeout at its deadline beats a late reply if its CAS commits first; a reply that wins first remains the terminal. “Unknown outcome” is retained for crash/transport expiry; no exactly-once external-effect claim.
+Concrete traces (IDs are fixed labels for the trace; `E` is dispatched effect count):
 
-## 4. Current shipped boundaries
+* **A/B/C/D approve:** `I(A),I(B),I(C),I(D)` -> all `pre`; `B approval=request`; `B answer=approved`; bodies `A,C,D` in positional order with `D` at its sequential barrier; each result; `E=4`.
+* **A/B/C/D refuse:** same pre/intents -> `B refused`; `B blocked_pre`; `A,C,D` bodies/results in order; `E=3`.
+* **timeout:** `B approval=request` at `t<deadline`; answer at `t>=deadline` -> `stale_approval`; timeout action -> `B blocked_pre`; `E=3`.
+* **interrupt while approval waits:** all pre actions, `B approval=request`, interrupt -> wave cancellation; no body starts; admitted intents receive cancelled results; `E=0`.
+* **terminal interrupt then resume:** `T1/R1` open -> interrupt terminal; resume -> `T2/R2`, latest generation; `E` only for T2. **Crash-open:** `T1/R1` open -> recovery `resume(T1,R1,pinnedGeneration)`, bounded count; no duplicate body for settled slots.
+* **late reply / cancel / duplicate:** request open -> expiry-eligible timeout wins and records unknown; late reply records late receipt/new-input only; cancel after terminal returns existing terminal; duplicate result returns existing terminal; no old request reopens.
+* **alarm:** `alarm.arm(A1)` -> armed; cancel CAS -> cancelled; due scan excludes A1; waiting evidence cannot cite A1 after cancel. A waiting terminal always carries `live_wait` plus nonempty alarm IDs.
+* **replay:** fold any trace including `blocked_post` and retained lease rows -> same snapshot, `E=0`.
 
-Native workers use the same session-owned loop and session id as the delegation id (_shipped_: `apps/openomni/src/composition/worker-session.ts:128-156`, `:159-184`). They do not run a second drive loop; a waiting worker watches the existing handle terminal (_shipped_: `apps/openomni/src/composition/worker-session.ts:220-248`). The delegation kernel alone settles durable delegation records by CAS, then publishes and wakes after commit (_shipped_: `apps/openomni/src/delegation/kernel.ts:303-346`). Its deadline timer, restart matrix, cancellation, and correlated reply are separate delegation residency/transport concerns (_shipped_: `apps/openomni/src/delegation/kernel.ts:382-439`, `:754-783`).
+## 5. Exact child boundaries and deletion receipts
 
-Session history is canonical action projection, not legacy message/part authority (_shipped_: `packages/agent/src/session-history.ts:5-9`, `:124-141`). The implementation-status page says durable handles and native worker binding are wired (_shipped_: `docs/implementation-status.md:19-20`, `:32-32`); this document freezes the remaining cross-cutting target and does not alter that shipped-state claim.
+A path is assigned once. Ranges within a shared file are separate symbols; immutable migrations are never deleted. Each child owns its deletion and dependent fixture census; #973 only verifies the final absence.
 
-## 5. Child issue construction and deletion receipts
+### #969 waiting/delivery cutover
 
-### #969 — waiting and delivery under actions
+* **Move/replace:** `apps/openomni/src/delegation/kernel.ts:createDelegationKernel` and `settle`, `deliverWake`, `arm`, `awaitDelegation`, `settleFromReply` (`:250-783`) move logical request terminal, wake, and await decisions to the canonical action/session fold; retain only physical driver preparation/transport receipt and channel correlation.
+* **Delete:** module-level `settlementWaiters` (`:124-130`), logical `settle`/`deliverWake`/`markWoken` path (`:303-380`), delegation timer terminal fold (`:382-406`), and direct reply-to-completed fold (`:771-783`), plus their dedicated tests/fixtures. Child terminal instead becomes parent inbox message. Keep `apps/openomni/src/delegation/*-driver.ts` physical drivers and required Wait correlation; no compatibility path.
+* **Depends on/owned tests:** delegation kernel tests and channel reply tests; data disposition is forward migration/retention owned by #969, with immutable historical migrations retained.
 
-**May change:** move generic request waiting/delivery decisions into the operation/intake action tree, retaining necessary channel correlation and physical drivers. Define action-backed request/reply occurrence IDs, deadlines, late/duplicate handling, and replay projection.
+### #970 recovery/retry/restoration
 
-**May not change:** session identity, turn ID rules, lease fencing, executor approval semantics, policy compilation, or delegation settlement authority. It must not create a second Wait/session machine.
+* **Move/replace:** `packages/agent/src/session-admission.ts:247-343` recovery/resume decisions and `packages/agent/src/session-turn.ts:237-309` retained-effect continuation; target common transition fold remains the sole apply owner.
+* **Delete:** any recovery/retry authority in `apps/openomni/src/delegation/process-entry.ts` beyond transport ACK; any duplicate resume/replay fixtures that re-run settled effects. Keep `packages/agent/src/core/execution/run.ts` provider-attempt logic and provenance; never add WorkItem/Attempt rows.
+* **Depends on/owned tests:** session admission/turn recovery tests and process crash traces; immutable ledger migrations retained.
 
-**Must delete:** independent Wait/Approval/delivery lifecycle authority, duplicate pending-request state machines, delivery branches that decide terminal truth outside the canonical action owner, and any compatibility adapter/dual path after cutover. Retain the physical channel driver and only the correlation primitive it demonstrably needs.
+### #971 monitor/occurrence alignment
 
-### #970 — durable recovery, retry, restoration
+* **Move/replace:** `packages/agent/src/session-stop-evidence.ts:29-39` remains the current alarm evidence reader; add occurrence decision/fold adjacent to it and `packages/protocol/src/ledger/l0.ts:341-377,508-530` vocabulary. `packages/ledger/src/storage/sqlite-l0-adapter.ts:577-628` remains alarm arm/cancel CAS.
+* **Delete:** only monitor/evaluator logical lifecycle branches and duplicate evaluator watchers/leases in their current consumers; do **not** delete armed/cancelled operational alarm rows, legitimate provider provenance, or immutable migrations. Exact evaluator consumer census and forward migration/retention decision belong to #971.
+* **Depends on/owned tests:** monitor/evaluator and alarm conformance fixtures; no polling/sleep bridge.
 
-**May change:** recovery decisions, bounded resume/retry, typed restoration and generation pinning in the existing admission/turn owner; add crash/race traces.
+### #972 history/diagnostic projections
 
-**May not change:** terminal interrupt ID regeneration versus crash-open ID reuse, operation effect ownership, external exactly-once claims, or introduce rollback.
+* **Move/replace:** `packages/agent/src/session-history.ts:6-142` is the sole canonical projection reader; extend it for canonical request/reply/approval/occurrence actions. Diagnostic readers consuming action trees move here, not #969.
+* **Delete:** legacy logical delivery/request history readers and duplicate JSON/event projection writers; assign each old reader/test to #972's deletion census. Keep physical message/part bytes and immutable migration files pending an explicit archive/retention decision; no effect dispatch during projection.
+* **Depends on/owned tests:** session-history and diagnostic projection tests only; #969 owns request writers and old request fixtures, so #972 does not edit those fixtures.
 
-**Must delete:** independent recovery/retry authority, process-local restoration truth, generic replay of provider/tool effects, and WorkItem/Attempt replacement rows or aliases.
+### #973 final conformance
 
-### #971 — monitor occurrences and evaluator recovery
+* **Owns only:** repository-wide semantic census and model/property/real-surface tests after #969-#972; it does not own production deletion. Harness cases are the traces in §4: invalid transition refusal, terminal uniqueness, deterministic replay `E=0`, mixed wave, recovery, late input, alarm cancellation.
+* **Delete:** no shared production path. It removes only obsolete final conformance fixtures that reference already-deleted symbols, with the deleting child named in the receipt; no WorkItem/Attempt fixtures are revived.
 
-**May change:** represent monitor/evaluator occurrences as operation actions and align their recovery/terminal observations with session transitions.
+## 6. References and non-negotiables
 
-**May not change:** lifecycle/lease CAS ownership, watcher truth, policy-engine count, or operation body ordering.
+Use [kernel-contract.md](kernel-contract.md) for session/lease/turn IDs, executor ownership, wave gating, attempts, waiting, compaction, and terminal recovery semantics; use [core-model.md](core-model.md) for durable vocabulary and the Wait boundary. This document supersedes only their independent logical Wait/approval/delivery lifecycle claims at the #969 cutover; physical channel correlation and operational alarm rows remain legitimate until their assigned child replaces the logical fold.
 
-**Must delete:** monitor-specific lifecycle state machine, evaluator-owned recovery decisions that bypass session admission, duplicate terminal watchers, and any polling/sleep-based bridge.
-
-### #972 — action-based history and diagnostics
-
-**May change:** projections and causal diagnostics over append-only actions, including request/reply/approval/monitor occurrence IDs.
-
-**May not change:** canonical action writes, transition legality, effect dispatch, or legacy-byte retention/disposition without the required archive/retention decision.
-
-**Must delete:** history authority in legacy message/part or delivery tables, duplicate JSON/event histories, and projection paths that execute effects. Keep only independently consumed physical storage until verified disposition.
-
-### #973 — conformance and semantic deletion
-
-**May change:** model/property harnesses and real-surface tests proving invalid transitions fail closed, one terminal winner, deterministic zero-effect replay, mixed-wave gating/order, recovery, and deletion census.
-
-**May not change:** production semantics or add test-only alternate authorities, sleeps, timing luck, or phrase-pinned prose tests.
-
-**Must delete:** obsolete fixtures and tests encoding deleted WorkItem/Attempt, independent Wait/Approval/delivery state, second watchers, or dual-path compatibility. The deletion receipt must name source consumers and prove no surviving reader/writer.
-
-## 6. Non-negotiable invariants
-
-1. One durable session history and one transition authority.
-2. Intent before effect; replay folds without dispatch.
-3. One fenced single-flight session lease; stale writers cannot commit.
-4. Interrupt cancels the current execution and uses new IDs on later execution; crash recovery resumes the same IDs and pinned generation.
-5. Approval suspends the original parsed invocation; whole-wave pre-gating prevents body effects while waiting.
-6. Bus/watchers are lossy observations after commit, never truth or command queues.
-7. No WorkItem/Attempt revival, second kernel/policy/approval/watcher, compatibility adapter, or dual path.
-8. Provider attempts and external effects are historical evidence; no universal rollback or exactly-once external-effect guarantee.
+There is one transition authority, one policy compiler, one approval lane, and one watcher/observation surface. No WorkItem/Attempt revival, second kernel/policy/approval engine, compatibility adapter, dual path, universal rollback, or exactly-once external-effect claim.
