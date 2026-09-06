@@ -4,6 +4,7 @@ import { RunEvents } from "../core/execution/events";
 import { resolveCompactionGeometry, type CompactionYield } from "./geometry";
 import { elideToolOutputs, type ToolOutputElision } from "./reduce";
 import type { CompactionCandidate } from "./speculate";
+import { createCompactionPlan, type CompactionRecord } from "./durable";
 
 interface SummarizationBudget {
   readonly maxInputTokens: number;
@@ -63,6 +64,7 @@ export interface CompactionOptions {
 type ResolvedCompactionOptions = CompactionOptions & { contextWindowTokens: number };
 
 interface CompactionResult {
+  readonly record?: CompactionRecord;
   messages: Message.WithParts[];
   compacted: boolean;
   removedCount: number;
@@ -112,8 +114,9 @@ const ANCHOR_HEADER = "[Conversation Summary]\n";
 export function withSummarizerDeadline(
   summarize: NonNullable<CompactionOptions["onSummarize"]>,
   deadlineMs = DEFAULT_SUMMARIZER_DEADLINE_MS,
+  signal?: AbortSignal,
 ): NonNullable<CompactionOptions["onSummarize"]> {
-  return async (messages, previousAnchor, budget, operationSignal) => {
+  return async (messages, previousAnchor, budget, operationSignal = signal) => {
     const controller = new AbortController();
     const cancellation = Promise.withResolvers<never>();
     const abort = (): void => {
@@ -437,6 +440,7 @@ export namespace Compaction {
     events: BusEvent.Sink,
     dispatch: {
       readonly trigger: "threshold" | "yield";
+      readonly signal?: AbortSignal;
       readonly measuredTokens?: number;
       /** A speculative candidate (L4): promoted with zero model calls when
        * its canonical prefix is unchanged; otherwise the synchronous merge
@@ -469,7 +473,12 @@ export namespace Compaction {
       );
       const ineffective = result.compacted && isIneffectiveCompaction(savedTokens, tokensBefore);
       const completed = result.compacted
-        ? { ...result, yield: { savedTokens, tokensBefore }, ineffective }
+        ? {
+            ...result,
+            record: createCompactionPlan(messages, result.messages, tokensBefore).record,
+            yield: { savedTokens, tokensBefore },
+            ineffective,
+          }
         : result;
       events.publish(RunEvents.CompactionCompleted, {
         ...identity,
@@ -495,6 +504,7 @@ export namespace Compaction {
               onSummarize: withSummarizerDeadline(
                 options.onSummarize,
                 options.summarizerDeadlineMs,
+                dispatch.signal,
               ),
             };
       return await compactUnbracketed(
@@ -535,7 +545,9 @@ export namespace Compaction {
       summarizerError?: Error,
     ) => CompactionResult,
   ): Promise<CompactionResult> {
-    const protectRecent = options.protectRecentMessages ?? DEFAULT_PROTECT_RECENT;
+    // A reversible cut names original content as its kept boundary. Even a
+    // zero-tail strategy must retain one atomic call/result entry unchanged.
+    const protectRecent = Math.max(1, options.protectRecentMessages ?? DEFAULT_PROTECT_RECENT);
 
     if (messages.length <= protectRecent) {
       return finish({ messages, compacted: false, removedCount: 0 }, "nothing_reclaimed", 0);

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { SessionHandleStore } from "@openomni/ledger";
 import type { RunInput, Sink } from "@openomni/llm";
-import { assistantMessage } from "./helpers/assistant-message";
+import { requestToolStep, assistantMessage } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { nextMessage } from "./helpers/ws";
 
@@ -37,7 +37,7 @@ test("a Resident turn hands work to an inline worker and reports what came back"
         // The provider is what actually runs a tool call, so the Resident's
         // turn calls the injected executor exactly as a real provider would
         // and then speaks the result back.
-        const executed = await input.toolExecutor?.({
+        const executed = requestToolStep(input, sink, {
           id: "call-1",
           tool: "delegate",
           input: {
@@ -47,6 +47,7 @@ test("a Resident turn hands work to an inline worker and reports what came back"
             timeoutMs: 5000,
           },
         });
+        if (executed === undefined) return { type: "stop" };
         sink.onMessage(
           assistantMessage(input, {
             parts: [
@@ -70,7 +71,7 @@ test("a Resident turn hands work to an inline worker and reports what came back"
   expect(answer.text).toContain(WORKER_ANSWER);
   // Proof the worker was a loop of its own rather than the Resident answering
   // itself: a second provider turn ran in a delegation session.
-  expect(seen).toEqual(["resident", "worker"]);
+  expect(seen).toEqual(["resident", "worker", "resident"]);
   expect(workerTools).not.toContain("work_items");
   expect(workerTools).not.toContain("complete_work");
   expect(workerTools.length).toBeGreaterThan(0);

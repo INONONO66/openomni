@@ -40,6 +40,9 @@ export interface ChatAgentConfig {
    * fail-closed ledger append from the lossy bus without touching the loop.
    */
   events: BusEvent.Sink;
+  /** The session owns inbox claims; this loop invokes its three model-step boundaries. */
+  boundary?: import("../session-handle").SessionRunnerInput["boundary"];
+  toolWave?: (calls: readonly Tool.Call[], signal?: AbortSignal) => Promise<readonly Tool.Result[]>;
   /** Durable L2 authority for session-owned prompt, turn, model, and tool work. */
   executor?: Executor;
   systemPrompt?: string;
@@ -116,8 +119,20 @@ export interface ChatAgentInput {
    * stale renders as pseudo-user messages).
    */
   messages: Array<
-    | { role: "user"; content: string; partMetadata?: Record<string, unknown>; time?: number }
-    | { role: "assistant"; content: string; partMetadata?: Record<string, unknown>; time?: number }
+    | {
+        role: "user";
+        content: string;
+        id?: string;
+        partMetadata?: Record<string, unknown>;
+        time?: number;
+      }
+    | {
+        role: "assistant";
+        content: string;
+        id?: string;
+        partMetadata?: Record<string, unknown>;
+        time?: number;
+      }
   >;
   traceContext?: import("@openomni/protocol").TraceContext.Type;
 }

@@ -7,7 +7,7 @@ import type { RunInput, Sink } from "@openomni/llm";
 import { Tool, type BusEvent, type ObservationSink, type PlainValue } from "@openomni/protocol";
 import { createDelegationKernel } from "../src/delegation/kernel";
 import { createInlineWorkerRunner } from "../src/delegation/worker-loop";
-import { assistantMessage } from "./helpers/assistant-message";
+import { requestToolStep, assistantMessage } from "./helpers/assistant-message";
 
 function field(value: PlainValue, name: string): PlainValue | undefined {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return undefined;
@@ -82,7 +82,7 @@ test("a worker tool call is executed and observed through the durable executor",
           providerID: model.provider,
         }),
         run: async (input: RunInput, sink: Sink) => {
-          const result = await input.toolExecutor?.({
+          const result = requestToolStep(input, sink, {
             id: "worker-call-1",
             tool: "delegate",
             input: {
@@ -92,6 +92,7 @@ test("a worker tool call is executed and observed through the durable executor",
               timeoutMs: 1000,
             },
           });
+          if (result === undefined) return { type: "stop" };
           sink.onMessage(assistantMessage(input, { text: String(result?.output ?? "missing") }));
           return { type: "stop" };
         },

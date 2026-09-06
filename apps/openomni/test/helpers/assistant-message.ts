@@ -1,5 +1,5 @@
-import type { RunInput } from "@openomni/llm";
-import type { Message } from "@openomni/protocol";
+import type { RunInput, Sink } from "@openomni/llm";
+import type { Message, Tool } from "@openomni/protocol";
 
 export interface AssistantMessageOptions {
   readonly call?: number;
@@ -59,4 +59,45 @@ export function assistantMessage(
       },
     ],
   };
+}
+
+/** A fake provider emits invocation data, then reads the real executor's next-step result. */
+export function requestToolStep(
+  input: RunInput,
+  sink: Sink,
+  call: Tool.Call,
+): Tool.Result | undefined {
+  for (const message of input.messages) {
+    for (const part of message.parts) {
+      if (part.type !== "tool" || part.callID !== call.id) continue;
+      if (part.state.status === "completed")
+        return { id: call.id, toolCallId: call.id, toolName: call.tool, output: part.state.output };
+      if (part.state.status === "error")
+        return {
+          id: call.id,
+          toolCallId: call.id,
+          toolName: call.tool,
+          output: part.state.error,
+          isError: true,
+        };
+    }
+  }
+  const sessionID = input.trace.sessionId;
+  sink.onMessage(
+    assistantMessage(input, {
+      reason: "tool-calls",
+      parts: [
+        {
+          id: `${call.id}-part`,
+          sessionID,
+          messageID: `${call.id}-message`,
+          type: "tool",
+          callID: call.id,
+          tool: call.tool,
+          state: { status: "pending", input: call.input },
+        },
+      ],
+    }),
+  );
+  return undefined;
 }

@@ -1,19 +1,11 @@
-import type {
-  BusEvent,
-  LedgerAction,
-  LedgerSession,
-  ObservationSink,
-  PlainValue,
-} from "@openomni/protocol";
-import { L0Observation, Tool, canonicalDigest } from "@openomni/protocol";
-import type {
-  CompiledPolicySnapshot,
-  PolicyEvaluation,
-  PolicyEvaluationInput,
-} from "@openomni/policy";
+import type { LedgerAction, PlainValue } from "@openomni/protocol";
+import { canonicalDigest } from "@openomni/protocol";
+import type { PolicyEvaluation, PolicyEvaluationInput } from "@openomni/policy";
 
-const CORE_KINDS = new Set(["prompt", "turn", "llm", "tool"]);
-type ToolObservationStatus = "success" | "error" | "timed_out";
+import { runWaveBodies, waveBodyScope, type WaveControl } from "./core/execution/tool-wave";
+
+const CORE_KINDS = new Set(["prompt", "turn", "llm", "tool", "compaction"]);
+import { createExecutionRecord, type ToolObservationStatus } from "./executor-record";
 
 export class UnregisteredExecutionKindError extends Error {
   readonly code = "unregistered_execution_kind";
@@ -24,119 +16,62 @@ export class UnregisteredExecutionKindError extends Error {
   }
 }
 
-interface ExecutionKindRegistration {
-  readonly kind: string;
-  readonly effect: PlainValue;
-  readonly reversible: boolean;
-  readonly inputSchema: PlainValue;
-}
-
-export interface ExecutionLedger {
-  commit(action: LedgerAction.Append): Promise<LedgerAction.Receipt>;
-}
-
-interface ExecutionIdentity {
-  readonly sessionId: string;
-  readonly role: LedgerSession.Role;
-  readonly parentActionId: string | null;
-}
-
-interface ToolObservationIdentity {
-  readonly turnId: string;
-  readonly callId: string;
-  readonly timeoutMs?: number;
-}
-
-interface ExecutionRequest {
-  readonly kind: string;
-  readonly op: string;
-  readonly intent: PlainValue;
-  readonly effect: PlainValue;
-  readonly revert?: () => void | Promise<void>;
-  readonly toolObservation?: ToolObservationIdentity;
-}
-
-interface AttemptRequest {
-  readonly op: string;
-  readonly intent: PlainValue;
-  readonly effect: PlainValue;
-}
-
-interface ActionSubject {
-  readonly kind: LedgerAction.Kind;
-  readonly op: string;
-}
-
-type ExecutionResult =
-  | { readonly terminal: "blocked_pre"; readonly reason: string }
-  | { readonly terminal: "executed"; readonly value: PlainValue }
-  | {
-      readonly terminal: "blocked_post";
-      readonly disposition: "reverted" | "irreversible";
-      readonly reason: string;
-    };
-
-export interface Executor {
-  run<T extends PlainValue>(
-    request: ExecutionRequest,
-    body: (intent: LedgerAction.Receipt) => Promise<T>,
-  ): Promise<ExecutionResult>;
-}
-
-export interface DurableExecutor extends Executor {
-  runExisting<T extends PlainValue>(
-    request: ExecutionRequest,
-    body: () => Promise<T>,
-  ): Promise<ExecutionResult>;
-  runAttempt<T extends PlainValue>(
-    parent: LedgerAction.Receipt,
-    request: AttemptRequest,
-    body: () => Promise<T>,
-  ): Promise<T>;
-}
-
-export interface ExecutorOptions {
-  readonly policy: CompiledPolicySnapshot;
-  readonly ledger: ExecutionLedger;
-  readonly observations: ObservationSink | BusEvent.Sink;
-  readonly identity: ExecutionIdentity;
-  readonly clock: () => number;
-  readonly entropy: () => string;
-  readonly extensionKinds?: readonly ExecutionKindRegistration[];
-}
+import type {
+  AttemptRequest,
+  DurableExecutor,
+  ExecutionBatchItem,
+  ExecutionBatchResult,
+  ExecutionRequest,
+  ExecutionResult,
+  ExecutorOptions,
+} from "./executor-contract";
+import { createExecutionApprovals } from "./executor-approval";
+export { ExecutionApprovalError } from "./executor-contract";
+export type {
+  DurableExecutor,
+  ExecutionLedger,
+  Executor,
+  ExecutionRequest,
+  ExecutionApprovals,
+  ExecutionApprovalRequest,
+  ExecutionBatchResult,
+  ExecutorOptions,
+} from "./executor-contract";
 
 export function createExecutor(options: ExecutorOptions): DurableExecutor {
+  const {
+    commit,
+    appendFailure,
+    appendIntent,
+    appendResult,
+    publishToolStarted,
+    publishToolTerminal,
+  } = createExecutionRecord(options);
+  const { approvals, awaitApproval } = createExecutionApprovals(options, commit);
   const kinds = new Set([
     ...CORE_KINDS,
     ...(options.extensionKinds ?? []).map((registration) => registration.kind),
   ]);
 
-  async function commit(action: LedgerAction.Append): Promise<LedgerAction.Receipt> {
-    const receipt = await options.ledger.commit(action);
-    options.observations.publish(L0Observation.ActionCommittedEvent, {
-      id: receipt.action.id,
-      sessionId: receipt.action.sessionId,
-      revision: receipt.revision,
-      kind: receipt.action.kind,
-    });
-    return receipt;
-  }
-
   async function decide(
     request: ExecutionRequest,
     phase: "pre" | "post",
     value: PlainValue,
-  ): Promise<PolicyEvaluation> {
+  ): Promise<PolicyEvaluation & { readonly receipt: LedgerAction.Receipt }> {
+    // Compaction is the existing turn.post/compaction policy operation,
+    // even though its durable evidence has the dedicated compaction kind.
+    const point =
+      request.kind === "compaction"
+        ? { kind: "turn", phase: "post" as const, op: "compaction" }
+        : { kind: request.kind, phase, op: request.op };
     const input: PolicyEvaluationInput = {
-      kind: request.kind,
-      phase,
-      op: request.op,
+      ...point,
       role: options.identity.role,
       sessionId: options.identity.sessionId,
       value,
     };
     const decision = options.policy.evaluate(input);
-    await commit({
+    const receipt = await commit({
       id: options.entropy(),
       parentId: options.identity.parentActionId,
       sessionId: options.identity.sessionId,
@@ -144,7 +79,7 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
       intent: {
         encodingVersion: 1,
         value: {
-          hook: `${request.kind}.${phase}`,
+          hook: `${point.kind}.${point.phase}`,
           generation: decision.generation,
           matchedRuleIds: [...decision.matchedRuleIds],
           verdict: decision.verdict,
@@ -161,38 +96,177 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
       ts: options.clock(),
       irreversible: true,
     });
-    return decision;
+    return { ...decision, receipt };
   }
 
   async function run<T extends PlainValue>(
     request: ExecutionRequest,
     body: (intent: LedgerAction.Receipt) => Promise<T>,
   ): Promise<ExecutionResult> {
-    const kind = registeredKind(request);
-
-    const pre = await decide(request, "pre", request.intent);
-    const refusal = preRefusal(pre, false);
-    if (refusal !== undefined) return refusal;
-
-    const intent = await appendIntent({
-      parentId: options.identity.parentActionId,
-      kind,
-      op: request.op,
-      value: request.intent,
+    const results = await runBatch([{ request, body }], {
+      signal: waveBodyScope.getStore()?.signal ?? new AbortController().signal,
     });
-    const startedAt = publishToolStarted(request);
+    const result = results[0];
+    if (result === undefined) throw new Error("single execution lost its result");
+    if (result.terminal === "failed") throw result.error;
+    if (result.terminal === "cancelled")
+      throw new DOMException("execution cancelled", "AbortError");
+    return result;
+  }
 
-    let value: T;
+  async function runBatch(
+    items: readonly ExecutionBatchItem[],
+    control: WaveControl,
+  ): Promise<readonly ExecutionBatchResult[]> {
+    const controller = new AbortController();
+    const inherited = waveBodyScope.getStore();
+    const signal = AbortSignal.any([
+      control.signal,
+      controller.signal,
+      ...(options.signal === undefined ? [] : [options.signal]),
+      ...(inherited === undefined ? [] : [inherited.signal]),
+    ]);
     try {
-      value = await body(intent);
-    } catch (caught) {
-      await appendFailure({ kind, op: request.op }, intent.action.id, request.effect, caught);
-      publishToolTerminal(request, startedAt, "error");
-      throw caught;
+      return await executeBatch(items, {
+        signal,
+        // A captured executor keeps its turn's owner outside the ambient scope.
+        retain: options.retainEffect ?? inherited?.retain ?? control.retain,
+      });
+    } finally {
+      controller.abort();
     }
-    const resultValue = clonePlainValue(value);
-    const outcome = await applyPostPolicy(request, resultValue);
-    return finishRun(request, kind, intent.action.id, startedAt, resultValue, outcome);
+  }
+
+  async function executeBatch(
+    items: readonly ExecutionBatchItem[],
+    control: WaveControl,
+  ): Promise<readonly ExecutionBatchResult[]> {
+    waveBodyScope.getStore()?.signal.throwIfAborted();
+    // Salvaged staged-pre algorithm: every decision precedes every intent/body.
+    const stages: {
+      item: ExecutionBatchItem;
+      request: ExecutionRequest;
+      kind: LedgerAction.Kind;
+      pre: Awaited<ReturnType<typeof decide>>;
+    }[] = [];
+    for (const item of items) {
+      const request = { ...item.request, intent: clonePlainValue(item.request.intent) };
+      const kind = registeredKind(request);
+      const pre = await decide(request, "pre", request.intent);
+      stages.push({ item, request, kind, pre });
+    }
+    const admitted: ((typeof stages)[number] & { intent: LedgerAction.Receipt | undefined })[] = [];
+    for (const stage of stages) {
+      const intent =
+        stage.pre.verdict === "deny"
+          ? undefined
+          : await appendIntent({
+              parentId: options.identity.parentActionId,
+              kind: stage.kind,
+              op: stage.request.op,
+              value: stage.request.intent,
+            });
+      admitted.push({ ...stage, intent });
+    }
+    const decisions = await Promise.all(
+      admitted.map(async (stage) => {
+        if (stage.pre.verdict !== "require_approval" || stage.intent === undefined)
+          return "approve" as const;
+        return awaitApproval(
+          {
+            id: stage.intent.action.id,
+            sessionId: options.identity.sessionId,
+            turnId: options.identity.turnId ?? options.identity.parentActionId,
+            ...(options.identity.toolsHash === undefined
+              ? {}
+              : { toolsHash: options.identity.toolsHash }),
+            ...(options.identity.toolsGeneration === undefined
+              ? {}
+              : { toolsGeneration: options.identity.toolsGeneration }),
+            callId: stage.request.toolObservation?.callId ?? stage.intent.action.id,
+            inputHash: canonicalDigest(stage.request.intent),
+            generation: stage.pre.generation,
+            revision: stage.pre.receipt.revision,
+            policyDecisionId: stage.pre.receipt.action.id,
+            intent: stage.request.intent,
+          },
+          control.signal,
+        );
+      }),
+    );
+    const started = new Map<number, number | undefined>();
+    const outcomes = await runWaveBodies(
+      admitted.map((stage, index) => ({
+        ...(stage.item.sequential ? { sequential: true as const } : {}),
+        async run() {
+          if (
+            stage.pre.verdict === "deny" ||
+            decisions[index] !== "approve" ||
+            stage.intent === undefined
+          )
+            return null;
+          started.set(index, publishToolStarted(stage.request));
+          return stage.item.body(stage.intent);
+        },
+      })),
+      control,
+    );
+    const results: ExecutionBatchResult[] = [];
+    for (const [index, stage] of admitted.entries()) {
+      const outcome = outcomes[index];
+      const intent = stage.intent;
+      if (outcome === undefined) throw new Error("wave lost positional result");
+      if (outcome.status === "cancelled") {
+        if (intent !== undefined)
+          await appendResult({ kind: stage.kind, op: stage.request.op }, intent.action.id, {
+            phase: "result",
+            terminal: "cancelled",
+            callId: stage.request.toolObservation?.callId ?? null,
+          });
+        publishToolTerminal(stage.request, started.get(index), "error");
+        results.push({ terminal: "cancelled" });
+      } else if (stage.pre.verdict === "deny" || decisions[index] !== "approve") {
+        const reason =
+          stage.pre.verdict === "deny"
+            ? (stage.pre.reason ?? "denied")
+            : decisions[index] === "timeout"
+              ? "approval_timeout"
+              : "approval_refused";
+        if (intent !== undefined)
+          await appendResult({ kind: stage.kind, op: stage.request.op }, intent.action.id, {
+            phase: "result",
+            terminal: "blocked_pre",
+            reason,
+            callId: stage.request.toolObservation?.callId ?? null,
+          });
+        results.push({ terminal: "blocked_pre", reason });
+      } else if (intent === undefined) throw new Error("wave lost admitted intent");
+      else if (outcome.status === "rejected") {
+        await appendFailure(
+          { kind: stage.kind, op: stage.request.op },
+          intent.action.id,
+          stage.request.effect,
+          outcome.error,
+          stage.request.toolObservation?.callId,
+        );
+        publishToolTerminal(stage.request, started.get(index), "error");
+        results.push({ terminal: "failed", error: outcome.error });
+      } else {
+        const value = clonePlainValue(outcome.value);
+        const post = await applyPostPolicy(stage.request, value);
+        results.push(
+          await finishRun(
+            stage.request,
+            stage.kind,
+            intent.action.id,
+            started.get(index),
+            value,
+            post,
+          ),
+        );
+      }
+    }
+    return results;
   }
 
   async function runExisting<T extends PlainValue>(
@@ -268,27 +342,21 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
             terminal: outcome.terminal,
             effect: request.effect,
             resultHash: canonicalDigest(outcome.value),
+            ...(request.kind === "compaction" || request.kind === "tool"
+              ? { result: outcome.value }
+              : {}),
+            ...(request.toolObservation ? { callId: request.toolObservation.callId } : {}),
           };
-    await appendResult({ kind, op: request.op }, intentId, effect);
+    await appendResult(
+      { kind, op: request.op },
+      intentId,
+      effect,
+      outcome.terminal === "executed" ? request.revertData?.() : undefined,
+    );
     const status =
       outcome.terminal === "blocked_post" ? "error" : toolObservationStatus(outcome.value);
     publishToolTerminal(request, startedAt, status);
     return outcome;
-  }
-
-  async function appendFailure<Caught>(
-    subject: ActionSubject,
-    parentId: string,
-    effect: PlainValue,
-    caught: Caught,
-  ): Promise<void> {
-    const error = caught instanceof Error ? caught : new Error(String(caught));
-    await appendResult(subject, parentId, {
-      phase: "result",
-      terminal: "failed",
-      effect,
-      error: { name: error.name },
-    });
   }
 
   async function applyPostPolicy(
@@ -310,113 +378,7 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
     return { terminal: "blocked_post", disposition, reason };
   }
 
-  function publishToolStarted(request: ExecutionRequest): number | undefined {
-    const identity = request.toolObservation;
-    if (request.kind !== "tool" || identity === undefined) return undefined;
-    const startedAt = options.clock();
-    scopedObservations(identity).publish(Tool.Events.Started, {
-      ...toolEventIdentity(request, identity),
-      time: startedAt,
-    });
-    return startedAt;
-  }
-
-  function publishToolTerminal(
-    request: ExecutionRequest,
-    startedAt: number | undefined,
-    status: ToolObservationStatus,
-  ): void {
-    const identity = request.toolObservation;
-    if (request.kind !== "tool" || identity === undefined || startedAt === undefined) return;
-    const observations = scopedObservations(identity);
-    if (status === "timed_out") {
-      observations.publish(Tool.Events.TimedOut, {
-        ...toolEventIdentity(request, identity),
-        time: options.clock(),
-        timeoutMs: identity.timeoutMs ?? 0,
-      });
-    }
-    const time = options.clock();
-    observations.publish(Tool.Events.Completed, {
-      ...toolEventIdentity(request, identity),
-      time,
-      durationMs: Math.max(0, time - startedAt),
-      isError: status !== "success",
-    });
-  }
-
-  function toolEventIdentity(request: ExecutionRequest, identity: ToolObservationIdentity) {
-    return {
-      traceId: identity.turnId,
-      sessionId: options.identity.sessionId,
-      runId: identity.turnId,
-      toolCallId: identity.callId,
-      toolName: request.op,
-    };
-  }
-
-  function scopedObservations(identity: ToolObservationIdentity): ObservationSink | BusEvent.Sink {
-    if (!("scope" in options.observations) || options.observations.scope === undefined) {
-      return options.observations;
-    }
-    return options.observations.scope({
-      traceId: identity.turnId,
-      sessionId: options.identity.sessionId,
-      turnId: identity.turnId,
-      callId: identity.callId,
-    });
-  }
-
-  async function appendIntent(input: {
-    readonly kind: LedgerAction.Kind;
-    readonly op: string;
-    readonly parentId: string | null;
-    readonly value: PlainValue;
-  }): Promise<LedgerAction.Receipt> {
-    return commit(
-      actionAppend(
-        input,
-        {
-          encodingVersion: 1,
-          value: { phase: "intent", op: input.op, value: input.value },
-        },
-        { encodingVersion: 1, value: { phase: "pending" } },
-      ),
-    );
-  }
-
-  async function appendResult(
-    subject: ActionSubject,
-    parentId: string,
-    value: PlainValue,
-  ): Promise<void> {
-    await commit(
-      actionAppend(
-        { ...subject, parentId },
-        { encodingVersion: 1, value: { phase: "result", op: subject.op } },
-        { encodingVersion: 1, value },
-      ),
-    );
-  }
-
-  function actionAppend(
-    input: ActionSubject & { readonly parentId: string | null },
-    intent: LedgerAction.Append["intent"],
-    effect: LedgerAction.Append["effect"],
-  ): LedgerAction.Append {
-    return {
-      id: options.entropy(),
-      parentId: input.parentId,
-      sessionId: options.identity.sessionId,
-      kind: input.kind,
-      intent,
-      effect,
-      ts: options.clock(),
-      irreversible: true,
-    };
-  }
-
-  return { run, runAttempt, runExisting };
+  return { run, runAttempt, runExisting, runBatch, approvals };
 }
 
 function blocks(decision: PolicyEvaluation): boolean {

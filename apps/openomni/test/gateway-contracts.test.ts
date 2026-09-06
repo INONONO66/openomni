@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { resolveChannelGrant } from "@openomni/channels";
 import type { RunInput } from "@openomni/llm";
 import { ActorRegistry, SessionHandleStore, Storage } from "@openomni/ledger";
-import { Gateway, MessagingEvents, type Message } from "@openomni/protocol";
+import { Gateway, MessagingEvents, type Message, type Tool } from "@openomni/protocol";
 import {
   createMountedChannelGrantRegistrar,
   createResidentGateway,
@@ -11,7 +11,11 @@ import {
   registerTrustedChannelGrant,
 } from "../src/gateway";
 import { createResident } from "../src/resident";
-import { assistantMessage, type AssistantMessageOptions } from "./helpers/assistant-message";
+import {
+  requestToolStep,
+  assistantMessage,
+  type AssistantMessageOptions,
+} from "./helpers/assistant-message";
 
 const MODEL = { provider: "fake", id: "gateway-contract-test" };
 const NOW = 5_000_000_000_000;
@@ -277,11 +281,12 @@ describe("Resident inbound treatment", () => {
   test("restores the normal tool dispatcher after an evidence-only turn", async () => {
     const executorOutputs: string[] = [];
     const resident = testResident(async (input, sink) => {
-      const result = await input.toolExecutor?.({
+      const result = requestToolStep(input, sink, {
         id: `call:${executorOutputs.length}`,
         tool: "missing",
         input: {},
       });
+      if (result === undefined) return { type: "stop" };
       executorOutputs.push(result?.output ?? "no executor");
       sink.onMessage(
         assistantMessage(input, { ...ASSISTANT_MESSAGE_OPTIONS, id: crypto.randomUUID() }),
@@ -297,15 +302,16 @@ describe("Resident inbound treatment", () => {
   });
 
   test("refuses tool execution during an evidence-only turn", async () => {
-    let executorResult: Awaited<ReturnType<NonNullable<RunInput["toolExecutor"]>>> | undefined;
+    let executorResult: Tool.Result | undefined;
     // An adversarial model loop: ignore toolChoice and invoke the supplied
     // executor directly, the way a prompt-injected model would.
     const resident = testResident(async (input, sink) => {
-      executorResult = await input.toolExecutor?.({
+      executorResult = requestToolStep(input, sink, {
         id: "call:forged",
         tool: "provision",
         input: { op: "provision_status" },
       });
+      if (executorResult === undefined) return { type: "stop" };
       sink.onMessage(
         assistantMessage(input, { ...ASSISTANT_MESSAGE_OPTIONS, id: crypto.randomUUID() }),
       );

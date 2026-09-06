@@ -2,13 +2,17 @@
 export type { AgentExecutionLifecycle, ChatAgentConfig } from "./core/types";
 export { RunReasonCode } from "./core/policy/reason-codes";
 export { failureFacts } from "./core/retry";
-export { placementGatedExecutor } from "./core/execution/turn";
+export { placementGatedExecutor } from "./core/execution/tool-placement";
 export type { CompactionOptions } from "./compaction";
 export { createSessionChatRunner } from "./session-chat-runner";
-export { closeSessions, session, sweepSessions } from "./session-handle";
-export { createExecutor, UnregisteredExecutionKindError } from "./executor";
+export { closeSessions, getSessionHandle, session, sweepSessions } from "./session-handle";
+export { createExecutor, ExecutionApprovalError, UnregisteredExecutionKindError } from "./executor";
 export { SEEDED_POLICY_ROWS } from "@openomni/policy";
-export type { ExecutionLedger, Executor } from "./executor";
+export type {
+  ExecutionLedger,
+  Executor,
+  ExecutionApprovalRequest,
+} from "./executor";
 export {
   createDispatcher,
   createTurnDispatcher,

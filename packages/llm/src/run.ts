@@ -33,7 +33,6 @@ export interface RunInput {
    */
   transport?: Transport;
   allowAuthFallback?: boolean;
-  toolExecutor?: (call: Tool.Call, context?: Tool.ExecutionContext) => Promise<Tool.Result>;
   toolChoice?: "auto" | "required" | "none";
   /** Maximum generated tokens for this call; absent leaves the provider default. */
   maxTokens?: number;
@@ -142,8 +141,8 @@ export namespace Run {
  * The native catalog (`message.send`, `engagement.open`, …) is collision-free
  * under plain `.`→`_`, but MCP tool names are `${server}.${name}` with
  * arbitrary segments, so two distinct originals can sanitize to the same key.
- * A silent overwrite of one tool's `execute` closure by another is a
- * correctness bug, so a taken key is disambiguated with a deterministic
+ * A silent overwrite of one advertised tool by another loses invocation
+ * identity, so a taken key is disambiguated with a deterministic
  * `_2`/`_3`/… suffix (truncated to keep the 128-char bound). The reverse map
  * lets the transcript record the dotted internal name instead of the wire name.
  */
@@ -259,42 +258,15 @@ export async function run(
         ]
       : [];
 
-    // Tools are keyed by their wire name (provider-pattern-safe), but the
-    // execute closure sets `tool: spec.name` (internal dotted) so execution
-    // and policy always see the dotted vocabulary. The SDK dispatches execute
-    // by the same key it advertised, so the wire→dotted reverse is free here.
+    // Schemas only. The receiving session executor, never the provider SDK,
+    // owns tool execution after the model-return inbox drain.
     const sdkTools: Record<string, unknown> = {};
     input.tools.forEach((spec, index) => {
       const wireName = wireNames[index] as string;
-      const executor = input.toolExecutor;
       sdkTools[wireName] = {
         type: "function" as const,
         description: spec.description,
         inputSchema: ai.jsonSchema(spec.inputSchema),
-        ...(executor && {
-          execute: async (
-            args: Record<string, unknown>,
-            options?: { toolCallId?: string; abortSignal?: AbortSignal },
-          ) => {
-            // The SDK always supplies toolCallId; a minted id would never
-            // correlate with the stream's tool part, so refuse instead.
-            if (options?.toolCallId === undefined) {
-              throw new Error("tool execute called without toolCallId");
-            }
-            const call: Tool.Call = {
-              id: options.toolCallId,
-              tool: spec.name,
-              input: args,
-            };
-            const result = await executor(call, {
-              signal: options?.abortSignal ?? abortSignal,
-            });
-            return {
-              output: result.output,
-              ...(result.isError === true && { isError: true }),
-            };
-          },
-        }),
       };
     });
     const lastToolName = wireNames[wireNames.length - 1];
@@ -311,7 +283,7 @@ export async function run(
       ...(input.maxTokens === undefined ? {} : { maxOutputTokens: input.maxTokens }),
       maxRetries: 0,
       stopWhen: [
-        ai.stepCountIs(input.maxSteps ?? 24),
+        ai.stepCountIs(1),
         ...(input.yieldAtInputTokens === undefined
           ? []
           : [
@@ -379,6 +351,7 @@ export async function run(
     sink,
     toolNames: originalByWire,
     maxRetryAttempts: input.maxRetryAttempts,
+    externalTools: true,
     trace: {
       traceId,
       sessionId: sessionID,

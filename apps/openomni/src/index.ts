@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { processEntryPath } from "./process-entry-path";
 import { configuredCompaction } from "./compaction/strategy";
 import { seedKernelPolicyRows } from "./policy-seed";
@@ -5,6 +6,8 @@ import {
   type ChatAgentConfig,
   closeSessions,
   type SessionRuntime,
+  getSessionHandle,
+  ExecutionApprovalError,
   sweepSessions,
 } from "@openomni/agent";
 import {
@@ -60,8 +63,13 @@ import { createCellRegistry } from "./tools/cell-registry";
 import type { CellPorts } from "./tools/execution/run-code";
 
 interface StartOptions {
+  readonly sessionRuntime?: Pick<
+    SessionRuntime,
+    "clock" | "approvalTimeoutMs" | "scheduleApprovalTimeout"
+  >;
   readonly config?: OpenOmniConfig;
   readonly llm?: ChatAgentConfig["llm"];
+  readonly toolDefinitions?: readonly import("@openomni/protocol").AnyToolDefinition[];
 }
 
 /**
@@ -233,7 +241,22 @@ export async function startOpenOmni(options: StartOptions = {}) {
       string,
       readonly import("@openomni/protocol").AnyToolDefinition[]
     >();
-    const sessionRuntime: SessionRuntime = { observations: Bus };
+    const sessionRuntime: SessionRuntime = {
+      ...options.sessionRuntime,
+      observations: Bus,
+      async authorizeApproval(credential, request) {
+        const expected = Buffer.from(config.wsToken ?? "");
+        const presented = Buffer.from(credential);
+        if (
+          expected.length === 0 ||
+          presented.length !== expected.length ||
+          !timingSafeEqual(presented, expected)
+        ) {
+          throw new ExecutionApprovalError("unauthenticated");
+        }
+        return { kind: "owner", principalId: "owner", evidenceId: `ws-owner:${request.id}` };
+      },
+    };
     await composer.mount("session.handles", (ctx) => {
       ctx.effect(() => closeSessions(sessionRuntime));
     });
@@ -385,6 +408,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
           };
 
     residentDeliver = createResident({
+      toolDefinitions: options.toolDefinitions,
       model: config.model,
       ...(config.model.fallbacks === undefined ? {} : { modelFallbacks: config.model.fallbacks }),
       apiKey: config.model.apiKey,
@@ -526,6 +550,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
     });
     return {
       port: boundPort,
+      sessions: { get: (id: string) => getSessionHandle(id, sessionRuntime) },
       // The boot's honest channel record: where config came from and why each
       // declared row did or did not mount (provision_status reads this later).
       channels: { source: liveSupervisor().source(), statuses: liveSupervisor().status() },

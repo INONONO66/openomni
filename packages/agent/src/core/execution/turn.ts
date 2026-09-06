@@ -1,12 +1,13 @@
+import { buildSystemPrompt, prepareTurnTools } from "./tool-placement";
 import type { RunInput, Sink } from "@openomni/llm";
-import { Placement } from "@openomni/placement";
-import { type Message, Operational, Tool } from "@openomni/protocol";
-import type { BusEvent } from "@openomni/protocol";
-import { effectiveMaxToolCalls, recordToolCall } from "../budget";
+import { type Message, type BusEvent, Operational } from "@openomni/protocol";
+import { effectiveMaxToolCalls } from "../budget";
 import { Compaction, type CompactionSession } from "../../compaction";
+import { executeCompaction } from "../../compaction/execute-cut";
 import { resolveCompactionGeometry } from "../../compaction/geometry";
 import { measuredContextTokens } from "../../compaction/measure";
-import { createAssistantMessage } from "../message-factory";
+import { createAssistantMessage, createUserMessage, withMessageId } from "../message-factory";
+import { settleModelTools } from "./tool-wave";
 import * as Retry from "../retry";
 import type { AgentResult, ChatAgentConfig, TokenUsage } from "../types";
 import { emitErrorRetry, emitTurnComplete, runResult } from "./run-events";
@@ -28,152 +29,6 @@ import {
   type TurnArtifacts,
 } from "./state";
 
-export function buildSystemPrompt(
-  basePrompt: string | undefined,
-  tools: Tool.Spec[],
-): string | undefined {
-  const toolPrompts = tools
-    .filter((t) => t.prompt)
-    .map((t) => `## Tool: ${t.name}\n${t.prompt}`)
-    .join("\n\n");
-
-  if (!toolPrompts) return basePrompt;
-  if (!basePrompt) return toolPrompts;
-  return `${basePrompt}\n\n---\n\n${toolPrompts}`;
-}
-
-export function assertToolExecutor(config: ChatAgentConfig): void {
-  if ((config.tools?.length ?? 0) > 0 && !config.toolExecutor) {
-    throw new Error("toolExecutor is required when tools are provided");
-  }
-}
-
-/**
- * Config-time validation: building the metadata map throws on a key
- * collision (see {@link buildToolMetadataMap}). Run alongside
- * `assertToolExecutor` so an ambiguous catalog refuses the run before it is
- * opened, instead of surfacing mid-turn as a retryable "tool" error.
- */
-export function assertUnambiguousToolMetadata(config: ChatAgentConfig): void {
-  buildToolMetadataMap(config.tools);
-}
-
-/**
- * Placement decides EXECUTION, not just advertisement. Filtering the catalog
- * only stops the model from being told about a tool; a model that names a
- * placement-filtered tool anyway (forged call, stale transcript, cached
- * catalog) must still be refused, or the capability requirement is
- * decorative. This wrapper is the single enforcement point for that refusal.
- *
- * It refuses ONLY tools this run's placement fold declared unofferable, under
- * every identity an executor can dispatch them by (`Tool.executableNames`).
- * Reservation is unconditional: a catalog where an offerable tool's literal
- * name is also a refused tool's alias is ambiguous at the executor's own
- * dispatch table, so the gate fails closed rather than resolving it by
- * catalog order. A name absent from the configured catalog is not a placement
- * matter — dynamic executors (MCP relays, host-registered tools) legitimately
- * resolve names the loop never listed, and rejecting those here would be
- * placement overreaching into tool resolution.
- *
- * `Placement.resolveTools` answers only what may be OFFERED, so this wrapper
- * is the other half: it refuses a call to a tool the placement fold declined
- * to offer, naming what was missing. Exported because every door into a tool
- * catalog needs it, and a second spelling of this refusal is how the two
- * would drift — the loop applies it to what the model calls; a host that
- * lets code call tools directly applies it to that door, which the loop
- * never sees.
- */
-export function placementGatedExecutor(
-  decisions: readonly Placement.ToolDecision[],
-  execute: NonNullable<ChatAgentConfig["toolExecutor"]>,
-): NonNullable<ChatAgentConfig["toolExecutor"]> {
-  const refused = new Map<string, NonNullable<Tool.Spec["requires"]>>();
-  for (const decision of decisions) {
-    if (decision.offerable) continue;
-    const requires = decision.tool.requires ?? [];
-    for (const name of Tool.executableNames(decision.tool.name)) refused.set(name, requires);
-  }
-  if (refused.size === 0) return execute;
-  return async (call, context) => {
-    const requires = refused.get(call.tool);
-    if (requires === undefined) return execute(call, context);
-    return {
-      id: call.id,
-      toolCallId: call.id,
-      toolName: call.tool,
-      output: `tool "${call.tool}" requires capabilities no attached target holds: ${requires.join(", ")}`,
-      isError: true,
-      settlement: "settled",
-    } as const;
-  };
-}
-
-type ToolPolicyMetadata = Pick<NonNullable<ChatAgentConfig["tools"]>[number], "descriptor"> & {
-  readonly labels?: readonly string[];
-};
-
-function buildToolMetadataMap(tools: ChatAgentConfig["tools"]): Map<string, ToolPolicyMetadata> {
-  const metadata = new Map<string, ToolPolicyMetadata>();
-  // Every key names the tool that claimed it. Two tools resolving to the same
-  // key (e.g. `a_b` alongside `a.b`, whose underscore-mangled alias is also
-  // `a.b`) used to be a silent last-writer-wins — the later tool's labels
-  // answered the earlier tool's policy lookups (#606 re-audit). A collision
-  // is a configuration error; refuse it loudly, naming both tools.
-  // Owners are keyed by tool IDENTITY, not name: two distinct tools carrying
-  // the same name (the underscore-mangling seam can manufacture that) must
-  // collide too, or the later one silently answers the earlier one's lookups.
-  const owners = new Map<string, { readonly name: string; readonly tool: object }>();
-  const claim = (key: string, tool: { name: string }, value: ToolPolicyMetadata): void => {
-    const owner = owners.get(key);
-    if (owner !== undefined && owner.tool !== tool) {
-      throw new Error(
-        `tool metadata collision: "${key}" is claimed by both "${owner.name}" and "${tool.name}"`,
-      );
-    }
-    owners.set(key, { name: tool.name, tool });
-    metadata.set(key, value);
-  };
-  for (const tool of tools ?? []) {
-    const labels = tool.labels ?? tool.descriptor?.labels;
-    if (labels === undefined && tool.descriptor === undefined) continue;
-    const value = {
-      ...(labels !== undefined && { labels }),
-      ...(tool.descriptor !== undefined && { descriptor: tool.descriptor }),
-    };
-    claim(tool.name, tool, value);
-    const canonical = labels?.find((label) => label.startsWith("tool:"))?.slice(5);
-    if (canonical) claim(canonical, tool, value);
-    const dotted = tool.name.replace(/_/g, ".");
-    if (dotted !== tool.name) claim(dotted, tool, value);
-  }
-  return metadata;
-}
-
-interface PreparedTurnTools {
-  readonly allTools: Tool.Spec[];
-  readonly executor: NonNullable<ChatAgentConfig["toolExecutor"]> | undefined;
-}
-
-function prepareTurnTools(state: RunState, config: ChatAgentConfig): PreparedTurnTools {
-  const toolTargets = config.toolTargets ?? [{ kind: "host", capabilities: [] } as const];
-  const placement = Placement.resolveTools(config.tools ?? [], toolTargets);
-  const allTools = placement
-    .filter((decision) => decision.offerable)
-    .map((decision) => decision.tool);
-  const configuredExecutor = config.toolExecutor;
-  const executor = configuredExecutor
-    ? placementGatedExecutor(placement, async (call, context) => {
-        const startedAt = Date.now();
-        try {
-          return await configuredExecutor(call, context);
-        } finally {
-          state.budgetState = recordToolCall(state.budgetState, Date.now() - startedAt);
-        }
-      })
-    : undefined;
-  return { allTools, executor };
-}
-
 export async function buildTurn(
   state: RunState,
   config: ChatAgentConfig,
@@ -194,12 +49,7 @@ export async function buildTurn(
     outputTokens: 0,
     totalTokens: 0,
   };
-  // The step cap is the REMAINING budget from the pool the budget actually
-  // enforces (-1 = unlimited): a yielded-and-continued run re-enters here,
-  // and a cap from any other pool starves or multiplies what an operator
-  // sized once. Tool calls and steps are different units — a parallel-call
-  // step spends several from the pool — so the cap is conservative, and an
-  // early end is a lossless re-entry, not a loss.
+  // The session loop spends the remaining tool-call budget; provider I/O is one step.
   const toolCallPool = effectiveMaxToolCalls(config.budget);
   const stepCap =
     toolCallPool === -1
@@ -227,6 +77,8 @@ export async function buildTurn(
   return {
     type: "ready",
     turn: {
+      toolExecutor: tools.executor,
+      refusedTools: tools.refused,
       runInput: {
         events: config.events,
         // ALIASING INVARIANT: this is `state.messages` itself, not a copy.
@@ -246,7 +98,6 @@ export async function buildTurn(
         auth: providerModel.providerID === config.model.provider ? config.auth : undefined,
         ...(config.transport === undefined ? {} : { transport: config.transport }),
         allowAuthFallback: config.allowAuthFallback,
-        toolExecutor: tools.executor,
         toolChoice: configuredToolChoice,
         maxSteps: stepCap,
         // Agent owns retry attempts, their backoff, and fallback selection.
@@ -362,15 +213,26 @@ export async function handleStop(
   turn: TurnArtifacts,
   compaction: CompactionSession | undefined,
 ): Promise<StopOutcome> {
+  const assistantIndex = state.messages.length;
+  const initialAssistant = resolveTurnAssistant(config.events, state, turn, agentBase);
+  appendRunMessages(state, [initialAssistant]);
+  const afterModelPrompts = await drainStepBoundary(state, config, "after_llm");
+  const toolCalls = await settleModelTools(turn, config, state);
+  const afterWavePrompts = await drainStepBoundary(state, config, "after_tools");
   emitTurnComplete(config.events, state, agentBase, turn.turnUsage);
   const turnText = assistantTextOf(turn.turnAssistant.message);
   const step = { type: "text" as const, content: turnText };
   appendRunStep(state, step);
   if (config.onStepFinish) await config.onStepFinish(step);
-  const assistantMessage = resolveTurnAssistant(config.events, state, turn, agentBase);
-  appendRunMessages(state, [assistantMessage]);
+  const assistantMessage = turn.turnAssistant.message ?? initialAssistant;
+  state.messages[assistantIndex] = assistantMessage;
   prepareCompactionAfterContinue(state, config, compaction);
 
+  if (toolCalls > 0 || afterModelPrompts + afterWavePrompts > 0) {
+    await applyCompaction(state, config, agentBase, compaction, "threshold");
+    advanceRunTurn(state);
+    return "continue";
+  }
   const yielded = turnYield(turn, assistantMessage);
   if (yielded === "steer") {
     advanceRunTurn(state);
@@ -573,10 +435,18 @@ async function applyCompaction(
 
   state.lastCompactionDeferred = undefined;
   const candidate = compaction?.candidate();
-  const result = await Compaction.compact(state.messages, options, agentBase, config.events, {
-    trigger,
-    ...(measuredTokens === undefined ? {} : { measuredTokens }),
-    ...(candidate === undefined ? {} : { candidate }),
+  const result = await executeCompaction({
+    history: state.messages,
+    options,
+    identity: agentBase,
+    events: config.events,
+    executor: config.executor,
+    signal: config.signal,
+    dispatch: {
+      trigger,
+      ...(measuredTokens === undefined ? {} : { measuredTokens }),
+      ...(candidate === undefined ? {} : { candidate }),
+    },
   });
   if (candidate !== undefined) compaction?.consume();
   state.lastCompactionIneffective = result.ineffective;
@@ -612,4 +482,19 @@ function resolveTurnAssistant(
   });
   const parentID = state.messages.at(-1)?.info.id ?? "";
   return createAssistantMessage("", parentID, state.sessionId);
+}
+
+export async function drainStepBoundary(
+  state: RunState,
+  config: ChatAgentConfig,
+  boundary: "before_llm" | "after_llm" | "after_tools",
+): Promise<number> {
+  const drained = await config.boundary?.(boundary);
+  if (drained?.interrupted || config.signal?.aborted) throw Retry.abortError();
+  for (const message of drained?.messages ?? []) {
+    appendRunMessages(state, [
+      withMessageId(createUserMessage(message.text, state.sessionId), message.id),
+    ]);
+  }
+  return drained?.messages.length ?? 0;
 }

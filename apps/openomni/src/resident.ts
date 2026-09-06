@@ -12,7 +12,7 @@ import {
   type SessionRuntime,
 } from "@openomni/agent";
 import type { Placement } from "@openomni/placement";
-import type { Gateway, Ingress, Model } from "@openomni/protocol";
+import type { AnyToolDefinition, Gateway, Ingress, Model } from "@openomni/protocol";
 import { Bus, newTraceId } from "@openomni/agent";
 import { chatProviderConfig } from "./composition/chat-provider";
 import { SessionBindingCache } from "./composition/session-bindings";
@@ -56,6 +56,7 @@ export interface ResidentOptions {
   readonly llm?: ChatAgentConfig["llm"];
   readonly compaction?: ChatAgentConfig["compaction"];
   readonly tools: CatalogPorts;
+  readonly toolDefinitions?: readonly AnyToolDefinition[];
   readonly targets: () => readonly Placement.ToolTarget[];
   readonly sessionRuntime?: SessionRuntime;
 }
@@ -131,7 +132,7 @@ export function createResident(options: ResidentOptions): ResidentDelivery {
 
   function createBinding(sessionId: string): ResidentBinding {
     const origin: DelegationOrigin = { role: "resident", depth: 0, sessionId };
-    const definitions = createTools(options.tools, origin);
+    const definitions = [...createTools(options.tools, origin), ...(options.toolDefinitions ?? [])];
     const chatRunner = createSessionChatRunner({
       prepare(input) {
         const dispatcher = createTurnDispatcher(definitions, input, runtime);
@@ -160,6 +161,14 @@ export function createResident(options: ResidentOptions): ResidentDelivery {
             tools,
             toolTargets: options.targets(),
             toolChoice: evidenceOnly || tools.length === 0 ? "none" : "auto",
+            toolWave: (calls, signal) =>
+              evidenceOnly
+                ? Promise.all(calls.map((call) => refuseEvidenceOnlyToolCall(call)))
+                : dispatcher.executeWave(calls, {
+                    sessionId: input.sessionId,
+                    turnId: input.turnId,
+                    signal,
+                  }),
             toolExecutor: evidenceOnly
               ? refuseEvidenceOnlyToolCall
               : toolExecutorForTurn(dispatcher, input),

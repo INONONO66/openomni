@@ -208,6 +208,7 @@ export namespace SessionGeneration {
       name: Identifier,
       inputSchema: PlainValueSchema,
       category: ToolCategory,
+      sequential: z.literal(true).optional(),
     })
     .strict();
   export type Tool = z.infer<typeof Tool>;

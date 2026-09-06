@@ -5,7 +5,13 @@ import { createAssistantMessage } from "../src/core/message-factory";
 import { RunEvents } from "../src/core/execution/events";
 import { ChatAgent } from "../src/core/chat-agent";
 import { Bus } from "../src/index";
-import { createMockLlmConfig, createStopOutcome, mockProviderData, mockProviderModel, type MockLlmFn } from "./helpers/mock-llm";
+import {
+  createMockLlmConfig,
+  createStopOutcome,
+  mockProviderData,
+  mockProviderModel,
+  type MockLlmFn,
+} from "./helpers/mock-llm";
 import { runInput } from "./helpers/run-input";
 
 const model = { provider: "anthropic", id: "claude-3-haiku-20240307" };
@@ -13,7 +19,11 @@ function agent(run: MockLlmFn) {
   return ChatAgent.create({
     events: Bus,
     model,
-    llm: createMockLlmConfig({ getModels: async () => mockProviderData, fromModelsDevModel: () => mockProviderModel, run }),
+    llm: createMockLlmConfig({
+      getModels: async () => mockProviderData,
+      fromModelsDevModel: () => mockProviderModel,
+      run,
+    }),
   });
 }
 
@@ -22,7 +32,13 @@ describe("ChatAgent public run contract", () => {
     const result = await agent(async (_input, sink) => {
       const message = createAssistantMessage("answer", "", "session");
       if (message.info.role !== "assistant") throw new Error("expected assistant message");
-      sink.onMessage({ ...message, info: { ...message.info, tokens: { input: 8, output: 5, reasoning: 0, cache: { read: 0, write: 0 } } } });
+      sink.onMessage({
+        ...message,
+        info: {
+          ...message.info,
+          tokens: { input: 8, output: 5, reasoning: 0, cache: { read: 0, write: 0 } },
+        },
+      });
       return createStopOutcome();
     }).run(runInput([{ role: "user", content: "hello" }]));
     expect(result).toMatchObject({
@@ -48,7 +64,10 @@ describe("ChatAgent public run contract", () => {
       llm: createMockLlmConfig({
         getModels: async () => mockProviderData,
         fromModelsDevModel: () => mockProviderModel,
-        run: async (input) => { observed = input; return createStopOutcome(); },
+        run: async (input) => {
+          observed = input;
+          return createStopOutcome();
+        },
       }),
     }).run(runInput([{ role: "user", content: "hello" }]));
     expect(observed).toMatchObject({
@@ -66,11 +85,16 @@ describe("ChatAgent public run contract", () => {
     const result = await ChatAgent.create({
       events: Bus,
       model,
-      onStepFinish: (step) => { seen.push(step); },
+      onStepFinish: (step) => {
+        seen.push(step);
+      },
       llm: createMockLlmConfig({
         getModels: async () => mockProviderData,
         fromModelsDevModel: () => mockProviderModel,
-        run: async (_input, sink) => { sink.onMessage(createAssistantMessage("done", "", "session")); return createStopOutcome(); },
+        run: async (_input, sink) => {
+          sink.onMessage(createAssistantMessage("done", "", "session"));
+          return createStopOutcome();
+        },
       }),
     }).run(runInput([{ role: "user", content: "hello" }]));
     expect(seen).toEqual(result.steps);
@@ -78,35 +102,26 @@ describe("ChatAgent public run contract", () => {
 
   it("rejects incomplete trace identity before provider execution", async () => {
     let calls = 0;
-    await expect(agent(async () => { calls += 1; return createStopOutcome(); }).run({ messages: [{ role: "user", content: "hello" }] })).rejects.toThrow("requires a trace context");
+    await expect(
+      agent(async () => {
+        calls += 1;
+        return createStopOutcome();
+      }).run({ messages: [{ role: "user", content: "hello" }] }),
+    ).rejects.toThrow("requires a trace context");
     expect(calls).toBe(0);
   });
 
   it("passes the configured abort signal through the LLM tool bridge", async () => {
     let capturedContext: Tool.ExecutionContext | undefined;
+    let providerSteps = 0;
     mock.module("ai", () => ({
       jsonSchema: (schema: object) => ({ jsonSchema: schema }),
       stepCountIs: () => () => false,
-      streamText: (args: {
-        tools: Record<
-          string,
-          {
-            execute?: (
-              input: Record<string, string>,
-              options: { toolCallId: string },
-            ) => Promise<{ output: string }>;
-          }
-        >;
-      }) => ({
+      streamText: () => ({
         fullStream: (async function* () {
-          const output = await args.tools.lookup?.execute?.({}, { toolCallId: "call-1" });
-          yield { type: "tool-call", toolCallId: "call-1", toolName: "lookup", input: {} };
-          yield {
-            type: "tool-result",
-            toolCallId: "call-1",
-            toolName: "lookup",
-            output: output?.output ?? "missing",
-          };
+          providerSteps += 1;
+          if (providerSteps === 1)
+            yield { type: "tool-call", toolCallId: "call-1", toolName: "lookup", input: {} };
           yield { type: "finish" };
         })(),
       }),
@@ -144,11 +159,29 @@ describe("ChatAgent public run contract", () => {
     const configured = ChatAgent.create({
       events: Bus,
       model,
-      tools: [{ name: "lookup", description: "Lookup", inputSchema: { type: "object" }, safe: true, placement: "host", requires: [] }],
-      llm: createMockLlmConfig({ getModels: async () => mockProviderData, fromModelsDevModel: () => mockProviderModel, run: async () => { calls += 1; return createStopOutcome(); } }),
+      tools: [
+        {
+          name: "lookup",
+          description: "Lookup",
+          inputSchema: { type: "object" },
+          safe: true,
+          placement: "host",
+          requires: [],
+        },
+      ],
+      llm: createMockLlmConfig({
+        getModels: async () => mockProviderData,
+        fromModelsDevModel: () => mockProviderModel,
+        run: async () => {
+          calls += 1;
+          return createStopOutcome();
+        },
+      }),
     });
     try {
-      await expect(configured.run(runInput([{ role: "user", content: "hello" }]))).rejects.toThrow("toolExecutor");
+      await expect(configured.run(runInput([{ role: "user", content: "hello" }]))).rejects.toThrow(
+        "toolExecutor",
+      );
       expect(retries).toEqual([]);
       expect(calls).toBe(0);
     } finally {
@@ -254,7 +287,10 @@ describe("ChatAgent loop controls", () => {
       llm: createMockLlmConfig({
         getModels: async () => mockProviderData,
         fromModelsDevModel: () => mockProviderModel,
-        run: async (input) => { maxSteps = input.maxSteps; return createStopOutcome(); },
+        run: async (input) => {
+          maxSteps = input.maxSteps;
+          return createStopOutcome();
+        },
       }),
     }).run(runInput([{ role: "user", content: "hello" }]));
     expect(maxSteps).toBe(7);
@@ -264,16 +300,21 @@ describe("ChatAgent loop controls", () => {
     const controller = new AbortController();
     controller.abort();
     let calls = 0;
-    await expect(ChatAgent.create({
-      events: Bus,
-      model,
-      signal: controller.signal,
-      llm: createMockLlmConfig({
-        getModels: async () => mockProviderData,
-        fromModelsDevModel: () => mockProviderModel,
-        run: async () => { calls += 1; return createStopOutcome(); },
-      }),
-    }).run(runInput([{ role: "user", content: "hello" }]))).rejects.toThrow("aborted");
+    await expect(
+      ChatAgent.create({
+        events: Bus,
+        model,
+        signal: controller.signal,
+        llm: createMockLlmConfig({
+          getModels: async () => mockProviderData,
+          fromModelsDevModel: () => mockProviderModel,
+          run: async () => {
+            calls += 1;
+            return createStopOutcome();
+          },
+        }),
+      }).run(runInput([{ role: "user", content: "hello" }])),
+    ).rejects.toThrow("aborted");
     expect(calls).toBe(0);
   });
 });
