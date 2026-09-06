@@ -257,22 +257,39 @@ it("freezes unsettled slots as canceled at the abort event, even if a body resol
   expect(await pending).toEqual([{ status: "cancelled" }]);
 });
 
-it("does not let a late body fulfillment overwrite cancellation", async () => {
-  const controller = new AbortController();
-  const entered = Promise.withResolvers<void>();
-  const release = Promise.withResolvers<null>();
-  const wave = runWaveBodies([{
-    async run() {
-      entered.resolve();
-      return release.promise;
-    },
-  }], { signal: controller.signal });
+for (const settlement of ["fulfillment", "rejection"] as const) {
+  it(`does not let a late body ${settlement} overwrite cancellation`, async () => {
+    const controller = new AbortController();
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<null>();
+    const effects: Promise<void>[] = [];
+    const wave = runWaveBodies([{
+      // Return the raw promise: an async adoption wrapper would let the wave
+      // snapshot cancellation before the overwrite regression becomes visible.
+      run() {
+        entered.resolve();
+        return release.promise;
+      },
+    }], { signal: controller.signal, retain: (effect) => { effects.push(effect); } });
 
-  await entered.promise;
-  controller.abort();
-  release.resolve(null);
-  await expect(wave).resolves.toEqual([{ status: "cancelled" }]);
-});
+    try {
+      await bounded(entered.promise);
+      controller.abort();
+      if (settlement === "rejection") release.reject(new Error("late rejection"));
+      else release.resolve(null);
+      // Observe after the scheduler's actual raw-body effect has settled, not
+      // merely after cancellation detached its caller.
+      expect(await bounded(Promise.allSettled(effects))).toEqual([
+        { status: "fulfilled", value: undefined },
+      ]);
+      await expect(bounded(wave)).resolves.toEqual([{ status: "cancelled" }]);
+    } finally {
+      release.resolve(null);
+      await bounded(Promise.allSettled(effects));
+      await bounded(wave);
+    }
+  });
+}
 
 it("does not enter a body when cancellation predates the wave", async () => {
   const controller = new AbortController();

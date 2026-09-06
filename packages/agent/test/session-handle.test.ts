@@ -14,6 +14,7 @@ import {
   type BusEvent,
   type LedgerAction,
   L0Observation,
+  PlainValueSchema,
   type ObservationSink,
   type PolicyRow,
   type SessionGeneration,
@@ -435,6 +436,57 @@ describe("durable session handle", () => {
       });
     }
   });
+
+  for (const sample of [
+    { name: "required counters", valid: true, usage: { inputTokens: 4, outputTokens: 5, totalTokens: 9 } },
+    { name: "optional counters", valid: true, usage: {
+      inputTokens: 4, outputTokens: 5, totalTokens: 9,
+      reasoningTokens: 2, cacheReadTokens: 3, cacheWriteTokens: 1,
+    } },
+    { name: "missing required counter", valid: false, usage: { inputTokens: 4, outputTokens: 5 } },
+    { name: "invalid optional counter", valid: false, usage: {
+      inputTokens: 4, outputTokens: 5, totalTokens: 9, reasoningTokens: "invalid",
+    } },
+    { name: "unknown counter", valid: false, usage: {
+      inputTokens: 4, outputTokens: 5, totalTokens: 9, unknownTokens: 1,
+    } },
+  ] as const) {
+    test(`validates transformed session usage with ${sample.name}`, async () => {
+      await Storage.withIsolation(async () => {
+        Storage.initialize({ dbPath: ":memory:", observationSink: sink });
+        seedPolicy([{
+          name: "transform-usage", kind: "turn", phase: "post",
+          match: { encodingVersion: 1, value: { op: "session" } },
+          verdict: { encodingVersion: 1, value: {
+            type: "transform", name: "redact", paths: ["result.usage"],
+            replacement: PlainValueSchema.parse(sample.usage),
+          } },
+          priority: 2_000,
+        }]);
+        const isolatedRuntime = { ...runtime };
+        try {
+          const handle = session(residentOptions("usage-transform", async () => ({
+            kind: "result", text: "result", finishReason: "stop",
+            usage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 },
+          })), isolatedRuntime);
+          const result = await bounded(handle.prompt("measure"), "transformed usage terminal");
+          if (sample.valid) {
+            expect(result).toEqual({ kind: "result", text: "result", finishReason: "stop", usage: sample.usage });
+          } else {
+            expect(result).toMatchObject({
+              kind: "error", cause: { name: "SessionPolicyRefusal", reason: "invalid_output" },
+            });
+          }
+          expect(SessionHandleStore.tree(handle.id)
+            .map(SessionHandleStore.turnTerminal).filter((value) => value !== undefined))
+            .toMatchObject([{ kind: sample.valid ? "result" : "error" }]);
+        } finally {
+          await closeSessions(isolatedRuntime);
+          Storage.reset();
+        }
+      });
+    });
+  }
 
   test("turn policy denial distinguishes body-zero pre from irreversible post", async () => {
     for (const phase of ["pre", "post"] as const) {

@@ -110,6 +110,14 @@ it("snapshots removed evidence independently of mutable source messages", () => 
   expect(restoreCompactionProjection(plan.projection, plan.record)).toEqual(original);
 });
 
+it("refuses compaction restoration when the original kept boundary is missing", () => {
+  const tail = assistant("last");
+  const plan = createCompactionPlan([assistant("first"), tail], [tail], 450);
+  // A concurrent replacement removed the kept boundary; restoring would splice
+  // unrelated history onto the discarded entries rather than undo this cut.
+  expect(() => restoreCompactionProjection([assistant("unrelated")], plan.record)).toThrow(Error);
+});
+
 it("retains concurrent entries after restoring a full-range elision", () => {
   // Given: both originals were replaced with elided same-ID entries.
   const prior = [assistant("first"), assistant("last")];
