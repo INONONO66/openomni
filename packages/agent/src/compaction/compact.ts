@@ -4,6 +4,7 @@ import { RunEvents } from "../core/execution/events";
 import { resolveCompactionGeometry, type CompactionYield } from "./geometry";
 import { elideToolOutputs, type ToolOutputElision } from "./reduce";
 import type { CompactionCandidate } from "./speculate";
+import { createCompactionPlan, type CompactionRecord } from "./durable";
 
 interface SummarizationBudget {
   readonly maxInputTokens: number;
@@ -63,6 +64,7 @@ export interface CompactionOptions {
 type ResolvedCompactionOptions = CompactionOptions & { contextWindowTokens: number };
 
 interface CompactionResult {
+  readonly record?: CompactionRecord;
   messages: Message.WithParts[];
   compacted: boolean;
   removedCount: number;
@@ -469,7 +471,12 @@ export namespace Compaction {
       );
       const ineffective = result.compacted && isIneffectiveCompaction(savedTokens, tokensBefore);
       const completed = result.compacted
-        ? { ...result, yield: { savedTokens, tokensBefore }, ineffective }
+        ? {
+            ...result,
+            record: createCompactionPlan(messages, result.messages, tokensBefore).record,
+            yield: { savedTokens, tokensBefore },
+            ineffective,
+          }
         : result;
       events.publish(RunEvents.CompactionCompleted, {
         ...identity,
