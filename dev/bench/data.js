@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788725600073,
+  "lastUpdate": 1788726530690,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -66401,6 +66401,100 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 839976,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ede6a7f07bbbf52dbb7472a3721ab04025547ad5",
+          "message": "feat(desktop): gateway transport wiring, fonts, running dot (#990)\n\n* feat(desktop): gateway transport wiring, fonts, running dot\n\nThree changes to the Electron console, each tested failing-first.\n\nGateway transport. The main process resolves the endpoint from the\nenvironment once at startup — OPENOMNI_WS_URL, else\nws://127.0.0.1:<OPENOMNI_WS_PORT or 3000>/ws — and answers one\nipcMain.handle behind window.desktop.gateway(). The port default and the\n/ws path are literals copied from apps/openomni/src/config.ts and\nindex.ts with the source named at each, because the topology forbids the\ndependency that would let the console read them. contextIsolation stays\non, nodeIntegration off, sandbox on, preload CJS. The renderer selects\nthe gateway transport when an endpoint resolves and the mock otherwise,\nin one pure function; the showcase and shoot-chat.ts have no bridge and\nkeep the mock. The token rides the WebSocket subprotocol pair\n[\"auth\", <token>] that packages/channels reads.\n\nTwo runtime defects surfaced doing it, both silent before this PR needed\nthe bridge to work: the preload bundle inlined the electron npm CLI shim\ninstead of externalizing the runtime module, so contextBridge was\nundefined and no bridge was ever exposed; and the renderer's CSP had no\nconnect-src, so default-src 'self' blocked the gateway socket, and no\nfont-src, so the build's inlined font subsets were refused.\n\nFonts. pretendard and @fontsource-variable/jetbrains-mono were already\nbundled; what was missing is the gate. packages/ui/test/fonts.test.ts\nfails on any absolute URL the stylesheet we author would resolve, in the\nCSS and in the imported package CSS, and pins each token to its family\nplus a system fallback.\n\nRunning dot. A running session's reason line is now the accent dot\nalone: its reason for ranking where it does is that it is running, which\nthe pulsing mark on that line already says, and the word beside it was\nthat mark's caption. Every other class keeps its phrase, because every\nother class is ranked on a fact the dot cannot state. The state stays in\nthe accessibility tree as role=\"img\" with aria-label and title — a bare\nspan is role generic, whose accessible name no mapping exposes.\n\nVerification: bun run build, turbo check-types, tsc -p script, check-deps,\ncheck-import-cycles, check-topology, check-dead-exports, lint, ultracite,\nbun test (3355 pass / 0 fail), apps/desktop build — all exit 0. Bridge and\nsubprotocol exercised end-to-end under real Electron against a live socket\nserver.\n\n* fix(desktop): keep fabricated history and unusable tokens off the wire\n\nThree defects found reviewing the transport swap, each one invisible in a\nscreenshot because the surface looks correct in every case.\n\nA live transport was seeded with the mock's fixture. `App` built every\n`Chat` from `timelines` regardless of which transport was behind it, so\na real gateway session opened on tool calls that never ran, a cost that\nwas never spent, and a pending approval whose Approve button would have\ndecided a command no machine was asked to execute — a fabricated\nconversation wearing a real connection. The fixture is now seeded only\nwhen no transport was injected, which is exactly the mock surface.\n\nA token that cannot be a subprotocol crashed the first send. `new\nWebSocket(url, protocols)` throws a bare SyntaxError on a value outside\nthe RFC 9110 token grammar, from inside the transport, so a space in\nOPENOMNI_WS_TOKEN surfaced as \"Wrong protocol for WebSocket\" on the\nOwner's first message with nothing naming the variable. It is refused at\nselection now, by name and without echoing the credential.\n\nThat refusal threw at module scope in the renderer, which is a blank\nwindow. `main.tsx` renders the message as the surface instead. It does\nNOT fall back to the mock: answering a misconfiguration with a scripted\nconversation would hide it behind something that looks like it works.\n\nVerified under real Electron against a live socket server: a good token\nreaches the wire as \"auth, <token>\" and renders the reply with no\nfixture present, and a malformed one prints the named message instead of\na blank page. Full suite 3359 pass / 0 fail; all gates exit 0.\n\n* test(desktop): narrow subprotocol offer on the request for Bun 1.3.6 handshake\n\nCI (Bun 1.3.6) failed 'the token reaches the wire': passing a response\nsec-websocket-protocol header to server.upgrade makes Bun write it twice\nand the client closes before opening. Mirror the production gateway\n(packages/channels websocket.ts) and narrow the request offer instead.",
+          "timestamp": "2026-09-06T20:27:35Z",
+          "tree_id": "eeef45972ed3865149c07a228dffa2e01ef3d474",
+          "url": "https://github.com/INONONO66/openomni/commit/ede6a7f07bbbf52dbb7472a3721ab04025547ad5"
+        },
+        "date": 1788726529354,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1801,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 13734,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 7250,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1795185,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 446938,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 8369702,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 137,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1427,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 762,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 486417,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3361,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 18374,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 170034,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 859690,
             "unit": "ns/op"
           }
         ]
