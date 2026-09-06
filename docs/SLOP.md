@@ -169,3 +169,7 @@ GitHub changes executed and re-read with `gh` on 2026-09-06:
 - **R3-3 (parked):** add a platform-specific `fchdir`/descriptor-backed cwd
   helper for exec so shell startup can inherit the pinned export directory.
   Current contract deliberately accepts the bounded pathname check/spawn TOCTOU.
+
+## #946 cutover working-tree receipt (2026-09-06)
+
+Targeted app/router tests pass for single inbox ingest, actor receipt arms, actual WebSocket final delivery, native child reply, actual process child-to-parent reply, worker actor denial, child rollback, external dedupe, policy observation ids and actor answer/deadline correlation. This is not closure of A3/A10/A17/B3/B4/B7/B10/C4/C5/C8/D3. Core terminal gateway admission, live alarm-owner integration, bounded durable reply-grant recovery and the remaining legacy test migrations are still open. No full gates were run in this child scope.

@@ -144,150 +144,17 @@ from `openomni daemon`, which still manages the Resident service. Example:
 }
 ```
 
-## 3. Delegation contracts (`protocol/src/delegation/`)
+## 3. Session messaging contracts
 
-- `Delegation.WorkerAddress` — `core` (internal loop; scope `inline` =
-  same-process child, `independent` = isolated process) or `actor`
-  (an already-registered external actor). The address says WHO, never HOW;
-  transport selection does not define session identity.
-- `Delegation.Operation`: `notify` (fire-and-forget message; no Wait, no
-  reply expected; terminal `sent` at transport acceptance; actor addresses
-  only), `ask` (a question; the reply settles it; core inline|independent or
-  actor), or `assign` (commissioned work held to acceptance criteria; core
-  independent or actor, never inline: an inline child is a volatile in-turn
-  helper, too weak to hold a contract to). `assign` requires acceptance
-  criteria; `ask` and `notify` forbid them.
-- `Delegation.Request`: address + operation + payload + **required deadline**
-  (epoch ms; no unbounded delegation exists, same law as `Wait.expiresAt`).
-- `Delegation.Origin`: who is asking (`role`, `depth`, `sessionId`) plus the
-  lineage the durable lifecycle needs: `parentDelegationId` and
-  `rootDelegationId`, stamped by the admission fold, never self-reported.
-- `Delegation.Handle`: what the requester holds after DURABLE admission,
-  before the work runs: the resolved `Transport` (`inline` | `process` |
-  `channel`), the effective deadline (admission clamps the requested deadline
-  to the parent's when a parent exists), the channel `waitId` when one was
-  prepared, and the tree ids settlement arrives under. The delegation handle
-  is not a polling surface; native worker state is read from its durable child
-  session snapshot, while transport settlement remains on the delegation record.
-- `Delegation.Settled`: seven terminals: `completed`, `failed`, `cancelled`,
-  `delivery_failed`, `no_response`, `interrupted`, `sent`.
-  `delivery_failed` (never reached the worker) and `no_response` (delivered,
-  silence past deadline; `at >= deadline` is a schema invariant) are distinct:
-  unknown-outcome is never read as did-not-happen. `interrupted` is set only
-  by the boot sweep: the host restarted while volatile (inline/process) work
-  was open. `sent` is transport acceptance of a notify, terminal for notify
-  only (pinned on `Delegation.Record`, where operation meets settlement).
-  `completed` means the worker/actor REPORTED completion (or replied);
-  acceptance-criteria enforcement remains deliberately outside this terminal.
-- `Delegation.Record`: the durable row (record-before-act): the Handle
-  fields plus origin, instruction summary, and the `open|settled` lifecycle.
-  Written at admission before any work runs; settled exactly once by the
-  kernel's open→settled compare-and-swap.
-- Events: `delegation.admitted` (the durable record committed),
-  `delegation.delivered` (transport ack), `delegation.settled`. The v1
-  `delegation.requested` event was removed: its meaning changed from
-  "admission decided" to "admission persisted", and a changed meaning is a
-  new event type.
+The model and cell catalog exposes one `sendMessage({to, type, content, replyTo?, deadline?})` tool. Targets are an existing session, a new parent-linked session, or an existing actor. Message types are `message | interrupt | resume`; a committed message becomes a prompt in the recipient inbox. The returned `{messageId, target}` is a handle, not a synchronous join.
 
-Admission (who may commission whom, address→transport resolution, deadline
-clamp, fanout cap), the three transport drivers, and sole settlement
-authority form the **DelegationKernel** in `apps/openomni`; the agent loop
-reaches it only through tools in its catalog (`delegate`, `await_delegation`,
-`cancel_delegation`).
+Every request enters `gateway.ingest(sender, envelope)`. External drivers provide authenticated sender coordinates and raw `Gateway.IngressFacts`; session tools supply their executor-bound session identity. Compiled message pre-policy selects external table A or session table B. Worker actor sends and worker allocation are denied by the default rows. The gateway reads perimeter facts and uses the injected L1 inbox writer; it does not query session state.
 
-### Async lifecycle contract
+L1 supplies source fences, target relationship/depth/fanout facts, and the child's initial configuration. Child configuration and first inbox commit are atomic. Native and process sessions use the same session runner. A process transports a session id and model configuration over shared durable storage; its output carries committed inbox doorbells, not acceptance or completion settlements.
 
-- **Record-before-act, single settlement fold.** `kernel.delegate()` runs:
-  admit → driver `prepare` (the channel driver allocates its durable `waitId`
-  here, so the persisted Handle already links the Wait) → write the
-  `Delegation.Record` → emit `delegation.admitted` → dispatch. Only the
-  kernel settles: a CAS `open→settled` in the store, then the
-  `delegation.settled` event, then the wake. Drivers report outcomes; they
-  never mutate delegation state. The store lives in
-  `packages/ledger/src/delegation/` over `Storage.DelegationSubAdapter`
-  (get / create / compareAndSwapStatus / listOpen / listOpenByRoot /
-  findByWaitId), with memory and SQLite adapters.
-- **Immediate Handle.** Process and channel ask|assign return the Handle as
-  soon as the record commits; settlement arrives later. Inline stays volatile
-  and awaited (the tool call blocks and returns the settlement directly, but
-  the record is still written uniformly, so the boot sweep can mark an
-  interrupted inline). Notify sends, settles `sent` at transport acceptance,
-  and returns Handle plus settlement.
-- **Owner-session wake.** When a non-inline delegation settles, the kernel
-  synthesizes an internal delivery into the origin session: a system-authored
-  message `delegation <id> settled: <status>: <summary>` that commits a prompt
-  to the Resident session inbox and runs through its handle. The settle CAS
-  makes the wake exactly-once.
-- **Re-invocable await and cancel.** `await_delegation(delegationId)` returns
-  the settlement if settled, else subscribes until settlement or the await's
-  own timeout, never past the delegation deadline. `cancel_delegation` aborts
-  the in-flight controller and CAS-settles `cancelled`; cancelling an
-  already-settled delegation returns the existing settlement.
-- **Deadline.** The kernel arms one timer per open record; firing settles
-  `no_response` (at the deadline instant, never before). The channel driver's
-  `waitSpec.expiresAt` IS the same effective deadline: one clock, no second
-  spelling.
-- **Restart matrix.** Boot sweep on startup: open records past their deadline
-  settle `no_response`; open inline/process records settle `interrupted`
-  (volatile transports, no reattach); open channel records with a future
-  deadline re-arm the timer and keep correlating, because the Wait is durable
-  and the record links it by `waitId` (a reply after restart reaches
-  `settleFromReply` and settles `completed` plus wake). Notify settles `sent`
-  at acceptance, so nothing notify stays open across a restart.
-- **Lineage and limits.** Admission computes
-  `effectiveDeadline = min(requested, parentDeadline)` when a parent exists,
-  and enforces a fanout cap of open records per `rootDelegationId` (default
-  8), counted from the durable store at admission. Both live in the admission
-  fold only. Exceeding the cap, a missing parent, a lineage mismatch, or a
-  passed deadline is a typed `AdmissionRefusal`. A native worker is also
-  materialized as a normal role=`worker` session whose `parentId` is the
-  origin session; it owns a separate lease, revision, and configuration
-  generation. The worker-origin restriction stands: a Worker may open only a
-  same-domain inline child (therefore ask only), `maxInlineDepth` 2.
-- **Grants stay separate.** `may_contact` (the #215 send kernel's
-  sender-target grants) is not `may_commission` (admission). The channel
-  driver rides the send kernel for every actor contact; admission decides
-  whether the delegation may exist at all. Neither grant implies the other.
+Child terminal mail preserves final text, terminal kind and original reply binding. Its atomicity, source answer/deadline CAS and exactly-once identity belong to the session/action store. Deadline requests use durable alarm rows, never per-message application timers. The retained Wait fold still owns external reply correlation; it is not a second worker lifecycle.
 
-### Session identity boundary
-
-Native inline and process execution now bind through `composition/worker-session.ts`. One instruction invokes one session-owned runAgent loop; there is no worker drive loop or prose-based BLOCKED policy. The shared executor reads continuation/repetition/stall/blocked limits from the captured policy generation. A waiting worker observes the session terminal instead of invoking a second loop. Process entry retains ACK-before-work, worker result identity, operator transport and shared SQLite; recursive children remain restricted to the permitted inline transport. Channel delegation and its existing Wait/wake lifecycle remain separate until their own cutover.
-
-Resident and native worker execution share `@openomni/agent`'s session handle
-and its per-turn L2 executor. The app retains only catalog data and endpoint
-bindings; prompt, turn, model, and both model/cell tool doors are decided
-against the same pinned compiled-policy snapshot and write into the same
-durable action tree. Model and tool calls get executor-owned intent/result
-pairs; prompt and turn decisions ride the inbox action and turn envelope the
-session machine already committed. Tool Started/Completed observations follow
-those intent/result commits. OpenOmni's storage boot seeds the mandatory
-kernel policy rows before either role materializes a session; missing durable
-policy data refuses execution rather than installing an in-memory fallback.
-The delegation id is reused as the durable worker session id; no
-`delegation-<id>` alias, WorkItem row, or Attempt row is created. The worker
-adapter supplies role-specific tools and system text, while lease acquisition,
-inbox drain, turn envelopes, crash recovery, and hibernation stay in the
-common session machine. Parent/child terminal mail is intentionally not
-specified here: the cross-session `sendMessage` contract belongs to I06; the
-existing delegation settlement wake remains until that slice removes the
-parallel lifecycle.
-
-### Vocabulary fences
-
-- **Transport ≠ Lane.** `Delegation.Transport` names the wire a commissioned
-  unit travels on (`inline`/`process`/`channel`); the core-model
-  "Lane" noun names execution roles (Built-in/Action/Worker/Subagent). The
-  two never alias.
-- **A machine is a WHERE, never a WHO.** Delegation addresses workers and
-  actors; a machine is a body execution lands on, and its addressing surface
-  is the raw endpoint axis (code-mode cells select machine object handles). The once-reserved `machine` transport arm was
-  removed rather than left dormant (Owner decision, #786): a worker whose
-  tools should land on a machine is an ordinary `process` worker whose
-  catalog placement folds against that machine.
-- **Wait is reused, not redefined.** Reply correlation, quorum, deadlines
-  (`expiresAt`), and `delivery_recorded` already live in `protocol/src/wait/`.
-  The `channel` transport opens a Wait; `Settled.no_response` is the delegation
-  reading of that Wait's expiry.
+A machine remains WHERE execution happens, not a messaging target. Actor delivery uses the existing grant, egress-budget, endpoint and idempotency kernel, returning `accepted | rejected | unknown` only for an executed actor effect. Session commits succeed or throw. Current verification and remaining integration gaps are listed in [Implementation Status](implementation-status.md).
 
 ## 4. Tool placement (`Tool.Placement`, `Tool.Spec`)
 

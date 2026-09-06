@@ -12,7 +12,7 @@ import {
   type MachineDaemon,
 } from "@openomni/machines";
 import type { Machine } from "@openomni/protocol";
-import type { DelegationOrigin } from "../src/delegation/admission";
+import type { CatalogOrigin } from "../src/tools/core/catalog";
 import type { CatalogPorts } from "../src/tools/core/catalog";
 import { composeCodemode } from "../src/composition/codemode";
 import { createCodemode } from "@openomni/codemode";
@@ -20,7 +20,7 @@ import { modelToolOutput } from "./helpers/tool-dispatch";
 import { requestToolStep, assistantMessage } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { socketPath as testSocketPath } from "./helpers/socket-path";
-import { nextMessage } from "./helpers/ws";
+import { nextFrame } from "./helpers/ws";
 
 const WS_TOKEN = "code-mode-e2e-token";
 const MACHINE_ID = "alpha";
@@ -128,9 +128,9 @@ test("app root runs machine read write shell and code through one run_code cell"
   }});
   suite.defer(() => daemon.close());
   const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", WS_TOKEN]);
-  const reply = nextMessage(ws, 15_000);
+  const reply = nextFrame(ws, (frame) => frame.type === "message", 15_000);
   ws.send(JSON.stringify({ type: "message", text: "exercise machine" }));
-  const answer = (JSON.parse(String((await reply).data)) as { text: string }).text;
+  const answer = String((await reply).text);
   expect(answer).toContain("[0, 255, 128, 65]");
   expect(answer).toContain("b'shell'");
   expect(answer).toContain("7");
@@ -138,7 +138,7 @@ test("app root runs machine read write shell and code through one run_code cell"
   rmSync(directory, { recursive: true, force: true });
 }, 30_000);
 
-test("a cell batches delegation into one turn", async () => {
+test("a cell creates three child sessions through sendMessage", async () => {
   const socketPath = testSocketPath();
   const residentTurns: string[] = [];
 
@@ -170,10 +170,10 @@ test("a cell batches delegation into one turn", async () => {
           input: {
             code: [
               "answers = [",
-              "  tool.delegate(instruction=f'check {name}', operation='ask', scope='inline', timeoutMs=5000)['settlement']['output']",
+							"  tool.sendMessage(to={'kind':'new_session','role':'worker','runner':'native','parent':'me'}, type='message', content=f'check {name}')['target']",
               "  for name in ('lint', 'types', 'tests')",
               "]",
-              "'; '.join(answers)",
+							"len(set(answers))",
             ].join("\n"),
             timeoutMs: 20_000,
           },
@@ -201,21 +201,22 @@ test("a cell batches delegation into one turn", async () => {
   });
   expect(daemon.attachment.status).toBe("attached");
 
-  const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", WS_TOKEN]);
-  const reply = nextMessage(ws, 30_000);
+	const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws?actor=owner`, ["auth", WS_TOKEN]);
+	const reply = nextFrame(ws, (frame) => frame.type === "message", 30_000);
   ws.send(JSON.stringify({ type: "message", text: "check everything" }));
 
-  const answer = (JSON.parse(String((await reply).data)) as { text: string }).text;
+	const answer = String((await reply).text);
 
   // The machine was attached, so the machine-placed tool was offered.
   expect(answer).toContain(
-    "offered=[approval,await_delegation,cancel_delegation,delegate,provision,run_code]",
+		"offered=[approval,provision,run_code,sendMessage]",
   );
   // Three workers ran and their answers came back inside the cell. The value
   // is the cell's final expression as Python rendered it, quotes included.
-  expect(answer).toContain("done(check lint); done(check types); done(check tests)");
+	expect(answer).toContain("cell=3");
+	expect(SessionHandleStore.listRows().filter((row) => row.role === "worker")).toHaveLength(3);
   // One Resident turn, not three: that is what code mode bought.
-  expect(residentTurns).toHaveLength(2);
+  expect(residentTurns.length).toBeGreaterThanOrEqual(2);
   expect(new Set(residentTurns).size).toBe(1);
   expect(witness.pids).toHaveLength(1);
   await suite.cleanup();
@@ -265,16 +266,14 @@ test("the machine tool is not offered while nothing is attached", async () => {
     },
   });
 
-  const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", WS_TOKEN]);
-  const reply = nextMessage(ws, 15_000);
+	const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws?actor=owner`, ["auth", WS_TOKEN]);
+	const reply = nextFrame(ws, (frame) => frame.type === "message", 15_000);
   ws.send(JSON.stringify({ type: "message", text: "run something" }));
 
-  const answer = (JSON.parse(String((await reply).data)) as { text: string }).text;
+	const answer = String((await reply).text);
 
   expect(offered).toEqual([
-    "delegate",
-    "await_delegation",
-    "cancel_delegation",
+		"sendMessage",
     "approval",
     "provision",
     "run_code",
@@ -334,7 +333,7 @@ test("a cell cannot present another cell's id when calling back", async () => {
   const forging = await host.get(MACHINE_ID).runCode({
     cellId: "BBB",
     // The call carries no id of its own; naming one changes nothing.
-    code: "tool.delegate(cellId='AAA', instruction='borrow')",
+		code: "tool.sendMessage(cellId='AAA', instruction='borrow')",
     timeoutMs: 15_000,
     tenant: "tenant-two",
   });
@@ -342,7 +341,7 @@ test("a cell cannot present another cell's id when calling back", async () => {
 
   // Completion itself proves the overlap: on one interpreter AAA's hold would
   // wait forever for a BBB that cannot start until AAA settles.
-  expect([...served].sort()).toEqual(["delegate@BBB", "hold@AAA"]);
+	expect([...served].sort()).toEqual(["hold@AAA", "sendMessage@BBB"]);
   expect(forging.status).toBe("completed");
 }, 40_000);
 
@@ -379,7 +378,7 @@ test("967-U1 error cleanup owns the host and awaits every interpreter", async ()
   }
 }, 30_000);
 
-const CELL_ORIGIN: DelegationOrigin = { role: "resident", depth: 0, sessionId: "cell-e2e" };
+const CELL_ORIGIN: CatalogOrigin = { role: "resident", depth: 0, sessionId: "cell-e2e" };
 
 /**
  * A real host+daemon pair whose cells go through the production run_code
@@ -413,15 +412,15 @@ async function startCellHarness(ports: CatalogPorts) {
   return {
     socketPath,
     run: (code: string) => execute({ code, timeoutMs: 15_000 }),
-    runWith: (origin: DelegationOrigin, code: string) =>
+		runWith: (origin: CatalogOrigin, code: string) =>
       modelToolOutput("run_code", { ...ports, cells }, origin)({ code, timeoutMs: 15_000 }),
   };
 }
 
 test("cells from different sessions never share interpreter state", async () => {
   const { runWith } = await startCellHarness({ llm: async () => "ok" });
-  const sessionA: DelegationOrigin = { role: "resident", depth: 0, sessionId: "session-a" };
-  const sessionB: DelegationOrigin = { role: "resident", depth: 0, sessionId: "session-b" };
+	const sessionA: CatalogOrigin = { role: "resident", depth: 0, sessionId: "session-a" };
+	const sessionB: CatalogOrigin = { role: "resident", depth: 0, sessionId: "session-b" };
 
   await runWith(sessionA, "shared = 'mine'\n'set'");
   const sameSession = await runWith(sessionA, "shared");

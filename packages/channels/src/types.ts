@@ -15,10 +15,10 @@ export type PublishPort = BusEvent.Sink["publish"];
  * (Discord and Telegram do); awaited-delivery correlation records it.
  */
 export interface ChannelClient {
-  /** `traceId` is the causing occurrence's trace (D11) — the inbound message for replies, the surface's documented origin mint for outbound sends; retries of one send share it. */
-  send(channelId: string, text: string, traceId: string): Promise<string | undefined>;
-  /** `traceId` is the inbound message's trace (D11) — typing is part of that message's causal chain. */
-  sendTyping?(channelId: string, traceId: string): Promise<void>;
+	/** `traceId` is the causing occurrence's trace (D11) — the inbound message for replies, the surface's documented origin mint for outbound sends; retries of one send share it. */
+	send(channelId: string, text: string, traceId: string): Promise<string | undefined>;
+	/** `traceId` is the inbound message's trace (D11) — typing is part of that message's causal chain. */
+	sendTyping?(channelId: string, traceId: string): Promise<void>;
 }
 
 /**
@@ -26,7 +26,7 @@ export interface ChannelClient {
  * MUST NOT: call platform API, manage state, or have side effects.
  * Pure transformation function — same input always produces same output.
  */
-export interface InboundNormalizer<TPayload = unknown> {
-  /** `traceId` is the surface's first-frame mint (D11) — the normalizer stamps it onto the InboundMessage, never mints. */
-  normalize(payload: TPayload, traceId: string): Channel.InboundMessage | null;
+export interface InboundNormalizer<TPayload> {
+	/** `traceId` is the surface's first-frame mint (D11) — the normalizer stamps it onto the InboundMessage, never mints. */
+	normalize(payload: TPayload, traceId: string): Channel.InboundMessage | null;
 }

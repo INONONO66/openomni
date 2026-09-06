@@ -2,7 +2,8 @@ import type { DedupeWindow } from "./dedupe";
 import { newTraceId } from "./trace";
 
 export interface DeliveryReceipt {
-  externalMessageId?: string;
+	value: "accepted" | "rejected" | "unknown";
+	externalMessageId?: string;
 }
 
 /**
@@ -15,14 +16,16 @@ export interface DeliveryReceipt {
  * at-least-once behavior.
  */
 export function deliverKeyed(
-  window: DedupeWindow<DeliveryReceipt>,
-  idempotencyKey: string | undefined,
-  send: (traceId: string) => Promise<string | undefined>,
+	window: DedupeWindow<DeliveryReceipt>,
+	idempotencyKey: string,
+	send: (traceId: string) => Promise<string | undefined>,
 ): Promise<DeliveryReceipt> {
-  const attempt = async (): Promise<DeliveryReceipt> => {
-    const traceId = newTraceId();
-    const externalMessageId = await send(traceId);
-    return externalMessageId === undefined ? {} : { externalMessageId };
-  };
-  return idempotencyKey === undefined ? attempt() : window.run(idempotencyKey, attempt);
+	const attempt = async (): Promise<DeliveryReceipt> => {
+		const traceId = newTraceId();
+		const externalMessageId = await send(traceId);
+		return externalMessageId === undefined
+			? { value: "unknown" }
+			: { value: "accepted", externalMessageId };
+	};
+	return window.run(idempotencyKey, attempt);
 }

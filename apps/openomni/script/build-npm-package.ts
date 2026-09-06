@@ -24,37 +24,37 @@ const staging = process.argv[2] ?? join(appDir, "dist-npm");
 rmSync(staging, { recursive: true, force: true });
 mkdirSync(join(staging, "bin"), { recursive: true });
 
-for (const entrypoint of ["src/cli/main.ts", "src/delegation/process-entry.ts"]) {
-  const result = await Bun.build({
-    entrypoints: [join(appDir, entrypoint)],
-    outdir: join(staging, "dist", "app"),
-    target: "bun",
-  });
-  if (!result.success) {
-    for (const log of result.logs) console.error(String(log));
-    process.exit(1);
-  }
+for (const entrypoint of ["src/cli/main.ts", "src/process-entry.ts"]) {
+	const result = await Bun.build({
+		entrypoints: [join(appDir, entrypoint)],
+		outdir: join(staging, "dist", "app"),
+		target: "bun",
+	});
+	if (!result.success) {
+		for (const log of result.logs) console.error(String(log));
+		process.exit(1);
+	}
 }
 
 cpSync(join(repoRoot, "packages", "ledger", "migration"), join(staging, "migration"), {
-  recursive: true,
+	recursive: true,
 });
 cpSync(join(appDir, "npm", "README.md"), join(staging, "README.md"));
 cpSync(join(appDir, "npm", "openomni-bin.js"), join(staging, "bin", "openomni.js"));
 
 const appManifest = JSON.parse(readFileSync(join(appDir, "package.json"), "utf-8")) as {
-  readonly version: string;
+	readonly version: string;
 };
 const manifest = {
-  name: "openomni",
-  version: appManifest.version,
-  description: "Single-Owner Agent OS — one Resident, running 24/7 on your machine",
-  type: "module",
-  bin: { openomni: "bin/openomni.js" },
-  files: ["bin", "dist", "migration", "README.md"],
-  repository: { type: "git", url: "git+https://github.com/INONONO66/openomni.git" },
-  engines: { node: ">=20" },
-  publishConfig: { access: "public" },
+	name: "openomni",
+	version: appManifest.version,
+	description: "Single-Owner Agent OS — one Resident, running 24/7 on your machine",
+	type: "module",
+	bin: { openomni: "bin/openomni.js" },
+	files: ["bin", "dist", "migration", "README.md"],
+	repository: { type: "git", url: "git+https://github.com/INONONO66/openomni.git" },
+	engines: { node: ">=20" },
+	publishConfig: { access: "public" },
 };
 writeFileSync(join(staging, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);
 

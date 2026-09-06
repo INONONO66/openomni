@@ -56,7 +56,6 @@ interface LedgerStreamProducer {
   /** Stream class key owned by this producer manifest. */
   readonly streamClass:
     | "wait"
-    | "work"
     | "route"
     | "route_correction"
     | "gateway_send"
@@ -136,12 +135,7 @@ export const LEDGER_PRODUCER_MANIFEST: LedgerProducerManifest = {
   // The wait/work producers below supply their own facts, adoption
   // genesis, and conflict taxonomy through it.
   sharedAppendExecutor: "packages/ledger/src/storage/commit-coordinator.ts",
-  frozenTableWriters: [
-    {
-      table: "worker_run_state",
-      adapter: "packages/ledger/src/storage/sqlite-worker-run-state-adapter.ts",
-    },
-  ],
+  frozenTableWriters: [],
   migrationSqlWriters: [
     // Pre-freeze historical backfill: sets executor_kind on then-live rows.
     {

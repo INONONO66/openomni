@@ -1,210 +1,111 @@
 import { describe, expect, it } from "bun:test";
-import type { Channel } from "@openomni/protocol";
 import type { ChannelAuthnDecisionObserver } from "../src/authn/types";
 import { GitHubAdapter } from "../src/provider/github/surface";
 
 type ChannelAuthnDecision = Parameters<ChannelAuthnDecisionObserver>[0];
 
 const secret = "github-webhook-secret";
-const config = {
-  triggers: [],
-} satisfies Channel.Config;
+const config = {};
 
 describe("GitHubAdapter channel-authn", () => {
-  it("accepts valid HMAC signatures through channel-authn middleware", async () => {
-    const decisions: ChannelAuthnDecision[] = [];
-    const body = JSON.stringify({ action: "ignored" });
-    const adapter = createAdapter(decisions);
-    const request = new Request("http://localhost/github/webhook", {
-      method: "POST",
-      headers: {
-        "x-hub-signature-256": await signGitHubBody(body),
-        "x-github-event": "unknown",
-      },
-      body,
-    });
+	it("accepts valid HMAC signatures through channel-authn middleware", async () => {
+		const decisions: ChannelAuthnDecision[] = [];
+		const body = JSON.stringify({ action: "ignored" });
+		const adapter = createAdapter(decisions);
+		const request = new Request("http://localhost/github/webhook", {
+			method: "POST",
+			headers: {
+				"x-hub-signature-256": await signGitHubBody(body),
+				"x-github-event": "unknown",
+			},
+			body,
+		});
 
-    const response = await adapter.handleWebhook(request);
+		const response = await adapter.handleWebhook(request);
 
-    expect(response.status).toBe(200);
-    expect(await response.text()).toBe("Unsupported event");
-    expect(decisions).toEqual([
-      expect.objectContaining({
-        name: "channel-authn:github-hmac",
-        policyId: "guardrail.permission",
-        verdict: "allow",
-        reason: "github signature verified",
-      }),
-    ]);
-  });
+		expect(response.status).toBe(200);
+		expect(await response.text()).toBe("Unsupported event");
+		expect(decisions).toEqual([
+			expect.objectContaining({
+				name: "channel-authn:github-hmac",
+				policyId: "guardrail.permission",
+				verdict: "allow",
+				reason: "github signature verified",
+			}),
+		]);
+	});
 
-  it("an empty-STRING issue body dispatches with the title — never vanishes (#606)", async () => {
-    // Pin for the `body || title` extractor: GitHub sends "" bodies, and a
-    // `??` regression would ignore the title and the empty-normalization
-    // drop would silently swallow a label-triggered event.
-    const decisions: ChannelAuthnDecision[] = [];
-    const body = JSON.stringify({
-      action: "opened",
-      issue: {
-        number: 7,
-        title: "Fix the flaky build",
-        body: "",
-        labels: [{ name: "approved" }],
-        user: { login: "octocat", type: "User" },
-      },
-      repository: {
-        full_name: "openomni/project",
-        owner: { login: "openomni" },
-        name: "project",
-      },
-    });
-    const adapter = createAdapter(decisions, {
-      triggers: [
-        { type: "event", events: ["issues.opened"] },
-        { type: "label", values: ["approved"] },
-      ],
-    });
-    const request = new Request("http://localhost/github/webhook", {
-      method: "POST",
-      headers: {
-        "x-hub-signature-256": await signGitHubBody(body),
-        "x-github-event": "issues",
-      },
-      body,
-    });
+	it("rejects invalid HMAC signatures through channel-authn middleware", async () => {
+		const decisions: ChannelAuthnDecision[] = [];
+		const adapter = createAdapter(decisions);
+		const request = new Request("http://localhost/github/webhook", {
+			method: "POST",
+			headers: { "x-hub-signature-256": "sha256=invalid" },
+			body: JSON.stringify({ action: "ignored" }),
+		});
 
-    const response = await adapter.handleWebhook(request);
+		const response = await adapter.handleWebhook(request);
 
-    expect(response.status).toBe(200);
-    expect(await response.text()).not.toBe("Filtered");
-  });
+		expect(response.status).toBe(401);
+		expect(await response.text()).toBe("Invalid signature");
+		expect(decisions).toEqual([
+			expect.objectContaining({
+				name: "channel-authn:github-hmac",
+				policyId: "guardrail.permission",
+				verdict: "deny",
+				reason: "github signature invalid",
+			}),
+		]);
+	});
 
-  it("rejects invalid HMAC signatures through channel-authn middleware", async () => {
-    const decisions: ChannelAuthnDecision[] = [];
-    const adapter = createAdapter(decisions);
-    const request = new Request("http://localhost/github/webhook", {
-      method: "POST",
-      headers: { "x-hub-signature-256": "sha256=invalid" },
-      body: JSON.stringify({ action: "ignored" }),
-    });
+	it("rejects missing HMAC signatures through channel-authn middleware", async () => {
+		const decisions: ChannelAuthnDecision[] = [];
+		const adapter = createAdapter(decisions);
+		const request = new Request("http://localhost/github/webhook", {
+			method: "POST",
+			body: JSON.stringify({ action: "ignored" }),
+		});
 
-    const response = await adapter.handleWebhook(request);
+		const response = await adapter.handleWebhook(request);
 
-    expect(response.status).toBe(401);
-    expect(await response.text()).toBe("Invalid signature");
-    expect(decisions).toEqual([
-      expect.objectContaining({
-        name: "channel-authn:github-hmac",
-        policyId: "guardrail.permission",
-        verdict: "deny",
-        reason: "github signature invalid",
-      }),
-    ]);
-  });
+		expect(response.status).toBe(401);
+		expect(await response.text()).toBe("Missing signature");
+		expect(decisions).toEqual([
+			expect.objectContaining({
+				name: "channel-authn:github-hmac",
+				policyId: "guardrail.permission",
+				verdict: "deny",
+				reason: "github signature missing",
+			}),
+		]);
+	});
 
-  it("rejects missing HMAC signatures through channel-authn middleware", async () => {
-    const decisions: ChannelAuthnDecision[] = [];
-    const adapter = createAdapter(decisions);
-    const request = new Request("http://localhost/github/webhook", {
-      method: "POST",
-      body: JSON.stringify({ action: "ignored" }),
-    });
-
-    const response = await adapter.handleWebhook(request);
-
-    expect(response.status).toBe(401);
-    expect(await response.text()).toBe("Missing signature");
-    expect(decisions).toEqual([
-      expect.objectContaining({
-        name: "channel-authn:github-hmac",
-        policyId: "guardrail.permission",
-        verdict: "deny",
-        reason: "github signature missing",
-      }),
-    ]);
-  });
-
-  it("filters trigger-denied webhook content through channel-authn middleware", async () => {
-    const decisions: ChannelAuthnDecision[] = [];
-    const body = JSON.stringify({
-      action: "created",
-      issue: {
-        number: 7,
-        title: "Run work",
-        labels: [{ name: "needs-triage" }],
-        user: { login: "octocat", type: "User" },
-      },
-      comment: {
-        id: 1,
-        body: "@openomni run",
-        user: { login: "octocat", type: "User" },
-      },
-      repository: {
-        full_name: "openomni/project",
-        owner: { login: "openomni" },
-        name: "project",
-      },
-    });
-    const adapter = createAdapter(decisions, {
-      triggers: [
-        { type: "event", events: ["issue_comment.created"] },
-        { type: "label", values: ["approved"] },
-      ],
-    });
-    const request = new Request("http://localhost/github/webhook", {
-      method: "POST",
-      headers: {
-        "x-hub-signature-256": await signGitHubBody(body),
-        "x-github-event": "issue_comment",
-      },
-      body,
-    });
-
-    const response = await adapter.handleWebhook(request);
-
-    expect(response.status).toBe(200);
-    expect(await response.text()).toBe("Filtered");
-    expect(decisions).toEqual([
-      expect.objectContaining({ name: "channel-authn:github-hmac", verdict: "allow" }),
-      expect.objectContaining({
-        name: "channel-authn:github-triggers",
-        policyId: "guardrail.permission",
-        verdict: "deny",
-        reason: "github trigger denied",
-        metadata: expect.objectContaining({
-          surface: "github",
-          event: "issue_comment.created",
-          labels: ["needs-triage"],
-        }),
-      }),
-    ]);
-  });
 });
 
 function createAdapter(
-  decisions: ChannelAuthnDecision[],
-  adapterConfig: Channel.Config = config,
+	decisions: ChannelAuthnDecision[],
+	adapterConfig: Record<string, never> = config,
 ): GitHubAdapter {
-  const adapter = new GitHubAdapter(secret, adapterConfig, () => undefined, undefined, undefined, {
-    onDecision: (decision) => {
-      decisions.push(decision);
-    },
-  });
-  adapter.onMessage(async () => null);
-  return adapter;
+	const adapter = new GitHubAdapter(secret, adapterConfig, () => undefined, undefined, undefined, {
+		onDecision: (decision) => {
+			decisions.push(decision);
+		},
+	});
+	adapter.onMessage(async () => undefined);
+	return adapter;
 }
 
 async function signGitHubBody(body: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(body));
-  return `sha256=${Array.from(new Uint8Array(signature))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("")}`;
+	const encoder = new TextEncoder();
+	const key = await crypto.subtle.importKey(
+		"raw",
+		encoder.encode(secret),
+		{ name: "HMAC", hash: "SHA-256" },
+		false,
+		["sign"],
+	);
+	const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(body));
+	return `sha256=${Array.from(new Uint8Array(signature))
+		.map((byte) => byte.toString(16).padStart(2, "0"))
+		.join("")}`;
 }

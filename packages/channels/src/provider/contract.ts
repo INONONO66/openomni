@@ -11,10 +11,13 @@ import type { PublishPort } from "../types.js";
  * the current server composition calls it keyless (at-least-once retained).
  */
 export type ProviderDeliveryRoute = (
-  externalId: string,
-  body: string,
-  idempotencyKey?: string,
-) => Promise<{ readonly externalMessageId?: string }>;
+	externalId: string,
+	body: string,
+	idempotencyKey: string,
+) => Promise<{
+	readonly value: "accepted" | "rejected" | "unknown";
+	readonly externalMessageId?: string;
+}>;
 
 /**
  * How a provider receives platform events. The runner does not interpret the
@@ -38,16 +41,16 @@ type IngestMode = "poll" | "socket" | "webhook";
  * policy instead of reverse-engineering the send path.
  */
 export interface RenderPolicy {
-  /**
-   * Maps Resident markdown to the platform dialect; identity where the
-   * platform accepts the text as-is (slack mrkdwn, github comments).
-   */
-  readonly renderMarkdown: (markdown: string) => string;
-  /**
-   * Hard per-message length the surface chunks outbound text to. `null`
-   * where the driver enforces no limit (github comments).
-   */
-  readonly messageLimit: number | null;
+	/**
+	 * Maps Resident markdown to the platform dialect; identity where the
+	 * platform accepts the text as-is (slack mrkdwn, github comments).
+	 */
+	readonly renderMarkdown: (markdown: string) => string;
+	/**
+	 * Hard per-message length the surface chunks outbound text to. `null`
+	 * where the driver enforces no limit (github comments).
+	 */
+	readonly messageLimit: number | null;
 }
 
 /**
@@ -57,12 +60,12 @@ export interface RenderPolicy {
  * replaces).
  */
 interface ProviderCapabilities {
-  /** The runtime exposes `deliveryRoute` — the Resident can message into it. */
-  readonly deliver: boolean;
-  /** The runtime exposes `webhookHandler` — ingress arrives over HTTP. */
-  readonly webhook: boolean;
-  /** Outbound text policy the surface applies (dialect + chunk limit). */
-  readonly render: RenderPolicy;
+	/** The runtime exposes `deliveryRoute` — the Resident can message into it. */
+	readonly deliver: boolean;
+	/** The runtime exposes `webhookHandler` — ingress arrives over HTTP. */
+	readonly webhook: boolean;
+	/** Outbound text policy the surface applies (dialect + chunk limit). */
+	readonly render: RenderPolicy;
 }
 
 /**
@@ -73,9 +76,9 @@ interface ProviderCapabilities {
  * conformance suite enforces the correspondence.
  */
 export interface ProviderRuntime {
-  readonly surface: Channel.Surface;
-  readonly deliveryRoute?: ProviderDeliveryRoute;
-  readonly webhookHandler?: (request: Request) => Promise<Response>;
+	readonly surface: Channel.Surface;
+	readonly deliveryRoute?: ProviderDeliveryRoute;
+	readonly webhookHandler?: (request: Request) => Promise<Response>;
 }
 
 /**
@@ -88,42 +91,42 @@ export interface ProviderRuntime {
  * admission) remains router-side.
  */
 export interface ChannelProvider<TCredentials, TId extends string = string> {
-  readonly id: TId;
-  readonly ingest: IngestMode;
-  readonly capabilities: ProviderCapabilities;
-  /**
-   * THE schema for this provider's secret payload — the app's credential
-   * gates (boot declared rows, `channel_declare`/`secret_rotate`) validate
-   * against this declaration instead of owning a parallel table. Shapes are
-   * genuinely heterogeneous by platform (telegram: one token; slack: two).
-   */
-  readonly credentials: z.ZodType<TCredentials, TCredentials>;
-  /**
-   * Non-secret instance knobs. No shipped provider carries knobs yet, so
-   * every schema is the empty record (`z.record(z.never())`) — the seam
-   * exists so `ChannelInstance.settings` is validated where it enters
-   * (`channel_declare`) instead of accepted-and-ignored.
-   */
-  readonly settings: z.ZodType<Record<string, never>, Record<string, never>>;
-  /**
-   * Operator checklist the credential cannot carry and the runner cannot
-   * verify — portal-side switches (Discord gateway intents, Slack app
-   * scopes). `provision_status` reports these verbatim; nothing enforces
-   * them (they fail loudly at the platform, not here).
-   */
-  readonly preconditions: readonly string[];
-  /**
-   * Constructs the surface and seams. Pure construction — no I/O until
-   * `surface.start()`. `TCredentials` is this provider's typed secret
-   * material, heterogeneous by design (telegram: one bot token; github: a
-   * webhook secret plus optional API token). Validation stays where the
-   * credential enters the system (env config today, the provisioning store
-   * later) — one enforcement layer per invariant, so the contract takes the
-   * already-trusted typed value.
-   */
-  create(
-    credentials: TCredentials,
-    config: Channel.Config,
-    publish: PublishPort,
-  ): ProviderRuntime;
+	readonly id: TId;
+	readonly ingest: IngestMode;
+	readonly capabilities: ProviderCapabilities;
+	/**
+	 * THE schema for this provider's secret payload — the app's credential
+	 * gates (boot declared rows, `channel_declare`/`secret_rotate`) validate
+	 * against this declaration instead of owning a parallel table. Shapes are
+	 * genuinely heterogeneous by platform (telegram: one token; slack: two).
+	 */
+	readonly credentials: z.ZodType<TCredentials, TCredentials>;
+	/**
+	 * Non-secret instance knobs. No shipped provider carries knobs yet, so
+	 * every schema is the empty record (`z.record(z.never())`) — the seam
+	 * exists so `ChannelInstance.settings` is validated where it enters
+	 * (`channel_declare`) instead of accepted-and-ignored.
+	 */
+	readonly settings: z.ZodType<Record<string, never>, Record<string, never>>;
+	/**
+	 * Operator checklist the credential cannot carry and the runner cannot
+	 * verify — portal-side switches (Discord gateway intents, Slack app
+	 * scopes). `provision_status` reports these verbatim; nothing enforces
+	 * them (they fail loudly at the platform, not here).
+	 */
+	readonly preconditions: readonly string[];
+	/**
+	 * Constructs the surface and seams. Pure construction — no I/O until
+	 * `surface.start()`. `TCredentials` is this provider's typed secret
+	 * material, heterogeneous by design (telegram: one bot token; github: a
+	 * webhook secret plus optional API token). Validation stays where the
+	 * credential enters the system (env config today, the provisioning store
+	 * later) — one enforcement layer per invariant, so the contract takes the
+	 * already-trusted typed value.
+	 */
+	create(
+		credentials: TCredentials,
+		config: Channel.Config,
+		publish: PublishPort,
+	): ProviderRuntime;
 }

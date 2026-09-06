@@ -15,6 +15,10 @@ This document extends [Gateway Design](gateway-design.md) and
 their vocabulary. Owner sign-off is required before any phase lands (baseline
 growth law).
 
+## Current messaging contract
+
+The active target is `sendMessage({to, type, content, replyTo?, deadline?})` and `gateway.ingest(sender, SendMessage | IngressFacts)`. Compiled A/B rows guard the injected inbox writer or existing actor send kernel. Drivers return transport receipts only; final responses use actor sends. Wait reply/message, thread, tokenHash and externalConversationId correlation remains intact. The historical examples below are not an alternate entry point or a retained completion lifecycle. See [Implementation Status](implementation-status.md) for targeted evidence and unresolved terminal-admission, live-alarm and reply-grant-recovery work.
+
 ## 1. Problem
 
 The perimeter today admits messages and lets the Resident answer them, and the

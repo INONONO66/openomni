@@ -16,7 +16,7 @@ export const GitHubProvider: ChannelProvider<GitHubCredentials, "github"> = {
   id: "github",
   ingest: "webhook",
   capabilities: {
-    deliver: false,
+    deliver: true,
     webhook: true,
     // GitHub renders markdown natively and comments carry no driver-enforced limit.
     render: { renderMarkdown: (markdown: string) => markdown, messageLimit: null },
@@ -42,6 +42,7 @@ export const GitHubProvider: ChannelProvider<GitHubCredentials, "github"> = {
     );
     return {
       surface,
+      deliveryRoute: (externalId, body, key) => surface.deliver(externalId, body, key),
       webhookHandler: (request) => surface.handleWebhook(request),
     };
   },

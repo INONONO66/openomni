@@ -1,11 +1,15 @@
 import {
-  type ChannelDeliveryRoute,
-  createGatewayRouter,
-  type GatewayRouter,
+	type ChannelDeliveryRoute,
+	createGatewayRouter,
+	type GatewayRouter,
 } from "@openomni/channels";
 import { ChannelGrantStore } from "@openomni/ledger";
-import type { Actor, Gateway, Ingress } from "@openomni/protocol";
-import { Bus } from "@openomni/agent";
+import type { Actor, Gateway } from "@openomni/protocol";
+import { Bus, currentExecutor, scopeObservation } from "@openomni/agent";
+import { Gateway as GatewayProtocol } from "@openomni/protocol";
+import { messageDecisionRules } from "./composition/message-decision";
+import { createIngressExecutor } from "./composition/ingress-executor";
+import { terminalMessage } from "./composition/terminal-message";
 
 /**
  * The tier a named channel surface mounts with when no Owner decision
@@ -26,14 +30,14 @@ const LOOPBACK_BOOTSTRAP_TIER: Actor.TrustTier = "owner";
 
 /** The authority one surface's trusted-channel grant materializes. */
 export interface TrustedChannelGrant {
-  readonly surface: string;
-  /**
-   * The tier senders on this surface resolve to when they carry no registered
-   * identity. Always explicit: owner authority exists only where a call site
-   * names it (the loopback `ws` bootstrap).
-   */
-  readonly defaultTier: Actor.TrustTier;
-  readonly allowedSenders?: readonly string[];
+	readonly surface: string;
+	/**
+	 * The tier senders on this surface resolve to when they carry no registered
+	 * identity. Always explicit: owner authority exists only where a call site
+	 * names it (the loopback `ws` bootstrap).
+	 */
+	readonly defaultTier: Actor.TrustTier;
+	readonly allowedSenders?: readonly string[];
 }
 
 /**
@@ -45,20 +49,20 @@ export interface TrustedChannelGrant {
  * history — revoking one erases no recorded fact.
  */
 export function registerTrustedChannelGrant(grant: TrustedChannelGrant): () => void {
-  const id = `openomni-resident-${grant.surface}`;
-  ChannelGrantStore.put({
-    id,
-    surface: grant.surface,
-    kind: "trusted_channel",
-    defaultTier: grant.defaultTier,
-    // An allowlisted grant materializes this tier for the listed senders
-    // alone — everyone else on the surface finds no grant and is blocked.
-    ...(grant.allowedSenders === undefined ? {} : { allowedSenders: [...grant.allowedSenders] }),
-    createdBy: "local-owner",
-  });
-  return () => {
-    ChannelGrantStore.remove(id);
-  };
+	const id = `openomni-resident-${grant.surface}`;
+	ChannelGrantStore.put({
+		id,
+		surface: grant.surface,
+		kind: "trusted_channel",
+		defaultTier: grant.defaultTier,
+		// An allowlisted grant materializes this tier for the listed senders
+		// alone — everyone else on the surface finds no grant and is blocked.
+		...(grant.allowedSenders === undefined ? {} : { allowedSenders: [...grant.allowedSenders] }),
+		createdBy: "local-owner",
+	});
+	return () => {
+		ChannelGrantStore.remove(id);
+	};
 }
 
 /**
@@ -69,46 +73,45 @@ export function registerTrustedChannelGrant(grant: TrustedChannelGrant): () => v
  * no tier of its own, so no mounted named surface can acquire one.
  */
 export function createMountedChannelGrantRegistrar(
-  allowedSendersBySurface: Readonly<Record<string, readonly string[]>> | undefined,
+	allowedSendersBySurface: Readonly<Record<string, readonly string[]>> | undefined,
 ): (surfaceId: string, defaultTier: Actor.TrustTier) => () => void {
-  return (surfaceId, defaultTier) => {
-    const allowedSenders = allowedSendersBySurface?.[surfaceId];
-    return registerTrustedChannelGrant({
-      surface: surfaceId,
-      defaultTier,
-      ...(allowedSenders === undefined ? {} : { allowedSenders }),
-    });
-  };
+	return (surfaceId, defaultTier) => {
+		const allowedSenders = allowedSendersBySurface?.[surfaceId];
+		return registerTrustedChannelGrant({
+			surface: surfaceId,
+			defaultTier,
+			...(allowedSenders === undefined ? {} : { allowedSenders }),
+		});
+	};
 }
 
 export interface OutboundMessaging {
-  readonly deliveryRoutes: ReadonlyMap<string, ChannelDeliveryRoute>;
-  readonly grants: () => readonly Gateway.SenderTargetGrant[];
-  readonly budgets?: () => readonly Gateway.SocialBudget[];
+	readonly deliveryRoutes: ReadonlyMap<string, ChannelDeliveryRoute>;
+	readonly grants: () => readonly Gateway.SenderTargetGrant[];
+	readonly budgets?: () => readonly Gateway.SocialBudget[];
+	readonly replyGrantRules?: () => readonly Gateway.ReplyGrantRule[];
 }
 
 export function createResidentGateway(
-  deliver: (delivery: Gateway.Deliver) => Promise<Ingress.IngressResult>,
-  messaging?: OutboundMessaging,
+	ports: Omit<Parameters<typeof createGatewayRouter>[0], "sink" | "run" | "messaging">,
+	messaging?: OutboundMessaging,
 ): GatewayRouter {
-  // The gateway owns only its own perimeter surface; external channel
-  // components register (and revoke) their own authority when they mount.
-  // The loopback ws bootstrap is the only surface that names owner tier; no
-  // sibling surface inherits it.
-  registerTrustedChannelGrant({ surface: "ws", defaultTier: LOOPBACK_BOOTSTRAP_TIER });
-  return createGatewayRouter({
-    sink: Bus.publish,
-    deliver,
-    ...(messaging === undefined
-      ? {}
-      : {
-        messaging: {
-          ...messaging,
-          // Engaging the gate with an empty Owner-declared source makes
-          // cold proactive outreach zero-by-default. Reply-scoped grants
-          // bypass this budget axis in the send kernel.
-          budgets: messaging.budgets ?? (() => []),
-        },
-      }),
-  });
+	registerTrustedChannelGrant({ surface: "ws", defaultTier: LOOPBACK_BOOTSTRAP_TIER });
+	const externalRun = createIngressExecutor(ports.clock ?? Date.now);
+	return createGatewayRouter({
+		...ports,
+		sink: scopeObservation(Bus, { sessionId: "gateway-ingress" }).publish,
+		run: async (sender, request, body) => {
+			if (sender.kind === "external") return externalRun(sender, request, body);
+			const result = await (terminalMessage.getStore()?.executor ?? currentExecutor()).run(request, body);
+			return { ...result, matchedRuleIds: messageDecisionRules(sender.id, request) };
+		},
+		observe: (sender, observation) => scopeObservation(Bus, { sessionId: sender.kind === "session" ? sender.id : "gateway-ingress" })
+			.publish(GatewayProtocol.MessageObserved, observation),
+		...(messaging === undefined ? {} : {
+			messaging: {
+				...messaging, budgets: messaging.budgets ?? (() => []),
+			}
+		}),
+	});
 }

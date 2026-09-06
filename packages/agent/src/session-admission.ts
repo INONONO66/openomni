@@ -26,6 +26,7 @@ import {
   generationForOpen,
 } from "./session-record";
 import type { SessionControllerState } from "./session-controller-state";
+import { observeDrained } from "./session-message-observation";
 
 export function createSessionAdmission(
   sessionId: string,
@@ -98,6 +99,7 @@ export function createSessionAdmission(
       releaseLease: false,
     });
     requireCommit(committed);
+    observeDrained(pending, turnId, "before_llm", clock(), runtime.observations);
     if (pending.some((item) => item.kind === "interrupt")) {
       const action = SessionHandleStore.tree(sessionId).find((item) => item.id === turnId);
       if (action === undefined) throw new Error(`committed turn is missing: ${turnId}`);

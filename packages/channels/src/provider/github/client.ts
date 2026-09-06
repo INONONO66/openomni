@@ -2,6 +2,7 @@ import { Operational } from "@openomni/protocol";
 import { z } from "zod";
 import { fetchWithRetry } from "../../support/fetch-retry";
 import type { PublishPort } from "../../types";
+import type { DeliveryReceipt } from "../../support/deliver";
 
 /** One comment page from the list endpoint — only `body` is read, extra keys pass. */
 const CommentsPageSchema = z.array(z.object({ body: z.string().optional() }));
@@ -18,7 +19,7 @@ export class GitHubClient {
     body: string,
     traceId: string,
     deliveryId?: string,
-  ): Promise<void> {
+  ): Promise<DeliveryReceipt> {
     if (!this.token) {
       // Loud absence (#606 audit): a deployment with a webhook secret but no
       // token would receive events, spend a full run, then silently never
@@ -30,7 +31,7 @@ export class GitHubClient {
         msg: "github token missing — reply not posted",
         context: { repo, issueNumber },
       });
-      return;
+      return { value: "rejected" };
     }
 
     const url = `https://api.github.com/repos/${repo}/issues/${issueNumber}/comments`;
@@ -51,7 +52,7 @@ export class GitHubClient {
         msg: "github comment already posted",
         context: { repo, issueNumber, deliveryId },
       });
-      return;
+      return { value: "accepted" };
     }
 
     const response = await fetchWithRetry(
@@ -70,8 +71,10 @@ export class GitHubClient {
 
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(`GitHub API failed (${response.status}): ${text}`);
+      this.publish(Operational.Events.Warn, { traceId, time: Date.now(), component: "github", msg: "GitHub rejected comment delivery", context: { status: response.status, detail: text } });
+      return { value: response.status < 500 ? "rejected" : "unknown" };
     }
+    const result = z.object({ id: z.number().optional() }).parse(await response.json());
 
     this.publish(Operational.Events.Debug, {
       traceId,
@@ -80,6 +83,7 @@ export class GitHubClient {
       msg: "github comment posted",
       context: { repo, issueNumber },
     });
+    return { value: "accepted", ...(result.id === undefined ? {} : { externalMessageId: String(result.id) }) };
   }
 
   private async hasComment(

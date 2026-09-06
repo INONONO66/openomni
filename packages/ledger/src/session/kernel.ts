@@ -1,4 +1,5 @@
 import {
+  Alarm,
   canonicalDigest,
   type Inbox,
   type LedgerAction,
@@ -93,6 +94,47 @@ export function commitInbox(input: Inbox.Commit): Inbox.Row {
   return committed;
 }
 
+export function armMessageDeadline(input: {
+  readonly messageId: string;
+  readonly sessionId: string;
+  readonly sourceActionId: string;
+  readonly fireAt: number;
+  readonly createdAt: number;
+  readonly replyTo?: string;
+}): Alarm.Row {
+  const sender = row(input.sessionId);
+  const spec = Alarm.MessageDeadline.parse({
+    kind: "message_deadline",
+    messageId: input.messageId,
+    sourceActionId: input.sourceActionId,
+    createdAt: input.createdAt,
+    ...(input.replyTo === undefined ? {} : { replyTo: input.replyTo }),
+    generation: {
+      toolsGeneration: sender.toolsGeneration,
+      systemHash: sender.systemHash,
+      policyGeneration: sender.policyGeneration,
+    },
+  });
+  const alarm = requiredAlarms().arm({
+    id: `${input.sourceActionId}:deadline`, sessionId: input.sessionId,
+    kind: "at", fireAt: input.fireAt, spec: { encodingVersion: 1, value: spec },
+  });
+  if (alarm === undefined) throw new Error(`message deadline arm refused: ${input.messageId}`);
+  return alarm;
+}
+
+/** Called by the alarm owner at a supplied instant, never a second timer loop. */
+export function expireMessageDeadlines(at: number): readonly string[] {
+  const sessions = new Set<string>();
+  const alarms = requiredAlarms();
+  for (const alarm of alarms.due(at)) {
+    if (!Alarm.MessageDeadline.safeParse(alarm.spec?.value).success) continue;
+    const timeout = alarms.fireMessage(alarm.id, at);
+    if (timeout !== undefined) sessions.add(timeout.sessionId);
+  }
+  return [...sessions];
+}
+
 export function pendingInbox(sessionId: string): Inbox.Row[] {
   return requiredInbox().list(sessionId, "pending");
 }
@@ -113,6 +155,10 @@ export function row(sessionId: string): LedgerSession.Row {
 
 export function listRows(): LedgerSession.Row[] {
   return requiredSessions().list();
+}
+
+export function openChildCount(parentId: string): number {
+  return requiredSessions().openChildCount(parentId);
 }
 
 export function policyRows(generation?: number): PolicyRow.Row[] {
@@ -470,6 +516,12 @@ function requiredSessions() {
 function requiredActions() {
   const adapter = Storage.get().actions;
   if (adapter === undefined) throw new Error("L0 storage capability is unavailable: actions");
+  return adapter;
+}
+
+function requiredAlarms() {
+  const adapter = Storage.get().alarms;
+  if (adapter === undefined) throw new Error("L0 storage capability is unavailable: alarms");
   return adapter;
 }
 

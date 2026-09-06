@@ -12,7 +12,7 @@ import {
   type ObservationSink,
   type PlainValue,
 } from "@openomni/protocol";
-import { createResident } from "../src/resident";
+import { residentRunner as createResident } from "./helpers/resident-runner";
 import { requestToolStep, assistantMessage } from "./helpers/assistant-message";
 
 const directory = mkdtempSync(join(tmpdir(), "openomni-resident-tool-wiring-"));
@@ -114,7 +114,7 @@ test("a resident tool call is executed and observed through the durable executor
     },
   });
 
-  await resident(delivery(sessionId));
+	await resident.prompt(sessionId, "please answer");
 
   const tree = SessionHandleStore.tree(sessionId);
   const prompt = tree.find((action) => action.kind === "prompt");

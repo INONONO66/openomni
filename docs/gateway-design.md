@@ -12,6 +12,10 @@ and outbound crossing goes through one perimeter with one ledger), and the
 agent promised, whom it awaits, when the user must approve — durable, not
 context-resident).
 
+## Current messaging contract
+
+The active target is `sendMessage({to, type, content, replyTo?, deadline?})` and `gateway.ingest(sender, SendMessage | IngressFacts)`. Compiled A/B rows guard the injected inbox writer or existing actor send kernel. Drivers return transport receipts only; final responses use actor sends. Wait reply/message, thread, tokenHash and externalConversationId correlation remains intact. The historical examples below are not an alternate entry point or a retained completion lifecycle. See [Implementation Status](implementation-status.md) for targeted evidence and unresolved terminal-admission, live-alarm and reply-grant-recovery work.
+
 ## 1. Topology — four layers, three packages + composition
 
 | Layer | Package | Owns | Must not |

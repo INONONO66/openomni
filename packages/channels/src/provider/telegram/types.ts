@@ -15,12 +15,18 @@ const TelegramChatSchema = z.object({
   username: z.string().optional(),
 });
 
+const TelegramEntitySchema = z.object({
+  type: z.string(), offset: z.number().int().nonnegative(), length: z.number().int().nonnegative(),
+  user: TelegramUserSchema.optional(),
+});
+
 export interface TelegramMessage {
   message_id: number;
   from?: z.infer<typeof TelegramUserSchema>;
   chat: z.infer<typeof TelegramChatSchema>;
   date: number;
   text?: string;
+  entities?: z.infer<typeof TelegramEntitySchema>[];
   reply_to_message?: TelegramMessage;
 }
 
@@ -32,6 +38,7 @@ const TelegramMessageSchema: z.ZodType<TelegramMessage> = z.lazy(() =>
     chat: TelegramChatSchema,
     date: z.number(),
     text: z.string().optional(),
+    entities: z.array(TelegramEntitySchema).optional(),
     reply_to_message: TelegramMessageSchema.optional(),
   }),
 );

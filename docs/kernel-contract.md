@@ -121,6 +121,12 @@ Every native Resident or worker is a normal durable session row. The row carries
 
 `session({id, role, runner, tools, system})` is the sole live consumer surface. Durable existence is independent of the in-memory handle: terminal idle with an empty inbox releases runtime immediately, while `get()` and `watch()` read without waking it. A committed prompt or alarm doorbell rehydrates the runner from the tree. Before runner entry the current fence commits a `turn` intent with a pre-minted result ID and pinned tool/system/policy generation; the same ID seals one terminal. Heartbeat loss aborts the runner and prevents a stale late commit. Startup sweeps intent-without-terminal turns before channel binding and resumes from their last completed boundary, with a persisted budget of ten.
 
+### Unified message boundary
+
+`sendMessage({to, type, content, replyTo?, deadline?})` enters `gateway.ingest(sender, envelope)`. Session identity is authenticated separately from model input. A/B are compiled message pre-policy rows; post policy is obligation-only. The gateway consumes perimeter facts and L1-projected session facts, and never reads the session store. Session delivery calls the injected inbox commit; new child configuration and first prompt share its transaction. Only executed actor delivery has an accepted/rejected/unknown receipt. A session commit succeeds or throws.
+
+A child terminal supplies parent mail with final text, terminal kind and the original reply binding. Admission must traverse the gateway before the atomic terminal-plus-parent write. Deadline alarms race replies on the source message action; only one answer/timeout winner changes state. Current implementation gaps are recorded in Implementation Status, not silently weakened here.
+
 ### Wait and existing-agent messaging
 
 Existing-agent messaging requires an explicit grant and targets an already allocated actor/session. It creates no session, Worker, executor, or budget and cannot convey Worker-allocation authority. Fire-and-forget records its delivery outcome and creates no Wait. The awaited form creates exactly one durable Wait owned by the waiting session. `PendingAsk` and `PendingInteraction` were this primitive's transitional code names; #215 absorbed them and migration 0025 dropped their persisted tables — the durable Wait is the only wait primitive.

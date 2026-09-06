@@ -149,11 +149,11 @@ describe("ledger producer drift", () => {
     }
   });
 
-  test("the archive includes frozen writers without inventing writers for retired targets", () => {
+  test("historical archives remain inspectable with no live frozen-table writers", () => {
     using fixture = createDispositionFixture();
     const archived = buildLedgerArchiveManifest(fixture.db).tables.map((entry) => entry.table);
     const writers = LEDGER_PRODUCER_MANIFEST.frozenTableWriters.map((entry) => entry.table);
-    expect(writers).toEqual(["worker_run_state"]);
+    expect(writers).toEqual([]);
     expect(archived).toEqual(expect.arrayContaining([...writers, "bus_event", "wait", "message", "part"]));
     expect(writers).not.toContain("bus_event");
     expect(writers).not.toContain("message");

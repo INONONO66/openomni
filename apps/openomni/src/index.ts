@@ -1,5 +1,5 @@
+import { AsyncResource } from "node:async_hooks";
 import { timingSafeEqual } from "node:crypto";
-import { processEntryPath } from "./process-entry-path";
 import { configuredCompaction } from "./compaction/strategy";
 import { seedKernelPolicyRows } from "./policy-seed";
 import {
@@ -9,6 +9,7 @@ import {
   getSessionHandle,
   ExecutionApprovalError,
   sweepSessions,
+	wakeSession,
 } from "@openomni/agent";
 import {
   type ChannelDeliveryRoute,
@@ -24,12 +25,13 @@ import {
   initialize,
   PersonStore,
   SecretStore,
+	SessionHandleStore,
   Storage,
 } from "@openomni/ledger";
 
 import { createMachineHost, type MachineHost } from "@openomni/machines";
 import type { Placement } from "@openomni/placement";
-import { type Channel, Gateway, type Ingress } from "@openomni/protocol";
+import type { Channel } from "@openomni/protocol";
 import { Bus, newTraceId } from "@openomni/agent";
 import { desiredChannels, materializePersons } from "./provisioning/declared";
 import { type ChannelSupervisor, createChannelSupervisor } from "./provisioning/supervisor";
@@ -43,21 +45,13 @@ import {
   type RegisteredActor,
 } from "./config";
 import { createLlmToolPort } from "./tools/execution/llm";
-import { createChannelDriver } from "./delegation/channel-driver";
-import { createInlineDriver } from "./delegation/inline-driver";
-import {
-  createDelegationKernel,
-  type DelegationKernel,
-  type DelegationWake,
-} from "./delegation/kernel";
-import { delegationTraceId } from "./delegation/trace";
-import { createWakeDeliveryQueue } from "./delegation/wake-delivery";
-import { createProcessDriver } from "./delegation/process-driver";
-import { createWorkerSessionRunner } from "./composition/worker-session";
+import { processEntryPath } from "./process-entry-path";
+import { createProcessSessionTransport } from "./composition/process-session";
+import { commitMessageInbox, prepareMessage } from "./composition/message-session";
+import { commitTerminalMessage } from "./composition/terminal-message";
 import { createMountedChannelGrantRegistrar, createResidentGateway } from "./gateway";
 import { createComposer, rollbackToCause } from "./composition/composer";
-import { buildInboundEvent } from "./inbound";
-import { createResident, type ResidentDelivery } from "./resident";
+import { createResident } from "./resident";
 import { HOST_TARGET } from "@openomni/agent";
 import { composeCodemode } from "./composition/codemode";
 
@@ -140,47 +134,6 @@ function createHttpRoutes(
   };
 }
 
-/** How a correlated reply's payload reads when handed back to the waiting delegation. */
-export function replyText(payload: unknown): string {
-  if (typeof payload === "string") return payload;
-  return JSON.stringify(payload);
-}
-
-/** Builds the internal, persisted Resident turn used for one settlement wake. */
-function delegationWakeDelivery(wake: DelegationWake): Gateway.Deliver {
-  const traceId = delegationTraceId(wake.record.delegationId);
-  return Gateway.Deliver.parse({
-    sessionId: wake.record.origin.sessionId,
-    event: {
-      id: `delegation:${wake.record.delegationId}:${wake.settlement.at}`,
-      traceId,
-      surface: "internal",
-      userId: "system",
-      payload: wake.message,
-      target: { kind: "resident" },
-      meta: {
-        actor: { role: "system", id: "system" },
-        agentName: "system",
-        kind: "delegation.settled",
-      },
-      mode: "direct",
-    },
-    decision: {
-      traceId,
-      time: wake.settlement.at,
-      inboundId: `delegation:${wake.record.delegationId}:inbound`,
-      surface: "internal",
-      mode: "direct",
-      stage: "surface_default",
-      outcome: "route",
-      reason: "durable delegation settlement",
-      factsUsed: ["delegation.settled"],
-      target: "resident",
-      sessionId: wake.record.origin.sessionId,
-    },
-  });
-}
-
 export async function startOpenOmni(options: StartOptions = {}) {
   const config = options.config ?? loadConfig();
   assertWsExposure(config);
@@ -191,7 +144,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
   // rollback and shutdown are the same reverse-order release, owned by the
   // stage that acquired the thing rather than restated by hand in two places.
   const composer = createComposer();
-  let kernel: DelegationKernel | undefined;
+	const doorbell = new AsyncResource("session-inbox");
   try {
     await composer.mount("journal", (ctx) => {
       initialize({ dbPath: config.dbPath, observationSink: Bus });
@@ -201,7 +154,9 @@ export async function startOpenOmni(options: StartOptions = {}) {
 
     const sessionRuntime: SessionRuntime = {
       ...options.sessionRuntime,
+			commitTerminal: commitTerminalMessage((...args) => messages.ingest(...args), options.sessionRuntime?.clock ?? Date.now),
       observations: Bus,
+			onInboxCommitted: (ids) => { for (const id of ids) doorbell.runInAsyncScope(() => { void wake(id); }); },
       async authorizeApproval(credential, request) {
         const expected = Buffer.from(config.wsToken ?? "");
         const presented = Buffer.from(credential);
@@ -224,50 +179,12 @@ export async function startOpenOmni(options: StartOptions = {}) {
     // idempotent identity upserts; the provisioning store is the durable one.
     materializePersons();
 
-    // A worker loop holds the same delegate tool the Resident does, so the
-    // runner needs the kernel that the kernel needs the runner to build. The
-    // cycle is closed by handing the runner a getter rather than a value.
-    let residentDeliver: ResidentDelivery | undefined;
-    // Boot-rescan wakes arrive before the Resident's deliver chain can be
-    // bound; they wait in this queue until the arm call below.
-    const wakeDelivery = createWakeDeliveryQueue();
-    const runner = createWorkerSessionRunner({
-      model: config.model,
-      apiKey: config.model.apiKey,
-      compaction: configuredCompaction(config, options.llm ?? {}),
-      ...(transport === undefined ? {} : { transport }),
-      kernel: () => {
-        if (kernel === undefined)
-          throw new Error("delegation kernel used before composition finished");
-        return kernel;
-      },
-      sessionRuntime,
-      ...(options.llm === undefined ? {} : { llm: options.llm }),
-    });
-    // The gateway owns the send kernel the channel driver speaks through, and
-    // the gateway needs the deliver chain the kernel is part of — the same
-    // late-binding the runner/kernel pair uses.
     let gateway: GatewayRouter | undefined;
-    const channelDriver = createChannelDriver({
-      send: (input) => {
-        if (gateway === undefined) throw new Error("messaging used before composition finished");
-        return gateway.messaging.send(input);
+		const messages = {
+			ingest: (...args: Parameters<GatewayRouter["ingest"]>) => {
+				if (gateway === undefined) throw new Error("gateway is not composed");
+				return gateway.ingest(...args);
       },
-      now: () => Date.now(),
-      newWaitId: () => crypto.randomUUID(),
-    });
-    const drivers = {
-      inline: createInlineDriver(runner),
-      channel: channelDriver,
-      process: createProcessDriver({
-        command: [process.execPath, processEntryPath(import.meta.url)],
-        worker: {
-          model: { provider: config.model.provider, id: config.model.id },
-          apiKey: config.model.apiKey,
-          ...(transport === undefined ? {} : { transport }),
-        },
-        dbPath: config.dbPath,
-      }),
     };
     // The catalog's approval lane (§6): Owner-consent requests plus the two
     // acts they authorize — promotion and cross-channel endpoint merge.
@@ -309,21 +226,6 @@ export async function startOpenOmni(options: StartOptions = {}) {
       promote: ActorRegistry.promote,
       mergeEndpoint: ActorRegistry.mergeEndpoint,
     };
-    kernel = createDelegationKernel({
-      events: Bus,
-      wake: (wake) => wakeDelivery.deliver(wake),
-      bootSweep: false,
-      drivers,
-      now: () => Date.now(),
-      newDelegationId: () => crypto.randomUUID(),
-    });
-    // Const capture for the closures below (the outer `let kernel` exists so
-    // the runner's late-binding getter can reach it).
-    const delegationKernel = kernel;
-    await composer.mount("delegation.kernel", (ctx) => {
-      ctx.effect(() => delegationKernel.stop());
-    });
-
     // The cell door is bound per cell rather than globally, so a cell serves
     // exactly the tools its own dispatcher holds.
     let cells: ReturnType<typeof composeCodemode> | undefined;
@@ -355,7 +257,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       await composer.mount("codemode", (ctx) => ctx.effect(() => composed.close()));
     }
 
-    residentDeliver = createResident({
+		const resident = createResident({
       toolDefinitions: options.toolDefinitions,
       model: config.model,
       ...(config.model.fallbacks === undefined ? {} : { modelFallbacks: config.model.fallbacks }),
@@ -363,7 +265,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       ...(transport === undefined ? {} : { transport }),
       compaction: configuredCompaction(config, options.llm ?? {}),
       tools: {
-        delegation: delegationKernel,
+				messages,
         ...(cells === undefined ? {} : { cells }),
         llm: llmPort,
         approvals: approvalPort,
@@ -374,53 +276,13 @@ export async function startOpenOmni(options: StartOptions = {}) {
       ...(options.llm === undefined ? {} : { llm: options.llm }),
     });
 
-    await sweepSessions(
-      (row) =>
-        row.role === "resident" ? residentDeliver.runnerFor(row.id) : runner.runnerFor(row),
-      sessionRuntime,
-    );
-
-    // A delivery the perimeter correlated to an open Wait is an actor's answer
-    // to a delegation, not a message for the Resident: it settles the waiting
-    // delegate call. A waitContext nothing is waiting on (a resume after this
-    // process restarted) falls through to the Resident as an ordinary message.
-    const deliver = async (delivery: Gateway.Deliver): Promise<Ingress.IngressResult> => {
-      const wait = delivery.waitContext;
-      // A wait-correlated route always carries the wait owner's session label
-      // (resolve-route pins `sessionId: state.wait.sessionId`), so no fallback:
-      // a labelless delivery is ordinary traffic for the Resident.
-      const sessionId = delivery.sessionId;
-      if (
-        wait !== undefined &&
-        sessionId !== undefined &&
-        delegationKernel.settleFromReply(wait.waitId, replyText(delivery.event.payload))
-      ) {
-        return {
-          mode: "direct",
-          target: { kind: "resident" },
-          sessionId,
-          result: {
-            output: "Reply received — the delegation it answers is settling.",
-            finishReason: "stop",
-          },
-        };
-      }
-      return residentDeliver(delivery);
-    };
-
-    // Every channel driver enters through the same gateway ingest seam. The
-    // closure is bound before the router exists but cannot be called until a
-    // surface starts after composition completes.
-    const routingHandler: Channel.MessageHandler = async (message) => {
-      if (gateway === undefined)
-        throw new Error("channel delivery used before composition finished");
-      const result = await gateway.ingest(buildInboundEvent(message));
-      return result.kind === "dropped" ? null : { text: result.result.output };
+		const routingHandler: Channel.MessageHandler = async ({ sender, facts }) => {
+			await messages.ingest(sender, facts);
     };
     let wsHandler: WebSocketHandler | undefined;
-    const wsRoute = async (externalId: string, body: string) => {
+		const wsRoute = async (externalId: string, body: string, idempotencyKey: string) => {
       if (wsHandler === undefined) throw new Error("ws delivery used before composition finished");
-      return wsHandler.push(externalId, body);
+			return wsHandler.push(externalId, body, idempotencyKey);
     };
     // Live table: channel components register and revoke their own outbound
     // routes while the gateway keeps reading it per delivery.
@@ -441,31 +303,46 @@ export async function startOpenOmni(options: StartOptions = {}) {
       traceId: newTraceId,
     });
     channelSupervisor = supervisor;
-    gateway = createResidentGateway(
-      deliver,
-      actors.length === 0
-        ? undefined
-        : {
-            deliveryRoutes,
-            grants: () =>
-              actors.map((actor) => ({
-                id: `resident->${actor.actorId}`,
-                senderId: "resident",
-                targetActorId: actor.actorId,
-                operations: ["awaited" as const, "fire_and_forget" as const],
-              })),
-            budgets: () => config.socialBudgets ?? [],
+		const processSessions = createProcessSessionTransport({
+			command: [process.execPath, processEntryPath(import.meta.url)],
+			worker: {
+				dbPath: config.dbPath, model: config.model, apiKey: config.model.apiKey,
+				...(transport === undefined ? {} : { transport })
           },
-    );
-    // Recovery is deliberately after the Resident and gateway exist: boot
-    // settlements must be able to deliver their one owner-session wake.
-    const recoveryTraceId = newTraceId();
-    WaitService.sweepExpired(recoveryTraceId, Bus.publish);
-    kernel.start();
-    // Recovery wakes arrived during kernel.start() and queued; arming binds
-    // the Resident delivery and flushes them. Reject-only on failure: the
-    // kernel's deliverWake is the single owner of wake-failure reporting.
-    wakeDelivery.arm((wake) => residentDeliver(delegationWakeDelivery(wake)).then(() => undefined));
+			committed: (ids) => { for (const id of ids) doorbell.runInAsyncScope(() => { void wake(id); }); },
+		});
+		await composer.mount("session.processes", (ctx) => ctx.effect(() => processSessions.close()));
+		const wake = (id: string) => {
+			const row = SessionHandleStore.row(id);
+			const runner = SessionHandleStore.latestGeneration(SessionHandleStore.tree(id))
+				.systemBlocks.find((block) => block.id === "runner" && block.source === "app:runner")?.content;
+			return runner === "process" ? processSessions.wake(id)
+				: wakeSession(id, resident.runnerFor(row), sessionRuntime);
+		};
+		gateway = createResidentGateway({
+			inbox: { commit: commitMessageInbox },
+			prepare: prepareMessage(resident.materialize),
+			armDeadline: SessionHandleStore.armMessageDeadline,
+			committed: (row) => { doorbell.runInAsyncScope(() => { void wake(row.sessionId); }); },
+			clock: sessionRuntime.clock,
+		}, {
+			deliveryRoutes,
+			grants: () => SessionHandleStore.listRows().filter((row) => row.role === "resident")
+				.flatMap((row) => actors.map((actor) => ({
+					id: row.id + "->" + actor.actorId, senderId: row.id,
+					targetActorId: actor.actorId, operations: ["awaited" as const, "fire_and_forget" as const],
+				}))),
+			budgets: () => config.socialBudgets ?? [],
+			replyGrantRules: () => SessionHandleStore.listRows().filter((row) => row.role === "resident")
+				.flatMap((row) => [...deliveryRoutes.keys()].map((surface) => ({
+					id: "reply:" + row.id + ":" + surface, senderId: row.id, surface,
+					operations: ["fire_and_forget" as const, "awaited" as const],
+					instanceTtlMs: 86_400_000, maxLiveInstances: 64, createdBy: "resident",
+				}))),
+		});
+		WaitService.sweepExpired(newTraceId(), Bus.publish);
+		for (const id of SessionHandleStore.expireMessageDeadlines((sessionRuntime.clock ?? Date.now)())) await wake(id);
+		await sweepSessions(resident.runnerFor, sessionRuntime);
 
     await composer.mount("channels", async (ctx) => {
       ctx.effect(() => supervisor.stopAll());
@@ -498,6 +375,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
     });
     return {
       port: boundPort,
+			gateway,
       sessions: { get: (id: string) => getSessionHandle(id, sessionRuntime) },
       // The boot's honest channel record: where config came from and why each
       // declared row did or did not mount (provision_status reads this later).

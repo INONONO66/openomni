@@ -1,93 +1,60 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import type { Channel } from "@openomni/protocol";
+import { Operational } from "@openomni/protocol";
 import { DiscordClient } from "../src/provider/discord/client";
-import {
-  DiscordApiError,
-  DiscordGatewayFetchError,
-  DiscordHandlerMissingError,
-} from "../src/provider/discord/error";
+import { DiscordApiError, DiscordGatewayFetchError, DiscordHandlerMissingError } from "../src/provider/discord/error";
 import { DiscordNormalizer } from "../src/provider/discord/normalizer";
 import { DiscordAdapter } from "../src/provider/discord/surface";
 import type { DiscordMessage } from "../src/provider/discord/types";
-import type { ChannelClient } from "../src/types";
+import { bounded } from "./helpers/bounded";
 
-type DiscordAdapterHarness = {
+interface DiscordAdapterHarness {
   botId: string | null;
-  client: ChannelClient;
-  handleMessageCreate(message: DiscordMessage, traceId: string): void;
   normalizer: DiscordNormalizer | null;
-};
-
+  handleMessageCreate(message: DiscordMessage, traceId: string): void;
+}
 const message: DiscordMessage = {
-  id: "message-1",
-  channel_id: "channel-1",
-  author: { id: "user-1", username: "user" },
-  content: "hello",
+  id: "message-1", channel_id: "channel-1", author: { id: "user-1", username: "user" }, content: "hello",
 };
-
-const config = { triggers: [] } satisfies Channel.Config;
 const realFetch = globalThis.fetch;
-
-afterEach(() => {
-  globalThis.fetch = realFetch;
-});
+afterEach(() => { globalThis.fetch = realFetch; });
 
 describe("Discord audit regressions", () => {
-  it("releases a failed inbound attempt so Discord can redeliver the same event", async () => {
+  it("releases a rejected ingress attempt for platform redelivery", async () => {
     const failed = Promise.withResolvers<void>();
+    const retried = Promise.withResolvers<void>();
     let handlerAttempts = 0;
-    const adapter = new DiscordAdapter("token", config, (_event, data) => {
-      const payload = data as { msg?: unknown };
-      if (payload.msg === "discord message handling failed") failed.resolve();
+    const adapter = new DiscordAdapter("token", {}, (event) => {
+      if (event.name === Operational.Events.Error.name) failed.resolve();
     });
     adapter.onMessage(async () => {
       handlerAttempts += 1;
-      return { text: "reply" };
+      if (handlerAttempts === 1) throw new Error("inbox refused");
+      retried.resolve();
     });
-
-    const harness = adapter as unknown as DiscordAdapterHarness;
+    const harness = adapter as object as DiscordAdapterHarness;
     harness.botId = "bot-1";
-    harness.normalizer = new DiscordNormalizer({ botId: "bot-1", triggers: [] });
-    harness.client = {
-      send: () => Promise.reject(new Error("Discord unavailable")),
-      sendTyping: () => Promise.resolve(),
-    };
-
+    harness.normalizer = new DiscordNormalizer();
     harness.handleMessageCreate(message, "trace-first");
-    await failed.promise;
+    await bounded(failed.promise);
     harness.handleMessageCreate(message, "trace-retry");
-
+    await bounded(retried.promise);
     expect(handlerAttempts).toBe(2);
   });
 
   it("throws a typed error when the gateway URL request fails", async () => {
-    globalThis.fetch = (async () =>
-      new Response("outage", { status: 503 })) as unknown as typeof fetch;
+    globalThis.fetch = Object.assign(async () => new Response("outage", { status: 503 }), { preconnect: realFetch.preconnect });
     const client = new DiscordClient("token", () => undefined);
-
-    const error = await client.fetchGatewayUrl().catch((caught: unknown) => caught);
-
-    expect(DiscordGatewayFetchError.isInstance(error)).toBe(true);
-    expect((error as Error).name).toBe("DiscordGatewayFetchError");
+    await expect(client.fetchGatewayUrl()).rejects.toBeInstanceOf(DiscordGatewayFetchError);
   });
 
   it("throws a typed error when a Discord API request fails", async () => {
-    globalThis.fetch = (async () =>
-      new Response("forbidden", { status: 403 })) as unknown as typeof fetch;
+    globalThis.fetch = Object.assign(async () => new Response("forbidden", { status: 403 }), { preconnect: realFetch.preconnect });
     const client = new DiscordClient("token", () => undefined);
-
-    const error = await client.send("channel-1", "hello", "trace-1").catch((caught: unknown) => caught);
-
-    expect(DiscordApiError.isInstance(error)).toBe(true);
-    expect((error as Error).name).toBe("DiscordApiError");
+    await expect(client.send("channel-1", "hello", "trace-1")).rejects.toBeInstanceOf(DiscordApiError);
   });
 
   it("throws a typed error when start has no message handler", async () => {
-    const adapter = new DiscordAdapter("token", config, () => undefined);
-
-    const error = await adapter.start("trace-1").catch((caught: unknown) => caught);
-
-    expect(DiscordHandlerMissingError.isInstance(error)).toBe(true);
-    expect((error as Error).name).toBe("DiscordHandlerMissingError");
+    const adapter = new DiscordAdapter("token", {}, () => undefined);
+    await expect(adapter.start("trace-1")).rejects.toBeInstanceOf(DiscordHandlerMissingError);
   });
 });

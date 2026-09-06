@@ -7,132 +7,134 @@ import { join } from "node:path";
 import { initialize, SessionHandleStore, Storage } from "@openomni/ledger";
 import type { Gateway, Model } from "@openomni/protocol";
 import { createResidentGateway } from "../src/gateway";
-import { createResident } from "../src/resident";
+import { wakeSession } from "@openomni/agent";
+import { commitMessageInbox, prepareMessage } from "../src/composition/message-session";
+import { residentRunner as createResident } from "./helpers/resident-runner";
 import { assistantMessage } from "./helpers/assistant-message";
 
 const directories: string[] = [];
 
 afterEach(() => {
-  mock.restore();
-  Storage.reset();
-  for (const directory of directories.splice(0)) {
-    rmSync(directory, { recursive: true, force: true });
-  }
+	mock.restore();
+	Storage.reset();
+	for (const directory of directories.splice(0)) {
+		rmSync(directory, { recursive: true, force: true });
+	}
 });
 
 const PRIMARY: Model.Ref = { provider: "fake", id: "resident-test" };
 const FALLBACK: Model.Ref = { provider: "other", id: "fallback-model" };
 
 function openSession(prefix: string): string {
-  const directory = mkdtempSync(join(tmpdir(), prefix));
-  directories.push(directory);
-  initialize({ dbPath: join(directory, "chat.db") });
-  // Delivery, not fixture CRUD, owns real handle materialization.
-  return crypto.randomUUID();
+	const directory = mkdtempSync(join(tmpdir(), prefix));
+	directories.push(directory);
+	initialize({ dbPath: join(directory, "chat.db") });
+	// Delivery, not fixture CRUD, owns real handle materialization.
+	return crypto.randomUUID();
 }
 
 function delivery(sessionId: string, meta?: Gateway.Deliver["event"]["meta"]): Gateway.Deliver {
-  const traceId = "0af7651916cd43dd8448eb211c80319c";
-  return {
-    sessionId,
-    event: {
-      id: "inbound-resilience",
-      traceId,
-      surface: "internal",
-      userId: "owner",
-      payload: "please answer",
-      target: { kind: "resident" },
-      mode: "direct",
-      ...(meta === undefined ? {} : { meta }),
-    },
-    decision: {
-      traceId,
-      time: Date.now(),
-      inboundId: "inbound-resilience",
-      surface: "internal",
-      mode: "direct",
-      stage: "surface_default",
-      outcome: "route",
-      reason: "test",
-      factsUsed: [],
-      target: "resident",
-      sessionId,
-    },
-  };
+	const traceId = "0af7651916cd43dd8448eb211c80319c";
+	return {
+		sessionId,
+		event: {
+			id: "inbound-resilience",
+			traceId,
+			surface: "internal",
+			userId: "owner",
+			payload: "please answer",
+			target: { kind: "resident" },
+			mode: "direct",
+			...(meta === undefined ? {} : { meta }),
+		},
+		decision: {
+			traceId,
+			time: Date.now(),
+			inboundId: "inbound-resilience",
+			surface: "internal",
+			mode: "direct",
+			stage: "surface_default",
+			outcome: "route",
+			reason: "test",
+			factsUsed: [],
+			target: "resident",
+			sessionId,
+		},
+	};
 }
 
 describe("Resident model fallback wiring", () => {
-  it("resolves the configured fallback on the retry after a transient failure", async () => {
-    const sessionId = openSession("openomni-resident-fallback-");
-    const resolved: Model.Ref[] = [];
-    const auths: Auth.Info[] = [];
-    const credentials = spyOn(Auth, "get").mockResolvedValue({ type: "api", key: "fallback-key" });
-    let calls = 0;
+	it("resolves the configured fallback on the retry after a transient failure", async () => {
+		const sessionId = openSession("openomni-resident-fallback-");
+		const resolved: Model.Ref[] = [];
+		const auths: Auth.Info[] = [];
+		const credentials = spyOn(Auth, "get").mockResolvedValue({ type: "api", key: "fallback-key" });
+		let calls = 0;
 
-    const resident = createResident({
-      model: PRIMARY,
-      modelFallbacks: [FALLBACK],
-      apiKey: "test-key",
-      tools: {},
-      targets: () => [],
-      llm: {
-        resolveModel: async (model) => {
-          resolved.push(model);
-          return { id: model.id, name: model.id, providerID: model.provider };
-        },
-        run: async (input, sink) => {
-          auths.push(await Auth.resolve(input.model.providerID, input.auth, input.authProvider));
-          calls += 1;
-          if (calls === 1) {
-            return { type: "error", error: providerFailure("transient blip") };
-          }
-          sink.onMessage(assistantMessage(input, { call: calls, text: "recovered" }));
-          return { type: "stop" };
-        },
-      },
-    });
+		const resident = createResident({
+			model: PRIMARY,
+			modelFallbacks: [FALLBACK],
+			apiKey: "test-key",
+			tools: {},
+			targets: () => [],
+			llm: {
+				resolveModel: async (model) => {
+					resolved.push(model);
+					return { id: model.id, name: model.id, providerID: model.provider };
+				},
+				run: async (input, sink) => {
+					auths.push(await Auth.resolve(input.model.providerID, input.auth, input.authProvider));
+					calls += 1;
+					if (calls === 1) {
+						return { type: "error", error: providerFailure("transient blip") };
+					}
+					sink.onMessage(assistantMessage(input, { call: calls, text: "recovered" }));
+					return { type: "stop" };
+				},
+			},
+		});
 
-    const result = await resident(delivery(sessionId));
+		const result = await resident.prompt(sessionId, "please answer");
 
-    expect(resolved).toEqual([PRIMARY, FALLBACK]);
-    expect(auths).toEqual([
-      { type: "api", key: "test-key" },
-      { type: "api", key: "fallback-key" },
-    ]);
-    expect(credentials.mock.calls).toEqual([[FALLBACK.provider]]);
-    expect(result.kind).not.toBe("dropped");
-  });
+		expect(resolved).toEqual([PRIMARY, FALLBACK]);
+		expect(auths).toEqual([
+			{ type: "api", key: "test-key" },
+			{ type: "api", key: "fallback-key" },
+		]);
+		expect(credentials.mock.calls).toEqual([[FALLBACK.provider]]);
+		expect(result.kind).not.toBe("dropped");
+	});
 
-  it("keeps every attempt on the primary when no fallback is configured", async () => {
-    const sessionId = openSession("openomni-resident-no-fallback-");
-    const resolved: Model.Ref[] = [];
-    let calls = 0;
+	it("keeps every attempt on the primary when no fallback is configured", async () => {
+		const sessionId = openSession("openomni-resident-no-fallback-");
+		const resolved: Model.Ref[] = [];
+		let calls = 0;
 
-    const resident = createResident({
-      model: PRIMARY,
-      apiKey: "test-key",
-      tools: {},
-      targets: () => [],
-      llm: {
-        resolveModel: async (model) => {
-          resolved.push(model);
-          return { id: model.id, name: model.id, providerID: model.provider };
-        },
-        run: async (input, sink) => {
-          calls += 1;
-          if (calls === 1) {
-            return { type: "error", error: providerFailure("transient blip") };
-          }
-          sink.onMessage(assistantMessage(input, { call: calls, text: "recovered" }));
-          return { type: "stop" };
-        },
-      },
-    });
+		const resident = createResident({
+			model: PRIMARY,
+			apiKey: "test-key",
+			tools: {},
+			targets: () => [],
+			llm: {
+				resolveModel: async (model) => {
+					resolved.push(model);
+					return { id: model.id, name: model.id, providerID: model.provider };
+				},
+				run: async (input, sink) => {
+					calls += 1;
+					if (calls === 1) {
+						return { type: "error", error: providerFailure("transient blip") };
+					}
+					sink.onMessage(assistantMessage(input, { call: calls, text: "recovered" }));
+					return { type: "stop" };
+				},
+			},
+		});
 
-    await resident(delivery(sessionId));
+		await resident.prompt(sessionId, "please answer");
 
-    expect(resolved).toEqual([PRIMARY, PRIMARY]);
-  });
+		expect(resolved).toEqual([PRIMARY, PRIMARY]);
+	});
 });
 
 /**
@@ -142,199 +144,170 @@ describe("Resident model fallback wiring", () => {
  * on the same shape production coercion has to survive.
  */
 function providerError(fields: {
-  readonly message: string;
-  readonly isRetryable: boolean;
-  readonly statusCode?: number;
-  readonly responseBody?: string;
+	readonly message: string;
+	readonly isRetryable: boolean;
+	readonly statusCode?: number;
+	readonly responseBody?: string;
 }): Error {
-  return Object.assign(new Error(fields.message), {
-    name: "AI_APICallError",
-    isRetryable: fields.isRetryable,
-    ...(fields.statusCode === undefined ? {} : { statusCode: fields.statusCode }),
-    ...(fields.responseBody === undefined ? {} : { responseBody: fields.responseBody }),
-  });
+	return Object.assign(new Error(fields.message), {
+		name: "AI_APICallError",
+		isRetryable: fields.isRetryable,
+		...(fields.statusCode === undefined ? {} : { statusCode: fields.statusCode }),
+		...(fields.responseBody === undefined ? {} : { responseBody: fields.responseBody }),
+	});
 }
 
 describe("Resident terminal LLM failure surfacing", () => {
-  function alwaysFailing(error: Error) {
-    return {
-      resolveModel: async (model: Model.Ref) => ({
-        id: model.id,
-        name: model.id,
-        providerID: model.provider,
-      }),
-      run: async () => ({ type: "error" as const, error: providerFailure(error.message, error) }),
-    };
-  }
+	function alwaysFailing(error: Error) {
+		return {
+			resolveModel: async (model: Model.Ref) => ({
+				id: model.id,
+				name: model.id,
+				providerID: model.provider,
+			}),
+			run: async () => ({ type: "error" as const, error: providerFailure(error.message, error) }),
+		};
+	}
 
-  function residentThatAlwaysFails(error: Error) {
-    return createResident({
-      model: PRIMARY,
-      apiKey: "test-key",
-      tools: {},
-      targets: () => [],
-      llm: alwaysFailing(error),
-    });
-  }
+	function residentThatAlwaysFails(error: Error) {
+		return createResident({
+			model: PRIMARY,
+			apiKey: "test-key",
+			tools: {},
+			targets: () => [],
+			llm: alwaysFailing(error),
+		});
+	}
 
-  it("answers a rate-limited exhaustion with a classified, attempt-counted reply", async () => {
-    const sessionId = openSession("openomni-resident-ratelimit-");
-    const resident = residentThatAlwaysFails(
-      providerError({ message: "rate limited", isRetryable: true, statusCode: 429 }),
-    );
+	it("answers a rate-limited exhaustion with a classified, attempt-counted reply", async () => {
+		const sessionId = openSession("openomni-resident-ratelimit-");
+		const resident = residentThatAlwaysFails(
+			providerError({ message: "rate limited", isRetryable: true, statusCode: 429 }),
+		);
 
-    const result = await resident(delivery(sessionId));
+		const result = await resident.prompt(sessionId, "please answer");
+		expect(result.text).toContain("rate limited upstream");
+		expect(result.text).toContain("tried 3 times");
+		expect(result.kind).toBe("error");
+	});
 
-    if (result.kind === "dropped") throw new Error("terminal failure was dropped, not answered");
-    expect(result.result.output).toContain("rate limited upstream");
-    expect(result.result.output).toContain("tried 3 times");
-    expect(result.result.finishReason).toBe("error");
-  });
+	it("names a spent balance for a billing exhaustion, unhedged", async () => {
+		const sessionId = openSession("openomni-resident-billing-");
+		const resident = residentThatAlwaysFails(
+			providerError({
+				message: JSON.stringify({ error: { code: "insufficient_quota", message: "no credit" } }),
+				isRetryable: true,
+				statusCode: 429,
+			}),
+		);
 
-  it("names a spent balance for a billing exhaustion, unhedged", async () => {
-    const sessionId = openSession("openomni-resident-billing-");
-    const resident = residentThatAlwaysFails(
-      providerError({
-        message: JSON.stringify({ error: { code: "insufficient_quota", message: "no credit" } }),
-        isRetryable: true,
-        statusCode: 429,
-      }),
-    );
+		const result = await resident.prompt(sessionId, "please answer");
+		expect(result.text).toContain("quota/billing exhausted");
+		expect(result.text).toContain("check provider account");
+		expect(result.text).not.toContain("may be exhausted");
+	});
 
-    const result = await resident(delivery(sessionId));
+	it.each([
+		{ message: "402 Payment Required", name: "a bare payment-required response" },
+		{ message: "billing_error: card declined", name: "a declined-card billing error" },
+	])("hedges $name as MAY be exhausted", async ({ message }) => {
+		const sessionId = openSession("openomni-resident-billing-hedged-");
+		const resident = residentThatAlwaysFails(
+			providerError({ message, isRetryable: false, statusCode: 402 }),
+		);
 
-    if (result.kind === "dropped") throw new Error("terminal failure was dropped, not answered");
-    expect(result.result.output).toContain("quota/billing exhausted");
-    expect(result.result.output).toContain("check provider account");
-    expect(result.result.output).not.toContain("may be exhausted");
-  });
+		const result = await resident.prompt(sessionId, "please answer");
+		expect(result.text).toContain("may be exhausted");
+	});
 
-  it.each([
-    { message: "402 Payment Required", name: "a bare payment-required response" },
-    { message: "billing_error: card declined", name: "a declined-card billing error" },
-  ])("hedges $name as MAY be exhausted", async ({ message }) => {
-    const sessionId = openSession("openomni-resident-billing-hedged-");
-    const resident = residentThatAlwaysFails(
-      providerError({ message, isRetryable: false, statusCode: 402 }),
-    );
+	it("names a content-policy refusal", async () => {
+		const sessionId = openSession("openomni-resident-content-policy-");
+		const resident = residentThatAlwaysFails(
+			providerError({
+				message: JSON.stringify({
+					error: { type: "invalid_request_error", code: "content_policy_violation" },
+				}),
+				isRetryable: false,
+				statusCode: 400,
+			}),
+		);
 
-    const result = await resident(delivery(sessionId));
+		const result = await resident.prompt(sessionId, "please answer");
+		expect(result.text).toContain("content policy");
+	});
 
-    if (result.kind === "dropped") throw new Error("terminal failure was dropped, not answered");
-    expect(result.result.output).toContain("may be exhausted");
-  });
+	it("does not expose raw unknown-fault details", async () => {
+		const sessionId = openSession("openomni-resident-unknown-");
+		const resident = residentThatAlwaysFails(
+			new Error("request failed apiKey=sk-live-SECRET baseURL=https://internal.example/v1"),
+		);
 
-  it("names a content-policy refusal", async () => {
-    const sessionId = openSession("openomni-resident-content-policy-");
-    const resident = residentThatAlwaysFails(
-      providerError({
-        message: JSON.stringify({
-          error: { type: "invalid_request_error", code: "content_policy_violation" },
-        }),
-        isRetryable: false,
-        statusCode: 400,
-      }),
-    );
+		const result = await resident.prompt(sessionId, "please answer");
+		expect(result.text).toContain("could not reach the model");
+		expect(result.text).not.toContain("sk-live-SECRET");
+		expect(result.text).not.toContain("https://internal.example/v1");
+	});
 
-    const result = await resident(delivery(sessionId));
+	it("returns one sanitized reply through gateway ingestion", async () => {
+		openSession("openomni-resident-gateway-");
+		const resident = residentThatAlwaysFails(
+			providerError({ message: "rate limited", isRetryable: true, statusCode: 429 }),
+		);
+		const gateway = createResidentGateway({
+			inbox: { commit: commitMessageInbox }, prepare: prepareMessage(resident.materialize),
+		});
 
-    if (result.kind === "dropped") throw new Error("terminal failure was dropped, not answered");
-    expect(result.result.output).toContain("content policy");
-  });
+		const result = await gateway.ingest({ kind: "external", surface: "ws", externalId: "owner" }, {
+			eventId: "inbound-resilience-gateway", surface: "ws", channelId: "owner", addressees: [], dm: true, payload: {}, render: "please answer",
+		});
+		if (result.status !== "executed") throw new Error("gateway did not commit");
+		const completed = await wakeSession(result.handle.target, resident.runnerFor(SessionHandleStore.row(result.handle.target)), resident.runtime);
+		expect(completed?.text).toContain("rate limited upstream");
+		expect(SessionHandleStore.getSnapshot(result.handle.target).turns.at(-1)?.terminal?.kind).toBe(
+			"error",
+		);
+	});
 
-  it("does not expose raw unknown-fault details", async () => {
-    const sessionId = openSession("openomni-resident-unknown-");
-    const resident = residentThatAlwaysFails(
-      new Error("request failed apiKey=sk-live-SECRET baseURL=https://internal.example/v1"),
-    );
+	it("does not convert a configuration failure into a model reply", async () => {
+		const sessionId = openSession("openomni-resident-config-failure-");
+		const resident = createResident({
+			model: PRIMARY,
+			apiKey: "test-key",
+			tools: {},
+			targets: () => [],
+			llm: {
+				resolveModel: async () => {
+					throw new Error("catalog invariant failed");
+				},
+			},
+		});
 
-    const result = await resident(delivery(sessionId));
+		const result = await resident.prompt(sessionId, "please answer");
+		expect(result.kind).toBe("error");
+		if (result.kind !== "error") throw new Error("configuration fault was not an error");
+		expect(result.cause?.message).toBe("catalog invariant failed");
+	});
 
-    if (result.kind === "dropped") throw new Error("terminal failure was dropped, not answered");
-    expect(result.result.output).toContain("could not reach the model");
-    expect(result.result.output).not.toContain("sk-live-SECRET");
-    expect(result.result.output).not.toContain("https://internal.example/v1");
-  });
+	it("records the classified reply in session history so the turn is auditable", async () => {
+		const sessionId = openSession("openomni-resident-failure-history-");
+		const resident = residentThatAlwaysFails(
+			providerError({ message: "rate limited", isRetryable: true, statusCode: 429 }),
+		);
 
-  it("returns one sanitized reply through gateway ingestion", async () => {
-    openSession("openomni-resident-gateway-");
-    const resident = residentThatAlwaysFails(
-      providerError({ message: "rate limited", isRetryable: true, statusCode: 429 }),
-    );
-    const gateway = createResidentGateway(resident);
+		await resident.prompt(sessionId, "please answer");
 
-    const result = await gateway.ingest({
-      id: "inbound-resilience-gateway",
-      traceId: "0af7651916cd43dd8448eb211c80319c",
-      mode: "direct",
-      surface: "ws",
-      userId: "owner",
-      payload: "please answer",
-      meta: { actor: { role: "user" } },
-    });
+		const tail = SessionHandleStore.getSnapshot(sessionId).turns.at(-1);
+		expect(tail?.terminal?.kind).toBe("error");
+		expect(tail?.messages.at(-1)?.text).toContain("rate limited upstream");
+	});
 
-    if (result.kind === "dropped") throw new Error("terminal failure was dropped, not answered");
-    expect(result.result.output).toContain("rate limited upstream");
-    expect(SessionHandleStore.getSnapshot(result.sessionId).turns.at(-1)?.terminal?.kind).toBe(
-      "error",
-    );
-  });
+	it("lets an abort keep propagating — a stopped run is not a model fault", async () => {
+		const sessionId = openSession("openomni-resident-abort-");
+		const aborted = new Error("aborted");
+		aborted.name = "AbortError";
+		const resident = residentThatAlwaysFails(aborted);
 
-  it("does not convert a configuration failure into a model reply", async () => {
-    const sessionId = openSession("openomni-resident-config-failure-");
-    const resident = createResident({
-      model: PRIMARY,
-      apiKey: "test-key",
-      tools: {},
-      targets: () => [],
-      llm: {
-        resolveModel: async () => {
-          throw new Error("catalog invariant failed");
-        },
-      },
-    });
-
-    await expect(resident(delivery(sessionId))).rejects.toThrow("catalog invariant failed");
-  });
-
-  it("records the classified reply in session history so the turn is auditable", async () => {
-    const sessionId = openSession("openomni-resident-failure-history-");
-    const resident = residentThatAlwaysFails(
-      providerError({ message: "rate limited", isRetryable: true, statusCode: 429 }),
-    );
-
-    await resident(delivery(sessionId));
-
-    const tail = SessionHandleStore.getSnapshot(sessionId).turns.at(-1);
-    expect(tail?.terminal?.kind).toBe("error");
-    expect(tail?.messages.at(-1)?.text).toContain("rate limited upstream");
-  });
-
-  it("lets a failed delegation wake keep throwing — the receipt must not be consumed", async () => {
-    // A wake's RESOLUTION is the durable `markWoken` receipt. Converting its
-    // failure into a reply would mark the settlement delivered and lose it,
-    // and no one is waiting on a channel for it — so it stays a throw and the
-    // next boot's rescan retries.
-    const sessionId = openSession("openomni-resident-wake-");
-    const resident = residentThatAlwaysFails(
-      providerError({ message: "rate limit exceeded", isRetryable: true, statusCode: 429 }),
-    );
-
-    await expect(
-      resident(delivery(sessionId, { kind: "delegation.settled" })),
-    ).rejects.toBeInstanceOf(Error);
-
-    // The failed attempt remains auditable as an error terminal, never a
-    // successful reply that could receipt the wake.
-    expect(SessionHandleStore.getSnapshot(sessionId).turns.at(-1)?.terminal?.kind).toBe("error");
-  });
-
-  it("lets an abort keep propagating — a stopped run is not a model fault", async () => {
-    const sessionId = openSession("openomni-resident-abort-");
-    const aborted = new Error("aborted");
-    aborted.name = "AbortError";
-    const resident = residentThatAlwaysFails(aborted);
-
-    await expect(resident(delivery(sessionId))).rejects.toThrow("aborted");
-  });
+		const result = await resident.prompt(sessionId, "please answer");
+		expect(result.kind).toBe("interrupted");
+	});
 });
