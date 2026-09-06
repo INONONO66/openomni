@@ -215,7 +215,7 @@ async function validateSourceImportDirection(): Promise<string[]> {
   }));
   const importPattern = openomniBarrelImportPattern();
 
-  for await (const { filePath, source } of scanRepositorySources("**/*.ts")) {
+  for await (const { filePath, source } of scanRepositorySources("**/*.{ts,tsx}")) {
     const owner = owners.find(({ srcPrefix }) => filePath.startsWith(srcPrefix));
     if (!owner) continue;
 
@@ -378,7 +378,7 @@ async function validateChannelsIntraPackageBanding(): Promise<string[]> {
   const relativeImportPattern = /(?:from\s+|import\s+|import\s*\(\s*)["'](\.{1,2}\/[^"']*)["']/g;
 
   for await (const { filePath, source } of scanRepositorySources(
-    `${CHANNELS_SRC_PREFIX}**/*.ts`,
+    `${CHANNELS_SRC_PREFIX}**/*.{ts,tsx}`,
   )) {
     for (const match of source.matchAll(importPattern)) {
       const dep = match[1];
@@ -410,7 +410,7 @@ async function validateDeepImports(): Promise<string[]> {
   const importPattern =
     /(?:from\s+|import\s+|import\s*\(\s*)["'](@openomni\/[^"']+\/src\/[^"']*)["']/g;
 
-  for await (const { filePath, source } of scanRepositorySources("**/*.ts")) {
+  for await (const { filePath, source } of scanRepositorySources("**/*.{ts,tsx}")) {
     for (const match of source.matchAll(importPattern)) {
       const importPath = match[1] as string;
       const line = lineNumberForOffset(source, match.index);
@@ -432,7 +432,7 @@ async function validateDeepRelativeImports(): Promise<string[]> {
   const violations: string[] = [];
   const importPattern = /(?:from\s+|import\s*\(\s*)["'](\.{2}\/[^"']*)["']/g;
 
-  for await (const { filePath, source } of scanRepositorySources("**/*.ts")) {
+  for await (const { filePath, source } of scanRepositorySources("**/*.{ts,tsx}")) {
     for (const match of source.matchAll(importPattern)) {
       const importPath = match[1] as string;
       const line = lineNumberForOffset(source, match.index);
@@ -458,7 +458,7 @@ async function validateDeepRelativeImports(): Promise<string[]> {
 async function validateGoldenPrinciples(): Promise<string[]> {
   const violations: string[] = [];
 
-  for await (const { filePath, source } of scanRepositorySources("**/*.ts")) {
+  for await (const { filePath, source } of scanRepositorySources("**/*.{ts,tsx}")) {
     const lines = source.split("\n");
 
     for (const [index, line] of lines.entries()) {
@@ -494,7 +494,7 @@ async function validateGoldenPrinciples(): Promise<string[]> {
 
     // #7: No catch-all filenames
     const basename = filePath.split("/").pop() ?? "";
-    if (/^(utils|helpers|common|service)\.ts$/.test(basename) && filePath.includes("/src/")) {
+    if (/^(utils|helpers|common|service)\.tsx?$/.test(basename) && filePath.includes("/src/")) {
       violations.push(
         `VIOLATION: ${filePath} — catch-all filename detected. See docs/golden-principles.local.md #7`,
       );

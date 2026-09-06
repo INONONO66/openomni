@@ -1,3 +1,5 @@
+import ts from "typescript";
+
 type SideEffectRuleId = "processor-projected-sink";
 
 interface SideEffectViolation {
@@ -7,36 +9,7 @@ interface SideEffectViolation {
   readonly message: string;
 }
 
-interface SideEffectRule {
-  readonly ruleId: SideEffectRuleId;
-  readonly filePath: string;
-  readonly sideEffect: RegExp;
-  readonly requiredBefore: readonly string[];
-  readonly requiredAfter: readonly string[];
-  readonly scopeStart?: RegExp;
-  readonly scopeEnd?: RegExp;
-  readonly message: string;
-}
-
-interface SourceMatch {
-  readonly index: number;
-  readonly text: string;
-}
-
 const hotFiles = ["packages/llm/src/processor/index.ts"];
-
-const rules: readonly SideEffectRule[] = [
-  {
-    ruleId: "processor-projected-sink",
-    filePath: "packages/llm/src/processor/index.ts",
-    sideEffect: /\bsink\.on(?:Message|ToolCall|ToolResult|Snapshot)\(/g,
-    requiredBefore: [
-      "const sink = createProjectedSink(events, configuredSink, sessionID, trace.traceId);",
-    ],
-    requiredAfter: [],
-    message: "processor sink side effects must flow through createProjectedSink",
-  },
-];
 
 async function main(): Promise<void> {
   const violations: SideEffectViolation[] = [];
@@ -70,93 +43,50 @@ async function verifyHotFilesExist(): Promise<void> {
 }
 
 export function validateSideEffectRules(filePath: string, source: string): SideEffectViolation[] {
-  return rules
-    .filter((rule) => rule.filePath === filePath)
-    .flatMap((rule) => validateRule(rule, source));
-}
-
-function validateRule(rule: SideEffectRule, source: string): SideEffectViolation[] {
-  const sideEffects = matches(source, rule.sideEffect);
-
-  if (sideEffects.length === 0) {
-    return [
-      {
-        ruleId: rule.ruleId,
-        filePath: rule.filePath,
-        line: 1,
-        message: `side-effect call pattern not found for rule: ${rule.message}`,
-      },
-    ];
+  if (!hotFiles.includes(filePath)) return [];
+  const file = ts.createSourceFile(filePath, source, ts.ScriptTarget.Latest, true);
+  const options: ts.CompilerOptions = { noResolve: true, noLib: true };
+  const host = ts.createCompilerHost(options);
+  host.getSourceFile = (name) => name === filePath ? file : undefined;
+  const checker = ts.createProgram([filePath], options, host).getTypeChecker();
+  const violations: SideEffectViolation[] = [];
+  let emissions = 0;
+  function violation(offset: number, message: string): void {
+    violations.push({
+      ruleId: "processor-projected-sink", filePath,
+      line: file.getLineAndCharacterOfPosition(offset).line + 1, message,
+    });
   }
-
-  return sideEffects.flatMap((sideEffect) => {
-    const searchStart = rule.scopeStart
-      ? lastMatchStartBefore(source, rule.scopeStart, sideEffect.index)
-      : 0;
-    const prefix = source.slice(searchStart, sideEffect.index);
-    const missingBefore = rule.requiredBefore.filter((snippet) => !prefix.includes(snippet));
-
-    const scopeEnd = firstMatchStartAfter(source, rule.scopeEnd, sideEffect.index);
-    const suffix = source.slice(
-      sideEffect.index + sideEffect.text.length,
-      scopeEnd === -1 ? source.length : scopeEnd,
-    );
-    const missingAfter = rule.requiredAfter.filter((snippet) => !suffix.includes(snippet));
-
-    const missing = [...missingBefore, ...missingAfter];
-
-    if (missing.length === 0) {
-      return [];
+  function visit(node: ts.Node): void {
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
+      const { expression: receiver, name } = node.expression;
+      if (ts.isIdentifier(receiver) && receiver.text === "sink" && /^on(Message|ToolCall|ToolResult|Snapshot)$/.test(name.text)) {
+        emissions += 1;
+        const declaration = checker.getSymbolAtLocation(receiver)?.valueDeclaration;
+        if (!declaration || !isProjectedBinding(declaration, node.getStart(file))) {
+          violation(node.getStart(file), "processor sink side effects must flow through createProjectedSink");
+        }
+      }
     }
-
-    return [
-      {
-        ruleId: rule.ruleId,
-        filePath: rule.filePath,
-        line: lineNumberForOffset(source, sideEffect.index),
-        message: `${rule.message}; missing: ${missing.join(", ")}`,
-      },
-    ];
-  });
-}
-
-function firstMatchStartAfter(source: string, pattern: RegExp | undefined, offset: number): number {
-  if (!pattern) return source.indexOf("\n  }", offset);
-  return (
-    matches(source, pattern)
-      .map((match) => match.index)
-      .find((index) => index > offset) ?? -1
-  );
-}
-
-function matches(source: string, pattern: RegExp): SourceMatch[] {
-  pattern.lastIndex = 0;
-  const results: SourceMatch[] = [];
-
-  let match = pattern.exec(source);
-  while (match !== null) {
-    results.push({ index: match.index, text: match[0] });
-    match = pattern.exec(source);
+    ts.forEachChild(node, visit);
   }
-
-  return results;
+  visit(file);
+  if (emissions === 0) violation(0, "side-effect call pattern not found for processor-projected-sink");
+  return violations;
 }
 
-function lastMatchStartBefore(source: string, pattern: RegExp, offset: number): number {
-  const starts = matches(source, pattern)
-    .map((match) => match.index)
-    .filter((index) => index <= offset);
-  return starts.at(-1) ?? 0;
-}
-
-function lineNumberForOffset(source: string, offset: number): number {
-  let line = 1;
-  for (let index = 0; index < offset; index += 1) {
-    if (source.charCodeAt(index) === 10) {
-      line += 1;
-    }
+function isProjectedBinding(declaration: ts.Declaration, emissionStart: number): boolean {
+  // The projector itself forwards to its raw sink parameter; no other function does.
+  if (ts.isParameter(declaration)) {
+    const owner = declaration.parent;
+    return ts.isFunctionDeclaration(owner) && owner.name?.text === "createProjectedSink";
   }
-  return line;
+  if (!ts.isVariableDeclaration(declaration) || declaration.end > emissionStart) return false;
+  const initializer = declaration.initializer;
+  return ts.isVariableDeclarationList(declaration.parent)
+    && (declaration.parent.flags & ts.NodeFlags.Const) !== 0
+    && initializer !== undefined && ts.isCallExpression(initializer)
+    && ts.isIdentifier(initializer.expression) && initializer.expression.text === "createProjectedSink";
 }
 
 if (import.meta.main) {

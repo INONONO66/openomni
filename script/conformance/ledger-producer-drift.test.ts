@@ -1,6 +1,9 @@
 import { createDispositionFixture } from "../../packages/ledger/test/helpers/disposition-967";
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { Database } from "bun:sqlite";
 import { buildLedgerArchiveManifest } from "../generate-ledger-archive-manifest";
 import {
   LEDGER_PRODUCER_MANIFEST,
@@ -18,6 +21,36 @@ const adapterBinding = "packages/ledger/src/storage/sqlite-storage.ts";
 
 
 describe("ledger producer drift", () => {
+  test.each(['"ledger_event"', '`ledger_event`', '[ledger_event]', 'main.ledger_event', '"main" . "ledger_event"', '[main].[ledger_event]'])
+  ("recognizes executable SQLite identifier %s in sources and migrations", (identifier) => {
+    using db = new Database(":memory:");
+    db.exec("CREATE TABLE ledger_event (id TEXT)");
+    const sql = `INSERT INTO ${identifier} (id) VALUES ('writer')`;
+    db.exec(sql);
+    expect(matchesLedgerTableWriteSql(`db.exec(${JSON.stringify(sql)})`)).toBe(true);
+    expect(matchesMigrationTableWriteSql(sql)).toBe(true);
+  });
+
+  test("discovers quoted writers while excluding production-tree tests and unrelated tables", async () => {
+    const root = mkdtempSync(join(tmpdir(), "openomni-producers-"));
+    try {
+      mkdirSync(join(root, "apps/probe/src/__tests__"), { recursive: true });
+      mkdirSync(join(root, "packages/probe/migration/0001"), { recursive: true });
+      const write = 'db.exec(`UPDATE "main"."ledger_head" SET head = 1`)';
+      for (const name of ["writer.tsx", "ignored.spec.ts", "ignored.test.tsx", "__tests__/ignored.ts"]) {
+        writeFileSync(join(root, "apps/probe/src", name), write);
+      }
+      writeFileSync(join(root, "apps/probe/src/read.ts"), 'db.exec(`SELECT * FROM "ledger_head"`); db.exec(`UPDATE "ledger_head_extra" SET head = 1`)');
+      writeFileSync(join(root, "packages/probe/migration/0001/migration.sql"), 'DELETE FROM [main].[worker_run_state];');
+      expect(await scanLedgerProducers(root)).toEqual({
+        appendCallSites: [], ledgerTableWriters: ["apps/probe/src/writer.tsx"], frozenTableWriters: [],
+        migrationSqlWriters: ["packages/probe/migration/0001/migration.sql"],
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("the observed write surface equals the manifest in both directions", async () => {
     const scan = await scanLedgerProducers(repoRoot);
 

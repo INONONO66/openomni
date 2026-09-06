@@ -51,17 +51,21 @@ afterEach(async () => {
 
 async function deletedSymbolViolations(): Promise<string[]> {
   const violations: string[] = [];
+  const repoRoot = join(import.meta.dir, "..");
   for (const root of ["apps", "packages", "script"] as const) {
-    const glob = new Bun.Glob(`${root}/**/*.ts`);
-    for await (const filePath of glob.scan({ cwd: ".", onlyFiles: true })) {
-      if (filePath.endsWith(".test.ts") || filePath.includes("/dist/")) continue;
-      const source = await Bun.file(filePath).text();
+    let scanned = 0;
+    const glob = new Bun.Glob(`${root}/**/*.{ts,tsx}`);
+    for await (const filePath of glob.scan({ cwd: repoRoot, onlyFiles: true })) {
+      if (/\.(?:test|spec)\.tsx?$/.test(filePath) || /\/(?:test|tests|__tests__|fixtures|dist|node_modules)\//.test(filePath)) continue;
+      scanned += 1;
+      const source = await Bun.file(join(repoRoot, filePath)).text();
       for (const symbol of DELETED_SYMBOLS) {
         if (filePath.includes(symbol) || source.includes(symbol)) {
           violations.push(`${symbol} ${filePath}`);
         }
       }
     }
+    expect(scanned, `empty production census: ${root}`).toBeGreaterThan(0);
   }
   return violations.sort((left, right) => left.localeCompare(right));
 }
