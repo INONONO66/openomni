@@ -19,21 +19,22 @@ for (const mode of ["throw", "crash"] as const) {
         stdout: "pipe", stderr: "pipe", timeout: 10_000 });
       const stdout = result.stdout.toString();
       console.log(JSON.stringify({ args, mode, boundary, exit: result.exitCode, signal: result.signalCode, stdout, stderr: result.stderr.toString() }));
-      try {
-        expect(result.exitCode).not.toBe(0);
-        expect(stdout).toContain(`"archiveBoundary":"${boundary}"`);
-        expect(snapshotDatabase(fixture.db)).toEqual(before);
-        if (existsSync(fixture.archive)) expect(statSync(fixture.archive).mode & 0o777).toBe(0o600);
-        if (mode === "throw") expect(stdout).toContain('"openDescriptors":0,"ownedRestores":0');
-      } finally {
-        for (const line of stdout.split("\n").filter(Boolean)) {
-          const resource = z.object({ ownedRestore: z.string() }).safeParse(JSON.parse(line));
-          if (!resource.success) continue;
-          rmSync(resource.data.ownedRestore, { recursive: true, force: true });
-          expect(existsSync(resource.data.ownedRestore)).toBe(false);
-          console.log(JSON.stringify({ cleanup: resource.data.ownedRestore, removed: true, owner: "archive-child" }));
-        }
+      // Attempt every cleanup; native disposal preserves assertion and cleanup failures.
+      using cleanup = new DisposableStack();
+      for (const line of stdout.split("\n").filter(Boolean)) {
+        cleanup.defer(() => {
+          const resource = z.object({ ownedRestore: z.string().optional() }).parse(JSON.parse(line));
+          if (resource.ownedRestore === undefined) return;
+          rmSync(resource.ownedRestore, { recursive: true, force: true });
+          expect(existsSync(resource.ownedRestore)).toBe(false);
+          console.log(JSON.stringify({ cleanup: resource.ownedRestore, removed: true, owner: "archive-child" }));
+        });
       }
+      expect(result.exitCode).not.toBe(0);
+      expect(stdout).toContain(`"archiveBoundary":"${boundary}"`);
+      expect(snapshotDatabase(fixture.db)).toEqual(before);
+      if (existsSync(fixture.archive)) expect(statSync(fixture.archive).mode & 0o777).toBe(0o600);
+      if (mode === "throw") expect(stdout).toContain('"openDescriptors":0,"ownedRestores":0');
     });
   });
 }
