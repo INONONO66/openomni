@@ -21,6 +21,10 @@ export const UI_NAMES = {
   TabStripControls: "TabStrip.Controls",
   /** The one sidebar toggle, first in the strip's zone in every state. */
   SidebarToggle: "Sidebar.Toggle",
+  /** The toggle's glyph; `data-opened` is the column's visibility (pinned or revealed). */
+  SidebarToggleIcon: "Sidebar.Toggle.Icon",
+  /** The history trio: clock, back, forward. Right-aligned to the sidebar's edge while open. */
+  TabStripTrio: "TabStrip.Trio",
   /** The one tab: the open column's title. */
   Tab: "Tab",
   /** The window root: sidebar state and the runtime `--sidebar-width` live here. */
