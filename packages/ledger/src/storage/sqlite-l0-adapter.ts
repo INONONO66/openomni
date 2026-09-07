@@ -108,7 +108,7 @@ export function createSqliteL0Adapters(
     actions,
     inbox,
     alarms: createAlarms(db, transaction, observationSink),
-    policies: createPolicies(db),
+    policies: createPolicies(db, transaction),
   };
 }
 
@@ -766,8 +766,27 @@ function fireAlarm(db: Database, input: Alarm.Fire): Alarm.Fired | undefined {
   return { row: committed, inbox, receipts: [fired, prompt] };
 }
 
-function createPolicies(db: Database): ProtocolStorage.PolicyRowSubAdapter {
+function createPolicies(
+  db: Database,
+  transaction: <T>(operation: () => T) => T,
+): ProtocolStorage.PolicyRowSubAdapter {
   return {
+    appendGeneration(derive) {
+      return transaction(() => {
+        const all = this.rows();
+        const latest = Math.max(0, ...all.map((row) => row.generation));
+        const drafts = derive(all.filter((row) => row.generation === latest));
+        if (drafts === undefined) return latest;
+        if (drafts.length === 0) throw new Error("policy generation must not be empty");
+        const generation = latest + 1;
+        for (const draft of drafts) {
+          if (!this.append({ ...draft, generation })) {
+            throw new Error(`could not append policy row: ${draft.name}`);
+          }
+        }
+        return generation;
+      });
+    },
     append(input) {
       const row = PolicyRow.Row.parse(input);
       const result = db

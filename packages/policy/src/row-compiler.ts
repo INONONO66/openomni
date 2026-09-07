@@ -536,7 +536,7 @@ export interface PolicyCompiler {
 }
 
 export function createPolicyCompiler(options: {
-  readonly source: Storage.PolicyRowSubAdapter;
+  readonly source: Pick<Storage.PolicyRowSubAdapter, "append" | "rows">;
   readonly mandatory?: readonly RuleName[];
   readonly kinds?: readonly string[];
 }): PolicyCompiler {

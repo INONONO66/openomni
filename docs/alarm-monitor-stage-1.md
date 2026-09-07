@@ -76,6 +76,14 @@ unsupported source, lifetime, budget/generation, regex and absolute-path shapes
 refuse with the alarm identity and preserve the old database image. Existing
 numbered SQL is not rewritten.
 
+Boot policy promotion uses the ledger adapter's `policies.appendGeneration`:
+latest-generation selection, copying and new rows share the existing storage
+transaction. A refused insert rolls back the entire generation; reopening still
+selects the previous complete rows. The seeder compares the full mandatory
+(name, kind, phase) identity set, not just the monitor budget marker. Existing
+policy values and site-specific identities are preserved. The compiler's
+row-level source contract is unchanged; app seeding uses only atomic promotion.
+
 Opaque synchronous throws at callback boundaries become `AlarmSourceError`
 with a typed site (`pty.data`, `pty.eof`, `path.observe`, `source.start`,
 `bus.scan`, `timer.scan`); they are reported, never cast to Error or silently

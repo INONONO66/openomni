@@ -1,17 +1,11 @@
 import { SEEDED_POLICY_ROWS } from "@openomni/agent";
 import { Storage } from "@openomni/ledger";
+import type { PolicyRow } from "@openomni/protocol";
 
 /** Seeds the kernel's mandatory generation before any durable session is materialized. */
 export function seedKernelPolicyRows(): number {
   const policies = Storage.get().policies;
   if (policies === undefined) throw new Error("L0 storage capability is unavailable: policies");
-  const current = policies.rows();
-  const latest = Math.max(0, ...current.map((row) => row.generation));
-  if (current.some((row) => row.generation === latest && row.name === "monitor-wake-budget"))
-    return latest;
-  const generation = latest + 1;
-  const base =
-    latest === 0 ? SEEDED_POLICY_ROWS : current.filter((row) => row.generation === latest);
   const budget = {
     name: "monitor-wake-budget",
     kind: "tool",
@@ -23,10 +17,18 @@ export function seedKernelPolicyRows(): number {
       value: { type: "obligation", name: "budget_clamp", metric: "notifications", limit: 8 },
     },
   };
-  for (const row of [...base, budget]) {
-    if (!policies.append({ ...row, generation })) {
-      throw new Error(`could not seed policy row: ${row.name}`);
+  return policies.appendGeneration((current) => {
+    const next = new Map([...SEEDED_POLICY_ROWS, budget].map((row) => [policyId(row), row]));
+    // Preserve existing policy values and site-specific ids; fill missing mandatory ids.
+    for (const row of current) next.set(policyId(row), row);
+    const currentIds = new Set(current.map(policyId));
+    if (currentIds.size === next.size && [...next.keys()].every((id) => currentIds.has(id))) {
+      return undefined;
     }
-  }
-  return generation;
+    return [...next.values()];
+  });
+}
+
+function policyId(row: Omit<PolicyRow.Row, "generation">): string {
+  return JSON.stringify([row.name, row.kind, row.phase]);
 }

@@ -43,6 +43,15 @@ export namespace Storage {
   export interface PolicyRowSubAdapter {
     append(row: PolicyRow.Row): boolean;
     rows(generation?: number): PolicyRow.Row[];
+    /** Select latest, derive its successor and append every row in one transaction.
+     * Return undefined from derive to keep the current generation unchanged.
+     * Empty generations and refused rows throw and roll back the whole write unit.
+     */
+    appendGeneration(
+      derive: (
+        current: readonly PolicyRow.Row[],
+      ) => readonly Omit<PolicyRow.Row, "generation">[] | undefined,
+    ): number;
   }
 
   export interface ActorRegistrySubAdapter {
