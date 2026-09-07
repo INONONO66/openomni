@@ -11,7 +11,6 @@ import {
   type SessionRunnerResult,
   type SessionRuntime,
 } from "@openomni/agent";
-import type { Placement } from "@openomni/placement";
 import type { AnyToolDefinition, Gateway, Ingress, Model } from "@openomni/protocol";
 import { Bus, newTraceId } from "@openomni/agent";
 import { chatProviderConfig } from "./composition/chat-provider";
@@ -57,7 +56,6 @@ export interface ResidentOptions {
   readonly compaction?: ChatAgentConfig["compaction"];
   readonly tools: CatalogPorts;
   readonly toolDefinitions?: readonly AnyToolDefinition[];
-  readonly targets: () => readonly Placement.ToolTarget[];
   readonly sessionRuntime?: SessionRuntime;
 }
 
@@ -159,7 +157,6 @@ export function createResident(options: ResidentOptions): ResidentDelivery {
             executor: dispatcher.executor,
             systemPrompt: input.system,
             tools,
-            toolTargets: options.targets(),
             toolChoice: evidenceOnly || tools.length === 0 ? "none" : "auto",
             toolWave: (calls, signal) =>
               evidenceOnly

@@ -54,13 +54,6 @@ export function createLlmTool(llm: LlmPort) {
 }
 
 /**
- * The llm tool's model, resolved from the models.dev catalog. Unlisted is an
- * ERROR, not a fallback: a bare model ref would drop the provider's `api.npm`
- * wiring and the LLM package would default to the OpenAI SDK — sending the
- * configured credential to the wrong provider. The agent loop's own resolver
- * refuses unlisted models for the same reason.
- */
-/**
  * The same substitution seam ChatAgentConfig["llm"] gives the Resident and
  * the worker loop: absent fields use the real provider I/O. Boot passes its
  * `options.llm` through, so a composition booted on a fake model never lets

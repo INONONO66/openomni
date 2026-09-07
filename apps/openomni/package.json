@@ -22,7 +22,6 @@
     "@openomni/protocol": "workspace:*",
     "@openomni/policy": "workspace:*",
     "zod": "^4.5.4",
-    "@openomni/placement": "workspace:*",
     "@openomni/machines": "workspace:*",
     "@openomni/codemode": "workspace:*"
   },

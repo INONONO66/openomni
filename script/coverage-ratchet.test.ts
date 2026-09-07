@@ -77,7 +77,7 @@ test("full check/update fail closed on empty instrumentation without rewriting b
     const baseline = join(root, "script/conformance/coverage-baseline.json");
     const before = readFileSync(baseline, "utf8");
     expect(cli().exitCode).toBe(0);
-    const reportPath = join(root, "packages/placement/coverage/lcov.info");
+    const reportPath = join(root, "packages/llm/coverage/lcov.info");
     for (const report of ["", record("src/covered.ts", "0", "0")]) {
       writeFileSync(reportPath, report);
       expect(cli().exitCode).not.toBe(0);
@@ -93,27 +93,27 @@ test("full check/update fail closed on empty instrumentation without rewriting b
 test("selected lane requires exactly its report and ignores unrelated reports", () =>
   fixture((root, cli) => {
     for (const lane of coverageLanes()) {
-      if (lane.dir !== "packages/placement")
+      if (lane.dir !== "packages/llm")
         rmSync(join(root, lane.dir, "coverage"), { recursive: true });
     }
     mkdirSync(join(root, "packages/machines/coverage"), { recursive: true });
     writeFileSync(join(root, "packages/machines/coverage/lcov.info"), "invalid");
-    expect(cli("--lane", "packages/placement").exitCode).toBe(0);
+    expect(cli("--lane", "packages/llm").exitCode).toBe(0);
     expect(cli().exitCode).not.toBe(0);
     for (const args of [
       ["--lane"],
       ["--lane", "packages/machines"],
       ["--lane", "bogus"],
-      ["--lane", "packages/placement", "--update"],
+      ["--lane", "packages/llm", "--update"],
     ])
       expect(cli(...args).exitCode).not.toBe(0);
-    rmSync(join(root, "packages/placement/coverage/lcov.info"));
-    expect(cli("--lane", "packages/placement").exitCode).not.toBe(0);
+    rmSync(join(root, "packages/llm/coverage/lcov.info"));
+    expect(cli("--lane", "packages/llm").exitCode).not.toBe(0);
   }));
 
 test("real Bun omission is rejected in check and update; type-only files are exempt", () =>
   fixture((root, cli) => {
-    const lane = join(root, "packages/placement");
+    const lane = join(root, "packages/llm");
     writeFileSync(join(lane, "src/index.ts"), 'export { covered } from "./covered";\n');
     writeFileSync(join(lane, "src/unimported.tsx"), "export const unimported = () => 2;\n");
     writeFileSync(
@@ -141,15 +141,15 @@ test("real Bun omission is rejected in check and update; type-only files are exe
     expect(report).not.toContain("SF:src/unimported.tsx");
     // Keep the historical denominator control independent of the omitted file.
     const baselinePath = join(root, "script/conformance/coverage-baseline.json");
-    const baseline = JSON.parse(readFileSync(baselinePath, "utf8"));
-    baseline["packages/placement"] = { linesFound: 1, linesHit: 1, pct: 100 };
+    const baseline = JSON.parse(readFileSync(baselinePath, "utf8")) as Record<string, { linesFound: number; linesHit: number; pct: number }>;
+    baseline["packages/llm"] = { linesFound: 1, linesHit: 1, pct: 100 };
     writeFileSync(baselinePath, JSON.stringify(baseline));
-    for (const args of [[], ["--update"], ["--lane", "packages/placement"]]) {
+    for (const args of [[], ["--update"], ["--lane", "packages/llm"]]) {
       const checked = cli(...args);
       expect(checked.exitCode).not.toBe(0);
       expect(checked.stderr?.toString()).toContain("src/unimported.tsx");
     }
     rmSync(join(lane, "src/unimported.tsx"));
     expect(cli("--update").exitCode).toBe(0);
-    expect(cli("--lane", "packages/placement").exitCode).toBe(0);
+    expect(cli("--lane", "packages/llm").exitCode).toBe(0);
   }));

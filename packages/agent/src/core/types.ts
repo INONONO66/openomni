@@ -9,7 +9,6 @@ import type {
   Tool,
 } from "@openomni/protocol";
 import type { Provider, RunInput, Sink } from "@openomni/llm";
-import type { Placement } from "@openomni/placement";
 import type { CompactionOptions } from "../compaction";
 import type { Executor } from "../executor";
 
@@ -53,19 +52,11 @@ export interface ChatAgentConfig {
   /** Direct, run-scoped history compaction strategy. */
   compaction?: CompactionOptions;
   tools?: AgentToolSpec[];
-  /**
-   * The brain host and any attached machines that may execute catalog tools,
-   * with machine capabilities already reduced by
-   * `Machine.effectiveCapabilities`. Absent honestly means one host candidate
-   * with no declared capabilities and no attached machines: free/host tools
-   * with empty requirements remain offerable, machine tools do not.
-   */
-  toolTargets?: readonly Placement.ToolTarget[];
   model: Model.Ref;
   /**
    * Ordered fallback models AFTER `model` (#752). On a chain-advancing
    * failure (timeout / transient_error / validation_error) the next retry
-   * attempt resolves the next candidate via the pure `@openomni/placement`
+   * attempt resolves the next candidate via the pure `@openomni/llm`
    * fold. Tool errors, context overflow (the compaction recovery retries the
    * SAME model), and aborts never advance the chain; when the chain is spent
    * the last candidate absorbs the remaining attempts — WHEN the run stops

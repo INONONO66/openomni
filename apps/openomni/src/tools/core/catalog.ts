@@ -1,5 +1,6 @@
 import type { AnyToolDefinition, Tool } from "@openomni/protocol";
 import { monitorTool } from "../mutation/monitor";
+import type { MachineHost } from "@openomni/machines";
 import type { DelegationOrigin } from "../../delegation/admission";
 import type { DelegationKernel } from "../../delegation/kernel";
 import { createApprovalTool, type ApprovalPort } from "../authority/approval";
@@ -13,8 +14,15 @@ import { createRunCodeTool } from "../execution/run-code";
 import type { composeCodemode } from "../../composition/codemode";
 import { createProvisionTool, type ProvisionPort } from "../mutation/provision";
 import { eraseTool, toolSpec } from "@openomni/agent";
+import { createReadTool } from "../fs/read";
+import { createWriteTool } from "../fs/write";
+import { createEditTool } from "../fs/edit";
+import { createListTool } from "../fs/list";
+import { createSearchTool } from "../fs/search";
+import { createBashTool } from "../code/bash";
 
 export interface CatalogPorts {
+  readonly machines?: MachineHost;
   readonly delegation?: DelegationKernel;
   readonly approvals?: ApprovalPort;
   readonly cells?: Pick<ReturnType<typeof composeCodemode>, "cell" | "bindTools">;
@@ -27,7 +35,14 @@ export function createTools(
   ports: CatalogPorts,
   origin: DelegationOrigin,
 ): readonly AnyToolDefinition[] {
-  const tools: AnyToolDefinition[] = [];
+  const tools: AnyToolDefinition[] = [
+    eraseTool(createReadTool(ports)),
+    eraseTool(createWriteTool(ports)),
+    eraseTool(createEditTool(ports)),
+    eraseTool(createListTool(ports)),
+    eraseTool(createSearchTool(ports)),
+    eraseTool(createBashTool(ports)),
+  ];
   tools.push(eraseTool(monitorTool));
   if (ports.delegation !== undefined) {
     tools.push(

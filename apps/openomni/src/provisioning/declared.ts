@@ -14,13 +14,16 @@ import { type KekResolution, resolveKek } from "./vault-key";
  */
 
 /** Binds the vault seam for `declaredChannelProfile`: store row + KEK → plaintext or a locked reason. */
-export function vaultCredentialReader(resolution: KekResolution): CredentialReader {
+export function vaultCredentialReader(
+  resolution: KekResolution,
+  readSecret: typeof SecretStore.get = SecretStore.get,
+): CredentialReader {
   if (resolution.kind === "locked") {
     return () => ({ kind: "locked", reason: resolution.reason });
   }
   const kek = resolution.kek;
   return (ref) => {
-    const secret = SecretStore.get(ref);
+    const secret = readSecret(ref);
     if (secret === undefined) {
       return { kind: "locked", reason: `no vault row for credentialRef ${ref}` };
     }
@@ -59,7 +62,12 @@ export function desiredChannels(
       statuses: [],
     };
   }
-  const reader = vaultCredentialReader(resolveKek(env, home));
+  const secrets = new Map<string, ReturnType<typeof SecretStore.get>>();
+  const readSecret: typeof SecretStore.get = (ref) => {
+    if (!secrets.has(ref)) secrets.set(ref, SecretStore.get(ref));
+    return secrets.get(ref);
+  };
+  const reader = vaultCredentialReader(resolveKek(env, home), readSecret);
   const { rows, statuses } = declaredChannelProfile(instances, reader);
   const byId = new Map(instances.map((instance) => [instance.id, instance]));
   return {
@@ -67,7 +75,7 @@ export function desiredChannels(
     rows: rows.map((row) => {
       const instance = byId.get(row.instanceId);
       const secret =
-        instance?.credentialRef === undefined ? undefined : SecretStore.get(instance.credentialRef);
+        instance?.credentialRef === undefined ? undefined : readSecret(instance.credentialRef);
       const rotation = secret?.rotatedAt ?? secret?.createdAt ?? 0;
       return {
         instanceId: row.instanceId,
