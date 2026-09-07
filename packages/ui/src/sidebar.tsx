@@ -2,7 +2,7 @@ import { createContext, type ReactNode, type RefObject, useContext, useRef } fro
 import { UI_NAMES } from "./names";
 
 /**
- * The sidebar, as Capy builds it: an in-flow GAP that reserves the width, a
+ * The sidebar, as the reference console builds it: an in-flow GAP that reserves the width, a
  * FIXED container that actually slides, and a CONTENT column inside it that
  * fades a beat after the container moves. Three elements rather than one,
  * because they animate three different things: the gap animates width (so the
@@ -14,7 +14,7 @@ import { UI_NAMES } from "./names";
  * gap, the container, and the tab strip's controls zone. While the handle is
  * dragging it is written straight to the style attribute under
  * `requestAnimationFrame`, and React hears about the width once, on release.
- * Every number here is measured from Capy; see docs/desktop-shell.md.
+ * Every number here is measured from the reference console; see docs/desktop-shell.md.
  */
 
 /** The width the handle may drag between, and where a fresh window starts. */

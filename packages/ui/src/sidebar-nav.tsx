@@ -10,7 +10,7 @@ import { useSidebar } from "./sidebar";
 /**
  * The sidebar column's rows, top to bottom: a 44px header, a nav of 28px
  * items, a section whose 32px header can turn into a search field, and a
- * footer over a hairline. Every height is measured from Capy
+ * footer over a hairline. Every height is measured from the reference console
  * (docs/desktop-shell.md); the words in them are the app's.
  */
 

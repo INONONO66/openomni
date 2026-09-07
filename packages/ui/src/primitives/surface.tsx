@@ -6,7 +6,7 @@ export type PanelTone = "bg" | "sunken" | "raised";
  * A hairline is allowed on a COLUMN SPLIT — the places where the layout
  * genuinely divides into independently scrolling regions — and on the ONE
  * frame edge: `box` is the main column's own panel, a 12px-cornered hairline
- * card sitting on the chrome (Capy's `--radius-panel`). Inside a column,
+ * card sitting on the chrome (the reference's `--radius-panel`). Inside a column,
  * structure is whitespace and type weight, never a drawn box.
  */
 export type PanelEdge = "none" | "right" | "left" | "box";

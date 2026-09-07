@@ -10,7 +10,7 @@ import { STRIP } from "./fixture";
 
 /**
  * The frame's class-state contract, asserted on static markup: which classes
- * and attributes each sidebar state produces. The numbers are Capy's
+ * and attributes each sidebar state produces. The numbers are the reference console's
  * (docs/desktop-shell.md); the tests pin the ones a regression would move.
  */
 

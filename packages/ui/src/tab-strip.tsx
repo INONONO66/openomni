@@ -6,7 +6,7 @@ import { IconButton } from "./primitives/button";
 import { useSidebar } from "./sidebar";
 
 /**
- * The window's top row, as Capy builds it: a 40px strip that is the drag
+ * The window's top row, as the reference console builds it: a 40px strip that is the drag
  * surface, with a CONTROLS ZONE on the left whose width tracks the sidebar.
  *
  * The zone is the trick. While the sidebar is open it is exactly
@@ -15,7 +15,7 @@ import { useSidebar } from "./sidebar";
  * sidebar collapses the zone shrinks to what the window controls, the sidebar
  * toggle, and the trio need — and because it animates `width` on the same
  * duration and curve as the sidebar gap, the tab slides left in lockstep with
- * the column beneath it. Every number is measured from Capy
+ * the column beneath it. Every number is measured from the reference console
  * (docs/desktop-shell.md).
  *
  * `platform` is a fact about where the OS draws its window controls, not about

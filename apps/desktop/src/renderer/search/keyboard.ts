@@ -73,7 +73,7 @@ export function reduce(
     case "escape":
       // One meaning: leave. The query clears, the field closes, and focus
       // returns to the row the operator is actually working in — not to
-      // nowhere. (Capy's section-header search; docs/desktop-shell.md.)
+      // nowhere. (reference section-header search; docs/desktop-shell.md.)
       return { state: INITIAL, effects: [{ kind: "close" }] };
 
     case "move": {

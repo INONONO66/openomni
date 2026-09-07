@@ -16,7 +16,7 @@ import { Voice } from "./timeline/voice";
  *
  * ## The frame
  *
- * A 40px tab strip fixed across the top, and under it the Capy sidebar
+ * A 40px tab strip fixed across the top, and under it the reference sidebar
  * mechanism: an in-flow gap that reserves the width, a fixed container that
  * slides, and the main column filling the rest. The strip's controls zone and
  * the gap read the same `--sidebar-width`, so the tab and the column move as

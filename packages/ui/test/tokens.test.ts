@@ -359,7 +359,7 @@ describe("the motion budget", () => {
     // a chevron — is `--motion-fast`, one duration composed with one easing so
     // a component cannot take one and not the other and invent a third speed.
     // The FRAME (tab strip zone, sidebar gap/container/content) moves on
-    // Capy's measured scale: exactly `fast`/`base`/`slow` and one curve, and
+    // the reference's measured scale: exactly `fast`/`base`/`slow` and one curve, and
     // nothing inside a column may spend them (docs/desktop-shell.md).
     const durations = [...CSS.matchAll(/^\s*(--[\w-]*duration[\w-]*):/gm)].map(([, name]) => name);
     const easings = [...CSS.matchAll(/^\s*(--[\w-]*ease[\w-]*):/gm)].map(([, name]) => name);

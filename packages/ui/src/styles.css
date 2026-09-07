@@ -166,7 +166,7 @@
      (12px). Nothing inside a column may take either — past 6px at this density
      a row stops being a line in a ledger and starts being a card, and the two
      frame radii are how the frame stays distinguishable from its content.
-     Measured from Capy (docs/desktop-shell.md). */
+     Measured from the reference console (docs/desktop-shell.md). */
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-card: 0.5rem;
@@ -235,7 +235,7 @@
 
   /* ---- Shell motion (frame only) ---------------------------------------- */
   /* The FRAME moves on a different scale from the content, and these are its
-     three speeds plus its one curve — copied from Capy (docs/desktop-shell.md),
+     three speeds plus its one curve — copied from the reference console (docs/desktop-shell.md),
      not tuned here. A sidebar sliding 240px cannot run the 120ms answer-to-
      input token: at that speed a 240px translate reads as a cut, not a slide.
 
@@ -259,7 +259,7 @@
                + 24 history + 4 + 24 back + 4 + 24 forward + 12 right pad = 204
        other   8 left pad + 24 toggle + 12 gap
                + 24 history + 4 + 24 back + 4 + 24 forward + 8 right pad = 132
-               (Capy measures 108 here, without a history control.)
+               (the reference measures 108 here, without a history control.)
 
      The open width is not a token: it is the runtime `--sidebar-width`. */
   --spacing-tab-controls-collapsed: 204px;
@@ -268,7 +268,7 @@
 
 /* ---- Layer scale ----------------------------------------------------------
    Every stacking decision in the window reads one of these; a component never
-   writes a bare `z-50`. Read through `z-(--z-sidebar)`. Copied from Capy. */
+   writes a bare `z-50`. Read through `z-(--z-sidebar)`. Copied from the reference console. */
 :root {
   --z-top-bar: 10;
   --z-sidebar: 50;
