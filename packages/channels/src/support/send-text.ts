@@ -10,9 +10,18 @@ export async function sendText(
   if (content.length === 0) return undefined;
   let lastMessageId: string | undefined;
   const rendered = render.renderMarkdown(content);
-  const chunks = render.messageLimit === null ? [rendered] : chunkMarkdown(rendered, render.messageLimit);
+  const chunks =
+    render.messageLimit === null ? [rendered] : chunkMarkdown(rendered, render.messageLimit);
+  let sent = false;
   for (const chunk of chunks) {
-    lastMessageId = (await send(chunk)) ?? lastMessageId;
+    try {
+      lastMessageId = (await send(chunk)) ?? lastMessageId;
+      sent = true;
+    } catch (error) {
+      // A later rejection cannot prove the whole logical message was rejected.
+      if (sent) throw new Error("partial message delivery", { cause: error });
+      throw error;
+    }
   }
   return lastMessageId;
 }

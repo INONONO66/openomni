@@ -6,6 +6,7 @@ import { TelegramAdapter } from "../src/provider/telegram/surface";
 for (const provider of ["discord", "slack", "telegram"] as const) {
   for (const failure of [
     "forbidden",
+    "partial",
     "network",
     "server",
     "malformed",
@@ -23,10 +24,14 @@ for (const provider of ["discord", "slack", "telegram"] as const) {
             return Response.json({ ok: true, channel: { id: "dm" } });
           sends += 1;
           if (failure === "network") throw new TypeError("connection lost after transmission");
-          if (failure === "forbidden" || failure === "server")
+          if (
+            failure === "forbidden" ||
+            failure === "server" ||
+            (failure === "partial" && sends === 2)
+          )
             return Response.json(
               { ok: false, error: "forbidden", description: "forbidden" },
-              { status: failure === "forbidden" ? 403 : 503 },
+              { status: failure === "server" ? 503 : 403 },
             );
           if (failure === "malformed") return new Response("not-json");
           if (failure === "missing_id") return Response.json({ ok: true, result: {} });
@@ -47,15 +52,16 @@ for (const provider of ["discord", "slack", "telegram"] as const) {
             : new TelegramAdapter("token", {}, () => undefined);
       try {
         const address = provider === "slack" ? "TEAM:USER" : "123";
-        const receipt = await adapter.deliver(address, "SENTINEL", "stable-key");
-        expect(sends).toBe(1);
+        const content = failure === "partial" ? "X".repeat(8000) : "SENTINEL";
+        const receipt = await adapter.deliver(address, content, "stable-key");
+        expect(sends).toBe(failure === "partial" ? 2 : 1);
         expect(receipt).toEqual(
           failure === "accepted"
             ? { value: "accepted", externalMessageId: "physical-id" }
             : { value: failure === "forbidden" ? "rejected" : "unknown" },
         );
-        expect(await adapter.deliver(address, "SENTINEL", "stable-key")).toEqual(receipt);
-        expect(sends).toBe(1);
+        expect(await adapter.deliver(address, content, "stable-key")).toEqual(receipt);
+        expect(sends).toBe(failure === "partial" ? 2 : 1);
       } finally {
         globalThis.fetch = originalFetch;
       }
