@@ -1390,6 +1390,86 @@ describe("durable session handle", () => {
     ).toEqual([""]);
   });
 
+  test.each([
+    "result",
+    "error",
+    "interrupted",
+  ] as const)("child %s terminal offers the original parent letter to the atomic commit port", async (kind) => {
+    const parent = session(
+      residentOptions("request-parent", async () => ({ kind: "result", text: "parent" })),
+      runtime,
+    );
+    expect(
+      Storage.get().actions?.append(
+        {
+          id: "original-send",
+          sessionId: parent.id,
+          parentId: null,
+          kind: "message",
+          intent: { encodingVersion: 1, value: { phase: "intent", messageId: "request" } },
+          effect: { encodingVersion: 1, value: { phase: "pending" } },
+          irreversible: true,
+          ts: now,
+        },
+        SessionHandleStore.row(parent.id).revision,
+      ),
+    ).toBeDefined();
+    let commits = 0;
+    runtime = {
+      ...runtime,
+      commitTerminal: async ({ commit, reply }) => {
+        commits += 1;
+        expect(
+          SessionHandleStore.tree(commit.sessionId).some(
+            (action) => SessionHandleStore.turnTerminal(action) !== undefined,
+          ),
+        ).toBe(false);
+        expect(SessionHandleStore.inboxRows(parent.id)).toEqual([]);
+        expect(reply.origin.value).toEqual({
+          kind: "child_terminal",
+          messageId: "request",
+          sourceActionId: "original-send",
+          replyTo: "original-binding",
+          childSessionId: "reply-child",
+          terminalKind: kind,
+        });
+        return SessionHandleStore.commit({ ...commit, deliveries: [reply] });
+      },
+    };
+    const worker = session(
+      {
+        id: "reply-child",
+        parentId: parent.id,
+        role: "worker",
+        tools: [],
+        system,
+        runner: async () => ({ kind, text: "terminal-text" }),
+      },
+      runtime,
+    );
+    await worker.prompt("work", {
+      encodingVersion: 1,
+      value: {
+        kind: "message",
+        messageId: "request",
+        senderSessionId: parent.id,
+        sourceActionId: "original-send",
+        replyTo: "original-binding",
+        deadline: now + 1000,
+      },
+    });
+    expect(commits).toBe(1);
+    expect(SessionHandleStore.inboxRows(parent.id).map((row) => row.content)).toEqual([
+      "terminal-text",
+    ]);
+    expect(
+      SessionHandleStore.tree(worker.id).flatMap((action) => {
+        const terminal = SessionHandleStore.turnTerminal(action);
+        return terminal === undefined ? [] : [terminal.kind];
+      }),
+    ).toEqual([kind]);
+  });
+
   test("materializes a worker as a parent-linked session with an independent lease", async () => {
     const runner: SessionRunner = async () => ({ kind: "result", text: "done" });
     const parent = session(residentOptions("resident-parent", runner), runtime);

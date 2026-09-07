@@ -1,6 +1,9 @@
 import { expect, test } from "bun:test";
 import { Bus } from "@openomni/agent";
-import { SessionHandleStore } from "@openomni/ledger";
+import { SessionHandleStore, Storage } from "@openomni/ledger";
+import { rmSync } from "node:fs";
+import { serveProcessSession } from "../src/process-entry";
+import { messageFixture } from "./helpers/message-fixture";
 import { Gateway } from "@openomni/protocol";
 import { assistantMessage, requestToolStep } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
@@ -37,6 +40,63 @@ function response(): Response {
     { headers: { "content-type": "text/event-stream" } },
   );
 }
+
+test("process-session entry preserves the commissioned deadline and reports the committed parent", async () => {
+  const fixture = messageFixture();
+  let requests = 0;
+  const provider = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () => {
+      requests += 1;
+      return response();
+    },
+  });
+  const deadline = Date.now() + 60_000;
+  try {
+    expect(
+      (
+        await fixture.send({
+          to: { kind: "new_session", role: "worker", runner: "process", parent: "me" },
+          type: "message",
+          content: "work",
+          deadline,
+          replyTo: "process-original",
+        })
+      ).isError,
+    ).not.toBe(true);
+    const child = SessionHandleStore.listRows().find((row) => row.role === "worker");
+    if (child === undefined) throw new Error("missing commissioned process session");
+    const notified: string[] = [];
+    await serveProcessSession(
+      {
+        sessionId: child.id,
+        dbPath: fixture.dbPath,
+        model: { provider: "anthropic", id: "claude-opus-4-5" },
+        apiKey: "process-key",
+        transport: { baseUrl: `http://127.0.0.1:${provider.port}/v1` },
+      },
+      (ids) => notified.push(...ids),
+    );
+    Storage.initialize({ dbPath: fixture.dbPath });
+    expect(requests).toBe(1);
+    expect(notified).toContain("sender");
+    expect(SessionHandleStore.inboxRows("sender")).toHaveLength(1);
+    expect(SessionHandleStore.inboxRows("sender")[0]).toMatchObject({
+      content: "PROCESS_SENTINEL",
+      origin: { value: { replyTo: "process-original", terminalKind: "result" } },
+    });
+    expect(
+      SessionHandleStore.tree(child.id).filter((action) => action.kind === "alarm.arm"),
+    ).toEqual([]);
+    expect(SessionHandleStore.expireMessageDeadlines(deadline)).toEqual([]);
+  } finally {
+    await provider.stop(true);
+    Storage.reset();
+    Bus.reset();
+    rmSync(fixture.directory, { recursive: true, force: true });
+  }
+});
 
 test("startOpenOmni runs a process session and drains its atomic parent reply without ACK settlement", async () => {
   const parentReply = Promise.withResolvers<void>();
