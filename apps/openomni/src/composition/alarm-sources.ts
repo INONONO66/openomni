@@ -59,37 +59,38 @@ export function commandSource(
       boundary = pending.indexOf("\n");
     }
   }
-  const terminal = new Bun.Terminal({
-    data(_terminal, bytes) {
-      if (closing) return;
-      try {
-        frame(decoder.write(bytes));
-      } catch {
-        failure(new AlarmSourceError("pty.data"));
-      }
-    },
-    exit(_terminal, code) {
-      if (!closing) {
+  // This terminal belongs to one child, not a reusable Terminal instance. Bun
+  // then closes the parent's slave descriptor on child exit so EOF can arrive.
+  const child = Bun.spawn(["/bin/sh", "-c", command], {
+    detached: true,
+    terminal: {
+      data(_terminal, bytes) {
+        if (closing) return;
         try {
-          frame(decoder.end());
-          if (pending !== "") line(pending);
-          pending = "";
-          if (code !== 0) failure(new Error("alarm PTY read failed"));
+          frame(decoder.write(bytes));
         } catch {
-          failure(new AlarmSourceError("pty.eof"));
+          failure(new AlarmSourceError("pty.data"));
         }
-      }
-      eof.resolve();
+      },
+      exit(_terminal, code) {
+        if (!closing) {
+          try {
+            frame(decoder.end());
+            if (pending !== "") line(pending);
+            pending = "";
+            // Linux reports last-slave hangup as EIO (Bun code 1). Accept it
+            // only after the child exited; a live child's read error stays fatal.
+            const hungUp = code === 1 && (child.exitCode !== null || child.signalCode !== null);
+            if (code !== 0 && !hungUp) failure(new Error("alarm PTY read failed"));
+          } catch {
+            failure(new AlarmSourceError("pty.eof"));
+          }
+        }
+        eof.resolve();
+      },
     },
   });
-  let child: ReturnType<typeof Bun.spawn>;
-  let spawned = false;
-  try {
-    child = Bun.spawn(["/bin/sh", "-c", command], { terminal, detached: true });
-    spawned = true;
-  } finally {
-    if (!spawned) terminal.close();
-  }
+  const terminal = child.terminal;
   let shutdown: Promise<void> | undefined;
   function terminate() {
     shutdown ??= (async () => {
@@ -100,11 +101,11 @@ export function commandSource(
       // Cancellation has no remaining output to drain. Retire the master after
       // the owned group was signalled and the leader reaped, even if Bun omits EOF.
       if (closing) {
-        terminal.close();
+        terminal?.close();
         eof.resolve();
       }
       await eof.promise;
-      terminal.close();
+      terminal?.close();
     })();
     return shutdown;
   }

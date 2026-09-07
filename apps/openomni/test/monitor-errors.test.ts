@@ -36,6 +36,25 @@ test("PTY callback faults surface a typed boundary failure", async () => {
   }
 });
 
+test("owned PTY drains the final UTF-8 line before reporting the child's exit status", async () => {
+  const exited = Promise.withResolvers<number>();
+  const lines: string[] = [];
+  const timer = setTimeout(() => exited.reject(new Error("PTY exit signal missing")), 5000);
+  const source = commandSource(
+    "printf '\\342\\230\\203 final'; exit 7",
+    (line) => lines.push(line),
+    exited.resolve,
+    exited.reject,
+  );
+  try {
+    expect(await exited.promise).toBe(7);
+    expect(lines).toEqual(["\u2603 final"]);
+  } finally {
+    clearTimeout(timer);
+    await source.close();
+  }
+});
+
 test("path callback faults report a typed failure without advancing its observation cursor", async () => {
   const directory = mkdtempSync(join(tmpdir(), "monitor-path-error-"));
   const path = join(directory, "target");
