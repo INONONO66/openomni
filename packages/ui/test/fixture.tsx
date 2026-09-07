@@ -1,14 +1,16 @@
-import type { PendingApproval, TranscriptCodeLine, TranscriptNode, TurnCost } from "../src";
+import type {
+  PendingApproval,
+  TranscriptCodeLine,
+  TranscriptNode,
+  TurnCost,
+} from "../src/timeline/model";
 
 /**
- * The showcase's transcript, as data.
+ * The test transcript, as data.
  *
- * It is a FIXTURE and not a second mock: the showcase renders `Console`, the
- * same component the app renders, so this file supplies input rather than
- * markup. Nothing here decides how anything looks.
- *
- * The shape is chosen to exercise every hard case the transcript has, so a
- * screenshot of this is a screenshot of the rules:
+ * It is a FIXTURE and not a second mock: it supplies input to `Console` and
+ * `Timeline`, and nothing here decides how anything looks. The shape is chosen
+ * to exercise every hard case the transcript has:
  *
  *   - TWO turns, so the 28px turn boundary is visible against the gaps inside
  *     a turn;

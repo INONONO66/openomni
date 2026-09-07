@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { Highlight, Panel, ScrollArea, Text } from "../src";
+import { Highlight } from "../src/primitives/highlight";
+import { ScrollArea } from "../src/primitives/scroll-area";
+import { Panel, Text } from "../src/primitives/surface";
 
 /** The surface layer: tone, structure, and typography, with no interaction. */
 describe("Panel", () => {

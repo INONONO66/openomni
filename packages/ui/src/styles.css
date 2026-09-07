@@ -1,10 +1,9 @@
 /* @openomni/ui — tokens, base, and window-chrome utilities for OpenOmni
    surfaces. Import AFTER `@import "tailwindcss"` in the consuming stylesheet.
 
-   Contract: apps/desktop/DESIGN.md. Text and whitespace carry the interface;
-   one chromatic accent, everything else achromatic; hierarchy by typography,
-   not by lines and boxes. No value may be introduced in a component — extend
-   this block first. */
+   Text and whitespace carry the interface; one chromatic accent, everything
+   else achromatic; hierarchy by typography, not by lines and boxes. No value
+   may be introduced in a component — extend this block first. */
 
 /* Fonts ship as npm assets; nothing is fetched over the network at runtime.
    Pretendard arrives as its dynamic subset (92 `unicode-range` faces) so a
@@ -117,10 +116,9 @@
 
      The exception is scoped as tightly as it can be stated: these two tokens may
      be spent ONLY inside a code block's diff rows, only on the change marker and
-     the `+`/`-` sign, and never on the code text itself. A test in
-     `apps/desktop/test/design-tokens.test.ts` fails if either name appears
-     outside `primitives/gutter.tsx`, which keeps the exception from generalising
-     into the state palette this reset deleted.
+     the `+`/`-` sign, and never on the code text itself. Only
+     `primitives/gutter.tsx` names them, which keeps the exception from
+     generalising into a state palette.
 
      Both are measured against all three surfaces in BOTH themes and clear
      4.5:1, asserted in `test/tokens.test.ts` — the marker is a 2px bar and the

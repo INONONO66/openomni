@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { UI_NAMES } from "../names";
 
 /**
- * DESIGN.md 7 — Row. The selectable list row, and the only selectable surface
+ * Row. The selectable list row, and the only selectable surface
  * in the system.
  *
  * Selection is a raised surface, bold text, and a hairline EDGE. No accent bar

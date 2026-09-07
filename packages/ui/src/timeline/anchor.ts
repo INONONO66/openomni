@@ -1,5 +1,5 @@
 /**
- * DESIGN.md 9 — addressable lines.
+ * addressable lines.
  *
  * Every row in the transcript — a prompt, a paragraph of the answer, a tool
  * row, a line of code — carries a stable anchor `t<turn>.<row>`. That is what

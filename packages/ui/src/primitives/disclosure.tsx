@@ -4,7 +4,7 @@ import { UI_NAMES } from "../names";
 import type { RowLevel } from "./row";
 
 /**
- * DESIGN.md 7 — Disclosure. A group header that expands a region: the sidebar's
+ * Disclosure. A group header that expands a region: the sidebar's
  * project groups and the timeline's collapsed detail.
  *
  * The header is overline text with no surface of its own at rest — a group
