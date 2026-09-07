@@ -13,8 +13,9 @@ test("desktop entries register IPC before window creation and render without awa
   const order: string[] = [];
   const rendered: object[] = [];
   const element = {};
-  const globals = globalThis as { document?: object; desktop?: DesktopApi };
+  const globals = globalThis as { document?: object; window?: object; desktop?: DesktopApi };
   const previousDocument = globals.document;
+  const previousWindow = globals.window;
   const previousDesktop = globals.desktop;
   const environment = ["OPENOMNI_WS_URL", "OPENOMNI_WS_TOKEN", "ELECTRON_RENDERER_URL"] as const;
   const previousEnvironment = environment.map((key) => process.env[key]);
@@ -30,6 +31,10 @@ test("desktop entries register IPC before window creation and render without awa
       expect(handlers.has(GATEWAY_CHANNEL)).toBe(true);
       windows.push(this);
     }
+    readonly webContents = { setBackgroundThrottling: (_enabled: boolean) => undefined };
+    readonly once = (_name: string): undefined => undefined;
+    readonly on = (_name: string): undefined => undefined;
+    readonly show = (): undefined => undefined;
     loadFile(path: string): Promise<void> {
       loaded.push(path);
       ready.resolve();
@@ -55,6 +60,7 @@ test("desktop entries register IPC before window creation and render without awa
         handlers.set(channel, callback);
       },
     },
+    nativeTheme: { shouldUseDarkColors: true },
     contextBridge: {
       exposeInMainWorld: (name: string, api: DesktopApi) => {
         expect(name).toBe("desktop");
@@ -83,7 +89,14 @@ test("desktop entries register IPC before window creation and render without awa
       };
     },
   }));
+  const listeners = {
+    addEventListener: (_name: string) => undefined,
+    removeEventListener: (_name: string) => undefined,
+  };
+  globals.window = { ...listeners, localStorage: {} };
   globals.document = {
+    ...listeners,
+    documentElement: { dataset: {} },
     getElementById: (id: string) => {
       expect(id).toBe("root");
       return element;
@@ -119,6 +132,8 @@ test("desktop entries register IPC before window creation and render without awa
   } finally {
     if (previousDocument === undefined) delete globals.document;
     else globals.document = previousDocument;
+    if (previousWindow === undefined) delete globals.window;
+    else globals.window = previousWindow;
     if (previousDesktop === undefined) delete globals.desktop;
     else globals.desktop = previousDesktop;
     for (const [index, key] of environment.entries()) {
