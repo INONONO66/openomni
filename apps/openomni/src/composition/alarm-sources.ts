@@ -52,25 +52,49 @@ export function commandSource(
     },
   });
   let child: ReturnType<typeof Bun.spawn>;
+  let spawned = false;
   try {
     child = Bun.spawn(["/bin/sh", "-c", command], { terminal, detached: true });
-  } catch (error) {
-    terminal.close();
-    throw error;
+    spawned = true;
+  } finally {
+    if (!spawned) terminal.close();
   }
-  const settled = Promise.all([child.exited, eof.promise]).then(([code]) => {
+  let shutdown: Promise<void> | undefined;
+  function terminate() {
+    shutdown ??= (async () => {
+      // The shell can exit before its children. Kill its group even then, before
+      // awaiting PTY EOF; waiting for EOF first lets HUP-ignoring descendants hang.
+      await killCommandGroup(child.pid);
+      await Promise.all([child.exited, eof.promise]);
+      terminal.close();
+    })();
+    return shutdown;
+  }
+  const settled = child.exited.then(async (code) => {
+    await terminate();
     if (!closing) exit(code);
   });
   void settled.catch((error: Error) => failure(error));
   return {
     async close() {
       closing = true;
-      if (child.exitCode === null) child.kill("SIGKILL");
-      terminal.close();
-      eof.resolve();
+      await terminate();
       await settled;
     },
   };
+}
+
+async function killCommandGroup(pid: number): Promise<void> {
+  // Bun's process.kill reports EPERM for some already-reaped negative PIDs on
+  // Darwin. The platform kill utility preserves ESRCH versus permission errors.
+  const signal = Bun.spawn(["/bin/kill", "-KILL", "--", `-${pid}`], {
+    stdout: "ignore",
+    stderr: "pipe",
+    env: { ...process.env, LC_ALL: "C" },
+  });
+  const [code, error] = await Promise.all([signal.exited, new Response(signal.stderr).text()]);
+  if (code !== 0 && !error.includes("No such process"))
+    throw new Error(`alarm process group ${pid} termination failed: ${error.trim()}`);
 }
 
 export function pathSource(
