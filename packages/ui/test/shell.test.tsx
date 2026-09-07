@@ -293,9 +293,9 @@ describe("the tab strip's controls zone", () => {
     const trio = tag(html, "TabStrip.Trio");
     expect(trio).toContain("ml-auto");
     expect(trio).toContain("gap-1");
-    expect(trio).toContain("strip-trio ");
-    expect(trio).toContain('data-collapsed="false"');
-    expect(tag(frame(false, null), "TabStrip.Trio")).toContain('data-collapsed="true"');
+    // No motion of its own: it slides with the zone's width and never fades.
+    expect(trio).not.toMatch(/opacity|invisible|transition|data-collapsed/);
+    expect(tag(frame(false, null), "TabStrip.Trio")).not.toMatch(/opacity|invisible|transition/);
     expect(
       zone.slice(trioAt + 1).match(/data-ui="(?!IconButton|Sidebar\.Toggle\.Icon)[^"]+"/g),
     ).toBeNull();

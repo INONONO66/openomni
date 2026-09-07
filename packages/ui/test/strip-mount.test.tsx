@@ -4,8 +4,8 @@ import { STRIP } from "./fixture";
 
 /**
  * The strip's history trio is ONE node for the window's life: collapsing and
- * re-opening the sidebar changes its `data-collapsed` attribute and nothing
- * else about its identity. Asserted on a live React root over a DOM, because
+ * re-opening the sidebar changes nothing about its identity (it slides with the
+ * zone's width; it carries no state attribute and no fade). Asserted on a live React root over a DOM, because
  * static markup cannot see a remount: the same HTML comes out of a node that
  * was replaced and one that was kept.
  *
@@ -58,25 +58,23 @@ const trioOf = (container: Element) => {
 };
 
 describe("the trio's identity", () => {
-  test("Given the strip open, When the sidebar collapses and re-opens, Then the trio is the same node with only data-collapsed changed", async () => {
+  test("Given the strip open, When the sidebar collapses and re-opens, Then the trio is the same node", async () => {
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
     await act(() => root.render(<Frame open />));
     const trio = trioOf(container);
-    expect(trio.getAttribute("data-collapsed")).toBe("false");
+    expect(trio.hasAttribute("data-collapsed")).toBe(false);
     trio.setAttribute("data-probe", "survives");
     const buttons = Array.from(trio.querySelectorAll("button"));
     expect(buttons).toHaveLength(3);
 
     await act(() => root.render(<Frame open={false} />));
     expect(trioOf(container)).toBe(trio);
-    expect(trio.getAttribute("data-collapsed")).toBe("true");
     expect(Array.from(trio.querySelectorAll("button"))).toEqual(buttons);
 
     await act(() => root.render(<Frame open />));
     expect(trioOf(container)).toBe(trio);
-    expect(trio.getAttribute("data-collapsed")).toBe("false");
     expect(trio.getAttribute("data-probe")).toBe("survives");
     expect(Array.from(trio.querySelectorAll("button"))).toEqual(buttons);
     expect(mounts).toBe(1);

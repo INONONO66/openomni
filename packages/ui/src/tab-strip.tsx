@@ -71,14 +71,10 @@ export function TabStrip({
         >
           <SidebarToggleIcon opened={mode !== "hidden"} />
         </IconButton>
-        {/* `ml-auto` is the spacer. ONE node in both states — never re-keyed:
-            `data-collapsed` drives `strip-trio`'s progress transition, so the
-            fade rides the zone's width motion without a remount. */}
-        <div
-          className="strip-trio ml-auto flex items-center gap-1 group-data-[resizing]/sidebar:duration-0 motion-reduce:transition-none"
-          data-collapsed={!open}
-          data-ui={UI_NAMES.TabStripTrio}
-        >
+        {/* `ml-auto` is the spacer. ONE node in both states — never re-keyed,
+            no motion of its own: it slides because the zone's width transitions,
+            and it never fades. */}
+        <div className="ml-auto flex items-center gap-1" data-ui={UI_NAMES.TabStripTrio}>
           <HistoryMenu
             currentId={history.currentId}
             entries={history.entries}

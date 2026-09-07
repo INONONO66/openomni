@@ -54,25 +54,23 @@ describe("the strip's tokens", () => {
     expect(overlay).toBe(SIDEBAR_WIDTH.default);
   });
 
-  test("Given the trio's fade, When read, Then it is a progress property on the zone's own duration and curve, driven by data-collapsed", () => {
-    expect(CSS).toContain('@property --strip-trio-progress {\n  syntax: "<number>";');
-    const utility = CSS.slice(CSS.indexOf("@utility strip-trio {"));
-    const block = utility.slice(0, utility.indexOf("\n}\n"));
-    expect(block).toContain("transition-property: --strip-trio-progress;");
-    expect(block).toContain("transition-duration: var(--duration-base);");
-    expect(block).toContain("transition-timing-function: var(--ease-frame);");
-    expect(block).toContain('&[data-collapsed="true"] {\n    --strip-trio-progress: 1;');
-    // The reference's clamp(1 - 3p, 0, 1), p from the nearer end.
-    expect(block.replace(/\s+/g, " ")).toContain(
-      "opacity: clamp( 0, 1 - 3 * min(var(--strip-trio-progress), 1 - var(--strip-trio-progress)), 1 );",
-    );
+  test("Given the trio, When the CSS is read, Then it has NO fade: no progress property, no opacity or visibility rule, no starting-style", async () => {
+    expect(CSS).not.toContain("--strip-trio-progress");
+    expect(CSS).not.toContain("strip-trio");
+    expect(CSS).not.toContain("data-collapsed");
     expect(CSS).not.toContain("@starting-style");
+    const strip = await Bun.file(join(SRC, "tab-strip.tsx")).text();
+    const trio = strip.slice(strip.indexOf("data-ui={UI_NAMES.TabStripTrio}") - 200, strip.indexOf("<HistoryMenu"));
+    const className = trio.match(/className="([^"]+)"/)?.[1] ?? "";
+    expect(className).toBe("ml-auto flex items-center gap-1");
+    expect(className).not.toMatch(/opacity|visible|invisible|transition/);
+    expect(trio).not.toContain("data-collapsed");
   });
 
   test("Given the strip's source, When read, Then the trio carries no key: one node in both states", async () => {
     const strip = await Bun.file(join(SRC, "tab-strip.tsx")).text();
-    const trio = strip.slice(strip.indexOf('className="strip-trio'), strip.indexOf("<HistoryMenu"));
-    expect(trio).toContain("data-collapsed={!open}");
+    const trio = strip.slice(strip.indexOf('className="ml-auto flex'), strip.indexOf("<HistoryMenu"));
+    expect(trio).toContain("data-ui={UI_NAMES.TabStripTrio}");
     expect(trio).not.toContain("key=");
     expect(strip).not.toContain("key={open");
   });
