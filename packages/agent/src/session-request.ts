@@ -332,7 +332,10 @@ function answerRequest(
   return recordRequest(command, request, inputDigest, "attached");
 }
 
-function withSeenReply(request: SessionTransition.Request, inputId: string): SessionTransition.Request {
+function withSeenReply(
+  request: SessionTransition.Request,
+  inputId: string,
+): SessionTransition.Request {
   return { ...request, seenReplyIds: [...new Set([...request.seenReplyIds, inputId])] };
 }
 

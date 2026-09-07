@@ -191,7 +191,8 @@ describe("explicit target resolution (fail closed)", () => {
 
 describe("fire-and-forget delivery", () => {
   test("records one sent audit and creates NO Request", async () => {
-    const audits: { operation: string; requestId?: string; grantId: string; traceId: string }[] = [];
+    const audits: { operation: string; requestId?: string; grantId: string; traceId: string }[] =
+      [];
     Bus.observe((event, payload) => {
       if (event.name !== "messaging.sent") return;
       const data = payload as {
@@ -314,7 +315,7 @@ describe("awaited delivery", () => {
 describe("delivery receipt", () => {
   test("a platform message id from the owner re-keys the request correlation to it", async () => {
     const withReceipt = createExistingAgentMessaging({
-    requests: seededRequests(),
+      requests: seededRequests(),
       deliver: () => ({ value: "accepted", externalMessageId: "platform:msg-77" }),
       grants: () => grants,
       publish: Bus.publish,
@@ -329,14 +330,24 @@ describe("delivery receipt", () => {
     // The send receipt carries the receipt-updated record (revision bumped
     // from 1 at create — head === revision on the owner stream, #510).
     expect(receipt.request.correlation.replyToMessageId).toBe("platform:msg-77");
-    expect(SessionHandleStore.tree(receipt.request.sessionId).filter(action => action.kind === "request")).toHaveLength(2);
+    expect(
+      SessionHandleStore.tree(receipt.request.sessionId).filter(
+        (action) => action.kind === "request",
+      ),
+    ).toHaveLength(2);
     const stored = SessionHandleStore.requestById("request:test-awaited");
     expect(stored?.correlation.replyToMessageId).toBe("platform:msg-77");
     // Correlation now answers the platform id, not the internal message id.
-    expect(SessionHandleStore.requestRows().filter(row => row.correlation.replyToMessageId === "platform:msg-77")).toHaveLength(1);
-    expect(SessionHandleStore.requestRows().filter(row => row.correlation.replyToMessageId === "message:test-awaited")).toHaveLength(
-      0,
-    );
+    expect(
+      SessionHandleStore.requestRows().filter(
+        (row) => row.correlation.replyToMessageId === "platform:msg-77",
+      ),
+    ).toHaveLength(1);
+    expect(
+      SessionHandleStore.requestRows().filter(
+        (row) => row.correlation.replyToMessageId === "message:test-awaited",
+      ),
+    ).toHaveLength(0);
   });
 
   test("no receipt from the owner leaves the internal-id correlation unchanged", async () => {
@@ -352,7 +363,7 @@ describe("delivery receipt", () => {
 
   test("a fire-and-forget receipt records nothing — there is no request to re-key", async () => {
     const withReceipt = createExistingAgentMessaging({
-    requests: seededRequests(),
+      requests: seededRequests(),
       deliver: () => ({ value: "accepted", externalMessageId: "platform:msg-88" }),
       grants: () => grants,
       publish: Bus.publish,
@@ -395,7 +406,7 @@ describe("durable send admission faults", () => {
     const detachedLedger = detached.ledger;
     if (detachedLedger === undefined) throw new Error("ledger sub-adapter missing");
     const reentrant = createExistingAgentMessaging({
-    requests: seededRequests(),
+      requests: seededRequests(),
       deliver: (message) => {
         deliveries.push(message);
         return { value: "accepted" as const };
@@ -436,7 +447,7 @@ describe("durable send admission faults", () => {
   test("fails closed when the ledger disappears before admission lookup", async () => {
     const detached = Storage.get();
     const withoutLedger = createExistingAgentMessaging({
-    requests: seededRequests(),
+      requests: seededRequests(),
       deliver: (message) => {
         deliveries.push(message);
         return { value: "accepted" as const };
@@ -506,11 +517,22 @@ describe("durable send admission faults", () => {
 
   test("propagates an unexpected request-store failure before delivery", async () => {
     const service = createExistingAgentMessaging({
-      requests: { ...seededRequests(), open: () => { throw new Error("request commit unavailable"); } },
-      deliver: message => { deliveries.push(message); return { value: "accepted" }; },
-      grants: () => grants, publish: Bus.publish,
+      requests: {
+        ...seededRequests(),
+        open: () => {
+          throw new Error("request commit unavailable");
+        },
+      },
+      deliver: (message) => {
+        deliveries.push(message);
+        return { value: "accepted" };
+      },
+      grants: () => grants,
+      publish: Bus.publish,
     });
-    await expect(service.send(buildAwaitedSendInput())).rejects.toThrow("request commit unavailable");
+    await expect(service.send(buildAwaitedSendInput())).rejects.toThrow(
+      "request commit unavailable",
+    );
     expect(deliveries).toEqual([]);
   });
 
@@ -536,7 +558,9 @@ describe("durable send admission faults", () => {
     expect((await messaging().send(first)).kind).toBe("sent");
     await expect(messaging().send(second)).rejects.toThrow("request open refused");
     expect(deliveries).toHaveLength(1);
-    expect(SessionHandleStore.requestById(spec.requestId)?.correlation.replyToMessageId).toBe("message:first-owner");
+    expect(SessionHandleStore.requestById(spec.requestId)?.correlation.replyToMessageId).toBe(
+      "message:first-owner",
+    );
   });
 });
 
@@ -623,7 +647,10 @@ async function probe(point: FaultPoint): Promise<Probe> {
     effects: external.size,
     attempts,
     debits: inspectDebitCount(),
-    request: input.requestSpec === undefined ? undefined : SessionHandleStore.requestById(input.requestSpec.requestId),
+    request:
+      input.requestSpec === undefined
+        ? undefined
+        : SessionHandleStore.requestById(input.requestSpec.requestId),
   };
 }
 

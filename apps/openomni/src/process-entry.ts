@@ -101,8 +101,12 @@ if (import.meta.main) {
   try {
     const line = await replies.first;
     if (line === undefined) process.exit(PROCESS_SESSION_NO_REQUEST_EXIT);
-    await serveProcessSession(ProcessSessionRequest.parse(JSON.parse(line)), (sessionIds) =>
-      console.log(JSON.stringify({ sessionIds })), replies.answer,
+    await serveProcessSession(
+      ProcessSessionRequest.parse(JSON.parse(line)),
+      (sessionIds) => console.log(JSON.stringify({ sessionIds })),
+      replies.answer,
     );
-  } finally { replies.close(); }
+  } finally {
+    replies.close();
+  }
 }

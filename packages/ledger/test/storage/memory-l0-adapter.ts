@@ -10,10 +10,7 @@ import {
   SessionTurn,
   type Storage as ProtocolStorage,
 } from "@openomni/protocol";
-import {
-  alarmAppend,
-  inboxAppend,
-} from "../../src/storage/l0-action-builders.js";
+import { alarmAppend, inboxAppend } from "../../src/storage/l0-action-builders.js";
 
 export interface MemoryL0Adapter {
   transaction<T>(operation: () => T): T;
@@ -101,7 +98,13 @@ export function createMemoryL0Adapter(): MemoryL0Adapter {
         const existing = sessionRows.get(parsed.row.id);
         if (existing !== undefined) return { created: false, row: existing };
         sessionRows.set(parsed.row.id, parsed.row);
-        const receipt = appendMemoryAction(sessionRows, actionRows, alarmRows, parsed.initialAction, 0);
+        const receipt = appendMemoryAction(
+          sessionRows,
+          actionRows,
+          alarmRows,
+          parsed.initialAction,
+          0,
+        );
         if (receipt === undefined) throw new Error("initial session configuration was refused");
         const row = sessionRows.get(parsed.row.id);
         if (row === undefined) throw new Error("materialized session disappeared");
@@ -165,8 +168,13 @@ export function createMemoryL0Adapter(): MemoryL0Adapter {
         return transaction(() => {
           const current = sessionRows.get(request.sessionId);
           if (current === undefined) return undefined;
-          const result = commitMemorySession(sessionRows, actionRows, inboxRows, alarmRows,
-            request.admit === undefined ? request : { ...request, releaseLease: false });
+          const result = commitMemorySession(
+            sessionRows,
+            actionRows,
+            inboxRows,
+            alarmRows,
+            request.admit === undefined ? request : { ...request, releaseLease: false },
+          );
           if (result?.ok !== true) return result;
           const receipts = [...result.receipts];
           if (request.receive !== undefined) {
@@ -180,12 +188,16 @@ export function createMemoryL0Adapter(): MemoryL0Adapter {
           }
           if (request.admit !== undefined) {
             const received = adapter.inbox.commit(request.admit);
-            if (received === undefined) throw new MemorySessionCommitRefused(memoryRefusal("inbox", current));
-            for (const action of adapter.actions.tree(received.sessionId)) receipts.push({ action, revision: action.ordinal });
+            if (received === undefined)
+              throw new MemorySessionCommitRefused(memoryRefusal("inbox", current));
+            for (const action of adapter.actions.tree(received.sessionId))
+              receipts.push({ action, revision: action.ordinal });
           }
           const row = sessionRows.get(request.sessionId);
           if (row === undefined) throw new Error("committed session missing");
-          const final = request.releaseLease ? { ...row, leaseOwner: null, leaseExpiresAt: null } : row;
+          const final = request.releaseLease
+            ? { ...row, leaseOwner: null, leaseExpiresAt: null }
+            : row;
           sessionRows.set(final.id, final);
           return { ok: true as const, row: final, receipts };
         });
@@ -281,7 +293,10 @@ export function createMemoryL0Adapter(): MemoryL0Adapter {
             if (!withinChildLimits(sessionRows, openChildCount, child.row.parentId, parsed.limits))
               return undefined;
             sessionRows.set(child.row.id, child.row);
-            if (appendMemoryAction(sessionRows, actionRows, alarmRows, child.initialAction, 0) === undefined) {
+            if (
+              appendMemoryAction(sessionRows, actionRows, alarmRows, child.initialAction, 0) ===
+              undefined
+            ) {
               throw new Error("child configuration refused");
             }
           }
@@ -297,8 +312,7 @@ export function createMemoryL0Adapter(): MemoryL0Adapter {
             session.revision,
           );
           if (receipt === undefined) {
-            if (child !== undefined)
-              throw new Error("message inbox commit refused");
+            if (child !== undefined) throw new Error("message inbox commit refused");
             return undefined;
           }
           const committed = Inbox.Row.parse({
@@ -322,9 +336,16 @@ export function createMemoryL0Adapter(): MemoryL0Adapter {
         return transaction(() => {
           let row = inboxRows.get(parsed.id);
           if (row !== undefined) {
-            const digest = (value: Pick<Inbox.Row, "id" | "sessionId" | "kind" | "content" | "origin">) =>
-              canonicalDigest({ id: value.id, sessionId: value.sessionId, kind: value.kind,
-                content: value.content, origin: value.origin });
+            const digest = (
+              value: Pick<Inbox.Row, "id" | "sessionId" | "kind" | "content" | "origin">,
+            ) =>
+              canonicalDigest({
+                id: value.id,
+                sessionId: value.sessionId,
+                kind: value.kind,
+                content: value.content,
+                origin: value.origin,
+              });
             if (digest(row) !== digest(parsed)) {
               throw new Error("message identity reused with different payload");
             }
@@ -520,11 +541,13 @@ function validInboxSender(
 ): boolean {
   if (row.sender === undefined) return true;
   const sender = sessions.get(row.sender.sessionId);
-  return sender !== undefined &&
+  return (
+    sender !== undefined &&
     sender.leaseOwner === row.sender.owner &&
     sender.leaseFence === row.sender.fence &&
     sender.leaseExpiresAt !== null &&
-    !Deadline.isExpired(row.createdAt, sender.leaseExpiresAt);
+    !Deadline.isExpired(row.createdAt, sender.leaseExpiresAt)
+  );
 }
 
 function validInboxChild(
@@ -545,7 +568,8 @@ function validInboxChild(
     actions.has(row.id) ||
     actions.has(child.initialAction.id) ||
     child.initialAction.id === row.id
-  ) return false;
+  )
+    return false;
   return true;
 }
 
@@ -587,19 +611,38 @@ function appendMemoryAction(
   sessions.set(session.id, { ...session, revision: expectedRevision + 1 });
   if (action.kind === "request" || action.kind === "reply") {
     const effect = action.effect.value;
-    if (effect !== null && typeof effect === "object" && !Array.isArray(effect) && effect.phase === "state") {
+    if (
+      effect !== null &&
+      typeof effect === "object" &&
+      !Array.isArray(effect) &&
+      effect.phase === "state"
+    ) {
       const request = SessionTransition.Request.parse(effect.request);
       const id = `${request.requestId}:deadline`;
       const existing = alarms.get(id);
-      alarms.set(id, Alarm.Row.parse({
-        ...(existing ?? {
-          id, sessionId: request.sessionId, kind: "at", fireAt: request.deadline,
-          spec: { encodingVersion: 1, value: { kind: "request_deadline", requestId: request.requestId } },
-          createdAt: request.createdAt,
+      alarms.set(
+        id,
+        Alarm.Row.parse({
+          ...(existing ?? {
+            id,
+            sessionId: request.sessionId,
+            kind: "at",
+            fireAt: request.deadline,
+            spec: {
+              encodingVersion: 1,
+              value: { kind: "request_deadline", requestId: request.requestId },
+            },
+            createdAt: request.createdAt,
+          }),
+          status:
+            request.state === "open"
+              ? "armed"
+              : request.state === "expired"
+                ? "fired"
+                : "cancelled",
+          updatedAt: action.ts,
         }),
-        status: request.state === "open" ? "armed" : request.state === "expired" ? "fired" : "cancelled",
-        updatedAt: action.ts,
-      }));
+      );
     }
   }
   return { action, revision: expectedRevision + 1 };
@@ -685,11 +728,14 @@ function validSessionInboxOwnership(request: LedgerSession.Commit): boolean {
   if (request.receive !== undefined && request.receive.sessionId !== request.sessionId) {
     return false;
   }
-  if (request.admit !== undefined && (
-    request.admit.createSession?.row.parentId !== request.sessionId ||
-    request.admit.sender?.sessionId !== request.sessionId ||
-    request.admit.sender.owner !== request.owner || request.admit.sender.fence !== request.fence
-  )) return false;
+  if (
+    request.admit !== undefined &&
+    (request.admit.createSession?.row.parentId !== request.sessionId ||
+      request.admit.sender?.sessionId !== request.sessionId ||
+      request.admit.sender.owner !== request.owner ||
+      request.admit.sender.fence !== request.fence)
+  )
+    return false;
   return true;
 }
 
@@ -699,7 +745,10 @@ class MemorySessionCommitRefused extends Error {
   }
 }
 
-function pendingRequestCount(actions: ReadonlyMap<string, LedgerAction.Node>, since: number): number {
+function pendingRequestCount(
+  actions: ReadonlyMap<string, LedgerAction.Node>,
+  since: number,
+): number {
   const requests = new Map<string, SessionTransition.Request>();
   for (const action of [...actions.values()].sort((left, right) => left.ordinal - right.ordinal)) {
     if (action.kind !== "request" && action.kind !== "reply") continue;
@@ -715,7 +764,8 @@ function pendingRequestCount(actions: ReadonlyMap<string, LedgerAction.Node>, si
     requests.set(request.requestId, request);
   }
   return [...requests.values()].filter(
-    (request) => request.state === "open" && request.mode === "approval" && request.createdAt > since,
+    (request) =>
+      request.state === "open" && request.mode === "approval" && request.createdAt > since,
   ).length;
 }
 

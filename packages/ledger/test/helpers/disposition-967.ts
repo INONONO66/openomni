@@ -56,7 +56,8 @@ export function createDispositionFixture(reportCleanup = true) {
     0,
   );
   if (appended.kind !== "appended") throw new Error("fixture history append failed");
-  insertHistoricalWait(db,
+  insertHistoricalWait(
+    db,
     HistoricalWait.parse({
       id: "preserved",
       ownerRef: { kind: "session", id: "legacy" },
@@ -90,7 +91,10 @@ export function createDispositionFixture(reportCleanup = true) {
   };
 }
 
-export function seedRetiredWait(db: Database, status: z.infer<typeof HistoricalWait>["status"] = "cancelled") {
+export function seedRetiredWait(
+  db: Database,
+  status: z.infer<typeof HistoricalWait>["status"] = "cancelled",
+) {
   const record = HistoricalWait.parse({
     id: "retired",
     ownerRef: { kind: "session", id: "historical" },
@@ -123,14 +127,25 @@ function insertHistoricalWait(db: Database, record: z.infer<typeof HistoricalWai
     partial,endpoint_id,channel_id,reply_to_message_id,thread_id,token_hash,
     external_conversation_id,expires_at,follow_up_until,time_created,time_updated)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
-      record.id, record.ownerRef.kind, record.ownerRef.id, record.originMessageId,
-      JSON.stringify(record), record.revision, record.status, Number(record.partial),
-      record.correlation.endpointId ?? null, record.correlation.channelId ?? null,
-      record.correlation.replyToMessageId ?? null, record.correlation.threadId ?? null,
-      record.correlation.tokenHash ?? null, record.correlation.externalConversationId ?? null,
-      record.expiresAt, record.resolvedAt === undefined ? null : record.resolvedAt + record.followUpWindow,
-      record.createdAt, record.updatedAt,
-    );
+    record.id,
+    record.ownerRef.kind,
+    record.ownerRef.id,
+    record.originMessageId,
+    JSON.stringify(record),
+    record.revision,
+    record.status,
+    Number(record.partial),
+    record.correlation.endpointId ?? null,
+    record.correlation.channelId ?? null,
+    record.correlation.replyToMessageId ?? null,
+    record.correlation.threadId ?? null,
+    record.correlation.tokenHash ?? null,
+    record.correlation.externalConversationId ?? null,
+    record.expiresAt,
+    record.resolvedAt === undefined ? null : record.resolvedAt + record.followUpWindow,
+    record.createdAt,
+    record.updatedAt,
+  );
 }
 
 export function snapshotDatabase(db: Database) {

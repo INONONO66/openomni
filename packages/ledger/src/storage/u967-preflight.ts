@@ -42,7 +42,8 @@ export function preflight967(db: Database, migrations: readonly { readonly name:
     latest === U967_MIGRATION ||
     latest === RETIRED_TABLE_MIGRATION ||
     latest === REPLY_GRANT_MIGRATION ||
-    latest === "0037_watch_alarms/migration.sql" || latest === REQUEST_MIGRATION;
+    latest === "0037_watch_alarms/migration.sql" ||
+    latest === REQUEST_MIGRATION;
   const latestIndex =
     latest === undefined ? -1 : migrations.findIndex((migration) => migration.name === latest);
   const expected = latestIndex < 0 ? migrations.slice(0, -1) : migrations.slice(0, latestIndex + 1);

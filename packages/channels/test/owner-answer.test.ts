@@ -2,9 +2,19 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createSessionRequests, decideRequestTransition, requestBindingDigest } from "@openomni/agent";
+import {
+  createSessionRequests,
+  decideRequestTransition,
+  requestBindingDigest,
+} from "@openomni/agent";
 import { BlacklistStore, SessionHandleStore, Storage } from "@openomni/ledger";
-import { Gateway, PlainValueSchema, canonicalDigest, type Channel, type SessionTransition } from "@openomni/protocol";
+import {
+  Gateway,
+  PlainValueSchema,
+  canonicalDigest,
+  type Channel,
+  type SessionTransition,
+} from "@openomni/protocol";
 import { WebSocketHandler } from "../src/websocket";
 import { makeRouter } from "./router/_router-fixture";
 import { originalAction } from "./helpers/requests";
@@ -12,7 +22,11 @@ import { requestFixture } from "./helpers/request-record";
 
 const credential = "owner-frame-secret";
 const sender = { kind: "external", surface: "ws", externalId: "owner-console" } as const;
-const principal = { kind: "owner", principalId: "owner", evidenceId: "owner-auth-evidence" } as const;
+const principal = {
+  kind: "owner",
+  principalId: "owner",
+  evidenceId: "owner-auth-evidence",
+} as const;
 let directory: string;
 let dbPath: string;
 let at: number;
@@ -36,27 +50,53 @@ function approval() {
   const row = SessionHandleStore.row("owner-session");
   const generation = SessionHandleStore.latestGeneration(SessionHandleStore.tree(row.id));
   const request = requestFixture({
-    requestId: "protected-call", sessionId: row.id, callId: "protected-call", mode: "approval",
+    requestId: "protected-call",
+    sessionId: row.id,
+    callId: "protected-call",
+    mode: "approval",
     parsedInput: { person: "alice", trustTier: "trusted" },
     inputHash: canonicalDigest({ person: "alice", trustTier: "trusted" }),
-    effectHash: canonicalDigest({}), generation: row.policyGeneration,
-    toolsGeneration: row.toolsGeneration, toolsHash: generation.toolsHash,
-    systemHash: row.systemHash, expectedResponders: ["owner"],
-    domainRevisions: { persons: 1 }, correlation: {},
+    effectHash: canonicalDigest({}),
+    generation: row.policyGeneration,
+    toolsGeneration: row.toolsGeneration,
+    toolsHash: generation.toolsHash,
+    systemHash: row.systemHash,
+    expectedResponders: ["owner"],
+    domainRevisions: { persons: 1 },
+    correlation: {},
   });
   request.bindingDigest = requestBindingDigest(request);
   const lease = SessionHandleStore.acquireLease({
-    sessionId: row.id, owner: "fixture", expectedFence: row.leaseFence, now: 2, expiresAt: 100,
+    sessionId: row.id,
+    owner: "fixture",
+    expectedFence: row.leaseFence,
+    now: 2,
+    expiresAt: 100,
   });
   if (!lease.ok) throw new Error("fixture lease refused");
-  const decision = decideRequestTransition({
-    version: 1, inputId: "open", sessionId: row.id, at: 2, expectedRevision: row.revision,
-    authority: { owner: "fixture", fence: lease.fence }, payload: { kind: "request.open", request },
-  }, { row: SessionHandleStore.row(row.id), actions: SessionHandleStore.tree(row.id) });
+  const decision = decideRequestTransition(
+    {
+      version: 1,
+      inputId: "open",
+      sessionId: row.id,
+      at: 2,
+      expectedRevision: row.revision,
+      authority: { owner: "fixture", fence: lease.fence },
+      payload: { kind: "request.open", request },
+    },
+    { row: SessionHandleStore.row(row.id), actions: SessionHandleStore.tree(row.id) },
+  );
   expect(decision.resolution).toBe("opened");
   const result = SessionHandleStore.commitRequestTransition({
-    sessionId: row.id, owner: "fixture", fence: lease.fence, now: 2, expectedRevision: row.revision,
-    actions: [...decision.actions], consumeInboxIds: [], state: row.state, releaseLease: true,
+    sessionId: row.id,
+    owner: "fixture",
+    fence: lease.fence,
+    now: 2,
+    expectedRevision: row.revision,
+    actions: [...decision.actions],
+    consumeInboxIds: [],
+    state: row.state,
+    releaseLease: true,
   });
   if (!result.ok) throw new Error("fixture request refused");
   return request;
@@ -66,15 +106,18 @@ function envelope(request: SessionTransition.Request, decision: "approve" | "ref
   return { kind: "request_answer", inputId: "answer-1", request, decision, credential } as const;
 }
 
-function router(options: {
-  principal?: SessionTransition.Principal;
-  domainRevision?: number;
-  authenticated?: (who: Gateway.IngestSender, proof: string, requestId: string) => void;
-} = {}) {
+function router(
+  options: {
+    principal?: SessionTransition.Principal;
+    domainRevision?: number;
+    authenticated?: (who: Gateway.IngestSender, proof: string, requestId: string) => void;
+  } = {},
+) {
   return makeRouter({
     clock: () => at,
     requests: createSessionRequests({
-      clock: () => at, observations: { publish: () => undefined },
+      clock: () => at,
+      observations: { publish: () => undefined },
       requestDomainRevisions: () => ({ persons: options.domainRevision ?? 1 }),
     }),
     authenticateAnswer: async (who, proof, requestId) => {
@@ -82,8 +125,12 @@ function router(options: {
       if (proof !== credential) throw new Error(`invalid secret: ${proof}`);
       return options.principal ?? principal;
     },
-    prepare() { throw new Error("typed answer reached message preparation"); },
-    run() { throw new Error("typed answer reached message recording"); },
+    prepare() {
+      throw new Error("typed answer reached message preparation");
+    },
+    run() {
+      throw new Error("typed answer reached message recording");
+    },
   });
 }
 
@@ -101,21 +148,39 @@ function event<T extends Event>(target: EventTarget, name: string): Promise<T> {
   });
 }
 
-async function connect(gateway: ReturnType<typeof router>, messages: Channel.InboundMessage[] = [], logs: string[] = []) {
-  const handler = new WebSocketHandler(async message => { messages.push(message); }, (_event, data) => {
-    logs.push(JSON.stringify(data));
-  }, {
-    token: "upgrade-secret",
-    onRequestAnswer: (who, answer) => gateway.ingest(who, answer),
-  });
+async function connect(
+  gateway: ReturnType<typeof router>,
+  messages: Channel.InboundMessage[] = [],
+  logs: string[] = [],
+) {
+  const handler = new WebSocketHandler(
+    async (message) => {
+      messages.push(message);
+    },
+    (_event, data) => {
+      logs.push(JSON.stringify(data));
+    },
+    {
+      token: "upgrade-secret",
+      onRequestAnswer: (who, answer) => gateway.ingest(who, answer),
+    },
+  );
   const server = Bun.serve({
-    hostname: "127.0.0.1", port: 0,
+    hostname: "127.0.0.1",
+    port: 0,
     fetch: (request, instance) => handler.handleUpgrade(request, instance),
     websocket: handler.ws,
   });
-  stops.push(() => { server.stop(true); });
-  const socket = new WebSocket(`ws://127.0.0.1:${server.port}/ws?actor=owner-console`, ["auth", "upgrade-secret"]);
-  stops.push(() => { socket.terminate(); });
+  stops.push(() => {
+    server.stop(true);
+  });
+  const socket = new WebSocket(`ws://127.0.0.1:${server.port}/ws?actor=owner-console`, [
+    "auth",
+    "upgrade-secret",
+  ]);
+  stops.push(() => {
+    socket.terminate();
+  });
   const opened = event(socket, "open");
   await opened;
   expect(socket.protocol).toBe("auth");
@@ -128,25 +193,36 @@ async function frame(socket: WebSocket, value: object) {
   return PlainValueSchema.parse(JSON.parse((await received).data));
 }
 
-test.each(["approve", "refuse"] as const)("real authenticated WebSocket %s reaches only canonical request actions", async decision => {
+test.each([
+  "approve",
+  "refuse",
+] as const)("real authenticated WebSocket %s reaches only canonical request actions", async (decision) => {
   const request = approval();
   const authenticated: object[] = [];
-  const gateway = router({ authenticated: (who, proof, requestId) => {
-    authenticated.push({ who, proof, requestId });
-  } });
+  const gateway = router({
+    authenticated: (who, proof, requestId) => {
+      authenticated.push({ who, proof, requestId });
+    },
+  });
   const messages: Channel.InboundMessage[] = [];
   const logs: string[] = [];
   const { socket } = await connect(gateway, messages, logs);
   const { kind: _kind, ...answer } = envelope(request, decision);
   const receipt = await frame(socket, { type: "request_answer", ...answer });
   expect(receipt).toMatchObject({
-    type: "receipt", inputId: answer.inputId,
-    result: { status: "executed", handle: { messageId: answer.inputId, target: request.sessionId } },
+    type: "receipt",
+    inputId: answer.inputId,
+    result: {
+      status: "executed",
+      handle: { messageId: answer.inputId, target: request.sessionId },
+    },
   });
   expect(authenticated).toEqual([{ who: sender, proof: credential, requestId: request.requestId }]);
-  expect(SessionHandleStore.requestById(request.requestId)?.state).toBe(decision === "approve" ? "resolved" : "refused");
+  expect(SessionHandleStore.requestById(request.requestId)?.state).toBe(
+    decision === "approve" ? "resolved" : "refused",
+  );
   const actions = SessionHandleStore.tree(request.sessionId);
-  expect(actions.find(action => action.kind === "reply")?.effect.value).toMatchObject({
+  expect(actions.find((action) => action.kind === "reply")?.effect.value).toMatchObject({
     answer: { receivedAt: 10, principal, decision, inputHash: request.inputHash },
   });
   expect(JSON.stringify(actions)).not.toContain(credential);
@@ -170,7 +246,11 @@ test("same typed answer survives SQLite and gateway restart with a fresh owner c
   const second = await connect(router());
   expect(await frame(second.socket, wire)).toMatchObject({ result: { status: "executed" } });
   expect(SessionHandleStore.tree(request.sessionId)).toEqual(before);
-  expect(SessionHandleStore.tree(request.sessionId).filter(action => action.id === `${request.requestId}:resolution`)).toHaveLength(1);
+  expect(
+    SessionHandleStore.tree(request.sessionId).filter(
+      (action) => action.id === `${request.requestId}:resolution`,
+    ),
+  ).toHaveLength(1);
 });
 
 test("wrong frame credential is refused without recording or leaking it", async () => {
@@ -178,8 +258,14 @@ test("wrong frame credential is refused without recording or leaking it", async 
   const before = SessionHandleStore.tree(request.sessionId);
   const { socket } = await connect(router());
   const { kind: _kind, ...answer } = envelope(request);
-  const result = await frame(socket, { type: "request_answer", ...answer, credential: "wrong-secret" });
-  expect(result).toMatchObject({ result: { status: "blocked_pre", reasonCode: "request_answer.unauthenticated" } });
+  const result = await frame(socket, {
+    type: "request_answer",
+    ...answer,
+    credential: "wrong-secret",
+  });
+  expect(result).toMatchObject({
+    result: { status: "blocked_pre", reasonCode: "request_answer.unauthenticated" },
+  });
   expect(JSON.stringify(result)).not.toContain("wrong-secret");
   expect(SessionHandleStore.tree(request.sessionId)).toEqual(before);
 });
@@ -187,29 +273,49 @@ test("wrong frame credential is refused without recording or leaking it", async 
 test("session sender, missing authenticator, and non-Owner evidence fail closed", async () => {
   const request = approval();
   let calls = 0;
-  const gateway = router({ authenticated: () => { calls++; } });
-  expect(await gateway.ingest({ kind: "session", id: request.sessionId }, envelope(request))).toEqual({
-    status: "blocked_pre", reasonCode: "request_answer.session_sender",
+  const gateway = router({
+    authenticated: () => {
+      calls++;
+    },
+  });
+  expect(
+    await gateway.ingest({ kind: "session", id: request.sessionId }, envelope(request)),
+  ).toEqual({
+    status: "blocked_pre",
+    reasonCode: "request_answer.session_sender",
   });
   expect(calls).toBe(0);
   expect(await makeRouter().ingest(sender, envelope(request))).toEqual({
-    status: "blocked_pre", reasonCode: "request_answer.unauthenticated",
+    status: "blocked_pre",
+    reasonCode: "request_answer.unauthenticated",
   });
-  expect(await router({ principal: { ...principal, kind: "actor" } }).ingest(sender, envelope(request))).toEqual({
-    status: "blocked_pre", reasonCode: "request_answer.unauthenticated",
+  expect(
+    await router({ principal: { ...principal, kind: "actor" } }).ingest(sender, envelope(request)),
+  ).toEqual({
+    status: "blocked_pre",
+    reasonCode: "request_answer.unauthenticated",
   });
   expect(SessionHandleStore.requestById(request.requestId)?.state).toBe("open");
 });
 
-test.each(["inputHash", "bindingDigest", "generation", "domainRevisions"] as const)("canonical kernel rejects altered %s", async field => {
+test.each([
+  "inputHash",
+  "bindingDigest",
+  "generation",
+  "domainRevisions",
+] as const)("canonical kernel rejects altered %s", async (field) => {
   const request = approval();
   const altered = {
     ...request,
-    ...(field === "generation" ? { generation: 999 } :
-      field === "domainRevisions" ? { domainRevisions: { persons: 999 } } : { [field]: "altered" }),
+    ...(field === "generation"
+      ? { generation: 999 }
+      : field === "domainRevisions"
+        ? { domainRevisions: { persons: 999 } }
+        : { [field]: "altered" }),
   };
   expect(await router().ingest(sender, envelope(altered))).toEqual({
-    status: "blocked_pre", reasonCode: "request_answer.rejected",
+    status: "blocked_pre",
+    reasonCode: "request_answer.rejected",
   });
   expect(SessionHandleStore.requestById(request.requestId)?.state).toBe("open");
 });
@@ -217,19 +323,28 @@ test.each(["inputHash", "bindingDigest", "generation", "domainRevisions"] as con
 test("current domain revision and captured owner receipt time remain kernel gates", async () => {
   const request = approval();
   expect(await router({ domainRevision: 2 }).ingest(sender, envelope(request))).toMatchObject({
-    status: "blocked_pre", reasonCode: "request_answer.rejected",
+    status: "blocked_pre",
+    reasonCode: "request_answer.rejected",
   });
   at = request.deadline;
   expect(await router().ingest(sender, { ...envelope(request), inputId: "late" })).toMatchObject({
-    status: "blocked_pre", reasonCode: "request_answer.late_unknown",
+    status: "blocked_pre",
+    reasonCode: "request_answer.late_unknown",
   });
   expect(SessionHandleStore.inboxRows(request.sessionId)).toEqual([]);
 });
 
 test("Owner authentication finishing at the deadline cannot approve into the past", async () => {
   const request = approval();
-  const gateway = router({ authenticated: () => { at = request.deadline; } });
-  expect(await gateway.ingest(sender, envelope(request))).toMatchObject({ status: "blocked_pre", reasonCode: "request_answer.late_unknown" });
+  const gateway = router({
+    authenticated: () => {
+      at = request.deadline;
+    },
+  });
+  expect(await gateway.ingest(sender, envelope(request))).toMatchObject({
+    status: "blocked_pre",
+    reasonCode: "request_answer.late_unknown",
+  });
   expect(SessionHandleStore.requestById(request.requestId)?.state).toBe("expired");
 });
 
@@ -237,7 +352,10 @@ test("an authenticated Owner answer cannot bypass the absolute blacklist", async
   const request = approval();
   BlacklistStore.put({ id: "blocked-surface", kind: "channel", value: "ws", createdBy: "owner" });
   const before = SessionHandleStore.tree(request.sessionId);
-  expect(await router().ingest(sender, envelope(request))).toMatchObject({ status: "blocked_pre", reasonCode: "request_answer.blacklisted" });
+  expect(await router().ingest(sender, envelope(request))).toMatchObject({
+    status: "blocked_pre",
+    reasonCode: "request_answer.blacklisted",
+  });
   expect(SessionHandleStore.tree(request.sessionId)).toEqual(before);
 });
 
@@ -245,13 +363,28 @@ test("plain text preserves stable driver event ID and cannot enter Owner authent
   const request = approval();
   const messages: Channel.InboundMessage[] = [];
   let calls = 0;
-  const { socket } = await connect(router({ authenticated: () => { calls++; } }), messages);
+  const { socket } = await connect(
+    router({
+      authenticated: () => {
+        calls++;
+      },
+    }),
+    messages,
+  );
   expect(await frame(socket, { text: "approve", eventId: "text-redelivery" })).toEqual({
-    type: "receipt", status: "accepted",
+    type: "receipt",
+    status: "accepted",
   });
-  expect(messages).toMatchObject([{
-    sender, facts: { eventId: "text-redelivery", render: "approve", payload: { websocket: { authenticated: true } } },
-  }]);
+  expect(messages).toMatchObject([
+    {
+      sender,
+      facts: {
+        eventId: "text-redelivery",
+        render: "approve",
+        payload: { websocket: { authenticated: true } },
+      },
+    },
+  ]);
   expect(calls).toBe(0);
   expect(SessionHandleStore.requestById(request.requestId)?.state).toBe("open");
 });
@@ -260,9 +393,13 @@ test("typed frames reject missing input identity and untrusted principal fields"
   const request = approval();
   const { socket } = await connect(router());
   const { kind: _kind, ...answer } = envelope(request);
-  for (const value of [{ ...answer, inputId: undefined }, { ...answer, principal }]) {
+  for (const value of [
+    { ...answer, inputId: undefined },
+    { ...answer, principal },
+  ]) {
     expect(await frame(socket, { type: "request_answer", ...value })).toEqual({
-      type: "error", message: "invalid request_answer frame",
+      type: "error",
+      message: "invalid request_answer frame",
     });
   }
   expect(SessionHandleStore.requestById(request.requestId)?.state).toBe("open");

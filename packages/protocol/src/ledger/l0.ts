@@ -77,12 +77,17 @@ export namespace LedgerAction {
   export type Receipt = z.infer<typeof Receipt>;
 }
 
-const InboxAdmission = z.object({
-  id: Identifier, sessionId: Identifier,
-  kind: z.enum(["prompt", "interrupt", "resume"]), content: z.string(),
-  origin: EncodedPayload, createdAt: EpochMs,
-  parentActionId: NullableIdentifier.default(null),
-}).strict();
+const InboxAdmission = z
+  .object({
+    id: Identifier,
+    sessionId: Identifier,
+    kind: z.enum(["prompt", "interrupt", "resume"]),
+    content: z.string(),
+    origin: EncodedPayload,
+    createdAt: EpochMs,
+    parentActionId: NullableIdentifier.default(null),
+  })
+  .strict();
 
 export namespace LedgerSession {
   export const Role = z.enum(["resident", "worker"]);
@@ -624,9 +629,12 @@ export namespace Alarm {
     .strict();
   export type WatchSpec = z.infer<typeof WatchSpec>;
 
-  export const RequestDeadline = z.object({
-    kind: z.literal("request_deadline"), requestId: Identifier,
-  }).strict();
+  export const RequestDeadline = z
+    .object({
+      kind: z.literal("request_deadline"),
+      requestId: Identifier,
+    })
+    .strict();
   export type RequestDeadline = z.infer<typeof RequestDeadline>;
 
   export const Kind = z.enum(["at", "watch"]);

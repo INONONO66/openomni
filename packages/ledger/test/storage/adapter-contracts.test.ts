@@ -335,8 +335,14 @@ describe("SQLite adapter contract guards", () => {
   test("request action compare-and-set rejects foreign parent and stale revision", () => {
     adapter.sessions.create(sessionRow("request-owner"));
     const action = LedgerAction.Append.parse({
-      id: "request", parentId: "missing", sessionId: "request-owner", kind: "request",
-      intent: encoded("original"), effect: encoded("open"), irreversible: true, ts: 1,
+      id: "request",
+      parentId: "missing",
+      sessionId: "request-owner",
+      kind: "request",
+      intent: encoded("original"),
+      effect: encoded("open"),
+      irreversible: true,
+      ts: 1,
     });
     expect(adapter.actions.append(action, 0)).toBeUndefined();
     expect(adapter.actions.append({ ...action, parentId: null }, 1)).toBeUndefined();

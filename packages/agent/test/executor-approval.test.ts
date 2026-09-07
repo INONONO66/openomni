@@ -74,7 +74,16 @@ function fixture(overrides: Partial<ExecutorOptions> = {}) {
   );
   const approvals = executor.approvals;
   if (approvals === undefined) throw new Error("missing approvals");
-  return { ...recording, ledger: overrides.ledger ?? recording.ledger, executor, controller, bodies, running, approvals, opened: opened.promise };
+  return {
+    ...recording,
+    ledger: overrides.ledger ?? recording.ledger,
+    executor,
+    controller,
+    bodies,
+    running,
+    approvals,
+    opened: opened.promise,
+  };
 }
 for (const decision of ["approve", "refuse"] as const) {
   it(`commits authenticated ${decision} on the original invocation before opening the whole wave`, async () => {
@@ -177,7 +186,9 @@ it("waits for the durable deadline owner instead of registering an executor time
   try {
     const request = await bounded(f.opened);
     expect(Storage.get().alarms?.get(`${request.requestId}:deadline`)).toMatchObject({
-      kind: "at", fireAt: request.deadline, status: "armed",
+      kind: "at",
+      fireAt: request.deadline,
+      status: "armed",
     });
     expect(f.approvals.pending()).toHaveLength(1);
     expect(f.bodies).toEqual([]);
@@ -219,7 +230,9 @@ it("expires exactly once at the deadline, even with a delayed alarm", async () =
 });
 async function expireApproval(f: ReturnType<typeof fixture>, requestId: string, at: number) {
   const result = await f.ledger.transition?.(
-    { kind: "request.timeout", requestId }, `${requestId}:deadline`, at,
+    { kind: "request.timeout", requestId },
+    `${requestId}:deadline`,
+    at,
   );
   if (result?.request !== undefined) f.approvals.notify?.(result.request);
 }

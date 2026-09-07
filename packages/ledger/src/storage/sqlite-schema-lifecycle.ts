@@ -115,13 +115,21 @@ export function clearSqliteStorage(db: Database): void {
 
 function applyConnectionPragmas(db: Database, synchronous: "FULL" | "NORMAL"): void {
   for (const sql of [
-    "PRAGMA journal_mode = WAL", `PRAGMA synchronous = ${synchronous}`,
-    "PRAGMA busy_timeout = 5000", "PRAGMA cache_size = -64000",
-    "PRAGMA mmap_size = 268435456", "PRAGMA temp_store = MEMORY",
-    "PRAGMA foreign_keys = ON", "PRAGMA wal_checkpoint(PASSIVE)",
+    "PRAGMA journal_mode = WAL",
+    `PRAGMA synchronous = ${synchronous}`,
+    "PRAGMA busy_timeout = 5000",
+    "PRAGMA cache_size = -64000",
+    "PRAGMA mmap_size = 268435456",
+    "PRAGMA temp_store = MEMORY",
+    "PRAGMA foreign_keys = ON",
+    "PRAGMA wal_checkpoint(PASSIVE)",
   ]) {
     // Bun 1.3.6 must not retain cached pragma cursors across the table rebuild.
     const statement = db.prepare(sql);
-    try { statement.all(); } finally { statement.finalize(); }
+    try {
+      statement.all();
+    } finally {
+      statement.finalize();
+    }
   }
 }

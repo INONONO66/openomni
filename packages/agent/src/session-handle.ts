@@ -131,7 +131,9 @@ class SessionRegistry {
     for (const row of SessionHandleStore.listRows()) {
       const hasOpenTurn = SessionHandleStore.openTurns(SessionHandleStore.tree(row.id)).length > 0;
       const hasInbox = SessionHandleStore.pendingInbox(row.id).length > 0;
-      const hasOutbound = SessionHandleStore.outboundRows(row.id).some((item) => item.state === "pending");
+      const hasOutbound = SessionHandleStore.outboundRows(row.id).some(
+        (item) => item.state === "pending",
+      );
       if (!hasOpenTurn && !hasInbox && !hasOutbound) continue;
       const entry = this.entries.get(row.id) ?? this.install(row.id, resolveRunner(row));
       recoveries.push(entry.controller.reconcile());

@@ -2,12 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { rmSync } from "node:fs";
 import { Bus } from "@openomni/agent";
-import {
-  ActorRegistry,
-  EgressBudgetStore,
-  SessionHandleStore,
-  Storage,
-} from "@openomni/ledger";
+import { ActorRegistry, EgressBudgetStore, SessionHandleStore, Storage } from "@openomni/ledger";
 import { Gateway, L0Observation } from "@openomni/protocol";
 import { messageFixture } from "./helpers/message-fixture";
 import { z } from "zod";
@@ -82,12 +77,16 @@ for (const mode of ["ancestor", "nearer", "ambiguous"] as const) {
     });
     if (mode === "ambiguous") {
       expect(receipt.status).toBe("blocked_pre");
-      expect(SessionHandleStore.inboxRows("sender").some((row) => row.content === "ANSWER")).toBe(false);
+      expect(SessionHandleStore.inboxRows("sender").some((row) => row.content === "ANSWER")).toBe(
+        false,
+      );
       return;
     }
     expect(receipt).toMatchObject({ status: "executed", handle: { target: "sender" } });
     expect(SessionHandleStore.inboxRows("sender").at(-1)?.content).toBe("ANSWER");
-    const resolved = SessionHandleStore.requestRows("sender").filter((request) => request.state === "resolved");
+    const resolved = SessionHandleStore.requestRows("sender").filter(
+      (request) => request.state === "resolved",
+    );
     expect(resolved).toHaveLength(1);
     expect(resolved[0]?.correlation.replyToMessageId).toBe(
       mode === "nearer" ? "platform-2" : "platform-1",
@@ -117,7 +116,11 @@ for (const refuse of [false, true]) {
                 .get()?.n,
             ).toBe(1);
             expect(
-              independent.query<{ n: number }, []>("SELECT COUNT(*) AS n FROM action WHERE kind = 'request' AND json_extract(effect, '$.resolution') = 'opened'").get()?.n,
+              independent
+                .query<{ n: number }, []>(
+                  "SELECT COUNT(*) AS n FROM action WHERE kind = 'request' AND json_extract(effect, '$.resolution') = 'opened'",
+                )
+                .get()?.n,
             ).toBe(1);
             return { value: "accepted" as const };
           },
@@ -169,9 +172,13 @@ test("child admission observations see the inbox and deadline together on anothe
   using db = new Database(fixture.dbPath, { readonly: true });
   const visible: Array<{ inbox: number; alarm: number }> = [];
   const unsubscribe = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
-    if (event.kind !== "request" && !(event.kind === "prompt" && event.sessionId !== "sender")) return;
+    if (event.kind !== "request" && !(event.kind === "prompt" && event.sessionId !== "sender"))
+      return;
     visible.push({
-      inbox: db.query<{ n: number }, []>("SELECT COUNT(*) AS n FROM inbox WHERE session_id != 'sender'").get()?.n ?? 0,
+      inbox:
+        db
+          .query<{ n: number }, []>("SELECT COUNT(*) AS n FROM inbox WHERE session_id != 'sender'")
+          .get()?.n ?? 0,
       alarm: db.query<{ n: number }, []>("SELECT COUNT(*) AS n FROM alarm").get()?.n ?? 0,
     });
   });

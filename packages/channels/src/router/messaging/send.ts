@@ -356,9 +356,12 @@ function openSendRequest(
 ): SessionTransition.Request | undefined {
   if (input.operation !== "awaited") return undefined;
   const spec = input.requestSpec as NonNullable<SendInput["requestSpec"]>;
-  const recorded = ports.requests.list().find(
-    candidate => candidate.requestId === spec.requestId && candidate.sessionId === spec.sessionId,
-  );
+  const recorded = ports.requests
+    .list()
+    .find(
+      (candidate) =>
+        candidate.requestId === spec.requestId && candidate.sessionId === spec.sessionId,
+    );
   return ports.requests.open({
     ...spec,
     correlation: {
@@ -392,7 +395,11 @@ async function deliverSend(
   if (request === undefined) return { request, value: delivery.value };
   const recorded = await ports.requests.receipt({
     inputId: canonicalKey([
-      input.messageId, "delivery", delivery.value, delivery.externalMessageId ?? null, input.at,
+      input.messageId,
+      "delivery",
+      delivery.value,
+      delivery.externalMessageId ?? null,
+      input.at,
     ]),
     requestId: request.requestId,
     sessionId: request.sessionId,

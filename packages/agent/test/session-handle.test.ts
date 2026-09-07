@@ -1427,13 +1427,19 @@ describe("durable session handle", () => {
         expect(SessionHandleStore.outboundRows(message.sourceSessionId)[0]?.state).toBe("pending");
         expect(SessionHandleStore.inboxRows(parent.id)).toEqual([]);
         expect(message).toMatchObject({
-          requestId: "original-send", replyTo: "original-binding",
-          sourceSessionId: "reply-child", terminal: kind === "result" ? "completed" : kind,
+          requestId: "original-send",
+          replyTo: "original-binding",
+          sourceSessionId: "reply-child",
+          terminal: kind === "result" ? "completed" : kind,
         });
         return SessionHandleStore.commitReceivedMessage({
-          id: message.messageId, sessionId: message.destinationSessionId,
-          kind: "prompt", content: message.content, createdAt: now,
-          parentActionId: null, origin: { encodingVersion: 1, value: message },
+          id: message.messageId,
+          sessionId: message.destinationSessionId,
+          kind: "prompt",
+          content: message.content,
+          createdAt: now,
+          parentActionId: null,
+          origin: { encodingVersion: 1, value: message },
         }).receipt;
       },
     };

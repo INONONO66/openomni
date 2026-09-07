@@ -136,7 +136,8 @@ export function outboundRows(sessionId: string): SessionTransition.Outbound[] {
   for (const action of tree(sessionId)) {
     if (action.kind !== "outbound") continue;
     const effect = action.effect.value;
-    if (effect === null || typeof effect !== "object" || Array.isArray(effect)) throw new Error("invalid outbound action effect");
+    if (effect === null || typeof effect !== "object" || Array.isArray(effect))
+      throw new Error("invalid outbound action effect");
     const value = SessionTransition.Outbound.parse(effect.outbound);
     outbound.set(value.message.messageId, value);
   }

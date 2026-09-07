@@ -196,9 +196,10 @@ export class WebSocketHandler {
       await this.handler({
         sender,
         facts: {
-          eventId: typeof parsed.eventId === "string" && parsed.eventId.length > 0
-            ? parsed.eventId
-            : crypto.randomUUID(),
+          eventId:
+            typeof parsed.eventId === "string" && parsed.eventId.length > 0
+              ? parsed.eventId
+              : crypto.randomUUID(),
           surface: "ws",
           channelId: surfaceKey,
           addressees: [],

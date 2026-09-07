@@ -993,12 +993,20 @@ test("an exact approval deadline refuses only B and cannot grant late authority"
     const alarms = Storage.get().alarms;
     if (alarms === undefined) throw new Error("missing alarm storage");
     const worker = createAlarmWorker({
-      alarms, observations: Bus, clock: () => now,
+      alarms,
+      observations: Bus,
+      clock: () => now,
       requestTimeout: (requestId, at) => {
-        handle.requests.transition({ kind: "request.timeout", requestId }, `${requestId}:deadline`, at);
+        handle.requests.transition(
+          { kind: "request.timeout", requestId },
+          `${requestId}:deadline`,
+          at,
+        );
       },
       wake: async () => undefined,
-      failure: error => { throw error; },
+      failure: (error) => {
+        throw error;
+      },
     });
     suite.defer(() => worker.close());
     now = 101;

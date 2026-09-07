@@ -171,7 +171,7 @@ describe("send kernel active-egress gate (#219 seam)", () => {
 
   function messaging(withGate = true) {
     return createExistingAgentMessaging({
-    requests: seededRequests(),
+      requests: seededRequests(),
       deliver: (message) => {
         deliveries.push(message.messageId);
         return { value: "accepted" as const };

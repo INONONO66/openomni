@@ -167,44 +167,48 @@ test("resolved reply redelivery preserves the original request revision", async 
   expect(commits).toHaveLength(1);
 });
 
-test.each(["before", "after"] as const)(
-  "reply redelivery repairs a crash %s the owner inbox commit without another input",
-  async site => {
-    await openRequest("handoff");
-    let fault = true;
-    let now = 10;
-    const requests = requestPort(() => now);
-    const router = makeRouter({
-      clock: () => now,
-      requests: {
-        ...requests,
-        answer: async input => {
-          if (fault && site === "before") {
-            fault = false;
-            throw new Error("inbox handoff fault");
-          }
-          const resolution = await requests.answer(input);
-          if (fault) {
-            fault = false;
-            throw new Error("inbox handoff fault");
-          }
-          return resolution;
-        },
+test.each([
+  "before",
+  "after",
+] as const)("reply redelivery repairs a crash %s the owner inbox commit without another input", async (site) => {
+  await openRequest("handoff");
+  let fault = true;
+  let now = 10;
+  const requests = requestPort(() => now);
+  const router = makeRouter({
+    clock: () => now,
+    requests: {
+      ...requests,
+      answer: async (input) => {
+        if (fault && site === "before") {
+          fault = false;
+          throw new Error("inbox handoff fault");
+        }
+        const resolution = await requests.answer(input);
+        if (fault) {
+          fault = false;
+          throw new Error("inbox handoff fault");
+        }
+        return resolution;
       },
-    });
-    await expect(router.ingest(sender, facts("handoff-reply"))).rejects.toThrow("inbox handoff fault");
-    expect(SessionHandleStore.requestById("handoff")?.state).toBe(site === "before" ? "open" : "resolved");
-    expect(SessionHandleStore.inboxRows("request-owner")).toHaveLength(site === "before" ? 0 : 1);
-    now = 20;
-    await router.ingest(sender, facts("handoff-reply"));
-    const before = SessionHandleStore.tree("request-owner");
-    now = 30;
-    await router.ingest(sender, facts("handoff-reply"));
-    expect(SessionHandleStore.tree("request-owner")).toEqual(before);
-    expect(SessionHandleStore.inboxRows("request-owner")).toHaveLength(1);
-    expect(SessionHandleStore.requestById("handoff")?.replies).toHaveLength(1);
-  },
-);
+    },
+  });
+  await expect(router.ingest(sender, facts("handoff-reply"))).rejects.toThrow(
+    "inbox handoff fault",
+  );
+  expect(SessionHandleStore.requestById("handoff")?.state).toBe(
+    site === "before" ? "open" : "resolved",
+  );
+  expect(SessionHandleStore.inboxRows("request-owner")).toHaveLength(site === "before" ? 0 : 1);
+  now = 20;
+  await router.ingest(sender, facts("handoff-reply"));
+  const before = SessionHandleStore.tree("request-owner");
+  now = 30;
+  await router.ingest(sender, facts("handoff-reply"));
+  expect(SessionHandleStore.tree("request-owner")).toEqual(before);
+  expect(SessionHandleStore.inboxRows("request-owner")).toHaveLength(1);
+  expect(SessionHandleStore.requestById("handoff")?.replies).toHaveLength(1);
+});
 
 test("unexpected responder is refused with an authoritative route correction", async () => {
   registerResponder("intruder", "intruder");

@@ -1,6 +1,12 @@
 import { beforeEach, expect, test } from "bun:test";
 import { Channel, Ingress, type Ledger } from "@openomni/protocol";
-import { ActorRegistry, ChannelGrantStore, SessionHandleStore, Storage, SurfaceKey } from "@openomni/ledger";
+import {
+  ActorRegistry,
+  ChannelGrantStore,
+  SessionHandleStore,
+  Storage,
+  SurfaceKey,
+} from "@openomni/ledger";
 import { Bus } from "../helpers/observation";
 import {
   commits,

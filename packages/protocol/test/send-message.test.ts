@@ -165,14 +165,23 @@ describe("gateway ingest", () => {
       { tokenHash: "token-1" },
       { externalConversationId: "conversation-1" },
       { tokenHash: "token-1", externalConversationId: "conversation-1" },
-      { replyToMessageId: "message-0", threadId: "thread-1", tokenHash: "token-1", externalConversationId: "conversation-1" },
+      {
+        replyToMessageId: "message-0",
+        threadId: "thread-1",
+        tokenHash: "token-1",
+        externalConversationId: "conversation-1",
+      },
     ];
     for (const correlation of cases) {
       const shared = SessionTransition.Correlation.parse(correlation);
       const input = { ...ingress, reply: { ...shared, chain: [] } };
       const parsed = Gateway.IngressFacts.parse(input);
       expect(parsed).toEqual(input);
-      expect(SessionTransition.Correlation.parse({ ...parsed.reply, ...pins })).toEqual({ ...shared, chain: [], ...pins });
+      expect(SessionTransition.Correlation.parse({ ...parsed.reply, ...pins })).toEqual({
+        ...shared,
+        chain: [],
+        ...pins,
+      });
     }
   });
 

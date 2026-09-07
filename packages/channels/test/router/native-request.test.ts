@@ -7,17 +7,34 @@ import { openRequest, requestPort } from "../helpers/requests";
 beforeEach(() => Storage.initialize({ dbPath: ":memory:" }));
 afterEach(() => Storage.reset());
 const sender = { kind: "session", id: "child" } as const;
-function outbound(overrides: Partial<SessionTransition.OutboundMessage> = {}): SessionTransition.OutboundMessage {
-  const payload = { messageId: "terminal:reply", sourceSessionId: "child", sourceActionId: "terminal",
-    destinationSessionId: "request-owner", requestId: "original", replyTo: "binding",
-    terminal: "completed" as const, content: "answer", ...overrides };
+function outbound(
+  overrides: Partial<SessionTransition.OutboundMessage> = {},
+): SessionTransition.OutboundMessage {
+  const payload = {
+    messageId: "terminal:reply",
+    sourceSessionId: "child",
+    sourceActionId: "terminal",
+    destinationSessionId: "request-owner",
+    requestId: "original",
+    replyTo: "binding",
+    terminal: "completed" as const,
+    content: "answer",
+    ...overrides,
+  };
   return { ...payload, digest: canonicalDigest(payload) };
 }
 
 test("native reply reaches the canonical receiving inbox once and retains its original binding", async () => {
-  await openRequest("original", { expectedResponders: [sender.id], correlation: {}, deadline: 100 });
+  await openRequest("original", {
+    expectedResponders: [sender.id],
+    correlation: {},
+    deadline: 100,
+  });
   const received: string[] = [];
-  const port = requestPort(() => 2, (ids) => received.push(...ids));
+  const port = requestPort(
+    () => 2,
+    (ids) => received.push(...ids),
+  );
   const message = outbound();
   expect(await answerNativeRequest(port, sender, message, message.content, 2)).toBe(true);
   expect(SessionHandleStore.requestById("original")?.state).toBe("resolved");
@@ -33,17 +50,33 @@ test("native reply rejects an altered authenticated sender, content, or destinat
   await openRequest("original", { expectedResponders: [sender.id], correlation: {} });
   const port = requestPort();
   const before = SessionHandleStore.tree("request-owner");
-  await expect(answerNativeRequest(port, { kind: "session", id: "stranger" }, outbound(), "answer", 2)).rejects.toThrow("binding mismatch");
-  await expect(answerNativeRequest(port, sender, outbound(), "altered", 2)).rejects.toThrow("binding mismatch");
-  await expect(answerNativeRequest(port, sender, outbound({ destinationSessionId: "other" }), "answer", 2)).rejects.toThrow("original request is missing");
-  await expect(answerNativeRequest(port, sender, outbound({ requestId: "missing" }), "answer", 2)).rejects.toThrow("original request is missing");
+  await expect(
+    answerNativeRequest(port, { kind: "session", id: "stranger" }, outbound(), "answer", 2),
+  ).rejects.toThrow("binding mismatch");
+  await expect(answerNativeRequest(port, sender, outbound(), "altered", 2)).rejects.toThrow(
+    "binding mismatch",
+  );
+  await expect(
+    answerNativeRequest(port, sender, outbound({ destinationSessionId: "other" }), "answer", 2),
+  ).rejects.toThrow("original request is missing");
+  await expect(
+    answerNativeRequest(port, sender, outbound({ requestId: "missing" }), "answer", 2),
+  ).rejects.toThrow("original request is missing");
   expect(await answerNativeRequest(port, sender, undefined, "ordinary", 2)).toBe(false);
   expect(SessionHandleStore.tree("request-owner")).toEqual(before);
 });
 
 test("a late native answer records the timeout winner without manufacturing new conversational input", async () => {
   await openRequest("original", { expectedResponders: [sender.id], correlation: {}, deadline: 2 });
-  expect(await answerNativeRequest(requestPort(() => 2), sender, outbound(), "answer", 2)).toBe(true);
+  expect(
+    await answerNativeRequest(
+      requestPort(() => 2),
+      sender,
+      outbound(),
+      "answer",
+      2,
+    ),
+  ).toBe(true);
   expect(SessionHandleStore.requestById("original")?.state).toBe("expired");
   expect(SessionHandleStore.inboxRows("request-owner")).toEqual([]);
 });

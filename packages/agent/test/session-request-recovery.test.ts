@@ -59,10 +59,13 @@ function dispatcher(
     definitions(bodies),
     {
       ...recording.identity,
-      ledger: { ...recording.ledger, actions: () => {
-        if ((result.executor.approvals?.pending().length ?? 0) > 0) ready?.();
-        return recording.ledger.actions?.() ?? [];
-      } },
+      ledger: {
+        ...recording.ledger,
+        actions: () => {
+          if ((result.executor.approvals?.pending().length ?? 0) > 0) ready?.();
+          return recording.ledger.actions?.() ?? [];
+        },
+      },
       actionId: recording.identity.parentActionId,
       policy: compiledPolicy(),
     },

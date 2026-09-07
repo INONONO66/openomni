@@ -407,7 +407,11 @@ export function createSessionTurn(
       fence: state.fence,
       now: clock(),
       expectedRevision: current.revision,
-      actions: [...deliveries, terminal, ...(reply === undefined ? [] : [outboundOpen(reply, terminal.ts)])],
+      actions: [
+        ...deliveries,
+        terminal,
+        ...(reply === undefined ? [] : [outboundOpen(reply, terminal.ts)]),
+      ],
       consumeInboxIds: interrupts.map((item) => item.id),
       state: nextState,
       releaseLease: reply === undefined && releaseLease,
@@ -415,7 +419,15 @@ export function createSessionTurn(
     requireCommit(committed);
     observeDrained(interrupts, open.turnId, "before_llm", clock(), runtime.observations);
     if (reply !== undefined) {
-      await dispatchSessionOutbound(sessionId, runtime, owner, state.fence, clock, pinPolicy, releaseLease);
+      await dispatchSessionOutbound(
+        sessionId,
+        runtime,
+        owner,
+        state.fence,
+        clock,
+        pinPolicy,
+        releaseLease,
+      );
     }
   }
   return { runTurn, drainBoundary, seal };

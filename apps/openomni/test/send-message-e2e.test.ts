@@ -58,23 +58,44 @@ test("a child session terminal commits exactly one parent reply with the origina
   const reply = Promise.withResolvers<void>();
   let consumed = false;
   let acknowledged = false;
-  const timer = setTimeout(() => reply.reject(new Error("receiving executor or source acknowledgement missing")), 5000);
-  const completed = reply.promise.then(() => ({ ok: true }), (error: Error) => ({ ok: false, error }));
+  const timer = setTimeout(
+    () => reply.reject(new Error("receiving executor or source acknowledgement missing")),
+    5000,
+  );
+  const completed = reply.promise.then(
+    () => ({ ok: true }),
+    (error: Error) => ({ ok: false, error }),
+  );
   const unsubscribe = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
-    const action = SessionHandleStore.tree(event.sessionId).find((candidate) => candidate.id === event.id);
+    const action = SessionHandleStore.tree(event.sessionId).find(
+      (candidate) => candidate.id === event.id,
+    );
     if (action === undefined) return;
     if (action.kind === "inbox.deliver") {
       const delivery = SessionTurn.Delivery.safeParse(action.effect.value);
       if (delivery.success && delivery.data.content.includes("CHILD_SENTINEL")) consumed = true;
     }
     const effect = action.effect.value;
-    if (action.kind === "outbound" && effect !== null && typeof effect === "object" && !Array.isArray(effect)) {
+    if (
+      action.kind === "outbound" &&
+      effect !== null &&
+      typeof effect === "object" &&
+      !Array.isArray(effect)
+    ) {
       const outbound = SessionTransition.Outbound.safeParse(effect.outbound);
-      if (outbound.success && outbound.data.state === "delivered" && outbound.data.message.content.includes("CHILD_SENTINEL")) acknowledged = true;
+      if (
+        outbound.success &&
+        outbound.data.state === "delivered" &&
+        outbound.data.message.content.includes("CHILD_SENTINEL")
+      )
+        acknowledged = true;
     }
     if (consumed && acknowledged) reply.resolve();
   });
-  suite.defer(() => { clearTimeout(timer); unsubscribe(); });
+  suite.defer(() => {
+    clearTimeout(timer);
+    unsubscribe();
+  });
   const config = suite.config("message-child-", { wsToken: "token" });
   const app = await suite.boot({
     config,
@@ -144,5 +165,9 @@ test("a child session terminal commits exactly one parent reply with the origina
   expect("wait" in Storage.get()).toBe(false);
   expect("approval" in Storage.get()).toBe(false);
   using db = new Database(config.dbPath, { readonly: true });
-  expect(db.query("SELECT name FROM sqlite_schema WHERE type = 'table' AND name IN ('wait','approval')").all()).toEqual([]);
+  expect(
+    db
+      .query("SELECT name FROM sqlite_schema WHERE type = 'table' AND name IN ('wait','approval')")
+      .all(),
+  ).toEqual([]);
 });

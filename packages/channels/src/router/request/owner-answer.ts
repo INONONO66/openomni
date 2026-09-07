@@ -38,10 +38,17 @@ export async function answerOwnerRequest(
   }
   const authenticatedAt = Math.max(receivedAt, (ports.clock ?? Date.now)());
   const endpoint = ActorRegistry.resolveEndpoint(sender.surface, sender.externalId);
-  if (matchBlacklist({ actorId: endpoint?.identity.id ?? principal.principalId,
-    endpointId: endpoint?.endpoint.id, channel: sender.surface,
-    candidates: [sender.surface, sender.externalId],
-  }, authenticatedAt) !== undefined) {
+  if (
+    matchBlacklist(
+      {
+        actorId: endpoint?.identity.id ?? principal.principalId,
+        endpointId: endpoint?.endpoint.id,
+        channel: sender.surface,
+        candidates: [sender.surface, sender.externalId],
+      },
+      authenticatedAt,
+    ) !== undefined
+  ) {
     return { status: "blocked_pre", reasonCode: "request_answer.blacklisted" };
   }
   const resolution = await ports.requests.answer({

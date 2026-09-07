@@ -57,11 +57,7 @@ import { requestDomainRevisions } from "./tools/core/request-domain-revisions";
 interface StartOptions {
   readonly sessionRuntime?: Pick<
     SessionRuntime,
-    | "clock"
-    | "approvalTimeoutMs"
-    | "waitRetry"
-    | "openIntent"
-    | "onHibernate"
+    "clock" | "approvalTimeoutMs" | "waitRetry" | "openIntent" | "onHibernate"
   >;
   readonly config?: OpenOmniConfig;
   readonly llm?: ChatAgentConfig["llm"];
@@ -129,7 +125,11 @@ export async function startOpenOmni(options: StartOptions = {}) {
   const authenticateOwner = (credential: string, requestId: string) => {
     const expected = Buffer.from(config.wsToken ?? "");
     const presented = Buffer.from(credential);
-    if (expected.length === 0 || presented.length !== expected.length || !timingSafeEqual(presented, expected)) {
+    if (
+      expected.length === 0 ||
+      presented.length !== expected.length ||
+      !timingSafeEqual(presented, expected)
+    ) {
       throw new ExecutionApprovalError("unauthenticated");
     }
     return { kind: "owner" as const, principalId: "owner", evidenceId: `ws-owner:${requestId}` };
@@ -171,9 +171,13 @@ export async function startOpenOmni(options: StartOptions = {}) {
     await composer.mount("session.handles", (ctx) => {
       ctx.effect(async () => {
         const outcomes = await Promise.allSettled([closeSessions(sessionRuntime), recovery]);
-        const failures = outcomes.flatMap((outcome) => outcome.status === "rejected"
-          ? [outcome.reason instanceof Error ? outcome.reason : new Error(String(outcome.reason))] : []);
-        if (failures.length > 0) throw new AggregateError(failures, "session shutdown and recovery failed");
+        const failures = outcomes.flatMap((outcome) =>
+          outcome.status === "rejected"
+            ? [outcome.reason instanceof Error ? outcome.reason : new Error(String(outcome.reason))]
+            : [],
+        );
+        if (failures.length > 0)
+          throw new AggregateError(failures, "session shutdown and recovery failed");
       });
     });
     const actors: readonly RegisteredActor[] = config.actors ?? [];
@@ -303,7 +307,8 @@ export async function startOpenOmni(options: StartOptions = {}) {
     });
     channelSupervisor = supervisor;
     const processSessions = createProcessSessionTransport({
-      answer: (answer) => requests.answer({ ...answer, receivedAt: (sessionRuntime.clock ?? Date.now)() }),
+      answer: (answer) =>
+        requests.answer({ ...answer, receivedAt: (sessionRuntime.clock ?? Date.now)() }),
       command: [process.execPath, processEntryPath(import.meta.url)],
       worker: {
         dbPath: config.dbPath,
@@ -335,7 +340,8 @@ export async function startOpenOmni(options: StartOptions = {}) {
         inbox: { commit: commitMessageInbox },
         prepare: prepareMessage(resident.materialize),
         requests,
-        authenticateAnswer: async (_sender, credential, requestId) => authenticateOwner(credential, requestId),
+        authenticateAnswer: async (_sender, credential, requestId) =>
+          authenticateOwner(credential, requestId),
         committed: (row) => {
           doorbell.runInAsyncScope(() => {
             void wake(row.sessionId);
@@ -395,14 +401,10 @@ export async function startOpenOmni(options: StartOptions = {}) {
       await supervisor.reconcile();
     });
 
-    wsHandler = new WebSocketHandler(
-      routingHandler,
-      Bus.publish,
-      {
-        ...(config.wsToken === undefined ? {} : { token: config.wsToken }),
-        onRequestAnswer: (sender, answer) => messages.ingest(sender, answer),
-      },
-    );
+    wsHandler = new WebSocketHandler(routingHandler, Bus.publish, {
+      ...(config.wsToken === undefined ? {} : { token: config.wsToken }),
+      onRequestAnswer: (sender, answer) => messages.ingest(sender, answer),
+    });
 
     const server = Bun.serve({
       hostname: config.host,
@@ -422,7 +424,9 @@ export async function startOpenOmni(options: StartOptions = {}) {
         void boundServer.stop();
       });
     });
-    const awaitingOwner = requests.list().some((request) => request.mode === "approval" && request.state === "open");
+    const awaitingOwner = requests
+      .list()
+      .some((request) => request.mode === "approval" && request.state === "open");
     recovery = sweepSessions(resident.runnerFor, sessionRuntime);
     if (awaitingOwner) {
       void recovery.catch((error: Error) => console.error("session recovery failed", error));

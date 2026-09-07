@@ -484,5 +484,4 @@ export namespace Gateway {
         reason: string;
         at: number;
       }>;
-
 }

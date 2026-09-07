@@ -97,7 +97,7 @@ describe("send kernel over reply-scoped instances", () => {
 
   function messaging() {
     return createExistingAgentMessaging({
-    requests: seededRequests(),
+      requests: seededRequests(),
       deliver: (message) => {
         delivered.push(message.target.endpointId);
         return { value: "accepted" as const };

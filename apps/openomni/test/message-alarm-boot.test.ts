@@ -64,7 +64,14 @@ test("the shipped startup alarm owner fires exactly at the deadline and never tw
         sessionId: id,
         parentId: null,
         kind: "message",
-        intent: { encodingVersion: 1, value: { phase: "intent", value: { messageId: "deadline-request" }, effectHash: canonicalDigest({}) } },
+        intent: {
+          encodingVersion: 1,
+          value: {
+            phase: "intent",
+            value: { messageId: "deadline-request" },
+            effectHash: canonicalDigest({}),
+          },
+        },
         effect: { encodingVersion: 1, value: { state: "open" } },
         irreversible: true,
         ts: now,
@@ -73,8 +80,15 @@ test("the shipped startup alarm owner fires exactly at the deadline and never tw
     ),
   ).toBeDefined();
   await createSessionRequests({ observations: Bus, clock: () => now }).open({
-    requestId: "alarm-source", sessionId: id, deadline: 100, at: now,
-    expectedResponders: ["peer"], correlation: {}, allowedActions: ["report_result"], resolution: "first", threshold: 1,
+    requestId: "alarm-source",
+    sessionId: id,
+    deadline: 100,
+    at: now,
+    expectedResponders: ["peer"],
+    correlation: {},
+    allowedActions: ["report_result"],
+    resolution: "first",
+    threshold: 1,
   });
   Storage.reset();
   calls = 0;

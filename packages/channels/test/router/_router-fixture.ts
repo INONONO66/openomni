@@ -1,7 +1,13 @@
 import { originalAction, requestPort } from "../helpers/requests";
 import { Channel, Ingress, Gateway, type Inbox } from "@openomni/protocol";
 import { compilePolicySnapshot } from "@openomni/policy";
-import { ActorRegistry, ChannelGrantStore, SessionHandleStore, Storage, SurfaceKey } from "@openomni/ledger";
+import {
+  ActorRegistry,
+  ChannelGrantStore,
+  SessionHandleStore,
+  Storage,
+  SurfaceKey,
+} from "@openomni/ledger";
 import { Bus } from "../helpers/observation";
 import {
   createGatewayRouter,
@@ -132,10 +138,10 @@ export function makeRouter(overrides: Partial<GatewayRouterPorts> = {}): Gateway
     ],
   });
   router = createGatewayRouter({
-    requests: requestPort(overrides.clock ?? Date.now, sessionIds => {
+    requests: requestPort(overrides.clock ?? Date.now, (sessionIds) => {
       for (const sessionId of sessionIds) {
         for (const row of SessionHandleStore.inboxRows(sessionId)) {
-          if (commits.some(existing => existing.id === row.id)) continue;
+          if (commits.some((existing) => existing.id === row.id)) continue;
           commits.push({ ...row, parentActionId: null });
           overrides.committed?.(row);
         }
@@ -150,11 +156,18 @@ export function makeRouter(overrides: Partial<GatewayRouterPorts> = {}): Gateway
     inbox: {
       commit: (row) => {
         SessionHandleStore.materialize({
-          id: row.sessionId, parentId: null, role: "resident", tools: [],
-          system: { preset: "", blocks: [] }, policyGeneration: 0,
-          actionId: `${row.sessionId}:configure`, at: 0,
+          id: row.sessionId,
+          parentId: null,
+          role: "resident",
+          tools: [],
+          system: { preset: "", blocks: [] },
+          policyGeneration: 0,
+          actionId: `${row.sessionId}:configure`,
+          at: 0,
         });
-        const existed = SessionHandleStore.inboxRows(row.sessionId).some(input => input.id === row.id);
+        const existed = SessionHandleStore.inboxRows(row.sessionId).some(
+          (input) => input.id === row.id,
+        );
         const received = SessionHandleStore.commitReceivedMessage(row);
         if (!existed) commits.push(row);
         return received.row;

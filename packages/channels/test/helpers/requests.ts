@@ -13,7 +13,12 @@ export function requestPort(
   clock: () => number = () => 1,
   onInboxCommitted?: (sessionIds: readonly string[]) => void,
 ) {
-  return createSessionRequests({ observations: Bus, clock, processId: "channels-test", onInboxCommitted });
+  return createSessionRequests({
+    observations: Bus,
+    clock,
+    processId: "channels-test",
+    onInboxCommitted,
+  });
 }
 
 export function originalAction(requestId: string, sessionId: string, value: PlainValue = {}) {

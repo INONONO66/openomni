@@ -153,7 +153,8 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
   async function admitStage(stage: BatchStage, waveId: string): Promise<AdmittedStage> {
     if (stage.pre.verdict === "deny") return { ...stage, intent: undefined };
     const original = stage.request.originalAction;
-    if (original !== undefined) return { ...stage, intent: { action: original, revision: original.ordinal } };
+    if (original !== undefined)
+      return { ...stage, intent: { action: original, revision: original.ordinal } };
     const intent = await appendIntent({
       parentId: options.identity.parentActionId,
       kind: stage.kind,
@@ -166,7 +167,8 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
         turnId: options.identity.turnId ?? options.identity.parentActionId,
         waveId,
         sequential: stage.item.sequential ?? false,
-        approvalRequired: stage.pre.verdict === "require_approval" || stage.request.approval?.required === true,
+        approvalRequired:
+          stage.pre.verdict === "require_approval" || stage.request.approval?.required === true,
         domainRevisions: { ...stage.request.approval?.domainRevisions },
       },
     });
@@ -194,7 +196,9 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
         stage.request.originalAction !== undefined,
     );
     for (const stage of stages) {
-      admitted.push(await admitStage(stage, stages[0]?.pre.receipt.action.id ?? stage.pre.receipt.action.id));
+      admitted.push(
+        await admitStage(stage, stages[0]?.pre.receipt.action.id ?? stage.pre.receipt.action.id),
+      );
     }
     const decisions = await Promise.all(
       admitted.map(async (stage) => {
@@ -301,59 +305,59 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
     decision: string | undefined,
     startedAt: number | undefined,
   ): Promise<ExecutionBatchResult> {
-      const intent = stage.intent;
-      if (outcome === undefined) throw new Error("wave lost positional result");
-      if (outcome.status === "cancelled") {
-        if (intent !== undefined)
-          await appendResult({ kind: stage.kind, op: stage.request.op }, intent.action.id, {
-            phase: "result",
-            terminal: "cancelled",
-            callId: stage.request.toolObservation?.callId ?? null,
-            ...projectToolResult(stage.request, { terminal: "cancelled" }),
-          });
-        publishToolTerminal(stage.request, startedAt, "error");
-        return { terminal: "cancelled" };
-      }
-      if (stage.pre.verdict === "deny" || decision !== "approve") {
-        const reason =
-          stage.pre.verdict === "deny"
-            ? (stage.pre.reason ?? "denied")
-            : decision === "timeout"
-              ? "approval_timeout"
-              : "approval_refused";
-        if (intent !== undefined)
-          await appendResult({ kind: stage.kind, op: stage.request.op }, intent.action.id, {
-            phase: "result",
-            terminal: "blocked_pre",
-            reason,
-            callId: stage.request.toolObservation?.callId ?? null,
-            ...projectToolResult(stage.request, { terminal: "blocked_pre", reason }),
-          });
-        return { terminal: "blocked_pre", reason };
-      }
-      if (intent === undefined) throw new Error("wave lost admitted intent");
-      if (outcome.status === "rejected") {
-        if (outcome.error.message === "outcome_unknown") {
-          await appendResult({ kind: stage.kind, op: stage.request.op }, intent.action.id, {
-            phase: "result",
-            terminal: "outcome_unknown",
-            ...projectToolResult(stage.request, { terminal: "failed", error: outcome.error }),
-          });
-        } else
-          await appendFailure(
-            { kind: stage.kind, op: stage.request.op },
-            intent.action.id,
-            stage.request.effect,
-            outcome.error,
-            stage.request.toolObservation?.callId,
-            stage.request.toolResult?.({ terminal: "failed", error: outcome.error }),
-          );
-        publishToolTerminal(stage.request, startedAt, "error");
-        return { terminal: "failed", error: outcome.error };
-      }
-      const value = clonePlainValue(outcome.value);
-      const post = await applyPostPolicy(stage.request, value);
-      return finishRun(stage.request, stage.kind, intent.action.id, startedAt, value, post);
+    const intent = stage.intent;
+    if (outcome === undefined) throw new Error("wave lost positional result");
+    if (outcome.status === "cancelled") {
+      if (intent !== undefined)
+        await appendResult({ kind: stage.kind, op: stage.request.op }, intent.action.id, {
+          phase: "result",
+          terminal: "cancelled",
+          callId: stage.request.toolObservation?.callId ?? null,
+          ...projectToolResult(stage.request, { terminal: "cancelled" }),
+        });
+      publishToolTerminal(stage.request, startedAt, "error");
+      return { terminal: "cancelled" };
+    }
+    if (stage.pre.verdict === "deny" || decision !== "approve") {
+      const reason =
+        stage.pre.verdict === "deny"
+          ? (stage.pre.reason ?? "denied")
+          : decision === "timeout"
+            ? "approval_timeout"
+            : "approval_refused";
+      if (intent !== undefined)
+        await appendResult({ kind: stage.kind, op: stage.request.op }, intent.action.id, {
+          phase: "result",
+          terminal: "blocked_pre",
+          reason,
+          callId: stage.request.toolObservation?.callId ?? null,
+          ...projectToolResult(stage.request, { terminal: "blocked_pre", reason }),
+        });
+      return { terminal: "blocked_pre", reason };
+    }
+    if (intent === undefined) throw new Error("wave lost admitted intent");
+    if (outcome.status === "rejected") {
+      if (outcome.error.message === "outcome_unknown") {
+        await appendResult({ kind: stage.kind, op: stage.request.op }, intent.action.id, {
+          phase: "result",
+          terminal: "outcome_unknown",
+          ...projectToolResult(stage.request, { terminal: "failed", error: outcome.error }),
+        });
+      } else
+        await appendFailure(
+          { kind: stage.kind, op: stage.request.op },
+          intent.action.id,
+          stage.request.effect,
+          outcome.error,
+          stage.request.toolObservation?.callId,
+          stage.request.toolResult?.({ terminal: "failed", error: outcome.error }),
+        );
+      publishToolTerminal(stage.request, startedAt, "error");
+      return { terminal: "failed", error: outcome.error };
+    }
+    const value = clonePlainValue(outcome.value);
+    const post = await applyPostPolicy(stage.request, value);
+    return finishRun(stage.request, stage.kind, intent.action.id, startedAt, value, post);
   }
 
   async function runExisting<T extends PlainValue>(

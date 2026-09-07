@@ -1,5 +1,12 @@
 import { SessionHandleStore } from "@openomni/ledger";
-import { canonicalDigest, type Inbox, type LedgerAction, type SessionGeneration, type SessionTransition, type PlainValue } from "@openomni/protocol";
+import {
+  canonicalDigest,
+  type Inbox,
+  type LedgerAction,
+  type SessionGeneration,
+  type SessionTransition,
+  type PlainValue,
+} from "@openomni/protocol";
 import type { SessionRuntime } from "./session-contract";
 import { SessionLeaseError } from "./session-contract";
 import { getSessionHandle } from "./session-handle";
@@ -26,12 +33,23 @@ export interface SessionRequestPort {
   receipt(input: SessionTransition.DeliveryReceipt): Promise<SessionTransition.Request>;
 }
 
-function requestGeneration(actions: readonly LedgerAction.Node[], turnId: string | null): SessionGeneration.Snapshot {
+function requestGeneration(
+  actions: readonly LedgerAction.Node[],
+  turnId: string | null,
+): SessionGeneration.Snapshot {
   if (turnId === null) return SessionHandleStore.latestGeneration(actions);
   const turn = SessionHandleStore.turnIntent(actions.find((action) => action.id === turnId));
-  const generation = turn === undefined ? undefined : SessionHandleStore.generationByNumber(actions, turn.toolsGeneration);
-  if (turn === undefined || generation === undefined || generation.toolsHash !== turn.toolsHash ||
-    generation.systemHash !== turn.systemHash || generation.policyGeneration !== turn.policyGeneration) {
+  const generation =
+    turn === undefined
+      ? undefined
+      : SessionHandleStore.generationByNumber(actions, turn.toolsGeneration);
+  if (
+    turn === undefined ||
+    generation === undefined ||
+    generation.toolsHash !== turn.toolsHash ||
+    generation.systemHash !== turn.systemHash ||
+    generation.policyGeneration !== turn.policyGeneration
+  ) {
     throw new Error("original request generation is unavailable");
   }
   return generation;
@@ -91,9 +109,17 @@ export function createSessionRequests(runtime: SessionRuntime): SessionRequestPo
   function timeout(requestId: string, at: number): void {
     const request = SessionHandleStore.requestById(requestId);
     if (request === undefined) throw new Error(`deadline request missing: ${requestId}`);
-    const result = transition(request.sessionId,
-      { kind: "request.timeout", requestId }, `${requestId}:deadline`, at);
-    if (result.actions.length > 0 && result.request?.mode === "approval" && result.request.state !== "open")
+    const result = transition(
+      request.sessionId,
+      { kind: "request.timeout", requestId },
+      `${requestId}:deadline`,
+      at,
+    );
+    if (
+      result.actions.length > 0 &&
+      result.request?.mode === "approval" &&
+      result.request.state !== "open"
+    )
       runtime.onRequestReady?.(request.sessionId);
   }
   return {

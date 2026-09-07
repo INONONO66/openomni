@@ -96,7 +96,9 @@ test("admitted first contact grants a scoped reply through the same ingest", asy
   const request = SessionHandleStore.requestRows("persona-owner")[0];
   expect(request).toMatchObject({ deadline: reply.deadline, state: "open" });
   expect(Storage.get().alarms?.get(`${request?.requestId}:deadline`)).toMatchObject({
-    kind: "at", fireAt: reply.deadline, status: "armed",
+    kind: "at",
+    fireAt: reply.deadline,
+    status: "armed",
   });
   expect(delivered).toEqual([
     { externalId: "buyer-external", body: "yes", idempotencyKey: sent.handle.messageId },

@@ -36,13 +36,15 @@ const Send = z
   .strict();
 
 // Credential is transient ingress material, never an action payload.
-const RequestAnswer = z.object({
-  kind: z.literal("request_answer"),
-  inputId: Id,
-  request: SessionTransition.Request,
-  decision: z.enum(["approve", "refuse"]),
-  credential: Id,
-}).strict();
+const RequestAnswer = z
+  .object({
+    kind: z.literal("request_answer"),
+    inputId: Id,
+    request: SessionTransition.Request,
+    decision: z.enum(["approve", "refuse"]),
+    credential: Id,
+  })
+  .strict();
 
 // target is the resolved session id (including new_session), or the actor id
 // for actor delivery. No fictitious session is allocated for an actor.

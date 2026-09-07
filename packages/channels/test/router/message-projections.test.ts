@@ -68,8 +68,12 @@ test("session deadline is part of the inbox commit, never a second alarm write",
   );
   expect(result.status).toBe("executed");
   if (result.status !== "executed") throw new Error("not executed");
-  expect(SessionHandleStore.tree("sender").filter(action => action.kind === "alarm.arm")).toEqual([]);
-  expect(SessionHandleStore.requestRows("sender")).toMatchObject([{ deadline: 100, expectedResponders: ["child"] }]);
+  expect(SessionHandleStore.tree("sender").filter((action) => action.kind === "alarm.arm")).toEqual(
+    [],
+  );
+  expect(SessionHandleStore.requestRows("sender")).toMatchObject([
+    { deadline: 100, expectedResponders: ["child"] },
+  ]);
   expect(commits).toHaveLength(1);
   expect(commits[0]?.origin.value).toMatchObject({
     kind: "message",

@@ -190,8 +190,13 @@ function verifyReceipt(db: Database, command: Command) {
     const { source: _source, backup: _backup, ...expected } = manifest;
     if (!isDeepStrictEqual(buildLedgerArchiveManifest(restored, manifest.generatedAt), expected))
       throw new U967Error("digest_mismatch");
-    assertArchiveEquality(db, restored, sourceState === "applied" &&
-      (archiveState === "pending" || canonicalDigest(sqliteSchema(db)) !== canonicalDigest(sqliteSchema(restored))));
+    assertArchiveEquality(
+      db,
+      restored,
+      sourceState === "applied" &&
+        (archiveState === "pending" ||
+          canonicalDigest(sqliteSchema(db)) !== canonicalDigest(sqliteSchema(restored))),
+    );
   });
   return { manifest, applied: sourceState === "applied" };
 }
@@ -253,19 +258,23 @@ function dispose(db: Database, command: Command): string {
   }
   // A verified historical acknowledgement cannot authorize later migrations.
   if (applied) return "already_applied";
-  initializeSqliteDatabase(db, (locked) => {
-    // The exact same validation and DELETE share the runner's BEGIN IMMEDIATE.
-    const { manifest, projection } = verifyDisposition(locked, command);
-    for (const candidate of projection.candidates) {
-      const removed = locked
-        .query("DELETE FROM wait WHERE id = ? AND revision = ? AND owner_kind = 'workItem'")
-        .run(candidate.id, candidate.revision);
-      if (removed.changes !== 1) throw new U967Error("stale_archive");
-    }
-    const bus = manifest.tables.find((table) => table.table === "bus_event");
-    if (bus === undefined || locked.query("DELETE FROM bus_event").run().changes !== bus.rowCount)
-      throw new U967Error("stale_archive");
-  }, "archive967");
+  initializeSqliteDatabase(
+    db,
+    (locked) => {
+      // The exact same validation and DELETE share the runner's BEGIN IMMEDIATE.
+      const { manifest, projection } = verifyDisposition(locked, command);
+      for (const candidate of projection.candidates) {
+        const removed = locked
+          .query("DELETE FROM wait WHERE id = ? AND revision = ? AND owner_kind = 'workItem'")
+          .run(candidate.id, candidate.revision);
+        if (removed.changes !== 1) throw new U967Error("stale_archive");
+      }
+      const bus = manifest.tables.find((table) => table.table === "bus_event");
+      if (bus === undefined || locked.query("DELETE FROM bus_event").run().changes !== bus.rowCount)
+        throw new U967Error("stale_archive");
+    },
+    "archive967",
+  );
   return "disposed";
 }
 

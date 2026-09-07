@@ -69,9 +69,16 @@ test("0035 upgrade preserves action parents, rowids, policies and native archive
     if (previous === undefined) throw new Error(`missing historical table: ${table}`);
     expect(snapshotDatabase(db).tables.find(({ name }) => name === table)).toEqual(
       table === "alarm"
-        ? { name: table, rows: previous.rows.map(row => ({
-            ...row, epoch: 1n, fence: 0n, last_batch: null, notifications: 0n,
-          })) }
+        ? {
+            name: table,
+            rows: previous.rows.map((row) => ({
+              ...row,
+              epoch: 1n,
+              fence: 0n,
+              last_batch: null,
+              notifications: 0n,
+            })),
+          }
         : previous,
     );
   }
@@ -215,50 +222,55 @@ test("refuses unresolved legacy correlation without synthesizing an invocation",
   expect(readFileSync(fixture.path)).toEqual(bytes);
 });
 
-test.each(["armed", "paused"] as const)(
-  "refuses %s legacy message deadline before PRAGMAs and under the migration lock",
-  (status) => {
-    using fixture = upgradeFixture();
-    fixture.db.run(
-      `UPDATE alarm SET status=?,spec=? WHERE id='armed-alarm'`,
-      [status, JSON.stringify({
-        kind: "message_deadline",
-        messageId: "native-message",
-        sourceActionId: "attempt-history",
-        replyTo: "native-original",
-        generation: { toolsGeneration: 1, systemHash: "system", policyGeneration: 0 },
-      })],
-    );
-    const before = snapshotDatabase(fixture.db);
-    const bytes = readFileSync(fixture.path);
-    for (const upgrade of [
-      () => initializeSqliteDatabase(fixture.db),
-      () => Migration.applyOrdered(fixture.db, migrationDir, [
+test.each([
+  "armed",
+  "paused",
+] as const)("refuses %s legacy message deadline before PRAGMAs and under the migration lock", (status) => {
+  using fixture = upgradeFixture();
+  fixture.db.run(`UPDATE alarm SET status=?,spec=? WHERE id='armed-alarm'`, [
+    status,
+    JSON.stringify({
+      kind: "message_deadline",
+      messageId: "native-message",
+      sourceActionId: "attempt-history",
+      replyTo: "native-original",
+      generation: { toolsGeneration: 1, systemHash: "system", policyGeneration: 0 },
+    }),
+  ]);
+  const before = snapshotDatabase(fixture.db);
+  const bytes = readFileSync(fixture.path);
+  for (const upgrade of [
+    () => initializeSqliteDatabase(fixture.db),
+    () =>
+      Migration.applyOrdered(fixture.db, migrationDir, [
         { name: "0038_session_requests/migration.sql" },
       ]),
-    ]) {
-      expect(upgrade).toThrow("alarm:armed-alarm");
-      expect(snapshotDatabase(fixture.db)).toEqual(before);
-      expect(readFileSync(fixture.path)).toEqual(bytes);
-    }
-  },
-);
+  ]) {
+    expect(upgrade).toThrow("alarm:armed-alarm");
+    expect(snapshotDatabase(fixture.db)).toEqual(before);
+    expect(readFileSync(fixture.path)).toEqual(bytes);
+  }
+});
 
-test.each(["fired", "cancelled"] as const)(
-  "retains terminal %s legacy message deadline bytes without reviving authority",
-  (status) => {
-    using fixture = upgradeFixture();
-    fixture.db.run(
-      `UPDATE alarm SET status=?,spec=? WHERE id='armed-alarm'`,
-      [status, '{ "kind": "message_deadline", "sourceActionId": "attempt-history" }'],
-    );
-    const before = fixture.db.query<Record<string, string | number | bigint | Uint8Array | null>, []>("SELECT rowid,* FROM alarm").all();
-    initializeSqliteDatabase(fixture.db);
-    expect(fixture.db.query("SELECT rowid,* FROM alarm").all()).toEqual(
-      before.map(row => ({ ...row, epoch: 1n, fence: 0n, last_batch: null, notifications: 0n })),
-    );
-  },
-);
+test.each([
+  "fired",
+  "cancelled",
+] as const)("retains terminal %s legacy message deadline bytes without reviving authority", (status) => {
+  using fixture = upgradeFixture();
+  fixture.db.run(`UPDATE alarm SET status=?,spec=? WHERE id='armed-alarm'`, [
+    status,
+    '{ "kind": "message_deadline", "sourceActionId": "attempt-history" }',
+  ]);
+  const before = fixture.db
+    .query<Record<string, string | number | bigint | Uint8Array | null>, []>(
+      "SELECT rowid,* FROM alarm",
+    )
+    .all();
+  initializeSqliteDatabase(fixture.db);
+  expect(fixture.db.query("SELECT rowid,* FROM alarm").all()).toEqual(
+    before.map((row) => ({ ...row, epoch: 1n, fence: 0n, last_batch: null, notifications: 0n })),
+  );
+});
 
 test.each([
   "missing-source",
@@ -272,27 +284,30 @@ test.each([
      VALUES ('parent','{}',1,1,'resident')`,
   );
   fixture.db.run("UPDATE session SET role='worker',parent_id='parent' WHERE id='legacy'");
-  fixture.db.run(
-    "UPDATE action SET session_id='parent',kind='message' WHERE id='attempt-history'",
-  );
-  fixture.db.run(
-    `UPDATE inbox SET origin=? WHERE id='pending-inbox'`,
-    [JSON.stringify(fault === "missing-origin" ? {} : {
-      kind: "message",
-      messageId: "native-message",
-      senderSessionId: fault === "wrong-source-session" ? "foreign" : "parent",
-      sourceActionId: fault === "missing-source" ? "missing" : "attempt-history",
-      deadline: 100,
-    })],
-  );
+  fixture.db.run("UPDATE action SET session_id='parent',kind='message' WHERE id='attempt-history'");
+  fixture.db.run(`UPDATE inbox SET origin=? WHERE id='pending-inbox'`, [
+    JSON.stringify(
+      fault === "missing-origin"
+        ? {}
+        : {
+            kind: "message",
+            messageId: "native-message",
+            senderSessionId: fault === "wrong-source-session" ? "foreign" : "parent",
+            sourceActionId: fault === "missing-source" ? "missing" : "attempt-history",
+            deadline: 100,
+          },
+    ),
+  ]);
   const before = snapshotDatabase(fixture.db);
   const bytes = readFileSync(fixture.path);
   expect(() => initializeSqliteDatabase(fixture.db)).toThrow("inbox:pending-inbox");
   expect(snapshotDatabase(fixture.db)).toEqual(before);
   expect(readFileSync(fixture.path)).toEqual(bytes);
-  expect(() => Migration.applyOrdered(fixture.db, migrationDir, [
-    { name: "0038_session_requests/migration.sql" },
-  ])).toThrow("inbox:pending-inbox");
+  expect(() =>
+    Migration.applyOrdered(fixture.db, migrationDir, [
+      { name: "0038_session_requests/migration.sql" },
+    ]),
+  ).toThrow("inbox:pending-inbox");
   expect(snapshotDatabase(fixture.db)).toEqual(before);
   expect(readFileSync(fixture.path)).toEqual(bytes);
 });
@@ -335,27 +350,54 @@ test.each([
   { state: "approved", decidedBy: "deadline", decidedAt: 2 },
 ])("dishonest historical consent disposition refuses unchanged: %j", (settlement) => {
   using fixture = upgradeFixture();
-  const data = { id: "dishonest", subject: { kind: "contact_promotion", actorId: "peer" },
-    requestedBy: "resident", deadline: 10, revision: 1, createdAt: 1, updatedAt: 2, ...settlement };
-  fixture.db.run("INSERT INTO approval VALUES ('dishonest',?,1,?,10,1,2)", [JSON.stringify(data), settlement.state]);
+  const data = {
+    id: "dishonest",
+    subject: { kind: "contact_promotion", actorId: "peer" },
+    requestedBy: "resident",
+    deadline: 10,
+    revision: 1,
+    createdAt: 1,
+    updatedAt: 2,
+    ...settlement,
+  };
+  fixture.db.run("INSERT INTO approval VALUES ('dishonest',?,1,?,10,1,2)", [
+    JSON.stringify(data),
+    settlement.state,
+  ]);
   const before = snapshotDatabase(fixture.db);
   expect(() => initializeSqliteDatabase(fixture.db)).toThrow("approval:dishonest");
   expect(snapshotDatabase(fixture.db)).toEqual(before);
 });
 
-test.each(["open", "waiting"] as const)("unbound consumed native %s execution refuses even without a pending inbox", (kind) => {
+test.each([
+  "open",
+  "waiting",
+] as const)("unbound consumed native %s execution refuses even without a pending inbox", (kind) => {
   using fixture = upgradeFixture();
-  fixture.db.run("INSERT INTO session (id,data,time_created,time_updated,role) VALUES ('parent','{}',1,1,'resident')");
+  fixture.db.run(
+    "INSERT INTO session (id,data,time_created,time_updated,role) VALUES ('parent','{}',1,1,'resident')",
+  );
   fixture.db.run("UPDATE session SET role='worker',parent_id='parent' WHERE id='legacy'");
   fixture.db.run("UPDATE inbox SET status='consumed',consumed_by='old',consumed_at=2");
-  fixture.db.run(`INSERT INTO action (id,session_id,kind,intent,effect,irreversible,encoding_version,ts,ordinal)
-    VALUES ('native-turn','legacy','turn',?, ?,1,1,2,2)`, [
-    JSON.stringify(kind === "open" ? { phase: "intent", resultId: "uncommitted" } : { phase: "terminal", turnId: "old-turn" }),
-    JSON.stringify(kind === "open" ? { phase: "pending" } : { phase: "terminal", kind: "waiting" }),
-  ]);
+  fixture.db.run(
+    `INSERT INTO action (id,session_id,kind,intent,effect,irreversible,encoding_version,ts,ordinal)
+    VALUES ('native-turn','legacy','turn',?, ?,1,1,2,2)`,
+    [
+      JSON.stringify(
+        kind === "open"
+          ? { phase: "intent", resultId: "uncommitted" }
+          : { phase: "terminal", turnId: "old-turn" },
+      ),
+      JSON.stringify(
+        kind === "open" ? { phase: "pending" } : { phase: "terminal", kind: "waiting" },
+      ),
+    ],
+  );
   const before = snapshotDatabase(fixture.db);
   const bytes = readFileSync(fixture.path);
-  expect(() => initializeSqliteDatabase(fixture.db)).toThrow("turn:native-turn:session:legacy:parent:parent");
+  expect(() => initializeSqliteDatabase(fixture.db)).toThrow(
+    "turn:native-turn:session:legacy:parent:parent",
+  );
   expect(snapshotDatabase(fixture.db)).toEqual(before);
   expect(readFileSync(fixture.path)).toEqual(bytes);
 });

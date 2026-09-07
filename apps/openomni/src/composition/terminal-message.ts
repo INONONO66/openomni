@@ -13,7 +13,9 @@ interface OutboundContext {
 
 export const outboundMessage = new AsyncLocalStorage<OutboundContext>();
 
-function receivedOutbound(message: SessionTransition.OutboundMessage): LedgerAction.Receipt | undefined {
+function receivedOutbound(
+  message: SessionTransition.OutboundMessage,
+): LedgerAction.Receipt | undefined {
   const action = SessionHandleStore.tree(message.destinationSessionId).find((candidate) => {
     if (candidate.id === message.messageId && candidate.kind === "prompt") return true;
     if (candidate.kind !== "reply") return false;
@@ -38,14 +40,22 @@ export function dispatchOutboundMessage(
         role: SessionHandleStore.row(message.sourceSessionId).role,
         parentActionId: `${message.sourceActionId}:outbound`,
       },
-      policy, observations: Bus, clock, entropy: () => crypto.randomUUID(),
+      policy,
+      observations: Bus,
+      clock,
+      entropy: () => crypto.randomUUID(),
       ledger: {
         async commit(action) {
           const row = SessionHandleStore.row(message.sourceSessionId);
           const result = SessionHandleStore.commit({
-            sessionId: message.sourceSessionId, ...authority,
-            now: clock(), expectedRevision: row.revision,
-            actions: [action], consumeInboxIds: [], state: row.state, releaseLease: false,
+            sessionId: message.sourceSessionId,
+            ...authority,
+            now: clock(),
+            expectedRevision: row.revision,
+            actions: [action],
+            consumeInboxIds: [],
+            state: row.state,
+            releaseLease: false,
           });
           if (!result.ok) throw new Error(`outbound policy commit ${result.reason}`);
           const receipt = result.receipts[0];
@@ -58,11 +68,17 @@ export function dispatchOutboundMessage(
     return outboundMessage.run(context, async () => {
       const admitted = await ingest(
         { kind: "session", id: message.sourceSessionId },
-        { to: { kind: "session", id: message.destinationSessionId }, type: "message", content: message.content, replyTo: message.replyTo },
+        {
+          to: { kind: "session", id: message.destinationSessionId },
+          type: "message",
+          content: message.content,
+          replyTo: message.replyTo,
+        },
       );
       if (admitted.status === "blocked_pre") throw new Error("outbound gateway admission refused");
       const receipt = context.receipt ?? receivedOutbound(message);
-      if (receipt === undefined) throw new Error("outbound receiving consumer did not commit a receipt");
+      if (receipt === undefined)
+        throw new Error("outbound receiving consumer did not commit a receipt");
       return receipt;
     });
   };

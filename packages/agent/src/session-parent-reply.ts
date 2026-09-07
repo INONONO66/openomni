@@ -1,5 +1,11 @@
 import { SessionHandleStore } from "@openomni/ledger";
-import { canonicalDigest, Inbox, SessionTransition, type LedgerAction, type LedgerSession } from "@openomni/protocol";
+import {
+  canonicalDigest,
+  Inbox,
+  SessionTransition,
+  type LedgerAction,
+  type LedgerSession,
+} from "@openomni/protocol";
 import type { SessionRunnerResult } from "./session-contract";
 
 /** A child seals its own obligation; only the receiving executor changes the parent. */
@@ -20,7 +26,7 @@ export function parentReply(
     destinationSessionId: row.parentId,
     requestId: original.data.sourceActionId,
     replyTo: original.data.replyTo ?? original.data.messageId,
-    terminal: result.kind === "result" ? "completed" as const : result.kind,
+    terminal: result.kind === "result" ? ("completed" as const) : result.kind,
     content: result.text ?? "",
   };
   return SessionTransition.OutboundMessage.parse({ ...message, digest: canonicalDigest(message) });

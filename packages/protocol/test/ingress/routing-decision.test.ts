@@ -232,7 +232,11 @@ describe("Ingress.recordedRoutingDecision (upcast-on-read)", () => {
       ...baseDecision,
       stage: "request_correlation" as const,
       outcome: "ambiguous" as const,
-      candidateInteractionIds: ["request:request-1", "pending_ask:ask-1", "pending_interaction:pi-1"],
+      candidateInteractionIds: [
+        "request:request-1",
+        "pending_ask:ask-1",
+        "pending_interaction:pi-1",
+      ],
     };
     expect(() => routingDecisionSchema.parse(legacyAmbiguous)).toThrow(ZodError);
 

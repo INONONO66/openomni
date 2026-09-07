@@ -93,7 +93,10 @@ export interface OutboundMessaging {
 }
 
 export function createResidentGateway(
-  ports: Omit<Parameters<typeof createGatewayRouter>[0], "sink" | "run" | "messaging" | "requests"> & {
+  ports: Omit<
+    Parameters<typeof createGatewayRouter>[0],
+    "sink" | "run" | "messaging" | "requests"
+  > & {
     readonly requests?: Parameters<typeof createGatewayRouter>[0]["requests"];
   },
   messaging?: OutboundMessaging,

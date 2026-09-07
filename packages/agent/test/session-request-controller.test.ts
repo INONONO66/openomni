@@ -10,9 +10,12 @@ import { bounded } from "./helpers/request-ledger";
 
 let runtime: SessionRuntime;
 beforeEach(() => {
-  Storage.initialize({ dbPath: ":memory:", observationSink: {
-    publish: (event, payload) => runtime?.observations.publish(event, payload),
-  } });
+  Storage.initialize({
+    dbPath: ":memory:",
+    observationSink: {
+      publish: (event, payload) => runtime?.observations.publish(event, payload),
+    },
+  });
   const policies = Storage.get().policies;
   if (policies === undefined) throw new Error("missing policies");
   for (const row of SEEDED_POLICY_ROWS) policies.append({ ...row, generation: 1 });
@@ -28,10 +31,14 @@ function setup() {
   runtime = {
     clock: () => now,
     entropy: () => crypto.randomUUID(),
-    observations: { publish: () => {
-      if (SessionHandleStore.requestRows("controller").some(request => request.state === "open"))
-        suspended.resolve();
-    } },
+    observations: {
+      publish: () => {
+        if (
+          SessionHandleStore.requestRows("controller").some((request) => request.state === "open")
+        )
+          suspended.resolve();
+      },
+    },
     scheduleHeartbeat: () => () => undefined,
   };
   const tool = eraseTool(

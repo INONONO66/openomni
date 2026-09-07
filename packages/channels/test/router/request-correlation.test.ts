@@ -93,7 +93,11 @@ test.each([
   "refused",
 ] as const)("%s requests stay visible for kernel late and duplicate decisions", (state) => {
   const outcomes = {
-    open: null, resolved: "answered", expired: "outcome_unknown", cancelled: "cancelled", refused: "denied",
+    open: null,
+    resolved: "answered",
+    expired: "outcome_unknown",
+    cancelled: "cancelled",
+    refused: "denied",
   } as const;
   const record = requestFixture({ state, outcome: outcomes[state] });
   expect(findRequestCandidates([record], { channelId: "dm", replyToMessageId: "sent" }).kind).toBe(

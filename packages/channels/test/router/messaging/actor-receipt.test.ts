@@ -17,7 +17,7 @@ for (const value of ["accepted", "rejected", "unknown"] as const) {
     // Given a real send kernel and a transport with an explicit receipt.
     const keys: string[] = [];
     const messaging = createExistingAgentMessaging({
-    requests: seededRequests(),
+      requests: seededRequests(),
       grants: () => [buildGrant("grant:sender->target")],
       publish: () => undefined,
       deliver: async (message) => {

@@ -62,30 +62,35 @@ export function createApprovalTool(port: ApprovalPort) {
       input: ApprovalInput,
       output: ApprovalOutput,
       visibility: { model: ["resident"], cell: ["resident"] },
-      execute: async ({ operation }, context) => Storage.get().transaction(() => {
-        if (context.domainRevisions === undefined || canonicalDigest({ ...context.domainRevisions }) !== canonicalDigest(authorityDomainRevisions(port, { operation }))) {
-          throw new ToolRefused("approval", "domain revision changed");
-        }
-        if (operation.op === "contact_promote") {
-          const identity = port.getIdentity(operation.actorId);
-          if (identity === undefined || identity.standing !== "provisional")
-            throw new ToolRefused("contact_promote", "contact is missing or already registered");
-          const promoted = port.promote(operation.actorId);
-          return { op: operation.op, id: promoted.id, trustTier: promoted.trustTier };
-        }
-        const endpoint = port.getEndpoint(operation.endpointId);
-        if (
-          endpoint === undefined ||
-          port.getIdentity(operation.toActorId) === undefined ||
-          endpoint.actorId === operation.toActorId
-        )
-          throw new ToolRefused(
-            "endpoint_merge",
-            "endpoint or target is missing, or already bound",
-          );
-        const merged = port.mergeEndpoint(operation.endpointId, operation.toActorId);
-        return { op: operation.op, id: merged.id, actorId: merged.actorId };
-      }),
+      execute: async ({ operation }, context) =>
+        Storage.get().transaction(() => {
+          if (
+            context.domainRevisions === undefined ||
+            canonicalDigest({ ...context.domainRevisions }) !==
+              canonicalDigest(authorityDomainRevisions(port, { operation }))
+          ) {
+            throw new ToolRefused("approval", "domain revision changed");
+          }
+          if (operation.op === "contact_promote") {
+            const identity = port.getIdentity(operation.actorId);
+            if (identity === undefined || identity.standing !== "provisional")
+              throw new ToolRefused("contact_promote", "contact is missing or already registered");
+            const promoted = port.promote(operation.actorId);
+            return { op: operation.op, id: promoted.id, trustTier: promoted.trustTier };
+          }
+          const endpoint = port.getEndpoint(operation.endpointId);
+          if (
+            endpoint === undefined ||
+            port.getIdentity(operation.toActorId) === undefined ||
+            endpoint.actorId === operation.toActorId
+          )
+            throw new ToolRefused(
+              "endpoint_merge",
+              "endpoint or target is missing, or already bound",
+            );
+          const merged = port.mergeEndpoint(operation.endpointId, operation.toActorId);
+          return { op: operation.op, id: merged.id, actorId: merged.actorId };
+        }),
       render: (_args, value) =>
         value.op === "contact_promote"
           ? `contact ${value.id} registered (tier ${value.trustTier})`

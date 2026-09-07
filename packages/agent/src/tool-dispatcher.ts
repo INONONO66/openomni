@@ -216,9 +216,15 @@ export function createDispatcher(
     const body = () =>
       activeExecutor.run(executor, async () =>
         PlainValueSchema.parse(
-          await executeToolBody(definition, parsedInput.data, {
-            ...context, ...(approval === undefined ? {} : { domainRevisions: approval.domainRevisions }),
-          }, options?.timeoutMs),
+          await executeToolBody(
+            definition,
+            parsedInput.data,
+            {
+              ...context,
+              ...(approval === undefined ? {} : { domainRevisions: approval.domainRevisions }),
+            },
+            options?.timeoutMs,
+          ),
         ),
       );
     const finish = (
@@ -302,7 +308,8 @@ export function createDispatcher(
       const results = await executor.runBatch([prepared], { signal: context.signal });
       const result = results[0];
       if (result === undefined) throw new Error("single dispatch lost its result");
-      if (door === "cell" && result.terminal === "cancelled") throw new DOMException("execution cancelled", "AbortError");
+      if (door === "cell" && result.terminal === "cancelled")
+        throw new DOMException("execution cancelled", "AbortError");
       return prepared.finish(result);
     }
     return prepared.finish(await executor.run(prepared.request, prepared.body));
@@ -416,12 +423,29 @@ function recoverableWaves(actions: readonly LedgerAction.Node[], turnId: string 
   for (const action of actions) {
     if (action.kind !== "tool") continue;
     const intent = action.intent.value;
-    if (intent === null || typeof intent !== "object" || Array.isArray(intent) ||
-      intent.phase !== "intent" || intent.turnId !== turnId ||
-      typeof intent.callId !== "string" || typeof intent.op !== "string" || typeof intent.waveId !== "string") continue;
-    if (actions.some(node => node.kind === "tool" && node.parentId === action.id &&
-      node.effect.value !== null && typeof node.effect.value === "object" &&
-      !Array.isArray(node.effect.value) && node.effect.value.phase === "result")) continue;
+    if (
+      intent === null ||
+      typeof intent !== "object" ||
+      Array.isArray(intent) ||
+      intent.phase !== "intent" ||
+      intent.turnId !== turnId ||
+      typeof intent.callId !== "string" ||
+      typeof intent.op !== "string" ||
+      typeof intent.waveId !== "string"
+    )
+      continue;
+    if (
+      actions.some(
+        (node) =>
+          node.kind === "tool" &&
+          node.parentId === action.id &&
+          node.effect.value !== null &&
+          typeof node.effect.value === "object" &&
+          !Array.isArray(node.effect.value) &&
+          node.effect.value.phase === "result",
+      )
+    )
+      continue;
     const parsed = PlainValueSchema.parse(intent.value);
     if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed))
       throw new Error(`invalid durable invocation: ${action.id}`);

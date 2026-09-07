@@ -1,5 +1,11 @@
 import { SurfaceKey } from "@openomni/ledger";
-import { Gateway, Inbox, canonicalDigest, type LedgerAction, type PlainValue } from "@openomni/protocol";
+import {
+  Gateway,
+  Inbox,
+  canonicalDigest,
+  type LedgerAction,
+  type PlainValue,
+} from "@openomni/protocol";
 import { createExistingAgentMessaging } from "./messaging/send";
 import { createReplyGrantInstances } from "./messaging/reply-grant";
 import { externalMessage } from "./external-message";
@@ -11,7 +17,12 @@ import type { GatewayRouter, GatewayRouterPorts } from "./message-ports";
 export type { ChannelDeliveryRoute, GatewayRouter, GatewayRouterPorts } from "./message-ports";
 export { resolveRoute, type RouteInbound, type RouteState } from "./resolve-route";
 
-function transformedContent(intent: LedgerAction.Receipt, sender: Gateway.IngestSender, send: Gateway.SendMessage, messageId: string): string {
+function transformedContent(
+  intent: LedgerAction.Receipt,
+  sender: Gateway.IngestSender,
+  send: Gateway.SendMessage,
+  messageId: string,
+): string {
   if (sender.kind === "session" && intent.action.sessionId !== sender.id)
     throw new Error("authenticated session sender mismatch");
   const stored = intent.action.intent.value;
@@ -29,26 +40,47 @@ function transformedContent(intent: LedgerAction.Receipt, sender: Gateway.Ingest
 }
 
 function inboxAdmission(input: {
-  intent: LedgerAction.Receipt; sender: Gateway.IngestSender; send: Gateway.SendMessage;
-  prepared: ReturnType<GatewayRouterPorts["prepare"]>; messageId: string; content: string;
-  commitAt: number; external: ReturnType<typeof externalMessage> | undefined;
+  intent: LedgerAction.Receipt;
+  sender: Gateway.IngestSender;
+  send: Gateway.SendMessage;
+  prepared: ReturnType<GatewayRouterPorts["prepare"]>;
+  messageId: string;
+  content: string;
+  commitAt: number;
+  external: ReturnType<typeof externalMessage> | undefined;
 }): Inbox.Commit {
   const { intent, sender, send, prepared, messageId, content, commitAt, external } = input;
   return {
-    id: messageId, sessionId: prepared.target,
+    id: messageId,
+    sessionId: prepared.target,
     kind: send.type === "message" ? "prompt" : send.type,
-    content, createdAt: commitAt, parentActionId: null,
+    content,
+    createdAt: commitAt,
+    parentActionId: null,
     ...(prepared.sender === undefined ? {} : { sender: prepared.sender }),
     ...(prepared.createSession === undefined ? {} : { createSession: prepared.createSession }),
     ...(prepared.limits === undefined ? {} : { limits: prepared.limits }),
-    origin: { encodingVersion: 1, value: prepared.origin ?? (sender.kind === "session"
-      ? Inbox.MessageOrigin.parse({
-          kind: "message", messageId, senderSessionId: sender.id, sourceActionId: intent.action.id,
-          ...(send.replyTo === undefined ? {} : { replyTo: send.replyTo }),
-          ...(send.deadline === undefined ? {} : { deadline: send.deadline }),
-        })
-      : { kind: "external", messageId, surface: sender.surface, externalId: sender.externalId,
-          actorId: external?.event.meta?.actor?.actorId ?? "" }) },
+    origin: {
+      encodingVersion: 1,
+      value:
+        prepared.origin ??
+        (sender.kind === "session"
+          ? Inbox.MessageOrigin.parse({
+              kind: "message",
+              messageId,
+              senderSessionId: sender.id,
+              sourceActionId: intent.action.id,
+              ...(send.replyTo === undefined ? {} : { replyTo: send.replyTo }),
+              ...(send.deadline === undefined ? {} : { deadline: send.deadline }),
+            })
+          : {
+              kind: "external",
+              messageId,
+              surface: sender.surface,
+              externalId: sender.externalId,
+              actorId: external?.event.meta?.actor?.actorId ?? "",
+            }),
+    },
   };
 }
 
@@ -80,33 +112,51 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
         });
 
   function projectMessage(
-    sender: Gateway.IngestSender, send: Gateway.SendMessage,
-    prepared: ReturnType<GatewayRouterPorts["prepare"]>, external: ReturnType<typeof externalMessage> | undefined,
+    sender: Gateway.IngestSender,
+    send: Gateway.SendMessage,
+    prepared: ReturnType<GatewayRouterPorts["prepare"]>,
+    external: ReturnType<typeof externalMessage> | undefined,
     startedAt: number,
   ) {
-    const actorSendAllowed = send.to.kind !== "actor" ||
-      (messaging !== undefined && messaging.preflight({
-        senderId: sender.kind === "session" ? sender.id : sender.externalId,
-        target: { actorId: send.to.actorId },
-        operation: send.deadline === undefined ? "fire_and_forget" : "awaited", at: startedAt,
-      }) === undefined);
-    const message = external !== undefined
-      ? { ...external.message, eventIdUnique: prepared.message.sender === "external" && prepared.message.eventIdUnique }
-      : prepared.message.sender === "session" ? { ...prepared.message, actorSendAllowed } : undefined;
+    const actorSendAllowed =
+      send.to.kind !== "actor" ||
+      (messaging !== undefined &&
+        messaging.preflight({
+          senderId: sender.kind === "session" ? sender.id : sender.externalId,
+          target: { actorId: send.to.actorId },
+          operation: send.deadline === undefined ? "fire_and_forget" : "awaited",
+          at: startedAt,
+        }) === undefined);
+    const message =
+      external !== undefined
+        ? {
+            ...external.message,
+            eventIdUnique: prepared.message.sender === "external" && prepared.message.eventIdUnique,
+          }
+        : prepared.message.sender === "session"
+          ? { ...prepared.message, actorSendAllowed }
+          : undefined;
     if (message === undefined) throw new Error("session message projection missing");
     return message;
   }
 
-  function admitReplyGrant(external: ReturnType<typeof externalMessage> | undefined, at: number, sourceId: string) {
+  function admitReplyGrant(
+    external: ReturnType<typeof externalMessage> | undefined,
+    at: number,
+    sourceId: string,
+  ) {
     if (external === undefined) return;
     const actor = external.event.meta?.actor;
     if (actor?.actorId === undefined || actor.endpoint === undefined) return;
     replyGrants.admit({
-      actorId: actor.actorId, endpoint: actor.endpoint, surface: external.event.surface,
+      actorId: actor.actorId,
+      endpoint: actor.endpoint,
+      surface: external.event.surface,
       traceId: external.event.traceId,
       ...(external.event.workspace === undefined ? {} : { workspace: external.event.workspace }),
       ...(external.event.channel === undefined ? {} : { channel: external.event.channel }),
-      at, sourceId,
+      at,
+      sourceId,
     });
   }
 
@@ -206,12 +256,31 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
               delivery: { kind: "actor", value: receipt.delivery },
             };
           }
-          if (await answerNativeRequest(ports.requests, sender, prepared.origin, content, clock())) {
+          if (
+            await answerNativeRequest(ports.requests, sender, prepared.origin, content, clock())
+          ) {
             return { status: "executed", handle, delivery: { kind: "session" } };
           }
           const commitAt = clock();
-          const admission = inboxAdmission({ intent, sender, send, prepared, messageId, content, commitAt, external });
-          await openNativeRequest(ports.requests, intent, sender, send, prepared.target, startedAt, admission);
+          const admission = inboxAdmission({
+            intent,
+            sender,
+            send,
+            prepared,
+            messageId,
+            content,
+            commitAt,
+            external,
+          });
+          await openNativeRequest(
+            ports.requests,
+            intent,
+            sender,
+            send,
+            prepared.target,
+            startedAt,
+            admission,
+          );
           const row = ports.inbox.commit(admission);
           commitMs = clock() - commitAt;
           committed = row;

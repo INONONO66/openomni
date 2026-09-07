@@ -124,13 +124,15 @@ test.each([
   });
   expect(await messaging.send({ ...input, at: 11 })).toEqual({ ...receipt, at: 11 });
   expect(posted).toBe(1);
-  expect(SessionHandleStore.tree("source-session")
-    .filter(action => action.kind === "request").map(action => action.effect.value))
-    .toMatchObject([
-      { request: { createdAt: 10 } },
-      { receipt: { at: 10, value: "accepted", externalMessageId: "77" } },
-      { receipt: { at: 11, value: "accepted", externalMessageId: "77" } },
-    ]);
+  expect(
+    SessionHandleStore.tree("source-session")
+      .filter((action) => action.kind === "request")
+      .map((action) => action.effect.value),
+  ).toMatchObject([
+    { request: { createdAt: 10 } },
+    { receipt: { at: 10, value: "accepted", externalMessageId: "77" } },
+    { receipt: { at: 11, value: "accepted", externalMessageId: "77" } },
+  ]);
   const router = makeRouter({
     requests,
     clock: () => 20,
@@ -209,6 +211,8 @@ test.each([
   expect(await messaging.send(input)).toMatchObject({ kind: "sent", delivery: value });
   expect(await messaging.send(input)).toMatchObject({ kind: "sent", delivery: value });
   expect(attempts).toBe(2);
-  expect(SessionHandleStore.requestById("original")?.correlation.replyToMessageId).toBe("uncertain-id");
+  expect(SessionHandleStore.requestById("original")?.correlation.replyToMessageId).toBe(
+    "uncertain-id",
+  );
   expect(SessionHandleStore.requestById("original")?.state).toBe("open");
 });

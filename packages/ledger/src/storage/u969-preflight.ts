@@ -127,7 +127,8 @@ export function preflight969(db: Database, at: number): void {
     // no pending native input can have a complete canonical request binding.
     blocked.push(`inbox:${row.id}:session:${row.session_id}:parent:${row.parent_id}`);
   }
-  for (const row of db.query<{ id: string; session_id: string; parent_id: string }, []>(`
+  for (const row of db
+    .query<{ id: string; session_id: string; parent_id: string }, []>(`
     SELECT turn.id, turn.session_id, session.parent_id FROM action turn
     JOIN session ON session.id = turn.session_id
     WHERE session.parent_id IS NOT NULL AND turn.kind = 'turn'
@@ -136,7 +137,8 @@ export function preflight969(db: Database, at: number): void {
         OR (json_extract(turn.effect, '$.phase') = 'terminal' AND json_extract(turn.effect, '$.kind') = 'waiting'
           AND NOT EXISTS (SELECT 1 FROM action later WHERE later.session_id = turn.session_id
             AND later.kind = 'turn' AND later.ordinal > turn.ordinal)))
-    ORDER BY turn.id`).all()) {
+    ORDER BY turn.id`)
+    .all()) {
     blocked.push(`turn:${row.id}:session:${row.session_id}:parent:${row.parent_id}`);
   }
   if (blocked.length > 0)

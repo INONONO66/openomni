@@ -82,7 +82,10 @@ describe.each(["memory", "sqlite"] as const)("%s canonical request deadline", (b
   test("answer and receiving inbox commit together, and timeout loses the terminal CAS", () => {
     const { transition } = openRequest();
     const result = expectCommitted(transition("resolved", { receive: reply() }));
-    expect(result.receipts.map(({ action }) => action.id)).toEqual(["original:resolution", "reply"]);
+    expect(result.receipts.map(({ action }) => action.id)).toEqual([
+      "original:resolution",
+      "reply",
+    ]);
     expect(result.row.revision).toBe(5);
     expect(SessionHandleStore.inboxRows("request-session").map(({ id }) => id)).toEqual(["reply"]);
     expect(SessionHandleStore.requestById("original")?.state).toBe("resolved");
@@ -133,17 +136,19 @@ describe.each(["memory", "sqlite"] as const)("%s canonical request deadline", (b
     });
     expect(duplicate).toEqual(first);
     expectCommitted(commit([]));
-    expectCommitted(SessionHandleStore.commit({
-      sessionId: "request-session",
-      owner: "writer",
-      fence: 1,
-      now: 101,
-      expectedRevision: first.receipt.revision,
-      actions: [],
-      consumeInboxIds: ["reply"],
-      state: "idle",
-      releaseLease: false,
-    }));
+    expectCommitted(
+      SessionHandleStore.commit({
+        sessionId: "request-session",
+        owner: "writer",
+        fence: 1,
+        now: 101,
+        expectedRevision: first.receipt.revision,
+        actions: [],
+        consumeInboxIds: ["reply"],
+        state: "idle",
+        releaseLease: false,
+      }),
+    );
     const consumed = SessionHandleStore.commitReceivedMessage(reply());
     expect(consumed.row.status).toBe("consumed");
     expect(consumed.receipt).toEqual(first.receipt);
@@ -189,9 +194,12 @@ describe("durable request projection", () => {
       if (event.id !== "original:resolution") return;
       try {
         using independent = new Database(dbPath, { readonly: true });
-        expect(independent.query("SELECT id FROM inbox WHERE id='reply'").get()).toEqual({ id: "reply" });
-        expect(independent.query("SELECT status FROM alarm WHERE id='original:deadline'").get())
-          .toEqual({ status: "cancelled" });
+        expect(independent.query("SELECT id FROM inbox WHERE id='reply'").get()).toEqual({
+          id: "reply",
+        });
+        expect(
+          independent.query("SELECT status FROM alarm WHERE id='original:deadline'").get(),
+        ).toEqual({ status: "cancelled" });
         expect(SessionHandleStore.requestById("original")?.state).toBe("resolved");
         observed.resolve();
       } catch (error) {
@@ -207,7 +215,10 @@ describe("durable request projection", () => {
     }
   });
 
-  test.each(["alarm", "inbox"] as const)("%s fault rolls back terminal CAS and survives restart", (table) => {
+  test.each([
+    "alarm",
+    "inbox",
+  ] as const)("%s fault rolls back terminal CAS and survives restart", (table) => {
     const { transition } = openRequest();
     using raw = new Database(dbPath);
     raw.run(`CREATE TRIGGER refuse_projection BEFORE INSERT ON ${table}
@@ -225,11 +236,15 @@ describe("durable request projection", () => {
     expectCommitted(transition("expired"));
     Storage.reset();
     Storage.initialize({ dbPath, observationSink: Bus });
-    expect(transition("resolved", { receive: reply() })).toMatchObject({ ok: false, reason: "revision" });
+    expect(transition("resolved", { receive: reply() })).toMatchObject({
+      ok: false,
+      reason: "revision",
+    });
     expect(SessionHandleStore.requestById("original")?.state).toBe("expired");
     expect(SessionHandleStore.inboxRows("request-session")).toEqual([]);
-    expect(raw.query("SELECT status FROM alarm WHERE id='original:deadline'").get())
-      .toEqual({ status: "fired" });
+    expect(raw.query("SELECT status FROM alarm WHERE id='original:deadline'").get()).toEqual({
+      status: "fired",
+    });
   });
 
   test("receive retry after restart returns the same durable action receipt", () => {

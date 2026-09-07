@@ -138,7 +138,8 @@ export function createController(
     requests: {
       transition(payload, inputId, at, admission) {
         const nextHandle = replacement();
-        if (nextHandle !== undefined) return nextHandle.requests.transition(payload, inputId, at, admission);
+        if (nextHandle !== undefined)
+          return nextHandle.requests.transition(payload, inputId, at, admission);
         const current = SessionHandleStore.row(sessionId);
         const ownsLease =
           current.leaseOwner === owner && current.leaseFence === state.fence && leaseLive(current);

@@ -90,7 +90,9 @@ function applyMigration(
   prepare967?: Migration.Preparation967,
 ): void {
   const rebuild = migration.name === REQUEST_MIGRATION;
-  const foreignKeys = db.query<{ foreign_keys: number | bigint }, []>("PRAGMA foreign_keys").all()[0]?.foreign_keys;
+  const foreignKeys = db
+    .query<{ foreign_keys: number | bigint }, []>("PRAGMA foreign_keys")
+    .all()[0]?.foreign_keys;
   // SQLite's table rebuild protocol disables FK actions before BEGIN. Check
   // every reference before COMMIT and restore the connection setting on exit.
   if (rebuild) db.run("PRAGMA foreign_keys = OFF");

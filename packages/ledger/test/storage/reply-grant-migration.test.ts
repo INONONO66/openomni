@@ -32,9 +32,7 @@ test("0035 upgrade and fresh archive-target schema share the measured fingerprin
     snapshotDatabase(fixture.db).tables.filter(
       ({ name }) => !["_migrations", "reply_grant"].includes(name),
     ),
-  ).toEqual(
-    before.tables.filter(({ name }) => name !== "_migrations"),
-  );
+  ).toEqual(before.tables.filter(({ name }) => name !== "_migrations"));
   expect(preflightSqliteDatabase(fixture.db)).toBe("applied");
   using reopened = new Database(fixture.path);
   initializeSqliteDatabase(reopened, undefined, "archive967");

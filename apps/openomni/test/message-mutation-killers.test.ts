@@ -54,7 +54,9 @@ test("new child configuration and first inbox roll back together on an inbox ins
     });
     expect(result.isError).toBe(true);
     expect(SessionHandleStore.listRows().filter((row) => row.role === "worker")).toEqual([]);
-    expect(db.query("SELECT count(*) AS count FROM inbox WHERE session_id != 'sender'").get()).toEqual({ count: 0 });
+    expect(
+      db.query("SELECT count(*) AS count FROM inbox WHERE session_id != 'sender'").get(),
+    ).toEqual({ count: 0 });
   } finally {
     db.close();
   }
@@ -211,7 +213,7 @@ test("an actor answer preserves platform correlation and wins its durable messag
   });
   for (const row of Storage.get().alarms?.due(200) ?? []) {
     const request = SessionHandleStore.requestRows(fixture.sessionId).find(
-      item => `${item.requestId}:deadline` === row.id,
+      (item) => `${item.requestId}:deadline` === row.id,
     );
     if (request === undefined) throw new Error("missing deadline request");
     fixture.requests.timeout(request.requestId, 200);
@@ -264,14 +266,38 @@ for (const check of ["parent", "fanout", "depth", "deadline"] as const) {
     } else {
       materialize("parent");
       db.query("UPDATE session SET parent_id = ? WHERE id = ?").run("parent", f.sessionId);
-      const action = Storage.get().actions?.append({
-        id: "parent:request", parentId: "parent:config", sessionId: "parent", kind: "message",
-        intent: { encodingVersion: 1, value: { phase: "intent", value: { messageId: "bound-request" }, effectHash: canonicalDigest({}) } },
-        effect: { encodingVersion: 1, value: { phase: "pending" } }, ts: 100, irreversible: true,
-      }, SessionHandleStore.row("parent").revision);
+      const action = Storage.get().actions?.append(
+        {
+          id: "parent:request",
+          parentId: "parent:config",
+          sessionId: "parent",
+          kind: "message",
+          intent: {
+            encodingVersion: 1,
+            value: {
+              phase: "intent",
+              value: { messageId: "bound-request" },
+              effectHash: canonicalDigest({}),
+            },
+          },
+          effect: { encodingVersion: 1, value: { phase: "pending" } },
+          ts: 100,
+          irreversible: true,
+        },
+        SessionHandleStore.row("parent").revision,
+      );
       if (action === undefined) throw new Error("parent request intent missing");
-      await f.requests.open({ requestId: action.action.id, sessionId: "parent", expectedResponders: [f.sessionId],
-        correlation: {}, allowedActions: ["report_result"], resolution: "first", threshold: 1, deadline: 150, at: 100 });
+      await f.requests.open({
+        requestId: action.action.id,
+        sessionId: "parent",
+        expectedResponders: [f.sessionId],
+        correlation: {},
+        allowedActions: ["report_result"],
+        resolution: "first",
+        threshold: 1,
+        deadline: 150,
+        at: 100,
+      });
       SessionHandleStore.commitInbox({
         id: "bound-request",
         sessionId: f.sessionId,

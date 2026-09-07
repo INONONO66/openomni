@@ -137,33 +137,40 @@ async function reconcile(port: ProvisionPort): Promise<ChannelRuntimeStatus[]> {
 }
 
 function executePersonDeclare(port: ProvisionPort, now: () => number = Date.now) {
-  return (input: z.output<typeof PERSON_DECLARE_INPUT>, domainRevisions?: Readonly<Record<string, number>>) => Storage.get().transaction(() => {
-    const { displayName, ...rest } = input.manifest;
-    const manifest: PersonManifest = { ...rest, displayName: displayName ?? rest.id };
-    const existing = port.persons.get(manifest.id);
-    if ((domainRevisions === undefined && approvalRequirement(existing, manifest) !== undefined) ||
-      (domainRevisions !== undefined && domainRevisions[manifest.id] !== (existing?.revision ?? -1))) {
-      return refusal("person_declare", "domain revision changed");
-    }
-    try {
-      const person = port.persons.put({
-        ...manifest,
-        revision: (existing?.revision ?? -1) + 1,
-        createdBy: "resident",
-        updatedAt: now(),
-      });
-      port.materialize();
-      return {
-        kind: "declared" as const,
-        id: person.id,
-        trustTier: person.trustTier,
-        revision: person.revision,
-      };
-    } catch (error) {
-      // §8.8: a second owner surfaces the store's typed owner_exists refusal.
-      return refusal("person_declare", error instanceof Error ? error.message : String(error));
-    }
-  });
+  return (
+    input: z.output<typeof PERSON_DECLARE_INPUT>,
+    domainRevisions?: Readonly<Record<string, number>>,
+  ) =>
+    Storage.get().transaction(() => {
+      const { displayName, ...rest } = input.manifest;
+      const manifest: PersonManifest = { ...rest, displayName: displayName ?? rest.id };
+      const existing = port.persons.get(manifest.id);
+      if (
+        (domainRevisions === undefined && approvalRequirement(existing, manifest) !== undefined) ||
+        (domainRevisions !== undefined &&
+          domainRevisions[manifest.id] !== (existing?.revision ?? -1))
+      ) {
+        return refusal("person_declare", "domain revision changed");
+      }
+      try {
+        const person = port.persons.put({
+          ...manifest,
+          revision: (existing?.revision ?? -1) + 1,
+          createdBy: "resident",
+          updatedAt: now(),
+        });
+        port.materialize();
+        return {
+          kind: "declared" as const,
+          id: person.id,
+          trustTier: person.trustTier,
+          revision: person.revision,
+        };
+      } catch (error) {
+        // §8.8: a second owner surfaces the store's typed owner_exists refusal.
+        return refusal("person_declare", error instanceof Error ? error.message : String(error));
+      }
+    });
 }
 
 function executePersonRemove(port: ProvisionPort) {
@@ -446,7 +453,10 @@ export function createProvisionTool(port: ProvisionPort) {
       execute: async ({ operation }, context) => {
         switch (operation.op) {
           case "person_declare":
-            return { op: operation.op, result: executors.person_declare(operation.args, context.domainRevisions) };
+            return {
+              op: operation.op,
+              result: executors.person_declare(operation.args, context.domainRevisions),
+            };
           case "person_remove":
             return { op: operation.op, ...(await executors.person_remove(operation.args)) };
           case "channel_declare":

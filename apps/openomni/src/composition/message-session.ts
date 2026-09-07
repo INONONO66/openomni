@@ -8,7 +8,12 @@ type Ports = Parameters<typeof createGatewayRouter>[0];
 export function commitMessageInbox(input: Inbox.Commit): Inbox.Row {
   const outbound = outboundMessage.getStore();
   const message = outbound?.input.message;
-  if (message !== undefined && (input.id !== message.messageId || input.sessionId !== message.destinationSessionId || input.content !== message.content)) {
+  if (
+    message !== undefined &&
+    (input.id !== message.messageId ||
+      input.sessionId !== message.destinationSessionId ||
+      input.content !== message.content)
+  ) {
     throw new Error("outbound inbox binding mismatch");
   }
   const received = SessionHandleStore.commitReceivedMessage(input);

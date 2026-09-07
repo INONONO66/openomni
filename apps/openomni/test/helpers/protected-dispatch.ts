@@ -1,5 +1,10 @@
 import { createDispatcher, createExecutor } from "@openomni/agent";
-import type { AnyToolDefinition, ObservationSink, PlainValue, SessionTransition } from "@openomni/protocol";
+import type {
+  AnyToolDefinition,
+  ObservationSink,
+  PlainValue,
+  SessionTransition,
+} from "@openomni/protocol";
 import { compiledPolicy } from "../../../../packages/agent/test/helpers/compiled-policy";
 import { bounded, requestLedger } from "../../../../packages/agent/test/helpers/request-ledger";
 import { requestDomainRevisions } from "../../src/tools/core/request-domain-revisions";

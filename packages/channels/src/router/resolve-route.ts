@@ -108,7 +108,11 @@ function resolveBlacklist(
   };
 }
 
-function resolveRequest(inbound: RouteInbound, request: RouteRequest, common: RouteCommon): RequestResolution {
+function resolveRequest(
+  inbound: RouteInbound,
+  request: RouteRequest,
+  common: RouteCommon,
+): RequestResolution {
   if (request.kind === "none") return { facts: ["request:none"] };
   if (request.kind === "ambiguous") {
     return {

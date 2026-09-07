@@ -3,11 +3,23 @@ import { SessionTransition } from "@openomni/protocol";
 import type { ProcessSessionRequest } from "../process-entry";
 
 const Doorbell = z.object({ sessionIds: z.array(z.string().min(1)) }).strict();
-const ProcessOutput = z.union([Doorbell, z.object({
-  kind: z.literal("request_answer"), answer: SessionTransition.Answer,
-}).strict()]);
+const ProcessOutput = z.union([
+  Doorbell,
+  z
+    .object({
+      kind: z.literal("request_answer"),
+      answer: SessionTransition.Answer,
+    })
+    .strict(),
+]);
 export const ProcessReplyReceipt = z.discriminatedUnion("ok", [
-  z.object({ ok: z.literal(true), inputId: z.string().min(1), resolution: SessionTransition.Resolution }).strict(),
+  z
+    .object({
+      ok: z.literal(true),
+      inputId: z.string().min(1),
+      resolution: SessionTransition.Resolution,
+    })
+    .strict(),
   z.object({ ok: z.literal(false), inputId: z.string().min(1), error: z.string() }).strict(),
 ]);
 
@@ -26,13 +38,21 @@ export function createProcessSessionTransport(options: {
       return;
     }
     const answer = output.answer;
-    if (answer.principal.kind !== "session" || answer.principal.principalId !== sessionId || answer.outbound?.sourceSessionId !== sessionId)
+    if (
+      answer.principal.kind !== "session" ||
+      answer.principal.principalId !== sessionId ||
+      answer.outbound?.sourceSessionId !== sessionId
+    )
       throw new Error("process answer principal does not match its authenticated child");
     let receipt: z.infer<typeof ProcessReplyReceipt>;
     try {
       receipt = { ok: true, inputId: answer.inputId, resolution: await options.answer(answer) };
     } catch (error) {
-      receipt = { ok: false, inputId: answer.inputId, error: error instanceof Error ? error.message : String(error) };
+      receipt = {
+        ok: false,
+        inputId: answer.inputId,
+        error: error instanceof Error ? error.message : String(error),
+      };
     }
     write(`${JSON.stringify(receipt)}\n`);
   }
@@ -59,7 +79,9 @@ export function createProcessSessionTransport(options: {
             while (end >= 0) {
               const line = buffer.slice(0, end);
               buffer = buffer.slice(end + 1);
-              await receive(line, sessionId, value => { child.stdin.write(value); });
+              await receive(line, sessionId, (value) => {
+                child.stdin.write(value);
+              });
               end = buffer.indexOf("\n");
             }
           }
