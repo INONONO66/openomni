@@ -63,7 +63,7 @@ function applyMigration(db: Database, migrationDir: string, migration: Migration
     },
   };
   {
-    const applied = db.query("SELECT 1 FROM _migrations WHERE name = ?").get(migration.name);
+    const applied = db.query<{ present: number }, [string]>("SELECT 1 AS present FROM _migrations WHERE name = ?").get(migration.name);
     if (!applied) {
       if (migration.name === U967_MIGRATION) {
         if (prepare967) prepare967(db);

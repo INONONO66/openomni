@@ -3,6 +3,22 @@ import { basename, dirname } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import type { Alarm } from "@openomni/protocol";
 
+/** Opaque throws are normalized to a typed boundary outcome, never cast to Error. */
+export class AlarmSourceError extends Error {
+  constructor(
+    readonly site:
+      | "pty.data"
+      | "pty.eof"
+      | "path.observe"
+      | "source.start"
+      | "bus.scan"
+      | "timer.scan",
+  ) {
+    super(`alarm source failed at ${site}`);
+    this.name = "AlarmSourceError";
+  }
+}
+
 export interface AlarmSource {
   observe?(): void;
   close(): Promise<void>;
@@ -33,8 +49,8 @@ export function commandSource(
       if (closing) return;
       try {
         frame(decoder.write(bytes));
-      } catch (error) {
-        failure(error instanceof Error ? error : new Error(String(error)));
+      } catch {
+        failure(new AlarmSourceError("pty.data"));
       }
     },
     exit(_terminal, code) {
@@ -44,8 +60,8 @@ export function commandSource(
           if (pending !== "") line(pending);
           pending = "";
           if (code !== 0) failure(new Error("alarm PTY read failed"));
-        } catch (error) {
-          failure(error instanceof Error ? error : new Error(String(error)));
+        } catch {
+          failure(new AlarmSourceError("pty.eof"));
         }
       }
       eof.resolve();
@@ -65,7 +81,14 @@ export function commandSource(
       // The shell can exit before its children. Kill its group even then, before
       // awaiting PTY EOF; waiting for EOF first lets HUP-ignoring descendants hang.
       await killCommandGroup(child.pid);
-      await Promise.all([child.exited, eof.promise]);
+      await child.exited;
+      // Cancellation has no remaining output to drain. Retire the master after
+      // the owned group was signalled and the leader reaped, even if Bun omits EOF.
+      if (closing) {
+        terminal.close();
+        eof.resolve();
+      }
+      await eof.promise;
       terminal.close();
     })();
     return shutdown;
@@ -85,16 +108,30 @@ export function commandSource(
 }
 
 async function killCommandGroup(pid: number): Promise<void> {
-  // Bun's process.kill reports EPERM for some already-reaped negative PIDs on
-  // Darwin. The platform kill utility preserves ESRCH versus permission errors.
+  // Keep signalling the group after leader exit. Darwin can report EPERM for
+  // zombie-only groups; accept that only after an authoritative process readback.
   const signal = Bun.spawn(["/bin/kill", "-KILL", "--", `-${pid}`], {
     stdout: "ignore",
     stderr: "pipe",
     env: { ...process.env, LC_ALL: "C" },
   });
   const [code, error] = await Promise.all([signal.exited, new Response(signal.stderr).text()]);
-  if (code !== 0 && !error.includes("No such process"))
-    throw new Error(`alarm process group ${pid} termination failed: ${error.trim()}`);
+  if (code === 0 || error.includes("No such process")) return;
+  if (error.includes("Operation not permitted")) {
+    const probe = Bun.spawn(["ps", "-axo", "pgid=,stat="], { stdout: "pipe", stderr: "pipe" });
+    const [status, processes, diagnostic] = await Promise.all([
+      probe.exited,
+      new Response(probe.stdout).text(),
+      new Response(probe.stderr).text(),
+    ]);
+    if (status !== 0) throw new Error(`alarm process-group readback failed: ${diagnostic.trim()}`);
+    const alive = processes.split("\n").some((line) => {
+      const [group, state] = line.trim().split(/\s+/);
+      return Number(group) === pid && !state?.startsWith("Z");
+    });
+    if (!alive) return;
+  }
+  throw new Error(`alarm process group ${pid} termination failed: ${error.trim()}`);
 }
 
 export function pathSource(
@@ -117,11 +154,11 @@ export function pathSource(
         event(JSON.stringify({ path: spec.path, event: kind }));
       // Do not advance the observation cursor if committing the event failed.
       previous = next;
-    } catch (error) {
-      failure(error instanceof Error ? error : new Error(String(error)));
+    } catch {
+      failure(new AlarmSourceError("path.observe"));
     }
   }
-  const source = watch(dirname(spec.path), (_kind, name) => {
+  const source = watch(dirname(spec.path), { recursive: true }, (_kind, name) => {
     if (name === null || name === basename(spec.path)) observe();
   });
   source.on("error", failure);

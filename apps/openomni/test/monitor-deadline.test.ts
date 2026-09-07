@@ -3,13 +3,10 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Storage } from "@openomni/ledger";
-import { z } from "zod";
-import type { PlainValue } from "@openomni/protocol";
+import { alarmSummary } from "./helpers/alarm-payload";
 import { alarmFixture } from "./helpers/alarm";
 
-const decodeJson: (text: string) => PlainValue = JSON.parse;
-const summarySchema = z.object({ alarmId: z.string(), epoch: z.number(), reason: z.string(), exitCode: z.number().nullable() }).strict();
-const summary = { decode: (content: string) => summarySchema.parse(decodeJson(content)) };
+const summary = { decode: alarmSummary };
 
 for (const mode of ["line", "exit"] as const) {
   test(`PTY ${mode} at the absolute timeout cannot outrun the scan`, () =>

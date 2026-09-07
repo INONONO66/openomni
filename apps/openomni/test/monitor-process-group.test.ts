@@ -17,7 +17,7 @@ const identity = z
   })
   .strict();
 
-for (const mode of ["cancel", "timeout", "budget", "exit", "shutdown"] as const) {
+for (const mode of ["cancel", "timeout", "budget", "exit", "shutdown", "rearm"] as const) {
   test(`command ${mode} kills the whole group including HUP-ignoring child-of-child`, () =>
     Storage.withIsolation(async () => {
       const directory = mkdtempSync(join(tmpdir(), "monitor-group-"));
@@ -79,8 +79,15 @@ for (const mode of ["cancel", "timeout", "budget", "exit", "shutdown"] as const)
           peers.some((peer) => peers.some((parent) => parent.process.pid === peer.process.parent)),
         ).toBe(true);
         // These subscriptions predate every action below, including physical kill.
-        const gone = bound(Promise.all(peers.map((peer) => peer.closed)).then(() => undefined));
-        if (mode === "exit" || mode === "budget") {
+        const original = [...peers];
+        const gone = bound(Promise.all(original.map((peer) => peer.closed)).then(() => undefined));
+        if (mode === "rearm") {
+          const readyAgain = fixture.next("group", (row) => row.content === "READY");
+          fixture.storage.alarms.rearm("group", 1000);
+          fixture.worker.tick();
+          await Promise.all([gone, readyAgain]);
+          expect(fixture.storage.alarms.get("group")).toMatchObject({ status: "armed", epoch: 2 });
+        } else if (mode === "exit" || mode === "budget") {
           const terminal = fixture.next("group", (row) =>
             row.content.includes(mode === "exit" ? '"exit"' : '"wake_budget"'),
           );
@@ -97,7 +104,7 @@ for (const mode of ["cancel", "timeout", "budget", "exit", "shutdown"] as const)
           if (mode !== "shutdown") fixture.worker.tick();
           await Promise.all([gone, fixture.worker.close()]);
         }
-        for (const peer of peers) {
+        for (const peer of original) {
           const state = Bun.spawnSync(["ps", "-p", String(peer.process.pid), "-o", "stat="]);
           // A not-yet-reaped zombie is dead; no live descendant may remain.
           expect(state.stdout.toString().trim().replace(/^Z.*$/, "")).toBe("");

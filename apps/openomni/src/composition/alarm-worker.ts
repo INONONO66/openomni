@@ -6,7 +6,7 @@ import {
   type ObservationSink,
   type Storage,
 } from "@openomni/protocol";
-import { commandSource, pathSource, type AlarmSource } from "./alarm-sources";
+import { AlarmSourceError, commandSource, pathSource, type AlarmSource } from "./alarm-sources";
 
 interface Running {
   readonly row: Alarm.Row;
@@ -42,10 +42,10 @@ export function createAlarmWorker(options: {
     );
   }
 
-  function release(id: string) {
-    const current = running.get(id);
-    if (current === undefined) return;
-    running.delete(id);
+  function release(row: Alarm.Row) {
+    const current = running.get(row.id);
+    if (current === undefined || current.row.fence !== row.fence) return;
+    running.delete(row.id);
     track(current.source.close());
   }
 
@@ -70,7 +70,7 @@ export function createAlarmWorker(options: {
       ...(expired || batchHash === undefined ? {} : { batchHash }),
     });
     if (fired === undefined) return;
-    if (fired.row.status !== "armed") release(row.id);
+    if (fired.row.status !== "armed") release(row);
     // Session shutdown owns runner settlement; this band owns only its sources.
     void options.wake(row.sessionId).catch((error: Error) => options.failure(error));
   }
@@ -87,7 +87,7 @@ export function createAlarmWorker(options: {
     try {
       summary(row, "source_error", null);
     } finally {
-      release(row.id);
+      release(row);
       options.failure(error);
     }
   }
@@ -137,8 +137,8 @@ export function createAlarmWorker(options: {
         );
       }
       running.set(row.id, { row: owned, source });
-    } catch (error) {
-      sourceFailure(owned, error instanceof Error ? error : new Error(String(error)));
+    } catch {
+      sourceFailure(owned, new AlarmSourceError("source.start"));
     }
   }
 
@@ -149,7 +149,7 @@ export function createAlarmWorker(options: {
       for (const [id, entry] of running) {
         const current = options.alarms.get(id);
         if (current?.status !== "armed" || current.fence !== entry.row.fence) {
-          release(id);
+          release(entry.row);
           continue;
         }
         const { watch } = Alarm.WatchSpec.parse(current.spec?.value);
@@ -177,8 +177,8 @@ export function createAlarmWorker(options: {
           if (payload.kind !== "alarm.arm") return;
           try {
             evaluate();
-          } catch (error) {
-            options.failure(error instanceof Error ? error : new Error(String(error)));
+          } catch {
+            options.failure(new AlarmSourceError("bus.scan"));
           }
         },
       );
@@ -189,8 +189,8 @@ export function createAlarmWorker(options: {
           const timer = setInterval(() => {
             try {
               callback();
-            } catch (error) {
-              options.failure(error instanceof Error ? error : new Error(String(error)));
+            } catch {
+              options.failure(new AlarmSourceError("timer.scan"));
             }
           }, 1000);
           return () => clearInterval(timer);
@@ -204,7 +204,7 @@ export function createAlarmWorker(options: {
       for (const [id, entry] of running) {
         // Persist invalidation before physical shutdown. This preserves takeover dedupe.
         options.alarms.acquire(id, entry.row.fence);
-        release(id);
+        release(entry.row);
       }
       await Promise.all([...settling]);
     },

@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { Storage } from "@openomni/ledger";
 import { alarmFixture } from "./helpers/alarm";
+import { alarmSummary } from "./helpers/alarm-payload";
 
 test("monitor budget: N+1 pauses once and only explicit rearm resets the epoch", () =>
   Storage.withIsolation(async () => {
@@ -60,7 +61,7 @@ test("monitor timeout: exact deadline fences source before its exit summary", ()
       const summary = fixture.next("timeout", (row) => row.content.includes('"timeout"'));
       fixture.advance(1050);
       fixture.worker.tick();
-      expect(JSON.parse((await summary).content).reason).toBe("timeout");
+      expect(alarmSummary((await summary).content).reason).toBe("timeout");
       expect(fixture.rows()).toHaveLength(2);
       const rearmed = fixture.next("timeout", (row) => row.content === "READY");
       fixture.storage.alarms.rearm("timeout", 1050);

@@ -53,7 +53,11 @@ export function alarmFixture(path = ":memory:") {
     return new Promise((resolve, reject) => {
       const abort = () => {
         unsubscribe();
-        reject(new Error(`no alarm inbox for ${id}`));
+        reject(
+          new Error(
+            `no alarm inbox for ${id}: ${JSON.stringify({ alarm: storage.alarms.get(id), inbox: storage.inbox.list("monitor-session"), errors: errors.map((error) => error.message) })}`,
+          ),
+        );
       };
       const unsubscribe = events.subscribe(L0Observation.ActionCommittedEvent, (event) => {
         if (event.kind !== "prompt") return;
