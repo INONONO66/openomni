@@ -72,17 +72,25 @@ describe("tool dispatcher public contract", () => {
     const execution = definition({ name: "run", category: "execution" });
 
     expect(toolInputSchema(eraseTool(query))).toMatchObject({ type: "object" });
-    expect(toolSpec(eraseTool(query))).toMatchObject({ name: "echo", safe: true, placement: "host" });
+    expect(toolSpec(eraseTool(query))).toMatchObject({
+      name: "echo",
+      safe: true,
+      placement: "host",
+    });
     expect(toolSpec(eraseTool(execution))).toMatchObject({ name: "run", safe: false });
     expect(sessionTool(eraseTool(execution))).toMatchObject({ name: "run", category: "execution" });
   });
 
   it("classifies missing tools and invalid inputs without invoking a tool", async () => {
     let executions = 0;
-    const dispatch = dispatcher([definition({ execute: () => {
-      executions += 1;
-      return Promise.resolve("ok");
-    } })]);
+    const dispatch = dispatcher([
+      definition({
+        execute: () => {
+          executions += 1;
+          return Promise.resolve("ok");
+        },
+      }),
+    ]);
 
     const missing = await dispatch.execute({ ...call, tool: "missing" }, context);
     const invalid = await dispatch.execute({ ...call, input: {} }, context);
@@ -94,7 +102,11 @@ describe("tool dispatcher public contract", () => {
 
   it("distinguishes explicit refusal from execution failure", async () => {
     const refused = dispatcher([
-      definition({ execute: async () => { throw new ToolRefused("echo", "unavailable"); } }),
+      definition({
+        execute: async () => {
+          throw new ToolRefused("echo", "unavailable");
+        },
+      }),
     ]);
     const failed = dispatcher([
       definition({ execute: () => Promise.reject(Symbol.for("failure")) }),

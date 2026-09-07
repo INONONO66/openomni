@@ -43,7 +43,11 @@ function harness(rows: readonly PolicyRow.Row[]) {
     },
   };
   const executor = createExecutor({
-    policy: compilePolicySnapshot({ generation: 1, rows: [mandatory, ...rows], mandatory: ["compaction"] }),
+    policy: compilePolicySnapshot({
+      generation: 1,
+      rows: [mandatory, ...rows],
+      mandatory: ["compaction"],
+    }),
     ledger,
     observations: { publish: () => undefined },
     identity: { sessionId: "session-1", role: "resident", parentActionId: null },
@@ -73,10 +77,7 @@ describe("the single L2 executor's four-kind verdict model", () => {
     const body = mock(async () => ({ ok: true }));
 
     expect(
-      executor.run(
-        { kind: "channel.send", op: "test", intent: {}, effect: {} },
-        body,
-      ),
+      executor.run({ kind: "channel.send", op: "test", intent: {}, effect: {} }, body),
     ).rejects.toEqual(
       expect.objectContaining({
         name: "UnregisteredExecutionKindError",
@@ -93,7 +94,11 @@ describe("the single L2 executor's four-kind verdict model", () => {
     const actions: LedgerAction.Append[] = [];
     let revision = 0;
     const executor = createExecutor({
-      policy: compilePolicySnapshot({ generation: 1, rows: [mandatory], mandatory: ["compaction"] }),
+      policy: compilePolicySnapshot({
+        generation: 1,
+        rows: [mandatory],
+        mandatory: ["compaction"],
+      }),
       ledger: {
         async commit(action) {
           actions.push(action);
@@ -166,10 +171,7 @@ describe("the single L2 executor's four-kind verdict model", () => {
       entropy: () => `receipt-${revision + 1}`,
     });
 
-    const running = executor.run(
-      { kind: "llm", op: "test", intent: {}, effect: {} },
-      body,
-    );
+    const running = executor.run({ kind: "llm", op: "test", intent: {}, effect: {} }, body);
     await intentCommitReached.promise;
     expect(body).toHaveBeenCalledTimes(0);
 
@@ -214,11 +216,7 @@ describe("the single L2 executor's four-kind verdict model", () => {
       ),
     ).rejects.toBe(failure);
 
-    expect(actions.map((action) => action.kind)).toEqual([
-      "policy.decision",
-      "tool",
-      "tool",
-    ]);
+    expect(actions.map((action) => action.kind)).toEqual(["policy.decision", "tool", "tool"]);
     const intent = actions[1];
     const result = actions[2];
     expect(result?.parentId).toBe(intent?.id);

@@ -10,9 +10,16 @@ export function observeDrained(
   sink: ObservationSink,
 ): void {
   for (const row of rows) {
-    const scoped = scopeObservation(sink, { sessionId: row.sessionId, turnId }, { clock: () => at });
+    const scoped = scopeObservation(
+      sink,
+      { sessionId: row.sessionId, turnId },
+      { clock: () => at },
+    );
     scoped.publish(Gateway.MessageObserved, {
-      kind: "message.drained", messageId: row.id, queueMs: Math.max(0, at - row.createdAt), boundary,
+      kind: "message.drained",
+      messageId: row.id,
+      queueMs: Math.max(0, at - row.createdAt),
+      boundary,
     });
   }
 }

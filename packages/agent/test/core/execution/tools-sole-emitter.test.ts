@@ -40,12 +40,15 @@ it("publishes no lifecycle event when pre policy blocks before tool intent", asy
     clock: () => 10,
   });
   let bodyCalls = 0;
-  const dispatcher = createDispatcher([
-    echoTool(async (text) => {
-      bodyCalls += 1;
-      return text;
-    }),
-  ], { executor: recording.executor });
+  const dispatcher = createDispatcher(
+    [
+      echoTool(async (text) => {
+        bodyCalls += 1;
+        return text;
+      }),
+    ],
+    { executor: recording.executor },
+  );
 
   const result = await dispatcher.execute(
     { id: "call-1", tool: "echo", input: { text: "blocked" } },
@@ -75,7 +78,9 @@ it("publishes Started after intent commit and Completed after result commit", as
     onObservation: observations.observe,
     clock: () => 10,
   });
-  const dispatcher = createDispatcher([echoTool(async (text) => text)], { executor: recording.executor });
+  const dispatcher = createDispatcher([echoTool(async (text) => text)], {
+    executor: recording.executor,
+  });
 
   const running = dispatcher.execute(
     { id: "call-1", tool: "echo", input: { text: "ok" } },
@@ -101,10 +106,9 @@ it("publishes one error completion after a failed tool result commits", async ()
     onObservation: observations.observe,
     clock: () => 10,
   });
-  const dispatcher = createDispatcher(
-    [echoTool(() => Promise.reject(new TypeError("failed")))],
-    { executor: recording.executor },
-  );
+  const dispatcher = createDispatcher([echoTool(() => Promise.reject(new TypeError("failed")))], {
+    executor: recording.executor,
+  });
 
   const result = await dispatcher.execute(
     { id: "call-1", tool: "echo", input: { text: "fail" } },
@@ -129,10 +133,10 @@ it("publishes TimedOut and Completed exactly once after the timeout result commi
       onObservation: observations.observe,
       clock: Date.now,
     });
-    const dispatcher = createDispatcher(
-      [echoTool(() => new Promise<string>(() => undefined))],
-      { executor: recording.executor, timeoutMs: 50 },
-    );
+    const dispatcher = createDispatcher([echoTool(() => new Promise<string>(() => undefined))], {
+      executor: recording.executor,
+      timeoutMs: 50,
+    });
 
     const running = dispatcher.execute(
       { id: "call-1", tool: "echo", input: { text: "stall" } },

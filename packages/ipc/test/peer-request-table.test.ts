@@ -98,7 +98,9 @@ describe("PeerRequestTable", () => {
       },
     });
 
-    expect(table.dispatch(Ipc.createRequest("inbound-echo", "echo", { value: 1 }), "peer-a")).toBe(true);
+    expect(table.dispatch(Ipc.createRequest("inbound-echo", "echo", { value: 1 }), "peer-a")).toBe(
+      true,
+    );
     expect(sent).toHaveLength(2);
     expect(Ipc.Response.parse(sent[0]).result).toEqual({ method: "echo", params: { value: 1 } });
     expect(Ipc.Notification.parse(sent[1])).toMatchObject({

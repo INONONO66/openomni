@@ -16,7 +16,10 @@ describe("tool execution context", () => {
       input: z.object({}).strict(),
       output: z.string(),
       visibility: { model: ["resident"], cell: ["resident"] },
-      execute: async (_input, context) => { captured = context; return "ok"; },
+      execute: async (_input, context) => {
+        captured = context;
+        return "ok";
+      },
       render: (_input, output) => output,
     });
     const { executor } = recordingExecutor();

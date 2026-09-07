@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
-import { anthropicModel as model, assistantMessage as buildAssistantMessage } from "../helpers/fixtures";
+import {
+  anthropicModel as model,
+  assistantMessage as buildAssistantMessage,
+} from "../helpers/fixtures";
 import type { Message, Tool } from "@openomni/protocol";
 import type { Sink } from "../../src/sink";
 import { Bus } from "../helpers/observation";
@@ -42,9 +45,7 @@ const toolProjectionCases: ToolProjectionCase[] = [
       { type: "tool-result", toolCallId: "call-send", toolName: "message_send", output: "sent" },
       { type: "finish" },
     ],
-    expectedCalls: [
-      { id: "call-send", tool: "message.send", input: { text: "hi" } },
-    ],
+    expectedCalls: [{ id: "call-send", tool: "message.send", input: { text: "hi" } }],
     expectedPart: {
       callID: "call-send",
       tool: "message.send",
@@ -134,7 +135,11 @@ describe("Processor tool result projection", () => {
     };
 
     const processor = Processor.create({
-      assistantMessage: buildAssistantMessage("msg-tool-result", "session-tool-result", "parent-tool-result"),
+      assistantMessage: buildAssistantMessage(
+        "msg-tool-result",
+        "session-tool-result",
+        "parent-tool-result",
+      ),
       sessionID: "session-tool-result",
       model,
       abort: new AbortController().signal,
@@ -191,47 +196,51 @@ describe("Processor tool result projection", () => {
     expect(state.time.end).toBeGreaterThanOrEqual(state.time.start);
   });
 
-  test.each(toolProjectionCases)(
-    "$name",
-    async ({ chunks, toolNames, expectedCalls, expectedResults, expectedResult, expectedPart }) => {
-      const toolCalls: Tool.Call[] = [];
-      const toolResults: Tool.Result[] = [];
-      const messages: Message.WithParts[] = [];
-      const sink: Sink = {
-        onMessage: (message) => messages.push(message),
-        onToolCall: (call) => toolCalls.push(call),
-        onToolResult: (result) => toolResults.push(result),
-      };
+  test.each(toolProjectionCases)("$name", async ({
+    chunks,
+    toolNames,
+    expectedCalls,
+    expectedResults,
+    expectedResult,
+    expectedPart,
+  }) => {
+    const toolCalls: Tool.Call[] = [];
+    const toolResults: Tool.Result[] = [];
+    const messages: Message.WithParts[] = [];
+    const sink: Sink = {
+      onMessage: (message) => messages.push(message),
+      onToolCall: (call) => toolCalls.push(call),
+      onToolResult: (result) => toolResults.push(result),
+    };
 
-      const processor = Processor.create({
-        assistantMessage: buildAssistantMessage(
-          "msg-tool-result",
-          "session-tool-result",
-          "parent-tool-result",
-        ),
-        sessionID: "session-tool-result",
-        model,
-        abort: new AbortController().signal,
-        sink,
-        events: Bus,
-        toolNames,
-        trace: { traceId: "trace-processor-test", sessionId: "session-tool-result" },
-        createStream: async () => ({
-          fullStream: (async function* () {
-            yield* chunks;
-          })(),
-        }),
-      });
+    const processor = Processor.create({
+      assistantMessage: buildAssistantMessage(
+        "msg-tool-result",
+        "session-tool-result",
+        "parent-tool-result",
+      ),
+      sessionID: "session-tool-result",
+      model,
+      abort: new AbortController().signal,
+      sink,
+      events: Bus,
+      toolNames,
+      trace: { traceId: "trace-processor-test", sessionId: "session-tool-result" },
+      createStream: async () => ({
+        fullStream: (async function* () {
+          yield* chunks;
+        })(),
+      }),
+    });
 
-      await processor.process({ system: "", promptText: "" });
+    await processor.process({ system: "", promptText: "" });
 
-      if (expectedCalls !== undefined) expect(toolCalls).toEqual(expectedCalls);
-      if (expectedResults !== undefined) expect(toolResults).toHaveLength(expectedResults);
-      if (expectedResult !== undefined) expect(toolResults[0]).toMatchObject(expectedResult);
-      const toolPart = messages.at(-1)?.parts.find((part) => part.type === "tool");
-      expect(toolPart).toMatchObject(expectedPart);
-    },
-  );
+    if (expectedCalls !== undefined) expect(toolCalls).toEqual(expectedCalls);
+    if (expectedResults !== undefined) expect(toolResults).toHaveLength(expectedResults);
+    if (expectedResult !== undefined) expect(toolResults[0]).toMatchObject(expectedResult);
+    const toolPart = messages.at(-1)?.parts.find((part) => part.type === "tool");
+    expect(toolPart).toMatchObject(expectedPart);
+  });
 });
 
 describe("Processor tool output normalization", () => {
@@ -245,7 +254,11 @@ describe("Processor tool output normalization", () => {
     };
 
     const processor = Processor.create({
-      assistantMessage: buildAssistantMessage("msg-tool-result", "session-tool-result", "parent-tool-result"),
+      assistantMessage: buildAssistantMessage(
+        "msg-tool-result",
+        "session-tool-result",
+        "parent-tool-result",
+      ),
       sessionID: "session-tool-result",
       model,
       abort: new AbortController().signal,
@@ -292,7 +305,11 @@ describe("Processor tool error normalization", () => {
     };
 
     const processor = Processor.create({
-      assistantMessage: buildAssistantMessage("msg-tool-result", "session-tool-result", "parent-tool-result"),
+      assistantMessage: buildAssistantMessage(
+        "msg-tool-result",
+        "session-tool-result",
+        "parent-tool-result",
+      ),
       sessionID: "session-tool-result",
       model,
       abort: new AbortController().signal,
@@ -354,7 +371,11 @@ describe("Processor abort settlement grace (#532 candidate 2)", () => {
     const abortController = new AbortController();
 
     const processor = Processor.create({
-      assistantMessage: buildAssistantMessage("msg-tool-result", "session-tool-result", "parent-tool-result"),
+      assistantMessage: buildAssistantMessage(
+        "msg-tool-result",
+        "session-tool-result",
+        "parent-tool-result",
+      ),
       sessionID: "session-tool-result",
       model,
       abort: abortController.signal,
@@ -401,16 +422,25 @@ describe("Processor abort settlement grace (#532 candidate 2)", () => {
     const messages: Message.WithParts[] = [];
     const abortController = new AbortController();
     const scheduledDelays: number[] = [];
+    const timerHandle = setTimeout(() => undefined, 0);
+    clearTimeout(timerHandle);
     spyOn(globalThis, "setTimeout").mockImplementation(
-      ((callback: Parameters<typeof setTimeout>[0], delay?: number) => {
-        scheduledDelays.push(delay ?? 0);
-        queueMicrotask(() => callback());
-        return 0 as unknown as ReturnType<typeof setTimeout>;
-      }) as unknown as typeof setTimeout,
+      Object.assign(
+        (callback: Parameters<typeof setTimeout>[0], delay?: number) => {
+          scheduledDelays.push(delay ?? 0);
+          queueMicrotask(() => callback());
+          return timerHandle;
+        },
+        { __promisify__: setTimeout.__promisify__ },
+      ),
     );
 
     const processor = Processor.create({
-      assistantMessage: buildAssistantMessage("msg-tool-result", "session-tool-result", "parent-tool-result"),
+      assistantMessage: buildAssistantMessage(
+        "msg-tool-result",
+        "session-tool-result",
+        "parent-tool-result",
+      ),
       sessionID: "session-tool-result",
       model,
       abort: abortController.signal,

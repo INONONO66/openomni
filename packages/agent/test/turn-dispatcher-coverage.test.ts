@@ -38,7 +38,13 @@ describe("createTurnDispatcher", () => {
     const recording = recordingLedger();
     const dispatcher = createTurnDispatcher(
       [tool("echo", async () => "ok")],
-      { sessionId: "session-1", role: "resident", actionId: "turn-1", policy: allowAllPolicy, ledger: recording.ledger },
+      {
+        sessionId: "session-1",
+        role: "resident",
+        actionId: "turn-1",
+        policy: allowAllPolicy,
+        ledger: recording.ledger,
+      },
       { observations: { publish: () => undefined }, clock: () => 1, entropy: recording.entropy },
     );
 
@@ -78,10 +84,13 @@ describe("currentExecutor", () => {
 
 describe("tool body outcomes", () => {
   it("settles a never-resolving body as timed_out", async () => {
-    const dispatcher = createDispatcher([tool("stall", () => new Promise<string>(() => undefined))], {
-      executor: passThrough,
-      timeoutMs: 5,
-    });
+    const dispatcher = createDispatcher(
+      [tool("stall", () => new Promise<string>(() => undefined))],
+      {
+        executor: passThrough,
+        timeoutMs: 5,
+      },
+    );
 
     const result = await dispatcher.execute(call("stall"), context);
 
@@ -102,7 +111,13 @@ describe("tool body outcomes", () => {
 
   it("fails closed when the body violates the output schema", async () => {
     const dispatcher = createDispatcher(
-      [tool("bad-output", async () => "anything", z.string().refine(() => false))],
+      [
+        tool(
+          "bad-output",
+          async () => "anything",
+          z.string().refine(() => false),
+        ),
+      ],
       { executor: passThrough },
     );
 

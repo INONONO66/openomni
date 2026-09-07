@@ -14,7 +14,9 @@ function user(id: string): Message.WithParts {
       agent: "test",
       model: { providerID: "", modelID: "" },
     },
-    parts: [{ id: `${id}-text`, sessionID: "policy-session", messageID: id, type: "text", text: id }],
+    parts: [
+      { id: `${id}-text`, sessionID: "policy-session", messageID: id, type: "text", text: id },
+    ],
   };
 }
 
@@ -33,7 +35,9 @@ function assistant(id: string): Message.WithParts {
       cost: 0,
       tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
     },
-    parts: [{ id: `${id}-text`, sessionID: "policy-session", messageID: id, type: "text", text: id }],
+    parts: [
+      { id: `${id}-text`, sessionID: "policy-session", messageID: id, type: "text", text: id },
+    ],
   };
 }
 

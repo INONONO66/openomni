@@ -95,9 +95,7 @@ describe("clientIdentity", () => {
     const identity = clientIdentity();
 
     expect(identity).toMatch(IDENTITY_PATTERN);
-    expect(identity).toBe(
-      `pi/${clientIdentity.version} (${platform()} ${release()}; ${arch()})`,
-    );
+    expect(identity).toBe(`pi/${clientIdentity.version} (${platform()} ${release()}; ${arch()})`);
   });
 
   test("is pure — repeated calls render the same string", () => {
@@ -105,9 +103,9 @@ describe("clientIdentity", () => {
   });
 
   test("reports the package manifest's version", async () => {
-    const manifest = (await Bun.file(
-      new URL("../../package.json", import.meta.url),
-    ).json()) as { version: string };
+    const manifest = (await Bun.file(new URL("../../package.json", import.meta.url)).json()) as {
+      version: string;
+    };
 
     expect(clientIdentity.version).toBe(manifest.version);
   });
