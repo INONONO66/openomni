@@ -38,8 +38,16 @@ import type { RowLevel } from "./row";
  * every level whether a chevron lands in it or not, so a header and a row at
  * one level share a single text x.
  *
+ * The header has NO hover fill. A fill on hover is what a selectable row does,
+ * and it kept reading as one: the pointer parked on a project label after a
+ * click left a lit rectangle above the rows that looked like a second
+ * selection. Hover answers on the label's tone instead — the same move the
+ * search line makes — so the header stays a container rather than an item.
+ *
  * Base UI owns `aria-expanded`, `aria-controls`, and panel unmounting, so a
  * collapsed group is absent from the accessibility tree rather than hidden.
+ * Open state is uncontrolled by default; a surface that remembers which groups
+ * the Owner closed passes `open` and `onOpenChange` and owns it instead.
  */
 
 /**
@@ -68,6 +76,8 @@ export function Disclosure({
   level = 0,
   tone = "subtle",
   defaultOpen = true,
+  open,
+  onOpenChange,
   className = "",
   children,
 }: {
@@ -86,6 +96,9 @@ export function Disclosure({
   readonly level?: RowLevel;
   readonly tone?: DisclosureTone;
   readonly defaultOpen?: boolean;
+  /** Controlled open state. Pair with `onOpenChange`, or leave both off. */
+  readonly open?: boolean | undefined;
+  readonly onOpenChange?: ((open: boolean) => void) | undefined;
   readonly className?: string;
   readonly children: ReactNode;
 }) {
@@ -97,9 +110,11 @@ export function Disclosure({
       className={className}
       data-ui={UI_NAMES.Disclosure}
       defaultOpen={defaultOpen}
+      onOpenChange={onOpenChange}
+      open={open}
     >
       <BaseCollapsible.Trigger
-        className={`focus-ring group flex h-row select-none items-center rounded-md px-row-inset text-left transition-quiet hover:bg-hover ${LEVEL[level]}`}
+        className={`focus-ring group flex h-row select-none items-center rounded-md px-row-inset text-left transition-quiet ${LEVEL[level]}`}
         data-level={level}
       >
         {/* The slot is a fixed width, not a gap: a 12px glyph in a 16px column
@@ -128,7 +143,7 @@ export function Disclosure({
           </svg>
         </span>
         <span
-          className={`min-w-0 flex-1 truncate font-semibold text-overline uppercase ${TONE[tone]}`}
+          className={`min-w-0 flex-1 truncate font-semibold text-overline uppercase transition-quiet group-hover:text-fg-muted ${TONE[tone]}`}
         >
           {label}
         </span>

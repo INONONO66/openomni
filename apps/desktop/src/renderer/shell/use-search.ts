@@ -1,6 +1,6 @@
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Boundary, Ordered } from "../attention";
-import type { Session, SessionId } from "../mock/console";
+import type { Session, SessionId } from "../state/store";
 import {
   type Filtered,
   filterOrdered,
@@ -33,13 +33,11 @@ export interface Search {
 export function useSearch({
   ordered,
   sessions,
-  projectNames,
   onSelect,
   focusSelectedRow,
 }: {
   readonly ordered: Ordered;
   readonly sessions: readonly Session[];
-  readonly projectNames: ReadonlyMap<string, string>;
   readonly onSelect: (id: SessionId, boundary?: Boundary | null) => void;
   /** Where Esc returns the caret when there is nothing left to clear. */
   readonly focusSelectedRow: () => void;
@@ -48,21 +46,17 @@ export function useSearch({
   const inputRef = useRef<HTMLInputElement>(null);
 
   /**
-   * A row's searchable text: its own name, its project's name, then the
-   * engine's reason line. All three are things the operator can see on screen,
-   * which is the test for whether a field belongs here — searching text the
-   * surface never shows produces matches that look like bugs.
+   * A row's searchable text: its own title, then its project's. Both are things
+   * the operator can see on screen, which is the test for whether a field
+   * belongs here — searching text the surface never shows produces matches that
+   * look like bugs.
    */
   const fieldsFor = useCallback(
-    (id: SessionId, reason: string): SearchFields => {
+    (id: SessionId): SearchFields => {
       const session = sessions.find((candidate) => candidate.id === id);
-      return [
-        session?.name ?? id,
-        projectNames.get(session?.projectId ?? "") ?? "",
-        reason.length > 0 ? reason : (session?.state ?? ""),
-      ];
+      return [session?.title ?? id, session?.projectId ?? ""];
     },
-    [sessions, projectNames],
+    [sessions],
   );
 
   const filtered = useMemo(

@@ -165,14 +165,18 @@ export function SearchLine({
  * the shared measure, and it must not know that the thing being titled is a
  * session or that the fact beside it is a model name. The surface supplies
  * both, so the frame stays reusable for any titled column.
+ *
+ * With no `title` the row is still drawn, empty: it is the main column's drag
+ * surface and its share of the titlebar height, and a column with nothing open
+ * still has a window to move.
  */
 export function MainHeader({
   title,
   detail,
 }: {
-  readonly title: string;
+  readonly title?: string | undefined;
   /** Set mono: it is machine truth about the titled thing, not prose. */
-  readonly detail: string;
+  readonly detail?: string | undefined;
 }) {
   return (
     <header
@@ -190,12 +194,16 @@ export function MainHeader({
             made the header read as a headline over a page instead of a label on
             a column. 500 is the weight that says "this is the thing you are
             looking at" without announcing it. */}
-        <Text className="truncate font-medium" level="title" sans tone="fg">
-          {title}
-        </Text>
-        <Text className="shrink-0" level="meta" mono tone="faint">
-          {detail}
-        </Text>
+        {title !== undefined && (
+          <Text className="truncate font-medium" level="title" sans tone="fg">
+            {title}
+          </Text>
+        )}
+        {detail !== undefined && (
+          <Text className="shrink-0" level="meta" mono tone="faint">
+            {detail}
+          </Text>
+        )}
       </div>
     </header>
   );

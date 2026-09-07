@@ -6,15 +6,13 @@ import {
   ScrollArea,
   SearchLine,
   SidebarHeader,
-  StatusDot,
   Text,
 } from "@openomni/ui";
 import { useCallback, useMemo, useRef } from "react";
 import type { Boundary, Ordered } from "../attention";
-import type { Project, Session, SessionId } from "../mock/console";
 import { highlightRuns } from "../search";
 import type { FilteredSession } from "../search";
-import { RUN_STATE_SHAPE, RUN_STATE_TIER } from "../run-state";
+import type { ProjectId, Session, SessionId } from "../state/store";
 import { rowId, TREE_ID } from "./row-id";
 import { useSearch } from "./use-search";
 
@@ -26,48 +24,45 @@ import { useSearch } from "./use-search";
  * hangs on one x, and each row's own fill starting at its own indent so
  * selection reports depth instead of flattening it.
  *
- * There are no connectors anywhere in this column, and the settled tail is no
- * longer a third depth. Two levels are stated completely by indentation — a
- * drawn elbow beside a row that is already the only thing at its x is topology
- * redrawn in ink. Settled sessions are plain rows under a quiet header at the
- * SAME depth as live ones, because that is what they are: sessions in this
- * project that have finished.
+ * There are no connectors anywhere in this column. Two levels are stated
+ * completely by indentation — a drawn elbow beside a row that is already the
+ * only thing at its x is topology redrawn in ink.
  *
  * Filtering preserves that hierarchy rather than flattening to a result list. A
  * matched session keeps its project header as its parent, so a result never
  * appears at an unexplained depth, and a project with nothing matching
  * disappears instead of leaving an empty header behind.
  *
- * Each live row is two lines: the session name, then the engine's `reason` in
- * the muted ramp. The second line is the point of the whole column — a ranking
- * the Owner cannot interrogate is a ranking they have to re-derive by opening
- * things, which is the cost this ordering exists to remove.
+ * Each row is ONE line: the session's title. There is no status line under it,
+ * because nothing real produces a status yet — and a line that would print a
+ * lone dot beside no words is a row spending its second line on nothing. When
+ * the gateway reports a session's state, the second line returns with it.
  */
 export function SessionTree({
   ordered,
   pendingChanges,
-  projects,
   sessions,
   selectedId,
+  collapsedProjectIds,
+  onToggleProject,
   onSelect,
+  onCreate,
 }: {
   readonly ordered: Ordered;
   /** Rows that moved since this order was adopted; held until a boundary. */
   readonly pendingChanges: number;
-  readonly projects: readonly Project[];
   readonly sessions: readonly Session[];
-  readonly selectedId: SessionId;
+  readonly selectedId: SessionId | null;
+  readonly collapsedProjectIds: ReadonlySet<ProjectId | null>;
+  readonly onToggleProject: (id: ProjectId | null) => void;
   /**
    * `boundary` is how the caller learns whether the order may advance. A row
    * clicked or arrowed in the tree is a finished decision; one committed from
    * the search field is not, so that path passes `null` and the order holds.
    */
   readonly onSelect: (id: SessionId, boundary?: Boundary | null) => void;
+  readonly onCreate: () => void;
 }) {
-  const projectNames = useMemo(
-    () => new Map(projects.map((project) => [project.id, project.name])),
-    [projects],
-  );
   const sessionById = useMemo(
     () => new Map(sessions.map((session) => [session.id, session])),
     [sessions],
@@ -79,12 +74,11 @@ export function SessionTree({
     else rowRefs.current.delete(id);
   }, []);
 
-  const focusSelectedRow = useCallback(
-    () => rowRefs.current.get(selectedId)?.focus(),
-    [selectedId],
-  );
+  const focusSelectedRow = useCallback(() => {
+    if (selectedId !== null) rowRefs.current.get(selectedId)?.focus();
+  }, [selectedId]);
 
-  const search = useSearch({ ordered, sessions, projectNames, onSelect, focusSelectedRow });
+  const search = useSearch({ ordered, sessions, onSelect, focusSelectedRow });
   const { filtered, state } = search;
 
   // Arrow keys travel the painted sequence, so they cross group boundaries the
@@ -115,7 +109,7 @@ export function SessionTree({
       edge="right"
       tone="sunken"
     >
-      <SidebarHeader createLabel="New session" />
+      <SidebarHeader createLabel="New session" onCreate={onCreate} />
       <SearchLine
         activeDescendantId={state.activeId === null ? undefined : rowId(state.activeId)}
         controlsId={TREE_ID}
@@ -128,6 +122,20 @@ export function SessionTree({
       />
       <ScrollArea className="flex-1" contentClassName="flex flex-col px-inset pb-section">
         <div id={TREE_ID}>
+          {/* One sentence when there is nothing to list, on the row's own text
+              x so it sits where the first row would. It names the way out
+              rather than describing the absence: the `+` it points at is in
+              the header directly above. */}
+          {sessions.length === 0 && (
+            <Text
+              as="p"
+              className="ps-[calc(var(--spacing-row-inset)+var(--spacing-indent-slot))]"
+              level="meta"
+              tone="faint"
+            >
+              No sessions yet — press +
+            </Text>
+          )}
           {/* Groups are separated by `section` ABOVE the header and nothing
               below it, so the whitespace belongs to the group it introduces and
               the block reads top-down. A symmetric gap gives a header equal
@@ -135,14 +143,20 @@ export function SessionTree({
               six. */}
           {filtered.projects.map((group) => (
             <Disclosure
-              collapsedCount={group.live.length + group.settled.length}
               className="mt-section first:mt-0"
-              key={group.id}
-              label={projectNames.get(group.id) ?? group.id}
+              collapsedCount={group.sessions.length}
+              key={group.id ?? ""}
+              label={group.id ?? "no project"}
+              // A query overrides a closed group: a result behind a collapsed
+              // header is a result nobody was shown.
+              onOpenChange={() => onToggleProject(group.id)}
+              open={!filtered.unfiltered || !collapsedProjectIds.has(group.id)}
               trailing={<ChangeHint count={group === filtered.projects[0] ? pendingChanges : 0} />}
             >
-              <ul className="flex flex-col">
-                {group.live.map((entry) => {
+              {/* Rows sit one step apart. Flush, a selected row and a hovered
+                  neighbour share an edge and read as one two-cell card. */}
+              <ul className="flex flex-col gap-0.5">
+                {group.sessions.map((entry) => {
                   const session = sessionById.get(entry.id);
                   if (!session) return null;
                   return (
@@ -159,37 +173,6 @@ export function SessionTree({
                   );
                 })}
               </ul>
-              {group.settled.length > 0 && (
-                <Disclosure
-                  // The open state rides the key so the uncontrolled disclosure
-                  // re-mounts when filtering changes whether it holds a match:
-                  // a result behind a closed group is a result nobody was shown.
-                  defaultOpen={group.settledOpen}
-                  key={`settled:${group.settledOpen}`}
-                  label={`settled · ${group.settled.length}`}
-                  level={1}
-                  tone="faint"
-                >
-                  <ul className="flex flex-col">
-                    {group.settled.map((entry) => {
-                      const session = sessionById.get(entry.id);
-                      if (!session) return null;
-                      return (
-                        <SessionRow
-                          active={entry.id === state.activeId}
-                          current={entry.id === selectedId}
-                          entry={entry}
-                          key={entry.id}
-                          onKeyDown={onKeyDown}
-                          onSelect={onSelect}
-                          registerRef={registerRef}
-                          session={session}
-                        />
-                      );
-                    })}
-                  </ul>
-                </Disclosure>
-              )}
             </Disclosure>
           ))}
         </div>
@@ -199,31 +182,7 @@ export function SessionTree({
 }
 
 /**
- * A two-line row: the session name, then why the engine put it here.
- *
- * There is no `State` chip on this row. The reason line already carries the
- * state and adds the age — "interrupted · 2h" next to a right-aligned
- * "interrupted" is the same fact printed twice, and the duplicate is the one
- * that costs a scan without paying for it. `State` is spent where the reason
- * line is not available.
- *
- * The reason line does get the DOT, though, and the distinction matters: a dot
- * is not a second copy of the word, it is the same word made scannable. The
- * reason line already begins with the state ("interrupted · 2h"), so the dot
- * marks that line rather than adding a column — the eye runs the dots down the
- * sidebar to find what is live, then reads the line it landed on.
- *
- * A RUNNING row is the exception, and it is where the argument above inverts:
- * its reason is empty, so the pulsing accent dot is the entire readout. There
- * is no age to add and no second fact to carry — "running" beside a mark that
- * already means running is a caption on the one row in the column that needs no
- * caption, and it spends the accent twice to say one thing.
- *
- * What the dot cannot do is be read aloud: `StatusDot` is `aria-hidden` by
- * contract, because everywhere else in the system a word sits beside it. Here
- * the word is gone, so the row's status cell carries it as an accessible name
- * and as the pointer's `title` — the state stays reportable to a screen reader
- * and recoverable on hover, without being printed.
+ * A one-line row: the session's title, weighted where the query hit it.
  *
  * `active` is the arrow-key cursor while searching. It reuses the SELECTION
  * fill rather than inventing a second highlight: two different marks for "the
@@ -253,7 +212,6 @@ function SessionRow({
         current={current || active}
         id={rowId(session.id)}
         level={1}
-        lines="two"
         onClick={() => onSelect(session.id)}
         onKeyDown={(event) => onKeyDown(event, session.id)}
         chevronSlot
@@ -269,39 +227,9 @@ function SessionRow({
             weight and the neutral ramp. */}
         <Highlight
           className="w-full"
-          runs={highlightRuns(session.name, entry.spans)}
+          runs={highlightRuns(session.title, entry.spans)}
           tone={entry.spans.length > 0 || !(current || active) ? "muted" : "fg"}
         />
-        <span className="flex w-full min-w-0 items-center">
-          {/* `role="img"` is what makes the name land. A bare `span` is a
-              `generic` role, and a `generic` element's `aria-label` is not
-              exposed by any of the mappings — the attribute looks correct in
-              the markup and announces nothing. `img` is the role for a
-              graphical element with a text alternative, which is exactly what a
-              drawn dot standing in for a word is. `title` carries the same
-              string for the pointer.
-
-              Both are conditional on there being no phrase: when the reason
-              line says "interrupted · 3h", a labelled wrapper around it would
-              make a screen reader announce the state and then read the line
-              that already contains it. */}
-          {entry.reason === "" ? (
-            <span aria-label={session.state} role="img" title={session.state}>
-              <StatusDot
-                shape={RUN_STATE_SHAPE[session.state]}
-                tier={RUN_STATE_TIER[session.state]}
-              />
-            </span>
-          ) : (
-            <StatusDot
-              shape={RUN_STATE_SHAPE[session.state]}
-              tier={RUN_STATE_TIER[session.state]}
-            />
-          )}
-          <Text className="min-w-0 flex-1 truncate" level="meta" tone="faint">
-            {entry.reason}
-          </Text>
-        </span>
       </Row>
     </li>
   );

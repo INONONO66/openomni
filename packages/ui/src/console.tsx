@@ -6,6 +6,7 @@ import { ScrollArea } from "./primitives/scroll-area";
 import { Panel } from "./primitives/surface";
 import type { PendingApproval, TranscriptNode, TurnCost } from "./timeline/model";
 import { Timeline } from "./timeline/timeline";
+import { Voice } from "./timeline/voice";
 
 /**
  * The console: the whole product surface, as ONE component.
@@ -41,49 +42,22 @@ import { Timeline } from "./timeline/timeline";
  */
 export function Console({
   sidebar,
-  title,
-  detail,
-  nodes,
-  costs,
-  sessionId,
-  emptyLabel = "No turns in this session yet.",
-  draft = "",
-  onDraftChange,
-  onSubmit,
-  onStop,
-  sending,
-  composerHint,
-  composerMeta,
-  pending,
-  onApprove,
-  onDeny,
-  onNextApproval,
+  session,
+  emptyLabel,
 }: {
   /**
    * The session navigator. A slot rather than a prop-driven tree: what ranks
    * and filters those rows is the app's, and this component must not learn it.
    */
   readonly sidebar: ReactNode;
-  /** The main column's title and its one qualifying fact. */
-  readonly title: string;
-  readonly detail: string;
-  readonly nodes: readonly TranscriptNode[];
-  readonly costs?: Readonly<Record<number, TurnCost>>;
-  /** The key transcript expansion state is remembered under. */
-  readonly sessionId: string;
-  readonly emptyLabel?: string;
-  readonly draft?: string;
-  readonly onDraftChange?: ((value: string) => void) | undefined;
-  readonly onSubmit?: (() => void) | undefined;
-  /** Interrupt the turn in flight. The composer's primary action while sending. */
-  readonly onStop?: (() => void) | undefined;
-  readonly sending?: boolean;
-  readonly composerHint?: string | undefined;
-  readonly composerMeta?: string | undefined;
-  readonly pending?: readonly PendingApproval[];
-  readonly onApprove?: ((toolId: string) => void) | undefined;
-  readonly onDeny?: ((toolId: string) => void) | undefined;
-  readonly onNextApproval?: (() => void) | undefined;
+  /**
+   * What the main column shows, or `undefined` when nothing is open. The
+   * column is then a header with no title and one sentence — `emptyLabel` —
+   * on the measure, and no composer: there is nothing to address a message to.
+   */
+  readonly session?: ConsoleSession | undefined;
+  /** The main column's sentence when there is nothing to show. */
+  readonly emptyLabel?: string | undefined;
 }) {
   return (
     // `data-density="shell"` is declared HERE, on the window root, because the
@@ -104,7 +78,7 @@ export function Console({
     >
       {sidebar}
       <Panel as="main" className="flex min-w-0 flex-1 flex-col" tone="bg">
-        <MainHeader detail={detail} title={title} />
+        <MainHeader detail={session?.detail} title={session?.title} />
         {/* `pinToEnd`: the transcript opens on the LATEST turn and stays there
             as the agent writes. Without it the column opens on the oldest turn
             and the newest one sits below the fold — which is where a row
@@ -117,24 +91,66 @@ export function Console({
           contentClassName="mx-auto w-full max-w-measure px-section pt-4 pb-section"
           pinToEnd
         >
-          <Timeline costs={costs} emptyLabel={emptyLabel} nodes={nodes} sessionId={sessionId} />
+          {session === undefined ? (
+            // The same voice and tone as an empty transcript, so "nothing open"
+            // and "nothing said yet" read as one state of one column rather
+            // than two designs of it.
+            <Voice className="text-fg/40" voice="meta">
+              {emptyLabel}
+            </Voice>
+          ) : (
+            <Timeline
+              costs={session.costs}
+              emptyLabel={emptyLabel}
+              nodes={session.nodes}
+              sessionId={session.id}
+            />
+          )}
         </ScrollArea>
-        {onDraftChange !== undefined && onSubmit !== undefined && (
-          <Composer
-            hint={composerHint}
-            meta={composerMeta}
-            onApprove={onApprove}
-            onDeny={onDeny}
-            onNext={onNextApproval}
-            onStop={onStop}
-            onSubmit={onSubmit}
-            onValueChange={onDraftChange}
-            pending={pending}
-            sending={sending}
-            value={draft}
-          />
-        )}
+        {session !== undefined &&
+          session.onDraftChange !== undefined &&
+          session.onSubmit !== undefined && (
+            <Composer
+              disabled={session.composerDisabled}
+              hint={session.composerHint}
+              meta={session.composerMeta}
+              onApprove={session.onApprove}
+              onDeny={session.onDeny}
+              onNext={session.onNextApproval}
+              onStop={session.onStop}
+              onSubmit={session.onSubmit}
+              onValueChange={session.onDraftChange}
+              pending={session.pending}
+              sending={session.sending}
+              value={session.draft ?? ""}
+            />
+          )}
       </Panel>
     </Panel>
   );
+}
+
+/** Everything the main column needs to show one open session. */
+export interface ConsoleSession {
+  /** The key transcript expansion state is remembered under. */
+  readonly id: string;
+  /** The main column's title and its one qualifying fact. */
+  readonly title: string;
+  readonly detail?: string | undefined;
+  readonly nodes: readonly TranscriptNode[];
+  readonly costs?: Readonly<Record<number, TurnCost>>;
+  readonly draft?: string;
+  readonly onDraftChange?: ((value: string) => void) | undefined;
+  readonly onSubmit?: (() => void) | undefined;
+  /** Interrupt the turn in flight. The composer's primary action while sending. */
+  readonly onStop?: (() => void) | undefined;
+  readonly sending?: boolean;
+  /** No wire behind the field. `composerHint` is where the surface says why. */
+  readonly composerDisabled?: boolean;
+  readonly composerHint?: string | undefined;
+  readonly composerMeta?: string | undefined;
+  readonly pending?: readonly PendingApproval[];
+  readonly onApprove?: ((toolId: string) => void) | undefined;
+  readonly onDeny?: ((toolId: string) => void) | undefined;
+  readonly onNextApproval?: (() => void) | undefined;
 }

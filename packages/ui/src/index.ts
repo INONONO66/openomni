@@ -9,8 +9,6 @@ export { Disclosure } from "./primitives/disclosure";
 export { Highlight } from "./primitives/highlight";
 export { Row } from "./primitives/row";
 export { ScrollArea } from "./primitives/scroll-area";
-export type { StateTier, StatusShape } from "./primitives/state";
-export { StatusDot } from "./primitives/state";
 export { Panel, Text } from "./primitives/surface";
 export type { PendingApproval, TranscriptNode, TurnCost } from "./timeline/model";
 export { Timeline } from "./timeline/timeline";

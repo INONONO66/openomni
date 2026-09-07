@@ -6,7 +6,6 @@ import {
   IDLE_BOUNDARY_MS,
   orderByAttention,
 } from "../src/renderer/attention";
-import { facts, signals } from "./attention-fixture";
 
 /**
  * The stability rule: a new order is adopted at a focus boundary, never while
@@ -14,8 +13,9 @@ import { facts, signals } from "./attention-fixture";
  * cursor costs more attention than it saves, which would defeat its own reason
  * for existing.
  */
-const before = orderByAttention(["p"], [facts("a", "running"), facts("b", "running")], signals());
-const after = orderByAttention(["p"], [facts("a", "running"), facts("b", "waiting")], signals());
+const facts = (id: string, createdAt: number) => ({ id, projectId: "p", createdAt });
+const before = orderByAttention([facts("a", 2), facts("b", 1)]);
+const after = orderByAttention([facts("a", 1), facts("b", 2)]);
 
 describe("order is applied at a focus boundary only", () => {
   test("Given a new ideal order and no boundary, When applied, Then the shown order is held", () => {
@@ -47,7 +47,7 @@ describe("drift is counted, never animated", () => {
   });
 
   test("Given a session disappears, When counting drift, Then the loss is reported", () => {
-    const shrunk = orderByAttention(["p"], [facts("a", "running")], signals());
+    const shrunk = orderByAttention([facts("a", 2)]);
 
     expect(changedSince(before, shrunk)).toBe(1);
   });

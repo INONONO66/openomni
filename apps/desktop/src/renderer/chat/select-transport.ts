@@ -3,33 +3,20 @@ import type { GatewayEndpoint } from "../../preload/api";
 import { createGatewayChatTransport } from "./gateway-transport";
 
 /**
- * Which wire the renderer speaks, decided in one pure function.
+ * The gateway endpoint, turned into the wire the renderer speaks — or refused.
  *
- * It is pure and separate from `app.tsx` for one reason: the difference between
- * these two transports is the difference between a real conversation and a
- * fabricated one, and a shell that quietly fell back to the mock while a
- * gateway was configured would show the Owner a fluent answer to a question
- * nothing ever received. That is not a defect a screenshot catches, so it is
- * asserted directly.
- *
- * The mock is not a placeholder for a missing feature — it is the correct
- * answer when there is no Electron main behind the renderer at all, which is
- * how the showcase and `scripts/shoot-chat.ts` render this same bundle.
- *
- * It returns the mock as `undefined` rather than as a constructed transport,
- * and that is deliberate: the mock's tuning (one chunk per animation frame) is
- * a property of the SURFACE, owned by `app.tsx`, and a second mock built here
- * would silently outrank it — a stream that finishes before it paints, which is
- * how the in-flight state disappeared once already.
+ * Pure and separate from `app.tsx` so the refusal can be asserted without a
+ * window. A misconfigured gateway is REPORTED, never worked around: the
+ * alternative is a shell that looks connected and answers nothing, which is a
+ * harder failure to read than one sentence naming the variable to fix.
  */
-
 export type SelectedTransport =
   | {
       readonly kind: "gateway";
       readonly transport: ChatTransport<UIMessage>;
       readonly protocols?: readonly string[];
     }
-  | { readonly kind: "mock"; readonly transport: undefined; readonly protocols?: undefined };
+  | { readonly kind: "misconfigured"; readonly transport: null; readonly problem: string };
 
 /**
  * An HTTP token, per RFC 9110 §5.6.2 — the grammar a subprotocol name must obey.
@@ -52,20 +39,7 @@ const HTTP_TOKEN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
  * credential. So the offer is a pair, in that order; a bare token would be an
  * unrecognised protocol and authenticate nothing.
  */
-function authProtocols(token: string): readonly string[] {
-  if (!HTTP_TOKEN.test(token)) {
-    // The token's VALUE is deliberately not in the message. It is a credential,
-    // and this string reaches a console log and a crash report.
-    throw new Error(
-      "OPENOMNI_WS_TOKEN cannot be offered as a WebSocket subprotocol: it must contain only unreserved token characters (letters, digits, and !#$%&'*+-.^_`|~)",
-    );
-  }
-  return ["auth", token];
-}
-
-export function selectChatTransport(endpoint: GatewayEndpoint | undefined): SelectedTransport {
-  if (endpoint === undefined) return { kind: "mock", transport: undefined };
-
+export function selectChatTransport(endpoint: GatewayEndpoint): SelectedTransport {
   // No token means no offer at all, rather than an empty one: a loopback
   // gateway with no configured token has nothing to match an `auth` pair
   // against, and answers the attempt with a 401.
@@ -73,7 +47,18 @@ export function selectChatTransport(endpoint: GatewayEndpoint | undefined): Sele
     return { kind: "gateway", transport: createGatewayChatTransport({ url: endpoint.url }) };
   }
 
-  const protocols = authProtocols(endpoint.token);
+  if (!HTTP_TOKEN.test(endpoint.token)) {
+    // The token's VALUE is deliberately not in the message. It is a credential,
+    // and this string reaches the screen and a crash report.
+    return {
+      kind: "misconfigured",
+      transport: null,
+      problem:
+        "OPENOMNI_WS_TOKEN cannot be offered as a WebSocket subprotocol: it must contain only unreserved token characters (letters, digits, and !#$%&'*+-.^_`|~)",
+    };
+  }
+
+  const protocols = ["auth", endpoint.token];
   return {
     kind: "gateway",
     transport: createGatewayChatTransport({ url: endpoint.url, protocols }),
