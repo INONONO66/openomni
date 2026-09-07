@@ -65,12 +65,14 @@ test("0035 upgrade preserves action parents, rowids, policies and native archive
     "ledger_event",
     "event_chain",
   ]) {
+    const previous = before.tables.find(({ name }) => name === table);
+    if (previous === undefined) throw new Error(`missing historical table: ${table}`);
     expect(snapshotDatabase(db).tables.find(({ name }) => name === table)).toEqual(
       table === "alarm"
-        ? { name: table, rows: before.tables.find(({ name }) => name === table)?.rows.map(row => ({
+        ? { name: table, rows: previous.rows.map(row => ({
             ...row, epoch: 1n, fence: 0n, last_batch: null, notifications: 0n,
           })) }
-        : before.tables.find(({ name }) => name === table),
+        : previous,
     );
   }
   const approvals = before.tables.find(({ name }) => name === "approval");
@@ -250,7 +252,7 @@ test.each(["fired", "cancelled"] as const)(
       `UPDATE alarm SET status=?,spec=? WHERE id='armed-alarm'`,
       [status, '{ "kind": "message_deadline", "sourceActionId": "attempt-history" }'],
     );
-    const before = fixture.db.query("SELECT rowid,* FROM alarm").all();
+    const before = fixture.db.query<Record<string, string | number | bigint | Uint8Array | null>, []>("SELECT rowid,* FROM alarm").all();
     initializeSqliteDatabase(fixture.db);
     expect(fixture.db.query("SELECT rowid,* FROM alarm").all()).toEqual(
       before.map(row => ({ ...row, epoch: 1n, fence: 0n, last_batch: null, notifications: 0n })),
