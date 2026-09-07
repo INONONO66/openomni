@@ -39,7 +39,7 @@ export function HistoryMenu({
   const recent = entries.slice(-HISTORY_MENU_LIMIT).reverse();
   return (
     <Menu.Root>
-      <Menu.Trigger render={<IconButton label="History" size="sm" />}>
+      <Menu.Trigger render={<IconButton label="History" size="base" />}>
         <History />
       </Menu.Trigger>
       <Menu.Portal>

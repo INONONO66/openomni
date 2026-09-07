@@ -1,12 +1,14 @@
-import { ChevronLeft, ChevronRight, PanelLeft, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import type { ReactNode } from "react";
 import { type HistoryEntry, HistoryMenu } from "./history-menu";
+import { ChevronIcon } from "./icons/chevron";
+import { SidebarToggleIcon } from "./icons/sidebar-toggle";
 import { UI_NAMES } from "./names";
 import { IconButton } from "./primitives/button";
 import { useSidebar } from "./sidebar";
 
 /**
- * The window's top row, as the reference console builds it: a 40px strip that is the drag
+ * The window's top row, as the reference console builds it: a 42px strip that is the drag
  * surface, with a CONTROLS ZONE on the left whose width tracks the sidebar.
  *
  * The zone is the trick. While the sidebar is open it is exactly
@@ -14,15 +16,17 @@ import { useSidebar } from "./sidebar";
  * the sidebar collapses the zone shrinks to what the window controls, the
  * sidebar toggle, and the trio need — and because it animates `width` on the
  * same duration and curve as the sidebar gap, the tab slides left in lockstep
- * with the column beneath it. The zone's CONTENT never moves: Linear-style,
- * `[toggle]` gap `[history] [back] [forward]` leads it after the window
- * controls in both states, so the one toggle is always in the same place
+ * with the column beneath it. The zone is `[toggle] [spacer] [trio]`, the
+ * spacer being the trio's `ml-auto`: open, the trio is pinned to the sidebar's
+ * right edge 12px in, riding `--sidebar-width`; collapsed, the zone's width is
+ * exactly the content's and the spacer is zero, so the trio sits 4px after the
+ * toggle. The toggle itself never moves, so it is always in the same place
  * under the pointer. Every number is measured (docs/desktop-shell.md).
  *
  * `platform` is a fact about where the OS draws its window controls, not about
- * the data: on darwin the traffic lights are inset 76px into the collapsed
- * zone, elsewhere the OS draws them on the far right and the zone starts at
- * the window's edge.
+ * the data: on darwin the traffic lights own the first 81px and the zone's
+ * content starts at 89 (`--spacing-strip-inset-darwin`); elsewhere the OS
+ * draws them on the far right and the zone starts at the window's edge.
  */
 export function TabStrip({
   title,
@@ -41,50 +45,57 @@ export function TabStrip({
   readonly history: HistoryControls;
   readonly trailing?: ReactNode;
 }) {
-  const { open, onToggle, reveal } = useSidebar();
+  const { open, mode, onToggle, reveal } = useSidebar();
   return (
     <header
-      className="drag-region fixed inset-x-0 top-0 z-(--z-top-bar) flex h-10 w-full shrink-0 items-center bg-sunken"
+      className="drag-region fixed inset-x-0 top-0 z-(--z-top-bar) flex h-shell-strip w-full shrink-0 items-center bg-sunken"
       data-ui={UI_NAMES.TabStrip}
     >
       <div
-        className={`flex h-full shrink-0 items-center overflow-hidden transition-[width] duration-base ease-frame group-data-[resizing]/sidebar:duration-0 motion-reduce:transition-none ${
+        className={`flex h-full shrink-0 items-center gap-1 overflow-hidden transition-[width] duration-base ease-frame group-data-[resizing]/sidebar:duration-0 motion-reduce:transition-none ${
           open ? "w-(--sidebar-width)" : COLLAPSED_WIDTH[platform]
         } ${ZONE_INSET[platform]}`}
         data-ui={UI_NAMES.TabStripControls}
       >
-        {/* The toggle leads, a 12px gap, then the trio. While collapsed the
-            toggle is also a hot zone: resting on it reveals the column as an
-            overlay, and clicking it while revealed pins the column open. */}
+        {/* The toggle leads. While collapsed it is also a hot zone: resting on
+            it reveals the column as an overlay, and clicking it while revealed
+            pins the column open. `plain`: the glyph's bar widening on reveal is
+            the hover answer, so no fill. */}
         <IconButton
           aria-expanded={open}
-          className="mr-3"
           data-ui={UI_NAMES.SidebarToggle}
           label={open ? "Collapse sidebar" : "Expand sidebar"}
           onClick={onToggle}
           onPointerEnter={open ? undefined : reveal.enter}
           onPointerLeave={open ? undefined : reveal.leave}
-          size="sm"
+          size="base"
+          variant="plain"
         >
-          <PanelLeft />
+          <SidebarToggleIcon opened={mode !== "hidden"} />
         </IconButton>
-        <div className="flex items-center gap-1">
+        {/* `ml-auto` is the spacer. Re-keyed on open/collapse so the arrive
+            transition replays with the zone's width transition. */}
+        <div
+          className="strip-trio-arrive ml-auto flex items-center gap-1"
+          data-ui={UI_NAMES.TabStripTrio}
+          key={open ? "open" : "collapsed"}
+        >
           <HistoryMenu
             currentId={history.currentId}
             entries={history.entries}
             now={history.now}
             onJump={history.onJump}
           />
-          <IconButton disabled={!history.canBack} label="Back" onClick={history.onBack} size="sm">
-            <ChevronLeft />
+          <IconButton disabled={!history.canBack} label="Back" onClick={history.onBack} size="base">
+            <ChevronIcon direction="left" />
           </IconButton>
           <IconButton
             disabled={!history.canForward}
             label="Forward"
             onClick={history.onForward}
-            size="sm"
+            size="base"
           >
-            <ChevronRight />
+            <ChevronIcon direction="right" />
           </IconButton>
         </div>
       </div>
@@ -111,7 +122,7 @@ const COLLAPSED_WIDTH: Record<WindowPlatform, string> = {
 
 /** The zone's padding is the same in both states: only its width moves. */
 const ZONE_INSET: Record<WindowPlatform, string> = {
-  darwin: "pr-3 pl-[76px]",
+  darwin: "pr-3 pl-strip-inset-darwin",
   other: "px-2",
 };
 
@@ -129,14 +140,14 @@ export interface HistoryControls {
 }
 
 /**
- * The one tab: a card, not a pill — 8px corners, a hairline, and the raised
+ * The one tab: a 26px card, not a pill — 8px corners, a hairline, and the raised
  * tone, with the title set at label weight. No status mark: what the column
  * is doing is the column's to say (docs/desktop-shell.md, Deferred).
  */
 function Tab({ title }: { readonly title: string }) {
   return (
     <div
-      className="flex h-7 w-56 min-w-0 shrink select-none items-center rounded-card border-[0.5px] border-line-surface bg-raised px-2.5 font-medium text-fg text-label"
+      className="flex h-tab-height w-56 min-w-0 shrink select-none items-center rounded-card border-[0.5px] border-line-surface bg-raised px-2.5 font-medium text-fg text-label"
       data-ui={UI_NAMES.Tab}
     >
       <span className="truncate">{title}</span>
