@@ -172,6 +172,12 @@
   --radius-card: 0.5rem;
   --radius-panel: 0.75rem;
 
+  /* The ONE shadow, and it belongs to the frame: a panel that has left the
+     layout (the sidebar revealed over the main column) needs depth the hairline
+     cannot give, and nothing inside a column floats. Soft and short-thrown so
+     it reads as lift, not as a drop shadow; light re-points the alpha. */
+  --shadow-panel: 0 8px 24px -8px --alpha(#000 / 60%);
+
   /* ---- Spacing rhythm (8px baseline; named steps are layout intent) ----- */
   /* Every vertical step is a multiple of 8 so rows, headers, and timeline
      blocks land on one grid instead of three. The old 30px row and 10px inset
@@ -243,12 +249,18 @@
      content. Nothing inside a column may spend these — a hover or a chevron is
      still `--motion-fast`. `fast` is the collapse speed (the frame leaving
      answers faster than it arrives), `base` is the open speed, `slow` is
-     reserved for overlays. `ease-out-quint` decelerates hard so a slide lands
-     without a bounce. */
+     reserved for overlays.
+
+     Re-measured against Linear (.omo/reports/sidebar-toggle-ref-20260907.md):
+     its sidebar width runs a spring (stiffness 420, damping 38, mass 1) that
+     settles in ~240ms, its content fades in 150ms, and it has no bezier of its
+     own. `base` is that settle; `fast` is the content fade; the frame's curve
+     is the same near-critically-damped ease-out the answer token already uses,
+     so the window has one curve at two speeds. */
   --duration-fast: 0.15s;
-  --duration-base: 0.2s;
+  --duration-base: 0.24s;
   --duration-slow: 0.3s;
-  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-frame: var(--motion-fast-ease);
 
   /* ---- Shell geometry ---------------------------------------------------- */
   /* The tab strip's controls zone while the sidebar is COLLAPSED, when it has
@@ -310,6 +322,7 @@
   --color-raised: var(--color-neutral-800);
   --color-hover: --alpha(#000 / 4%);
   --color-active: --alpha(#000 / 6%);
+  --shadow-panel: 0 8px 24px -8px --alpha(#000 / 18%);
 
   /* The four steps mirror the dark ramp's SEPARATION, not its lightness: on a
      white surface a tone that cannot be read is not a tone. Same floors as

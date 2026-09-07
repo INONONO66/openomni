@@ -377,12 +377,14 @@ describe("the motion budget", () => {
       [...theme.matchAll(/^\s*--duration-(\w+):\s*([^;]+);/gm)].map((m) => [m[1], m[2]]),
     ).toEqual([
       ["fast", "0.15s"],
-      ["base", "0.2s"],
+      ["base", "0.24s"],
       ["slow", "0.3s"],
     ]);
-    expect(theme).toContain("--ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1)");
+    // The frame's curve IS the answer curve at another speed: one bezier in the
+    // window, not two (.omo/reports/sidebar-toggle-ref-20260907.md).
+    expect(theme).toContain("--ease-frame: var(--motion-fast-ease)");
     expect(durations.filter((name) => name?.startsWith("--duration-"))).toHaveLength(3);
-    expect(easings.filter((name) => name?.startsWith("--ease-"))).toEqual(["--ease-out-quint"]);
+    expect(easings.filter((name) => name?.startsWith("--ease-"))).toEqual(["--ease-frame"]);
   });
 
   test("Given the retired tokens, When searched, Then neither survives", () => {
