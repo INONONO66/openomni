@@ -209,7 +209,7 @@ test("a cell batches delegation into one turn", async () => {
 
   // The catalog is stable; the daemon enforces machine availability at execution.
   expect(answer).toContain(
-    "offered=[approval,await_delegation,bash,cancel_delegation,delegate,edit,list,provision,read,run_code,search,write]",
+    "offered=[approval,await_delegation,bash,cancel_delegation,delegate,edit,list,monitor,provision,read,run_code,search,write]",
   );
   // Three workers ran and their answers came back inside the cell. The value
   // is the cell's final expression as Python rendered it, quotes included.
@@ -271,7 +271,7 @@ test("the catalog remains available while machine execution refuses without atta
   const answer = (JSON.parse(String((await reply).data)) as { text: string }).text;
 
   expect(offered).toEqual([
-    "read", "write", "edit", "list", "search", "bash",
+    "read", "write", "edit", "list", "search", "bash", "monitor",
     "delegate",
     "await_delegation",
     "cancel_delegation",

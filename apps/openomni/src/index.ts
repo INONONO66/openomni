@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
+import { createAlarmWorker } from "./composition/alarm-worker";
 import { processEntryPath } from "./process-entry-path";
 import { configuredCompaction } from "./compaction/strategy";
 import { seedKernelPolicyRows } from "./policy-seed";
@@ -9,6 +10,7 @@ import {
   getSessionHandle,
   ExecutionApprovalError,
   sweepSessions,
+  wakeSession,
 } from "@openomni/agent";
 import {
   type ChannelDeliveryRoute,
@@ -362,6 +364,20 @@ export async function startOpenOmni(options: StartOptions = {}) {
         row.role === "resident" ? residentDeliver.runnerFor(row.id) : runner.runnerFor(row),
       sessionRuntime,
     );
+
+    const alarmStore = Storage.get().alarms;
+    if (alarmStore === undefined) throw new Error("alarm storage unavailable at boot");
+    const alarms = createAlarmWorker({
+      alarms: alarmStore,
+      observations: Bus,
+      clock: options.sessionRuntime?.clock,
+      wake: (id) => wakeSession(id, (row) => row.role === "resident" ? residentDeliver.runnerFor(row.id) : runner.runnerFor(row), sessionRuntime),
+      failure: (error) => console.error("alarm worker failure", error),
+    });
+    await composer.mount("alarms", (ctx) => {
+      ctx.effect(() => alarms.close());
+      alarms.start();
+    });
 
     // A delivery the perimeter correlated to an open Wait is an actor's answer
     // to a delegation, not a message for the Resident: it settles the waiting

@@ -1,4 +1,5 @@
 import type { AnyToolDefinition, Tool } from "@openomni/protocol";
+import { monitorTool } from "../mutation/monitor";
 import type { MachineHost } from "@openomni/machines";
 import type { DelegationOrigin } from "../../delegation/admission";
 import type { DelegationKernel } from "../../delegation/kernel";
@@ -42,6 +43,7 @@ export function createTools(
     eraseTool(createSearchTool(ports)),
     eraseTool(createBashTool(ports)),
   ];
+  tools.push(eraseTool(monitorTool));
   if (ports.delegation !== undefined) {
     tools.push(
       eraseTool(createDelegateTool(ports.delegation, origin.role, origin.depth)),

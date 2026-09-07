@@ -6,6 +6,59 @@ Single source of truth for current wiring, not a declaration that every target i
 
 Machine/codemode wiring is updated by #938/#939 in PR #991, rebased onto `5b3ff997` including #987's deletion receipts and #988's protocol-only messaging contracts. The source pin above identifies the retained #948 historical receipt, not the new machine implementation.
 
+## #947 stage-1 branch receipt (2026-09-06)
+
+The stage-1 branch extends the existing alarm owner with fenced evaluation,
+atomic fired/prompt delivery, persistent PTY and path sources, durable dedupe,
+policy-budget pause/rearm, and boot discovery. The additive `monitor` tool uses
+`op:create|rearm|cancel`. The app band outlives session hibernation; its committed
+inbox doorbell re-enters the existing session controller, not a second loop.
+The focused 30-test run passes, including a real PTY, SQLite reopen and a
+one-model-call waiting terminal followed by a hibernated-session wake.
+
+The Owner-approved input now nests an op-discriminated `operation`, with create
+payload under `source` and required `alarmId` on controls. `lint:tools` passes
+without an exemption or lowered floor. Path sources reconcile stat identity in
+the same app scan as native notifications: unchanged observations write zero,
+and a missed native event no longer strands a durable create. The path test
+subscribes before mutation and drives reconciliation without yielding to the
+native callback, proving atomic delivery independently of callback timing.
+Evaluator entry captures the app async context, preventing tool-wave abort
+inheritance. A real WebSocket/PTY/FIFO regression verifies that a tool-created
+source wakes a hibernated app session after its original tool wave has ended.
+
+Rebased production checkpoint `6a912340` passes the complete gate chain:
+3377 tests across 359 files, zero failures, and all 11 coverage lanes plus the
+unchanged coverage ratchet. The real app WebSocket/path exercise reaches a
+hibernated-session wake at revision 59 with two model calls. Removing the app
+async-context binding makes the PTY/FIFO regression fail with AbortError.
+
+[Decisions and operational limits](alarm-monitor-stage-1.md) include the
+at-most-once restart gap. Stage 2 after #946 still owes only the
+message-deadline consumer -> `at` alarm migration, its answer/deadline CAS and
+restart tests, and B4 deletion proof. #969-#973 receipts remain unconsumed.
+
+### PR #994 R1 correction receipt
+
+The R1 implementation merges main `678d357e` (#993): all six fs/bash tools,
+monitor and existing tools remain in the catalog; placement stays deleted.
+Callback deadline precedence now applies before ordinary match/exit admission.
+Command cleanup kills its process group, including HUP-ignoring grandchildren,
+and stale cleanup is fenced from a rearmed source. Migration validates the
+complete shared WatchSpec before committing 0035. Synchronous inbox/action
+assertions kill the path-reconciliation mutant before native callbacks can run.
+A compiler-backed boundary test reports zero inferred unsafe values and rejects
+its deliberately planted JSON/catch mutant; runtime payloads are schema-checked.
+The earlier 3377-test receipt above remains historical, not a claim that R1
+was already addressed at that checkpoint.
+
+Production checkpoint `21675e12` passes the merged full suite: 3435 tests,
+zero failures, 11167 assertions across 365 files. All ten current coverage lanes
+and the unchanged ratchet pass (app 97.08%, ledger 99.34%). The full build/type/
+dependency/cycle/lint/export chain, including tool-lint self-test, exits 0.
+The reviewer's added-line compiler probe emits no unsafe values. The real-app
+WebSocket/path wake still commits one fired pair and reaches revision 59.
+
 ## Deployed shape
 
 | Component | Current wiring | Source |

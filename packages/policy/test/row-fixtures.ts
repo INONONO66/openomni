@@ -26,7 +26,7 @@ export function atGeneration(row: PolicyRowDraft, generation: number): PolicyRow
   return { ...row, generation };
 }
 
-export class MemoryPolicyRows implements Storage.PolicyRowSubAdapter {
+export class MemoryPolicyRows implements Pick<Storage.PolicyRowSubAdapter, "append" | "rows"> {
   readonly stored: PolicyRow.Row[];
   reads = 0;
 

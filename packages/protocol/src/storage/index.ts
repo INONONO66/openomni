@@ -33,12 +33,25 @@ export namespace Storage {
   export interface AlarmSubAdapter {
     arm(row: Alarm.Arm): Alarm.Row | undefined;
     cancel(id: string, updatedAt: number): Alarm.Row | undefined;
+    get(id: string): Alarm.Row | undefined;
+    rearm(id: string, at: number): Alarm.Row | undefined;
+    acquire(id: string, expectedFence: number): Alarm.Row | undefined;
+    fire(input: Alarm.Fire): Alarm.Fired | undefined;
     due(at: number): Alarm.Row[];
   }
 
   export interface PolicyRowSubAdapter {
     append(row: PolicyRow.Row): boolean;
     rows(generation?: number): PolicyRow.Row[];
+    /** Select latest, derive its successor and append every row in one transaction.
+     * Return undefined from derive to keep the current generation unchanged.
+     * Empty generations and refused rows throw and roll back the whole write unit.
+     */
+    appendGeneration(
+      derive: (
+        current: readonly PolicyRow.Row[],
+      ) => readonly Omit<PolicyRow.Row, "generation">[] | undefined,
+    ): number;
   }
 
   export interface ActorRegistrySubAdapter {

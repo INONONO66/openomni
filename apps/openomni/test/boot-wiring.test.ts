@@ -147,7 +147,7 @@ test("967 boot preserves promoted expired session", async () => {
     Storage.reset();
     calls = 0;
 
-    const app = await suite.boot(options);
+    const app = await suite.boot({ ...options, sessionRuntime: { clock: () => 50 } });
     const after = {
       session: raw.query("SELECT * FROM session WHERE id = ?").get(id),
       actions: raw.query("SELECT * FROM action WHERE session_id = ? ORDER BY ordinal").all(id),

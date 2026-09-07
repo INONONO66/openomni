@@ -121,6 +121,24 @@ Every native Resident or worker is a normal durable session row. The row carries
 
 `session({id, role, runner, tools, system})` is the sole live consumer surface. Durable existence is independent of the in-memory handle: terminal idle with an empty inbox releases runtime immediately, while `get()` and `watch()` read without waking it. A committed prompt or alarm doorbell rehydrates the runner from the tree. Before runner entry the current fence commits a `turn` intent with a pre-minted result ID and pinned tool/system/policy generation; the same ID seals one terminal. Heartbeat loss aborts the runner and prevents a stale late commit. Startup sweeps intent-without-terminal turns before channel binding and resumes from their last completed boundary, with a persisted budget of ten.
 
+### Alarm and monitor baseline
+
+One durable `alarm` owner stores both `at` and `watch`. The app worker band,
+not session residency, owns PTY command and filesystem source handles. A firing
+commits `alarm.fired`, a prompt action and its inbox row with alarm-id origin in
+one transaction. Observation and the session doorbell follow the commit; due
+scans are not action truth. Recurring matches leave the watch armed. Explicit
+rearm keeps its id while resetting the epoch budget/dedupe; cancellation is
+terminal. Captured policy rows bound notifications; excess pauses once until
+explicit rearm. PTY exit always has a summary unless control already fenced it.
+Persistent source recovery does not replay a live-stream gap.
+
+[Stage-1 decisions](alarm-monitor-stage-1.md) specify framing, source cleanup,
+restart and operator behavior. [Implementation Status](implementation-status.md)
+distinguishes branch evidence from merged delivery. The unified alarm/occurrence
+transition product in [session-lifecycle-contract.md](session-lifecycle-contract.md)
+remains the separate #971 target, not a receipt consumed by this baseline.
+
 ### Wait and existing-agent messaging
 
 Existing-agent messaging requires an explicit grant and targets an already allocated actor/session. It creates no session, Worker, executor, or budget and cannot convey Worker-allocation authority. Fire-and-forget records its delivery outcome and creates no Wait. The awaited form creates exactly one durable Wait owned by the waiting session. `PendingAsk` and `PendingInteraction` were this primitive's transitional code names; #215 absorbed them and migration 0025 dropped their persisted tables — the durable Wait is the only wait primitive.

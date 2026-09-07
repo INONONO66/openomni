@@ -8,6 +8,36 @@ This is the tracked successor for the #948 rows formerly recorded in `.omo/repor
 
 The Owner-approved #945/#948 amendment overrides stale campaign labels and E4 parking. Deletion evidence, remaining quality acceptance, and the parked #950 successor are separate. This is not a zero-failure/final-convergence receipt and does not close #945 or the full #948 acceptance.
 
+## #947 stage-1 alarm contribution (unmerged)
+
+| Row | Receipt |
+| --- | --- |
+| B4 | Not closed here. Delegation source is untouched; #946 owns deletion and stage 2 wires its deadline consumer to the existing `at` alarm owner. |
+| E8 | Additive `monitor` registration and strict create/rearm/cancel schema implemented; no claim about unrelated vocabulary. |
+| Alarm quality | Focused 30 tests pass, including real PTY exit/dedupe, exact timeout, budget pause/rearm, path create/modify/cancel, atomic rollback, SQLite reopen, and hibernation/live-wait. |
+| Path readiness correction | The same path source reconciles stat identity on the app scan; unchanged scans append nothing. The test subscribes before mutation and drives reconciliation before native callbacks can run. The previous create timeout is retained in local history, not hidden by sleeps or retries. |
+| Full verification | On rebased production checkpoint `6a912340`: build, workspace/script types, dependency/cycle checks, lint, tool lint, formatter-disabled Ultracite and dead-export gates exit 0. `bun test --timeout 15000` passes 3377 tests across 359 files in one run, zero failures. |
+| Coverage | All 11 coverage-producing lanes pass, then the unchanged ratchet passes: app 96.83%, agent 97.73%, ledger 99.34%; no floors lowered. |
+| Real surface and mutation | WebSocket -> monitor -> real path/create -> atomic inbox -> hibernated session wake passes (two model calls, revision 59). PTY/FIFO app regression passes; removing app async-context binding fails with the expired tool-wave AbortError. |
+| Tool schema | Owner-approved nested `operation` discriminates create/rearm/cancel; create nests `source`, controls require `alarmId`. `bun run lint:tools` passes under the existing field cap, with no exemption or floor reduction. |
+| Lifecycle campaign | No #969-#973 transition/deletion/test receipt is consumed by stage 1. |
+
+R1 correction evidence (after main `678d357e` merge): production checkpoint
+`21675e12` passes all gates, including tool-lint self-test; 3435 tests pass in
+one full-suite run, zero failures. Ten current coverage lanes and the unchanged
+ratchet pass (app 97.08%, ledger 99.34%, agent 97.73%). The removed placement
+lane is main's deletion, not a floor change introduced by this PR.
+
+| Finding | Failing-first proof -> correction |
+| --- | --- |
+| R1 callback timeout | Three PTY line/exit/native-path tests fail before the callback deadline check; all pass with timeout precedence. No scan is triggered by those tests. |
+| R2 descendants | Five real child-of-child HUP-ignoring process probes fail before group cleanup. Cancel/timeout/pause/exit/shutdown/rearm now close exact death-witness sockets and leave no live probed process. |
+| R3 migration guard | Seventeen invalid historical specs formerly upgraded; each now refuses with the alarm id and byte-identical old database. Complete command/path upgrades still pass. |
+| R4 reconciliation oracle | Removing source observation now fails on the synchronous inbox count before any yield; restored implementation passes. |
+| R5 inferred types | Compiler test fails on untyped JSON results/catch bindings; corrected boundary files report zero. Its planted mutant still fails discrimination. No cast, suppression, exemption or baseline growth was added. |
+
+Decisions and operator contracts: [alarm-monitor-stage-1.md](alarm-monitor-stage-1.md).
+
 ## A rows: already-absent production domains
 
 | Rows | Target | Classification at source HEAD | Merged deletion |

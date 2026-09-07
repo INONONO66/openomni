@@ -1,5 +1,6 @@
 import {
   Alarm,
+  canonicalDigest,
   Deadline,
   Inbox,
   LedgerAction,
@@ -129,6 +130,52 @@ export function createMemoryL0Adapter(): MemoryL0Adapter {
     },
   };
 
+  function control(id: string, at: number, op: "cancel" | "rearm") {
+    return transaction(() => {
+      const current = alarmRows.get(id);
+      if (current === undefined || current.status === "cancelled") return undefined;
+      const session = sessionRows.get(current.sessionId);
+      if (session === undefined) return undefined;
+      const row: Alarm.Row = {
+        ...current,
+        status: op === "cancel" ? "cancelled" : "armed",
+        updatedAt: at,
+        fence: current.fence + 1,
+        ...(op === "rearm"
+          ? { epoch: current.epoch + 1, fireAt: at, notifications: 0, lastBatch: null }
+          : {}),
+      };
+      const receipt = appendMemoryAction(
+        sessionRows,
+        actionRows,
+        {
+          id: canonicalDigest([id, row.epoch, op]),
+          parentId: id,
+          sessionId: row.sessionId,
+          kind: "alarm.arm",
+          intent: { encodingVersion: 1, value: { op, alarmId: id, epoch: row.epoch } },
+          effect: {
+            encodingVersion: 1,
+            value: {
+              status: row.status,
+              epoch: row.epoch,
+              fence: row.fence,
+              fireAt: row.fireAt,
+              notifications: row.notifications,
+              lastBatch: row.lastBatch,
+            },
+          },
+          irreversible: true,
+          ts: at,
+        },
+        session.revision,
+      );
+      if (receipt === undefined) return undefined;
+      alarmRows.set(id, row);
+      return row;
+    });
+  }
+
   return {
     transaction,
     sessions,
@@ -212,12 +259,108 @@ export function createMemoryL0Adapter(): MemoryL0Adapter {
           return row;
         });
       },
-      cancel(id, updatedAt) {
+      get: (id) => alarmRows.get(id),
+      cancel: (id, at) => control(id, at, "cancel"),
+      rearm: (id, at) => control(id, at, "rearm"),
+      acquire(id, fence) {
         const row = alarmRows.get(id);
-        if (row === undefined || row.status !== "armed") return undefined;
-        const cancelled = Alarm.Row.parse({ ...row, status: "cancelled", updatedAt });
-        alarmRows.set(id, cancelled);
-        return cancelled;
+        if (row === undefined || row.status !== "armed" || row.fence !== fence) return undefined;
+        const next = { ...row, fence: fence + 1 };
+        alarmRows.set(id, next);
+        return next;
+      },
+      fire(input) {
+        return transaction(() => {
+          const row = alarmRows.get(input.id);
+          if (
+            row === undefined ||
+            row.status !== "armed" ||
+            row.epoch !== input.epoch ||
+            row.fence !== input.fence ||
+            input.at < row.fireAt
+          )
+            return undefined;
+          if (input.batchHash !== undefined && row.lastBatch === input.batchHash) return undefined;
+          const session = sessionRows.get(row.sessionId);
+          if (session === undefined) return undefined;
+          const paused = !input.terminal && row.notifications >= input.limit;
+          const status = paused
+            ? "paused"
+            : input.terminal || row.kind === "at"
+              ? "fired"
+              : "armed";
+          const content = paused
+            ? JSON.stringify({
+                alarmId: row.id,
+                epoch: row.epoch,
+                reason: "wake_budget",
+                status: "paused",
+              })
+            : input.content;
+          const fired = appendMemoryAction(
+            sessionRows,
+            actionRows,
+            {
+              id: input.actionId,
+              parentId: row.id,
+              sessionId: row.sessionId,
+              kind: paused ? "alarm.paused" : "alarm.fired",
+              intent: {
+                encodingVersion: 1,
+                value: {
+                  alarmId: row.id,
+                  epoch: row.epoch,
+                  fence: row.fence,
+                  inboxId: input.inboxId,
+                },
+              },
+              effect: { encodingVersion: 1, value: { status, content } },
+              irreversible: true,
+              ts: input.at,
+            },
+            session.revision,
+          );
+          if (fired === undefined) return undefined;
+          const pending: Inbox.Commit = {
+            id: input.inboxId,
+            sessionId: row.sessionId,
+            kind: "prompt",
+            content,
+            origin: { encodingVersion: 1, value: row.id },
+            createdAt: input.at,
+            parentActionId: input.actionId,
+          };
+          const prompt = appendMemoryAction(
+            sessionRows,
+            actionRows,
+            inboxAppend(pending),
+            fired.revision,
+          );
+          if (prompt === undefined) throw new Error("alarm prompt append refused");
+          const inbox = Inbox.Row.parse({
+            id: pending.id,
+            sessionId: pending.sessionId,
+            kind: pending.kind,
+            content,
+            origin: pending.origin,
+            createdAt: pending.createdAt,
+            status: "pending",
+            consumedBy: null,
+            consumedAt: null,
+            ordinal: nextInboxOrdinal(inboxRows, row.sessionId),
+          });
+          inboxRows.set(inbox.id, inbox);
+          const next: Alarm.Row = {
+            ...row,
+            status,
+            notifications: row.notifications + (paused || input.terminal ? 0 : 1),
+            lastBatch: input.batchHash ?? row.lastBatch,
+            fence: row.fence + (status === "armed" ? 0 : 1),
+            updatedAt: input.at,
+          };
+          alarmRows.set(row.id, next);
+          return { row: next, inbox, receipts: [fired, prompt] };
+        });
       },
       due(at) {
         return [...alarmRows.values()]
@@ -226,6 +369,22 @@ export function createMemoryL0Adapter(): MemoryL0Adapter {
       },
     },
     policies: {
+      appendGeneration(derive) {
+        return transaction(() => {
+          const all = this.rows();
+          const latest = Math.max(0, ...all.map((row) => row.generation));
+          const drafts = derive(all.filter((row) => row.generation === latest));
+          if (drafts === undefined) return latest;
+          if (drafts.length === 0) throw new Error("policy generation must not be empty");
+          const generation = latest + 1;
+          for (const draft of drafts) {
+            if (!this.append({ ...draft, generation })) {
+              throw new Error(`could not append policy row: ${draft.name}`);
+            }
+          }
+          return generation;
+        });
+      },
       append(row) {
         const parsed = PolicyRow.Row.parse(row);
         const key = policyKey(parsed);

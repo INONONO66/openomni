@@ -54,6 +54,7 @@
         "@openomni/ledger": "workspace:*",
         "@openomni/llm": "workspace:*",
         "@openomni/machines": "workspace:*",
+        "@openomni/policy": "workspace:*",
         "@openomni/protocol": "workspace:*",
         "zod": "^4.5.4",
       },
