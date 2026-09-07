@@ -51,7 +51,11 @@ export async function sweepSessions(
 }
 
 /** Doorbell for already-committed inbox truth; never creates another prompt. */
-export async function wakeSession(id: string, resolveRunner: (row: LedgerSession.Row) => SessionRunner, runtime: SessionRuntime): Promise<void> {
+export async function wakeSession(
+  id: string,
+  resolveRunner: (row: LedgerSession.Row) => SessionRunner,
+  runtime: SessionRuntime,
+): Promise<void> {
   let registry = registries.get(runtime);
   if (registry === undefined) {
     registry = new SessionRegistry(runtime);
@@ -134,7 +138,8 @@ class SessionRegistry {
 
   async wake(id: string, resolveRunner: (row: LedgerSession.Row) => SessionRunner): Promise<void> {
     if (SessionHandleStore.pendingInbox(id).length === 0) return;
-    const entry = this.entries.get(id) ?? this.install(id, resolveRunner(SessionHandleStore.row(id)));
+    const entry =
+      this.entries.get(id) ?? this.install(id, resolveRunner(SessionHandleStore.row(id)));
     await entry.controller.reconcile();
   }
 
