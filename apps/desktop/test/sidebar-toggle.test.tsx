@@ -88,4 +88,26 @@ describe("the one toggle", () => {
     expect(tag(html, "Sidebar.Content")).not.toContain("inert");
     expect(tag(html, "Sidebar")).toContain('data-sidebar-state="collapsed"');
   });
+
+  test("Given each store state, When rendered, Then the glyph's bar reads the column's visibility while aria-expanded reads the pin", () => {
+    const glyph = (html: string) => tag(html, "Sidebar.Toggle.Icon");
+    expect(glyph(shell())).toContain('data-opened="true"');
+    toggleSidebar();
+    expect(glyph(shell())).toContain('data-opened="false"');
+    setSidebarFloating(true);
+    const revealed = shell();
+    expect(glyph(revealed)).toContain('data-opened="true"');
+    expect(tag(revealed, "Sidebar.Toggle")).toContain('aria-expanded="false"');
+  });
+
+  test("Given the strip, When rendered from the store, Then the trio closes the zone, right-aligned, at the 28px step", () => {
+    const html = shell();
+    const trio = tag(html, "TabStrip.Trio");
+    expect(trio).toContain("ml-auto");
+    expect(html.indexOf('data-ui="Sidebar.Toggle"')).toBeLessThan(
+      html.indexOf('data-ui="TabStrip.Trio"'),
+    );
+    expect(tag(html, "Sidebar.Toggle")).toContain('data-size="base"');
+    expect(tag(html, "TabStrip.Controls")).toContain("pl-strip-inset-darwin");
+  });
 });

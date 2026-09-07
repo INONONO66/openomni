@@ -265,7 +265,9 @@ describe("the tab strip's controls zone", () => {
     const html = frame(true, null);
     const zone = tag(html, "TabStrip.Controls");
     expect(zone).toContain("w-(--sidebar-width)");
-    expect(zone).toContain("pl-[76px]");
+    expect(zone).toContain("pl-strip-inset-darwin");
+    expect(zone).toContain("pr-3");
+    expect(zone).toContain("gap-1");
     expect(html.match(/data-ui="Sidebar.Toggle"/g)).toHaveLength(1);
     expect(toggle(html)).toContain('aria-label="Collapse sidebar"');
     expect(toggle(html)).toContain('aria-expanded="true"');
@@ -276,10 +278,54 @@ describe("the tab strip's controls zone", () => {
     expect(html.indexOf('aria-label="Back"')).toBeLessThan(html.indexOf('aria-label="Forward"'));
   });
 
+  test("Given the zone, When rendered, Then the trio is its last child, pushed to the sidebar's edge by `ml-auto`", () => {
+    const html = frame(true, null);
+    const zone = html.slice(
+      html.indexOf('data-ui="TabStrip.Controls"'),
+      html.indexOf('aria-label="New"'),
+    );
+    // Children in order: toggle, trio — and nothing after the trio's closing tag.
+    const toggleAt = zone.indexOf('data-ui="Sidebar.Toggle"');
+    const trioAt = zone.indexOf('data-ui="TabStrip.Trio"');
+    expect(toggleAt).toBeGreaterThan(0);
+    expect(trioAt).toBeGreaterThan(toggleAt);
+    const trio = tag(html, "TabStrip.Trio");
+    expect(trio).toContain("ml-auto");
+    expect(trio).toContain("gap-1");
+    expect(trio).toContain("strip-trio-arrive");
+    expect(
+      zone.slice(trioAt + 1).match(/data-ui="(?!IconButton|Sidebar\.Toggle\.Icon)[^"]+"/g),
+    ).toBeNull();
+  });
+
+  test("Given the strip's four controls, When rendered, Then each is the 28px `base` step and the toggle paints no hover fill", () => {
+    const html = frame(true, null);
+    expect(toggle(html)).toContain('data-size="base"');
+    expect(toggle(html)).toContain('data-variant="plain"');
+    expect(toggle(html)).not.toContain("hover:bg-hover");
+    for (const label of ["History", "Back", "Forward"]) {
+      const button = html.match(new RegExp(`<button[^>]*aria-label="${label}"[^>]*>`))?.[0];
+      expect(button).toContain('data-size="base"');
+      expect(button).toContain("hover:bg-hover");
+    }
+  });
+
+  test("Given the toggle's glyph, When the column is pinned, hidden, or revealed, Then the bar's width reads 4.5 / 1.5 / 4.5", () => {
+    const icon = (html: string) => {
+      const start = html.indexOf('data-ui="Sidebar.Toggle.Icon"');
+      return html.slice(start, html.indexOf("</svg>", start));
+    };
+    expect(icon(frame(true, null))).toContain('width="4.5"');
+    expect(icon(frame(false, null))).toContain('width="1.5"');
+    expect(icon(frame(false, null, "darwin", true))).toContain('width="4.5"');
+    expect(icon(frame(false, null))).toContain('x="4" y="5"');
+    expect(icon(frame(false, null))).toContain('height="6" rx="0.75"');
+  });
+
   test("Given a collapsed sidebar on darwin, When rendered, Then the zone clears the traffic lights and the same toggle leads it", () => {
     const html = frame(false, null);
     const zone = tag(html, "TabStrip.Controls");
-    expect(zone).toContain("pl-[76px]");
+    expect(zone).toContain("pl-strip-inset-darwin");
     expect(zone).toContain("w-tab-controls-collapsed ");
     expect(html.match(/data-ui="Sidebar.Toggle"/g)).toHaveLength(1);
     expect(toggle(html)).toContain('aria-label="Expand sidebar"');
@@ -298,7 +344,7 @@ describe("the tab strip's controls zone", () => {
   test("Given a collapsed sidebar elsewhere, When rendered, Then the zone starts at the window edge", () => {
     const zone = tag(frame(false, null, "other"), "TabStrip.Controls");
     expect(zone).toContain("w-tab-controls-collapsed-generic");
-    expect(zone).not.toContain("pl-[76px]");
+    expect(zone).not.toContain("pl-strip-inset-darwin");
   });
 
   test("Given the zone, When rendered, Then it animates width on the frame's curve and yields to reduced motion", () => {
@@ -316,7 +362,7 @@ describe("the tab strip's controls zone", () => {
     expect(html).toContain('aria-label="New"');
   });
 
-  test("Given a title, When rendered, Then the tab is a 28px card with no status mark", () => {
+  test("Given a title, When rendered, Then the tab is a 26px card with no status mark", () => {
     const html = renderToStaticMarkup(
       <Sidebar
         floating={false}
@@ -336,7 +382,7 @@ describe("the tab strip's controls zone", () => {
       </Sidebar>,
     );
     const tab = tag(html, "Tab");
-    expect(tab).toContain("h-7 w-56");
+    expect(tab).toContain("h-tab-height w-56");
     expect(tab).toContain("rounded-card");
     expect(html).not.toContain('data-ui="StatusDot"');
   });
