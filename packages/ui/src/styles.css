@@ -156,14 +156,21 @@
   --text-overline--letter-spacing: 0.09em;
 
   /* ---- Radii ------------------------------------------------------------ */
-  /* `sm` is the mark scale — an elbow's corner, a gutter's cut. `md` is the
-     SURFACE scale: every interactive rectangle in the system (a row, a fence, a
-     tool row's hover, a focus ring) lands on 6px, so the softening reads as one
-     decision rather than as three components each picking a corner. Nothing
-     larger exists: past 6px at this density a row stops being a line in a
-     ledger and starts being a card. */
+  /* `sm` is the mark scale — an elbow's corner, a gutter's cut, a tree row. `md`
+     is the SURFACE scale: every interactive rectangle inside a column (a fence,
+     a tool row's hover, a focus ring) lands on 6px, so the softening reads as
+     one decision rather than as three components each picking a corner.
+
+     `card` and `panel` are the two FRAME radii, and they exist for the shell
+     only: a tab in the strip is a card (8px), the main column is a panel
+     (12px). Nothing inside a column may take either — past 6px at this density
+     a row stops being a line in a ledger and starts being a card, and the two
+     frame radii are how the frame stays distinguishable from its content.
+     Measured from Capy (docs/desktop-shell.md). */
   --radius-sm: 4px;
   --radius-md: 6px;
+  --radius-card: 0.5rem;
+  --radius-panel: 0.75rem;
 
   /* ---- Spacing rhythm (8px baseline; named steps are layout intent) ----- */
   /* Every vertical step is a multiple of 8 so rows, headers, and timeline
@@ -174,8 +181,6 @@
   --spacing-gutter: 16px;
   --spacing-section: 24px;
   --spacing-group-gap: 8px;
-  --spacing-titlebar: 56px;
-  --spacing-tree: 264px;
   --spacing-detail: 320px;
   --spacing-row: 32px;
   --spacing-control-sm: 24px;
@@ -235,6 +240,59 @@
   --motion-fast-duration: 120ms;
   --motion-fast-ease: cubic-bezier(0.2, 0, 0, 1);
   --motion-fast: var(--motion-fast-duration) var(--motion-fast-ease);
+
+  /* ---- Shell motion (frame only) ---------------------------------------- */
+  /* The FRAME moves on a different scale from the content, and these are its
+     three speeds plus its one curve — copied from Capy (docs/desktop-shell.md),
+     not tuned here. A sidebar sliding 240px cannot run the 120ms answer-to-
+     input token: at that speed a 240px translate reads as a cut, not a slide.
+
+     Scope: the tab strip's controls zone, the sidebar gap, container, and
+     content. Nothing inside a column may spend these — a hover or a chevron is
+     still `--motion-fast`. `fast` is the collapse speed (the frame leaving
+     answers faster than it arrives), `base` is the open speed, `slow` is
+     reserved for overlays. `ease-out-quint` decelerates hard so a slide lands
+     without a bounce. */
+  --duration-fast: 0.15s;
+  --duration-base: 0.2s;
+  --duration-slow: 0.3s;
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* ---- Shell geometry ---------------------------------------------------- */
+  /* The tab strip's controls zone while the sidebar is COLLAPSED, when it has
+     to hold the window controls plus the sidebar toggle and the history trio
+     without clipping. Stated as a sum so it can be re-measured, not guessed:
+
+       darwin  76 (traffic lights inset) + 24 toggle + 12 gap
+               + 24 history + 4 + 24 back + 4 + 24 forward + 12 right pad = 204
+       other   Capy's own measured width for the same zone with the OS drawing
+               its controls elsewhere: 108, `px-2`.
+
+     The open width is not a token: it is the runtime `--sidebar-width`. */
+  --spacing-tab-controls-collapsed: 204px;
+  --spacing-tab-controls-collapsed-generic: 108px;
+}
+
+/* ---- Layer scale ----------------------------------------------------------
+   Every stacking decision in the window reads one of these; a component never
+   writes a bare `z-50`. Read through `z-(--z-sidebar)`. Copied from Capy. */
+:root {
+  --z-top-bar: 10;
+  --z-sidebar: 50;
+  --z-drawer: 350;
+  --z-dialog: 500;
+  --z-overlay-content: 550;
+  --z-toast: 600;
+  --z-tooltip: 700;
+
+  /* How much of the window's top the tab strip owns. 0 until the renderer
+     declares a strip on `<html data-tab-strip>`; then the fixed sidebar starts
+     below it and the sidebar column drops its own top padding. */
+  --shell-top: 0px;
+}
+
+:root[data-tab-strip] {
+  --shell-top: 2.5rem;
 }
 
 /* Dark is the shipped default. Light re-points the same semantic tokens, so no
@@ -362,6 +420,33 @@ body {
 }
 @utility no-drag {
   -webkit-app-region: no-drag;
+}
+
+/* Overlay content opts out of dragging BY SELECTOR, not by class: a menu
+   portalled under the strip would otherwise inherit the drag region and eat
+   its own clicks. Anything with an overlay role is interactive by definition. */
+[role="menu"],
+[role="dialog"],
+[role="alertdialog"],
+[role="listbox"],
+[popover] {
+  -webkit-app-region: no-drag;
+}
+
+/* The frame's speeds, as utilities, so a shell component spends a named token
+   and never a numeric `duration-200`. Tailwind has no `--duration-*` theme
+   namespace, so the three are declared here rather than in `@theme`. */
+@utility duration-fast {
+  --tw-duration: var(--duration-fast);
+  transition-duration: var(--duration-fast);
+}
+@utility duration-base {
+  --tw-duration: var(--duration-base);
+  transition-duration: var(--duration-base);
+}
+@utility duration-slow {
+  --tw-duration: var(--duration-slow);
+  transition-duration: var(--duration-slow);
 }
 
 /* The one shared transition, and the ONLY place a component may acquire one.

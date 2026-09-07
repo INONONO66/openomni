@@ -17,16 +17,40 @@ export const UI_NAMES = {
   Console: "Console",
   /** A tonal surface — the window, a column, a recessed region. */
   Panel: "Panel",
-  /** The sidebar's titlebar row: the drag surface beside the traffic lights. */
-  SidebarHeader: "SidebarHeader",
-  /** The main column's titlebar row: title plus one qualifying fact. */
-  MainHeader: "MainHeader",
-  /** The sidebar's one control: a line, not a box. */
-  SearchLine: "SearchLine",
-  /** The one selectable surface in the system. */
-  Row: "Row",
-  /** A group header that expands a region. */
-  Disclosure: "Disclosure",
+  /** The window's top row: the controls zone, the one tab, the create control. */
+  TabStrip: "TabStrip",
+  /** The strip's left zone: window controls, sidebar toggle, history trio. */
+  TabStripControls: "TabStrip.Controls",
+  /** The one tab: the open column's title. */
+  Tab: "Tab",
+  /** The shell root: sidebar state and the runtime `--sidebar-width` live here. */
+  Sidebar: "Sidebar",
+  /** The in-flow spacer the fixed sidebar container sits over. */
+  SidebarGap: "Sidebar.Gap",
+  /** The fixed box that slides; the resize handle hangs off its right edge. */
+  SidebarContainer: "Sidebar.Container",
+  /** The fading column inside the container; `inert` while collapsed. */
+  SidebarContent: "Sidebar.Content",
+  /** The 16px grab zone on the sidebar's right edge. */
+  SidebarResizeHandle: "Sidebar.ResizeHandle",
+  /** The sidebar's top row: brand, then search and the collapse toggle. */
+  SidebarHeader: "Sidebar.Header",
+  /** The primary destinations, under the header. */
+  SidebarNav: "Sidebar.Nav",
+  /** One destination in the nav. */
+  NavItem: "NavItem",
+  /** A section's title row, or its search field while searching. */
+  SectionHeader: "SectionHeader",
+  /** The section header's one control: search open, search closed. */
+  SectionHeaderToggle: "SectionHeader.Toggle",
+  /** The sidebar's bottom row, above a hairline. */
+  SidebarFooter: "Sidebar.Footer",
+  /** One line of the tree, at one of three depths. */
+  TreeRow: "TreeRow",
+  /** The clock: the last twenty places the main column has been. */
+  HistoryMenu: "HistoryMenu",
+  /** One place in the history: a title and how long ago. */
+  HistoryMenuItem: "HistoryMenu.Item",
 
   /** The transcript column. */
   Timeline: "Timeline",
