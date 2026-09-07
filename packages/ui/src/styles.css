@@ -180,13 +180,9 @@
      `section`, spent between a group header and its first row. */
   --spacing-gutter: 16px;
   --spacing-section: 24px;
-  --spacing-group-gap: 8px;
-  --spacing-detail: 320px;
-  --spacing-row: 32px;
   --spacing-control-sm: 24px;
   --spacing-control-md: 32px;
   --spacing-inset: 8px;
-  --spacing-row-inset: 8px;
   /* The reading measure, and the transcript's ONE column.
 
      68ch of the prose face, which lands near the 60–75 character line the
@@ -202,15 +198,11 @@
   --spacing-measure: 68ch;
 
   /* ---- Indentation ------------------------------------------------------ */
-  /* One indent step, spent per level of the navigator's PROJECT → SESSION
-     hierarchy, and the one horizontal rhythm in the system. A list whose levels
-     all start at the same x has no hierarchy in it: the depth has to be visible
-     in the geometry, because this system has no lines and no icons to draw it
-     with. `indent-slot` is the chevron column, reserved at EVERY level whether
-     or not a chevron lands in it, so text x within a level is one value rather
-     than two. */
+  /* One indent step, spent per level of the tree's three depths, and the one
+     horizontal rhythm in the system. A list whose levels all start at the same
+     x has no hierarchy in it: the depth has to be visible in the geometry,
+     because this system has no lines and no icons to draw it with. */
   --spacing-indent: 12px;
-  --spacing-indent-slot: 16px;
 
   /* ---- The character grid ----------------------------------------------- */
   /* One character cell of the mono face, for the places that have to sit on the
@@ -265,12 +257,13 @@
 
        darwin  76 (traffic lights inset) + 24 toggle + 12 gap
                + 24 history + 4 + 24 back + 4 + 24 forward + 12 right pad = 204
-       other   Capy's own measured width for the same zone with the OS drawing
-               its controls elsewhere: 108, `px-2`.
+       other   8 left pad + 24 toggle + 12 gap
+               + 24 history + 4 + 24 back + 4 + 24 forward + 8 right pad = 132
+               (Capy measures 108 here, without a history control.)
 
      The open width is not a token: it is the runtime `--sidebar-width`. */
   --spacing-tab-controls-collapsed: 204px;
-  --spacing-tab-controls-collapsed-generic: 108px;
+  --spacing-tab-controls-collapsed-generic: 132px;
 }
 
 /* ---- Layer scale ----------------------------------------------------------
@@ -406,8 +399,6 @@ body {
 
   --spacing-gutter: 8px;
   --spacing-section: 16px;
-  --spacing-group-gap: 8px;
-  --spacing-row: 24px;
   --spacing-control-md: 24px;
 
   font-family: var(--font-mono);
@@ -417,6 +408,11 @@ body {
 @utility drag-region {
   -webkit-app-region: drag;
   user-select: none;
+  /* Every control inside a drag surface opts out BY SELECTOR: a button that
+     forgot `no-drag` would move the window instead of firing. */
+  & :is(button, input, [role="button"]) {
+    -webkit-app-region: no-drag;
+  }
 }
 @utility no-drag {
   -webkit-app-region: no-drag;

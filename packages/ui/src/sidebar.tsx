@@ -30,6 +30,7 @@ const FRAME_MOTION = "ease-out-quint motion-reduce:transition-none";
 interface SidebarState {
   readonly open: boolean;
   readonly width: number;
+  readonly onToggle: () => void;
   readonly onWidthCommit: (width: number) => void;
   readonly rootRef: RefObject<HTMLDivElement | null>;
 }
@@ -46,6 +47,7 @@ export function useSidebar(): SidebarState {
 export function Sidebar({
   open,
   width,
+  onToggle,
   onWidthCommit,
   className = "",
   children,
@@ -53,6 +55,8 @@ export function Sidebar({
 }: {
   readonly open: boolean;
   readonly width: number;
+  /** Open ↔ collapsed. Fired by the header's toggle and the strip's. */
+  readonly onToggle: () => void;
   /** The width the Owner released the handle at, already clamped. */
   readonly onWidthCommit: (width: number) => void;
   readonly className?: string;
@@ -60,7 +64,7 @@ export function Sidebar({
 } & Omit<React.ComponentPropsWithoutRef<"div">, "className" | "children" | "style">) {
   const rootRef = useRef<HTMLDivElement>(null);
   return (
-    <SidebarContext.Provider value={{ open, width, onWidthCommit, rootRef }}>
+    <SidebarContext.Provider value={{ open, width, onToggle, onWidthCommit, rootRef }}>
       <div
         className={`group/sidebar flex h-dvh w-full overflow-hidden bg-sunken pt-(--shell-top) ${className}`}
         data-sidebar-state={open ? "open" : "collapsed"}
@@ -78,7 +82,7 @@ export function Sidebar({
 export function SidebarGap() {
   return (
     <div
-      className={`relative w-(--sidebar-width) shrink-0 transition-[width] duration-base group-data-[sidebar-state=collapsed]/sidebar:w-0 group-data-[sidebar-state=collapsed]/sidebar:duration-fast group-data-[resizing]/sidebar:duration-0 ${FRAME_MOTION}`}
+      className={`relative w-(--sidebar-width) shrink-0 transition-[width] duration-base group-data-[sidebar-state=collapsed]/sidebar:w-0 group-data-[resizing]/sidebar:duration-0 group-data-[sidebar-state=collapsed]/sidebar:duration-fast ${FRAME_MOTION}`}
       data-ui={UI_NAMES.SidebarGap}
     />
   );
@@ -88,11 +92,13 @@ export function SidebarContainer({ children }: { readonly children: ReactNode })
   const { open } = useSidebar();
   return (
     <div
-      className={`fixed top-(--shell-top) bottom-0 left-0 z-(--z-sidebar) flex w-(--sidebar-width) transition-[translate] duration-base group-data-[sidebar-state=collapsed]/sidebar:-translate-x-full group-data-[sidebar-state=collapsed]/sidebar:duration-fast group-data-[resizing]/sidebar:duration-0 ${FRAME_MOTION}`}
+      className={`fixed top-(--shell-top) bottom-0 left-0 z-(--z-sidebar) flex w-(--sidebar-width) transition-[translate] duration-base group-data-[sidebar-state=collapsed]/sidebar:-translate-x-full group-data-[resizing]/sidebar:duration-0 group-data-[sidebar-state=collapsed]/sidebar:duration-fast ${FRAME_MOTION}`}
       data-ui={UI_NAMES.SidebarContainer}
     >
       <div
-        className={`flex h-full min-w-0 flex-1 flex-col transition-[opacity,translate] delay-[40ms] duration-base group-data-[sidebar-state=collapsed]/sidebar:-translate-x-4 group-data-[sidebar-state=collapsed]/sidebar:opacity-0 group-data-[sidebar-state=collapsed]/sidebar:delay-0 group-data-[sidebar-state=collapsed]/sidebar:duration-[120ms] group-data-[resizing]/sidebar:duration-0 ${FRAME_MOTION}`}
+        // `pt-2` is the column's own top breath; under a tab strip the strip
+        // already owns that air, so the column starts flush.
+        className={`flex h-full min-h-0 min-w-0 flex-1 flex-col pt-2 transition-[opacity,translate] delay-[40ms] duration-base group-data-[sidebar-state=collapsed]/sidebar:-translate-x-4 group-data-[sidebar-state=collapsed]/sidebar:opacity-0 group-data-[sidebar-state=collapsed]/sidebar:delay-0 group-data-[resizing]/sidebar:duration-0 group-data-[sidebar-state=collapsed]/sidebar:duration-[120ms] [[data-tab-strip]_&]:pt-0 ${FRAME_MOTION}`}
         data-ui={UI_NAMES.SidebarContent}
         // A collapsed column is off-screen but still in the tree: `inert` is
         // what takes its rows out of the tab order and the accessibility tree
@@ -145,13 +151,14 @@ function SidebarResizeHandle() {
   };
 
   return (
+    // biome-ignore lint/a11y/useSemanticElements: a focusable window splitter (WAI-ARIA separator with valuenow) has no native element; <hr> cannot be operated
     <div
       aria-label="Resize sidebar"
       aria-orientation="vertical"
       aria-valuemax={SIDEBAR_WIDTH.max}
       aria-valuemin={SIDEBAR_WIDTH.min}
       aria-valuenow={width}
-      className="focus-ring group-data-[resizing]/sidebar:after:opacity-100 absolute inset-y-0 -right-2 w-4 cursor-col-resize touch-none no-drag after:absolute after:inset-y-0 after:left-2 after:w-px after:bg-line-surface after:opacity-0 after:transition-quiet after:motion-reduce:transition-none hover:after:opacity-100 focus-visible:after:opacity-100"
+      className="focus-ring no-drag absolute inset-y-0 -right-2 w-4 cursor-col-resize touch-none after:absolute after:inset-y-0 after:left-2 after:w-px after:bg-line-surface after:opacity-0 after:transition-quiet hover:after:opacity-100 focus-visible:after:opacity-100 group-data-[resizing]/sidebar:after:opacity-100 after:motion-reduce:transition-none"
       data-ui={UI_NAMES.SidebarResizeHandle}
       onKeyDown={(event) => {
         const direction = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;

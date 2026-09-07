@@ -13,8 +13,6 @@
  * inside all of them.
  */
 export const UI_NAMES = {
-  /** The whole window: chrome + navigator slot + transcript + composer. */
-  Console: "Console",
   /** A tonal surface — the window, a column, a recessed region. */
   Panel: "Panel",
   /** The window's top row: the controls zone, the one tab, the create control. */
@@ -23,7 +21,7 @@ export const UI_NAMES = {
   TabStripControls: "TabStrip.Controls",
   /** The one tab: the open column's title. */
   Tab: "Tab",
-  /** The shell root: sidebar state and the runtime `--sidebar-width` live here. */
+  /** The window root: sidebar state and the runtime `--sidebar-width` live here. */
   Sidebar: "Sidebar",
   /** The in-flow spacer the fixed sidebar container sits over. */
   SidebarGap: "Sidebar.Gap",

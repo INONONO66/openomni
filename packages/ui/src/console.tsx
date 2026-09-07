@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
-import { MainHeader } from "./chrome";
 import { Composer } from "./composer";
-import { UI_NAMES } from "./names";
 import { ScrollArea } from "./primitives/scroll-area";
 import { Panel } from "./primitives/surface";
+import { Sidebar, SidebarContainer, SidebarGap } from "./sidebar";
+import { type HistoryControls, TabStrip, type WindowPlatform } from "./tab-strip";
 import type { PendingApproval, TranscriptNode, TurnCost } from "./timeline/model";
 import { Timeline } from "./timeline/timeline";
 import { Voice } from "./timeline/voice";
@@ -14,14 +14,20 @@ import { Voice } from "./timeline/voice";
  * The rule the Owner set is the one enforced here: **the shell IS the ui
  * package, composed** — not a thing the ui package can be used to build.
  *
- * ## The three-band main column
+ * ## The frame
  *
- * The main column is a header, a scrolling transcript, and a fixed input zone,
- * and all three hang on ONE 68ch measure. That shared measure is the layout's
- * whole structure: the title sits over the first line of prose, the composer
- * sits under the last, and the reader's eye returns to a single left edge for
- * the entire session. A composer wider than the transcript it answers is two
- * columns pretending to be one.
+ * A 40px tab strip fixed across the top, and under it the Capy sidebar
+ * mechanism: an in-flow gap that reserves the width, a fixed container that
+ * slides, and the main column filling the rest. The strip's controls zone and
+ * the gap read the same `--sidebar-width`, so the tab and the column move as
+ * one thing. The main column is a 12px-cornered panel on the chrome tone.
+ *
+ * ## The two-band main column
+ *
+ * The main column is a scrolling transcript and a fixed input zone, and both
+ * hang on ONE 68ch measure — the title has moved up into the strip's tab. A
+ * composer wider than the transcript it answers is two columns pretending to be
+ * one.
  *
  * Only the transcript scrolls. The composer is pinned because the place the
  * Owner types must not be something they have to scroll to find, and the
@@ -41,13 +47,19 @@ import { Voice } from "./timeline/voice";
  * does not know what sending one does.
  */
 export function Console({
+  shell,
+  strip,
   sidebar,
   session,
   emptyLabel,
 }: {
+  readonly shell: ConsoleShell;
+  readonly strip: ConsoleStrip;
   /**
-   * The session navigator. A slot rather than a prop-driven tree: what ranks
-   * and filters those rows is the app's, and this component must not learn it.
+   * The sidebar column's content. A slot rather than a prop-driven tree: what
+   * ranks and filters those rows is the app's, and this component must not
+   * learn it. Composed from `SidebarHeader`, `SidebarNav`, `SidebarSection`,
+   * `TreeRow`, and `SidebarFooter`.
    */
   readonly sidebar: ReactNode;
   /**
@@ -66,19 +78,34 @@ export function Console({
     // was missed rendering at the System scale. It re-points the type scale and
     // the vertical rhythm only; no color token changes, so this is a density
     // declaration and not a second theme.
-    // The window root answers to `Console`, not to `Panel`. It is a Panel by
-    // construction, but the Owner pointing at the whole screen means the
-    // composition — and a name that only ever said `Panel` would leave the
-    // screen itself unaddressable.
-    <Panel
-      className="flex h-full min-h-0"
+    // The window root is the `Sidebar` root: the whole screen is the sidebar
+    // mechanism's wrapper, and it is addressed under that name.
+    <Sidebar
       data-density="shell"
-      data-ui={UI_NAMES.Console}
-      tone="bg"
+      onToggle={shell.onToggleSidebar}
+      onWidthCommit={shell.onSidebarWidthCommit}
+      open={shell.sidebarOpen}
+      width={shell.sidebarWidth}
     >
-      {sidebar}
-      <Panel as="main" className="flex min-w-0 flex-1 flex-col" tone="bg">
-        <MainHeader detail={session?.detail} title={session?.title} />
+      <TabStrip
+        createLabel={strip.createLabel}
+        history={strip.history}
+        onCreate={strip.onCreate}
+        platform={strip.platform}
+        title={session?.title}
+        trailing={strip.trailing}
+      />
+      <SidebarGap />
+      <SidebarContainer>{sidebar}</SidebarContainer>
+      {/* The panel is inset from the chrome on its right and bottom only: its
+          left edge meets the sidebar, where the resize handle straddles it,
+          and its top meets the strip. */}
+      <Panel
+        as="main"
+        className="mr-2 mb-2 flex min-w-0 flex-1 flex-col group-data-[sidebar-state=collapsed]/sidebar:ml-2"
+        edge="box"
+        tone="bg"
+      >
         {/* `pinToEnd`: the transcript opens on the LATEST turn and stays there
             as the agent writes. Without it the column opens on the oldest turn
             and the newest one sits below the fold — which is where a row
@@ -126,17 +153,34 @@ export function Console({
             />
           )}
       </Panel>
-    </Panel>
+    </Sidebar>
   );
+}
+
+/** The frame's state: the app owns it, persists it, and hands it down. */
+export interface ConsoleShell {
+  readonly sidebarOpen: boolean;
+  /** Already clamped by `clampSidebarWidth`. */
+  readonly sidebarWidth: number;
+  readonly onToggleSidebar: () => void;
+  readonly onSidebarWidthCommit: (width: number) => void;
+}
+
+/** What the tab strip needs beyond the open column's title. */
+export interface ConsoleStrip {
+  readonly createLabel: string;
+  readonly onCreate: () => void;
+  readonly platform: WindowPlatform;
+  readonly history: HistoryControls;
+  readonly trailing?: ReactNode;
 }
 
 /** Everything the main column needs to show one open session. */
 export interface ConsoleSession {
   /** The key transcript expansion state is remembered under. */
   readonly id: string;
-  /** The main column's title and its one qualifying fact. */
+  /** The tab's title. */
   readonly title: string;
-  readonly detail?: string | undefined;
   readonly nodes: readonly TranscriptNode[];
   readonly costs?: Readonly<Record<number, TurnCost>>;
   readonly draft?: string;
