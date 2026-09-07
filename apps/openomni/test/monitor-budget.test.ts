@@ -34,7 +34,7 @@ test("monitor budget: N+1 pauses once and only explicit rearm resets the epoch",
       fixture.worker.tick();
       expect(fixture.rows()).toHaveLength(3);
       const resumed = fixture.next("budget", (row) => row.content === "one");
-      fixture.storage.alarms.rearm("budget", 1000);
+      fixture.storage.alarms.rearm("budget", "monitor-session", 1000);
       await resumed;
       expect(fixture.storage.alarms.get("budget")?.epoch).toBe(2);
       expect(fixture.errors).toEqual([]);
@@ -63,11 +63,10 @@ test("monitor timeout: exact deadline fences source before its exit summary", ()
       fixture.worker.tick();
       expect(alarmSummary((await summary).content).reason).toBe("timeout");
       expect(fixture.rows()).toHaveLength(2);
-      const rearmed = fixture.next("timeout", (row) => row.content === "READY");
-      fixture.storage.alarms.rearm("timeout", 1050);
+      expect(fixture.storage.alarms.rearm("timeout", "monitor-session", 1050)).toBeUndefined();
       fixture.worker.tick();
-      await rearmed;
-      expect(fixture.storage.alarms.get("timeout")).toMatchObject({ epoch: 2, status: "armed" });
+      expect(fixture.storage.alarms.get("timeout")).toMatchObject({ epoch: 1, status: "fired" });
+      expect(fixture.rows()).toHaveLength(2);
       expect(fixture.errors).toEqual([]);
     } finally {
       await fixture.close();

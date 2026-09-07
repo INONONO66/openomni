@@ -148,7 +148,7 @@ function exerciseL0Contracts(storage: L0Adapter) {
       Alarm.Arm.parse({
         id: "alarm-later",
         sessionId: session.id,
-        kind: "at",
+        kind: "watch",
         fireAt: 500,
       }),
     ),
@@ -164,7 +164,9 @@ function exerciseL0Contracts(storage: L0Adapter) {
       }),
     ),
   ).toMatchObject({ status: "armed" });
-  expect(storage.alarms.cancel("alarm-later", 450)).toMatchObject({ status: "cancelled" });
+  expect(storage.alarms.cancel("alarm-later", session.id, 450)).toMatchObject({
+    status: "cancelled",
+  });
   expect(storage.alarms.due(450).map((row) => row.id)).toEqual(["alarm-now"]);
   expect(storage.sessions.get(session.id)?.revision).toBe(7);
 

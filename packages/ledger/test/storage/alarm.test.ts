@@ -65,7 +65,7 @@ function exercise(
   expect(fire("duplicate", "A")).toBeUndefined();
   expect(fire("budget", "B")?.row.status).toBe("paused");
   expect(fire("stale", "C")).toBeUndefined();
-  const rearmed = adapter.alarms.rearm("watch", 1100);
+  const rearmed = adapter.alarms.rearm("watch", "alarm-session", 1100);
   expect(rearmed).toMatchObject({
     id: "watch",
     epoch: 2,
@@ -73,8 +73,8 @@ function exercise(
     lastBatch: null,
     status: "armed",
   });
-  expect(adapter.alarms.cancel("watch", 1101)?.status).toBe("cancelled");
-  expect(adapter.alarms.rearm("watch", 1102)).toBeUndefined();
+  expect(adapter.alarms.cancel("watch", "alarm-session", 1101)?.status).toBe("cancelled");
+  expect(adapter.alarms.rearm("watch", "alarm-session", 1102)).toBeUndefined();
   return {
     tree: adapter.actions.tree("alarm-session"),
     inbox: adapter.inbox.list("alarm-session"),

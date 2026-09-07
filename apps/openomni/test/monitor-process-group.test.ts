@@ -83,7 +83,7 @@ for (const mode of ["cancel", "timeout", "budget", "exit", "shutdown", "rearm"] 
         const gone = bound(Promise.all(original.map((peer) => peer.closed)).then(() => undefined));
         if (mode === "rearm") {
           const readyAgain = fixture.next("group", (row) => row.content === "READY");
-          fixture.storage.alarms.rearm("group", 1000);
+          fixture.storage.alarms.rearm("group", "monitor-session", 1000);
           fixture.worker.tick();
           await Promise.all([gone, readyAgain]);
           expect(fixture.storage.alarms.get("group")).toMatchObject({ status: "armed", epoch: 2 });
@@ -99,7 +99,7 @@ for (const mode of ["cancel", "timeout", "budget", "exit", "shutdown", "rearm"] 
           await Promise.all([gone, terminal]);
           expect(await writer.exited).toBe(0);
         } else {
-          if (mode === "cancel") fixture.storage.alarms.cancel("group", 1000);
+          if (mode === "cancel") fixture.storage.alarms.cancel("group", "monitor-session", 1000);
           if (mode === "timeout") fixture.advance(1050);
           if (mode !== "shutdown") fixture.worker.tick();
           await Promise.all([gone, fixture.worker.close()]);

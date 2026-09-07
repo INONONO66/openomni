@@ -852,13 +852,13 @@ function createAlarms(
       return result.row;
     },
     get: (id) => selectAlarm(db, id),
-    cancel(id, at) {
-      const result = transaction(() => controlAlarm(db, id, at, "cancel"));
+    cancel(id, sessionId, at) {
+      const result = transaction(() => controlAlarm(db, id, sessionId, at, "cancel"));
       if (result !== undefined) publishCommitted(db, observationSink, result.receipt);
       return result?.row;
     },
-    rearm(id, at) {
-      const result = transaction(() => controlAlarm(db, id, at, "rearm"));
+    rearm(id, sessionId, at) {
+      const result = transaction(() => controlAlarm(db, id, sessionId, at, "rearm"));
       if (result !== undefined) publishCommitted(db, observationSink, result.receipt);
       return result?.row;
     },
@@ -894,9 +894,21 @@ function createAlarms(
   };
 }
 
-function controlAlarm(db: Database, id: string, at: number, op: "cancel" | "rearm") {
+function controlAlarm(
+  db: Database,
+  id: string,
+  sessionId: string,
+  at: number,
+  op: "cancel" | "rearm",
+) {
   const current = selectAlarm(db, id);
-  if (current === undefined || current.status === "cancelled") return undefined;
+  if (
+    current === undefined ||
+    current.sessionId !== sessionId ||
+    current.kind !== "watch" ||
+    (current.status !== "armed" && current.status !== "paused")
+  )
+    return undefined;
   const session = selectSession(db, current.sessionId);
   if (session === undefined) return undefined;
   const row: Alarm.Row = {

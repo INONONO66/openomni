@@ -76,7 +76,7 @@ test("monitor path: subscribed create and modify, then cancellation fences callb
       expect(alarmPathEvent((await modified).content)).toEqual({ path, event: "modify" });
       const old = fixture.storage.alarms.get("modify");
       if (old === undefined) throw new Error("missing alarm");
-      fixture.storage.alarms.cancel("modify", 1001);
+      fixture.storage.alarms.cancel("modify", "monitor-session", 1001);
       writeFileSync(path, "after cancel");
       fixture.worker.tick();
       expect(

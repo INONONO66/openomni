@@ -182,10 +182,16 @@ export function createMemoryL0Adapter(): MemoryL0Adapter {
     },
   };
 
-  function control(id: string, at: number, op: "cancel" | "rearm") {
+  function control(id: string, sessionId: string, at: number, op: "cancel" | "rearm") {
     return transaction(() => {
       const current = alarmRows.get(id);
-      if (current === undefined || current.status === "cancelled") return undefined;
+      if (
+        current === undefined ||
+        current.sessionId !== sessionId ||
+        current.kind !== "watch" ||
+        (current.status !== "armed" && current.status !== "paused")
+      )
+        return undefined;
       const session = sessionRows.get(current.sessionId);
       if (session === undefined) return undefined;
       const row: Alarm.Row = {
@@ -435,8 +441,8 @@ export function createMemoryL0Adapter(): MemoryL0Adapter {
         });
       },
       get: (id) => alarmRows.get(id),
-      cancel: (id, at) => control(id, at, "cancel"),
-      rearm: (id, at) => control(id, at, "rearm"),
+      cancel: (id, sessionId, at) => control(id, sessionId, at, "cancel"),
+      rearm: (id, sessionId, at) => control(id, sessionId, at, "rearm"),
       acquire(id, fence) {
         const row = alarmRows.get(id);
         if (row === undefined || row.status !== "armed" || row.fence !== fence) return undefined;

@@ -71,11 +71,7 @@ export const monitorTool = defineTool({
     context.signal.throwIfAborted();
     const at = Date.now();
     if (args.op !== "create") {
-      const current = alarms.get(args.alarmId);
-      if (current === undefined || current.sessionId !== context.sessionId)
-        throw new ToolRefused("monitor", "alarm not found in this session");
-      const row =
-        args.op === "cancel" ? alarms.cancel(current.id, at) : alarms.rearm(current.id, at);
+      const row = alarms[args.op](args.alarmId, context.sessionId, at);
       if (row === undefined) throw new ToolRefused("monitor", "alarm control refused");
       return row;
     }
