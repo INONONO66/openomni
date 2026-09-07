@@ -1,7 +1,7 @@
 import { expect, mock, test } from "bun:test";
 import { GATEWAY_CHANNEL, type DesktopApi, type GatewayEndpoint } from "../src/preload/api";
 
-test("desktop entries register IPC before window creation and resolve it before rendering", async () => {
+test("desktop entries register IPC before window creation and render without awaiting the gateway", async () => {
   const ready = Promise.withResolvers<void>();
   const handlers = new Map<string, () => GatewayEndpoint>();
   const events = new Map<string, () => void>();
@@ -111,7 +111,7 @@ test("desktop entries register IPC before window creation and resolve it before 
     });
     order.length = 0;
     await import("../src/renderer/main");
-    expect(order).toEqual(["root", "invoke", "render"]);
+    expect(order).toEqual(["root", "render"]);
     expect(rendered).toHaveLength(1);
   } finally {
     if (previousDocument === undefined) delete globals.document;
