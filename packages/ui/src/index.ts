@@ -5,7 +5,6 @@
    types the chat adapter targets. */
 
 export { Console, type ConsoleShell, type ConsoleStrip } from "./console";
-export type { HistoryEntry } from "./history-menu";
 export { Highlight } from "./primitives/highlight";
 export { ScrollArea } from "./primitives/scroll-area";
 export { Text } from "./primitives/surface";

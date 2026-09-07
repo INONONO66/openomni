@@ -13,7 +13,7 @@ export interface HistoryEntry {
 }
 
 /** The menu lists this many, newest first; the stack behind it may be longer. */
-export const HISTORY_MENU_LIMIT = 20;
+const HISTORY_MENU_LIMIT = 20;
 
 /**
  * The clock: a Base UI menu over the last twenty places, newest first, the

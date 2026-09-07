@@ -16,11 +16,6 @@ export interface ShellPreferences {
   readonly width: number;
 }
 
-export const DEFAULT_SHELL_PREFERENCES: ShellPreferences = {
-  open: true,
-  width: SIDEBAR_WIDTH.default,
-};
-
 export function readShellPreferences(storage: Pick<Storage, "getItem">): ShellPreferences {
   const width = Number(storage.getItem(SIDEBAR_WIDTH_KEY));
   return {

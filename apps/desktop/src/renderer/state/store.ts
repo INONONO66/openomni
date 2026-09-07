@@ -49,7 +49,7 @@ export type Place =
   | { readonly kind: "route"; readonly route: Route };
 
 /** One entry in the navigation history: a place, what it was called, and when. */
-export interface HistoryEntry {
+interface HistoryEntry {
   readonly id: string;
   readonly place: Place;
   readonly title: string;
