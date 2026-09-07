@@ -45,6 +45,18 @@ describe("nothing open", () => {
   });
 });
 
+describe("empty routes", () => {
+  test("renders each non-session route as an honest empty column", () => {
+    for (const route of ["inbox", "automations", "memory"] as const) {
+      consoleStore.setState((state) => ({ ...state, route }));
+      const html = shell(null);
+      expect(html).toContain('data-ui="Panel"');
+      expect(html.match(/aria-current="page"/g)).toHaveLength(1);
+      expect(html).not.toContain("data-composer");
+    }
+  });
+});
+
 describe("one session", () => {
   test("Given a created session, When the app renders, Then it is the header and the current row", () => {
     createSession(1);
