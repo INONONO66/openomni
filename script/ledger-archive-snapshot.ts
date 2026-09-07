@@ -81,6 +81,19 @@ export function assertArchiveEquality(
     sourceSchema.some((row) => row.name === "archive_969_wait") &&
     archivedSchema.some((row) => row.name === "wait");
   const rebuiltTables = new Set(requestCutover ? ["action", "policy", "wait", "approval"] : []);
+  const watchMigration = "0037_watch_alarms/migration.sql";
+  if (dispositionDelta &&
+    source.query("SELECT 1 FROM _migrations WHERE name = ?").get(watchMigration) !== null &&
+    restored.query("SELECT 1 FROM _migrations WHERE name = ?").get(watchMigration) === null) {
+    preflightSqliteDatabase(source);
+    preflightSqliteDatabase(restored);
+    // Only migration defaults may accompany the byte-identical historical columns.
+    if (source.query(`SELECT 1 FROM alarm WHERE epoch IS NOT 1 OR fence IS NOT 0
+      OR last_batch IS NOT NULL OR notifications IS NOT 0 LIMIT 1`).get() !== null)
+      throw new U967Error("stale_archive:alarm");
+    rebuiltTables.add("alarm");
+    migrationDelta.push(watchMigration);
+  }
   if (requestCutover) {
     preflightSqliteDatabase(source);
     preflightSqliteDatabase(restored);

@@ -220,6 +220,7 @@ export function createMemoryL0Adapter(): MemoryL0Adapter {
       const receipt = appendMemoryAction(
         sessionRows,
         actionRows,
+        alarmRows,
         {
           id: canonicalDigest([id, row.epoch, op]),
           parentId: id,
@@ -409,6 +410,7 @@ export function createMemoryL0Adapter(): MemoryL0Adapter {
           const fired = appendMemoryAction(
             sessionRows,
             actionRows,
+            alarmRows,
             {
               id: input.actionId,
               parentId: row.id,
@@ -442,6 +444,7 @@ export function createMemoryL0Adapter(): MemoryL0Adapter {
           const prompt = appendMemoryAction(
             sessionRows,
             actionRows,
+            alarmRows,
             inboxAppend(pending),
             fired.revision,
           );

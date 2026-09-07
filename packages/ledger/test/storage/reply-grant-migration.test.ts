@@ -14,7 +14,7 @@ import { Migration } from "../../src/storage/migration-runner";
 
 const migrationDir = join(import.meta.dir, "../../migration");
 
-test("0035 upgrade and fresh 0037 schema share the measured fingerprint and reopen", () => {
+test("0035 upgrade and fresh archive-target schema share the measured fingerprint and reopen", () => {
   using fixture = createDispositionFixture(false);
   fixture.db.run("DELETE FROM bus_event");
   Migration.applyOrdered(fixture.db, migrationDir, [
@@ -26,29 +26,14 @@ test("0035 upgrade and fresh 0037 schema share the measured fingerprint and reop
   initializeSqliteDatabase(fixture.db, undefined, "archive967");
 
   expect(canonicalDigest(sqliteSchema(fixture.db))).toBe(
-    "sha256:f948a47d029d098334c56501460bb69932f48a81a3c7287c24b498c641ecc58e",
+    "sha256:89e7677fe96971ec5ff5f8176504f42a478ae4fd8dfa84e4e18560077279e0ff",
   );
   expect(
     snapshotDatabase(fixture.db).tables.filter(
       ({ name }) => !["_migrations", "reply_grant"].includes(name),
     ),
   ).toEqual(
-    before.tables
-      .filter(({ name }) => name !== "_migrations")
-      .map((table) =>
-        table.name === "alarm"
-          ? {
-              ...table,
-              rows: table.rows.map((row) => ({
-                ...row,
-                epoch: 1n,
-                fence: 0n,
-                last_batch: null,
-                notifications: 0n,
-              })),
-            }
-          : table,
-      ),
+    before.tables.filter(({ name }) => name !== "_migrations"),
   );
   expect(preflightSqliteDatabase(fixture.db)).toBe("applied");
   using reopened = new Database(fixture.path);

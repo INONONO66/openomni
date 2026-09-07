@@ -66,7 +66,11 @@ test("0035 upgrade preserves action parents, rowids, policies and native archive
     "event_chain",
   ]) {
     expect(snapshotDatabase(db).tables.find(({ name }) => name === table)).toEqual(
-      before.tables.find(({ name }) => name === table),
+      table === "alarm"
+        ? { name: table, rows: before.tables.find(({ name }) => name === table)?.rows.map(row => ({
+            ...row, epoch: 1n, fence: 0n, last_batch: null, notifications: 0n,
+          })) }
+        : before.tables.find(({ name }) => name === table),
     );
   }
   const approvals = before.tables.find(({ name }) => name === "approval");
@@ -108,6 +112,21 @@ test.each([
   expect(() =>
     fixture.db.run("INSERT INTO archive_969_wait SELECT * FROM archive_969_wait"),
   ).toThrow("immutable_archive");
+});
+
+test.each([
+  "UPDATE alarm SET fence = 1",
+  "UPDATE alarm SET epoch = 2",
+  "UPDATE alarm SET notifications = 1",
+  "UPDATE alarm SET last_batch = 'changed'",
+  "UPDATE alarm SET spec = '\"changed\"'",
+])("archive equality rejects post-upgrade alarm changes: %s", (mutation) => {
+  using fixture = upgradeFixture();
+  copyFileSync(fixture.path, fixture.archive);
+  using archived = new Database(fixture.archive, { readonly: true, safeIntegers: true });
+  initializeSqliteDatabase(fixture.db);
+  fixture.db.run(mutation);
+  expect(() => assertArchiveEquality(fixture.db, archived, true)).toThrow("stale_archive:alarm");
 });
 
 test.each([
@@ -233,7 +252,9 @@ test.each(["fired", "cancelled"] as const)(
     );
     const before = fixture.db.query("SELECT rowid,* FROM alarm").all();
     initializeSqliteDatabase(fixture.db);
-    expect(fixture.db.query("SELECT rowid,* FROM alarm").all()).toEqual(before);
+    expect(fixture.db.query("SELECT rowid,* FROM alarm").all()).toEqual(
+      before.map(row => ({ ...row, epoch: 1n, fence: 0n, last_batch: null, notifications: 0n })),
+    );
   },
 );
 
