@@ -1,4 +1,3 @@
-import { Operational } from "@openomni/protocol";
 import { z } from "zod";
 import { fetchWithRetry } from "../../support/fetch-retry";
 import type { ChannelClient, PublishPort } from "../../types";
@@ -99,6 +98,7 @@ export class DiscordClient implements ChannelClient {
       const text = await res.text();
       throw new DiscordApiError({
         message: `Discord API ${path} failed (${res.status}): ${text}`,
+        rejected: res.status >= 400 && res.status < 500,
       });
     }
 
