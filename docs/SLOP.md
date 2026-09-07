@@ -103,9 +103,9 @@ A direct fresh `initializeSqliteDatabase` probe found none of `work_item`, `arti
 
 | Row/acceptance | Status at this source |
 | --- | --- |
-| E3 | OPEN #945: no reproducible production/test clone-zero inventory is claimed. |
-| E4 | REQUIRED #945, **not parked**: explicit/implicit any type0 and unknown type0, no boundary exemption. |
-| E5 | Script tests/coverage lane wired; 100% campaign coverage, analyzer thresholds and surviving-mutant zero are not established. |
+| E3 | OPEN #945: production/test clone findings are measured separately by the pinned detector and ratcheted; clone-zero remains final convergence. |
+| E4 | REQUIRED #945, **not parked**: the TypeScript census distinguishes written type tokens from transitive inferred type findings at owned reference sites. Existing findings have a measured shrink-only baseline; new/modified source findings must be zero. |
+| E5 | #945 ratchets cover source type, publisher/export/store, complexity, clones and native coverage evidence. Baselines may only shrink; findings in added files or modified source ranges fail. Full mutation is scheduled/manual and cannot turn an incomplete run into a baseline. Final all-dimension zero belongs to #973. |
 | E7 | OPEN: prompt builder has no memory parameter and presets have no deleted tool instruction, but `apps/openomni/test/prompt.test.ts:27-29` still pins prose/code-mode phrases. Structural assembly assertions coexist with those pins. No tests were added or modified in this docs-only PR. |
 | Synchronous completion signal | Locally invoked the real builder for Resident/Worker, split the returned machine-consumed prompt into blocks, asserted zero removed sentinels: Resident 3 blocks, Worker 2. No sleep/poll. Catalog contained `approval`, `await_delegation`, `cancel_delegation`, `delegate`, `llm`, `provision`, `run_code`; zero removed tool names. |
 | Prompt/signature mutation | Existing tests do not supply the full requested negative signature/sentinel mutation contract; no claim that restoring an unused parameter must fail them. This acceptance remains open rather than adding a prose test or claiming an unrun mutant. |

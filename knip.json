@@ -12,12 +12,18 @@
     ".": {
       "entry": [
         "package.json",
-        "script/**/*.ts",
+        "script/**/*.{ts,mjs}",
         "biome.json",
         "lefthook.yml",
         "commitlint.config.*"
       ],
-      "project": ["script/**/*.ts", "*.json", "*.jsonc", "*.yml", "*.yaml"]
+      "project": [
+        "script/**/*.{ts,mjs}",
+        "*.json",
+        "*.jsonc",
+        "*.yml",
+        "*.yaml"
+      ]
     },
     "apps/desktop": {
       "entry": [

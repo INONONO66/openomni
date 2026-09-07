@@ -1,0 +1,444 @@
+{
+  "contract": {
+    "hardBounds": {
+      "explicitAny": 0,
+      "implicitAny": 0,
+      "unknown": 0,
+      "unknownBoundaryExemptions": 0,
+      "productionCloneClusters": 0,
+      "testCloneClusters": 0,
+      "coverage": {
+        "statements": 100,
+        "branches": 100,
+        "functions": 100,
+        "lines": 100,
+        "perFile": true,
+        "aggregate": true,
+        "tolerancePercentagePoints": 0
+      },
+      "cyclomaticExclusiveMax": 22,
+      "cognitiveExclusiveMax": 22,
+      "halsteadDifficultyExclusiveMax": 80,
+      "crapExclusiveMax": 25,
+      "survivingMutants": 0,
+      "publisherViolations": 0,
+      "exportViolations": 0,
+      "storeViolations": 0,
+      "allowlists": [],
+      "grandfathered": []
+    },
+    "mutation": {
+      "algorithm": "d945-mutation@1",
+      "engine": "TypeScript5.9.2 AST transforms + Bun1.3.6 exact existing test runner, optional 1.4.1 compatibility",
+      "order": "first-order, one edit per isolated candidate; dedup by original path/start/end/replacement SHA256; deterministic bytewise path then offset then operator then replacement ordering",
+      "scope": "All executable owned production/tooling/test/fixture/benchmark TS/JS, including analyzer, test runner and mutation runner code. Type-only annotations, comments and nonexecuting data do not have runtime mutations; explicit type census mutation fixtures cover type keywords.",
+      "operators": [
+        {
+          "id": "boolean-literal",
+          "replacements": {
+            "true": ["false"],
+            "false": ["true"]
+          }
+        },
+        {
+          "id": "equality",
+          "replacements": {
+            "===": ["!=="],
+            "!==": ["==="],
+            "==": ["!="],
+            "!=": ["=="]
+          }
+        },
+        {
+          "id": "relational",
+          "replacements": {
+            "<": ["<=", ">="],
+            "<=": ["<", ">"],
+            ">": [">=", "<="],
+            ">=": [">", "<"]
+          }
+        },
+        {
+          "id": "arithmetic",
+          "replacements": {
+            "+": ["-"],
+            "-": ["+"],
+            "*": ["/"],
+            "/": ["*"],
+            "%": ["*"],
+            "**": ["*"]
+          }
+        },
+        {
+          "id": "logical",
+          "replacements": {
+            "&&": ["||"],
+            "||": ["&&"],
+            "??": ["||"]
+          }
+        },
+        {
+          "id": "bitwise",
+          "replacements": {
+            "&": ["|"],
+            "|": ["&"],
+            "^": ["&"],
+            "<<": [">>"],
+            ">>": ["<<"],
+            ">>>": [">>"]
+          }
+        },
+        {
+          "id": "unary",
+          "replacements": {
+            "!x": ["x"],
+            "+x": ["-x"],
+            "-x": ["+x"],
+            "~x": ["x"]
+          }
+        },
+        {
+          "id": "update",
+          "replacements": {
+            "++": ["--"],
+            "--": ["++"]
+          }
+        },
+        {
+          "id": "assignment",
+          "replacements": {
+            "+=": ["-="],
+            "-=": ["+="],
+            "*=": ["/="],
+            "/=": ["*="],
+            "&&=": ["||="],
+            "||=": ["&&="],
+            "??=": ["||="]
+          }
+        },
+        {
+          "id": "numeric-literal",
+          "replacements": {
+            "0": ["1"],
+            "nonzero finite number": ["0"]
+          }
+        },
+        {
+          "id": "bigint-literal",
+          "replacements": {
+            "0n": ["1n"],
+            "nonzero bigint": ["0n"]
+          }
+        },
+        {
+          "id": "string-literal",
+          "replacements": {
+            "nonempty runtime string": ["\"\""],
+            "empty runtime string": ["\"__d945_mutant__\""]
+          }
+        },
+        {
+          "id": "condition",
+          "replacements": {
+            "if/while/do/for-test/ternary-test": ["true", "false"]
+          }
+        },
+        {
+          "id": "conditional-arm",
+          "replacements": {
+            "test ? a : b": ["test ? b : a"]
+          }
+        },
+        {
+          "id": "statement-delete",
+          "replacements": {
+            "non-directive expression statement": ["empty statement"]
+          }
+        },
+        {
+          "id": "return-value",
+          "replacements": {
+            "return expression": ["return undefined"]
+          }
+        },
+        {
+          "id": "throw-delete",
+          "replacements": {
+            "throw expression": ["empty statement"]
+          }
+        },
+        {
+          "id": "array-literal",
+          "replacements": {
+            "nonempty array": ["[]"]
+          }
+        },
+        {
+          "id": "object-literal",
+          "replacements": {
+            "nonempty object": ["{}"]
+          }
+        },
+        {
+          "id": "optional-chain",
+          "replacements": {
+            "optional property/element/call": ["same nonoptional access/call"]
+          }
+        },
+        {
+          "id": "await-delete",
+          "replacements": {
+            "await expression": ["expression"]
+          }
+        },
+        {
+          "id": "switch-case",
+          "replacements": {
+            "case literal": ["delete case clause including its statements"]
+          }
+        },
+        {
+          "id": "regex",
+          "replacements": {
+            "^ anchor": ["remove anchor"],
+            "$ anchor": ["remove anchor"],
+            "+ quantifier": ["*"],
+            "* quantifier": ["+"],
+            "? quantifier": ["remove quantifier"],
+            "i flag": ["toggle flag"],
+            "g flag": ["toggle flag"]
+          }
+        },
+        {
+          "id": "method",
+          "replacements": {
+            "array.filter(predicate)": ["array.filter(() => true)"],
+            "array.every(predicate)": ["array.some(predicate)"],
+            "array.some(predicate)": ["array.every(predicate)"],
+            "string.startsWith(arg)": ["string.endsWith(arg)"],
+            "string.endsWith(arg)": ["string.startsWith(arg)"]
+          }
+        }
+      ],
+      "preconditions": "Resolve method receiver type for array/string operators; never mutate module specifier strings, directives or type-only literals. Regex alternatives enumerate all applicable token positions. AST/no-op byte-identical edits are not eligible and record reason. All remaining generated edits get a manifest row even if compilation fails.",
+      "manifestFields": [
+        "id",
+        "path",
+        "sourceSha256",
+        "startOffset",
+        "endOffset",
+        "operator",
+        "replacement",
+        "replacementSha256",
+        "typecheck",
+        "testSelection",
+        "outcome",
+        "stdoutSha256",
+        "stderrSha256",
+        "exitCode"
+      ],
+      "outcomes": {
+        "KILLED": "mutated program compiles, baseline is green, unchanged behavioral test asserts false or real gate discriminates mutant, recorded assertion identity; syntax/config/build crashes are not kills",
+        "SURVIVED": "eligible valid mutant executes its selection successfully",
+        "NO_COVERAGE": "valid mutant never reaches its original mapped location; blocking",
+        "INVALID": "generated mutant is rejected by parser/typecheck; retain full diagnostics and denominator, never count as KILLED",
+        "INFRA_ERROR": "process/signal/build/timeout/incomplete/missing output unrelated to a demonstrated behavioral assertion; blocking"
+      },
+      "fullPass": "SURVIVED=0 AND NO_COVERAGE=0 AND INFRA_ERROR=0 AND all generated candidates classified AND all eligible files/operators accounted; nonzero valid mutants or a syntax-based proof of no eligible runtime site per file/operator; zero-file/zero-selection run fails",
+      "equivalentMutantAllowlist": [],
+      "timeoutPolicy": "Bound tests at 15000ms; timeout alone is INFRA_ERROR not a killed mutant. Subscribe to child exit/error before trigger; deterministic fault signals, no fixed sleeps/polling.",
+      "smallPR": "full non-mutation gates and discriminating synthetic mutation fixtures; optional changed-unit mutation explicitly partial; never claim full zero",
+      "fullRequiredAt": [
+        "Q-ZERO candidate before #945 closure and #948",
+        "weekly scheduled current main",
+        "F930 converged tree after #949",
+        "CONFORMANCE #973 final tree"
+      ],
+      "cachePolicy": "Reuse only identical source/tree/contract/inventory/operator/tool/test hashes with complete immutable raw receipts; full manifest is still enumerated, no baseline/survivor suppression",
+      "testMutationCaveat": "Surviving weakened test assertions are blockers. Feasibility is unverified, not an exclusion or a reason to reduce scope."
+    },
+    "embeddedPython": {
+      "status": "FROZEN_PROPOSAL_NOT_IMPLEMENTED",
+      "scope": ["packages/machines/src/kernel.ts#PYTHON_DRIVER"],
+      "futureOwnedPythonScripts": "Any added script/*.py analyzer/preload/helper files also included in owned inventory with same bounds; not a tool exemption",
+      "runtime": {
+        "version": "3.12.12",
+        "url": "https://www.python.org/ftp/python/3.12.12/Python-3.12.12.tgz",
+        "httpStatus": 200,
+        "contentLength": "27255645",
+        "status": "PROPOSED_RELEASE_URL_EXISTS_BINARY_NOT_INSTALLED_OR_EXECUTED"
+      },
+      "dependencies": [
+        {
+          "name": "radon",
+          "version": "6.0.1",
+          "sdistFilename": "radon-6.0.1.tar.gz",
+          "sha256": "d1ac0053943a893878940fedc8b19ace70386fc9c9bf0a09229a44125ebf45b5",
+          "metadataUrl": "https://pypi.org/pypi/radon/6.0.1/json",
+          "status": "PROPOSED_NOT_INSTALLED_OR_COMPATIBILITY_VERIFIED"
+        },
+        {
+          "name": "coverage",
+          "version": "7.10.7",
+          "sdistFilename": "coverage-7.10.7.tar.gz",
+          "sha256": "f4ab143ab113be368a3e9b795f9cd7906c5ef407d6173fe9675a902e1fffc239",
+          "metadataUrl": "https://pypi.org/pypi/coverage/7.10.7/json",
+          "status": "PROPOSED_NOT_INSTALLED_OR_COMPATIBILITY_VERIFIED"
+        },
+        {
+          "name": "cognitive-complexity",
+          "version": "1.3.0",
+          "sdistFilename": "cognitive_complexity-1.3.0.tar.gz",
+          "sha256": "a0cfbd47dee0b19f4056f892389f501694b205c3af69fb703cc744541e03dde5",
+          "metadataUrl": "https://pypi.org/pypi/cognitive-complexity/1.3.0/json",
+          "status": "PROPOSED_NOT_INSTALLED_OR_COMPATIBILITY_VERIFIED"
+        }
+      ],
+      "dependencyLock": "script/conformance/quality-python-requirements.lock: exact versions with hashes for full transitive resolution on CPython3.12.12; parent lock sha required before implementation integration, not generated here",
+      "entry": "script/quality-python.py",
+      "invocation": [
+        "python3",
+        "script/quality-python.py",
+        "--contract",
+        "script/conformance/quality-contract.json"
+      ],
+      "metrics": {
+        "cyclomatic": "radon6.0.1 visitors over extracted ast, max21 per function/method/module executable body; nested functions separately",
+        "cognitive": "cognitive_complexity.api.get_cognitive_complexity@1.3.0 per function; synthetic function wrapper for module top-level control, max21; no wrapper-induced increment",
+        "halstead": "radon6.0.1 h_visit h1/h2/N1/N2 and difficulty, unrounded difficulty<80 per function/module; JSON records raw counts",
+        "CRAP": "same formula and strict<25 using radon C and same function original-source statement coverage"
+      },
+      "clones": "same jscpd4.0.5 weak mode50tokens5lines with python format, extracted virtual source included in production ledger",
+      "coverage": {
+        "engine": "coverage.py7.10.7 branch=True, timid=True to avoid platform-extension variation, concurrency=thread; all sources pre-registered; exclude_lines=[] and partial_branches=[] (no default pragma exclusions)",
+        "statementDimension": "d945-python-coverage@1 AST statement-entry counters, including separate same-line statements; no comments/docstrings/type-only constructs counted as executable statements; function-body counters distinct from definition execution",
+        "functionDimension": "AST function/lambda entry counter, preserving signatures and coroutine/generator semantics; unexecuted function0, cannot credit definition line alone",
+        "lineDimension": "coverage.py executable source lines (no excludes); unknown/unloaded extracted driver remains0 not omitted",
+        "branchDimension": "coverage.py full static possible arcs for branch lines, all exits required; short-circuit operand decision counters added by d945-python-coverage@1 for each BoolOp transition, preserving single evaluation",
+        "thresholds": "all four dimensions100 per virtual file and aggregate; same no-rounding/missing-data policy as TS",
+        "processSurface": "instrument isolated driver source through test-owned transform of PYTHON_DRIVER binding in emitted test copy; real PythonKernel spawn, stdin/stdout/reverse calls remain intact; observe process exit and trace flush, include background threads; no product source seam required",
+        "liveness": "killed/crashed driver trace missing => incomplete, not0success; use bounded exact command/exit signals, no sleeps/polls"
+      },
+      "mutation": {
+        "algorithm": "d945-python-mutation@1",
+        "parser": "CPython3.12.12 ast.parse/ast.unparse",
+        "operators": [
+          {
+            "id": "py-boolean",
+            "replacements": {
+              "True": ["False"],
+              "False": ["True"]
+            }
+          },
+          {
+            "id": "py-equality",
+            "replacements": {
+              "==": ["!="],
+              "!=": ["=="],
+              "is": ["is not"],
+              "is not": ["is"],
+              "in": ["not in"],
+              "not in": ["in"]
+            }
+          },
+          {
+            "id": "py-relational",
+            "replacements": {
+              "<": ["<=", ">="],
+              "<=": ["<", ">"],
+              ">": [">=", "<="],
+              ">=": [">", "<"]
+            }
+          },
+          {
+            "id": "py-arithmetic",
+            "replacements": {
+              "+": ["-"],
+              "-": ["+"],
+              "*": ["/"],
+              "/": ["*"],
+              "//": ["/"],
+              "%": ["*"],
+              "**": ["*"]
+            }
+          },
+          {
+            "id": "py-logical",
+            "replacements": {
+              "and": ["or"],
+              "or": ["and"]
+            }
+          },
+          {
+            "id": "py-unary",
+            "replacements": {
+              "not x": ["x"],
+              "+x": ["-x"],
+              "-x": ["+x"],
+              "~x": ["x"]
+            }
+          },
+          {
+            "id": "py-number",
+            "replacements": {
+              "0": ["1"],
+              "nonzero numeric constant": ["0"]
+            }
+          },
+          {
+            "id": "py-string",
+            "replacements": {
+              "nonempty str/bytes": ["empty same-type literal"],
+              "empty str/bytes": ["__d945_mutant__ same-type literal"]
+            }
+          },
+          {
+            "id": "py-condition",
+            "replacements": {
+              "if/while/if-expression/comprehension-if": ["True", "False"]
+            }
+          },
+          {
+            "id": "py-expression-delete",
+            "replacements": {
+              "non-docstring Expr statement": ["Pass"]
+            }
+          },
+          {
+            "id": "py-return",
+            "replacements": {
+              "return expression": ["return None"]
+            }
+          },
+          {
+            "id": "py-raise",
+            "replacements": {
+              "raise expression": ["Pass"]
+            }
+          },
+          {
+            "id": "py-container",
+            "replacements": {
+              "nonempty list/tuple/dict/set literal": ["empty same container"]
+            }
+          },
+          {
+            "id": "py-assert",
+            "replacements": {
+              "assert condition": ["Pass"]
+            }
+          },
+          {
+            "id": "py-await",
+            "replacements": {
+              "await expression": ["expression"]
+            }
+          }
+        ],
+        "orderAndOutcomes": "same first-order stable original-source identity and KILLED/SURVIVED/NO_COVERAGE/INVALID/INFRA_ERROR definitions as JS; invalid syntax not killed, no equivalents allowlist",
+        "runner": "TS mutation coordinator replaces exactly one virtual-source node in isolated driver copy then invokes actual existing machines test entry via Bun1.3.6; no static fake Python execution"
+      },
+      "binaryConformance": "extract actual embedded driver; inject uncovered Python branch, cloned Python body, metric bound equality, and surviving Python mutation; each owning class fails; real kernel test exercises driver and captures source-mapped counters; host literal execution alone does not pass"
+    }
+  }
+}
