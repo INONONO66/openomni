@@ -1,17 +1,18 @@
 /* @openomni/ui — the UI package apps/desktop consumes. Tokens live in
-   ./styles.css. The barrel exports exactly what the renderer imports: the one
+   ./styles.css. The barrel exports exactly what the renderer imports — the one
    `Console` composition, the sidebar column's rows the app composes into its
    slot, the width contract the app's store clamps against, and the transcript
-   types the chat adapter targets. */
+   types the chat adapter targets — and apps/desktop/test/ui-barrel.test.ts
+   fails on any name here that the app does not import. */
 
 export { Console, type ConsoleShell, type ConsoleStrip } from "./console";
 export { Highlight } from "./primitives/highlight";
-export { ScrollArea } from "./primitives/scroll-area";
 export { Text } from "./primitives/surface";
-export { clampSidebarWidth, Sidebar, SIDEBAR_WIDTH } from "./sidebar";
+export { clampSidebarWidth, SIDEBAR_WIDTH } from "./sidebar";
 export {
   NavItem,
   SectionHeader,
+  SectionList,
   SectionSearchInput,
   SidebarFooter,
   SidebarNav,

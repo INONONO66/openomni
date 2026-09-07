@@ -1,8 +1,8 @@
 import {
   Highlight,
   NavItem,
-  ScrollArea,
   SectionHeader,
+  SectionList,
   SectionSearchInput,
   SidebarFooter,
   SidebarNav,
@@ -142,7 +142,7 @@ export function SessionTree({
             value={state.query}
           />
         </SectionHeader>
-        <ScrollArea className="flex-1" contentClassName="flex flex-col gap-px px-2 pb-2">
+        <SectionList>
           <div aria-label="Sessions" id={TREE_ID} role="tree">
             {/* One sentence when there is nothing to list, on the row's own
                 text x so it sits where the first row would. It names the way
@@ -195,10 +195,10 @@ export function SessionTree({
               );
             })}
           </div>
-        </ScrollArea>
+        </SectionList>
       </SidebarSection>
       <SidebarFooter>
-        <NavItem className="w-full" icon={<Settings />} disabled>
+        <NavItem icon={<Settings />} disabled>
           Settings
         </NavItem>
       </SidebarFooter>

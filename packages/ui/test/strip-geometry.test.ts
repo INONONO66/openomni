@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
+import { SIDEBAR_WIDTH } from "../src/sidebar";
 
 /**
  * The strip's geometry is a handful of tokens that must add up: the collapsed
@@ -48,6 +49,9 @@ describe("the strip's tokens", () => {
     expect(contents).toBe(225);
     expect(overlay).toBeGreaterThanOrEqual(contents);
     expect(overlay).toBe(240);
+    // ONE number: the overlay token and the pinned default, so a reveal that is
+    // pinned does not reflow the column.
+    expect(overlay).toBe(SIDEBAR_WIDTH.default);
   });
 
   test("Given the trio's fade, When read, Then it is a progress property on the zone's own duration and curve, driven by data-collapsed", () => {

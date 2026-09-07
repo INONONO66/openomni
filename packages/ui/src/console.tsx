@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Composer } from "./composer";
 import { ScrollArea } from "./primitives/scroll-area";
 import { Panel } from "./primitives/surface";
-import { Sidebar, SidebarContainer, SidebarGap } from "./sidebar";
+import { Sidebar } from "./sidebar";
 import { type HistoryControls, TabStrip, type WindowPlatform } from "./tab-strip";
 import type { PendingApproval, TranscriptNode, TurnCost } from "./timeline/model";
 import { Timeline } from "./timeline/timeline";
@@ -16,7 +16,7 @@ import { Voice } from "./timeline/voice";
  *
  * ## The frame
  *
- * A 40px tab strip fixed across the top, and under it the reference sidebar
+ * A 42px tab strip fixed across the top, and under it the reference sidebar
  * mechanism: an in-flow gap that reserves the width, a fixed container that
  * slides, and the main column filling the rest. The strip's controls zone and
  * the gap read the same `--sidebar-width`, so the tab and the column move as
@@ -61,8 +61,8 @@ export function Console({
   /**
    * The sidebar column's content. A slot rather than a prop-driven tree: what
    * ranks and filters those rows is the app's, and this component must not
-   * learn it. Composed from `SidebarNav`, `SidebarSection`,
-   * `TreeRow`, and `SidebarFooter`.
+   * learn it. Composed from `SidebarNav`, `SidebarSection`
+   * (`SectionHeader` + `SectionList`), `TreeRow`, and `SidebarFooter`.
    */
   readonly sidebar: ReactNode;
   /**
@@ -98,10 +98,9 @@ export function Console({
         onCreate={strip.onCreate}
         platform={strip.platform}
         title={title}
-        trailing={strip.trailing}
       />
-      <SidebarGap />
-      <SidebarContainer>{sidebar}</SidebarContainer>
+      <Sidebar.Gap />
+      <Sidebar.Container>{sidebar}</Sidebar.Container>
       {/* The panel is inset from the chrome on its right and bottom only: its
           left edge meets the sidebar, where the resize handle straddles it,
           and its top meets the strip. */}
@@ -181,7 +180,6 @@ export interface ConsoleStrip {
   readonly onCreate: () => void;
   readonly platform: WindowPlatform;
   readonly history: HistoryControls;
-  readonly trailing?: ReactNode;
 }
 
 /** Everything the main column needs to show one open session. */

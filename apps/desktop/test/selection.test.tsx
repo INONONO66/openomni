@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { Sidebar } from "@openomni/ui";
 import { renderToStaticMarkup } from "react-dom/server";
 import { orderByAttention } from "../src/renderer/attention";
 import { SessionTree } from "../src/renderer/shell/session-tree";
@@ -26,26 +25,17 @@ const tree = (
   options: { pendingChanges?: number; collapsed?: ReadonlySet<string | null> } = {},
 ) =>
   renderToStaticMarkup(
-    <Sidebar
-      floating={false}
-      onFloatingChange={() => undefined}
-      onToggle={() => undefined}
-      onWidthCommit={() => undefined}
-      open
-      width={240}
-    >
-      <SessionTree
-        collapsedProjectIds={options.collapsed ?? new Set()}
-        onNavigate={() => undefined}
-        onSelect={() => undefined}
-        onToggleProject={() => undefined}
-        ordered={orderByAttention(list)}
-        pendingChanges={options.pendingChanges ?? 0}
-        route="sessions"
-        selectedId={selectedId}
-        sessions={list}
-      />
-    </Sidebar>,
+    <SessionTree
+      collapsedProjectIds={options.collapsed ?? new Set()}
+      onNavigate={() => undefined}
+      onSelect={() => undefined}
+      onToggleProject={() => undefined}
+      ordered={orderByAttention(list)}
+      pendingChanges={options.pendingChanges ?? 0}
+      route="sessions"
+      selectedId={selectedId}
+      sessions={list}
+    />,
   );
 
 describe("the sidebar marks exactly one selected row", () => {

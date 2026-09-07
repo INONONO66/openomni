@@ -8,8 +8,6 @@ import {
   type RevealTimers,
   SIDEBAR_REVEAL,
   Sidebar,
-  SidebarContainer,
-  SidebarGap,
 } from "../src/sidebar";
 import { SectionHeader } from "../src/sidebar-nav";
 import { TabStrip, type WindowPlatform } from "../src/tab-strip";
@@ -43,8 +41,8 @@ function frame(
         onCreate={() => undefined}
         platform={platform}
       />
-      <SidebarGap />
-      <SidebarContainer>{children}</SidebarContainer>
+      <Sidebar.Gap />
+      <Sidebar.Container>{children}</Sidebar.Container>
     </Sidebar>,
   );
 }

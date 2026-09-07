@@ -140,7 +140,12 @@ export function useSidebar(): SidebarState {
   return state;
 }
 
-/** The shell root. Everything in the window — strip, sidebar, main — is inside it. */
+/**
+ * The shell root. Everything in the window — strip, sidebar, main — is inside
+ * it. Its two frame parts are statics: `Sidebar.Gap` (the in-flow spacer) and
+ * `Sidebar.Container` (the fixed box that slides); `Console` composes them, and
+ * nothing outside this package needs them by any other name.
+ */
 export function Sidebar({
   open,
   floating,
@@ -148,7 +153,6 @@ export function Sidebar({
   onToggle,
   onFloatingChange,
   onWidthCommit,
-  className = "",
   children,
   ...rest
 }: {
@@ -162,7 +166,6 @@ export function Sidebar({
   readonly onFloatingChange: (floating: boolean) => void;
   /** The width the Owner released the handle at, already clamped. */
   readonly onWidthCommit: (width: number) => void;
-  readonly className?: string;
   readonly children: ReactNode;
 } & Omit<React.ComponentPropsWithoutRef<"div">, "className" | "children" | "style">) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -206,7 +209,7 @@ export function Sidebar({
       value={{ open, mode, width, onToggle, onWidthCommit, rootRef, reveal }}
     >
       <div
-        className={`group/sidebar flex h-dvh w-full overflow-hidden bg-sunken pt-(--shell-top) ${className}`}
+        className="group/sidebar flex h-dvh w-full overflow-hidden bg-sunken pt-(--shell-top)"
         data-sidebar-state={open ? "open" : "collapsed"}
         data-ui={UI_NAMES.Sidebar}
         ref={rootRef}
@@ -219,7 +222,7 @@ export function Sidebar({
   );
 }
 
-export function SidebarGap() {
+function SidebarGap() {
   return (
     <div
       className={`relative w-(--sidebar-width) shrink-0 transition-[width] duration-base group-data-[sidebar-state=collapsed]/sidebar:w-0 ${FRAME_MOTION}`}
@@ -254,7 +257,7 @@ const CONTENT: Record<SidebarMode, string> = {
   overlay: "delay-[40ms]",
 };
 
-export function SidebarContainer({ children }: { readonly children: ReactNode }) {
+function SidebarContainer({ children }: { readonly children: ReactNode }) {
   const { open, mode, reveal } = useSidebar();
   const hot = open ? {} : { onPointerEnter: reveal.enter, onPointerLeave: reveal.leave };
   return (
@@ -294,6 +297,9 @@ export function SidebarContainer({ children }: { readonly children: ReactNode })
     </>
   );
 }
+
+Sidebar.Gap = SidebarGap;
+Sidebar.Container = SidebarContainer;
 
 /** ←/→ step; with Shift, four steps. */
 const KEY_STEP = 8;

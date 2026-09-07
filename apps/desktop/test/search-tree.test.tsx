@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Highlight, Sidebar } from "@openomni/ui";
+import { Highlight } from "@openomni/ui";
 import { renderToStaticMarkup } from "react-dom/server";
 import { orderByAttention } from "../src/renderer/attention";
 import { SessionTree } from "../src/renderer/shell/session-tree";
@@ -26,27 +26,18 @@ const selectedId = "s2";
 const ordered = orderByAttention(sessions);
 
 const html = renderToStaticMarkup(
-  <Sidebar
-    floating={false}
-    onFloatingChange={() => undefined}
-    onToggle={() => undefined}
-    onWidthCommit={() => undefined}
-    open
-    width={240}
-  >
-    <SessionTree
-      collapsedProjectIds={new Set()}
-      defaultSearching
-      onNavigate={() => undefined}
-      onSelect={() => undefined}
-      onToggleProject={() => undefined}
-      ordered={ordered}
-      pendingChanges={0}
-      route="sessions"
-      selectedId={selectedId}
-      sessions={sessions}
-    />
-  </Sidebar>,
+  <SessionTree
+    collapsedProjectIds={new Set()}
+    defaultSearching
+    onNavigate={() => undefined}
+    onSelect={() => undefined}
+    onToggleProject={() => undefined}
+    ordered={ordered}
+    pendingChanges={0}
+    route="sessions"
+    selectedId={selectedId}
+    sessions={sessions}
+  />,
 );
 
 describe("the field is wired to the tree it filters", () => {

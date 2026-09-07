@@ -1,5 +1,4 @@
 import { Plus } from "lucide-react";
-import type { ReactNode } from "react";
 import { type HistoryEntry, HistoryMenu } from "./history-menu";
 import { ChevronIcon } from "./icons/chevron";
 import { SidebarToggleIcon } from "./icons/sidebar-toggle";
@@ -35,7 +34,6 @@ export function TabStrip({
   onCreate,
   platform,
   history,
-  trailing,
 }: {
   /** The one tab's title. Absent when nothing is open: the tab is not drawn. */
   readonly title?: string | undefined;
@@ -44,7 +42,6 @@ export function TabStrip({
   readonly onCreate: () => void;
   readonly platform: WindowPlatform;
   readonly history: HistoryControls;
-  readonly trailing?: ReactNode;
 }) {
   const { open, mode, onToggle, reveal } = useSidebar();
   return (
@@ -107,9 +104,6 @@ export function TabStrip({
           <Plus />
         </IconButton>
       </div>
-      {trailing !== undefined && (
-        <div className="flex shrink-0 items-center gap-1 pr-2">{trailing}</div>
-      )}
     </header>
   );
 }

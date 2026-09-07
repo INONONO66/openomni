@@ -4,6 +4,7 @@ import { Search, X } from "lucide-react";
 import { type ReactNode, type Ref, useId } from "react";
 import { UI_NAMES } from "./names";
 import { IconButton } from "./primitives/button";
+import { ScrollArea } from "./primitives/scroll-area";
 import { Text } from "./primitives/surface";
 
 /**
@@ -25,25 +26,26 @@ export function SidebarNav({ children }: { readonly children: ReactNode }) {
   );
 }
 
-/** One destination: a 16px glyph at the frame's 1.5px line and a label on a 28px row. */
+/**
+ * One destination: a 16px glyph at the frame's 1.5px line and a label on a 28px
+ * row, the row's full width wherever it sits (the nav's column, the footer's row).
+ */
 export function NavItem({
   icon,
   active = false,
-  className = "",
   children,
   ...rest
 }: {
   readonly icon: ReactNode;
   readonly active?: boolean;
-  readonly className?: string;
   readonly children: ReactNode;
 } & Omit<BaseButton.Props, "className" | "children" | "render" | "style">) {
   return (
     <BaseButton
       aria-current={active ? "page" : undefined}
-      className={`focus-ring [&_svg]:glyph-stroke flex h-7 select-none items-center gap-2 rounded-sm px-2 font-medium text-label transition-quiet motion-reduce:transition-none [&_svg]:size-4 [&_svg]:shrink-0 ${
+      className={`focus-ring [&_svg]:glyph-stroke flex h-7 w-full select-none items-center gap-2 rounded-sm px-2 font-medium text-label transition-quiet motion-reduce:transition-none [&_svg]:size-4 [&_svg]:shrink-0 ${
         active ? "bg-hover text-fg" : "text-fg-muted hover:bg-hover hover:text-fg"
-      } ${className}`}
+      }`}
       data-ui={UI_NAMES.NavItem}
       {...rest}
     >
@@ -56,6 +58,19 @@ export function NavItem({
 /** The column's main region: it takes whatever height the rows above leave. */
 export function SidebarSection({ children }: { readonly children: ReactNode }) {
   return <div className="mt-3 flex min-h-0 flex-1 flex-col">{children}</div>;
+}
+
+/**
+ * The section's scrolling body: the rows under the header, on the nav's own
+ * rhythm (1px apart, 8px in), taking the section's remaining height. The
+ * consumer lays its tree inside; this owns only the scroll and the spacing.
+ */
+export function SectionList({ children }: { readonly children: ReactNode }) {
+  return (
+    <ScrollArea className="flex-1" contentClassName="flex flex-col gap-px px-2 pb-2">
+      {children}
+    </ScrollArea>
+  );
 }
 
 /**

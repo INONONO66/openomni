@@ -26,7 +26,6 @@ export function TreeRow({
   level = 0,
   current = false,
   expanded,
-  className = "",
   children,
   ...rest
 }: {
@@ -34,7 +33,6 @@ export function TreeRow({
   readonly current?: boolean;
   /** Set only on a row that opens a group; the chevron reports it. */
   readonly expanded?: boolean | undefined;
-  readonly className?: string;
   readonly children: ReactNode;
 } & Omit<BaseButton.Props, "className" | "children" | "render" | "style">) {
   return (
@@ -43,7 +41,7 @@ export function TreeRow({
       aria-expanded={expanded}
       className={`focus-ring flex h-7 w-full select-none items-center gap-1.5 rounded-sm pr-2 text-left text-label transition-quiet active:bg-active disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0 ${
         current ? "bg-raised font-medium text-fg" : "text-fg-muted hover:bg-hover hover:text-fg"
-      } ${LEVEL[level]} ${className}`}
+      } ${LEVEL[level]}`}
       data-level={level}
       data-ui={UI_NAMES.TreeRow}
       {...rest}
