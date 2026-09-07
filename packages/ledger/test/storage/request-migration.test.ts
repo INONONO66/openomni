@@ -141,7 +141,7 @@ test("mid-migration foreign-key failure rolls back archives table drops and hist
   const before = snapshotDatabase(fixture.db);
   expect(() =>
     Migration.applyOrdered(fixture.db, migrationDir, [
-      { name: "0037_session_requests/migration.sql" },
+      { name: "0038_session_requests/migration.sql" },
     ]),
   ).toThrow("request_migration_foreign_key_violation");
   expect(snapshotDatabase(fixture.db)).toEqual(before);
@@ -213,7 +213,7 @@ test.each(["armed", "paused"] as const)(
     for (const upgrade of [
       () => initializeSqliteDatabase(fixture.db),
       () => Migration.applyOrdered(fixture.db, migrationDir, [
-        { name: "0037_session_requests/migration.sql" },
+        { name: "0038_session_requests/migration.sql" },
       ]),
     ]) {
       expect(upgrade).toThrow("alarm:armed-alarm");
@@ -268,7 +268,7 @@ test.each([
   expect(snapshotDatabase(fixture.db)).toEqual(before);
   expect(readFileSync(fixture.path)).toEqual(bytes);
   expect(() => Migration.applyOrdered(fixture.db, migrationDir, [
-    { name: "0037_session_requests/migration.sql" },
+    { name: "0038_session_requests/migration.sql" },
   ])).toThrow("inbox:pending-inbox");
   expect(snapshotDatabase(fixture.db)).toEqual(before);
   expect(readFileSync(fixture.path)).toEqual(bytes);

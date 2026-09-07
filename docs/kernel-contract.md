@@ -139,7 +139,7 @@ Existing-agent messaging requires an explicit grant and targets an allocated act
 - **Late-input policy:** an authenticated answer at or after the deadline records `late_unknown`, expiring a still-open request in the same batch. It never reopens that request or becomes new conversational input. This supersedes the former logical follow-up window.
 - **Physical correlation and partial replies:** immediate-to-root reply chains precede thread, token and conversation evidence; ambiguity is never guessed. First, quorum and all policies count distinct expected responders. Arrived replies remain durable when the deadline wins with fewer than the threshold. A supplied platform id can bind a physical receipt without converting `rejected` or `unknown` into `accepted`; transport acceptance is not completion.
 
-Migration 0037 retains inactive terminal legacy rows in immutable archives and refuses unresolved or unsupported old state before mutation. There are no compatibility stores or historical writers in the live path. The full transition ordering is in [Session lifecycle contract](session-lifecycle-contract.md#4-original-request-late-input-and-delivery).
+Migration 0038 retains inactive terminal legacy rows in immutable archives and refuses unresolved or unsupported old state before mutation. There are no compatibility stores or historical writers in the live path. The full transition ordering is in [Session lifecycle contract](session-lifecycle-contract.md#4-original-request-late-input-and-delivery).
 
 ### Jester evaluation and authorized egress
 

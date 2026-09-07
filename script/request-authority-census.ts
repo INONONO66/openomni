@@ -56,7 +56,7 @@ const historicalSql = new Set([
   "packages/ledger/migration/0012_wait/migration.sql",
   "packages/ledger/migration/0028_approval/migration.sql",
   "packages/ledger/migration/0034_u967_archive_disposition/migration.sql",
-  "packages/ledger/migration/0037_session_requests/migration.sql",
+  "packages/ledger/migration/0038_session_requests/migration.sql",
 ]);
 const historicalFormats = new Set([
   "packages/ledger/src/storage/historical-request-format.ts",

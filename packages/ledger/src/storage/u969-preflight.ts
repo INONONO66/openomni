@@ -2,7 +2,7 @@ import type { Database } from "bun:sqlite";
 import { HistoricalApproval, HistoricalWait } from "./historical-request-format";
 import { terminalComplete } from "./u967-projection";
 
-export const REQUEST_MIGRATION = "0037_session_requests/migration.sql";
+export const REQUEST_MIGRATION = "0038_session_requests/migration.sql";
 
 function historicalRowComplete(
   table: "wait" | "approval",
