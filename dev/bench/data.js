@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788741051430,
+  "lastUpdate": 1788752066327,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -66683,6 +66683,100 @@ window.BENCHMARK_DATA = {
           {
             "name": "storage-session-list/500-sessions",
             "value": 699503,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2ed9948bac290475ffa3391ef652e99613bc0baf",
+          "message": "refactor(desktop): strip ui showcase layer, restore hiddenInset chrome (#989)\n\npackages/ui becomes a minimal package apps/desktop consumes:\n- delete showcase/ (vite app, shoot-*/probe-* scripts, sections), the\n  showcase/shoot tsconfigs and scripts, COMPONENTS.md, and the desktop\n  DESIGN.md/BOUNDARY.md design docs\n- delete unreachable primitives (AnchorGutter, Input, Button, Rule, State)\n  and the showcase-only gates (drift, names, design-tokens grep)\n- narrow the barrel to what apps/desktop imports; test data moves to\n  test/fixture.tsx; drop vite/tailwind/playwright devDeps and knip entries\n\napps/desktop:\n- titleBarStyle \"hiddenInset\" with traffic lights at (16, 18); the\n  existing drag-region header rows are now the visible chrome\n- dev-only debugging: detached DevTools, renderer console/crash/load\n  failures mirrored to stdout as [renderer], and a dev:inspect script\n- externalize \"electron\" in the preload build; the bundle was inlining\n  the npm shim and the sandboxed preload failed to load",
+          "timestamp": "2026-09-07T03:33:20Z",
+          "tree_id": "751934be351c0040a85e5c60627dcab3c2e7eade",
+          "url": "https://github.com/INONONO66/openomni/commit/2ed9948bac290475ffa3391ef652e99613bc0baf"
+        },
+        "date": 1788752065907,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1751,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 12976,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 6927,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1706403,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 436448,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 8075154,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 139,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1509,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 702,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 514583,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3438,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 18503,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 176212,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 892877,
             "unit": "ns/op"
           }
         ]
