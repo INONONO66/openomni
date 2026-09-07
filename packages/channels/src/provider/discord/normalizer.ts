@@ -1,51 +1,34 @@
-import { Channel } from "@openomni/protocol";
-import { strippedMentionContent } from "../../support/trigger";
+import type { Channel } from "@openomni/protocol";
 import type { InboundNormalizer } from "../../types";
 import type { DiscordMessage } from "./types";
 
-export interface DiscordNormalizerContext {
-  botId: string;
-  triggers: Channel.Config["triggers"];
-}
-
 export class DiscordNormalizer implements InboundNormalizer<DiscordMessage> {
-  constructor(private readonly ctx: DiscordNormalizerContext) {}
-
-  normalize(message: DiscordMessage, traceId: string): Channel.InboundMessage | null {
+  normalize(message: DiscordMessage): Channel.InboundMessage | null {
     if (message.author.bot) return null;
     if (!message.content) return null;
 
     const isDM = !message.guild_id;
-    const mentioned = message.mentions?.some((u) => u.id === this.ctx.botId) ?? false;
-
-    const content = strippedMentionContent(
-      message.content,
-      new RegExp(`<@!?${this.ctx.botId}>\\s*`, "g"),
-      mentioned && !isDM,
-      this.ctx.triggers,
-    );
-    if (!content) return null;
-
-    const surfaceKey = Channel.SurfaceKey.fromChannel({
-      surface: "discord",
-      namespace: this.ctx.botId,
-      kind: isDM ? "dm" : "channel",
-      id: isDM ? message.author.id : message.channel_id,
-    });
 
     return {
-      id: message.id,
-      traceId,
-      surfaceKey,
-      text: content,
-      sender: {
-        id: message.author.id,
-        name: message.author.username,
+      sender: { kind: "external", surface: "discord", externalId: message.author.id },
+      facts: {
+        eventId: message.id,
+        surface: "discord",
+        channelId: message.channel_id,
+        ...(message.guild_id === undefined ? {} : { workspaceId: message.guild_id }),
+        addressees: (message.mentions ?? []).map((user) => ({ externalId: user.id })),
+        dm: isDM,
+        ...(message.message_reference?.message_id
+          ? {
+              reply: {
+                chain: [message.message_reference.message_id],
+                replyToMessageId: message.message_reference.message_id,
+              },
+            }
+          : {}),
+        payload: message,
+        render: message.content,
       },
-      ...(message.message_reference?.message_id
-        ? { replyToId: message.message_reference.message_id }
-        : {}),
-      raw: message,
     };
   }
 }

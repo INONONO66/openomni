@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { BusEvent } from "../bus/index.js";
 import { Actor } from "../actor/index.js";
 import { Events as IngressEvents } from "../event/ingress.js";
 import { Ingress } from "../ingress/index.js";
@@ -399,6 +400,9 @@ export namespace Gateway {
 
   export const MessageObservation = MessageContract.Observation;
   export type MessageObservation = z.infer<typeof MessageObservation>;
+  export const MessageObserved = BusEvent.define("message.observed", MessageObservation, {
+    visibility: "ephemeral",
+  });
 
   export const Origin = OriginSchema;
   export type Origin = z.infer<typeof OriginSchema>;
@@ -464,6 +468,7 @@ export namespace Gateway {
     | Readonly<{
         kind: "sent";
         operation: "fire_and_forget";
+        delivery: "accepted" | "rejected" | "unknown";
         messageId: string;
         senderId: string;
         grantId: string;
@@ -473,6 +478,7 @@ export namespace Gateway {
     | Readonly<{
         kind: "sent";
         operation: "awaited";
+        delivery: "accepted" | "rejected" | "unknown";
         messageId: string;
         senderId: string;
         grantId: string;

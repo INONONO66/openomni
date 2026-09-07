@@ -108,9 +108,13 @@ describe("moved migration resolution (#502)", () => {
       const before = snapshotDatabase(db);
       expect(() => initializeSqliteDatabase(db)).toThrow("unsupported_upgrade");
       expect(snapshotDatabase(db)).toEqual(before);
-      Migration.applyOrdered(db, MIGRATION_DIR, [{ name: "0030_drop_retired_tables/migration.sql" }]);
+      Migration.applyOrdered(db, MIGRATION_DIR, [
+        { name: "0030_drop_retired_tables/migration.sql" },
+      ]);
       expect(
-        db.query<{ name: string }, []>("SELECT name FROM sqlite_master WHERE name = 'work_item'").get(),
+        db
+          .query<{ name: string }, []>("SELECT name FROM sqlite_master WHERE name = 'work_item'")
+          .get(),
       ).toBeNull();
       expect(retiredWorkIndexesIn(db)).toEqual([]);
     } finally {
@@ -141,7 +145,11 @@ describe("moved migration resolution (#502)", () => {
     const reopened = new Database(path);
     try {
       initializeSqliteDatabase(reopened);
-      expect(reopened.query<{ name: string }, []>("SELECT name FROM _migrations WHERE name LIKE '0031_%'").all()).toEqual(receipt);
+      expect(
+        reopened
+          .query<{ name: string }, []>("SELECT name FROM _migrations WHERE name LIKE '0031_%'")
+          .all(),
+      ).toEqual(receipt);
       expect(receipt).toEqual([{ name: "0031_l0_ledger_base/migration.sql" }]);
     } finally {
       reopened.close();

@@ -97,8 +97,7 @@ export function MarkdownBlockView({
   // `CodeFence`, and wrapping it in a second named element purely so the name
   // appears would put a layout-free div between the turn's gap and the fence's
   // own border, which is a box the Owner would then be able to address and
-  // nobody could style. `Turn.Response › CodeFence` is the complete chain here,
-  // and COMPONENTS.md says so on the `MarkdownBlock` row.
+  // nobody could style. `Turn.Response › CodeFence` is the complete chain here.
   if (block.kind === "code") {
     return (
       <Code lang={block.lang ?? "text"} lines={block.lines ?? []} startLine={block.startLine} />

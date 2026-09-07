@@ -29,44 +29,74 @@ for (const door of ["cell", "wave"] as const) {
         let rawSettled = false;
         const retain = (effect: Promise<void>) => {
           effects.add(effect);
-          observers.push(effect.then(
-            () => { effects.delete(effect); },
-            // Diagnose rejection without deleting it or leaking an unhandled descendant.
-            (error: unknown) => {
-              rejectedOwnership.push(error instanceof Error ? error.name : typeof error);
-            },
-          ));
+          observers.push(
+            effect.then(
+              () => {
+                effects.delete(effect);
+              },
+              // Diagnose rejection without deleting it or leaking an unhandled descendant.
+              (error: Error | { toString: number }) => {
+                rejectedOwnership.push(error instanceof Error ? error.name : typeof error);
+              },
+            ),
+          );
         };
         const recording = recordingLedger();
         const executor = createExecutor({
-          policy: allowAllPolicy, ledger: recording.ledger, observations: { publish: () => undefined },
+          policy: allowAllPolicy,
+          ledger: recording.ledger,
+          observations: { publish: () => undefined },
           identity: { sessionId: "session-1", role: "resident", parentActionId: null },
-          clock: () => 1, entropy: recording.entropy,
+          clock: () => 1,
+          entropy: recording.entropy,
           ...(owner === "bound" ? { retainEffect: retain } : {}),
         });
-        const dispatcher = createDispatcher([defineTool({
-          name: "timed", description: "actual timed rejection", category: "query",
-          visibility: { model: ["resident"], cell: ["resident"] },
-          input: z.object({}), output: z.string(), render: (_input, output) => output,
-          async execute(_input, context) {
-            context.signal.addEventListener("abort", () => timedOut.resolve(), { once: true });
-            await gate.promise;
-            rawSettled = true;
-            if (reason === "Error") throw new Error("raw definition rejected");
-            // Legal JSON rejection whose String conversion throws.
-            return Promise.reject({ toString: 0 });
+        const dispatcher = createDispatcher(
+          [
+            defineTool({
+              name: "timed",
+              description: "actual timed rejection",
+              category: "query",
+              visibility: { model: ["resident"], cell: ["resident"] },
+              input: z.object({}),
+              output: z.string(),
+              render: (_input, output) => output,
+              async execute(_input, context) {
+                context.signal.addEventListener("abort", () => timedOut.resolve(), { once: true });
+                await gate.promise;
+                rawSettled = true;
+                if (reason === "Error") throw new Error("raw definition rejected");
+                // Legal JSON rejection whose String conversion throws.
+                return Promise.reject({ toString: 0 });
+              },
+            }),
+          ],
+          {
+            executor,
+            timeoutMs: 0,
+            retainEffect() {
+              foreignRetentions += 1;
+            },
           },
-        })], { executor, timeoutMs: 0, retainEffect() { foreignRetentions += 1; } });
-        const wrapper = waveBodyScope.run({
-          signal: new AbortController().signal,
-          retain: owner === "inherited" ? retain : () => { foreignRetentions += 1; },
-        }, async () => {
-          const call = { id: "timed-call", tool: "timed", input: {} };
-          const context = { sessionId: "session-1", turnId: "turn-1" };
-          return door === "cell"
-            ? [await dispatcher.executeCell(call, context)]
-            : await dispatcher.executeWave([call], context);
-        });
+        );
+        const wrapper = waveBodyScope.run(
+          {
+            signal: new AbortController().signal,
+            retain:
+              owner === "inherited"
+                ? retain
+                : () => {
+                    foreignRetentions += 1;
+                  },
+          },
+          async () => {
+            const call = { id: "timed-call", tool: "timed", input: {} };
+            const context = { sessionId: "session-1", turnId: "turn-1" };
+            return door === "cell"
+              ? [await dispatcher.executeCell(call, context)]
+              : await dispatcher.executeWave([call], context);
+          },
+        );
         try {
           // When: the exact timeout and caller detach while the actual definition is gated.
           await bounded(timedOut.promise);
@@ -74,7 +104,8 @@ for (const door of ["cell", "wave"] as const) {
           const frozen = structuredClone(results);
           expect(results).toMatchObject([{ isError: true, errorKind: "execution_failed" }]);
           expect(recording.committed.at(-1)?.effect?.value).toMatchObject({
-            terminal: "executed", result: { status: "timed_out" },
+            terminal: "executed",
+            result: { status: "timed_out" },
           });
           expect(rawSettled).toBe(false);
           expect(foreignRetentions).toBe(0);
@@ -103,15 +134,24 @@ for (const door of ["cell", "wave"] as const) {
     it(`reports timed ${door} ${reason} rejection before timeout`, async () => {
       // Given: a real definition rejects in a microtask, before the timeout timer can fire.
       const recording = recordingExecutor();
-      const dispatcher = createDispatcher([defineTool({
-        name: "timed", description: "immediate rejection", category: "query",
-        visibility: { model: ["resident"], cell: ["resident"] },
-        input: z.object({}), output: z.string(), render: (_input, output) => output,
-        async execute() {
-          if (reason === "Error") throw new Error("raw definition rejected");
-          return Promise.reject({ toString: 0 });
-        },
-      })], { executor: recording.executor, timeoutMs: 0 });
+      const dispatcher = createDispatcher(
+        [
+          defineTool({
+            name: "timed",
+            description: "immediate rejection",
+            category: "query",
+            visibility: { model: ["resident"], cell: ["resident"] },
+            input: z.object({}),
+            output: z.string(),
+            render: (_input, output) => output,
+            async execute() {
+              if (reason === "Error") throw new Error("raw definition rejected");
+              return Promise.reject({ toString: 0 });
+            },
+          }),
+        ],
+        { executor: recording.executor, timeoutMs: 0 },
+      );
       const call = { id: "timed-call", tool: "timed", input: {} };
       const context = { sessionId: "session-1", turnId: "turn-1" };
       // When: the result path, rather than timeout, wins.
@@ -119,9 +159,10 @@ for (const door of ["cell", "wave"] as const) {
       if (door === "cell" && reason === "plain-value") {
         await expect(dispatcher.executeCell(call, context)).rejects.toBeInstanceOf(TypeError);
       } else {
-        const results = door === "cell"
-          ? [await dispatcher.executeCell(call, context)]
-          : await dispatcher.executeWave([call], context);
+        const results =
+          door === "cell"
+            ? [await dispatcher.executeCell(call, context)]
+            : await dispatcher.executeWave([call], context);
         expect(results).toMatchObject([{ isError: true, errorKind: "execution_failed" }]);
       }
       expect(recording.committed.at(-1)?.effect?.value).toMatchObject(
@@ -141,34 +182,49 @@ for (const door of ["cell", "wave"] as const) {
       const timedOut = Promise.withResolvers<void>();
       const effects = new Set<Promise<void>>();
       const executor = recordingExecutor().executor;
-      const dispatcher = createDispatcher([defineTool({
-        name: "timed", description: "timed effect", category: "query",
-        visibility: { model: ["resident"], cell: ["resident"] },
-        input: z.object({}), output: z.string(), render: (_input, output) => output,
-        async execute(_input, context) {
-          context.signal.addEventListener("abort", () => timedOut.resolve(), { once: true });
-          await gate.promise;
-          if (rejects) throw new Error("raw effect rejected");
-          return "effect";
+      const dispatcher = createDispatcher(
+        [
+          defineTool({
+            name: "timed",
+            description: "timed effect",
+            category: "query",
+            visibility: { model: ["resident"], cell: ["resident"] },
+            input: z.object({}),
+            output: z.string(),
+            render: (_input, output) => output,
+            async execute(_input, context) {
+              context.signal.addEventListener("abort", () => timedOut.resolve(), { once: true });
+              await gate.promise;
+              if (rejects) throw new Error("raw effect rejected");
+              return "effect";
+            },
+          }),
+        ],
+        { executor, timeoutMs: 0 },
+      );
+      const wave = runWaveBodies(
+        [
+          {
+            async run() {
+              const call = { id: "timed-call", tool: "timed", input: {} };
+              const context = { sessionId: "session-1", turnId: "turn-1" };
+              const results =
+                door === "cell"
+                  ? [await dispatcher.executeCell(call, context)]
+                  : await dispatcher.executeWave([call], context);
+              expect(results.map((result) => result.isError)).toEqual([true]);
+              return null;
+            },
+          },
+        ],
+        {
+          signal: new AbortController().signal,
+          retain(effect) {
+            effects.add(effect);
+            void effect.then(() => effects.delete(effect));
+          },
         },
-      })], { executor, timeoutMs: 0 });
-      const wave = runWaveBodies([{
-        async run() {
-          const call = { id: "timed-call", tool: "timed", input: {} };
-          const context = { sessionId: "session-1", turnId: "turn-1" };
-          const results = door === "cell"
-            ? [await dispatcher.executeCell(call, context)]
-            : await dispatcher.executeWave([call], context);
-          expect(results.map((result) => result.isError)).toEqual([true]);
-          return null;
-        },
-      }], {
-        signal: new AbortController().signal,
-        retain(effect) {
-          effects.add(effect);
-          void effect.then(() => effects.delete(effect));
-        },
-      });
+      );
       try {
         // When: actual timeout and both caller wrappers settle before the definition.
         await timedOut.promise;
@@ -197,25 +253,43 @@ it("inherits raw-body retention through nested executors without a bound turn ow
   const outer = recordingExecutor().executor;
   const inner = recordingExecutor().executor;
   const request = { kind: "tool", op: "nested", intent: {}, effect: {} };
-  const wave = runWaveBodies([{
-    async run() {
-      try {
-        await outer.run(request, async () => {
-          if (inner.runBatch === undefined) throw new Error("missing batch executor");
-          await inner.runBatch([{ request, body: () => {
-            entered.resolve();
-            return gate.promise;
-          } }], { signal: new AbortController().signal });
+  const wave = runWaveBodies(
+    [
+      {
+        async run() {
+          try {
+            await outer.run(request, async () => {
+              if (inner.runBatch === undefined) throw new Error("missing batch executor");
+              await inner.runBatch(
+                [
+                  {
+                    request,
+                    body: () => {
+                      entered.resolve();
+                      return gate.promise;
+                    },
+                  },
+                ],
+                { signal: new AbortController().signal },
+              );
+              return null;
+            });
+          } catch (error) {
+            if (!(error instanceof DOMException) || error.name !== "AbortError") throw error;
+          } finally {
+            parentSettled.resolve();
+          }
           return null;
-        });
-      } catch (error) {
-        if (!(error instanceof DOMException) || error.name !== "AbortError") throw error;
-      } finally {
-        parentSettled.resolve();
-      }
-      return null;
+        },
+      },
+    ],
+    {
+      signal: controller.signal,
+      retain(effect) {
+        effects.add(effect);
+      },
     },
-  }], { signal: controller.signal, retain(effect) { effects.add(effect); } });
+  );
   try {
     await entered.promise;
     // When: the wave cancels and both executor wrappers unwind before the raw body.
@@ -263,14 +337,24 @@ for (const settlement of ["fulfillment", "rejection"] as const) {
     const entered = Promise.withResolvers<void>();
     const release = Promise.withResolvers<null>();
     const effects: Promise<void>[] = [];
-    const wave = runWaveBodies([{
-      // Return the raw promise: an async adoption wrapper would let the wave
-      // snapshot cancellation before the overwrite regression becomes visible.
-      run() {
-        entered.resolve();
-        return release.promise;
+    const wave = runWaveBodies(
+      [
+        {
+          // Return the raw promise: an async adoption wrapper would let the wave
+          // snapshot cancellation before the overwrite regression becomes visible.
+          run() {
+            entered.resolve();
+            return release.promise;
+          },
+        },
+      ],
+      {
+        signal: controller.signal,
+        retain: (effect) => {
+          effects.push(effect);
+        },
       },
-    }], { signal: controller.signal, retain: (effect) => { effects.push(effect); } });
+    );
 
     try {
       await bounded(entered.promise);
@@ -312,27 +396,30 @@ it("does not enter a body when cancellation predates the wave", async () => {
 
 it("keeps a sequential barrier after preceding rejection and runs later work", async () => {
   const entered: string[] = [];
-  const wave = runWaveBodies([
-    {
-      async run() {
-        entered.push("parallel");
-        throw new Error("parallel failed");
+  const wave = runWaveBodies(
+    [
+      {
+        async run() {
+          entered.push("parallel");
+          throw new Error("parallel failed");
+        },
       },
-    },
-    {
-      sequential: true,
-      async run() {
-        entered.push("barrier");
-        return null;
+      {
+        sequential: true,
+        async run() {
+          entered.push("barrier");
+          return null;
+        },
       },
-    },
-    {
-      async run() {
-        entered.push("following");
-        return null;
+      {
+        async run() {
+          entered.push("following");
+          return null;
+        },
       },
-    },
-  ], { signal: new AbortController().signal });
+    ],
+    { signal: new AbortController().signal },
+  );
 
   await expect(wave).resolves.toEqual([
     { status: "rejected", error: new Error("parallel failed") },

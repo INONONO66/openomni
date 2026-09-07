@@ -74,7 +74,7 @@ function fakeProviders(): FakeBuild {
         surface,
         deliveryRoute: (externalId, body) => {
           delivered.push({ externalId, body });
-          return Promise.resolve({ externalMessageId: "tg-1" });
+          return Promise.resolve({ value: "accepted" as const, externalMessageId: "tg-1" });
         },
       };
     },
@@ -88,7 +88,7 @@ function fakeProviders(): FakeBuild {
         surface,
         deliveryRoute: (externalId, body) => {
           delivered.push({ externalId, body });
-          return Promise.resolve({ externalMessageId: "dc-1" });
+          return Promise.resolve({ value: "accepted" as const, externalMessageId: "dc-1" });
         },
       };
     },
@@ -116,7 +116,7 @@ function fakeProviders(): FakeBuild {
         surface,
         deliveryRoute: (externalId, body) => {
           delivered.push({ externalId, body });
-          return Promise.resolve({ externalMessageId: "sl-1" });
+          return Promise.resolve({ value: "accepted" as const, externalMessageId: "sl-1" });
         },
       };
     },
@@ -124,7 +124,7 @@ function fakeProviders(): FakeBuild {
   return { surfaces, providers: { telegram, discord, github, slack }, delivered, webhookCalls };
 }
 
-const handler: Channel.MessageHandler = () => Promise.resolve(null);
+const handler: Channel.MessageHandler = () => Promise.resolve();
 
 function build(config: OpenOmniConfig, fakes: FakeBuild): BuiltChannel[] {
   return channelProfile(config, fakes.providers).map((row) => row.build(handler));
@@ -197,7 +197,7 @@ describe("channelProfile", () => {
     });
   });
 
-  test("triggers stay the installation's declared policy per channel", () => {
+  test("providers receive no trigger policy", () => {
     const fakes = fakeProviders();
     build(
       baseConfig({
@@ -207,11 +207,9 @@ describe("channelProfile", () => {
       }),
       fakes,
     );
-    const byId = new Map(fakes.surfaces.map((surface) => [surface.id, surface.config.triggers]));
-    expect(byId.get("telegram")).toEqual([]);
-    expect(byId.get("discord")).toEqual([{ type: "mention" }]);
-    expect(byId.get("github")).toEqual([
-      { type: "event", events: ["issue_comment.created", "issues.opened"] },
-    ]);
+    const byId = new Map(fakes.surfaces.map((surface) => [surface.id, surface.config]));
+    expect(byId.get("telegram")).toEqual({});
+    expect(byId.get("discord")).toEqual({});
+    expect(byId.get("github")).toEqual({});
   });
 });

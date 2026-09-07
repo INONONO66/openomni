@@ -51,7 +51,9 @@ function escapeXml(value: string): string {
 function assertUnitSafe(label: string, value: string): string {
   // biome-ignore lint/suspicious/noControlCharactersInRegex: rejecting control chars is the point
   if (/[\u0000-\u001f\u007f]/.test(value)) {
-    throw new Error(`${label} contains control characters and cannot be written into a service unit`);
+    throw new Error(
+      `${label} contains control characters and cannot be written into a service unit`,
+    );
   }
   return value;
 }
@@ -179,7 +181,9 @@ export function daemonUninstall(target: DaemonTarget, io: DaemonIo): string {
       const notLoaded =
         print.code !== 0 && /could not find service/i.test(`${print.stderr}${print.stdout}`);
       if (!notLoaded) {
-        throw new Error("daemon could not be stopped and may still be loaded — unit left installed");
+        throw new Error(
+          "daemon could not be stopped and may still be loaded — unit left installed",
+        );
       }
     }
   } else {

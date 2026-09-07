@@ -1,6 +1,7 @@
 import { SEEDED_POLICY_ROWS } from "@openomni/agent";
 import { Storage } from "@openomni/ledger";
 import type { PolicyRow } from "@openomni/protocol";
+import { MESSAGE_POLICY_ROWS } from "./message-policy";
 
 /** Seeds the kernel's mandatory generation before any durable session is materialized. */
 export function seedKernelPolicyRows(): number {
@@ -18,7 +19,9 @@ export function seedKernelPolicyRows(): number {
     },
   };
   return policies.appendGeneration((current) => {
-    const next = new Map([...SEEDED_POLICY_ROWS, budget].map((row) => [policyId(row), row]));
+    const next = new Map(
+      [...SEEDED_POLICY_ROWS, ...MESSAGE_POLICY_ROWS, budget].map((row) => [policyId(row), row]),
+    );
     // Preserve existing policy values and site-specific ids; fill missing mandatory ids.
     for (const row of current) next.set(policyId(row), row);
     const currentIds = new Set(current.map(policyId));

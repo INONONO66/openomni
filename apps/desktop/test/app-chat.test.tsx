@@ -295,9 +295,7 @@ describe("stop while streaming", () => {
 function streamedText(messages: readonly OpenOmniUIMessage[]): string {
   const last = messages.at(-1);
   if (last === undefined || last.role !== "assistant") return "";
-  return last.parts
-    .map((part) => (part.type === "text" ? part.text : ""))
-    .join("");
+  return last.parts.map((part) => (part.type === "text" ? part.text : "")).join("");
 }
 
 describe("the composer's send reaches the transport", () => {

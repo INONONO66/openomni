@@ -7,8 +7,8 @@ import { Storage } from "./storage";
  * #510 C3 record-before-act write and its replay read) — never through the
  * master `Storage` entry, whose adapter reaches every brain surface
  * (canonical sessions and action history). Exposing exactly the two
- * methods makes gateway-design §6's "named perimeter surfaces plus a scoped
- * append port" literally true and lets the S8 named-import pin drop
+ * record methods, plus an admission transaction boundary, keeps gateway-design
+ * §6's "named perimeter surfaces plus a scoped append port" and lets its pin drop
  * `Storage` from the router allowlist.
  *
  * Returns `undefined` when the active adapter lacks the ledger sub-adapter
@@ -17,6 +17,11 @@ import { Storage } from "./storage";
  */
 export namespace LedgerAppend {
   export type Port = Pick<ProtocolStorage.LedgerSubAdapter, "append" | "headFact">;
+
+  /** One perimeter admission unit, including its injected durable deadline write. */
+  export function transaction<T>(operation: () => T): T {
+    return Storage.get().transaction(operation);
+  }
 
   export function port(): Port | undefined {
     return Storage.get().ledger;

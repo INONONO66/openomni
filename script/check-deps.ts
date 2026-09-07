@@ -256,6 +256,7 @@ const CHANNELS_ROUTER_LEDGER_SURFACES = new Set([
   "ActorRegistry",
   "BlacklistStore",
   "ChannelGrantStore",
+  "ReplyGrantStore",
   "WaitStore",
   "SurfaceKey",
   "LedgerAppend",
@@ -587,10 +588,7 @@ function selfTest(): void {
   const oneTier: PackageRule = { ...twoTier, srcAllowedDeps: undefined };
   const cases: Array<[string, boolean]> = [
     ["manifest permits what the manifest lists", isAllowedDep(twoTier, "@openomni/agent")],
-    [
-      "src refuses what only the manifest lists",
-      !isAllowedSourceDep(twoTier, "@openomni/agent"),
-    ],
+    ["src refuses what only the manifest lists", !isAllowedSourceDep(twoTier, "@openomni/agent")],
     ["src permits its own narrower set", isAllowedSourceDep(twoTier, "@openomni/protocol")],
     ["src refuses what neither lists", !isAllowedSourceDep(twoTier, "@openomni/ledger")],
     [
@@ -687,6 +685,13 @@ function selfTest(): void {
         "packages/channels/src/router/routing-resolution.ts",
         'import { Session, SurfaceKey } from "@openomni/ledger";',
       ).length === 1,
+    ],
+    [
+      "S8: the router may name the durable reply-grant projection",
+      channelsRouterLedgerViolations(
+        "packages/channels/src/router/messaging/reply-grant.ts",
+        'import { ReplyGrantStore } from "@openomni/ledger";',
+      ).length === 0,
     ],
     [
       "S8: a type-only brain-surface import is still pinned",

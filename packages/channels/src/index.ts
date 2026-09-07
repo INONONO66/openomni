@@ -5,4 +5,3 @@ export { createGatewayRouter } from "./router/index.js";
 export { resolveChannelGrant } from "./router/channel-grant.js";
 export { WaitService } from "./router/wait/index.js";
 export type { ChannelDeliveryRoute, GatewayRouter } from "./router/index.js";
-export type { ExistingAgentMessaging } from "./router/messaging/send.js";

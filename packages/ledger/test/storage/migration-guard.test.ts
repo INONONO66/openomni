@@ -75,10 +75,12 @@ describe("967 atomic disposition", () => {
     expect(() => {
       const adapter = new SqliteStorageAdapter(fixture.path);
       adapter.close();
-    }).toThrow(expect.objectContaining({
-      constructor: U967Error,
-      code: "approval_required",
-    }));
+    }).toThrow(
+      expect.objectContaining({
+        constructor: U967Error,
+        code: "approval_required",
+      }),
+    );
     expect(fixture.db.serialize()).toEqual(before);
   });
 
@@ -87,7 +89,9 @@ describe("967 atomic disposition", () => {
     adapter.close();
     using raw = new Database(join(tmpDir, "fresh.sqlite"), { readonly: true });
     expect(tableNames(raw)).not.toContain("bus_event");
-    expect(raw.query("SELECT name FROM _migrations WHERE name LIKE '0034%'").all()).toEqual([{ name: "0034_u967_archive_disposition/migration.sql" }]);
+    expect(raw.query("SELECT name FROM _migrations WHERE name LIKE '0035%'").all()).toEqual([
+      { name: "0035_drop_retired_delegation_tables/migration.sql" },
+    ]);
   });
 });
 
@@ -97,7 +101,11 @@ describe("migration 0025 pending-table drop guard", () => {
     seedPendingAskRow(db);
 
     expect(() => initializeSqliteDatabase(db)).toThrow("unsupported_upgrade");
-    expect(() => Migration.applyOrdered(db, MIGRATION_DIR, [{ name: "0025_drop_pending_tables/migration.sql" }])).toThrow(/CHECK constraint failed/);
+    expect(() =>
+      Migration.applyOrdered(db, MIGRATION_DIR, [
+        { name: "0025_drop_pending_tables/migration.sql" },
+      ]),
+    ).toThrow(/CHECK constraint failed/);
 
     // The wrapping transaction rolled back: rows survive, tables survive,
     // and 0025 was never recorded as applied.

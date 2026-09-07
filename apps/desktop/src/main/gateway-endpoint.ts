@@ -79,7 +79,8 @@ function port(raw: string | undefined): number {
 }
 
 export function resolveGatewayEndpoint(env: GatewayEnv): GatewayEndpoint {
-  const url = read(env.OPENOMNI_WS_URL) ?? `ws://127.0.0.1:${port(env.OPENOMNI_WS_PORT)}${GATEWAY_PATH}`;
+  const url =
+    read(env.OPENOMNI_WS_URL) ?? `ws://127.0.0.1:${port(env.OPENOMNI_WS_PORT)}${GATEWAY_PATH}`;
   const token = read(env.OPENOMNI_WS_TOKEN);
   return token === undefined ? { url } : { url, token };
 }

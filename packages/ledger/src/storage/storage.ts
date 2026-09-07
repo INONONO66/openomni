@@ -1,6 +1,5 @@
 import type { BusEvent, Storage as ProtocolStorage } from "@openomni/protocol";
 import { AsyncLocalStorage } from "node:async_hooks";
-import type { WorkerRunStateStore } from "../worker-run/state-store";
 
 export const productionStorageAdapterBrand: unique symbol = Symbol("productionStorageAdapter");
 
@@ -28,15 +27,11 @@ export namespace Storage {
     // as required (SqliteStorageAdapter).
     wait?: ProtocolStorage.WaitSubAdapter;
     approval?: ProtocolStorage.ApprovalSubAdapter;
-    // Optional for test fakes only — DelegationStore fails closed when it is
-    // missing; production adapters wire it as required (SqliteStorageAdapter).
-    delegation?: ProtocolStorage.DelegationSubAdapter;
     // #510 phase B: decision-class ledger append on the SAME connection as
     // the projection sub-adapters, so a decision-class store can commit
     // append + projection inside one `transaction()` call. Optional for test
     // fakes only — decision-class writers fail closed without it.
     ledger?: ProtocolStorage.LedgerSubAdapter;
-    workerRunState?: WorkerRunStateStore.Adapter;
     // Active-egress debit ledger (#219, perimeter domain). Optional for test
     // fakes only — EgressBudgetStore fails closed when it is missing;
     // production adapters wire it as required (SqliteStorageAdapter). Sole
@@ -45,6 +40,7 @@ export namespace Storage {
     actorRegistry?: ProtocolStorage.ActorRegistrySubAdapter;
     blacklist?: ProtocolStorage.BlacklistSubAdapter;
     channelGrant?: ProtocolStorage.ChannelGrantSubAdapter;
+    replyGrant?: ProtocolStorage.ReplyGrantSubAdapter;
     // Provisioning declarations + vault rows (docs/provisioning-and-providers.md
     // §3). Optional for test fakes only — provisioning stores fail closed
     // (typed adapter_absent) when it is missing; production adapters wire it
@@ -71,13 +67,12 @@ export namespace Storage {
 
     "wait",
     "approval",
-    "delegation",
     "ledger",
-    "workerRunState",
     "egressBudget",
     "actorRegistry",
     "blacklist",
     "channelGrant",
+    "replyGrant",
     "provisioning",
     "sessions",
     "actions",

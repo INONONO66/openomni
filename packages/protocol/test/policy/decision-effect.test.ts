@@ -16,8 +16,6 @@ describe("Policy decision and effect schemas", () => {
     { type: "run.abort", reason: "budget exceeded" },
     { type: "run.continue_with_prompt", prompt: "Ask for confirmation first." },
     { type: "run.retry_after", delayMs: 1_000, maxRetries: 2 },
-    { type: "delegation.set_constraints", constraints: { maxDepth: 1 } },
-    { type: "delegation.require_approval", reason: "external delegate" },
     { type: "audit.annotate", annotation: "policy matched", severity: "info" },
     { type: "writeback.rewrite", output: "Redacted final response." },
     { type: "writeback.suppress", reason: "contains sensitive content" },
@@ -95,7 +93,7 @@ describe("Policy decision and effect schemas", () => {
   it("parses EffectiveDecision with merged effects and contributing policies", () => {
     const result = Policy.EffectiveDecision.parse({
       verdict: "allow",
-      mergedEffects: [effects[12], effects[15]],
+      mergedEffects: [effects[10], effects[13]],
       obligations: [],
       contributingPolicies: ["policy.audit", "policy.workspace-lock"],
     });

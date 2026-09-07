@@ -9,9 +9,9 @@ afterEach(() => {
   globalThis.fetch = realFetch;
 });
 
-function mockSendMessage(
-  respond: (body: SentBody, call: number) => Response,
-): { calls: SentBody[] } {
+function mockSendMessage(respond: (body: SentBody, call: number) => Response): {
+  calls: SentBody[];
+} {
   const calls: SentBody[] = [];
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     expect(String(input)).toContain("/sendMessage");
@@ -45,7 +45,9 @@ describe("TelegramClient.sendMarkdown", () => {
     const id = await client.sendMarkdown("chat-1", "*bold*", "trace-1");
 
     expect(id).toBe("42");
-    expect(calls).toEqual([{ chat_id: "chat-1", text: "*bold*", parse_mode: "MarkdownV2" } as SentBody]);
+    expect(calls).toEqual([
+      { chat_id: "chat-1", text: "*bold*", parse_mode: "MarkdownV2" } as SentBody,
+    ]);
   });
 
   it("resends the same text as plain on an entity-parse rejection and warns", async () => {
@@ -66,9 +68,7 @@ describe("TelegramClient.sendMarkdown", () => {
   });
 
   it("rethrows non-parse failures without a plain resend", async () => {
-    const { calls } = mockSendMessage(
-      () => new Response("forbidden", { status: 403 }),
-    );
+    const { calls } = mockSendMessage(() => new Response("forbidden", { status: 403 }));
     const client = new TelegramClient("token", () => undefined);
 
     await expect(client.sendMarkdown("chat-1", "text", "trace-1")).rejects.toThrow(

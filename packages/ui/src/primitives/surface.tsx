@@ -23,7 +23,7 @@ const EDGE: Record<PanelEdge, string> = {
 };
 
 /**
- * DESIGN.md 7 — Panel. The structural surface primitive: one of three quiet
+ * Panel. The structural surface primitive: one of three quiet
  * tones plus an optional column-split hairline. It exists so app layout code
  * can compose columns without naming a color.
  */
@@ -89,7 +89,7 @@ const TEXT_LEVEL: Record<TextLevel, string> = {
 };
 
 /**
- * DESIGN.md 3 — Text. Binds a type-scale level to a foreground tone so app code
+ * Text. Binds a type-scale level to a foreground tone so app code
  * never writes a color or a size class.
  *
  * The face is a claim about WHAT THE TEXT IS, and the system now makes both
@@ -145,7 +145,7 @@ export function Text({
 }
 
 /**
- * DESIGN.md 7 — Caret. Marks the tail of streaming output: a state indicator,
+ * Caret. Marks the tail of streaming output: a state indicator,
  * not decoration. Drawn, never a half-block character — that glyph varies by
  * font and copies into the transcript as garbage when a reader selects text.
  *
@@ -173,20 +173,6 @@ export function Caret({ streaming = false }: { readonly streaming?: boolean }) {
       data-caret=""
       data-streaming={streaming}
       data-ui={UI_NAMES.Caret}
-    />
-  );
-}
-
-/**
- * DESIGN.md 8 — Rule. The column-split hairline, as a standalone element for
- * the one case Panel cannot cover: a vertical split inside a flex row.
- */
-export function Rule({ className = "" }: { readonly className?: string }) {
-  return (
-    <span
-      aria-hidden
-      className={`block w-px self-stretch bg-line ${className}`}
-      data-ui={UI_NAMES.Rule}
     />
   );
 }

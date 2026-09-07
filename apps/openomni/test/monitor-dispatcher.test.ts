@@ -195,7 +195,7 @@ test("monitor create seals live-wait with one model call; PTY inbox wakes a hibe
         woke.reject(error);
       },
       async wake(id) {
-        await wakeSession(id, () => runner, runtime);
+        await wakeSession(id, runner, runtime);
         woke.resolve();
       },
     });

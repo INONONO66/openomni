@@ -1,17 +1,12 @@
 import type { Ipc } from "@openomni/protocol";
+import type { IpcClient } from "./client";
 
 type MethodTable = typeof Ipc.Methods;
 type MethodName = keyof MethodTable;
 type MethodParams<Method extends MethodName> = MethodTable[Method]["params"]["_input"];
 type MethodResult<Method extends MethodName> = MethodTable[Method]["result"]["_output"];
 
-type GenericIpcCaller = {
-  call(
-    method: string,
-    params?: Record<string, unknown>,
-    timeoutMs?: number,
-  ): Promise<unknown>;
-};
+type GenericIpcCaller = Pick<IpcClient, "call">;
 
 /**
  * Schema-derived facade for same-version methods. The caller's generic call

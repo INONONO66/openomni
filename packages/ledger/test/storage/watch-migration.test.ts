@@ -59,7 +59,7 @@ function historical(spec: PlainValue) {
 }
 
 for (const [name, spec] of malformed) {
-  test(`0035 refuses ${name} before changing the old database`, () => {
+  test(`0037 refuses ${name} before changing the old database`, () => {
     using db = historical(spec);
     const before = db.serialize();
     const schema = sqliteSchema(db);
@@ -70,7 +70,7 @@ for (const [name, spec] of malformed) {
       db
         .query<{ name: string }, []>("SELECT name FROM _migrations ORDER BY rowid DESC LIMIT 1")
         .get()?.name,
-    ).toBe("0034_u967_archive_disposition/migration.sql");
+    ).toBe("0036_reply_grant_projection/migration.sql");
   });
 }
 
@@ -84,7 +84,7 @@ for (const [name, spec] of [
     },
   ],
 ] satisfies [string, PlainValue][]) {
-  test(`0035 upgrades a complete ${name} spec without losing bytes`, () => {
+  test(`0037 upgrades a complete ${name} spec without losing bytes`, () => {
     using db = historical(spec);
     const before = db.query<{ spec: string }, []>("SELECT spec FROM alarm").get();
     initializeSqliteDatabase(db);

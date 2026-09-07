@@ -171,7 +171,11 @@ describe("Retry billing classification", () => {
       reason: "rate_limit",
     },
     { message: "quota exceeded for this minute", statusCode: 429, reason: "rate_limit" },
-  ])("does not confuse transient failures with spent balances: $message", ({ message, statusCode, reason }) => {
+  ])("does not confuse transient failures with spent balances: $message", ({
+    message,
+    statusCode,
+    reason,
+  }) => {
     const decision = withRandom(0, () =>
       Retry.decide(1, apiError({ message, isRetryable: true, statusCode })),
     );
@@ -213,8 +217,10 @@ describe("Retry billing classification", () => {
     // Capacity exhaustion, not balance exhaustion: the provider is telling us
     // to come back, not that the account is spent.
     expect(
-      Retry.decide(1, apiError({ message: JSON.stringify({ code: "quota_exhausted" }), isRetryable: true }))
-        .reason,
+      Retry.decide(
+        1,
+        apiError({ message: JSON.stringify({ code: "quota_exhausted" }), isRetryable: true }),
+      ).reason,
     ).toBe("overloaded");
   });
 

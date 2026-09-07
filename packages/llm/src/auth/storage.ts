@@ -88,7 +88,11 @@ export namespace Auth {
 
   export const ResolutionError = NamedError.create(
     "AuthResolutionError",
-    z.object({ message: z.string(), provider: z.string(), reason: z.enum(["missing_auth", "invalid_auth"]) }),
+    z.object({
+      message: z.string(),
+      provider: z.string(),
+      reason: z.enum(["missing_auth", "invalid_auth"]),
+    }),
   );
 
   /** Explicit credentials are usable only for the provider they were bound to. */
@@ -98,16 +102,30 @@ export namespace Auth {
     boundProvider = provider,
     allowFallback = true,
   ): Promise<Info> {
-    const auth = boundProvider === provider && explicit !== undefined
-      ? explicit
-      : allowFallback ? await Auth.get(provider) : undefined;
-    if (auth === undefined) throw new ResolutionError({
-      message: `No authentication found for provider: ${provider}`,
-      provider, reason: "missing_auth",
-    });
+    const auth =
+      boundProvider === provider && explicit !== undefined
+        ? explicit
+        : allowFallback
+          ? await Auth.get(provider)
+          : undefined;
+    if (auth === undefined)
+      throw new ResolutionError({
+        message: `No authentication found for provider: ${provider}`,
+        provider,
+        reason: "missing_auth",
+      });
     const parsed = Info.safeParse(auth);
-    if (!parsed.success || (parsed.data.type === "api" ? parsed.data.key.length === 0 : !URL.canParse(parsed.data.baseURL))) {
-      throw new ResolutionError({ message: `Invalid authentication for provider: ${provider}`, provider, reason: "invalid_auth" });
+    if (
+      !parsed.success ||
+      (parsed.data.type === "api"
+        ? parsed.data.key.length === 0
+        : !URL.canParse(parsed.data.baseURL))
+    ) {
+      throw new ResolutionError({
+        message: `Invalid authentication for provider: ${provider}`,
+        provider,
+        reason: "invalid_auth",
+      });
     }
     return parsed.data;
   }

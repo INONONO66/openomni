@@ -420,9 +420,7 @@ describe("WaitStore", () => {
     // Concurrent writer advances the revision after channels decided from
     // the prior raw row but before storage commits that produced outcome.
     commitCancel("wait-1", "trace-wait-store", 500);
-    const error = captureStoreError(() =>
-      WaitStore.commit(staleOutcome, "trace-wait-store"),
-    );
+    const error = captureStoreError(() => WaitStore.commit(staleOutcome, "trace-wait-store"));
 
     expect(error.data.code).toBe("revision_conflict");
     expect(error.data.waitId).toBe("wait-1");

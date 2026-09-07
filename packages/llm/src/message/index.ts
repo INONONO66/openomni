@@ -78,11 +78,12 @@ export function stringifyToolOutput(output: unknown): string {
 }
 
 function buildToolResult(result: Message.ToolPart): ToolMessage {
-  const output = result.state.status === "completed"
-    ? stringifyToolOutput(result.state.output)
-    : result.state.status === "error"
-      ? `Error: ${result.state.error}`
-      : "[Tool execution was interrupted]";
+  const output =
+    result.state.status === "completed"
+      ? stringifyToolOutput(result.state.output)
+      : result.state.status === "error"
+        ? `Error: ${result.state.error}`
+        : "[Tool execution was interrupted]";
   return {
     role: "tool",
     content: [buildToolResultBlock({ id: result.callID, tool: result.tool, output })],
@@ -104,9 +105,12 @@ function buildAssistantMessage(msg: AssistantWithParts, model: Provider.Model): 
   const toolResults: ToolMessage[] = [];
   for (const part of msg.parts) {
     if (part.type === "text") textContent.push(part.text);
-    if (part.type === "reasoning") reasoningBlocks.push(buildAssistantReasoningBlock(part, resendSignature));
+    if (part.type === "reasoning")
+      reasoningBlocks.push(buildAssistantReasoningBlock(part, resendSignature));
     if (part.type === "tool") {
-      toolCalls.push(buildToolCallBlock({ id: part.callID, tool: part.tool, input: part.state.input }));
+      toolCalls.push(
+        buildToolCallBlock({ id: part.callID, tool: part.tool, input: part.state.input }),
+      );
       toolResults.push(buildToolResult(part));
     }
   }
@@ -120,7 +124,9 @@ function assembleAssistantMessages(
   toolResults: ToolMessage[],
 ): SDKMessage[] {
   if (toolCalls.length > 0) {
-    const content: Array<AssistantTextBlock | AssistantReasoningBlock | AssistantToolCallBlock> = [...reasoningBlocks];
+    const content: Array<AssistantTextBlock | AssistantReasoningBlock | AssistantToolCallBlock> = [
+      ...reasoningBlocks,
+    ];
     if (textContent.length > 0) content.push({ type: "text", text: textContent.join("\n") });
     content.push(...toolCalls);
     return [{ role: "assistant", content }, ...toolResults];
@@ -136,14 +142,20 @@ function assembleAssistantMessages(
 function messageToSDK(msg: Message.WithParts, model: Provider.Model): SDKMessage[] {
   if (msg.parts.length === 0) return [];
   if (msg.info.role === "user") {
-    const content = msg.parts.filter((p): p is Message.TextPart => p.type === "text").map((p) => p.text).join("\n");
+    const content = msg.parts
+      .filter((p): p is Message.TextPart => p.type === "text")
+      .map((p) => p.text)
+      .join("\n");
     return content.length > 0 ? [{ role: "user", content }] : [];
   }
   if (isAssistantMessage(msg)) return buildAssistantMessage(msg, model);
   return [];
 }
 
-export function toModelMessages(messagesWithParts: Message.WithParts[], model: Provider.Model): SDKMessage[] {
+export function toModelMessages(
+  messagesWithParts: Message.WithParts[],
+  model: Provider.Model,
+): SDKMessage[] {
   const coreMessages: SDKMessage[] = [];
   for (const msg of messagesWithParts) coreMessages.push(...messageToSDK(msg, model));
   return ProviderTransform.normalizeMessages(coreMessages, model);

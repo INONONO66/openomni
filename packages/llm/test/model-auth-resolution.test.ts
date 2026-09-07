@@ -3,7 +3,10 @@ import { Auth, ModelsDev, Provider } from "../src";
 
 const catalog = {
   anthropic: {
-    id: "anthropic", name: "Anthropic", npm: "@ai-sdk/anthropic", env: [],
+    id: "anthropic",
+    name: "Anthropic",
+    npm: "@ai-sdk/anthropic",
+    env: [],
     models: { trusted: { id: "trusted", name: "Trusted", limit: { context: 1000 } } },
   },
 };
@@ -16,7 +19,9 @@ describe("canonical model and provider-bound credentials", () => {
     const authRead = spyOn(Auth, "get").mockResolvedValue(undefined);
     const fetch = spyOn(globalThis, "fetch");
     expect(await Provider.resolveModel({ provider: "anthropic", id: "trusted" })).toMatchObject({
-      id: "trusted", providerID: "anthropic", api: { npm: "@ai-sdk/anthropic" },
+      id: "trusted",
+      providerID: "anthropic",
+      api: { npm: "@ai-sdk/anthropic" },
     });
     expect(catalogRead).toHaveBeenCalledTimes(1);
     expect(authRead).not.toHaveBeenCalled();
@@ -32,7 +37,8 @@ describe("canonical model and provider-bound credentials", () => {
       ["anthropic", "absent", "model_not_found"],
     ] as const) {
       await expect(Provider.resolveModel({ provider, id })).rejects.toMatchObject({
-        name: "ModelResolutionError", data: { provider, model: id, reason },
+        name: "ModelResolutionError",
+        data: { provider, model: id, reason },
       });
     }
     expect(fetch).not.toHaveBeenCalled();
@@ -45,12 +51,19 @@ describe("canonical model and provider-bound credentials", () => {
       Response.json({ data: [{ id: "proxy-only" }] }),
     );
     expect(await Provider.resolveModel({ provider: "anthropic", id: "proxy-only" })).toMatchObject({
-      id: "proxy-only", providerID: "anthropic",
+      id: "proxy-only",
+      providerID: "anthropic",
     });
-    spyOn(Auth, "get").mockResolvedValue({ type: "proxy", baseURL: "https://broken-proxy.example" });
+    spyOn(Auth, "get").mockResolvedValue({
+      type: "proxy",
+      baseURL: "https://broken-proxy.example",
+    });
     fetch.mockRejectedValue(new Error("connection refused"));
-    await expect(Provider.resolveModel({ provider: "anthropic", id: "absent" })).rejects.toMatchObject({
-      data: { reason: "proxy_listing_failed" }, cause: expect.any(Error),
+    await expect(
+      Provider.resolveModel({ provider: "anthropic", id: "absent" }),
+    ).rejects.toMatchObject({
+      data: { reason: "proxy_listing_failed" },
+      cause: expect.any(Error),
     });
   });
 
@@ -68,13 +81,18 @@ describe("canonical model and provider-bound credentials", () => {
     const get = spyOn(Auth, "get").mockResolvedValue(undefined);
     const fetch = spyOn(globalThis, "fetch");
     await expect(Auth.resolve("anthropic", { type: "api", key: "" })).rejects.toMatchObject({
-      name: "AuthResolutionError", data: { reason: "invalid_auth", provider: "anthropic" },
+      name: "AuthResolutionError",
+      data: { reason: "invalid_auth", provider: "anthropic" },
     });
-    await expect(Auth.resolve("openai", { type: "api", key: "primary" }, "anthropic", false)).rejects.toMatchObject({
+    await expect(
+      Auth.resolve("openai", { type: "api", key: "primary" }, "anthropic", false),
+    ).rejects.toMatchObject({
       data: { reason: "missing_auth", provider: "openai" },
     });
     expect(get).not.toHaveBeenCalled();
-    await expect(Auth.resolve("openai")).rejects.toMatchObject({ data: { reason: "missing_auth" } });
+    await expect(Auth.resolve("openai")).rejects.toMatchObject({
+      data: { reason: "missing_auth" },
+    });
     expect(get.mock.calls).toEqual([["openai"]]);
     expect(fetch).not.toHaveBeenCalled();
   });

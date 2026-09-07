@@ -164,13 +164,19 @@ function publishChange(outcome: CommittedOutcome, traceId: string): void {
         threshold: outcome.threshold,
         followUp: false,
       });
-      Storage.publishObservation(Wait.Events.Resolved, { ...base, resolvedAt: outcome.record.updatedAt });
+      Storage.publishObservation(Wait.Events.Resolved, {
+        ...base,
+        resolvedAt: outcome.record.updatedAt,
+      });
       return;
     case "expired":
       Storage.publishObservation(Wait.Events.Expired, { ...base, partial: outcome.partial });
       return;
     case "cancelled":
-      Storage.publishObservation(Wait.Events.Cancelled, { ...base, cancelledAt: outcome.record.updatedAt });
+      Storage.publishObservation(Wait.Events.Cancelled, {
+        ...base,
+        cancelledAt: outcome.record.updatedAt,
+      });
       return;
     case "delivery_recorded":
       // Correlation projection update only (replyToMessageId re-keys to the
@@ -333,5 +339,4 @@ export namespace WaitStore {
     publishChange(outcome, traceId);
     return outcome;
   }
-
 }

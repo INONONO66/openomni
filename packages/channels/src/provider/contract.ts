@@ -13,8 +13,11 @@ import type { PublishPort } from "../types.js";
 export type ProviderDeliveryRoute = (
   externalId: string,
   body: string,
-  idempotencyKey?: string,
-) => Promise<{ readonly externalMessageId?: string }>;
+  idempotencyKey: string,
+) => Promise<{
+  readonly value: "accepted" | "rejected" | "unknown";
+  readonly externalMessageId?: string;
+}>;
 
 /**
  * How a provider receives platform events. The runner does not interpret the
@@ -121,9 +124,5 @@ export interface ChannelProvider<TCredentials, TId extends string = string> {
    * later) — one enforcement layer per invariant, so the contract takes the
    * already-trusted typed value.
    */
-  create(
-    credentials: TCredentials,
-    config: Channel.Config,
-    publish: PublishPort,
-  ): ProviderRuntime;
+  create(credentials: TCredentials, config: Channel.Config, publish: PublishPort): ProviderRuntime;
 }

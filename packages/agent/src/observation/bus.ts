@@ -159,8 +159,10 @@ export function scopeObservation(
 ): ObservationSink {
   const clock = options.clock ?? Date.now;
   const entropy = options.entropy ?? (() => crypto.randomUUID());
-  const report = options.onError ?? ((error, eventName) =>
-    console.warn("observation emit failed", { eventName, error: String(error) }));
+  const report =
+    options.onError ??
+    ((error, eventName) =>
+      console.warn("observation emit failed", { eventName, error: String(error) }));
 
   const scoped: ObservationSink = {
     publish<T>(event: BusEvent.Descriptor<T>, data: T): void {

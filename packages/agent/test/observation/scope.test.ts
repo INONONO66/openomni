@@ -79,9 +79,7 @@ describe("scoped observations", () => {
 
     expect(() => Reflect.apply(scoped.publish, scoped, [TestEvent, null])).not.toThrow();
     expect(() => Reflect.apply(scoped.publish, scoped, [TestEvent, []])).not.toThrow();
-    expect(() =>
-      scoped.publish(TestEvent, { component: "test", msg: "valid" }),
-    ).not.toThrow();
+    expect(() => scoped.publish(TestEvent, { component: "test", msg: "valid" })).not.toThrow();
 
     expect(errors).toEqual([
       { name: TestEvent.name, type: "TypeError" },
@@ -158,13 +156,9 @@ describe("scoped observations", () => {
 
   it("noop sink and its scopes discard observations", () => {
     const sink = noopSink();
+    expect(() => sink.publish(TestEvent, { component: "test", msg: "discard" })).not.toThrow();
     expect(() =>
-      sink.publish(TestEvent, { component: "test", msg: "discard" }),
-    ).not.toThrow();
-    expect(() =>
-      sink
-        .scope?.(identity)
-        .publish(TestEvent, { component: "test", msg: "discard" }),
+      sink.scope?.(identity).publish(TestEvent, { component: "test", msg: "discard" }),
     ).not.toThrow();
   });
 

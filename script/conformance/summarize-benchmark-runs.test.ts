@@ -1,8 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  EXPECTED_BENCHMARK_NAMES,
-  validateBenchmarkRuns,
-} from "../summarize-benchmark-runs";
+import { EXPECTED_BENCHMARK_NAMES, validateBenchmarkRuns } from "../summarize-benchmark-runs";
 
 function completeRun(name: string) {
   return {

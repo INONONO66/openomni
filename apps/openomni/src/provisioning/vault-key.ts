@@ -43,7 +43,10 @@ export function resolveKek(env: Record<string, string | undefined>, home: string
 }
 
 /** `openomni init`: mints the key file once; an existing file is never overwritten. */
-export function ensureVaultKeyFile(home: string): { readonly path: string; readonly created: boolean } {
+export function ensureVaultKeyFile(home: string): {
+  readonly path: string;
+  readonly created: boolean;
+} {
   const path = vaultKeyPath(home);
   if (existsSync(path)) return { path, created: false };
   mkdirSync(dirname(path), { recursive: true });

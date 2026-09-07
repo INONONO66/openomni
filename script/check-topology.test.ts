@@ -45,7 +45,10 @@ function fixture() {
     "packages/phantom/test/index.test.ts": "",
     "packages/phantom/tsconfig.json": "{}",
     "knip.json": JSON.stringify({ workspaces: { ".": {}, [workspace.dir]: {} } }),
-    "script/conformance/coverage-baseline.json": JSON.stringify({ [workspace.dir]: {}, script: {} }),
+    "script/conformance/coverage-baseline.json": JSON.stringify({
+      [workspace.dir]: {},
+      script: {},
+    }),
     ".github/workflows/ci.yml": [
       "      # topology:test-steps:start",
       ciTestSteps([workspace]),

@@ -15,7 +15,12 @@ export namespace Migration {
 
   export type Preparation967 = (db: Database) => void;
 
-  export function applyOrdered(db: Database, migrationDir: string, migrations: Definition[], prepare967?: Preparation967): void {
+  export function applyOrdered(
+    db: Database,
+    migrationDir: string,
+    migrations: Definition[],
+    prepare967?: Preparation967,
+  ): void {
     db.exec("CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY)");
 
     for (const migration of migrations.map((item) => Definition.parse(item))) {
@@ -45,14 +50,23 @@ function migrationStatements(sql: string): string[] {
 const decodeJson: (text: string) => PlainValue = JSON.parse;
 
 function validateWatchAlarms(db: Database): void {
-  const rows = db.query<{ id: string; spec: string | null }, []>("SELECT id, spec FROM alarm WHERE kind = 'watch'").all();
+  const rows = db
+    .query<{ id: string; spec: string | null }, []>(
+      "SELECT id, spec FROM alarm WHERE kind = 'watch'",
+    )
+    .all();
   for (const row of rows) {
     const parsed = Alarm.WatchSpec.safeParse(row.spec === null ? null : decodeJson(row.spec));
     if (!parsed.success) throw new Error(`alarm migration refused: ${row.id}: invalid watch spec`);
   }
 }
 
-function applyMigration(db: Database, migrationDir: string, migration: Migration.Definition, prepare967?: Migration.Preparation967): void {
+function applyMigration(
+  db: Database,
+  migrationDir: string,
+  migration: Migration.Definition,
+  prepare967?: Migration.Preparation967,
+): void {
   db.exec("BEGIN IMMEDIATE TRANSACTION");
   let committed = false;
   // Native disposal preserves both failures as SuppressedError if rollback
@@ -63,16 +77,19 @@ function applyMigration(db: Database, migrationDir: string, migration: Migration
     },
   };
   {
-    const applied = db.query<{ "1": number | bigint }, [string]>("SELECT 1 FROM _migrations WHERE name = ?").get(migration.name);
+    const applied = db
+      .query<{ "1": number | bigint }, [string]>("SELECT 1 FROM _migrations WHERE name = ?")
+      .get(migration.name);
     if (!applied) {
       if (migration.name === U967_MIGRATION) {
         if (prepare967) prepare967(db);
         else {
           const projection = inspect967Projections(db, Date.now());
-          if (projection.blocked.length > 0 || projection.candidates.length > 0) throw new U967Error("approval_required");
+          if (projection.blocked.length > 0 || projection.candidates.length > 0)
+            throw new U967Error("approval_required");
         }
       }
-      if (migration.name === "0035_watch_alarms/migration.sql") validateWatchAlarms(db);
+      if (migration.name === "0037_watch_alarms/migration.sql") validateWatchAlarms(db);
       const sql = readFileSync(join(migrationDir, migration.name), "utf-8");
       for (const statement of migrationStatements(sql)) {
         db.run(statement);

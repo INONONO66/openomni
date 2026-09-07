@@ -6,7 +6,7 @@ import type {
   PlainValue,
   Tool,
 } from "@openomni/protocol";
-import type { CompiledPolicySnapshot } from "@openomni/policy";
+import type { CompiledPolicySnapshot, PolicyEvaluationInput } from "@openomni/policy";
 import type { WaveControl } from "./core/execution/tool-wave";
 
 interface ExecutionKindRegistration {
@@ -40,6 +40,7 @@ export interface ExecutionRequest {
   readonly op: string;
   readonly intent: PlainValue;
   readonly effect: PlainValue;
+  readonly message?: PolicyEvaluationInput["message"];
   readonly revert?: () => void | Promise<void>;
   /** Result-dependent evidence for a reversible durable projection. */
   readonly revertData?: () => PlainValue | undefined;

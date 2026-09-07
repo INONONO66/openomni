@@ -5,10 +5,7 @@ import { createCompactionSummarizer } from "./summarizer";
 import type { LlmIo } from "../tools/execution/llm";
 
 /** Translate operator configuration into the callback-free run-scoped strategy. */
-export function configuredCompaction(
-  config: OpenOmniConfig,
-  io: LlmIo = {},
-): CompactionOptions {
+export function configuredCompaction(config: OpenOmniConfig, io: LlmIo = {}): CompactionOptions {
   const transport = modelTransport(config.model);
   return {
     elideToolOutputs: { minOutputChars: 4000, keepHeadChars: 500 },

@@ -102,7 +102,7 @@ function paymentRequired(error: unknown): boolean {
   let current: unknown = error;
   for (let depth = 0; depth < 8; depth += 1) {
     if (typeof current !== "object" || current === null) return false;
-    const record = current as { statusCode?: unknown; data?: { statusCode?: unknown }; cause?: unknown };
+    const record = current as Error & { statusCode?: number; data?: { statusCode?: number } };
     if (record.statusCode === 402 || record.data?.statusCode === 402) return true;
     const cause = record.cause;
     if (cause === undefined || cause === current) return false;

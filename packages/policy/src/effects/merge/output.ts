@@ -20,11 +20,6 @@ export interface EffectAccumulatorSet {
   readonly continueWithPrompt?: MergedEffect;
   readonly retryAfter?: RetryAccumulator;
   readonly runReplaceMessages?: MergedEffect;
-  readonly delegationConstraints?: {
-    readonly constraints: PlainObject;
-    readonly order: number;
-  };
-  readonly delegationApproval?: ApprovalAccumulator;
   readonly writebackRewrite?: MergedEffect;
   readonly writebackSuppress?: PriorityApprovalAccumulator;
   readonly workspaceLock?: { readonly required: boolean; readonly order: number };
@@ -56,7 +51,6 @@ export function appendMergedEffects(
     });
   }
   appendRunEffects(merged, accumulators);
-  appendDelegationEffects(merged, accumulators);
   appendWritebackEffects(merged, accumulators);
   appendRuntimeEffects(merged, accumulators);
 }
@@ -72,26 +66,6 @@ function appendRunEffects(merged: MergedEffect[], accumulators: EffectAccumulato
     });
   }
   if (accumulators.runReplaceMessages) merged.push(accumulators.runReplaceMessages);
-}
-
-function appendDelegationEffects(merged: MergedEffect[], accumulators: EffectAccumulatorSet): void {
-  if (accumulators.delegationConstraints) {
-    merged.push({
-      effect: {
-        type: "delegation.set_constraints",
-        constraints: accumulators.delegationConstraints.constraints,
-      },
-      order: accumulators.delegationConstraints.order,
-      priority: 0,
-    });
-  }
-  if (accumulators.delegationApproval) {
-    merged.push({
-      effect: approvalEffect("delegation.require_approval", accumulators.delegationApproval),
-      order: accumulators.delegationApproval.order,
-      priority: 0,
-    });
-  }
 }
 
 function appendWritebackEffects(merged: MergedEffect[], accumulators: EffectAccumulatorSet): void {

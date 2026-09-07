@@ -78,15 +78,17 @@ describe("ws port parsing", () => {
     expect(loadConfig().wsPort).toBe(0);
   });
 
-  it.each(["-1", "70000", "8080.5", "not-a-port"])(
-    "refuses %p with a typed configuration code",
-    (raw) => {
-      const error = thrownBy(() => parseWsPort(raw));
-      expect(ConfigurationError.isInstance(error)).toBe(true);
-      if (!ConfigurationError.isInstance(error)) throw error;
-      expect(error.data.code).toBe("invalid_ws_port");
-    },
-  );
+  it.each([
+    "-1",
+    "70000",
+    "8080.5",
+    "not-a-port",
+  ])("refuses %p with a typed configuration code", (raw) => {
+    const error = thrownBy(() => parseWsPort(raw));
+    expect(ConfigurationError.isInstance(error)).toBe(true);
+    if (!ConfigurationError.isInstance(error)) throw error;
+    expect(error.data.code).toBe("invalid_ws_port");
+  });
 });
 
 describe("ws exposure enforcement", () => {

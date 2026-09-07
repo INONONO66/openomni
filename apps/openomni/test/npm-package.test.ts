@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/agent";
-import { PROCESS_WORKER_NO_REQUEST_EXIT } from "../src/delegation/process-entry";
+import { PROCESS_SESSION_NO_REQUEST_EXIT } from "../src/process-entry";
 import { startOpenOmni } from "../src/index";
 
 const appDir = join(import.meta.dir, "..");
@@ -144,7 +144,7 @@ describe("npm package staging", () => {
         stderr: "pipe",
       },
     );
-    expect(worker.exitCode).toBe(PROCESS_WORKER_NO_REQUEST_EXIT);
+    expect(worker.exitCode).toBe(PROCESS_SESSION_NO_REQUEST_EXIT);
     expect(worker.stdout.toString()).toBe("");
   }, 30_000);
 });

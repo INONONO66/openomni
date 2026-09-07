@@ -1,4 +1,5 @@
 import { Gateway, Operational, type BusEvent } from "@openomni/protocol";
+import { ReplyGrantStore } from "@openomni/ledger";
 import { deliverySurfaceKey } from "./grant.js";
 
 /**
@@ -11,15 +12,16 @@ import { deliverySurfaceKey } from "./grant.js";
  * never by engagement id, and `maxLiveInstances` caps grant farming by mass
  * first contact.
  *
- * Instances remain an in-memory projection. Router construction replays the
- * immutable route.decided admissions that originally justified them; no
- * reply-grant store or lifecycle is introduced.
+ * Instances are one indexed durable current projection of committed admissions.
+ * Construction never replays history; channels alone normalizes perimeter facts.
  */
 
 const ENDPOINT_CHANNEL_FACT_PREFIX = "reply_grant.endpoint.channel:";
 const ENDPOINT_EXTERNAL_ID_FACT_PREFIX = "reply_grant.endpoint.external_id:";
 
-export function replyGrantEndpointFacts(endpoint: Readonly<{ channel: string; externalId: string }>) {
+export function replyGrantEndpointFacts(
+  endpoint: Readonly<{ channel: string; externalId: string }>,
+) {
   return [
     `${ENDPOINT_CHANNEL_FACT_PREFIX}${encodeURIComponent(endpoint.channel)}`,
     `${ENDPOINT_EXTERNAL_ID_FACT_PREFIX}${encodeURIComponent(endpoint.externalId)}`,
@@ -33,7 +35,9 @@ export function replyGrantEndpointFromFacts(
   const externalIds = facts.filter((fact) => fact.startsWith(ENDPOINT_EXTERNAL_ID_FACT_PREFIX));
   if (channels.length !== 1 || externalIds.length !== 1) return undefined;
   try {
-    const channel = decodeURIComponent(channels[0]?.slice(ENDPOINT_CHANNEL_FACT_PREFIX.length) ?? "");
+    const channel = decodeURIComponent(
+      channels[0]?.slice(ENDPOINT_CHANNEL_FACT_PREFIX.length) ?? "",
+    );
     const externalId = decodeURIComponent(
       externalIds[0]?.slice(ENDPOINT_EXTERNAL_ID_FACT_PREFIX.length) ?? "",
     );
@@ -54,13 +58,13 @@ export type ReplyGrantAdmission = Readonly<{
   channel?: string;
   traceId: string;
   at: number;
-  /** Immutable route owner stream; makes replayed instance ids stable. */
+  /** Committed admission identity; makes retry instance ids stable. */
   sourceId?: string;
 }>;
 
 export type ReplyGrantInstances = Readonly<{
   /** Live view for the send kernel's grant source; expiry is re-checked per-send by the evaluator (`at` is the send's clock). */
-  list(): readonly Gateway.SenderTargetGrant[];
+  list(at?: number): readonly Gateway.SenderTargetGrant[];
   /** Materializes instances for an admitted inbound; capacity/first-contact rules applied per rule. */
   admit(admission: ReplyGrantAdmission): void;
 }>;
@@ -76,38 +80,36 @@ function ruleCovers(rule: Gateway.ReplyGrantRule, admission: ReplyGrantAdmission
 
 export function createReplyGrantInstances(ports: {
   readonly rules: () => readonly Gateway.ReplyGrantRule[];
-  /** Immutable routed admissions, oldest first, used only to rebuild the projection at boot. */
-  readonly replay?: () => readonly ReplyGrantAdmission[];
   /** Injected observation sink — materialization and capacity refusals are audited, never silent. */
   readonly publish: BusEvent.Sink["publish"];
 }): ReplyGrantInstances {
-  let instances: Gateway.SenderTargetGrant[] = [];
-
-  /** Memory hygiene only — authority-expiry is the evaluator's per-send check. */
-  function prune(at: number): void {
-    instances = instances.filter(
-      (instance) => instance.expiresAt === undefined || at <= instance.expiresAt,
-    );
-  }
-
-  function admit(admission: ReplyGrantAdmission, replaying: boolean): void {
-    prune(admission.at);
+  function admit(admission: ReplyGrantAdmission): void {
     for (const rule of ports.rules()) {
       if (!ruleCovers(rule, admission)) continue;
       // The persona never needs a grant to be replied to by itself.
       if (rule.senderId === admission.actorId) continue;
       const surfaceKey = deliverySurfaceKey(admission.endpoint);
-      const liveForRule = instances.filter((instance) => instance.ruleId === rule.id);
-      const alreadyLive = liveForRule.some(
-        (instance) =>
-          instance.targetActorId === admission.actorId &&
-          instance.replyScope?.surfaceKey === surfaceKey,
-      );
-      // First contact only: a live instance for this initiator+container
-      // keeps its ORIGINAL expiry — repeat messages never refresh it.
-      if (alreadyLive) continue;
-      if (liveForRule.length >= rule.maxLiveInstances) {
-        if (!replaying) {
+      const sourceId =
+        admission.sourceId ?? JSON.stringify([admission.actorId, surfaceKey, admission.at]);
+      const instance = {
+        id: `reply-grant:${encodeURIComponent(rule.id)}:${encodeURIComponent(sourceId)}`,
+        senderId: rule.senderId,
+        targetActorId: admission.actorId,
+        operations: [...rule.operations],
+        expiresAt: admission.at + rule.instanceTtlMs,
+        ruleId: rule.id,
+        replyScope: { surfaceKey },
+      } satisfies Gateway.SenderTargetGrant;
+      Gateway.SenderTargetGrant.parse(instance);
+      // First contact, expiry and the cap are atomic across router instances.
+      const result = ReplyGrantStore.claim(instance, {
+        at: admission.at,
+        maxLiveInstances: rule.maxLiveInstances,
+      });
+      switch (result) {
+        case "existing":
+          continue;
+        case "capacity":
           ports.publish(Operational.Events.Warn, {
             traceId: admission.traceId,
             time: admission.at,
@@ -120,52 +122,31 @@ export function createReplyGrantInstances(ports: {
               maxLiveInstances: rule.maxLiveInstances,
             },
           });
-        }
-        continue;
-      }
-      // Parse pins the schema invariants (rule-materialized ⇒ replyScope +
-      // expiresAt) — a drifting materializer fails loudly, not silently.
-      const instance = Gateway.SenderTargetGrant.parse({
-        id:
-          admission.sourceId === undefined
-            ? crypto.randomUUID()
-            : `reply-grant:${encodeURIComponent(rule.id)}:${encodeURIComponent(admission.sourceId)}`,
-        senderId: rule.senderId,
-        targetActorId: admission.actorId,
-        operations: [...rule.operations],
-        expiresAt: admission.at + rule.instanceTtlMs,
-        ruleId: rule.id,
-        replyScope: { surfaceKey },
-      } satisfies Gateway.SenderTargetGrant);
-      instances.push(instance);
-      if (!replaying) {
-        ports.publish(Operational.Events.Info, {
-          traceId: admission.traceId,
-          time: admission.at,
-          component: "gateway",
-          msg: "reply-grant instance materialized",
-          context: {
-            ruleId: rule.id,
-            instanceId: instance.id,
-            senderId: rule.senderId,
-            targetActorId: admission.actorId,
-            surfaceKey,
-            expiresAt: instance.expiresAt,
-          },
-        });
+          continue;
+        case "claimed":
+          ports.publish(Operational.Events.Info, {
+            traceId: admission.traceId,
+            time: admission.at,
+            component: "gateway",
+            msg: "reply-grant instance materialized",
+            context: {
+              ruleId: rule.id,
+              instanceId: instance.id,
+              senderId: rule.senderId,
+              targetActorId: admission.actorId,
+              surfaceKey,
+              expiresAt: instance.expiresAt,
+            },
+          });
+          break;
       }
     }
   }
 
-  for (const admission of ports.replay?.() ?? []) admit(admission, true);
-  prune(Date.now());
-
   return {
-    list() {
-      return [...instances];
+    list(at = Date.now()) {
+      return ReplyGrantStore.listLive(at);
     },
-    admit(admission: ReplyGrantAdmission): void {
-      admit(admission, false);
-    },
+    admit,
   };
 }

@@ -15,9 +15,8 @@
  *   - clicking the header actually expands, and Enter/arrows reach it;
  *   - a gutter click actually sets `location.hash` and rings the row.
  *
- * It probes the REAL renderer, like `probe-search.ts`, and for the same reason:
- * the showcase renders a static composition, and probing that would assert the
- * composition rather than the surface the Owner sees.
+ * It probes the REAL renderer, like `probe-search.ts`: the shipped
+ * `dist/renderer`, which is the surface the Owner sees.
  *
  *   bun run --cwd apps/desktop probe:timeline <outDir>
  */

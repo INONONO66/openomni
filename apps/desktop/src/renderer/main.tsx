@@ -51,7 +51,8 @@ async function endpoint() {
 function fatal(message: string): void {
   const notice = document.createElement("pre");
   notice.textContent = message;
-  notice.style.cssText = "margin:0;padding:24px;white-space:pre-wrap;font:13px ui-monospace,monospace";
+  notice.style.cssText =
+    "margin:0;padding:24px;white-space:pre-wrap;font:13px ui-monospace,monospace";
   root?.replaceChildren(notice);
 }
 

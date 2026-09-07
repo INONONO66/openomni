@@ -1,5 +1,5 @@
 /**
- * DESIGN.md 5 rule 5 — the one moving element in the system, DRAWN.
+ * the one moving element in the system, DRAWN.
  *
  * A 2×3 grid of dots — the braille cell's own geometry — with the lit dot
  * stepping around the ring. It was ten braille CHARACTERS advanced by a CSS

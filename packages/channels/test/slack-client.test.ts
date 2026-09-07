@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { SlackClient } from "../src/provider/slack/client";
 import { SlackApiError } from "../src/provider/slack/error";
 import type { PublishPort } from "../src/types";
+import type { PlainValue } from "@openomni/protocol";
 
 const noopPublish: PublishPort = () => undefined;
 
@@ -12,9 +13,9 @@ interface RecordedCall {
 }
 
 /** Routes slack Web API calls to scripted bodies and records what was sent. */
-function installFetchMock(
-  respond: (method: string) => { status?: number; body: unknown },
-): { calls: RecordedCall[] } {
+function installFetchMock(respond: (method: string) => { status?: number; body: PlainValue }): {
+  calls: RecordedCall[];
+} {
   const calls: RecordedCall[] = [];
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input);

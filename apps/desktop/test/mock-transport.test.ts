@@ -58,7 +58,10 @@ describe("createMockChatTransport", () => {
 
     const text = (chunks: readonly UIMessageChunk[]) =>
       chunks
-        .filter((chunk): chunk is Extract<UIMessageChunk, { type: "text-delta" }> => chunk.type === "text-delta")
+        .filter(
+          (chunk): chunk is Extract<UIMessageChunk, { type: "text-delta" }> =>
+            chunk.type === "text-delta",
+        )
         .map((chunk) => chunk.delta)
         .join("");
     expect([text(first), text(second), text(third)]).toEqual(["one", "two", "one"]);

@@ -13,7 +13,6 @@ import type { Channel } from "@openomni/protocol";
 import type { BuiltChannel, ChannelComponent } from "../src/channels";
 import { createComposer } from "../src/composition/composer";
 import { MOUNTED_CHANNEL_DEFAULT_TIER, registerTrustedChannelGrant } from "../src/gateway";
-import { replyText } from "../src/index";
 import {
   type ChannelSupervisor,
   createChannelSupervisor,
@@ -22,7 +21,7 @@ import {
 } from "../src/provisioning/supervisor";
 import { assistantMessage } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
-import { nextMessage } from "./helpers/ws";
+import { nextFrame, nextMessage } from "./helpers/ws";
 
 const suite = residentSuite();
 
@@ -44,14 +43,14 @@ describe("boot tool catalog", () => {
       },
     });
 
-    const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, [
+    const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws?actor=owner`, [
       "auth",
       "boot-catalog-token",
     ]);
-    const reply = nextMessage(ws);
+    const reply = nextFrame(ws, (frame) => frame.type === "message");
     ws.send(JSON.stringify({ type: "message", text: "catalog" }));
 
-    expect(JSON.parse(String((await reply).data))).toEqual({ type: "response", text: "ready" });
+    expect(await reply).toMatchObject({ type: "message", text: "ready" });
     expect(await toolNames).not.toContain("work_items");
     expect(await toolNames).not.toContain("complete_work");
   });
@@ -77,7 +76,7 @@ test("967 boot preserves promoted expired session", async () => {
   const response = nextMessage(ws);
   ws.send(JSON.stringify({ type: "message", text: "catalog seed" }));
   await response;
-  const template = SessionHandleStore.listRows()[0];
+  const template = SessionHandleStore.listRows().find((row) => row.id !== "gateway-ingress");
   if (template === undefined) throw new Error("missing app session");
   const generation = SessionHandleStore.latestGeneration(SessionHandleStore.tree(template.id));
   await first.stop();
@@ -204,13 +203,6 @@ test("967 boot preserves promoted expired session", async () => {
   }
 });
 
-describe("replyText", () => {
-  test("hands a string payload back verbatim and serializes anything else", () => {
-    expect(replyText("done")).toBe("done");
-    expect(replyText({ status: "done", count: 2 })).toBe('{"status":"done","count":2}');
-  });
-});
-
 describe("channel supervisor", () => {
   beforeEach(() => {
     Storage.initialize({ dbPath: ":memory:" });
@@ -239,7 +231,7 @@ describe("channel supervisor", () => {
         build: (): BuiltChannel => {
           const surface: Channel.Surface = {
             id,
-            config: { triggers: [] },
+            config: {},
             async start() {
               if (channel.failNextStarts > 0) {
                 channel.failNextStarts -= 1;
@@ -276,7 +268,7 @@ describe("channel supervisor", () => {
     const webhookHandlers = new Map<string, (request: Request) => Promise<Response>>();
     const supervisor = createChannelSupervisor({
       desired,
-      build: (component) => component.build(async () => null),
+      build: (component) => component.build(async () => undefined),
       grant: (surface, defaultTier) => registerTrustedChannelGrant({ surface, defaultTier }),
       deliveryRoutes,
       webhookHandlers,
@@ -294,7 +286,7 @@ describe("channel supervisor", () => {
 
   test("a stage owns its grant, route, and webhook; stopAll revokes all of them", async () => {
     const calls: string[] = [];
-    const route: ProviderDeliveryRoute = async () => ({});
+    const route: ProviderDeliveryRoute = async () => ({ value: "accepted" });
     const routed = fakeChannel("telegram", calls, { deliveryRoute: route });
     const ingressOnly = fakeChannel("github", calls, { webhook: true });
     const { supervisor, deliveryRoutes, webhookHandlers } = supervisorFor(() => ({

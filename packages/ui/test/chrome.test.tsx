@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { MainHeader, SearchLine, SidebarHeader } from "../src";
+import { MainHeader, SearchLine, SidebarHeader } from "../src/chrome";
 
 /** The primitive is data-blind, so every test supplies its own props. */
 const searchLine = (props: Partial<Parameters<typeof SearchLine>[0]> = {}) =>

@@ -87,25 +87,72 @@ describe("machine attach handshake", () => {
     const root = mkdtempSync(join(tmpdir(), "om-routing-"));
     const data = Buffer.alloc(80_001, 255);
     writeFileSync(join(root, "data"), data);
-    const a: Machine.Enrollment = { ...enrollment, machineId: "A", tags: ["fast", "local"], allowedCapabilities: ["fs.read", "kernel.py"], allowedExports: ["docs"] };
+    const a: Machine.Enrollment = {
+      ...enrollment,
+      machineId: "A",
+      tags: ["fast", "local"],
+      allowedCapabilities: ["fs.read", "kernel.py"],
+      allowedExports: ["docs"],
+    };
     const b: Machine.Enrollment = { ...a, machineId: "B", tags: ["other"] };
     try {
-      await withHost((id) => id === "A" ? a : id === "B" ? b : undefined, async ({ host, path }) => {
-        const first = host.get("A");
-        expect(host.get("A")).toBe(first);
-        const connect = (id: string) => attachMachineDaemon({ socketPath: path, offer: offer({ machineId: id, offeredCapabilities: ["fs.read", "kernel.py"], exports: [{ name: "docs", path: root }] }), fsExports: new Map([["docs", root]]), runner: { runCode: async (request) => ({ status: "completed", cellId: request.cellId, value: id, output: { stdout: "", stderr: "" } }), close: async () => undefined } });
-        const da = await connect("A"); const db = await connect("B");
-        try {
-          expect(host.list()).toEqual([a, b].map((entry) => ({ ...entry, tags: entry.tags ?? [], capabilities: ["fs.read", "kernel.py"], os: "darwin", arch: "arm64" })));
-          host.list()[0]?.tags.push("mutated");
-          expect(host.list()[0]?.tags).toEqual(["fast", "local"]);
-          expect((await first.fs.read(join(root, "data"))).data).toEqual(data);
-          const request = { cellId: "route", code: "value", timeoutMs: 1000 };
-          const results = await Promise.all([first.runCode(request), host.get("B").runCode(request)]);
-          expect(results).toMatchObject([{ status: "completed", value: "A" }, { status: "completed", value: "B" }]);
-        } finally { await da.close(); await db.close(); }
-      });
-    } finally { rmSync(root, { recursive: true, force: true }); }
+      await withHost(
+        (id) => (id === "A" ? a : id === "B" ? b : undefined),
+        async ({ host, path }) => {
+          const first = host.get("A");
+          expect(host.get("A")).toBe(first);
+          const connect = (id: string) =>
+            attachMachineDaemon({
+              socketPath: path,
+              offer: offer({
+                machineId: id,
+                offeredCapabilities: ["fs.read", "kernel.py"],
+                exports: [{ name: "docs", path: root }],
+              }),
+              fsExports: new Map([["docs", root]]),
+              runner: {
+                runCode: async (request) => ({
+                  status: "completed",
+                  cellId: request.cellId,
+                  value: id,
+                  output: { stdout: "", stderr: "" },
+                }),
+                close: async () => undefined,
+              },
+            });
+          const da = await connect("A");
+          const db = await connect("B");
+          try {
+            expect(host.list()).toEqual(
+              [a, b].map((entry) => ({
+                ...entry,
+                tags: entry.tags ?? [],
+                capabilities: ["fs.read", "kernel.py"],
+                os: "darwin",
+                arch: "arm64",
+              })),
+            );
+            host.list()[0]?.tags.push("mutated");
+            expect(host.list()[0]?.tags).toEqual(["fast", "local"]);
+            expect((await first.fs.read(join(root, "data"))).data).toEqual(data);
+            const request = { cellId: "route", code: "value", timeoutMs: 1000 };
+            const results = await Promise.all([
+              first.runCode(request),
+              host.get("B").runCode(request),
+            ]);
+            expect(results).toMatchObject([
+              { status: "completed", value: "A" },
+              { status: "completed", value: "B" },
+            ]);
+          } finally {
+            await da.close();
+            await db.close();
+          }
+        },
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   test("enrolled daemon attaches with the enrollment∩offer effective set and the attached event", async () => {
@@ -118,7 +165,9 @@ describe("machine attach handshake", () => {
           effectiveCapabilities: ["fs.read"],
           effectiveExports: [],
         });
-        expect(host.list().find((entry) => entry.machineId === "mac-studio")?.capabilities).toEqual(["fs.read"]);
+        expect(host.list().find((entry) => entry.machineId === "mac-studio")?.capabilities).toEqual(
+          ["fs.read"],
+        );
         expect(collector.events).toEqual([
           {
             name: "machine.attached",
@@ -136,7 +185,9 @@ describe("machine attach handshake", () => {
       async ({ host, path, collector }) => {
         const daemon = await attachMachineDaemon({ socketPath: path, offer: offer() });
         expect(daemon.attachment).toEqual({ status: "refused", reason: "machine_not_enrolled" });
-        expect(host.list().find((entry) => entry.machineId === "mac-studio")?.capabilities).toBeUndefined();
+        expect(
+          host.list().find((entry) => entry.machineId === "mac-studio")?.capabilities,
+        ).toBeUndefined();
         expect(collector.events).toEqual([]);
         daemon.close();
       },
@@ -188,7 +239,9 @@ describe("machine attach handshake", () => {
           time: 5000,
           reason: "connection_closed",
         });
-        expect(host.list().find((entry) => entry.machineId === "mac-studio")?.capabilities).toBeUndefined();
+        expect(
+          host.list().find((entry) => entry.machineId === "mac-studio")?.capabilities,
+        ).toBeUndefined();
       },
     );
   });
@@ -213,7 +266,9 @@ describe("machine attach handshake", () => {
           effectiveCapabilities: ["shell.exec"],
           effectiveExports: [],
         });
-        expect(host.list().find((entry) => entry.machineId === "mac-studio")?.capabilities).toEqual(["shell.exec"]);
+        expect(host.list().find((entry) => entry.machineId === "mac-studio")?.capabilities).toEqual(
+          ["shell.exec"],
+        );
         second.close();
         first.close();
       },

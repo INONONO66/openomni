@@ -3,7 +3,11 @@ import { Bus, newTraceId } from "./helpers/observation";
 import { clientIdentity } from "../src/provider/identity";
 import type { Sink } from "../src/sink";
 
-const TEST_TRACE = { traceId: newTraceId(), sessionId: "session-transport", runId: "run-transport" };
+const TEST_TRACE = {
+  traceId: newTraceId(),
+  sessionId: "session-transport",
+  runId: "run-transport",
+};
 
 type AiCaptureGlobal = typeof globalThis & {
   __openomniTransportStreamArgs?: Record<string, unknown>;

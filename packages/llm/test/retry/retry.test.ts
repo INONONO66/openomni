@@ -71,11 +71,16 @@ describe("Retry", () => {
   describe("sleep(ms, abortSignal)", () => {
     test("resolves without an abort signal", async () => {
       let fireTimer: (() => void) | undefined;
+      const timerHandle = setTimeout(() => undefined, 0);
+      clearTimeout(timerHandle);
       const timeout = vi.spyOn(globalThis, "setTimeout").mockImplementation(
-        ((callback: Parameters<typeof setTimeout>[0]) => {
-          if (typeof callback === "function") fireTimer = callback;
-          return 0 as unknown as ReturnType<typeof setTimeout>;
-        }) as typeof setTimeout,
+        Object.assign(
+          (callback: Parameters<typeof setTimeout>[0]) => {
+            if (typeof callback === "function") fireTimer = callback;
+            return timerHandle;
+          },
+          { __promisify__: setTimeout.__promisify__ },
+        ),
       );
       try {
         const sleeping = Retry.sleep(0);
@@ -403,10 +408,7 @@ describe("Retry.decide ratelimit-reset parsing (#532 candidate 3)", () => {
     const expired = new Date(now - 1000).toISOString();
     expect(
       withNow(now, () =>
-        decideWithoutJitter(
-          1,
-          rateLimitError({ "anthropic-ratelimit-requests-reset": expired }),
-        ),
+        decideWithoutJitter(1, rateLimitError({ "anthropic-ratelimit-requests-reset": expired })),
       ),
     ).toEqual({ retry: true, reason: "rate_limit", delayMs: 2000 });
   });
@@ -421,12 +423,14 @@ describe("Retry.decide ratelimit-reset parsing (#532 candidate 3)", () => {
   });
 
   test("x-ratelimit-reset duration with compound units parses", () => {
-    expect(decideWithoutJitter(1, rateLimitError({ "x-ratelimit-reset-tokens": "1m30s" }))).toEqual({
-      retry: true,
-      reason: "rate_limit",
-      delayMs: Retry.RETRY_INITIAL_DELAY,
-      retryAfterOverCap: true,
-    });
+    expect(decideWithoutJitter(1, rateLimitError({ "x-ratelimit-reset-tokens": "1m30s" }))).toEqual(
+      {
+        retry: true,
+        reason: "rate_limit",
+        delayMs: Retry.RETRY_INITIAL_DELAY,
+        retryAfterOverCap: true,
+      },
+    );
   });
 
   test("anthropic-ratelimit reset timestamp is used when retry-after is absent", () => {

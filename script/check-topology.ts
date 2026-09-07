@@ -177,7 +177,9 @@ function checkCoverageInventory(
   problems: TopologyProblems,
 ): void {
   const baseline = json(join(root, "script/conformance/coverage-baseline.json"));
-  const expected = coverageLanes(topology).map((lane) => lane.dir).sort();
+  const expected = coverageLanes(topology)
+    .map((lane) => lane.dir)
+    .sort();
   const actual = Object.keys(baseline).sort();
   if (actual.join("\n") !== expected.join("\n")) {
     problems["coverage-ratchet"].push(

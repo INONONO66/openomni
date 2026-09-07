@@ -1,7 +1,6 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import {
   lstatSync,
-  mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
@@ -659,7 +658,12 @@ describe("cli dispatch", () => {
 
   test("machine attach validates arity and forwards the config without starting the Resident", async () => {
     const seen: string[] = [];
-    const { deps: cli } = deps({ attachMachine: async (path) => { seen.push(path); return 7; } });
+    const { deps: cli } = deps({
+      attachMachine: async (path) => {
+        seen.push(path);
+        return 7;
+      },
+    });
     expect(await runCli(["machine"], cli)).toBe(1);
     expect(await runCli(["machine", "attach"], cli)).toBe(1);
     expect(await runCli(["machine", "attach", "config.json", "extra"], cli)).toBe(1);
@@ -755,18 +759,13 @@ describe("cli dispatch", () => {
 });
 
 describe("processEntryPath", () => {
-  test("probes bundled sibling, then compiled output, then source", () => {
+  test("probes the JavaScript sibling, then the source entry", () => {
     const dir = tempDir();
     const base = pathToFileURL(join(dir, "main.js")).href;
     const bundled = join(dir, "process-entry.js");
-    const compiled = join(dir, "delegation", "process-entry.js");
-    mkdirSync(join(dir, "delegation"), { recursive: true });
     writeFileSync(bundled, "");
-    writeFileSync(compiled, "");
     expect(processEntryPath(base)).toBe(bundled);
     rmSync(bundled);
-    expect(processEntryPath(base)).toBe(compiled);
-    rmSync(compiled);
-    expect(processEntryPath(base)).toBe(join(dir, "delegation", "process-entry.ts"));
+    expect(processEntryPath(base)).toBe(join(dir, "process-entry.ts"));
   });
 });

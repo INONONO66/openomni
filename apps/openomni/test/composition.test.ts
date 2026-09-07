@@ -78,8 +78,8 @@ describe("composition substrate", () => {
     await expect(
       composer.mount("bad", (ctx) => {
         ctx.effect(() => {
-        order.push("bad.release");
-      });
+          order.push("bad.release");
+        });
         throw boom;
       }),
     ).rejects.toBe(boom);
@@ -97,9 +97,7 @@ describe("composition substrate", () => {
       });
       throw mountFailure;
     });
-    await expect(rejection).rejects.toThrow(
-      "composition stage bad failed and its rollback failed",
-    );
+    await expect(rejection).rejects.toThrow("composition stage bad failed and its rollback failed");
     const caught = await rejection.then(
       () => null,
       (error: AggregateError) => error,

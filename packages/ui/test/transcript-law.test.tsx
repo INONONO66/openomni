@@ -1,27 +1,21 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
+import { Console } from "../src/console";
+import type { TranscriptNode } from "../src/timeline/model";
 import {
   BLOCK_GAP,
-  COLLAPSE_AFTER,
-  Console,
   PAIR_GAP,
   PARAGRAPH_GAP,
-  type TranscriptNode,
-  TURN_GAP,
-  Timeline,
-  collapses,
-  type Expansion,
-  expansionFor,
-  gapAbove,
-  isLoud,
   type PartKind,
-  segmentTurns,
+  TURN_GAP,
+  gapAbove,
   spacingClass,
-  summarize,
-  summaryLabel,
-} from "../src";
-import { pending, transcript } from "../showcase/fixture";
+} from "../src/timeline/spacing";
+import { type Expansion, Timeline, expansionFor } from "../src/timeline/timeline";
+import { segmentTurns } from "../src/timeline/turns";
+import { COLLAPSE_AFTER, collapses, isLoud, summarize, summaryLabel } from "../src/timeline/work-group";
+import { pending, transcript } from "./fixture";
 
 /**
  * The transcript law, pinned where it is DECIDED rather than where it is drawn.
@@ -471,15 +465,12 @@ describe("the accent budget", () => {
  *
  * The scroll POSITION itself cannot be asserted here: these tests render to
  * static markup, which has no viewport, no scroll offset and no composer to be
- * hidden behind, so the defect this guards (the last turn sitting 114px below
- * the fold) is invisible to every assertion in this file. The real gate is
- * `showcase:probe-transcript-tail`, which measures it in a browser at 1280x860.
+ * hidden behind, so the defect this guards (the last turn sitting below the
+ * fold) is invisible to every assertion in this file.
  *
  * What IS assertable here is the WIRING — that the console asks for end-pinning
- * at all, and that the navigator does not. That is the half which silently
- * rots: the probe would catch a regression, but only when someone runs it,
- * whereas dropping the prop is a one-character edit that this catches in the
- * normal suite.
+ * at all, and that the navigator does not. Dropping the prop is a one-character
+ * edit that this catches in the normal suite.
  */
 describe("the transcript opens on its newest turn", () => {
   test("Given the console, When composed, Then the transcript column pins to the end", () => {
@@ -567,7 +558,6 @@ describe("the diff exception stays scoped to diff rows", () => {
       "primitives/state.tsx",
       "primitives/surface.tsx",
       "primitives/button.tsx",
-      "primitives/anchor-gutter.tsx",
       "timeline/tool-rows.tsx",
       "timeline/timeline.tsx",
       "timeline/markdown-block.tsx",

@@ -13,9 +13,8 @@
  *   - the highlight is weight-only: no fill, no hue of its own.
  *   - the tree does not reflow while the field is focused.
  *
- * It probes the REAL renderer rather than the design system's showcase,
- * because the showcase deliberately fronts the primitive with a substring
- * stub — probing that would assert the stub.
+ * It probes the REAL renderer: the shipped `dist/renderer`, not a test-only
+ * composition.
  *
  *   bun run --cwd apps/desktop probe:search <outDir>
  */

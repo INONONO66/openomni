@@ -10,7 +10,10 @@ function publish<T>(descriptor: BusEvent.Descriptor<T>, value: T): void {
   }
 }
 
-function subscribe<T>(descriptor: BusEvent.Descriptor<T>, listener: (value: T) => void): () => void {
+function subscribe<T>(
+  descriptor: BusEvent.Descriptor<T>,
+  listener: (value: T) => void,
+): () => void {
   const bucket = listeners.get(descriptor.name) ?? new Set<Listener>();
   const wrapped: Listener = (_event, value) => listener(value);
   bucket.add(wrapped);

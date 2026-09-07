@@ -7,7 +7,13 @@ export interface CiPlan {
   readonly full: boolean;
   readonly verify: boolean;
   readonly dependencyReview: boolean;
-  readonly matrix: { readonly include: readonly { readonly key: string; readonly dir: string; readonly coverage: boolean }[] };
+  readonly matrix: {
+    readonly include: readonly {
+      readonly key: string;
+      readonly dir: string;
+      readonly coverage: boolean;
+    }[];
+  };
   readonly reason: string;
 }
 
@@ -54,7 +60,11 @@ export function planChanges(
     verify,
     dependencyReview: false,
     matrix: { include: verify ? rows(workspaces) : [] },
-    reason: verify ? "workspace-impact" : paths.length === 0 ? "empty-diff" : "root-documentation-only",
+    reason: verify
+      ? "workspace-impact"
+      : paths.length === 0
+        ? "empty-diff"
+        : "root-documentation-only",
   };
 }
 
@@ -66,7 +76,13 @@ function rows(topology: readonly WorkspaceTopology[]) {
 }
 
 function fullPlan(topology: readonly WorkspaceTopology[], reason: string): CiPlan {
-  return { full: true, verify: true, dependencyReview: true, matrix: { include: rows(topology) }, reason };
+  return {
+    full: true,
+    verify: true,
+    dependencyReview: true,
+    matrix: { include: rows(topology) },
+    reason,
+  };
 }
 
 function validateGraph(topology: readonly WorkspaceTopology[]): void {
@@ -74,11 +90,19 @@ function validateGraph(topology: readonly WorkspaceTopology[]): void {
   const names = new Set(topology.map((workspace) => workspace.packageName));
   const keys = new Set(topology.map((workspace) => workspace.key));
   const dirs = new Set(topology.map((workspace) => workspace.dir));
-  if (names.size !== topology.length || keys.size !== topology.length || dirs.size !== topology.length || keys.has("scripts")) {
+  if (
+    names.size !== topology.length ||
+    keys.size !== topology.length ||
+    dirs.size !== topology.length ||
+    keys.has("scripts")
+  ) {
     throw new Error("topology workspace names, keys and directories must be unique");
   }
   for (const workspace of topology) {
-    if (!/^[a-zA-Z0-9_-]+$/.test(workspace.key) || !/^(packages|apps)\/[a-zA-Z0-9_-]+$/.test(workspace.dir)) {
+    if (
+      !/^[a-zA-Z0-9_-]+$/.test(workspace.key) ||
+      !/^(packages|apps)\/[a-zA-Z0-9_-]+$/.test(workspace.dir)
+    ) {
       throw new Error(`invalid topology workspace boundary: ${workspace.key}`);
     }
     const band = workspace.allowedDeps;
@@ -99,7 +123,8 @@ function main(): void {
   // Inventory validation must run even when a docs-only/full shortcut is used.
   assertTopologyComplete(TOPOLOGY, process.cwd());
   const event = process.env.GITHUB_EVENT_NAME;
-  const full = values.full === true || (event !== undefined && event !== "" && event !== "pull_request");
+  const full =
+    values.full === true || (event !== undefined && event !== "" && event !== "pull_request");
   let paths: readonly string[] | undefined;
   if (!full) {
     const sha = z.string().regex(/^(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$/);
@@ -107,18 +132,28 @@ function main(): void {
     const head = sha.parse(values.head);
     // Argument arrays, SHA validation, and NUL delimiters avoid shell expansion,
     // option injection, rename loss, and splitting filenames on whitespace.
-    const result = Bun.spawnSync(["git", "diff", "--no-ext-diff", "--no-renames", "--name-only", "-z", base, head, "--"], {
-      cwd: process.cwd(), stdout: "pipe", stderr: "pipe",
-    });
-    if (result.exitCode !== 0) throw new Error(`git diff failed (${result.exitCode}): ${result.stderr.toString()}`);
+    const result = Bun.spawnSync(
+      ["git", "diff", "--no-ext-diff", "--no-renames", "--name-only", "-z", base, head, "--"],
+      {
+        cwd: process.cwd(),
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
+    if (result.exitCode !== 0)
+      throw new Error(`git diff failed (${result.exitCode}): ${result.stderr.toString()}`);
     const output = result.stdout.toString();
-    if (output !== "" && !output.endsWith("\0")) throw new Error("git diff output is not NUL terminated");
+    if (output !== "" && !output.endsWith("\0"))
+      throw new Error("git diff output is not NUL terminated");
     paths = output === "" ? [] : output.slice(0, -1).split("\0");
   }
   const plan = planChanges(paths, full);
   const outputPath = process.env.GITHUB_OUTPUT;
   if (outputPath) {
-    appendFileSync(outputPath, `full=${plan.full}\nverify=${plan.verify}\ndependencyReview=${plan.dependencyReview}\nmatrix=${JSON.stringify(plan.matrix)}\n`);
+    appendFileSync(
+      outputPath,
+      `full=${plan.full}\nverify=${plan.verify}\ndependencyReview=${plan.dependencyReview}\nmatrix=${JSON.stringify(plan.matrix)}\n`,
+    );
   }
   process.stdout.write(`${JSON.stringify(plan)}\n`);
 }

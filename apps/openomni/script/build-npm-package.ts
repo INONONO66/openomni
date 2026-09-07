@@ -24,7 +24,7 @@ const staging = process.argv[2] ?? join(appDir, "dist-npm");
 rmSync(staging, { recursive: true, force: true });
 mkdirSync(join(staging, "bin"), { recursive: true });
 
-for (const entrypoint of ["src/cli/main.ts", "src/delegation/process-entry.ts"]) {
+for (const entrypoint of ["src/cli/main.ts", "src/process-entry.ts"]) {
   const result = await Bun.build({
     entrypoints: [join(appDir, entrypoint)],
     outdir: join(staging, "dist", "app"),

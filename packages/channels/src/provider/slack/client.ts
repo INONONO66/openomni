@@ -103,7 +103,10 @@ export class SlackClient implements ChannelClient {
       { traceId, label: `slack ${method}`, publish: this.publish },
     );
     if (!res.ok) {
-      throw new SlackApiError({ message: `slack ${method} failed (${res.status})` });
+      throw new SlackApiError({
+        message: `slack ${method} failed (${res.status})`,
+        rejected: res.status >= 400 && res.status < 500,
+      });
     }
     const raw = (await res.json()) as object;
     const envelope = EnvelopeSchema.safeParse(raw);
@@ -113,6 +116,7 @@ export class SlackClient implements ChannelClient {
     if (!envelope.data.ok) {
       throw new SlackApiError({
         message: `slack ${method} refused: ${envelope.data.error ?? "unspecified error"}`,
+        rejected: true,
       });
     }
     const parsed = shape.schema.safeParse(raw);

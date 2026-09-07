@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { UI_NAMES } from "../names";
 
 /**
- * DESIGN.md 5 rule 8 — an addressable gutter, DRAWN.
+ * an addressable gutter, DRAWN.
  *
  *     142   let lease = self.lease.acquire().await?;
  *     143 - if lease.generation != self.generation {
@@ -29,7 +29,7 @@ import { UI_NAMES } from "../names";
  *     replacement.
  *
  * Both are CHROMATIC, and that is the system's one scoped exception to the
- * single-accent law (DESIGN.md §2). Green-is-added / red-is-removed is the
+ * single-accent law. Green-is-added / red-is-removed is the
  * universal diff convention — git's, every review tool's, every editor's — and
  * the reader arrives already trained on it, so an achromatic diff is the one
  * place refusing color makes the surface harder to read than the convention it

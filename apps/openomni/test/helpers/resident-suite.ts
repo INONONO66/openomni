@@ -47,9 +47,11 @@ export function residentSuite(beforeReset?: () => Promise<void> | void): Residen
       try {
         await dispose();
       } catch (error) {
-        failures.push(error instanceof Error
-          ? error
-          : new Error("non-Error cleanup rejection", { cause: error }));
+        failures.push(
+          error instanceof Error
+            ? error
+            : new Error("non-Error cleanup rejection", { cause: error }),
+        );
       }
     }
     await Promise.all(sockets.splice(0).map((ws) => attempt(() => closeSocket(ws))));

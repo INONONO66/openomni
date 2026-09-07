@@ -72,13 +72,18 @@ export namespace Provider {
   );
 
   /** Resolve only catalog-trusted or positively proxy-discovered models. */
-  export async function resolveModel(input: { readonly provider: string; readonly id: string }): Promise<Model> {
+  export async function resolveModel(input: {
+    readonly provider: string;
+    readonly id: string;
+  }): Promise<Model> {
     const data = await ModelsDev.get();
     const provider = data[input.provider];
     if (provider === undefined) {
       throw new ModelResolutionError({
         message: `Unknown provider: ${input.provider}`,
-        provider: input.provider, model: input.id, reason: "provider_not_found",
+        provider: input.provider,
+        model: input.id,
+        reason: "provider_not_found",
       });
     }
     const catalog = catalogModels(provider);
@@ -90,17 +95,26 @@ export namespace Provider {
       try {
         ids = await fetchProxyModels(auth.baseURL, auth.apiKey);
       } catch (cause) {
-        throw new ModelResolutionError({
-          message: `Proxy model listing failed for provider: ${input.provider}`,
-          provider: input.provider, model: input.id, reason: "proxy_listing_failed",
-        }, { cause });
+        throw new ModelResolutionError(
+          {
+            message: `Proxy model listing failed for provider: ${input.provider}`,
+            provider: input.provider,
+            model: input.id,
+            reason: "proxy_listing_failed",
+          },
+          { cause },
+        );
       }
-      const discovered = enrichWithCatalog(ids, catalog, input.provider).find((model) => model.id === input.id);
+      const discovered = enrichWithCatalog(ids, catalog, input.provider).find(
+        (model) => model.id === input.id,
+      );
       if (discovered !== undefined) return discovered;
     }
     throw new ModelResolutionError({
       message: `Model not found: ${input.provider}/${input.id}`,
-      provider: input.provider, model: input.id, reason: "model_not_found",
+      provider: input.provider,
+      model: input.id,
+      reason: "model_not_found",
     });
   }
 

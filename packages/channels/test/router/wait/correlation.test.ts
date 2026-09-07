@@ -184,10 +184,7 @@ describe("findWaitCandidates", () => {
 
     expect(resolution.kind).toBe("ambiguous");
     if (resolution.kind !== "ambiguous") throw new Error("expected ambiguity");
-    expect(resolution.candidates.map((candidate) => candidate.key)).toEqual([
-      "wait:a",
-      "wait:z",
-    ]);
+    expect(resolution.candidates.map((candidate) => candidate.key)).toEqual(["wait:a", "wait:z"]);
   });
 
   test("executes exact ordered queries over the wait table", () => {

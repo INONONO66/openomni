@@ -55,7 +55,8 @@ async function withBridge(
       return { status: "failed", error: `tool is not offerable: ${call.name}` };
     },
   });
-  const daemon = await attachMachineDaemon({ runner: createCodemode().runner,
+  const daemon = await attachMachineDaemon({
+    runner: createCodemode().runner,
     socketPath: path,
     offer: {
       machineId: "m-1",
@@ -556,7 +557,11 @@ describe("code-mode tool bridge", () => {
       offeredCapabilities: ["kernel.py" as const],
       offeredAt: 2000,
     };
-    const first = await attachMachineDaemon({ runner: createCodemode().runner, socketPath: path, offer });
+    const first = await attachMachineDaemon({
+      runner: createCodemode().runner,
+      socketPath: path,
+      offer,
+    });
     let second: Awaited<ReturnType<typeof attachMachineDaemon>> | undefined;
     try {
       const cell = host.get("m-1").runCode({
@@ -574,7 +579,11 @@ describe("code-mode tool bridge", () => {
 
       // Take the machine over while the cell sits inside its first tool call.
       await firstCallEntered;
-      second = await attachMachineDaemon({ runner: createCodemode().runner, socketPath: path, offer });
+      second = await attachMachineDaemon({
+        runner: createCodemode().runner,
+        socketPath: path,
+        offer,
+      });
       release();
 
       // Being superseded revokes tools, but the cell still finishes on its
@@ -680,7 +689,9 @@ describe("code-mode tool bridge", () => {
       // Back-compat: a tenantless request reads as the "default" tenant and
       // shares one interpreter with other tenantless requests.
       await host.get("m-1").runCode({ cellId: "d-1", code: "y = 7", timeoutMs: 15_000 });
-      const defaulted = await host.get("m-1").runCode({ cellId: "d-2", code: "y", timeoutMs: 15_000 });
+      const defaulted = await host
+        .get("m-1")
+        .runCode({ cellId: "d-2", code: "y", timeoutMs: 15_000 });
       expect(defaulted).toMatchObject({ status: "completed", value: "7" });
     });
   });
@@ -698,7 +709,8 @@ describe("code-mode tool bridge", () => {
       events: silent,
       now: () => 5000,
     });
-    const daemon = await attachMachineDaemon({ runner: createCodemode().runner,
+    const daemon = await attachMachineDaemon({
+      runner: createCodemode().runner,
       socketPath: path,
       offer: {
         machineId: "m-1",

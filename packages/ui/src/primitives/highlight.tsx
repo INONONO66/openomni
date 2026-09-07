@@ -2,7 +2,7 @@ import { UI_NAMES } from "../names";
 import type { TextTone } from "./surface";
 
 /**
- * DESIGN.md 7 — Highlight. Match emphasis inside a label, as WEIGHT ONLY.
+ * Highlight. Match emphasis inside a label, as WEIGHT ONLY.
  *
  * Matched glyphs take the primary tone at medium weight; the rest of the label
  * stays on the tone it would have had anyway. There is no color and no

@@ -95,18 +95,8 @@ export const TOPOLOGY = [
     displayName: "agent",
     dir: "packages/agent",
     packageName: "@openomni/agent",
-    allowedDeps: [
-      "@openomni/protocol",
-      "@openomni/ledger",
-      "@openomni/policy",
-      "@openomni/llm",
-    ],
-    srcAllowedDeps: [
-      "@openomni/protocol",
-      "@openomni/ledger",
-      "@openomni/policy",
-      "@openomni/llm",
-    ],
+    allowedDeps: ["@openomni/protocol", "@openomni/ledger", "@openomni/policy", "@openomni/llm"],
+    srcAllowedDeps: ["@openomni/protocol", "@openomni/ledger", "@openomni/policy", "@openomni/llm"],
     testLane: true,
     coverageLane: true,
     knipWorkspace: true,
@@ -144,11 +134,7 @@ export const TOPOLOGY = [
     displayName: "channels",
     dir: "packages/channels",
     packageName: "@openomni/channels",
-    allowedDeps: [
-      "@openomni/protocol",
-      "@openomni/policy",
-      "@openomni/ledger",
-    ],
+    allowedDeps: ["@openomni/protocol", "@openomni/policy", "@openomni/ledger"],
     srcAllowedDeps: ["@openomni/protocol", "@openomni/policy", "@openomni/ledger"],
     testLane: true,
     coverageLane: true,
@@ -184,11 +170,11 @@ export const TOPOLOGY = [
     // None, and that is the whole rule: the design system may not depend on the
     // app it dresses, nor on any kernel package. It owns tokens, primitives,
     // window chrome, the transcript's presentation, and the one `Console`
-    // composition — all of it data-blind. See DESIGN.md 10.
+    // composition — all of it data-blind.
     allowedDeps: [],
     testLane: true,
-    // Deliberate: the surface's claim is visual and is reviewed through the
-    // showcase shots; there is no approved line-coverage baseline yet.
+    // Deliberate: the surface's claim is visual and is reviewed by running the
+    // desktop app; there is no approved line-coverage baseline yet.
     coverageLane: false,
     knipWorkspace: true,
     tsconfigVerify: true,

@@ -6,7 +6,10 @@ import { PythonKernel } from "../src/kernel";
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
   let reject!: (error: Error) => void;
-  const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; });
+  const promise = new Promise<T>((yes, no) => {
+    resolve = yes;
+    reject = no;
+  });
   return { promise, resolve, reject };
 }
 describe("interpreter bridge ownership", () => {
@@ -49,7 +52,10 @@ describe("interpreter bridge ownership", () => {
     const signals: KillSignal[] = [];
     const unhandled: Error[] = [];
     const onUnhandled = (error: Error) => unhandled.push(error);
-    const rejectionEvents = process as NodeJS.Process & { on(event: "unhandledRejection", listener: (error: Error) => void): void; off(event: "unhandledRejection", listener: (error: Error) => void): void };
+    const rejectionEvents = process as NodeJS.Process & {
+      on(event: "unhandledRejection", listener: (error: Error) => void): void;
+      off(event: "unhandledRejection", listener: (error: Error) => void): void;
+    };
     rejectionEvents.on("unhandledRejection", onUnhandled);
     try {
       const running = kernel.run(
@@ -66,7 +72,17 @@ describe("interpreter bridge ownership", () => {
       await callEntered.promise;
       const child = z.instanceof(ChildProcess).parse(Reflect.get(kernel, "process"));
       if (!child) throw new Error("expected a running Python process");
-      const callbacks = [...z.object({ inFlight: z.map(z.string(), z.custom<Promise<void>>((value) => value instanceof Promise)) }).parse(Reflect.get(kernel, "pending")).inFlight.values()];
+      const callbacks = [
+        ...z
+          .object({
+            inFlight: z.map(
+              z.string(),
+              z.custom<Promise<void>>((value) => value instanceof Promise),
+            ),
+          })
+          .parse(Reflect.get(kernel, "pending"))
+          .inFlight.values(),
+      ];
       const kill = child.kill.bind(child);
       child.kill = ((signal?: KillSignal) => {
         signals.push(signal);
@@ -136,6 +152,4 @@ describe("interpreter bridge ownership", () => {
       await kernel.close();
     }
   });
-
-
 });

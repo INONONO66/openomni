@@ -16,7 +16,8 @@ describe("tablesToBullets", () => {
   });
 
   it("rewrites a GFM table into bold-heading bullet groups", () => {
-    const text = "| Name | Role | City |\n| --- | :-: | ---: |\n| Ana | dev | Seoul |\n| Bo | ops | Busan |";
+    const text =
+      "| Name | Role | City |\n| --- | :-: | ---: |\n| Ana | dev | Seoul |\n| Bo | ops | Busan |";
     expect(tablesToBullets(text)).toBe(
       "**Ana**\n- Role: dev\n- City: Seoul\n\n**Bo**\n- Role: ops\n- City: Busan",
     );

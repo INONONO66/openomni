@@ -30,6 +30,8 @@ import {
   sessionRunnerResultFromValue,
 } from "./session-record";
 import type { SessionControllerState } from "./session-controller-state";
+import { parentReply } from "./session-parent-reply";
+import { observeDrained } from "./session-message-observation";
 
 export function createSessionTurn(
   sessionId: string,
@@ -356,6 +358,7 @@ export function createSessionTurn(
       releaseLease: false,
     });
     requireCommit(committed);
+    observeDrained(pending, turnId, boundary, clock(), runtime.observations);
     const interrupted = pending.some((item) => item.kind === "interrupt");
     const messages = pending
       .filter((item) => item.kind === "prompt")
@@ -396,7 +399,7 @@ export function createSessionTurn(
       at: clock(),
     });
     const nextState = result.kind === "interrupted" ? "interrupted" : "idle";
-    const committed = SessionHandleStore.commit({
+    const commit: LedgerSession.Commit = {
       sessionId,
       owner,
       fence: state.fence,
@@ -406,8 +409,27 @@ export function createSessionTurn(
       consumeInboxIds: interrupts.map((item) => item.id),
       state: nextState,
       releaseLease,
-    });
+    };
+    const reply = parentReply(current, terminal, result)[0];
+    let committed: LedgerSession.CommitResult;
+    if (reply === undefined) committed = SessionHandleStore.commit(commit);
+    else {
+      if (runtime.commitTerminal === undefined)
+        throw new Error("child terminal requires the gateway commit port");
+      committed = await runtime.commitTerminal({
+        commit,
+        reply,
+        policy: pinPolicy(open.policyGeneration),
+      });
+    }
     requireCommit(committed);
+    observeDrained(interrupts, open.turnId, "before_llm", clock(), runtime.observations);
+    if (committed.ok) {
+      const inboxSessions = committed.receipts
+        .filter((receipt) => receipt.action.kind === "prompt")
+        .map((receipt) => receipt.action.sessionId);
+      if (inboxSessions.length > 0) runtime.onInboxCommitted?.(inboxSessions);
+    }
   }
   return { runTurn, drainBoundary, seal };
 }

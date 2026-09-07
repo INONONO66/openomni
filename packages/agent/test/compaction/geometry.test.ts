@@ -6,14 +6,9 @@ import {
 
 describe("compaction geometry", () => {
   it("tiers the base threshold by context window", () => {
-    expect([16_000, 32_000, 64_000, 128_000, 512_000, 1_000_000].map(baseThresholdRatioForWindow)).toEqual([
-      0.45,
-      0.5,
-      0.55,
-      0.6,
-      0.7,
-      0.8,
-    ]);
+    expect(
+      [16_000, 32_000, 64_000, 128_000, 512_000, 1_000_000].map(baseThresholdRatioForWindow),
+    ).toEqual([0.45, 0.5, 0.55, 0.6, 0.7, 0.8]);
   });
 
   it("moves the threshold from the previous compaction yield and clamps it", () => {

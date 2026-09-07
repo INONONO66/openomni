@@ -15,7 +15,11 @@ import { Actor, type Provisioning } from "@openomni/protocol";
 import { declaredChannelProfile, validateProviderCredential } from "../src/channels";
 import type { OpenOmniConfig } from "../src/config";
 import { MOUNTED_CHANNEL_DEFAULT_TIER } from "../src/gateway";
-import { desiredChannels, materializePersons, vaultCredentialReader } from "../src/provisioning/declared";
+import {
+  desiredChannels,
+  materializePersons,
+  vaultCredentialReader,
+} from "../src/provisioning/declared";
 import { ensureVaultKeyFile, resolveKek, vaultKeyPath } from "../src/provisioning/vault-key";
 
 const NOW = 1_756_000_000_000;
@@ -95,7 +99,7 @@ describe("declared channel profile", () => {
     };
   }
 
-  test("a valid declaration mounts with the provider's trigger policy", () => {
+  test("a valid declaration mounts with the provider's empty driver configuration", () => {
     const { rows, statuses } = declaredChannelProfile(
       [instance({})],
       readerFor({ "secret:channel-telegram-main": '{"token":"tg-token"}' }),
@@ -106,8 +110,8 @@ describe("declared channel profile", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]?.instanceId).toBe("channel:telegram:main");
     expect(rows[0]?.component.id).toBe("telegram");
-    const built = rows[0]?.component.build(() => Promise.resolve(null));
-    expect(built?.surface.config).toEqual({ triggers: [] });
+    const built = rows[0]?.component.build(() => Promise.resolve());
+    expect(built?.surface.config).toEqual({});
     expect(built?.surface.id).toBe("telegram");
   });
 

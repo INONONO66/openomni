@@ -17,7 +17,9 @@ describe("ingress target helpers", () => {
   });
 
   it("resolves metadata targets when no explicit target is present", () => {
-    expect(resolveTarget({ meta: { target: { kind: "worker", workerId: "worker-meta" } } })).toEqual({
+    expect(
+      resolveTarget({ meta: { target: { kind: "worker", workerId: "worker-meta" } } }),
+    ).toEqual({
       kind: "worker",
       workerId: "worker-meta",
     });
@@ -47,9 +49,7 @@ describe("ingress target helpers", () => {
   });
 
   it("separates worker surface sessions while preserving resident keys", () => {
-    expect(extractSurfaceKey({ surface: "cli", workspace: "ws", channel: "ch" })).toBe(
-      "cli:ws:ch",
-    );
+    expect(extractSurfaceKey({ surface: "cli", workspace: "ws", channel: "ch" })).toBe("cli:ws:ch");
     expect(
       extractSurfaceKey({
         surface: "cli",

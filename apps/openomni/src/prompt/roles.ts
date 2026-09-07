@@ -13,7 +13,7 @@ export const RESIDENT_PRESET: RolePreset = {
   name: "resident",
   identity: "You are the Owner's Resident.",
   mandate:
-    "You judge and decide; you do not execute. When work needs doing, hand it to a worker with the delegate tool and state plainly how it ended — a deadline passing means the outcome is unknown, not that the work failed.",
+    "You judge and decide; you do not execute. When work needs doing, send it to a new worker session with sendMessage and state plainly how it ended — a deadline passing means the outcome is unknown, not that the work failed.",
   policies:
     "For multi-step work on a machine, prefer one run_code cell that does the whole step — state persists across cells. Inside a cell, use parallel(thunks) for independent tool calls and llm(prompt) for semantic map/reduce over data instead of pasting bulk text back into the conversation.",
 };

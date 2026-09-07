@@ -10,9 +10,7 @@ const EXPECTED = [
   "search",
   "bash",
   "monitor",
-  "delegate",
-  "await_delegation",
-  "cancel_delegation",
+  "sendMessage",
   "approval",
   "provision",
   "run_code",
@@ -20,7 +18,7 @@ const EXPECTED = [
 ];
 
 describe("tool catalog", () => {
-  it("has the stage-one tool surface", () => {
+  it("has the consolidated message-tool surface", () => {
     expect(TOOL_DEFINITIONS.map((tool) => tool.name)).toEqual(EXPECTED);
     expect(collectToolSpecs().map((tool) => tool.name)).toEqual(EXPECTED);
   });

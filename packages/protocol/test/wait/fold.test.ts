@@ -3,14 +3,27 @@ import { Wait } from "../../src/wait/index.js";
 import { buildReplyInput, buildWaitRecord } from "../helpers/wait.js";
 
 describe("967 retired owner parse refuses", () => {
-  test.each(["workItem", "WorkItem", "work_item", "work-item"])("rejects %s at the public boundary", (kind: string) => {
+  test.each([
+    "workItem",
+    "WorkItem",
+    "work_item",
+    "work-item",
+  ])("rejects %s at the public boundary", (kind: string) => {
     const ownerRef = { kind, id: "historical-owner" };
     expect(Wait.OwnerRef.safeParse(ownerRef).success).toBe(false);
-    expect(Wait.Record.safeParse({ ...buildWaitRecord({ ownerRef: { kind: "session", id: "session-owner" } }), ownerRef }).success).toBe(false);
+    expect(
+      Wait.Record.safeParse({
+        ...buildWaitRecord({ ownerRef: { kind: "session", id: "session-owner" } }),
+        ownerRef,
+      }).success,
+    ).toBe(false);
   });
 
   test("accepts the surviving session owner", () => {
-    expect(Wait.OwnerRef.parse({ kind: "session", id: "session-owner" })).toEqual({ kind: "session", id: "session-owner" });
+    expect(Wait.OwnerRef.parse({ kind: "session", id: "session-owner" })).toEqual({
+      kind: "session",
+      id: "session-owner",
+    });
   });
 });
 

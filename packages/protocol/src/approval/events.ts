@@ -18,11 +18,9 @@ const EventBase = z.object({
 });
 
 export const ApprovalEvents = {
-  Requested: BusEvent.define(
-    "approval.requested",
-    EventBase.extend({ deadline: EpochMs }),
-    { visibility: "llm_reason" },
-  ),
+  Requested: BusEvent.define("approval.requested", EventBase.extend({ deadline: EpochMs }), {
+    visibility: "llm_reason",
+  }),
   Decided: BusEvent.define(
     "approval.decided",
     EventBase.extend({ state: State.exclude(["pending"]), decidedBy: DecidedBy }),

@@ -32,9 +32,7 @@ export function effectiveCapabilities(enrollment: Enrollment, offer: Offer): Eff
   return {
     kind: "effective",
     machineId: enrollment.machineId,
-    capabilities: [
-      ...new Set(offer.offeredCapabilities.filter((id) => allowed.has(id))),
-    ].sort(),
+    capabilities: [...new Set(offer.offeredCapabilities.filter((id) => allowed.has(id)))].sort(),
   };
 }
 

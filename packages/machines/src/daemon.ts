@@ -8,7 +8,11 @@ import { execute } from "./exec";
 
 /** Injected at composition: machines never imports or owns an interpreter. */
 export interface CodeRunner {
-  runCode(request: Machine.CellRequest, call: (call: Machine.ToolCall) => Promise<Machine.ToolCallResult>, signal: AbortSignal): Promise<Machine.CellResult>;
+  runCode(
+    request: Machine.CellRequest,
+    call: (call: Machine.ToolCall) => Promise<Machine.ToolCallResult>,
+    signal: AbortSignal,
+  ): Promise<Machine.CellResult>;
   close(): Promise<void>;
 }
 
@@ -34,10 +38,15 @@ export async function attachMachineDaemon(options: MachineDaemonOptions): Promis
   let client: IpcClient | undefined;
   let attachment: Machine.AttachResult = { status: "refused", reason: "machine_not_enrolled" };
   let ready!: () => void;
-  const attached = new Promise<void>((resolve) => { ready = resolve; });
+  const attached = new Promise<void>((resolve) => {
+    ready = resolve;
+  });
   let resolveClosed!: () => void;
   let rejectClosed!: (error: Error) => void;
-  const closed = new Promise<void>((resolve, reject) => { resolveClosed = resolve; rejectClosed = reject; });
+  const closed = new Promise<void>((resolve, reject) => {
+    resolveClosed = resolve;
+    rejectClosed = reject;
+  });
   let closing: Promise<void> | undefined;
   function close(): Promise<void> {
     if (closing !== undefined) return closing;
@@ -53,9 +62,15 @@ export async function attachMachineDaemon(options: MachineDaemonOptions): Promis
     return closing;
   }
   function has(capability: string): boolean {
-    return attachment.status === "attached" && attachment.effectiveCapabilities.includes(capability) && offer.offeredCapabilities.includes(capability);
+    return (
+      attachment.status === "attached" &&
+      attachment.effectiveCapabilities.includes(capability) &&
+      offer.offeredCapabilities.includes(capability)
+    );
   }
-  function openCwd(cwd: string): { readonly cwd: string; readonly close: () => void } | Machine.ExecResult {
+  function openCwd(
+    cwd: string,
+  ): { readonly cwd: string; readonly close: () => void } | Machine.ExecResult {
     const absolute = posix.normalize(cwd);
     const allowed = attachment.status === "attached" ? attachment.effectiveExports : [];
     for (const name of allowed) {
@@ -67,7 +82,8 @@ export async function attachMachineDaemon(options: MachineDaemonOptions): Promis
       try {
         const resolved = posix.normalize(realpathSync(absolute));
         const canonical = posix.normalize(realpathSync(root));
-        if (resolved !== canonical && !resolved.startsWith(`${canonical}/`)) return { status: "refused", reason: "path_escapes_export" };
+        if (resolved !== canonical && !resolved.startsWith(`${canonical}/`))
+          return { status: "refused", reason: "path_escapes_export" };
       } catch {
         // A missing path remains inside the configured root; spawn reports io_error.
       }
@@ -76,24 +92,43 @@ export async function attachMachineDaemon(options: MachineDaemonOptions): Promis
     return { status: "refused", reason: "path_escapes_export" };
   }
   function requireClient(): IpcClient {
-    if (client === undefined) throw new MachineRefusalError({ reason: "closed", message: "daemon connection is closed" });
+    if (client === undefined)
+      throw new MachineRefusalError({ reason: "closed", message: "daemon connection is closed" });
     return client;
   }
   try {
     client = await connectIpcClient(options.socketPath, {
-      onDisconnect: () => { void close(); },
+      onDisconnect: () => {
+        void close();
+      },
       onRequest: async (method, params, respond) => {
         await attached;
         if (method === Machine.WireMethod.FsOp) {
           const request = Machine.FsRequest.parse(params);
-          const capability = request.op === "write" ? Machine.WellKnownCapability.fsWrite : Machine.WellKnownCapability.fsRead;
+          const capability =
+            request.op === "write"
+              ? Machine.WellKnownCapability.fsWrite
+              : Machine.WellKnownCapability.fsRead;
           if (!has(capability)) {
-            respond({ status: "refused", reason: "fs_not_available", message: `${capability} is not available` } satisfies Machine.FsResult);
+            respond({
+              status: "refused",
+              reason: "fs_not_available",
+              message: `${capability} is not available`,
+            } satisfies Machine.FsResult);
             return;
           }
           const offered = offer.exports?.find((entry) => entry.name === request.export);
-          if (attachment.status !== "attached" || !attachment.effectiveExports.includes(request.export) || offered === undefined || options.fsExports?.get(request.export) !== offered.path) {
-            respond({ status: "refused", reason: "export_not_available", message: `export is not available: ${request.export}` } satisfies Machine.FsResult);
+          if (
+            attachment.status !== "attached" ||
+            !attachment.effectiveExports.includes(request.export) ||
+            offered === undefined ||
+            options.fsExports?.get(request.export) !== offered.path
+          ) {
+            respond({
+              status: "refused",
+              reason: "export_not_available",
+              message: `export is not available: ${request.export}`,
+            } satisfies Machine.FsResult);
             return;
           }
           respond(await filesystem(request));
@@ -102,7 +137,10 @@ export async function attachMachineDaemon(options: MachineDaemonOptions): Promis
         if (method === Machine.WireMethod.Exec) {
           const request = Machine.ExecRequest.parse(params);
           if (!has(Machine.WellKnownCapability.shellExec)) {
-            respond({ status: "refused", reason: "exec_not_available" } satisfies Machine.ExecResult);
+            respond({
+              status: "refused",
+              reason: "exec_not_available",
+            } satisfies Machine.ExecResult);
             return;
           }
           const cwd = openCwd(request.cwd);
@@ -113,7 +151,11 @@ export async function attachMachineDaemon(options: MachineDaemonOptions): Promis
           const execution = execute({ ...request, cwd: cwd.cwd }, lifetime.signal);
           cwd.close();
           pending.add(execution);
-          try { respond(await execution); } finally { pending.delete(execution); }
+          try {
+            respond(await execution);
+          } finally {
+            pending.delete(execution);
+          }
           return;
         }
         if (method === Machine.WireMethod.CancelCode) {
@@ -123,22 +165,51 @@ export async function attachMachineDaemon(options: MachineDaemonOptions): Promis
           respond({ cancelled: cell !== undefined } satisfies Machine.CancelResult);
           return;
         }
-        if (method !== Machine.WireMethod.RunCode) throw new MachineRefusalError({ reason: "invalid_method", message: `invalid method: ${method}` });
+        if (method !== Machine.WireMethod.RunCode)
+          throw new MachineRefusalError({
+            reason: "invalid_method",
+            message: `invalid method: ${method}`,
+          });
         const request = Machine.CellRequest.parse(params);
         if (!has(Machine.WellKnownCapability.pythonKernel) || options.runner === undefined) {
-          respond({ status: "refused", reason: "kernel_not_available" } satisfies Machine.CellResult);
+          respond({
+            status: "refused",
+            reason: "kernel_not_available",
+          } satisfies Machine.CellResult);
           return;
         }
-        if (cells.has(request.cellId)) throw new MachineRefusalError({ reason: "invalid_response", message: "duplicate cell id" });
+        if (cells.has(request.cellId))
+          throw new MachineRefusalError({
+            reason: "invalid_response",
+            message: "duplicate cell id",
+          });
         const cell = new AbortController();
         cells.set(request.cellId, cell);
-        const execution = options.runner.runCode(request, async (call) => Machine.ToolCallResult.parse(await typedCall(requireClient(), Machine.WireMethod.CallTool, call, request.timeoutMs)), cell.signal);
+        const execution = options.runner.runCode(
+          request,
+          async (call) =>
+            Machine.ToolCallResult.parse(
+              await typedCall(
+                requireClient(),
+                Machine.WireMethod.CallTool,
+                call,
+                request.timeoutMs,
+              ),
+            ),
+          cell.signal,
+        );
         pending.add(execution);
-        try { respond(Machine.CellResult.parse(await execution)); }
-        finally { cells.delete(request.cellId); pending.delete(execution); }
+        try {
+          respond(Machine.CellResult.parse(await execution));
+        } finally {
+          cells.delete(request.cellId);
+          pending.delete(execution);
+        }
       },
     });
-    attachment = Machine.AttachResult.parse(await typedCall(client, Machine.WireMethod.Attach, offer, options.attachTimeoutMs));
+    attachment = Machine.AttachResult.parse(
+      await typedCall(client, Machine.WireMethod.Attach, offer, options.attachTimeoutMs),
+    );
     ready();
     return { attachment, closed, close };
   } catch (error) {

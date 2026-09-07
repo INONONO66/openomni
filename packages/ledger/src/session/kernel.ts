@@ -1,4 +1,5 @@
 import {
+  Alarm,
   canonicalDigest,
   type Inbox,
   type LedgerAction,
@@ -10,6 +11,7 @@ import {
   type ObservationSink,
 } from "@openomni/protocol";
 import { Storage } from "../storage/storage.js";
+import { messageDeadlineArm } from "../storage/l0-action-builders.js";
 
 export const LEASE_TTL_MS = 30_000;
 export const HEARTBEAT_INTERVAL_MS = 10_000;
@@ -93,6 +95,31 @@ export function commitInbox(input: Inbox.Commit): Inbox.Row {
   return committed;
 }
 
+export function armMessageDeadline(input: {
+  readonly messageId: string;
+  readonly sessionId: string;
+  readonly sourceActionId: string;
+  readonly fireAt: number;
+  readonly createdAt: number;
+  readonly replyTo?: string;
+}): Alarm.Row {
+  const alarm = requiredAlarms().arm(messageDeadlineArm(input, row(input.sessionId)));
+  if (alarm === undefined) throw new Error(`message deadline arm refused: ${input.messageId}`);
+  return alarm;
+}
+
+/** Called by the alarm owner at a supplied instant, never a second timer loop. */
+export function expireMessageDeadlines(at: number): readonly string[] {
+  const sessions = new Set<string>();
+  const alarms = requiredAlarms();
+  for (const alarm of alarms.due(at)) {
+    if (!Alarm.MessageDeadline.safeParse(alarm.spec?.value).success) continue;
+    const timeout = alarms.fireMessage(alarm.id, at);
+    if (timeout !== undefined) sessions.add(timeout.sessionId);
+  }
+  return [...sessions];
+}
+
 export function pendingInbox(sessionId: string): Inbox.Row[] {
   return requiredInbox().list(sessionId, "pending");
 }
@@ -113,6 +140,10 @@ export function row(sessionId: string): LedgerSession.Row {
 
 export function listRows(): LedgerSession.Row[] {
   return requiredSessions().list();
+}
+
+export function openChildCount(parentId: string): number {
+  return requiredSessions().openChildCount(parentId);
 }
 
 export function policyRows(generation?: number): PolicyRow.Row[] {
@@ -470,6 +501,12 @@ function requiredSessions() {
 function requiredActions() {
   const adapter = Storage.get().actions;
   if (adapter === undefined) throw new Error("L0 storage capability is unavailable: actions");
+  return adapter;
+}
+
+function requiredAlarms() {
+  const adapter = Storage.get().alarms;
+  if (adapter === undefined) throw new Error("L0 storage capability is unavailable: alarms");
   return adapter;
 }
 

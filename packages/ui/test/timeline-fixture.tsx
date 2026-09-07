@@ -1,5 +1,5 @@
-import type { TranscriptNode, TurnCost } from "../src";
-import { costs as showcaseCosts, transcript } from "../showcase/fixture";
+import type { TranscriptNode, TurnCost } from "../src/timeline/model";
+import { costs as ledgerCosts, transcript } from "./fixture";
 
 /**
  * Transcript fixtures for the timeline tests, keyed like a session store.
@@ -11,9 +11,8 @@ import { costs as showcaseCosts, transcript } from "../showcase/fixture";
  * transcript DATA, which is exactly what a design system is allowed to keep as
  * a fixture.
  *
- * `kernel-ledger` is the showcase's own transcript, reused deliberately: the
- * tests and the screenshots then pin the SAME input, so a shot cannot show a
- * case the assertions never saw.
+ * `kernel-ledger` is the shared transcript from `./fixture`, so every timeline
+ * test pins the SAME input.
  */
 
 /** A second session: two complete turns, forty minutes apart. */
@@ -82,7 +81,7 @@ const lease: readonly TranscriptNode[] = [
 ];
 
 /**
- * The showcase transcript, with its last answer left STREAMING.
+ * The shared transcript, with its last answer left STREAMING.
  *
  * The caret assertions need a live turn and the rest need a settled one, so the
  * two fixtures here deliberately differ in exactly that.
@@ -91,7 +90,7 @@ const lease: readonly TranscriptNode[] = [
  * last block and only prose and headings carry one — a blinking cursor welded
  * to the end of a bullet or inside a code fence would claim the list item or
  * the line is still being written, which is not what streaming means. The
- * showcase transcript ends on bullets, so without this the streaming fixture
+ * shared transcript ends on bullets, so without this the streaming fixture
  * would render no caret and the assertion would be pinning the wrong thing.
  */
 const ledger: readonly TranscriptNode[] = transcript.map((node) =>
@@ -110,7 +109,7 @@ export const timelines: Readonly<Record<string, readonly TranscriptNode[]>> = {
 };
 
 export const turnCosts: Readonly<Record<string, Readonly<Record<number, TurnCost>>>> = {
-  "kernel-ledger": showcaseCosts,
+  "kernel-ledger": ledgerCosts,
   "kernel-lease": {
     1: { at: "09:18", elapsed: "41s" },
     2: { at: "09:58", elapsed: "6s" },

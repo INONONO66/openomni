@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
-import { BLOCK_GAP, PAIR_GAP, PARAGRAPH_GAP, TURN_GAP, Timeline, segmentTurns } from "../src";
+import { BLOCK_GAP, PAIR_GAP, PARAGRAPH_GAP, TURN_GAP } from "../src/timeline/spacing";
+import { Timeline } from "../src/timeline/timeline";
+import { segmentTurns } from "../src/timeline/turns";
 import { timelines, turnCosts } from "./timeline-fixture";
 
 /**

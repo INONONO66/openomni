@@ -1,5 +1,6 @@
-import { describe, expect, test } from "bun:test";
-import type { BusEvent, Gateway } from "@openomni/protocol";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { SqliteStorageAdapter, Storage } from "@openomni/ledger";
+import { Operational, type BusEvent, type Gateway } from "@openomni/protocol";
 import {
   createReplyGrantInstances,
   replyGrantEndpointFromFacts,
@@ -10,10 +11,13 @@ import {
  * #708 reply-grant materialization mechanics (design §2b stage-0 rule):
  * Owner-written RULES materialize bounded, reply-scoped grant INSTANCES for
  * first-contact admitted actors — perimeter facts only, capped per rule.
- * Immutable routed admissions rebuild the in-memory projection after restart.
+ * The current projection is durable and never reconstructed from route history.
  */
 
 const NOW = 1_700_000_000_000;
+
+beforeEach(() => Storage.configure(new SqliteStorageAdapter(":memory:")));
+afterEach(() => Storage.reset());
 
 function rule(overrides: Partial<Gateway.ReplyGrantRule> = {}): Gateway.ReplyGrantRule {
   return {
@@ -40,9 +44,12 @@ function admission(overrides: Partial<ReplyGrantAdmission> = {}): ReplyGrantAdmi
 }
 
 function harness(rules: readonly Gateway.ReplyGrantRule[]) {
-  const published: Array<{ name: string; data: Record<string, unknown> }> = [];
+  const published: Array<{
+    name: string;
+    data: ReturnType<typeof Operational.Events.Info.schema.parse>;
+  }> = [];
   const publish: BusEvent.Sink["publish"] = (descriptor, data) => {
-    published.push({ name: descriptor.name, data: data as Record<string, unknown> });
+    published.push({ name: descriptor.name, data: Operational.Events.Info.schema.parse(data) });
   };
   const instances = createReplyGrantInstances({ rules: () => rules, publish });
   return { instances, published };
@@ -71,7 +78,7 @@ describe("reply-grant instance materialization", () => {
 
     instances.admit(admission());
 
-    const live = instances.list();
+    const live = instances.list(NOW);
     expect(live).toHaveLength(1);
     expect(live[0]).toMatchObject({
       senderId: "actor:persona",
@@ -83,49 +90,15 @@ describe("reply-grant instance materialization", () => {
     });
     expect(published.map((event) => event.name)).toEqual(["operational.info"]);
     expect(published[0]?.data).toMatchObject({
-      msg: "reply-grant instance materialized",
       traceId: "trace-reply-grant",
     });
   });
 
-  test("immutable admission replay preserves original TTL and capacity", () => {
-    const replayAt = Date.now();
-    const published: Array<{ name: string; data: Record<string, unknown> }> = [];
-    const instances = createReplyGrantInstances({
-      rules: () => [rule({ maxLiveInstances: 1 })],
-      replay: () => [
-        admission({ at: replayAt, sourceId: "route:first" }),
-        admission({
-          actorId: "actor:stranger-2",
-          endpoint: { channel: "telegram", externalId: "chat-2" },
-          at: replayAt + 1,
-          sourceId: "route:second",
-        }),
-      ],
-      publish: (descriptor, data) => {
-        published.push({ name: descriptor.name, data: data as Record<string, unknown> });
-      },
-    });
-
-    const live = instances.list();
-    expect(live).toHaveLength(1);
-    expect(live[0]).toMatchObject({
-      id: "reply-grant:rule-1:route%3Afirst",
-      targetActorId: "actor:stranger-1",
-      expiresAt: replayAt + 60_000,
-      replyScope: { surfaceKey: "telegram:chat-1" },
-    });
-    expect(published).toEqual([]);
-  });
-
-  test("expired immutable admissions rematerialize no authority", () => {
-    const instances = createReplyGrantInstances({
-      rules: () => [rule()],
-      replay: () => [admission({ at: Date.now() - 60_001, sourceId: "route:expired" })],
-      publish: () => undefined,
-    });
-
-    expect(instances.list()).toEqual([]);
+  test("expiry is inclusive and removes authority without another admission", () => {
+    const { instances } = harness([rule()]);
+    instances.admit(admission());
+    expect(instances.list(NOW + 60_000)).toHaveLength(1);
+    expect(instances.list(NOW + 60_001)).toEqual([]);
   });
 
   test("repeat contact is NOT first contact: no second instance, no expiry refresh", () => {
@@ -134,7 +107,7 @@ describe("reply-grant instance materialization", () => {
     instances.admit(admission());
     instances.admit(admission({ at: NOW + 10_000 }));
 
-    const live = instances.list();
+    const live = instances.list(NOW + 10_000);
     expect(live).toHaveLength(1);
     expect(live[0]?.expiresAt).toBe(NOW + 60_000);
   });
@@ -150,10 +123,9 @@ describe("reply-grant instance materialization", () => {
       }),
     );
 
-    expect(instances.list()).toHaveLength(1);
+    expect(instances.list(NOW)).toHaveLength(1);
     const warn = published.find((event) => event.name === "operational.warn");
     expect(warn?.data).toMatchObject({
-      msg: "reply-grant rule at capacity; no instance materialized",
       context: {
         ruleId: "rule-1",
         targetActorId: "actor:stranger-2",
@@ -174,7 +146,7 @@ describe("reply-grant instance materialization", () => {
       }),
     );
 
-    const live = instances.list();
+    const live = instances.list(NOW + 60_001);
     expect(live).toHaveLength(1);
     expect(live[0]?.targetActorId).toBe("actor:stranger-2");
   });
@@ -186,10 +158,10 @@ describe("reply-grant instance materialization", () => {
     instances.admit(admission({ workspace: "bot-b" }));
     instances.admit(admission({ workspace: "bot-a", actorId: "actor:persona" }));
 
-    expect(instances.list()).toHaveLength(0);
+    expect(instances.list(NOW)).toHaveLength(0);
 
     instances.admit(admission({ workspace: "bot-a" }));
-    expect(instances.list()).toHaveLength(1);
+    expect(instances.list(NOW)).toHaveLength(1);
   });
 
   test("the same actor in a second container is a new first contact (per-container scope)", () => {
@@ -198,7 +170,47 @@ describe("reply-grant instance materialization", () => {
     instances.admit(admission());
     instances.admit(admission({ endpoint: { channel: "telegram", externalId: "chat-9" } }));
 
-    const scopes = instances.list().map((instance) => instance.replyScope?.surfaceKey);
+    const scopes = instances.list(NOW).map((instance) => instance.replyScope?.surfaceKey);
     expect(scopes.sort()).toEqual(["telegram:chat-1", "telegram:chat-9"]);
+  });
+
+  test("construction never reads ledger history and every list reads the current projection", () => {
+    const adapter = Storage.get();
+    const history = {
+      ...adapter.ledger,
+      factsByType: () => {
+        throw new Error("history forbidden");
+      },
+    };
+    Storage.configure({
+      transaction: adapter.transaction.bind(adapter),
+      replyGrant: adapter.replyGrant,
+    });
+    Object.defineProperty(Storage.get(), "ledger", { get: () => history });
+    const first = harness([rule()]);
+    const second = harness([rule()]);
+    first.instances.admit(admission({ sourceId: "committed:1" }));
+    expect(second.instances.list(NOW)[0]?.id).toBe("reply-grant:rule-1:committed%3A1");
+    adapter.close?.();
+  });
+
+  test("projection failures propagate without a volatile grant or success observation", () => {
+    const { instances, published } = harness([rule()]);
+    const adapter = Storage.get();
+    adapter.close?.();
+    expect(() => instances.admit(admission())).toThrow();
+    expect(() => instances.list(NOW)).toThrow();
+    expect(published).toEqual([]);
+  });
+
+  test("an absent projection fails closed instead of creating memory authority", () => {
+    Storage.reset();
+    Storage.configure({ transaction: (operation) => operation() });
+    const { instances, published } = harness([rule()]);
+    expect(() => instances.admit(admission())).toThrow(
+      "Storage adapter does not implement reply grants",
+    );
+    expect(() => instances.list(NOW)).toThrow("Storage adapter does not implement reply grants");
+    expect(published).toEqual([]);
   });
 });

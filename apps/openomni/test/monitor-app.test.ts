@@ -5,7 +5,6 @@ import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { L0Observation } from "@openomni/protocol";
 import { assistantMessage, requestToolStep } from "./helpers/assistant-message";
 import { residentSuite, fakeProviderModel } from "./helpers/resident-suite";
-import { nextMessage } from "./helpers/ws";
 
 const suite = residentSuite();
 
@@ -14,7 +13,9 @@ test("app monitor source escapes the creating tool wave and wakes a hibernated s
   const fifo = join(directory, "source");
   expect(Bun.spawnSync(["mkfifo", fifo]).exitCode).toBe(0);
   let calls = 0;
+  const waiting = Promise.withResolvers<void>();
   const app = await suite.boot({
+    sessionRuntime: { onHibernate: () => waiting.resolve() },
     config: suite.config("monitor-app-db-", {
       wsToken: "monitor-test",
       compactionSummarizer: false,
@@ -46,9 +47,13 @@ test("app monitor source escapes the creating tool wave and wakes a hibernated s
     },
   });
   const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "monitor-test"]);
-  const reply = nextMessage(ws, 5000);
-  ws.send(JSON.stringify({ type: "message", text: "watch for the signal" }));
-  await reply;
+  const waitTimer = setTimeout(() => waiting.reject(new Error("monitor did not suspend")), 5000);
+  try {
+    ws.send(JSON.stringify({ type: "message", text: "watch for the signal" }));
+    await waiting.promise;
+  } finally {
+    clearTimeout(waitTimer);
+  }
   const alarm = Storage.get().alarms?.due(Number.MAX_SAFE_INTEGER)[0];
   if (alarm === undefined) throw new Error("no created alarm");
   expect(calls).toBe(1);

@@ -23,7 +23,6 @@ export * from "./wait/index.js";
 export * from "./approval/index.js";
 export * from "./provisioning/index.js";
 export * from "./machine/index.js";
-export * from "./delegation/index.js";
 export * from "./transcript/index.js";
 export * from "./ledger/index.js";
 export * from "./storage/index.js";

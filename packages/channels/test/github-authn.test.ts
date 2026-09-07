@@ -1,14 +1,11 @@
 import { describe, expect, it } from "bun:test";
-import type { Channel } from "@openomni/protocol";
 import type { ChannelAuthnDecisionObserver } from "../src/authn/types";
 import { GitHubAdapter } from "../src/provider/github/surface";
 
 type ChannelAuthnDecision = Parameters<ChannelAuthnDecisionObserver>[0];
 
 const secret = "github-webhook-secret";
-const config = {
-  triggers: [],
-} satisfies Channel.Config;
+const config = {};
 
 describe("GitHubAdapter channel-authn", () => {
   it("accepts valid HMAC signatures through channel-authn middleware", async () => {
@@ -36,47 +33,6 @@ describe("GitHubAdapter channel-authn", () => {
         reason: "github signature verified",
       }),
     ]);
-  });
-
-  it("an empty-STRING issue body dispatches with the title — never vanishes (#606)", async () => {
-    // Pin for the `body || title` extractor: GitHub sends "" bodies, and a
-    // `??` regression would ignore the title and the empty-normalization
-    // drop would silently swallow a label-triggered event.
-    const decisions: ChannelAuthnDecision[] = [];
-    const body = JSON.stringify({
-      action: "opened",
-      issue: {
-        number: 7,
-        title: "Fix the flaky build",
-        body: "",
-        labels: [{ name: "approved" }],
-        user: { login: "octocat", type: "User" },
-      },
-      repository: {
-        full_name: "openomni/project",
-        owner: { login: "openomni" },
-        name: "project",
-      },
-    });
-    const adapter = createAdapter(decisions, {
-      triggers: [
-        { type: "event", events: ["issues.opened"] },
-        { type: "label", values: ["approved"] },
-      ],
-    });
-    const request = new Request("http://localhost/github/webhook", {
-      method: "POST",
-      headers: {
-        "x-hub-signature-256": await signGitHubBody(body),
-        "x-github-event": "issues",
-      },
-      body,
-    });
-
-    const response = await adapter.handleWebhook(request);
-
-    expect(response.status).toBe(200);
-    expect(await response.text()).not.toBe("Filtered");
   });
 
   it("rejects invalid HMAC signatures through channel-authn middleware", async () => {
@@ -123,74 +79,18 @@ describe("GitHubAdapter channel-authn", () => {
       }),
     ]);
   });
-
-  it("filters trigger-denied webhook content through channel-authn middleware", async () => {
-    const decisions: ChannelAuthnDecision[] = [];
-    const body = JSON.stringify({
-      action: "created",
-      issue: {
-        number: 7,
-        title: "Run work",
-        labels: [{ name: "needs-triage" }],
-        user: { login: "octocat", type: "User" },
-      },
-      comment: {
-        id: 1,
-        body: "@openomni run",
-        user: { login: "octocat", type: "User" },
-      },
-      repository: {
-        full_name: "openomni/project",
-        owner: { login: "openomni" },
-        name: "project",
-      },
-    });
-    const adapter = createAdapter(decisions, {
-      triggers: [
-        { type: "event", events: ["issue_comment.created"] },
-        { type: "label", values: ["approved"] },
-      ],
-    });
-    const request = new Request("http://localhost/github/webhook", {
-      method: "POST",
-      headers: {
-        "x-hub-signature-256": await signGitHubBody(body),
-        "x-github-event": "issue_comment",
-      },
-      body,
-    });
-
-    const response = await adapter.handleWebhook(request);
-
-    expect(response.status).toBe(200);
-    expect(await response.text()).toBe("Filtered");
-    expect(decisions).toEqual([
-      expect.objectContaining({ name: "channel-authn:github-hmac", verdict: "allow" }),
-      expect.objectContaining({
-        name: "channel-authn:github-triggers",
-        policyId: "guardrail.permission",
-        verdict: "deny",
-        reason: "github trigger denied",
-        metadata: expect.objectContaining({
-          surface: "github",
-          event: "issue_comment.created",
-          labels: ["needs-triage"],
-        }),
-      }),
-    ]);
-  });
 });
 
 function createAdapter(
   decisions: ChannelAuthnDecision[],
-  adapterConfig: Channel.Config = config,
+  adapterConfig: Record<string, never> = config,
 ): GitHubAdapter {
   const adapter = new GitHubAdapter(secret, adapterConfig, () => undefined, undefined, undefined, {
     onDecision: (decision) => {
       decisions.push(decision);
     },
   });
-  adapter.onMessage(async () => null);
+  adapter.onMessage(async () => undefined);
   return adapter;
 }
 

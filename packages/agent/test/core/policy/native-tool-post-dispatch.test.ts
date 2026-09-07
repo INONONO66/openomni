@@ -1,10 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { Tool } from "@openomni/protocol";
-import {
-  createDispatcher,
-  defineTool,
-  ToolRefused,
-} from "../../../src/index";
+import { createDispatcher, defineTool, ToolRefused } from "../../../src/index";
 import { z } from "zod";
 import {
   actionCommitGate,
@@ -83,7 +79,10 @@ describe("tool post-policy refusal", () => {
       onCommit: resultCommit.onCommit,
       onObservation: observations.observe,
     });
-    const running = createDispatcher([definition], { executor: recording.executor }).execute(call, context);
+    const running = createDispatcher([definition], { executor: recording.executor }).execute(
+      call,
+      context,
+    );
 
     await resultCommit.reached;
     expect(observations.names).toHaveLength(1);
@@ -116,7 +115,9 @@ describe("tool post-policy refusal", () => {
 
   for (const door of ["model", "cell"] as const) {
     it(`${door} door uses a valid transformed output`, async () => {
-      const dispatcher = createDispatcher([definition], { executor: transformingExecutor("masked") });
+      const dispatcher = createDispatcher([definition], {
+        executor: transformingExecutor("masked"),
+      });
       const result =
         door === "model"
           ? await dispatcher.execute(call, context)

@@ -1,7 +1,7 @@
 import { UI_NAMES } from "../names";
 
 /**
- * DESIGN.md 5 rule 6 — an epoch rule, DRAWN.
+ * an epoch rule, DRAWN.
  *
  *     ───── compacted · 14:32
  *

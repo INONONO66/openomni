@@ -418,28 +418,6 @@ describe("Policy schemas", () => {
       });
     });
 
-    it("parses delegation.set_constraints effect", () => {
-      const result = Policy.PolicyEffect.parse({
-        type: "delegation.set_constraints",
-        constraints: { maxDepth: 2 },
-      });
-      expect(result).toMatchObject({
-        type: "delegation.set_constraints",
-        constraints: { maxDepth: 2 },
-      });
-    });
-
-    it("parses delegation.require_approval effect", () => {
-      const result = Policy.PolicyEffect.parse({
-        type: "delegation.require_approval",
-        reason: "requires approval",
-      });
-      expect(result).toMatchObject({
-        type: "delegation.require_approval",
-        reason: "requires approval",
-      });
-    });
-
     it("parses audit.annotate effect", () => {
       const result = Policy.PolicyEffect.parse({
         type: "audit.annotate",
@@ -474,8 +452,6 @@ describe("Policy schemas", () => {
         "run.abort",
         "run.continue_with_prompt",
         "run.retry_after",
-        "delegation.set_constraints",
-        "delegation.require_approval",
         "audit.annotate",
       ] as const;
 
@@ -484,7 +460,7 @@ describe("Policy schemas", () => {
         allowedEffects: allEffects,
         defaultFailPolicy: "fail-closed",
       });
-      expect(result.allowedEffects.length).toBe(11);
+      expect(result.allowedEffects.length).toBe(9);
     });
   });
 

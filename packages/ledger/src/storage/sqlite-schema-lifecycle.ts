@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { join } from "node:path";
 import { Migration } from "./migration-runner";
-import { preflight967, U967Error, U967_MIGRATION } from "./u967-preflight";
+import { preflight967, U967Error, U967_MIGRATION, REPLY_GRANT_MIGRATION } from "./u967-preflight";
 import { inspect967Projections } from "./u967-projection";
 
 const MIGRATION_DIR = join(import.meta.dir, "../../migration");
@@ -43,10 +43,13 @@ const ORDERED_MIGRATIONS: Migration.Definition[] = [
   { name: "0032_drop_dormant_tables/migration.sql" },
   { name: "0033_fenced_session_handles/migration.sql" },
   { name: U967_MIGRATION },
-  { name: "0035_watch_alarms/migration.sql" },
+  { name: "0035_drop_retired_delegation_tables/migration.sql" },
+  { name: "0036_reply_grant_projection/migration.sql" },
+  { name: "0037_watch_alarms/migration.sql" },
 ];
 
 const CLEAR_ORDER = [
+  "reply_grant",
   "secret",
   "channel_instance",
   "person",
@@ -55,14 +58,11 @@ const CLEAR_ORDER = [
   "event_chain",
   "wait",
   "approval",
-  "delegation",
   "channel_grant",
   "blacklist",
   "actor_endpoint",
   "actor_identity",
   "egress_debit",
-  "worker_grant",
-  "worker_run_state",
 
   "surface_key",
   "part",
@@ -74,22 +74,33 @@ export function preflightSqliteDatabase(db: Database) {
   return preflight967(db, ORDERED_MIGRATIONS);
 }
 
-export function initializeSqliteDatabase(db: Database, prepare967?: Migration.Preparation967): void {
+export function initializeSqliteDatabase(
+  db: Database,
+  prepare967?: Migration.Preparation967,
+): void {
   const state = preflightSqliteDatabase(db);
   if (state === "pending" && prepare967 === undefined) {
     const projection = inspect967Projections(db, Date.now());
-    if (projection.blocked.length > 0 || projection.candidates.length > 0
-      || db.query("SELECT 1 FROM bus_event LIMIT 1").get()) throw new U967Error("approval_required");
+    if (
+      projection.blocked.length > 0 ||
+      projection.candidates.length > 0 ||
+      db.query("SELECT 1 FROM bus_event LIMIT 1").get()
+    )
+      throw new U967Error("approval_required");
   }
   // The primary connection owns every decision-class write (ledger appends +
   // projections share its transactions), so it runs at synchronous=FULL: a
   // committed append survives power loss, which is what "no record, no
   // action" durably means (#510 D1).
   applyConnectionPragmas(db, "FULL");
-  // An archive approval authorizes only its frozen disposition, not later migrations.
-  const migrations = prepare967 === undefined
-    ? ORDERED_MIGRATIONS
-    : ORDERED_MIGRATIONS.slice(0, ORDERED_MIGRATIONS.findIndex((migration) => migration.name === U967_MIGRATION) + 1);
+  // Preserve the shipped archive chain through 0036, never authorize later migrations.
+  const migrations =
+    prepare967 === undefined
+      ? ORDERED_MIGRATIONS
+      : ORDERED_MIGRATIONS.slice(
+          0,
+          ORDERED_MIGRATIONS.findIndex((migration) => migration.name === REPLY_GRANT_MIGRATION) + 1,
+        );
   Migration.applyOrdered(db, MIGRATION_DIR, migrations, prepare967);
 }
 

@@ -45,10 +45,7 @@ Usage:
   openomni logs                  follow the daemon logs
   openomni help                  show this message`;
 
-const DAEMON_VERBS: Record<
-  string,
-  (target: DaemonTarget, io: DaemonIo) => string
-> = {
+const DAEMON_VERBS: Record<string, (target: DaemonTarget, io: DaemonIo) => string> = {
   install: daemonInstall,
   uninstall: daemonUninstall,
   status: daemonStatus,

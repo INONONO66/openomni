@@ -293,7 +293,10 @@ function SessionRow({
               />
             </span>
           ) : (
-            <StatusDot shape={RUN_STATE_SHAPE[session.state]} tier={RUN_STATE_TIER[session.state]} />
+            <StatusDot
+              shape={RUN_STATE_SHAPE[session.state]}
+              tier={RUN_STATE_TIER[session.state]}
+            />
           )}
           <Text className="min-w-0 flex-1 truncate" level="meta" tone="faint">
             {entry.reason}

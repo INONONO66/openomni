@@ -70,7 +70,7 @@ Only explicitly idempotent polling commands should be relied on for repeated
 external effects. The band assumes one active app per database; unified
 multi-owner evaluator leasing is #971's separate target.
 
-Migration 0035 validates every persisted watch using the shared protocol
+Migration 0037 validates every persisted watch using the shared protocol
 `Alarm.WatchSpec` before applying SQL in the migration transaction. Missing or
 unsupported source, lifetime, budget/generation, regex and absolute-path shapes
 refuse with the alarm identity and preserve the old database image. Existing
@@ -113,6 +113,17 @@ product/active-key authority and session/evaluator lease composition; #972
 history projections; and #973 lifecycle harness remain exclusively theirs.
 Stage 1 does not claim their receipt registrations or their target semantics.
 
-Stage 2 after #946 owes the message-deadline consumer's migration to kind:at,
-reply/deadline winner and restart acceptance through that consumer, and B4's
-exact timer-owner deletion receipt. No other stage-1 functionality is deferred.
+The #946 integration uses the same alarm band's live scans for durable `at`
+message deadlines and retains its source-action answer/timeout CAS and typed
+`message.timed_out` observation. Session admission inserts the alarm with the
+inbox and child configuration. Actor admission commits the alarm, send fact,
+budget debit and correlation before external delivery; an alarm insertion fault
+rolls the admission back. Native deadline tests cover early/exact instants,
+answer-first races, rollback and reopening. No per-message timer exists in the
+message gateway, composition or ledger deadline consumer; the alarm band owns
+the only periodic deadline scan. The retired delegation domain remains deleted.
+
+Migration 0037 follows main's shipped 0035/0036 without rewriting their SQL.
+Historical archive approval remains bounded to main's shipped 0034-0036 chain;
+ordinary boot applies the later guarded watch migration. Message and monitor policy rows share the same
+complete-set check and atomic generation promotion.

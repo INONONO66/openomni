@@ -86,12 +86,12 @@ test("real app SSE compaction commits reversible evidence through the session ex
     const received = nextMessage(socket, 5000);
     socket.send(JSON.stringify({ type: "message", text: `input-${index}` }));
     const reply = z
-      .object({ type: z.literal("response"), text: z.string() })
+      .object({ type: z.literal("message"), messageId: z.string(), text: z.string() })
       .parse(JSON.parse(String((await received).data)));
     expect(reply.text).toBe("retained evidence ".repeat(160).trimEnd());
   }
   // Then: the real durable action has content-addressed original evidence.
-  const rows = SessionHandleStore.listRows();
+  const rows = SessionHandleStore.listRows().filter((row) => row.id !== "gateway-ingress");
   expect(rows).toHaveLength(1);
   const row = rows[0];
   if (row === undefined) throw new Error("missing session");

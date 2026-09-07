@@ -1,14 +1,15 @@
 import type { AnyToolDefinition, Tool } from "@openomni/protocol";
 import { monitorTool } from "../mutation/monitor";
+import type { LedgerSession } from "@openomni/protocol";
 import type { MachineHost } from "@openomni/machines";
-import type { DelegationOrigin } from "../../delegation/admission";
-import type { DelegationKernel } from "../../delegation/kernel";
+import { createSendMessageTool, type MessagePort } from "../authority/send-message";
+
+export interface CatalogOrigin {
+  readonly role: LedgerSession.Role;
+  readonly depth: number;
+  readonly sessionId: string;
+}
 import { createApprovalTool, type ApprovalPort } from "../authority/approval";
-import {
-  createAwaitDelegationTool,
-  createCancelDelegationTool,
-  createDelegateTool,
-} from "../authority/delegation";
 import { createLlmTool, type LlmPort } from "../execution/llm";
 import { createRunCodeTool } from "../execution/run-code";
 import type { composeCodemode } from "../../composition/codemode";
@@ -22,8 +23,8 @@ import { createSearchTool } from "../fs/search";
 import { createBashTool } from "../code/bash";
 
 export interface CatalogPorts {
+  readonly messages?: MessagePort;
   readonly machines?: MachineHost;
-  readonly delegation?: DelegationKernel;
   readonly approvals?: ApprovalPort;
   readonly cells?: Pick<ReturnType<typeof composeCodemode>, "cell" | "bindTools">;
   readonly llm?: LlmPort;
@@ -33,7 +34,7 @@ export interface CatalogPorts {
 /** Construct the immutable tool set once for a session. */
 export function createTools(
   ports: CatalogPorts,
-  origin: DelegationOrigin,
+  origin: CatalogOrigin,
 ): readonly AnyToolDefinition[] {
   const tools: AnyToolDefinition[] = [
     eraseTool(createReadTool(ports)),
@@ -44,13 +45,7 @@ export function createTools(
     eraseTool(createBashTool(ports)),
   ];
   tools.push(eraseTool(monitorTool));
-  if (ports.delegation !== undefined) {
-    tools.push(
-      eraseTool(createDelegateTool(ports.delegation, origin.role, origin.depth)),
-      eraseTool(createAwaitDelegationTool(ports.delegation)),
-      eraseTool(createCancelDelegationTool(ports.delegation)),
-    );
-  }
+  if (ports.messages !== undefined) tools.push(eraseTool(createSendMessageTool(ports.messages)));
   if (ports.approvals !== undefined) tools.push(eraseTool(createApprovalTool(ports.approvals)));
   if (ports.provisioning !== undefined)
     tools.push(eraseTool(createProvisionTool(ports.provisioning)));
@@ -68,7 +63,7 @@ const ALL_PORTS = new Proxy(
   {},
   { get: () => new Proxy(() => undefined, { get: () => () => undefined }) },
 ) as CatalogPorts;
-const CATALOG_ORIGIN: DelegationOrigin = { role: "resident", depth: 0, sessionId: "catalog" };
+const CATALOG_ORIGIN: CatalogOrigin = { role: "resident", depth: 0, sessionId: "catalog" };
 /** Schema-only exhaustive list used by repository conformance tooling. */
 export const TOOL_DEFINITIONS: readonly AnyToolDefinition[] = createTools(
   ALL_PORTS,

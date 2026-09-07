@@ -98,8 +98,8 @@ describe("the neutral ramp", () => {
 
   test("Given the ramp, When each step is traced, Then a semantic token claims it", () => {
     // A step nothing claims is a spare palette entry, and a spare palette entry
-    // is how the deleted palette comes back. It is also invisible in the
-    // showcase, because Tailwind never emits an unreferenced theme color.
+    // is how the deleted palette comes back. It is also invisible on screen,
+    // because Tailwind never emits an unreferenced theme color.
     const claimed = new Set(
       [...CSS.matchAll(/var\(--color-neutral-(\d+)\)/g)].map((hit) => Number(hit[1])),
     );

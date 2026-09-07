@@ -97,5 +97,4 @@ describe("resolveRoute", () => {
     expect(decision.factsUsed).toContain("surface.default:new");
     expect(decision.factsUsed.some((fact) => fact.includes("undefined"))).toBe(false);
   });
-
 });

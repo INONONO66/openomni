@@ -153,8 +153,6 @@ describe("ModelsDev catalog loading", () => {
       });
     });
 
-
-
     it("should fall back to the bundled snapshot when the cache sanitizes to nothing", async () => {
       await writeCacheCatalog({
         openai: null,

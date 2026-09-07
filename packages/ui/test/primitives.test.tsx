@@ -1,74 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { Button, CodeFence, CodeToken, Disclosure, IconButton, Input, Row, State } from "../src";
+import { IconButton } from "../src/primitives/button";
+import { CodeFence, CodeToken } from "../src/primitives/code";
+import { Disclosure } from "../src/primitives/disclosure";
+import { Row } from "../src/primitives/row";
 
 /**
  * Primitives are asserted through their rendered markup: the class map a
  * variant/tone selects, and the semantics Base UI contributes.
  */
-
-describe("Button", () => {
-  test("Given no variant, When rendered, Then it is a native ghost button", () => {
-    const html = renderToStaticMarkup(<Button>Run</Button>);
-
-    expect(html).toStartWith("<button");
-    expect(html).toContain('type="button"');
-    expect(html).toContain('data-variant="ghost"');
-  });
-
-  test("Given each variant, When rendered, Then only primary spends the accent", () => {
-    const primary = renderToStaticMarkup(<Button variant="primary">P</Button>);
-    const secondary = renderToStaticMarkup(<Button variant="secondary">S</Button>);
-    const ghost = renderToStaticMarkup(<Button variant="ghost">G</Button>);
-
-    expect(primary).toContain("bg-accent");
-    expect(secondary).not.toContain("accent");
-    expect(ghost).not.toContain("accent");
-    expect(new Set([primary, secondary, ghost]).size).toBe(3);
-  });
-
-  test("Given any variant, When rendered, Then no variant draws a border", () => {
-    // A drawn outline around a control is the box this system replaced with
-    // whitespace and a tonal step.
-    for (const variant of ["primary", "secondary", "ghost"] as const) {
-      expect(renderToStaticMarkup(<Button variant={variant}>x</Button>)).not.toContain("border");
-    }
-  });
-
-  test("Given each size, When rendered, Then a distinct control height is selected", () => {
-    expect(renderToStaticMarkup(<Button size="sm">S</Button>)).toContain("h-control-sm");
-    expect(renderToStaticMarkup(<Button size="md">M</Button>)).toContain("h-control-md");
-  });
-
-  test("Given any variant, When rendered, Then the full interaction state set is covered", () => {
-    for (const variant of ["primary", "secondary", "ghost"] as const) {
-      const html = renderToStaticMarkup(<Button variant={variant}>x</Button>);
-      // A variant that styles hover but not press leaves the click unacknowledged.
-      expect(html).toContain("hover:");
-      expect(html).toContain("active:");
-      expect(html).toContain("focus-ring");
-      expect(html).toContain("disabled:");
-      expect(html).toContain("transition-quiet");
-    }
-  });
-
-  test("Given a disabled button, When rendered, Then the state reaches the platform and CSS", () => {
-    const html = renderToStaticMarkup(<Button disabled>Stop</Button>);
-
-    expect(html).toContain("disabled=");
-    expect(html).toContain('data-disabled=""');
-    expect(html).toContain("disabled:pointer-events-none");
-  });
-
-  test("Given an icon child, When rendered, Then the slot is declared on the control", () => {
-    // Tailwind arbitrary variants are HTML-escaped inside the class attribute,
-    // so these assert the form that actually ships.
-    const html = renderToStaticMarkup(<Button>Run</Button>);
-
-    expect(html).toContain("[&amp;_svg]:shrink-0");
-    expect(html).toContain("[&amp;_svg]:pointer-events-none");
-  });
-});
 
 describe("IconButton", () => {
   test("Given a label, When rendered, Then it names itself and stays square", () => {
@@ -93,49 +33,6 @@ describe("IconButton", () => {
     expect(html).toContain("hover:bg-hover");
     expect(html).toContain("active:");
     expect(html).toContain("focus-ring");
-  });
-});
-
-describe("State", () => {
-  const TIERS = ["live", "attention", "settled"] as const;
-
-  test("Given any label, When rendered, Then the word itself is the readout", () => {
-    // The primitive prints what it is given: it owns the tonal rule, not the
-    // vocabulary, so an arbitrary word must render as faithfully as a
-    // domain one.
-    for (const label of ["running", "waiting", "queued", "부트"]) {
-      const html = renderToStaticMarkup(<State label={label} tier="attention" />);
-
-      expect(html).toContain(`>${label}<`);
-      expect(html).toContain(`data-state="${label}"`);
-    }
-  });
-
-  test("Given the live tier, When rendered, Then it is the only tier using the accent", () => {
-    // Only `live` is a claim about right now; everything else recedes.
-    expect(renderToStaticMarkup(<State label="running" tier="live" />)).toContain("text-accent");
-    for (const tier of ["attention", "settled"] as const) {
-      expect(renderToStaticMarkup(<State label="x" tier={tier} />)).not.toContain("accent");
-    }
-  });
-
-  test("Given the tiers, When compared, Then each takes its own step of the ramp", () => {
-    // Three tiers collapsed onto two tones would make one of them decorative.
-    const tones = TIERS.map((tier) =>
-      /class="[^"]*?(text-[\w-]+)"/.exec(renderToStaticMarkup(<State label="x" tier={tier} />)),
-    ).map((hit) => hit?.[1]);
-
-    expect(new Set(tones).size).toBe(TIERS.length);
-  });
-
-  test("Given any tier, When rendered, Then there is no dot, border, or fill", () => {
-    for (const tier of TIERS) {
-      const html = renderToStaticMarkup(<State label="x" tier={tier} />);
-
-      expect(html).not.toContain("rounded-full");
-      expect(html).not.toContain("border");
-      expect(html).not.toContain("bg-");
-    }
   });
 });
 
@@ -257,65 +154,6 @@ describe("Disclosure", () => {
     );
 
     expect(html).toContain(">3<");
-  });
-});
-
-describe("Input", () => {
-  test("Given a label, When rendered, Then the control is bound to it by id", () => {
-    const html = renderToStaticMarkup(<Input label="Search sessions" placeholder="Search" />);
-
-    expect(html).toContain("<input");
-    expect(html).toContain('placeholder="Search"');
-
-    const labelFor = html.match(/<label[^>]*for="([^"]+)"/)?.[1];
-    const inputId = html.match(/<input[^>]*id="([^"]+)"/)?.[1];
-    expect(labelFor).toBeDefined();
-    expect(inputId).toBe(labelFor);
-  });
-
-  test("Given a label, When rendered, Then the accessible name is present but hidden", () => {
-    const html = renderToStaticMarkup(<Input label="Search sessions" />);
-
-    expect(html).toContain("sr-only");
-    expect(html).toContain(">Search sessions<");
-  });
-
-  test("Given an explicit id, When rendered, Then it wins over the generated one", () => {
-    const html = renderToStaticMarkup(<Input id="filter-field" label="Filter" />);
-
-    expect(html).toContain('for="filter-field"');
-    expect(html).toContain('id="filter-field"');
-  });
-
-  test("Given a resting field, When rendered, Then focus is the accent underline only", () => {
-    const html = renderToStaticMarkup(<Input label="Filter" />);
-
-    expect(html).toStartWith("<label");
-    expect(html).toContain("focus-within:border-b-accent");
-    expect(html).toContain("border-b-transparent");
-  });
-
-  test("Given a resting field, When rendered, Then it carries a quiet surface, not nothing", () => {
-    // A field with no surface at rest is not a field: it is a placeholder
-    // floating in a column with nothing saying it can be typed into. The
-    // elevation IS the affordance, which is why there is no icon to add.
-    //
-    // The surface belongs to the WRAPPER; the control inside stays transparent
-    // so the whole field reads as one tonal step rather than two.
-    const html = renderToStaticMarkup(<Input label="Search sessions" />);
-    const wrapper = html.slice(0, html.indexOf("<input"));
-
-    expect(wrapper).toContain("bg-raised");
-    expect(wrapper).not.toContain("bg-transparent");
-    expect(html).not.toContain("<svg");
-  });
-
-  test("Given a disabled field, When rendered, Then it is reported natively and dimmed", () => {
-    const html = renderToStaticMarkup(<Input disabled label="Filter" />);
-
-    expect(html).toContain("disabled=");
-    expect(html).toContain("has-disabled:opacity-50");
-    expect(html).toContain("has-disabled:cursor-not-allowed");
   });
 });
 

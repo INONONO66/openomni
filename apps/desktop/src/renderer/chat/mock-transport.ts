@@ -22,7 +22,7 @@ export function createMockChatTransport({
 
   return {
     async sendMessages({ abortSignal }) {
-      const reply = replies.length === 0 ? "" : replies[replyIndex % replies.length] ?? "";
+      const reply = replies.length === 0 ? "" : (replies[replyIndex % replies.length] ?? "");
       replyIndex += 1;
       const textPartId = `mock-text-${textPartIndex}`;
       textPartIndex += 1;

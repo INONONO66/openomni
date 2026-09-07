@@ -150,7 +150,10 @@ const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "::1"]);
 // ingress to the network. startOpenOmni calls this before binding — the
 // single enforcement layer for this invariant, covering injected config too.
 export function assertWsExposure(config: Pick<OpenOmniConfig, "host" | "wsToken">): void {
-  if (!LOOPBACK_HOSTS.has(config.host) && (config.wsToken === undefined || config.wsToken.length === 0)) {
+  if (
+    !LOOPBACK_HOSTS.has(config.host) &&
+    (config.wsToken === undefined || config.wsToken.length === 0)
+  ) {
     throw new Error("OPENOMNI_WS_TOKEN is required when OPENOMNI_WS_HOST is not loopback");
   }
 }
@@ -225,10 +228,7 @@ const Actors = z
   .min(1);
 
 /** Reads an env var holding JSON, naming the variable on both parse and schema failure. */
-function parseEnvJson<T>(
-  name: string,
-  schema: { safeParse: (value: unknown) => { success: true; data: T } | { success: false; error: z.ZodError } },
-): T | undefined {
+function parseEnvJson<T>(name: string, schema: z.ZodType<T>): T | undefined {
   const raw = process.env[name]?.trim();
   if (raw === undefined || raw.length === 0) return undefined;
   let json: unknown;
@@ -270,12 +270,12 @@ function channelsFromEnv(): OpenOmniConfig["channels"] {
     ...(telegramToken ? { telegram: { token: telegramToken } } : {}),
     ...(githubSecret
       ? {
-        github: {
-          secret: githubSecret,
-          ...(githubToken ? { token: githubToken } : {}),
-          ...(githubBotUsername ? { botUsername: githubBotUsername } : {}),
-        },
-      }
+          github: {
+            secret: githubSecret,
+            ...(githubToken ? { token: githubToken } : {}),
+            ...(githubBotUsername ? { botUsername: githubBotUsername } : {}),
+          },
+        }
       : {}),
   };
 }

@@ -164,11 +164,11 @@ try {
   const replyEvent = nextMessage(ws, 5000);
   ws.send(JSON.stringify({ type: "message", text: "967 input" }));
   const reply = z
-    .object({ type: z.literal("response"), text: z.string() })
+    .object({ type: z.literal("message"), text: z.string() })
     .parse(JSON.parse(String((await replyEvent).data)));
 
   // Then: the transport reply and committed SQLite terminal agree.
-  assert.deepEqual(reply, { type: "response", text: "retained reply" });
+  assert.deepEqual(reply, { type: "message", text: "retained reply" });
   assert.equal(requests, 3);
   assert.deepEqual(billed, { input: 16, output: 20 });
   assert.deepEqual(calls, [{ id: "paired", tool: "lookup", input: {} }]);
@@ -190,7 +190,7 @@ try {
     ["retained reply"],
   );
   console.log("967 provider", JSON.stringify({ requests, billed, calls, results, terminals }));
-  const rows = SessionHandleStore.listRows();
+  const rows = SessionHandleStore.listRows().filter((row) => row.id !== "gateway-ingress");
   assert.equal(rows.length, 1);
   const row = rows[0];
   assert.ok(row);

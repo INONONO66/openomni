@@ -243,6 +243,9 @@ export function createController(
   }
 
   async function reconcile(): Promise<SessionRunnerResult | undefined> {
+    if (SessionHandleStore.pendingInbox(sessionId).some((item) => item.kind === "interrupt")) {
+      state.controller?.abort();
+    }
     if (state.closed || state.released || state.active !== undefined) return state.active;
     const work = driveAvailable().finally(async () => {
       state.active = undefined;

@@ -4,8 +4,12 @@ import {
   type GatewayRouter,
 } from "@openomni/channels";
 import { ChannelGrantStore } from "@openomni/ledger";
-import type { Actor, Gateway, Ingress } from "@openomni/protocol";
-import { Bus } from "@openomni/agent";
+import type { Actor, Gateway } from "@openomni/protocol";
+import { Bus, currentExecutor, scopeObservation } from "@openomni/agent";
+import { Gateway as GatewayProtocol } from "@openomni/protocol";
+import { messageDecisionRules } from "./composition/message-decision";
+import { createIngressExecutor } from "./composition/ingress-executor";
+import { terminalMessage } from "./composition/terminal-message";
 
 /**
  * The tier a named channel surface mounts with when no Owner decision
@@ -85,30 +89,37 @@ export interface OutboundMessaging {
   readonly deliveryRoutes: ReadonlyMap<string, ChannelDeliveryRoute>;
   readonly grants: () => readonly Gateway.SenderTargetGrant[];
   readonly budgets?: () => readonly Gateway.SocialBudget[];
+  readonly replyGrantRules?: () => readonly Gateway.ReplyGrantRule[];
 }
 
 export function createResidentGateway(
-  deliver: (delivery: Gateway.Deliver) => Promise<Ingress.IngressResult>,
+  ports: Omit<Parameters<typeof createGatewayRouter>[0], "sink" | "run" | "messaging">,
   messaging?: OutboundMessaging,
 ): GatewayRouter {
-  // The gateway owns only its own perimeter surface; external channel
-  // components register (and revoke) their own authority when they mount.
-  // The loopback ws bootstrap is the only surface that names owner tier; no
-  // sibling surface inherits it.
   registerTrustedChannelGrant({ surface: "ws", defaultTier: LOOPBACK_BOOTSTRAP_TIER });
+  const externalRun = createIngressExecutor(ports.clock ?? Date.now);
   return createGatewayRouter({
-    sink: Bus.publish,
-    deliver,
+    ...ports,
+    sink: scopeObservation(Bus, { sessionId: "gateway-ingress" }).publish,
+    run: async (sender, request, body) => {
+      if (sender.kind === "external") return externalRun(sender, request, body);
+      const result = await (terminalMessage.getStore()?.executor ?? currentExecutor()).run(
+        request,
+        body,
+      );
+      return { ...result, matchedRuleIds: messageDecisionRules(sender.id, request) };
+    },
+    observe: (sender, observation) =>
+      scopeObservation(Bus, {
+        sessionId: sender.kind === "session" ? sender.id : "gateway-ingress",
+      }).publish(GatewayProtocol.MessageObserved, observation),
     ...(messaging === undefined
       ? {}
       : {
-        messaging: {
-          ...messaging,
-          // Engaging the gate with an empty Owner-declared source makes
-          // cold proactive outreach zero-by-default. Reply-scoped grants
-          // bypass this budget axis in the send kernel.
-          budgets: messaging.budgets ?? (() => []),
-        },
-      }),
+          messaging: {
+            ...messaging,
+            budgets: messaging.budgets ?? (() => []),
+          },
+        }),
   });
 }

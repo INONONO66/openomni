@@ -6,6 +6,7 @@
   "main": "dist/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
+    "dev:inspect": "electron-vite dev --inspect",
     "build": "rm -rf dist && electron-vite build",
     "preview": "electron-vite preview",
     "shoot:chat": "bun run scripts/shoot-chat.ts",

@@ -100,6 +100,12 @@ export function createAlarmWorker(options: {
   }
 
   function start(row: Alarm.Row) {
+    if (row.kind === "at" && Alarm.MessageDeadline.safeParse(row.spec?.value).success) {
+      const timeout = options.alarms.fireMessage(row.id, now());
+      if (timeout !== undefined)
+        void options.wake(timeout.sessionId).catch((error: Error) => options.failure(error));
+      return;
+    }
     const owned = options.alarms.acquire(row.id, row.fence);
     if (owned === undefined) return;
     if (owned.kind === "at") {

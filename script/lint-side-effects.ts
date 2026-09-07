@@ -47,31 +47,41 @@ export function validateSideEffectRules(filePath: string, source: string): SideE
   const file = ts.createSourceFile(filePath, source, ts.ScriptTarget.Latest, true);
   const options: ts.CompilerOptions = { noResolve: true, noLib: true };
   const host = ts.createCompilerHost(options);
-  host.getSourceFile = (name) => name === filePath ? file : undefined;
+  host.getSourceFile = (name) => (name === filePath ? file : undefined);
   const checker = ts.createProgram([filePath], options, host).getTypeChecker();
   const violations: SideEffectViolation[] = [];
   let emissions = 0;
   function violation(offset: number, message: string): void {
     violations.push({
-      ruleId: "processor-projected-sink", filePath,
-      line: file.getLineAndCharacterOfPosition(offset).line + 1, message,
+      ruleId: "processor-projected-sink",
+      filePath,
+      line: file.getLineAndCharacterOfPosition(offset).line + 1,
+      message,
     });
   }
   function visit(node: ts.Node): void {
     if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
       const { expression: receiver, name } = node.expression;
-      if (ts.isIdentifier(receiver) && receiver.text === "sink" && /^on(Message|ToolCall|ToolResult|Snapshot)$/.test(name.text)) {
+      if (
+        ts.isIdentifier(receiver) &&
+        receiver.text === "sink" &&
+        /^on(Message|ToolCall|ToolResult|Snapshot)$/.test(name.text)
+      ) {
         emissions += 1;
         const declaration = checker.getSymbolAtLocation(receiver)?.valueDeclaration;
         if (!declaration || !isProjectedBinding(declaration, node.getStart(file))) {
-          violation(node.getStart(file), "processor sink side effects must flow through createProjectedSink");
+          violation(
+            node.getStart(file),
+            "processor sink side effects must flow through createProjectedSink",
+          );
         }
       }
     }
     ts.forEachChild(node, visit);
   }
   visit(file);
-  if (emissions === 0) violation(0, "side-effect call pattern not found for processor-projected-sink");
+  if (emissions === 0)
+    violation(0, "side-effect call pattern not found for processor-projected-sink");
   return violations;
 }
 
@@ -83,10 +93,14 @@ function isProjectedBinding(declaration: ts.Declaration, emissionStart: number):
   }
   if (!ts.isVariableDeclaration(declaration) || declaration.end > emissionStart) return false;
   const initializer = declaration.initializer;
-  return ts.isVariableDeclarationList(declaration.parent)
-    && (declaration.parent.flags & ts.NodeFlags.Const) !== 0
-    && initializer !== undefined && ts.isCallExpression(initializer)
-    && ts.isIdentifier(initializer.expression) && initializer.expression.text === "createProjectedSink";
+  return (
+    ts.isVariableDeclarationList(declaration.parent) &&
+    (declaration.parent.flags & ts.NodeFlags.Const) !== 0 &&
+    initializer !== undefined &&
+    ts.isCallExpression(initializer) &&
+    ts.isIdentifier(initializer.expression) &&
+    initializer.expression.text === "createProjectedSink"
+  );
 }
 
 if (import.meta.main) {

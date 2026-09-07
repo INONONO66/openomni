@@ -21,15 +21,7 @@ type EffectFamily<Prefix extends string> = Extract<
   PolicyEffect,
   { readonly type: `${Prefix}.${string}` }
 >;
-type Family =
-  | "prompt"
-  | "model"
-  | "tool"
-  | "run"
-  | "delegation"
-  | "writeback"
-  | "runtime"
-  | "audit";
+type Family = "prompt" | "model" | "tool" | "run" | "writeback" | "runtime" | "audit";
 
 const EFFECT_FAMILY = {
   "prompt.append_context": "prompt",
@@ -45,8 +37,6 @@ const EFFECT_FAMILY = {
   "run.continue_with_prompt": "run",
   "run.retry_after": "run",
   "run.replace_messages": "run",
-  "delegation.set_constraints": "delegation",
-  "delegation.require_approval": "delegation",
   "writeback.rewrite": "writeback",
   "writeback.suppress": "writeback",
   "runtime.workspace_lock": "runtime",
@@ -64,8 +54,6 @@ interface MergeAccumulators {
   continueWithPrompt?: MergedEffect;
   retryAfter?: RetryAccumulator;
   runReplaceMessages?: MergedEffect;
-  delegationConstraints?: { readonly constraints: PlainObject; readonly order: number };
-  delegationApproval?: ApprovalAccumulator;
   promptReplace?: MergedEffect;
   modelOverride?: MergedEffect;
   writebackRewrite?: MergedEffect;
@@ -99,9 +87,6 @@ function mergeEntry(state: MergeAccumulators, entry: EffectEntry): void {
       return;
     case "run":
       mergeRunEffect(state, entry as EffectEntry & { effect: EffectFamily<"run"> });
-      return;
-    case "delegation":
-      mergeDelegationEffect(state, entry as EffectEntry & { effect: EffectFamily<"delegation"> });
       return;
     case "writeback":
       mergeWritebackEffect(state, entry as EffectEntry & { effect: EffectFamily<"writeback"> });
@@ -180,27 +165,6 @@ function mergeRunEffect(
       return;
     case "run.replace_messages":
       state.runReplaceMessages = selectPriorityEffect(state.runReplaceMessages, entry);
-      return;
-  }
-}
-
-function mergeDelegationEffect(
-  state: MergeAccumulators,
-  entry: EffectEntry & { effect: EffectFamily<"delegation"> },
-): void {
-  const { effect } = entry;
-  switch (effect.type) {
-    case "delegation.set_constraints":
-      state.delegationConstraints = {
-        constraints: deepMergeRecords(
-          state.delegationConstraints?.constraints ?? {},
-          effect.constraints,
-        ),
-        order: Math.min(state.delegationConstraints?.order ?? entry.order, entry.order),
-      };
-      return;
-    case "delegation.require_approval":
-      state.delegationApproval = appendReason(state.delegationApproval, effect.reason, entry.order);
       return;
   }
 }

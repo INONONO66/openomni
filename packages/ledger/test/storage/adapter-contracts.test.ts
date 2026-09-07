@@ -12,13 +12,11 @@ import {
   type Storage as ProtocolStorage,
   Wait,
 } from "@openomni/protocol";
-import { DelegationStore } from "../../src/delegation/index.js";
 import { createMemoryL0Adapter } from "./memory-l0-adapter.js";
 import { Migration } from "../../src/storage/migration-runner.js";
 import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage.js";
 import { Storage } from "../../src/storage/storage.js";
 import { WaitStore } from "../../src/wait/index.js";
-import { buildDelegationRecord } from "../helpers/delegation.js";
 import { buildWaitCreate } from "../helpers/wait.js";
 
 const directories: string[] = [];
@@ -333,30 +331,6 @@ describe("SQLite adapter contract guards", () => {
     ).toThrow("refuse inbox");
     expect(adapter.sessions.get(row.id)?.revision).toBe(0);
     expect(adapter.actions.tree(row.id)).toEqual([]);
-  });
-
-  test("delegation reads reject a row whose key disagrees with its payload", () => {
-    const record = DelegationStore.create(buildDelegationRecord());
-    database()
-      .query("UPDATE delegation SET data = ? WHERE delegation_id = ?")
-      .run(JSON.stringify({ ...record, delegationId: "delegation-foreign" }), record.delegationId);
-
-    expect(() => DelegationStore.get(record.delegationId)).toThrow("Delegation id mismatch");
-  });
-
-  test("delegation claims fail closed when the wait id is already stored", () => {
-    DelegationStore.create(
-      buildDelegationRecord({ delegationId: "delegation-a", waitId: "wait-shared" }),
-    );
-    const conflicting = buildDelegationRecord({
-      delegationId: "delegation-b",
-      waitId: "wait-shared",
-    });
-
-    expect(() => DelegationStore.claimOpenWithinRoot(conflicting, 8)).toThrow(
-      "Delegation already exists",
-    );
-    expect(DelegationStore.get(conflicting.delegationId)).toBeUndefined();
   });
 
   test("wait correlation and compare-and-set fail closed on malformed calls", () => {

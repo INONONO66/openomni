@@ -57,7 +57,11 @@ async function withMachine(
     now: () => 5000,
     callTool,
   });
-  const daemon = await attachMachineDaemon({ runner: createCodemode().runner, socketPath: path, offer: offer(capabilities) });
+  const daemon = await attachMachineDaemon({
+    runner: createCodemode().runner,
+    socketPath: path,
+    offer: offer(capabilities),
+  });
   try {
     await run({ host });
   } finally {
@@ -83,10 +87,7 @@ describe("cell settlement ownership", () => {
         },
         noTools,
       );
-      const queued = kernel.run(
-        { cellId: "queued", code: "value = 99", timeoutMs: 5 },
-        noTools,
-      );
+      const queued = kernel.run({ cellId: "queued", code: "value = 99", timeoutMs: 5 }, noTools);
 
       expect(await first).toMatchObject({ status: "completed", cellId: "blocking" });
       expect(await queued).toMatchObject({ status: "timed_out", cellId: "queued" });
@@ -135,7 +136,10 @@ describe("code-mode kernel substrate", () => {
     const kernel = new PythonKernel();
     try {
       await expect(
-        kernel.run({ cellId: "before-invalid-driver-output", code: "persisted = 42", timeoutMs: 1_000 }, noTools),
+        kernel.run(
+          { cellId: "before-invalid-driver-output", code: "persisted = 42", timeoutMs: 1_000 },
+          noTools,
+        ),
       ).resolves.toMatchObject({ status: "completed" });
       await expect(
         kernel.run(
@@ -148,7 +152,10 @@ describe("code-mode kernel substrate", () => {
         ),
       ).rejects.toBeInstanceOf(SyntaxError);
       await expect(
-        kernel.run({ cellId: "after-invalid-driver-output", code: "persisted", timeoutMs: 1_000 }, noTools),
+        kernel.run(
+          { cellId: "after-invalid-driver-output", code: "persisted", timeoutMs: 1_000 },
+          noTools,
+        ),
       ).resolves.toMatchObject({ status: "raised" });
     } finally {
       await kernel.close();
@@ -159,9 +166,8 @@ describe("code-mode kernel substrate", () => {
     const kernel = new PythonKernel();
     try {
       await expect(
-        kernel.run(
-          { cellId: "unserializable-answer", code: "tool.test()", timeoutMs: 1_000 },
-          () => Promise.resolve(Machine.ToolCallResult.parse({ status: "completed", value: 1n })),
+        kernel.run({ cellId: "unserializable-answer", code: "tool.test()", timeoutMs: 1_000 }, () =>
+          Promise.resolve(Machine.ToolCallResult.parse({ status: "completed", value: 1n })),
         ),
       ).resolves.toMatchObject({ status: "raised" });
     } finally {
@@ -181,8 +187,9 @@ describe("code-mode kernel substrate", () => {
 
   test("a raise reports raised with the output produced before it", async () => {
     await withMachine(["kernel.py"], async ({ host }) => {
-      const result = await host.get("mac-studio").runCode(cell("print('before the raise')\nraise ValueError('boom')"),
-      );
+      const result = await host
+        .get("mac-studio")
+        .runCode(cell("print('before the raise')\nraise ValueError('boom')"));
 
       expect(result.status).toBe("raised");
       if (result.status !== "raised") throw new Error("expected raised");
@@ -197,8 +204,9 @@ describe("code-mode kernel substrate", () => {
 
   test("a cell over its deadline is timed_out and the next cell still runs", async () => {
     await withMachine(["kernel.py"], async ({ host }) => {
-      const timedOut = await host.get("mac-studio").runCode(cell("import time\nwhile True: time.sleep(0.05)", 750),
-      );
+      const timedOut = await host
+        .get("mac-studio")
+        .runCode(cell("import time\nwhile True: time.sleep(0.05)", 750));
       expect(timedOut).toMatchObject({ status: "timed_out" });
 
       // Forward progress is the guarantee: the replacement interpreter serves
@@ -213,8 +221,9 @@ describe("code-mode kernel substrate", () => {
 
   test("stdout and stderr are both captured on a completed cell", async () => {
     await withMachine(["kernel.py"], async ({ host }) => {
-      const result = await host.get("mac-studio").runCode(cell("import sys\nprint('out')\nprint('err', file=sys.stderr)"),
-      );
+      const result = await host
+        .get("mac-studio")
+        .runCode(cell("import sys\nprint('out')\nprint('err', file=sys.stderr)"));
 
       expect(result.status).toBe("completed");
       if (result.status !== "completed") throw new Error("expected completed");
@@ -252,7 +261,10 @@ describe("code-mode kernel substrate", () => {
       now: () => 5000,
     });
     try {
-      await expect(host.get("mac-mini").runCode(cell("1"))).rejects.toMatchObject({ name: "MachineRefusalError", data: { reason: "machine_not_attached" } });
+      await expect(host.get("mac-mini").runCode(cell("1"))).rejects.toMatchObject({
+        name: "MachineRefusalError",
+        data: { reason: "machine_not_attached" },
+      });
     } finally {
       host.close();
     }

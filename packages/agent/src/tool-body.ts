@@ -76,10 +76,12 @@ async function executeDefinition<In extends z.ZodType, Out extends z.ZodType>(
     (error) => ({ timedOut: false, error: toError(error) }) as const,
   );
   // Ownership follows raw settlement, independent of fallible result conversion.
-  waveBodyScope.getStore()?.retain?.(rawExecution.then(
-    () => undefined,
-    () => undefined,
-  ));
+  waveBodyScope.getStore()?.retain?.(
+    rawExecution.then(
+      () => undefined,
+      () => undefined,
+    ),
+  );
   const timeout = Promise.withResolvers<{ readonly timedOut: true }>();
   const timer = setTimeout(() => {
     controller.abort(new Error(`tool timed out after ${timeoutMs}ms`));

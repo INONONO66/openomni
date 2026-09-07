@@ -114,7 +114,8 @@ function renderCanonical(value: unknown): string {
     const fields: string[] = [];
     for (const key of Object.keys(value).sort()) {
       const nested = (value as PlainObject)[key];
-      if (nested === undefined) throw new Error(`canonical JSON cannot express undefined at ${key}`);
+      if (nested === undefined)
+        throw new Error(`canonical JSON cannot express undefined at ${key}`);
       fields.push(`${JSON.stringify(key)}:${renderCanonical(nested)}`);
     }
     return `{${fields.join(",")}}`;

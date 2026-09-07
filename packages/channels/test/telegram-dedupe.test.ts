@@ -68,11 +68,11 @@ describe("TelegramAdapter dedupe (D1)", () => {
   it("delivers same message_id from two different chats (no cross-chat collision)", async () => {
     const delivered: Channel.InboundMessage[] = [];
     const deliveredBoth = Promise.withResolvers<void>();
-    const adapter = new TelegramAdapter("test-token", { triggers: [] }, () => undefined);
+    const adapter = new TelegramAdapter("test-token", {}, () => undefined);
     adapter.onMessage(async (message) => {
       delivered.push(message);
       if (delivered.length === 2) deliveredBoth.resolve();
-      return null;
+      return undefined;
     });
 
     const timeout = setTimeout(
@@ -88,20 +88,21 @@ describe("TelegramAdapter dedupe (D1)", () => {
     }
 
     expect(delivered).toHaveLength(2);
-    const surfaceKeys = delivered.map((m) => m.surfaceKey).sort();
+    const surfaceKeys = delivered.map((m) => m.facts.channelId).sort();
     expect(new Set(surfaceKeys).size).toBe(2);
     expect(surfaceKeys.some((k) => k.includes("111"))).toBe(true);
     expect(surfaceKeys.some((k) => k.includes("222"))).toBe(true);
   });
 });
 
-const config = { triggers: [] } satisfies Channel.Config;
+const config = {};
 type DeliveryOwner = Readonly<{
   deliver(
     externalId: string,
     body: string,
-    idempotencyKey?: string,
+    idempotencyKey: string,
   ): Promise<{
+    value: "accepted" | "rejected" | "unknown";
     externalMessageId?: string;
   }>;
 }>;
@@ -165,11 +166,8 @@ describe("outbound adapter delivery dedupe capability", () => {
   )("%s remains at-least-once when no idempotency key is supplied", async (_name, fixture) => {
     const { owner, outboundCalls } = fixture();
 
-    await owner.deliver("recipient-1", "hello");
-    await owner.deliver("recipient-1", "hello");
-
-    // This is the production path: app composition drops
-    // the key, so retries can create a second platform message.
+    await owner.deliver("recipient-1", "hello", "gateway-message-2");
+    await owner.deliver("recipient-1", "hello", "gateway-message-3");
     expect(outboundCalls()).toBe(2);
   });
 
@@ -179,7 +177,7 @@ describe("outbound adapter delivery dedupe capability", () => {
     const receipt = await owner.deliver("recipient-1", "a".repeat(2001), "chunked-message");
 
     expect(outboundCalls()).toBe(2);
-    expect(receipt).toEqual({ externalMessageId: "discord-message-2" });
+    expect(receipt).toEqual({ value: "accepted", externalMessageId: "discord-message-2" });
   });
 
   test("a failed keyed delivery is evicted so a retry can make progress", async () => {

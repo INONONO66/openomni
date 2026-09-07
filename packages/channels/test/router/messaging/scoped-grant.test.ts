@@ -98,6 +98,7 @@ describe("send kernel over reply-scoped instances", () => {
     return createExistingAgentMessaging({
       deliver: (message) => {
         delivered.push(message.target.endpointId);
+        return { value: "accepted" as const };
       },
       grants: () => grants,
       publish: Bus.publish,
