@@ -32,9 +32,13 @@ test("missing incomplete and stale native type receipts never normalize to zero"
 });
 
 test("native type findings retain identity and trigger growth and changed-file ratchets", () => {
-	const violation = { path: "script/example.ts", line: 4, kind: "implicitAny", symbol: "value", offset: 10 };
+	const violation = { path: "script/example.ts", line: 4, kind: "implicitAny", symbol: "value", offset: 10, origin: "owned" };
 	const native = { ...types, violations: [violation] };
 	const base = mergeMeasurements(identity.paths, [normalizeTypes(native, identity)]);
+	expect(base.findings[0]?.origin).toBe("owned");
+	const { origin: _origin, ...unlabelled } = violation;
+	expect(() => normalizeTypes({ ...types, violations: [unlabelled] }, identity)).toThrow();
+	expect(() => normalizeTypes({ ...types, violations: [{ ...violation, origin: "guessed" }] }, identity)).toThrow();
 	const doubled = mergeMeasurements(identity.paths, [normalizeTypes({ ...native, violations: [violation, violation] }, identity)]);
 	expect(regressions(base, doubled, new Set()).length).toBe(2);
 	expect(regressions(base, base, new Set(identity.paths))).toHaveLength(1);

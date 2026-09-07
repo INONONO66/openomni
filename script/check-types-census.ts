@@ -91,6 +91,7 @@ export const resultSchema = {
       violations: jsonArray(object.violations, (entry) => ({
         ...parseLocation(entry),
         kind: jsonChoice(jsonObject(entry).kind, ["explicitAny", "implicitAny", "unknown"]),
+        origin: jsonChoice(jsonObject(entry).origin, origins),
       })),
       abiMetadata: jsonArray(object.abiMetadata, (entry) => ({
         ...parseAbiDeclaration(entry),
@@ -102,6 +103,15 @@ export const resultSchema = {
 };
 export type CensusResult = ReturnType<typeof resultSchema.parse>;
 type Kind = "implicitAny" | "unknown";
+/** `owned`: the top type is written, declared or inferred in campaign-owned source.
+ * `foreign`: it is reached only through declarations the campaign does not own
+ * (dependency `.d.ts`, `lib.*.d.ts`), e.g. zod internals or `Error.cause`. */
+export const origins = ["owned", "foreign"] as const;
+export type Origin = (typeof origins)[number];
+type Edge = { type: ts.Type; foreign: boolean };
+function declaredOutside(declaration: ts.Node | undefined, owned: Set<string>): boolean {
+  return declaration !== undefined && !owned.has(declaration.getSourceFile().fileName);
+}
 
 function diagnosticError(root: string, diagnostic: ts.Diagnostic): CensusError {
   return {
@@ -203,9 +213,10 @@ function isQuery(node: ts.Node): boolean {
 function memberTypes(
   type: ts.Type,
   checker: ts.TypeChecker,
+  owned: Set<string>,
   brands: Map<ts.Symbol, AbiDeclaration>,
   metadata: Set<AbiDeclaration>,
-): ts.Type[] {
+): Edge[] {
   const symbol = type.getSymbol();
   const declarations = symbol?.declarations ?? [];
   if (symbol && symbol.flags & ts.SymbolFlags.Module) return [];
@@ -239,7 +250,7 @@ function memberTypes(
     // The access/call expression itself is still independently classified.
     const callable = checker.getNonNullableType(member);
     if (callable.getCallSignatures().length || callable.getConstructSignatures().length) return [];
-    return [member];
+    return [{ type: member, foreign: declaredOutside(declaration, owned) }];
   });
 }
 function childrenOf(
@@ -248,28 +259,49 @@ function childrenOf(
   owned: Set<string>,
   brands: Map<ts.Symbol, AbiDeclaration>,
   metadata: Set<AbiDeclaration>,
-): ts.Type[] {
-  const children: ts.Type[] = [];
-  if (type.isUnionOrIntersection()) children.push(...type.types);
-  if (type.aliasTypeArguments) children.push(...type.aliasTypeArguments);
+): Edge[] {
+  const children: Edge[] = [];
+  // Structural edges inherit ownership; edges through a declaration carry its
+  // ownership. Type arguments of a generic declared outside the campaign are
+  // that declaration's instantiation (zod's ZodType<any, any, any>), not ours.
+  const structural = (types: readonly ts.Type[], foreign = false) =>
+    children.push(...types.map((child) => ({ type: child, foreign })));
+  if (type.isUnionOrIntersection()) structural(type.types);
+  if (type.aliasTypeArguments)
+    structural(
+      type.aliasTypeArguments,
+      declaredOutside(type.aliasSymbol?.declarations?.[0], owned),
+    );
   if (type.flags & ts.TypeFlags.Object) {
     const object = type as ts.ObjectType;
-    if (object.objectFlags & ts.ObjectFlags.Reference)
-      children.push(...checker.getTypeArguments(object as ts.TypeReference));
-    children.push(...memberTypes(type, checker, brands, metadata));
-    for (const index of checker.getIndexInfosOfType(type)) children.push(index.type);
+    if (object.objectFlags & ts.ObjectFlags.Reference) {
+      const reference = object as ts.TypeReference;
+      structural(
+        checker.getTypeArguments(reference),
+        declaredOutside(reference.target.getSymbol()?.declarations?.[0], owned),
+      );
+    }
+    children.push(...memberTypes(type, checker, owned, brands, metadata));
+    for (const index of checker.getIndexInfosOfType(type))
+      children.push({ type: index.type, foreign: declaredOutside(index.declaration, owned) });
   }
   for (const signature of [...type.getCallSignatures(), ...type.getConstructSignatures()]) {
-    children.push(checker.getReturnTypeOfSignature(signature));
     const declaration = signature.getDeclaration();
+    children.push({
+      type: checker.getReturnTypeOfSignature(signature),
+      foreign: declaredOutside(declaration, owned),
+    });
     if (declaration && owned.has(declaration.getSourceFile().fileName)) {
       for (const parameter of signature.parameters)
-        children.push(checker.getTypeOfSymbolAtLocation(parameter, declaration));
+        children.push({
+          type: checker.getTypeOfSymbolAtLocation(parameter, declaration),
+          foreign: false,
+        });
     }
   }
   if (type.flags & ts.TypeFlags.IndexedAccess) {
     const indexed = type as ts.IndexedAccessType;
-    children.push(indexed.objectType, indexed.indexType);
+    structural([indexed.objectType, indexed.indexType]);
   }
   return children;
 }
@@ -312,8 +344,10 @@ function typeClassifier(program: ts.Program, checker: ts.TypeChecker, owned: Set
     }
     bind(source);
   }
-  const edges = new Map<ts.Type, { children: ts.Type[]; metadata: Set<AbiDeclaration> }>();
-  return (start: ts.Type): { kinds: Kind[]; metadata: Set<AbiDeclaration> } => {
+  const edges = new Map<ts.Type, { children: Edge[]; metadata: Set<AbiDeclaration> }>();
+  // Reach a top type twice: once over owned/structural edges only, once over
+  // every edge. A kind reached only on the second pass is foreign-origin.
+  function reach(start: ts.Type, ownedOnly: boolean) {
     const seen = new Set<ts.Type>();
     const pending = [start];
     const kinds = new Set<Kind>();
@@ -338,22 +372,63 @@ function typeClassifier(program: ts.Program, checker: ts.TypeChecker, owned: Set
         edge = { children: childrenOf(type, checker, owned, brands, excluded), metadata: excluded };
         edges.set(type, edge);
       }
-      pending.push(...edge.children);
+      for (const child of edge.children) if (!ownedOnly || !child.foreign) pending.push(child.type);
       for (const entry of edge.metadata) metadata.add(entry);
     }
-    return { kinds: [...kinds].sort(), metadata };
+    return { kinds, metadata };
+  }
+  return (start: ts.Type): { kinds: Kind[]; owned: Set<Kind>; metadata: Set<AbiDeclaration> } => {
+    const complete = reach(start, false);
+    return { kinds: [...complete.kinds].sort(), owned: reach(start, true).kinds, metadata: complete.metadata };
   };
+}
+/** A directly top-typed node is attributed to the declaration that typed it:
+ * the campaign's own binding, parameter or annotation, the resolved callee, or
+ * the referenced property/alias. Unresolvable provenance stays owned. */
+function declaredHere(node: ts.Node, checker: ts.TypeChecker, owned: Set<string>): boolean {
+  const symbolOwned = (symbol: ts.Symbol | undefined) => {
+    const resolved = symbol && symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
+    return !declaredOutside(resolved?.valueDeclaration ?? resolved?.declarations?.[0], owned);
+  };
+  if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
+    const declaration = checker.getResolvedSignature(node)?.getDeclaration();
+    return declaration
+      ? !declaredOutside(declaration, owned)
+      : symbolOwned(checker.getSymbolAtLocation(node.expression));
+  }
+  if (ts.isPropertyAccessExpression(node)) return symbolOwned(checker.getSymbolAtLocation(node.name));
+  if (ts.isElementAccessExpression(node))
+    return symbolOwned(checker.getSymbolAtLocation(node.argumentExpression));
+  if (ts.isIdentifier(node)) return symbolOwned(checker.getSymbolAtLocation(node));
+  if (ts.isTypeReferenceNode(node)) return symbolOwned(checker.getSymbolAtLocation(node.typeName));
+  if (ts.isAwaitExpression(node) || ts.isParenthesizedExpression(node) || ts.isNonNullExpression(node))
+    return declaredHere(node.expression, checker, owned);
+  return true;
+}
+/** A directly top-typed node is attributed by `declaredHere`; a type reaching a
+ * top type through edges is owned when the owned-only pass reached that kind. */
+function originOf(
+  node: ts.Node,
+  type: ts.Type,
+  kind: Kind,
+  ownedKinds: Set<Kind>,
+  checker: ts.TypeChecker,
+  owned: Set<string>,
+): Origin {
+  const direct = type.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown);
+  return (direct ? declaredHere(node, checker, owned) : ownedKinds.has(kind)) ? "owned" : "foreign";
 }
 function scanSource(
   source: ts.SourceFile,
   root: string,
   checker: ts.TypeChecker,
+  owned: Set<string>,
   classify: ReturnType<typeof typeClassifier>,
   abiMetadata: CensusResult["abiMetadata"],
 ): CensusResult["violations"] {
   const violations: CensusResult["violations"] = [];
   const path = relative(root, source.fileName);
-  function add(node: ts.Node, kind: CensusResult["violations"][number]["kind"]): void {
+  function add(node: ts.Node, kind: CensusResult["violations"][number]["kind"], origin: Origin): void {
     const offset = node.getStart(source);
     violations.push({
       path,
@@ -361,14 +436,16 @@ function scanSource(
       line: source.getLineAndCharacterOfPosition(offset).line + 1,
       symbol: symbolName(node),
       kind,
+      origin,
     });
   }
   function visit(node: ts.Node): void {
-    if (node.kind === ts.SyntaxKind.AnyKeyword) add(node, "explicitAny");
-    else if (node.kind === ts.SyntaxKind.UnknownKeyword) add(node, "unknown");
+    if (node.kind === ts.SyntaxKind.AnyKeyword) add(node, "explicitAny", "owned");
+    else if (node.kind === ts.SyntaxKind.UnknownKeyword) add(node, "unknown", "owned");
     else if (isQuery(node) && !ts.isStringLiteralLike(node)) {
-      const classified = classify(checker.getTypeAtLocation(node));
-      for (const kind of classified.kinds) add(node, kind);
+      const type = checker.getTypeAtLocation(node);
+      const classified = classify(type);
+      for (const kind of classified.kinds) add(node, kind, originOf(node, type, kind, classified.owned, checker, owned));
       for (const entry of classified.metadata) {
         const offset = node.getStart(source);
         abiMetadata.push({
@@ -440,7 +517,10 @@ export function census(root: string, contract: Contract, inventory: Inventory): 
           source,
           root,
           checker,
-          unresolved ? () => ({ kinds: [], metadata: new Set<AbiDeclaration>() }) : classify,
+          owned,
+          unresolved
+            ? () => ({ kinds: [], owned: new Set<Kind>(), metadata: new Set<AbiDeclaration>() })
+            : classify,
           result.abiMetadata,
         ),
       );

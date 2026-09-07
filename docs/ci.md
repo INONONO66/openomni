@@ -74,9 +74,39 @@ Quality baseline fragments are exact measured multiplicities by gate, source and
 symbol. Both the index and fragments are compared with the Git base: editing a
 fragment cannot make growth legal. The initial admission baseline must equal a
 complete measurement, without spare allowances; it records debt rather than
-claiming convergence. Once the baseline exists in the Git base, added files must
-contain no findings and changed lines (including intersecting function ranges)
-must contain no findings. Missing or incomplete measurements always fail.
+claiming convergence. Missing or incomplete measurements always fail.
+
+Once the baseline exists in the Git base, `script/quality-ratchet.ts` attributes
+growth to the PR's own changes rather than to paths:
+
+- Changed files come from `git diff --name-status --find-renames` plus untracked
+  owned sources. A moved file inherits the baseline recorded under its Git base
+  path; hunks are the added/changed line ranges of that base-to-current diff,
+  and an added file is entirely new. Deleted paths simply stop matching.
+- Findings compare by content identity: gate, mapped path and symbol, with
+  anonymous function byte offsets erased (a per-file value multiset) and clone
+  clusters keyed by token hash alone. Pre-existing complexity inside a touched
+  function is not growth; a worse metric value, or a new function/symbol, is.
+  When an identity grows, the rows in changed files are reported.
+- The type census labels each top type `owned` or `foreign`. Written `any`/
+  `unknown`, owned bindings, parameters and members, and reach through owned
+  declarations are owned; reach only through dependency or `lib.*.d.ts`
+  declarations (zod internals, `Error.cause`, foreign generic instantiations) is
+  foreign and never counts as PR growth. Owned top types on changed lines always
+  fail (the literal-zero target); unlabelled rows are owned. The repo-total
+  shrink-only baseline is unchanged and still lists every finding.
+- Coverage on the PR is the native LCOV evidence itself (the measurement
+  bundle's `coverage.json` beside `current.json`, or `--coverage`): every touched
+  line of a production or tooling source (not tests, fixtures or benchmarks) must
+  have executed in a selected lane; a touched production file with no native
+  record owes all of its measured statements. The proof-bit `unproven-statement` class
+  remains the whole-repository floor and is no longer ratcheted per statement
+  hash, because multi-line statements can never satisfy it. CRAP growth counts
+  only where the function contains a natively unexecuted line.
+
+Baseline integrity (fragments versus the Git base) and initial admission keep
+the strict path-keyed comparison. `script/quality-ratchet.test.ts` proves each
+rule with a passing case and a mutation that flips it.
 
 ### Initial measured admission baseline (#945)
 
