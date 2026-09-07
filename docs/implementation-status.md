@@ -25,8 +25,16 @@ subscribes before mutation and drives reconciliation without yielding to the
 native callback, proving atomic delivery independently of callback timing.
 Evaluator entry captures the app async context, preventing tool-wave abort
 inheritance. A real WebSocket/PTY/FIFO regression verifies that a tool-created
-source wakes a hibernated app session after its original tool wave has ended. [Decisions and operational limits](alarm-monitor-stage-1.md)
-include the at-most-once restart gap. Stage 2 after #946 still owes only the
+source wakes a hibernated app session after its original tool wave has ended.
+
+Rebased production checkpoint `6a912340` passes the complete gate chain:
+3377 tests across 359 files, zero failures, and all 11 coverage lanes plus the
+unchanged coverage ratchet. The real app WebSocket/path exercise reaches a
+hibernated-session wake at revision 59 with two model calls. Removing the app
+async-context binding makes the PTY/FIFO regression fail with AbortError.
+
+[Decisions and operational limits](alarm-monitor-stage-1.md) include the
+at-most-once restart gap. Stage 2 after #946 still owes only the
 message-deadline consumer -> `at` alarm migration, its answer/deadline CAS and
 restart tests, and B4 deletion proof. #969-#973 receipts remain unconsumed.
 

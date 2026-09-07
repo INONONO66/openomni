@@ -16,7 +16,9 @@ The Owner-approved #945/#948 amendment overrides stale campaign labels and E4 pa
 | E8 | Additive `monitor` registration and strict create/rearm/cancel schema implemented; no claim about unrelated vocabulary. |
 | Alarm quality | Focused 30 tests pass, including real PTY exit/dedupe, exact timeout, budget pause/rearm, path create/modify/cancel, atomic rollback, SQLite reopen, and hibernation/live-wait. |
 | Path readiness correction | The same path source reconciles stat identity on the app scan; unchanged scans append nothing. The test subscribes before mutation and drives reconciliation before native callbacks can run. The previous create timeout is retained in local history, not hidden by sleeps or retries. |
-| Coverage | All 11 coverage-producing lanes pass, then the unchanged ratchet passes: app 96.8%, agent 97.73%, ledger 99.34%; no floors lowered. |
+| Full verification | On rebased production checkpoint `6a912340`: build, workspace/script types, dependency/cycle checks, lint, tool lint, formatter-disabled Ultracite and dead-export gates exit 0. `bun test --timeout 15000` passes 3377 tests across 359 files in one run, zero failures. |
+| Coverage | All 11 coverage-producing lanes pass, then the unchanged ratchet passes: app 96.83%, agent 97.73%, ledger 99.34%; no floors lowered. |
+| Real surface and mutation | WebSocket -> monitor -> real path/create -> atomic inbox -> hibernated session wake passes (two model calls, revision 59). PTY/FIFO app regression passes; removing app async-context binding fails with the expired tool-wave AbortError. |
 | Tool schema | Owner-approved nested `operation` discriminates create/rearm/cancel; create nests `source`, controls require `alarmId`. `bun run lint:tools` passes under the existing field cap, with no exemption or floor reduction. |
 | Lifecycle campaign | No #969-#973 transition/deletion/test receipt is consumed by stage 1. |
 
