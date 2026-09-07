@@ -170,6 +170,14 @@ jobs:
         with:
           name: workspace-dist
       - run: bun run ci restore
+      - name: Native Python analyzer self-tests
+        if: matrix.key == 'scripts'
+        env:
+          QUALITY_MUTATION_DECISION: script/conformance/quality-mutation-contract.json
+        run: |
+          for file in script/quality-coverage/test_*.py script/quality-mutation/python-engine.test.py; do
+            python "$file"
+          done
       - name: Start fresh native coverage receipt
         if: matrix.coverage
         env:
