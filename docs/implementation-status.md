@@ -52,6 +52,13 @@ its deliberately planted JSON/catch mutant; runtime payloads are schema-checked.
 The earlier 3377-test receipt above remains historical, not a claim that R1
 was already addressed at that checkpoint.
 
+Production checkpoint `21675e12` passes the merged full suite: 3435 tests,
+zero failures, 11167 assertions across 365 files. All ten current coverage lanes
+and the unchanged ratchet pass (app 97.08%, ledger 99.34%). The full build/type/
+dependency/cycle/lint/export chain, including tool-lint self-test, exits 0.
+The reviewer's added-line compiler probe emits no unsafe values. The real-app
+WebSocket/path wake still commits one fired pair and reaches revision 59.
+
 ## Deployed shape
 
 | Component | Current wiring | Source |

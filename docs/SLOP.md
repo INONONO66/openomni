@@ -22,7 +22,11 @@ The Owner-approved #945/#948 amendment overrides stale campaign labels and E4 pa
 | Tool schema | Owner-approved nested `operation` discriminates create/rearm/cancel; create nests `source`, controls require `alarmId`. `bun run lint:tools` passes under the existing field cap, with no exemption or floor reduction. |
 | Lifecycle campaign | No #969-#973 transition/deletion/test receipt is consumed by stage 1. |
 
-R1 correction evidence (after main `678d357e` merge):
+R1 correction evidence (after main `678d357e` merge): production checkpoint
+`21675e12` passes all gates, including tool-lint self-test; 3435 tests pass in
+one full-suite run, zero failures. Ten current coverage lanes and the unchanged
+ratchet pass (app 97.08%, ledger 99.34%, agent 97.73%). The removed placement
+lane is main's deletion, not a floor change introduced by this PR.
 
 | Finding | Failing-first proof -> correction |
 | --- | --- |
