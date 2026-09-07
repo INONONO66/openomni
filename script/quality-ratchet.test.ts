@@ -4,14 +4,30 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { baselineAt, changedSources, regressions, touchedFindings } from "./quality-ratchet";
 
-const row = { gate: "publisher" as const, path: "packages/a/src/event.ts", line: 1, symbol: "Ready", value: 1 };
-const snapshot = (findings = [row]) => ({ version: 1 as const, complete: true as const, analyzed: ["publisher" as const], inventory: [row.path], findings });
+const row = {
+  gate: "publisher" as const,
+  path: "packages/a/src/event.ts",
+  line: 1,
+  symbol: "Ready",
+  value: 1,
+};
+const snapshot = (findings = [row]) => ({
+  version: 1 as const,
+  complete: true as const,
+  analyzed: ["publisher" as const],
+  inventory: [row.path],
+  findings,
+});
 
 test("ratchets only shrink; new findings, value growth and findings in modified files fail", () => {
   const base = snapshot();
   expect(regressions(base, snapshot([]), new Set())).toEqual([]);
   expect(regressions(base, base, new Set())).toEqual([]);
-  for (const current of [snapshot([{ ...row, value: 2 }]), snapshot([row, row]), snapshot([{ ...row, symbol: "Other" }])])
+  for (const current of [
+    snapshot([{ ...row, value: 2 }]),
+    snapshot([row, row]),
+    snapshot([{ ...row, symbol: "Other" }]),
+  ])
     expect(regressions(base, current, new Set()).length).toBeGreaterThan(0);
   expect(regressions(base, base, new Set([row.path]))).toEqual([row]);
   expect(regressions(base, snapshot([{ ...row, line: 9 }]), new Set())).toEqual([]);
@@ -28,14 +44,39 @@ test("actual Git diff includes added/modified owned source, never generated or d
   try {
     mkdirSync(join(root, "script"));
     writeFileSync(join(root, "script/old.ts"), "export const kept = 1;\nexport const value = 1;\n");
-    writeFileSync(join(root, "script/tsconfig.json"), '{"compilerOptions":{"strict":true},"include":["*.ts"]}');
-    writeFileSync(join(root, "contract.json"), JSON.stringify({ version: 1, typescript: "5.9.2", roots: ["script"], projects: ["script/tsconfig.json"], topology: false }));
-    const original = { ...snapshot([{ ...row, path: "script/old.ts" }]), inventory: ["script/old.ts"] };
+    writeFileSync(
+      join(root, "script/tsconfig.json"),
+      '{"compilerOptions":{"strict":true},"include":["*.ts"]}',
+    );
+    writeFileSync(
+      join(root, "contract.json"),
+      JSON.stringify({
+        version: 1,
+        typescript: "5.9.2",
+        roots: ["script"],
+        projects: ["script/tsconfig.json"],
+        topology: false,
+      }),
+    );
+    const original = {
+      ...snapshot([{ ...row, path: "script/old.ts" }]),
+      inventory: ["script/old.ts"],
+    };
     writeFileSync(join(root, "baseline.json"), JSON.stringify(original));
     git(["init", "-q"]);
     git(["add", "."]);
     // A fixture-only commit establishes a real comparison tree; never a product commit.
-    git(["-c", "user.name=fixture", "-c", "user.email=fixture@example.test", "-c", "core.hooksPath=/dev/null", "commit", "-qm", "fixture"]);
+    git([
+      "-c",
+      "user.name=fixture",
+      "-c",
+      "user.email=fixture@example.test",
+      "-c",
+      "core.hooksPath=/dev/null",
+      "commit",
+      "-qm",
+      "fixture",
+    ]);
     writeFileSync(join(root, "script/old.ts"), "export const kept = 1;\nexport const value = 2;\n");
     writeFileSync(join(root, "script/new.ts"), "export const added = 1;\n");
     mkdirSync(join(root, "script/generated"));
@@ -47,25 +88,65 @@ test("actual Git diff includes added/modified owned source, never generated or d
     expect(touchedFindings(root, "HEAD", [untouched, edited, added])).toEqual([edited, added]);
     const current = { ...original, inventory: ["script/new.ts", "script/old.ts"] };
     const cli = join(import.meta.dir, "quality-ratchet.ts");
-    const invoke = () => Bun.spawnSync([process.execPath, cli, "--root", root, "--base", "HEAD", "--baseline", "baseline.json", "--current", "current.json", "--contract", "contract.json"]).exitCode;
+    const invoke = (baseline = "baseline.json") =>
+      Bun.spawnSync([
+        process.execPath,
+        cli,
+        "--root",
+        root,
+        "--base",
+        "HEAD",
+        "--baseline",
+        baseline,
+        "--current",
+        "current.json",
+        "--contract",
+        "contract.json",
+      ]).exitCode;
     writeFileSync(join(root, "current.json"), JSON.stringify(current));
     expect(invoke()).toBe(0);
     writeFileSync(join(root, "current.json"), JSON.stringify({ ...current, findings: [edited] }));
     expect(invoke()).toBe(1);
     writeFileSync(join(root, "current.json"), JSON.stringify({ ...current, complete: false }));
     expect(invoke()).toBe(2);
-    writeFileSync(join(root, "current.json"), JSON.stringify({ ...current, findings: [{ ...untouched, value: 2 }] }));
-    writeFileSync(join(root, "baseline.json"), JSON.stringify({ ...original, findings: [{ ...untouched, value: 2 }] }));
+    writeFileSync(
+      join(root, "current.json"),
+      JSON.stringify({ ...current, findings: [{ ...untouched, value: 2 }] }),
+    );
+    writeFileSync(
+      join(root, "baseline.json"),
+      JSON.stringify({ ...original, findings: [{ ...untouched, value: 2 }] }),
+    );
     expect(invoke()).toBe(2);
+    // A first baseline must equal the measured debt, including added source.
+    const initial = { ...current, findings: [added] };
+    writeFileSync(join(root, "initial.json"), JSON.stringify(initial));
+    writeFileSync(join(root, "current.json"), JSON.stringify(initial));
+    expect(invoke("initial.json")).toBe(0);
+    writeFileSync(join(root, "current.json"), JSON.stringify({ ...initial, findings: [] }));
+    expect(invoke("initial.json")).toBe(2);
+    writeFileSync(
+      join(root, "current.json"),
+      JSON.stringify({ ...initial, findings: [added, added] }),
+    );
+    expect(invoke("initial.json")).toBe(1);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-
 test("compacted baseline multiplicities cannot conceal new or higher-severity findings", () => {
   const base = { ...snapshot(), findings: [{ ...row, value: 10, count: 2 }] };
-  expect(regressions(base, snapshot([{ ...row, value: 9 }, { ...row, value: 8 }]), new Set())).toEqual([]);
+  expect(
+    regressions(
+      base,
+      snapshot([
+        { ...row, value: 9 },
+        { ...row, value: 8 },
+      ]),
+      new Set(),
+    ),
+  ).toEqual([]);
   expect(regressions(base, snapshot([row, row, row]), new Set())).toHaveLength(3);
   expect(regressions(base, snapshot([{ ...row, value: 11 }]), new Set())).toHaveLength(1);
 });
@@ -78,17 +159,35 @@ test("fragment baselines are read from the compared Git revision, not editable w
   };
   try {
     const { findings, ...header } = snapshot();
-    writeFileSync(join(root, "index.json"), JSON.stringify({ ...header, fragments: ["rows.json"] }));
+    writeFileSync(
+      join(root, "index.json"),
+      JSON.stringify({ ...header, fragments: ["rows.json"] }),
+    );
     writeFileSync(join(root, "rows.json"), JSON.stringify(findings));
     git(["init", "-q"]);
     git(["add", "."]);
-    git(["-c", "user.name=fixture", "-c", "user.email=fixture@example.test", "-c", "core.hooksPath=/dev/null", "commit", "-qm", "baseline"]);
+    git([
+      "-c",
+      "user.name=fixture",
+      "-c",
+      "user.email=fixture@example.test",
+      "-c",
+      "core.hooksPath=/dev/null",
+      "commit",
+      "-qm",
+      "baseline",
+    ]);
     writeFileSync(join(root, "rows.json"), JSON.stringify([{ ...row, count: 2 }]));
     const prior = baselineAt(root, "index.json", "HEAD");
     const candidate = baselineAt(root, "index.json");
     expect(prior.findings).toEqual([row]);
     expect(regressions(prior, candidate, new Set())).toHaveLength(1);
-    writeFileSync(join(root, "index.json"), JSON.stringify({ ...header, fragments: ["../outside.json"] }));
+    writeFileSync(
+      join(root, "index.json"),
+      JSON.stringify({ ...header, fragments: ["../outside.json"] }),
+    );
     expect(() => baselineAt(root, "index.json")).toThrow();
-  } finally { rmSync(root, { recursive: true, force: true }); }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

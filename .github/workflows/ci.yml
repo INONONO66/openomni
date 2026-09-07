@@ -314,9 +314,6 @@ jobs:
           printf '%s\n' "$CI_PLAN" > quality-plan.json
           bun run script/check-quality-python.ts
           bun run script/quality-measure.ts --base "$QUALITY_BASE" --baseline script/conformance/quality-baseline-lcov-bound.json --plan quality-plan.json --run "$QUALITY_RUN" --coverage-directory quality-receipts
-      - name: Full mutation ratchet (scheduled or manual convergence)
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-        run: bun run script/quality-native-mutation.ts --base origin/main --baseline script/conformance/quality-baseline-mutation.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:

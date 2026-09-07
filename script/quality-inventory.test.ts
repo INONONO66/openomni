@@ -77,6 +77,8 @@ test("inventory includes declarations, TSX, tests, checked-in fixtures, benchmar
       "script/fixtures/case.ts",
       "bench/case.mts",
       "script/gate.cts",
+      "script/test_driver.py",
+      "script/driver_test.py",
       "npm/launcher.js",
       "migration.sql",
       "apps/example/src/runtime.config.ts",
@@ -93,14 +95,16 @@ test("inventory includes declarations, TSX, tests, checked-in fixtures, benchmar
     expect(inventory.files.find((file) => file.path === "script/gate.cts")?.category).toBe(
       "tooling",
     );
-    expect(inventory.files.find((file) => file.path === "test/case.test.ts")?.category).toBe(
-      "test",
-    );
+    for (const path of ["test/case.test.ts", "script/test_driver.py", "script/driver_test.py"]) {
+      expect(inventory.files.find((file) => file.path === path)?.category).toBe("test");
+    }
     expect(inventory.files.find((file) => file.path === "bench/case.mts")?.category).toBe(
       "benchmark",
     );
     expect(inventory.files.find((file) => file.path === "migration.sql")?.language).toBe("sql");
-    expect(inventory.files.find((file) => file.path === "apps/example/src/runtime.config.ts")?.category).toBe("production");
+    expect(
+      inventory.files.find((file) => file.path === "apps/example/src/runtime.config.ts")?.category,
+    ).toBe("production");
     expect(inventory.files.every((file) => file.sha256.length === 64)).toBe(true);
     expect(buildInventory(root, contract)).toEqual(inventory);
     writeFileSync(join(root, "new.ts"), "export const added = 1;\n");

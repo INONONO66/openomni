@@ -58,4 +58,8 @@ skills-lock.json
 # Local CI plans and build-transfer archives
 /ci-plan.json
 /workspace-dist.tar
+/quality-plan.json
+/quality-receipts/
+/quality-results/
+/quality-mutation-results/
 __pycache__/

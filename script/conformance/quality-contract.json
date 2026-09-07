@@ -26,14 +26,12 @@
     "packages/llm/tsconfig.json",
     "packages/llm/tsconfig.test.json",
     "packages/machines/tsconfig.json",
-    "packages/placement/tsconfig.json",
+    "packages/codemode/tsconfig.json",
     "packages/policy/tsconfig.json",
     "packages/protocol/tsconfig.build.json",
     "packages/protocol/tsconfig.json",
     "packages/protocol/tsconfig.test.json",
     "packages/ui/tsconfig.json",
-    "packages/ui/tsconfig.shoot.json",
-    "packages/ui/tsconfig.showcase.json",
     "packages/ui/tsconfig.test.json",
     "script/tsconfig.json"
   ]

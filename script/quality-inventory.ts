@@ -140,8 +140,11 @@ export function digest(text: string | Buffer): string {
   return createHash("sha256").update(text).digest("hex");
 }
 export function decodeJson(text: string): Json {
-  try { return strictJson(text); }
-  catch { throw new InventoryError("config", "", "invalid JSON syntax"); }
+  try {
+    return strictJson(text);
+  } catch {
+    throw new InventoryError("config", "", "invalid JSON syntax");
+  }
 }
 export function readContract(path: string): Contract {
   return contractSchema.parse(decodeJson(readFileSync(path, "utf8")));
@@ -176,7 +179,12 @@ function category(path: string): Inventory["files"][number]["category"] {
   if (path.endsWith(".sql")) return "migration";
   if (parts.some((part) => /fixtures?/.test(part))) return "fixture";
   if (parts.includes("bench") || /\.bench\./.test(path)) return "benchmark";
-  if (parts.includes("test") || /\.(test|spec)\./.test(path)) return "test";
+  if (
+    parts.includes("test") ||
+    /\.(test|spec)\./.test(path) ||
+    /(?:^|\/)(?:test_.+|.+_test)\.py$/.test(path)
+  )
+    return "test";
   if (parts.includes("script") || parts.includes("npm")) return "tooling";
   if (qualitySource(path)) return "production";
   if (/\.config\./.test(path)) return "tooling";
@@ -231,7 +239,7 @@ export function buildInventory(root: string, contract: Contract): Inventory {
       path: "tsconfig.base.json",
       sha256: digest(readFileSync(join(root, "tsconfig.base.json"))),
     });
-    const path = "packages/machines/src/kernel.ts";
+    const path = "packages/codemode/src/kernel.ts";
     const source = ts.createSourceFile(
       path,
       readFileSync(join(root, path), "utf8"),

@@ -52,8 +52,10 @@ an explicitly labeled upper bound. Missing or ambiguous proof remains a finding,
 not fabricated coverage. Static metrics and clones cover the whole owned inventory;
 coverage/CRAP are checked only for selected lanes, and every changed source must
 have a selected coverage lane. No stale report is borrowed for an unselected lane.
-Full mutation is scheduled/manual final-convergence
-work; a PR pilot is never reported as zero survivors.
+Full mutation runs in the explicit `quality-mutation` scheduled/manual workflow,
+not in PR admission. It retains failed/incomplete process evidence and fails
+closed until a complete campaign and reviewed baseline exist; a missing baseline
+is not a zero-survivor claim. A PR pilot is never reported as zero survivors.
 
 Python quality tools are installed from
 `script/conformance/quality-python-requirements.txt` under Python 3.12.12.
@@ -69,9 +71,11 @@ not an owned table requiring an invented application writer.
 
 Quality baseline fragments are exact measured multiplicities by gate, source and
 symbol. Both the index and fragments are compared with the Git base: editing a
-fragment cannot make growth legal. Added files must contain no findings; changed
-lines (and intersecting function ranges) must contain no findings. A complete
-measurement is required before a baseline can be recorded; there is no soft mode.
+fragment cannot make growth legal. The initial admission baseline must equal a
+complete measurement, without spare allowances; it records debt rather than
+claiming convergence. Once the baseline exists in the Git base, added files must
+contain no findings and changed lines (including intersecting function ranges)
+must contain no findings. Missing or incomplete measurements always fail.
 
 The recursive script lane runs conformance and tool tests once. There are no
 extra duplicate conformance/topology/tsconfig test steps.

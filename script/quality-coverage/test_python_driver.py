@@ -108,9 +108,9 @@ def exchange(argv: list[str]) -> list[ResultFrame]:
 def test_driver_when_real_source_uses_cells_and_reverse_calls() -> None:
     # Given the actual source binding, not a reduced/fake driver or new inventory.
     root = Path(__file__).resolve().parents[2]
-    kernel = (root / "packages/machines/src/kernel.ts").read_text()
+    kernel = (root / "packages/codemode/src/kernel.ts").read_text()
     source = kernel.split("const PYTHON_DRIVER = String.raw`", 1)[1].split("`;", 1)[0]
-    identity = "packages/machines/src/kernel.ts#PYTHON_DRIVER"
+    identity = "packages/codemode/src/kernel.ts#PYTHON_DRIVER"
     native = exchange([sys.executable, "-u", "-c", source])
     with tempfile.TemporaryDirectory() as temporary:
         directory = Path(temporary)

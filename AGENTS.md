@@ -143,8 +143,9 @@ bun test --timeout 15000
 bun run script/check-coverage-ratchet.ts
 
 # #945 measurement entry points (native source/coverage receipts are mandatory):
-bun run script/quality-inventory.ts > quality-inventory.json
-bun run script/check-types-census.ts --inventory quality-inventory.json
+mkdir -p quality-results
+bun run script/quality-inventory.ts > quality-results/inventory.json
+bun run script/check-types-census.ts --inventory quality-results/inventory.json
 bun run script/check-quality-python.ts
 # After sealing coverage receipts as described in docs/ci.md:
 bun run script/quality-measure.ts --base origin/main --baseline script/conformance/quality-baseline-lcov-bound.json --plan quality-plan.json --run "$QUALITY_RUN" --coverage-directory quality-receipts
@@ -168,8 +169,9 @@ Coverage baselines are updated after coverage-producing test runs with `bun run 
 `check-census.ts`, the type census, and the frozen analyzers behind
 `check-quality-metrics.ts` and `check-quality-coverage.ts`. Their strict original
 coverage-receipt API remains available for exact statement-counter verification.
-`quality-ratchet.ts` rejects baseline growth against the Git base and any finding
-on added/modified source lines (or anywhere in a newly added file). Baseline
+`quality-ratchet.ts` requires an exact complete measurement for initial baseline
+admission. Once established in the Git base, it rejects baseline growth and any
+finding on added/modified source lines (or anywhere in a newly added file). Baseline
 fragments contain measured multiplicities, not exemptions; there is no update or
 soft mode for this ratchet. Full mutation uses `run-quality-mutations.ts` and
 requires a complete campaign receipt, including restoration and cleanup proof.
