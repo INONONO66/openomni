@@ -1,4 +1,7 @@
 import { expect, mock, test } from "bun:test";
+import { createRoot, hydrateRoot } from "react-dom/client";
+
+const realClient = { createRoot, hydrateRoot };
 import { GATEWAY_CHANNEL, type DesktopApi, type GatewayEndpoint } from "../src/preload/api";
 
 test("desktop entries register IPC before window creation and render without awaiting the gateway", async () => {
@@ -124,5 +127,6 @@ test("desktop entries register IPC before window creation and render without awa
       else process.env[key] = value;
     }
     mock.restore();
+    mock.module("react-dom/client", () => realClient);
   }
 }, 15_000);
