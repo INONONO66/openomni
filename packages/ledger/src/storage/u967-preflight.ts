@@ -26,6 +26,7 @@ const SCHEMA_0033 = "sha256:3a6ab3e2b91321743f5309a59cec69064f300b956e3a6237a2c4
 const SCHEMA_0034 = "sha256:47900a330291d08e53bf50a9a1dc34b5314aa13a1341f04a2fba95114416fa2d";
 const SCHEMA_0035 = "sha256:7cc06095957973ceb27c8a1cd2eef1cecc01c04f4f8c7e5dca57dc22f3250e14";
 const SCHEMA_0036 = "sha256:89e7677fe96971ec5ff5f8176504f42a478ae4fd8dfa84e4e18560077279e0ff";
+const SCHEMA_0037 = "sha256:f948a47d029d098334c56501460bb69932f48a81a3c7287c24b498c641ecc58e";
 
 export function preflight967(db: Database, migrations: readonly { readonly name: string }[]) {
   const schema = sqliteSchema(db);
@@ -38,18 +39,21 @@ export function preflight967(db: Database, migrations: readonly { readonly name:
   const applied =
     latest === U967_MIGRATION ||
     latest === RETIRED_TABLE_MIGRATION ||
-    latest === REPLY_GRANT_MIGRATION;
+    latest === REPLY_GRANT_MIGRATION ||
+    latest === "0037_watch_alarms/migration.sql";
   const latestIndex =
     latest === undefined ? -1 : migrations.findIndex((migration) => migration.name === latest);
   const expected = latestIndex < 0 ? migrations.slice(0, -1) : migrations.slice(0, latestIndex + 1);
   const schemaDigest =
-    latest === REPLY_GRANT_MIGRATION
-      ? SCHEMA_0036
-      : latest === RETIRED_TABLE_MIGRATION
-        ? SCHEMA_0035
-        : applied
-          ? SCHEMA_0034
-          : SCHEMA_0033;
+    latest === "0037_watch_alarms/migration.sql"
+      ? SCHEMA_0037
+      : latest === REPLY_GRANT_MIGRATION
+        ? SCHEMA_0036
+        : latest === RETIRED_TABLE_MIGRATION
+          ? SCHEMA_0035
+          : applied
+            ? SCHEMA_0034
+            : SCHEMA_0033;
   if (
     canonicalDigest(history) !== canonicalDigest(expected) ||
     canonicalDigest(schema) !== schemaDigest

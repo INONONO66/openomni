@@ -148,7 +148,7 @@ function exerciseL0Contracts(storage: L0Adapter) {
       Alarm.Arm.parse({
         id: "alarm-later",
         sessionId: session.id,
-        kind: "at",
+        kind: "watch",
         fireAt: 500,
       }),
     ),
@@ -164,9 +164,11 @@ function exerciseL0Contracts(storage: L0Adapter) {
       }),
     ),
   ).toMatchObject({ status: "armed" });
-  expect(storage.alarms.cancel("alarm-later", 450)).toMatchObject({ status: "cancelled" });
+  expect(storage.alarms.cancel("alarm-later", session.id, 450)).toMatchObject({
+    status: "cancelled",
+  });
   expect(storage.alarms.due(450).map((row) => row.id)).toEqual(["alarm-now"]);
-  expect(storage.sessions.get(session.id)?.revision).toBe(6);
+  expect(storage.sessions.get(session.id)?.revision).toBe(7);
 
   const policy = PolicyRow.Row.parse({
     name: "allow-tool",
@@ -180,7 +182,7 @@ function exerciseL0Contracts(storage: L0Adapter) {
   expect(storage.policies.append(policy)).toBe(true);
   expect(storage.policies.append(policy)).toBe(false);
   expect(storage.policies.rows()).toEqual([policy]);
-  expect(storage.sessions.get(session.id)?.revision).toBe(6);
+  expect(storage.sessions.get(session.id)?.revision).toBe(7);
 
   return {
     session: storage.sessions.get(session.id),

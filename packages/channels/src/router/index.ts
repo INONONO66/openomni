@@ -131,39 +131,45 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
           }
           if (send.to.kind === "actor") {
             if (messaging === undefined) throw new Error("actor messaging is not configured");
-            const receipt = await messaging.send({
-              messageId,
-              traceId: intent.action.id,
-              senderId: sender.kind === "session" ? sender.id : sender.externalId,
-              target: { actorId: send.to.actorId },
-              body: content,
-              at: startedAt,
-              operation: send.deadline === undefined ? "fire_and_forget" : "awaited",
-              ...(send.deadline === undefined
-                ? {}
-                : {
-                    waitSpec: {
-                      waitId: messageId,
-                      ownerRef: { kind: "session" as const, id: intent.action.sessionId },
-                      allowedActions: ["report_result" as const],
-                      expectedResponders: [send.to.actorId],
-                      resolutionPolicy: "first_reply" as const,
-                      expiresAt: send.deadline,
-                      followUpWindow: 0,
-                    },
-                  }),
-            });
+            const receipt = await messaging.send(
+              {
+                messageId,
+                traceId: intent.action.id,
+                senderId: sender.kind === "session" ? sender.id : sender.externalId,
+                target: { actorId: send.to.actorId },
+                body: content,
+                at: startedAt,
+                operation: send.deadline === undefined ? "fire_and_forget" : "awaited",
+                ...(send.deadline === undefined
+                  ? {}
+                  : {
+                      waitSpec: {
+                        waitId: messageId,
+                        ownerRef: { kind: "session" as const, id: intent.action.sessionId },
+                        allowedActions: ["report_result" as const],
+                        expectedResponders: [send.to.actorId],
+                        resolutionPolicy: "first_reply" as const,
+                        expiresAt: send.deadline,
+                        followUpWindow: 0,
+                      },
+                    }),
+              },
+              () => {
+                if (send.deadline === undefined || sender.kind !== "session") return;
+                if (ports.armDeadline === undefined)
+                  throw new Error("message deadline owner unavailable");
+                ports.armDeadline({
+                  messageId,
+                  sessionId: sender.id,
+                  sourceActionId: intent.action.id,
+                  fireAt: send.deadline,
+                  createdAt: startedAt,
+                  ...(send.replyTo === undefined ? {} : { replyTo: send.replyTo }),
+                });
+              },
+            );
             if (receipt.kind === "denied")
               throw new Error(`actor send admission changed: ${receipt.code}`);
-            if (send.deadline !== undefined && sender.kind === "session")
-              ports.armDeadline?.({
-                messageId,
-                sessionId: sender.id,
-                sourceActionId: intent.action.id,
-                fireAt: send.deadline,
-                createdAt: startedAt,
-                ...(send.replyTo === undefined ? {} : { replyTo: send.replyTo }),
-              });
             return {
               status: "executed",
               handle,

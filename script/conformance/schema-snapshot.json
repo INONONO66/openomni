@@ -57,6 +57,18 @@
   "Actor.ProvisionalMintPolicy": ["max", "windowMs"],
   "Actor.ResolvedEndpoint": ["endpoint", "identity"],
   "Alarm.Arm": ["fireAt", "id", "kind", "sessionId", "spec"],
+  "Alarm.Fire": [
+    "actionId",
+    "at",
+    "batchHash",
+    "content",
+    "epoch",
+    "fence",
+    "id",
+    "inboxId",
+    "limit",
+    "terminal"
+  ],
   "Alarm.MessageDeadline": [
     "createdAt",
     "generation",
@@ -67,14 +79,27 @@
   ],
   "Alarm.Row": [
     "createdAt",
+    "epoch",
+    "fence",
     "fireAt",
     "id",
     "kind",
+    "lastBatch",
+    "notifications",
     "sessionId",
     "spec",
     "status",
     "updatedAt"
   ],
+  "Alarm.Watch#0": [
+    "command",
+    "description",
+    "filter",
+    "persistent",
+    "timeout_ms"
+  ],
+  "Alarm.Watch#1": ["description", "event", "path", "persistent", "timeout_ms"],
+  "Alarm.WatchSpec": ["notificationLimit", "policyGeneration", "watch"],
   "AppConnector.Consent": [
     "capabilities",
     "credentials",
