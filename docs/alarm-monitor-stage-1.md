@@ -24,6 +24,8 @@ No delegation file or deadline consumer is changed in stage 1.
   cannot add a wake.
 - Exactly one of persistent:true and positive timeout_ms is required. Timeout
   is an absolute watch-row deadline, not a session timer or another alarm row.
+  Each source delivery captures time and checks the deadline before admitting
+  a match or exit: at the boundary, timeout wins even before the next scan.
 - Wake budget is an immutable compiled policy obligation, scoped to an alarm
   epoch. N matching notifications are followed by one budget-pause prompt on
   N+1; no automatic refill or resume. Explicit rearm starts a fresh budget.
@@ -51,7 +53,14 @@ channel binding. Evaluator entry is bound to the app's async context at band
 construction: a tool-origin bus notification cannot lend its expiring executor
 wave signal or authority to a persistent source or its later wake.
 Shutdown invalidates source fences before closing the PTY or
-filesystem handle; it does not cancel durable armed rows. One-second due scans
+filesystem handle; it does not cancel durable armed rows. Command cleanup sends
+SIGKILL to the entire owned process group on cancel, timeout, pause, rearm,
+shutdown and natural shell exit, including descendants that ignore HUP. Natural
+exit kills remaining group members before waiting for PTY EOF; cancelled output
+is discarded after leader exit. Darwin's zombie-only-group EPERM is accepted
+only after a process snapshot proves no live group member. A stale cleanup
+callback cannot close the current epoch's source. Group cleanup does not claim
+to sandbox commands that deliberately escape into a different session/group. One-second due scans
 recover missed bus observations and process-worker-created rows. Operators
 inspect the existing alarm row and action/inbox history, not a second watcher
 registry. Source and wake errors are reported by the app. A timed watch lost
@@ -60,6 +69,18 @@ a persistent watch starts from now, preserving its epoch and dedupe digest.
 Only explicitly idempotent polling commands should be relied on for repeated
 external effects. The band assumes one active app per database; unified
 multi-owner evaluator leasing is #971's separate target.
+
+Migration 0035 validates every persisted watch using the shared protocol
+`Alarm.WatchSpec` before applying SQL in the migration transaction. Missing or
+unsupported source, lifetime, budget/generation, regex and absolute-path shapes
+refuse with the alarm identity and preserve the old database image. Existing
+numbered SQL is not rewritten.
+
+Opaque synchronous throws at callback boundaries become `AlarmSourceError`
+with a typed site (`pty.data`, `pty.eof`, `path.observe`, `source.start`,
+`bus.scan`, `timer.scan`); they are reported, never cast to Error or silently
+dropped. JSON test/upgrade boundaries decode a PlainValue and then validate the
+domain schema. The compiler-backed alarm type test rejects raw untyped values.
 
 Owner-approved input amendment (2026-09-06): `monitor` has one object-root
 `operation` field, following the existing approval/provision ABI. Inside it,

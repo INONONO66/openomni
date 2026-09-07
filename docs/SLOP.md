@@ -22,6 +22,16 @@ The Owner-approved #945/#948 amendment overrides stale campaign labels and E4 pa
 | Tool schema | Owner-approved nested `operation` discriminates create/rearm/cancel; create nests `source`, controls require `alarmId`. `bun run lint:tools` passes under the existing field cap, with no exemption or floor reduction. |
 | Lifecycle campaign | No #969-#973 transition/deletion/test receipt is consumed by stage 1. |
 
+R1 correction evidence (after main `678d357e` merge):
+
+| Finding | Failing-first proof -> correction |
+| --- | --- |
+| R1 callback timeout | Three PTY line/exit/native-path tests fail before the callback deadline check; all pass with timeout precedence. No scan is triggered by those tests. |
+| R2 descendants | Five real child-of-child HUP-ignoring process probes fail before group cleanup. Cancel/timeout/pause/exit/shutdown/rearm now close exact death-witness sockets and leave no live probed process. |
+| R3 migration guard | Seventeen invalid historical specs formerly upgraded; each now refuses with the alarm id and byte-identical old database. Complete command/path upgrades still pass. |
+| R4 reconciliation oracle | Removing source observation now fails on the synchronous inbox count before any yield; restored implementation passes. |
+| R5 inferred types | Compiler test fails on untyped JSON results/catch bindings; corrected boundary files report zero. Its planted mutant still fails discrimination. No cast, suppression, exemption or baseline growth was added. |
+
 Decisions and operator contracts: [alarm-monitor-stage-1.md](alarm-monitor-stage-1.md).
 
 ## A rows: already-absent production domains

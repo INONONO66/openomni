@@ -38,6 +38,20 @@ at-most-once restart gap. Stage 2 after #946 still owes only the
 message-deadline consumer -> `at` alarm migration, its answer/deadline CAS and
 restart tests, and B4 deletion proof. #969-#973 receipts remain unconsumed.
 
+### PR #994 R1 correction receipt
+
+The R1 implementation merges main `678d357e` (#993): all six fs/bash tools,
+monitor and existing tools remain in the catalog; placement stays deleted.
+Callback deadline precedence now applies before ordinary match/exit admission.
+Command cleanup kills its process group, including HUP-ignoring grandchildren,
+and stale cleanup is fenced from a rearmed source. Migration validates the
+complete shared WatchSpec before committing 0035. Synchronous inbox/action
+assertions kill the path-reconciliation mutant before native callbacks can run.
+A compiler-backed boundary test reports zero inferred unsafe values and rejects
+its deliberately planted JSON/catch mutant; runtime payloads are schema-checked.
+The earlier 3377-test receipt above remains historical, not a claim that R1
+was already addressed at that checkpoint.
+
 ## Deployed shape
 
 | Component | Current wiring | Source |
