@@ -26,9 +26,10 @@ lint, and quality gates still run for executable changes.
 
 ## Execution
 
-The shared setup action installs the exact Bun version from `package.json`
+The shared setup action installs Bun 1.4.1, pinned in `package.json`,
 and uses `bun install --frozen-lockfile`. Only the package download cache is
-reused. Test results are not cached.
+reused. Test results are not cached. Alarm monitoring requires Bun >=1.4.0
+for its built-in PTY support; unsupported runtimes refuse app construction.
 
 The Build job creates workspace `dist` artifacts once per run. Typechecking,
 quality checks, and test lanes restore the same archive and reject missing

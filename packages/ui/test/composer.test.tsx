@@ -163,16 +163,18 @@ describe("the composer surface", () => {
     // the prop is a control that exists in the package and not in the product.
     const html = renderToStaticMarkup(
       <Console
-        detail="claude-sonnet-4-6"
-        draft=""
-        nodes={[]}
-        onDraftChange={() => undefined}
-        onStop={() => undefined}
-        onSubmit={() => undefined}
-        sending
-        sessionId="stop"
+        session={{
+          id: "stop",
+          title: "Session",
+          detail: "claude-sonnet-4-6",
+          nodes: [],
+          draft: "",
+          onDraftChange: () => undefined,
+          onStop: () => undefined,
+          onSubmit: () => undefined,
+          sending: true,
+        }}
         sidebar={null}
-        title="Session"
       />,
     );
 

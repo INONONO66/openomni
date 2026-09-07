@@ -1,4 +1,4 @@
-import type { SessionId } from "../mock/console";
+import type { SessionId } from "../state/store";
 
 /**
  * The DOM id of a session row.

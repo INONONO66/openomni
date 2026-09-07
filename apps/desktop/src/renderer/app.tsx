@@ -1,82 +1,166 @@
 import { Chat, useChat } from "@ai-sdk/react";
 import { Console } from "@openomni/ui";
+import { useStore } from "@tanstack/react-store";
 import type { ChatTransport, UIMessage } from "ai";
-import { useMemo, useRef, useState } from "react";
+import { type ReactNode, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { applyAtBoundary, orderByAttention } from "./attention";
-import type { Boundary, Held, ProjectSessionFacts, Signals } from "./attention";
+import type { Boundary, Held } from "./attention";
 import { uiMessagesToTranscript } from "./chat/adapter";
 import type { OpenOmniUIMessage } from "./chat/message";
-import { createMockChatTransport } from "./chat/mock-transport";
-import type { SessionId } from "./mock/console";
-import {
-  lastReadAt,
-  now,
-  pins,
-  projects,
-  selectedSessionId,
-  sessions,
-  snoozes,
-} from "./mock/console";
-import { timelines } from "./mock/timelines";
+import { selectChatTransport } from "./chat/select-transport";
 import { SessionTree } from "./shell/session-tree";
+import { useGatewayEndpoint } from "./state/queries";
+import {
+  consoleStore,
+  createSession,
+  type Session,
+  type SessionId,
+  selectSession,
+  setDraft,
+  toggleProject,
+} from "./state/store";
 
 /**
- * Static shell over the mock data: [session navigator | transcript].
+ * The shell: [session navigator | transcript], wired to the store and the wire.
  *
- * The right-hand detail column is gone. A third column that is empty by design
- * spends a fifth of the window on nothing, and the surface this system is
- * building keeps content centered with the sides deliberately clear.
+ * This file's job is what the design system must not know: which session is
+ * selected, how the list is ranked, where the gateway is, and what the
+ * product's words are. It composes `Console` from `@openomni/ui`; it does not
+ * draw one.
  *
- * The composer and the approval tray are wired to a real `Chat` from the AI
- * SDK, one per session, over whichever transport this window was handed.
- * Sending streams a reply and approving posts a tool-approval response — the
- * same calls either way, which is what makes the gateway a substitution rather
- * than a second code path. Which wire that is, is decided in
- * `chat/select-transport.ts` and passed IN: a component that reached for
- * `window.desktop` itself could not be rendered by the showcase, by the
- * screenshot script, or by a test.
+ * Client state — the sessions this window created, the selection, the drafts,
+ * which groups are closed — is read from `state/store.ts` through selectors,
+ * so a keystroke in a draft re-renders the composer and not the tree. Server
+ * state — today only the gateway endpoint — comes through `state/queries.ts`,
+ * and the app renders IMMEDIATELY rather than awaiting it: the window is
+ * useful before the endpoint answers, and the composer simply stays disabled
+ * until it does.
  *
  * Ordering runs through `attention` and is applied at a focus boundary only —
- * here, a selection change. Between boundaries the previous order is held, so
- * the list never reflows under the cursor.
- *
- * A selection made FROM the search field is deliberately not a boundary. The
- * operator is still inside the control, narrowing; reordering the rows they are
- * arrowing through is the exact reflow the rule exists to prevent, and it is
- * worse under a query than at rest because the result set moves too.
- *
- * The screen itself is `Console` from `@openomni/ui`, rendered here with live
- * data. This file's job is what the design system must not know: which session
- * is selected, how the list is ranked, and what the product's words are. It
- * composes the shell; it does not draw one.
+ * a selection change, or creating a session, which selects it. Between
+ * boundaries the previous order is held, so the list never reflows under the
+ * cursor. A selection made FROM the search field is deliberately not a
+ * boundary: the operator is still inside the control, narrowing.
  */
-export function App({ transport }: { readonly transport?: ChatTransport<UIMessage> }) {
-  // The mock surface and the live one are told apart ONCE, here, and the same
-  // answer decides both the wire and the transcript's starting contents.
-  const wire = transport ?? MOCK_TRANSPORT;
-  const seeded = transport === undefined;
-  const [selected, setSelected] = useState(selectedSessionId);
+export function App() {
+  const sessions = useStore(consoleStore, (state) => state.sessions);
+  const selectedId = useStore(consoleStore, (state) => state.selectedSessionId);
+  const collapsedProjectIds = useStore(consoleStore, (state) => state.collapsedProjectIds);
+  const endpoint = useGatewayEndpoint();
+
   const [held, setHeld] = useState<Held>(() => ({
-    shown: idealOrder(selectedSessionId),
+    shown: idealOrder(sessions),
     pendingChanges: 0,
   }));
-  // The draft is per session: switching away and back must not hand the Owner
-  // a half-written message addressed to a different agent.
-  const [drafts, setDrafts] = useState<Readonly<Record<string, string>>>({});
+
+  // The wire, derived from the endpoint query. `null` while the query is in
+  // flight, when this build has no gateway, and when the configured token
+  // cannot be offered — three states the composer reports in one line rather
+  // than talking to anything fabricated.
+  const selected = useMemo(
+    () => (endpoint.data ? selectChatTransport(endpoint.data) : null),
+    [endpoint.data],
+  );
+  const transport = selected?.transport ?? null;
+  const notice = endpoint.isPending
+    ? undefined
+    : (endpoint.error?.message ??
+      (selected === null
+        ? "gateway not configured"
+        : selected.kind === "misconfigured"
+          ? selected.problem
+          : undefined));
+
+  // Adopt the ideal order for the store's CURRENT sessions. Read off the store
+  // rather than the selector's value so a session created in this same handler
+  // is already in the order that boundary adopts.
+  const adopt = (boundary: Boundary | null) =>
+    setHeld((previous) =>
+      applyAtBoundary(previous, idealOrder(consoleStore.state.sessions), boundary),
+    );
+
+  // Selection change IS the breakpoint: the Owner has just finished deciding
+  // what to look at, so a new order costs them nothing — UNLESS the decision
+  // was made from inside the search field, where they have not finished yet.
+  const select = (id: SessionId, boundary: Boundary | null = "selection") => {
+    selectSession(id);
+    adopt(boundary);
+  };
+
+  const create = () => {
+    createSession();
+    adopt("selection");
+  };
+
+  const session = sessions.find((candidate) => candidate.id === selectedId);
+  const sidebar = (
+    <SessionTree
+      collapsedProjectIds={collapsedProjectIds}
+      onCreate={create}
+      onSelect={select}
+      onToggleProject={toggleProject}
+      ordered={held.shown}
+      pendingChanges={held.pendingChanges}
+      selectedId={selectedId}
+      sessions={sessions}
+    />
+  );
+
+  return (
+    // The window's own height. `Console` fills whatever box it is given.
+    <div className="h-screen min-h-0">
+      {session === undefined ? (
+        <Console emptyLabel="Select or create a session" sidebar={sidebar} />
+      ) : (
+        <SessionConsole notice={notice} session={session} sidebar={sidebar} transport={transport} />
+      )}
+    </div>
+  );
+}
+
+/**
+ * The main column for ONE open session, and the only place `useChat` runs.
+ *
+ * It is a component of its own so the hook has a session to run over: with
+ * nothing selected there is no chat, and a hook cannot be skipped, so the split
+ * is what lets the empty column be honestly empty instead of a chat for a
+ * session that does not exist.
+ */
+function SessionConsole({
+  session,
+  sidebar,
+  transport,
+  notice,
+}: {
+  readonly session: Session;
+  readonly sidebar: ReactNode;
+  readonly transport: ChatTransport<UIMessage> | null;
+  /** Why the composer is disabled, when it is. */
+  readonly notice: string | undefined;
+}) {
+  const draft = useStore(consoleStore, (state) => state.drafts[session.id] ?? "");
 
   // One `Chat` per session, kept in a ref so a re-render never rebuilds one and
   // drops a stream mid-turn. A session the Owner has never opened has no chat
-  // at all: constructing seven of them up front would attach seven transports
-  // to keep six idle conversations warm.
+  // at all. The chat sends through `wire`, which reads the CURRENT transport at
+  // send time — `Chat` takes its transport at construction, and the endpoint
+  // query may not have answered when the first chat is built.
+  const transportRef = useRef(transport);
+  useLayoutEffect(() => {
+    transportRef.current = transport;
+  }, [transport]);
+  const wire = useMemo<ChatTransport<UIMessage>>(
+    () => ({
+      sendMessages: (options) => current(transportRef.current).sendMessages(options),
+      reconnectToStream: (options) => current(transportRef.current).reconnectToStream(options),
+    }),
+    [],
+  );
   const chats = useRef<Map<SessionId, Chat<OpenOmniUIMessage>>>(new Map());
-  const chat = chatFor(chats.current, selected, wire, seeded);
+  const chat = chatFor(chats.current, session.id, wire);
 
-  // Unconditional, on every render, with the selected chat chosen ABOVE it —
-  // `useChat` is a hook, and selecting inside it would make the hook order
-  // depend on which session is open.
   const { messages, sendMessage, status, stop, addToolApprovalResponse } = useChat({ chat });
 
-  const session = sessions.find((candidate) => candidate.id === selected);
   const { nodes, costs, pending } = useMemo(() => uiMessagesToTranscript(messages), [messages]);
   // `submitted` is the window between the send and the first chunk; without it
   // the composer unlocks for exactly as long as the request takes to reach the
@@ -84,10 +168,10 @@ export function App({ transport }: { readonly transport?: ChatTransport<UIMessag
   const sending = status === "submitted" || status === "streaming";
 
   const send = () => {
-    const text = drafts[selected]?.trim() ?? "";
-    if (text === "") return;
+    const text = draft.trim();
+    if (text === "" || transport === null) return;
     void sendMessage({ text });
-    setDrafts((was) => ({ ...was, [selected]: "" }));
+    setDraft(session.id, "");
   };
 
   // The tray hands back the APPROVAL's id, because that is what the adapter put
@@ -96,105 +180,65 @@ export function App({ transport }: { readonly transport?: ChatTransport<UIMessag
     void addToolApprovalResponse({ id: approvalId, approved });
   };
 
-  // Selection change IS the breakpoint: the Owner has just finished deciding
-  // what to look at, so a new order costs them nothing — UNLESS the decision
-  // was made from inside the search field, where they have not finished yet.
-  const select = (id: string, boundary: Boundary | null = "selection") => {
-    setSelected(id);
-    setHeld((previous) => applyAtBoundary(previous, idealOrder(id), boundary));
-  };
-
   return (
-    // The window's own height. `Console` fills whatever box it is given.
-    <div className="h-screen min-h-0">
-      <Console
-        composerHint={session?.agent ?? "—"}
-        composerMeta={`${Object.keys(costs).length} turns`}
-        costs={costs}
-        detail={session?.agent ?? "—"}
-        draft={drafts[selected] ?? ""}
-        emptyLabel="No turns in this session yet."
-        nodes={nodes}
-        onApprove={decide(true)}
-        onDeny={decide(false)}
-        onDraftChange={(value) => setDrafts((was) => ({ ...was, [selected]: value }))}
+    <Console
+      emptyLabel="No turns in this session yet."
+      session={{
+        id: session.id,
+        title: session.title,
+        nodes,
+        costs,
+        draft,
+        onDraftChange: (value) => setDraft(session.id, value),
+        onSubmit: send,
         // Per SESSION, because `stop` belongs to the chat the hook is currently
         // subscribed to: it aborts the turn the Owner is watching, and switching
         // sessions mid-stream leaves the other one running, which is what one
         // chat per session is for.
-        onStop={() => void stop()}
-        onSubmit={send}
-        pending={pending}
-        sending={sending}
-        sessionId={selected}
-        sidebar={
-          <SessionTree
-            onSelect={select}
-            ordered={held.shown}
-            pendingChanges={held.pendingChanges}
-            projects={projects}
-            selectedId={selected}
-            sessions={sessions}
-          />
-        }
-        title={session?.name ?? "—"}
-      />
-    </div>
+        onStop: () => void stop(),
+        sending,
+        composerDisabled: transport === null,
+        composerHint: notice,
+        composerMeta: `${Object.keys(costs).length} turns`,
+        pending,
+        onApprove: decide(true),
+        onDeny: decide(false),
+      }}
+      sidebar={sidebar}
+    />
   );
+}
+
+/** The transport to send on right now, or the reason there is none. */
+function current(transport: ChatTransport<UIMessage> | null): ChatTransport<UIMessage> {
+  if (transport === null) throw new Error("gateway not configured");
+  return transport;
 }
 
 /**
  * The chat for a session, created on first sight and never again.
  *
- * On the MOCK surface the fixture is the chat's INITIAL messages rather than a
- * separate rendering path, so the moment the Owner sends, the streamed reply
- * lands in the same list the fixture is in and the transcript keeps one source.
- * Everything the surface draws is derived from that list.
- *
- * Over the GATEWAY the chat starts EMPTY, and that is the load-bearing half.
- * Seeding a live session with the fixture would open the transcript on tool
- * calls that never ran, a cost that was never spent, and a pending approval the
- * Owner could click Approve on — a fabricated conversation wearing a real
- * connection, which is the one failure a transport swap must not introduce. The
- * session list above it is still the mock's; what this guarantees is that
- * nothing fabricated is ever attributed to the wire.
+ * It starts EMPTY, always. There is no history on the wire yet, and seeding a
+ * session with anything else would open the transcript on a conversation
+ * nobody had — the one failure a real connection must not introduce.
  */
 function chatFor(
   chats: Map<SessionId, Chat<OpenOmniUIMessage>>,
   sessionId: SessionId,
   transport: ChatTransport<UIMessage>,
-  seeded: boolean,
 ): Chat<OpenOmniUIMessage> {
   const existing = chats.get(sessionId);
   if (existing !== undefined) return existing;
 
   const created = new Chat<OpenOmniUIMessage>({
     id: sessionId,
-    messages: seeded ? [...(timelines[sessionId] ?? [])] : [],
+    messages: [],
     transport,
     generateId,
   });
   chats.set(sessionId, created);
   return created;
 }
-
-/**
- * ONE transport for every chat, and the default when nothing hands one in.
- *
- * The gateway holds a single socket for the whole window, so the shape is the
- * same either way: sessions share a connection and are told apart by the chat
- * they belong to. A transport per chat would have made the swap a rewrite
- * instead of a substitution.
- */
-// One chunk per paint keeps the mock's in-flight state visible in the real
-// renderer instead of collapsing the whole reply into one React render.
-const MOCK_TRANSPORT = createMockChatTransport({
-  replies: [
-    "The mock transport is streaming this reply through the Console so the in-flight assistant answer remains visible before the chat returns to ready.",
-  ],
-  chunkSize: 4,
-  tick: () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
-});
 
 /**
  * Message ids, from a counter rather than the SDK's random default.
@@ -210,32 +254,13 @@ const generateId = () => {
   return `m${nextId}`;
 };
 
-/**
- * The engine's input. `now` is the mock's fixed instant rather than the wall
- * clock, so the shell renders the same ranking on every run — the same property
- * the tests rely on, for the same reason.
- */
-function idealOrder(activeSessionId: string) {
-  const signals: Signals = {
-    now,
-    activeSessionId,
-    pins,
-    snoozes,
-    lastReadAt,
-    userBusy: false,
-  };
-  const facts: readonly ProjectSessionFacts[] = sessions.map((session) => ({
-    id: session.id,
-    projectId: session.projectId,
-    state: session.state,
-    lastEventAt: session.lastEventAt,
-    lastUserTurnAt: session.lastUserTurnAt,
-    unreadCount: session.unreadCount,
-  }));
-
+/** The engine's input: the facts a store session actually carries. */
+function idealOrder(sessions: readonly Session[]) {
   return orderByAttention(
-    projects.map((project) => project.id),
-    facts,
-    signals,
+    sessions.map((session) => ({
+      id: session.id,
+      projectId: session.projectId,
+      createdAt: session.createdAt,
+    })),
   );
 }

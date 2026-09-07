@@ -1,4 +1,4 @@
-import type { SessionId } from "../mock/console";
+import type { SessionId } from "../state/store";
 
 /**
  * The search field's keyboard contract, as a pure function.

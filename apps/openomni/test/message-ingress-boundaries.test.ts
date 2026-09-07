@@ -96,6 +96,74 @@ for (const mode of ["ancestor", "nearer", "ambiguous"] as const) {
   });
 }
 
+for (const refuse of [false, true]) {
+  test(`actor deadline and send admission ${refuse ? "roll back together" : "commit before delivery"}`, async () => {
+    let dbPath = "";
+    let deliveries = 0;
+    const fixture = messageFixture("resident", {
+      deliveryRoutes: new Map([
+        [
+          "ws",
+          async () => {
+            deliveries += 1;
+            using independent = new Database(dbPath, { readonly: true });
+            expect(
+              independent.query<{ n: number }, []>("SELECT COUNT(*) AS n FROM alarm").get()?.n,
+            ).toBe(1);
+            expect(
+              independent
+                .query<{ n: number }, []>(
+                  "SELECT COUNT(*) AS n FROM ledger_event WHERE stream_id LIKE 'gateway_send:%'",
+                )
+                .get()?.n,
+            ).toBe(1);
+            expect(
+              independent.query<{ n: number }, []>("SELECT COUNT(*) AS n FROM wait").get()?.n,
+            ).toBe(1);
+            return { value: "accepted" as const };
+          },
+        ],
+      ]),
+      grants: () => [
+        { id: "grant", senderId: "sender", targetActorId: "peer", operations: ["awaited"] },
+      ],
+      budgets: () => [
+        { id: "budget", targetActorId: "peer", maxPerWindow: 10, windowMs: 1000, cooldownMs: 0 },
+      ],
+    });
+    directories.push(fixture.directory);
+    dbPath = fixture.dbPath;
+    registerPeer();
+    using db = new Database(dbPath);
+    if (refuse)
+      db.exec(
+        "CREATE TRIGGER refuse_deadline BEFORE INSERT ON alarm BEGIN SELECT RAISE(ABORT, 'deadline fault'); END",
+      );
+    const result = await fixture.send({
+      to: { kind: "actor", actorId: "peer" },
+      type: "message",
+      content: "question",
+      deadline: 200,
+    });
+    expect(result.isError === true).toBe(refuse);
+    expect(deliveries).toBe(refuse ? 0 : 1);
+    expect(db.query<{ n: number }, []>("SELECT COUNT(*) AS n FROM alarm").get()?.n).toBe(
+      refuse ? 0 : 1,
+    );
+    expect(
+      db
+        .query<{ n: number }, []>(
+          "SELECT COUNT(*) AS n FROM ledger_event WHERE stream_id LIKE 'gateway_send:%'",
+        )
+        .get()?.n,
+    ).toBe(refuse ? 0 : 1);
+    expect(WaitStore.list()).toHaveLength(refuse ? 0 : 1);
+    expect(db.query<{ n: number }, []>("SELECT COUNT(*) AS n FROM egress_debit").get()?.n).toBe(
+      refuse ? 0 : 1,
+    );
+  });
+}
+
 test("child admission observations see the inbox and deadline together on another connection", async () => {
   const fixture = messageFixture();
   directories.push(fixture.directory);

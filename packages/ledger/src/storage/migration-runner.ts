@@ -1,4 +1,5 @@
 import type { Database } from "bun:sqlite";
+import { Alarm, type PlainValue } from "@openomni/protocol";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
@@ -46,6 +47,20 @@ function migrationStatements(sql: string): string[] {
     .filter((statement) => statement.length > 0);
 }
 
+const decodeJson: (text: string) => PlainValue = JSON.parse;
+
+function validateWatchAlarms(db: Database): void {
+  const rows = db
+    .query<{ id: string; spec: string | null }, []>(
+      "SELECT id, spec FROM alarm WHERE kind = 'watch'",
+    )
+    .all();
+  for (const row of rows) {
+    const parsed = Alarm.WatchSpec.safeParse(row.spec === null ? null : decodeJson(row.spec));
+    if (!parsed.success) throw new Error(`alarm migration refused: ${row.id}: invalid watch spec`);
+  }
+}
+
 function applyMigration(
   db: Database,
   migrationDir: string,
@@ -62,7 +77,9 @@ function applyMigration(
     },
   };
   {
-    const applied = db.query("SELECT 1 FROM _migrations WHERE name = ?").get(migration.name);
+    const applied = db
+      .query<{ "1": number | bigint }, [string]>("SELECT 1 FROM _migrations WHERE name = ?")
+      .get(migration.name);
     if (!applied) {
       if (migration.name === U967_MIGRATION) {
         if (prepare967) prepare967(db);
@@ -72,6 +89,7 @@ function applyMigration(
             throw new U967Error("approval_required");
         }
       }
+      if (migration.name === "0037_watch_alarms/migration.sql") validateWatchAlarms(db);
       const sql = readFileSync(join(migrationDir, migration.name), "utf-8");
       for (const statement of migrationStatements(sql)) {
         db.run(statement);

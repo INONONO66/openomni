@@ -9,6 +9,7 @@ const EXPECTED = [
   "list",
   "search",
   "bash",
+  "monitor",
   "sendMessage",
   "approval",
   "provision",

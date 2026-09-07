@@ -20,8 +20,8 @@
     "@openomni/ledger": "workspace:*",
     "@openomni/llm": "workspace:*",
     "@openomni/protocol": "workspace:*",
-    "zod": "^4.5.4",
     "@openomni/policy": "workspace:*",
+    "zod": "^4.5.4",
     "@openomni/machines": "workspace:*",
     "@openomni/codemode": "workspace:*"
   },

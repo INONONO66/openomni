@@ -1,25 +1,37 @@
 import { SEEDED_POLICY_ROWS } from "@openomni/agent";
 import { Storage } from "@openomni/ledger";
+import type { PolicyRow } from "@openomni/protocol";
 import { MESSAGE_POLICY_ROWS } from "./message-policy";
 
 /** Seeds the kernel's mandatory generation before any durable session is materialized. */
 export function seedKernelPolicyRows(): number {
   const policies = Storage.get().policies;
   if (policies === undefined) throw new Error("L0 storage capability is unavailable: policies");
-  const stored = policies.rows();
-  const latest = stored.reduce((value, row) => Math.max(value, row.generation), 0);
-  const current = stored.filter((row) => row.generation === latest);
-  const missing = MESSAGE_POLICY_ROWS.filter(
-    (required) => !current.some((row) => row.name === required.name && row.kind === required.kind),
-  );
-  if (latest > 0 && missing.length === 0) return latest;
-  const generation = latest + 1;
-  Storage.get().transaction(() => {
-    for (const row of [...(latest === 0 ? SEEDED_POLICY_ROWS : current), ...missing]) {
-      if (!policies.append({ ...row, generation })) {
-        throw new Error(`could not seed policy row: ${row.name}`);
-      }
+  const budget = {
+    name: "monitor-wake-budget",
+    kind: "tool",
+    phase: "pre" as const,
+    priority: 900,
+    match: { encodingVersion: 1 as const, value: { op: "monitor" } },
+    verdict: {
+      encodingVersion: 1 as const,
+      value: { type: "obligation", name: "budget_clamp", metric: "notifications", limit: 8 },
+    },
+  };
+  return policies.appendGeneration((current) => {
+    const next = new Map(
+      [...SEEDED_POLICY_ROWS, ...MESSAGE_POLICY_ROWS, budget].map((row) => [policyId(row), row]),
+    );
+    // Preserve existing policy values and site-specific ids; fill missing mandatory ids.
+    for (const row of current) next.set(policyId(row), row);
+    const currentIds = new Set(current.map(policyId));
+    if (currentIds.size === next.size && [...next.keys()].every((id) => currentIds.has(id))) {
+      return undefined;
     }
+    return [...next.values()];
   });
-  return generation;
+}
+
+function policyId(row: Omit<PolicyRow.Row, "generation">): string {
+  return JSON.stringify([row.name, row.kind, row.phase]);
 }

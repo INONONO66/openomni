@@ -1,24 +1,9 @@
-import type { ProjectId, SessionId } from "../mock/console";
-import { reasonFor } from "./reason";
-import { CLASS_RANK, classify, score } from "./score";
-import type { AttentionClass, SessionFacts, Signals } from "./score";
+import type { ProjectId, SessionId } from "../state/store";
 
-/**
- * One live row: a session the Owner may need, and why.
- *
- * Reachable through `Ordered` rather than exported by name — consumers destructure
- * the tree, they never construct a row.
- */
-interface OrderedSession {
-  readonly id: SessionId;
-  readonly reason: string;
-}
-
-/** One project group: live rows in attention order, then the settled tail. */
+/** One project group: its sessions, ranked. `null` is the unfiled group. */
 interface OrderedProject {
-  readonly id: ProjectId;
-  readonly live: readonly OrderedSession[];
-  readonly settled: readonly SessionId[];
+  readonly id: ProjectId | null;
+  readonly sessions: readonly SessionId[];
 }
 
 /** The engine's whole output: PROJECT → SESSION, ranked. */
@@ -26,106 +11,67 @@ export interface Ordered {
   readonly projects: readonly OrderedProject[];
 }
 
-/** A session's facts plus the group it belongs to. */
-export type ProjectSessionFacts = SessionFacts & { readonly projectId: ProjectId };
-
-interface Ranked {
-  readonly facts: SessionFacts;
-  readonly attentionClass: AttentionClass;
-  readonly rank: number;
-  readonly score: number;
-  readonly reason: string;
+/**
+ * What the engine ranks on. Deliberately not the whole `Session`: a title is
+ * not a ranking signal, and keeping it out of the input is what stops one from
+ * becoming one.
+ *
+ * Right now the only fact a session carries is when it was created. Run state,
+ * unread counts, and the Owner's own pins were ranking inputs once, but nothing
+ * real produced them — they were fixture fields — so they are gone rather than
+ * left as a shape the wire does not fill. When the gateway can report a
+ * session's state, that state is added HERE and the classes come back with it.
+ */
+export interface SessionFacts {
+  readonly id: SessionId;
+  readonly projectId: ProjectId | null;
+  readonly createdAt: number;
 }
 
 /**
  * The ideal order, right now.
  *
- * Pure and total: same inputs, same output, no clock and no I/O. `now` is a
- * parameter because a ranking that reads the clock cannot be tested and cannot
- * be held steady across a render — and holding it steady is the whole point of
- * the stability rule that wraps this function.
+ * Pure and total: same inputs, same output, no clock and no I/O — and holding
+ * it steady across a render is the stability rule's job, not this function's.
  *
- * `projectIds` fixes which groups exist; it does not fix their sequence. Group
- * order is derived from the sessions inside, so a project rises because its
- * work needs attention, never because of where it was declared.
+ * Groups exist because sessions do: a project appears when its first session
+ * does and disappears with its last, in the order the sessions themselves earn.
+ * A group weighs as much as its newest session, so the project holding the most
+ * recent work is first even if it holds nothing else.
  */
-export function orderByAttention(
-  projectIds: readonly ProjectId[],
-  facts: readonly ProjectSessionFacts[],
-  signals: Signals,
-): Ordered {
-  const byProject = new Map<ProjectId, Ranked[]>(projectIds.map((id) => [id, []]));
-
+export function orderByAttention(facts: readonly SessionFacts[]): Ordered {
+  const byProject = new Map<ProjectId | null, SessionFacts[]>();
   for (const item of facts) {
     const bucket = byProject.get(item.projectId);
-    // A session naming a project that does not exist is an input bug, not a
-    // render decision: drop it rather than invent a group to hold it.
-    if (!bucket) continue;
-    const attentionClass = classify(item, signals);
-    bucket.push({
-      facts: item,
-      attentionClass,
-      rank: CLASS_RANK[attentionClass],
-      score: score(item, signals.now),
-      reason: reasonFor(attentionClass, item, signals),
-    });
+    if (bucket) bucket.push(item);
+    else byProject.set(item.projectId, [item]);
   }
 
-  const projects: OrderedProject[] = [];
-  for (const id of projectIds) {
-    const ranked = [...(byProject.get(id) ?? [])].sort(compare);
-    projects.push({
-      id,
-      live: ranked
-        .filter((item) => item.attentionClass !== "settled")
-        .map(({ facts: session, reason }) => ({ id: session.id, reason })),
-      settled: ranked
-        .filter((item) => item.attentionClass === "settled")
-        .map((item) => item.facts.id),
-    });
-  }
+  const projects = [...byProject.entries()].map(([id, bucket]) => {
+    const ranked = [...bucket].sort(compare);
+    return { id, sessions: ranked.map((item) => item.id), newest: ranked[0]?.createdAt ?? 0 };
+  });
 
   return {
-    projects: projects.sort((a, b) => projectWeight(byProject, a) - projectWeight(byProject, b)),
+    projects: projects
+      .sort((a, b) => b.newest - a.newest || compareId(a.id ?? "", b.id ?? ""))
+      .map(({ id, sessions }) => ({ id, sessions })),
   };
 }
 
 /**
- * Class first, score second, id last. The id tie-break is not cosmetic: two
- * sessions with identical timestamps must not swap places between renders, and
+ * Newest first, id last. The id tie-break is not cosmetic: two sessions created
+ * in the same millisecond must not swap places between renders, and
  * `Array.prototype.sort` stability alone cannot promise that across the
  * regrouping above.
  */
-function compare(a: Ranked, b: Ranked): number {
-  if (a.rank !== b.rank) return a.rank - b.rank;
-  if (a.score !== b.score) return b.score - a.score;
-  return a.facts.id < b.facts.id ? -1 : 1;
+function compare(a: SessionFacts, b: SessionFacts): number {
+  return b.createdAt - a.createdAt || compareId(a.id, b.id);
 }
 
-/**
- * A group weighs as much as its most demanding session. Sorting groups by their
- * best row is what makes the sidebar answer "where do I look" in one glance:
- * the project holding the only waiting session is first, even if it holds
- * nothing else.
- *
- * A project with only settled work sorts last by construction — `settled` is
- * the highest rank, so its best row is also its worst.
- */
-function projectWeight(
-  byProject: ReadonlyMap<ProjectId, readonly Ranked[]>,
-  project: OrderedProject,
-): number {
-  const ranked = byProject.get(project.id) ?? [];
-  if (ranked.length === 0) return Number.POSITIVE_INFINITY;
-
-  let best = Number.POSITIVE_INFINITY;
-  for (const item of ranked) {
-    // Score refines within a class, so it is folded in as a fraction: a rank
-    // step always dominates any score difference.
-    const weight = item.rank - Math.min(1, item.score) * 0.5;
-    if (weight < best) best = weight;
-  }
-  return best;
+function compareId(a: string, b: string): number {
+  if (a === b) return 0;
+  return a < b ? -1 : 1;
 }
 
 /** How many rows moved between two orders — the group header's change hint. */
@@ -148,8 +94,7 @@ function flatten(ordered: Ordered): ReadonlyMap<SessionId, number> {
   const positions = new Map<SessionId, number>();
   let index = 0;
   for (const project of ordered.projects) {
-    for (const session of project.live) positions.set(session.id, index++);
-    for (const id of project.settled) positions.set(id, index++);
+    for (const id of project.sessions) positions.set(id, index++);
   }
   return positions;
 }

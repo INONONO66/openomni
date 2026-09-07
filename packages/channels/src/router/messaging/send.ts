@@ -94,7 +94,7 @@ type SendAuthorityInput = Pick<SendInput, "senderId" | "target" | "operation" | 
 
 export type ExistingAgentMessaging = Readonly<{
   preflight: (input: SendAuthorityInput) => MessageDenialCode | undefined;
-  send: (input: SendInput) => Promise<SendReceipt>;
+  send: (input: SendInput, admitted?: () => void) => Promise<SendReceipt>;
 }>;
 
 type TargetDenialCode = Extract<
@@ -302,6 +302,7 @@ function admitSend(
   authorization: AuthorizedSend,
   ports: MessagingPorts,
   deny: DenySend,
+  admitted?: () => void,
 ): SendAdmission | SendReceipt {
   const { input, target, grant } = authorization;
   const sendClass = sendClassOf(input);
@@ -338,6 +339,7 @@ function admitSend(
     }
   }
   admission = recordAdmission(input, target, budgeted, sendClass);
+  admitted?.();
   repairBudgetDebit(input, admission);
   return admission;
 }
@@ -497,17 +499,19 @@ export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAge
     };
   }
 
-  async function send(rawInput: SendInput): Promise<SendReceipt> {
+  async function send(rawInput: SendInput, admitted?: () => void): Promise<SendReceipt> {
     const input = SendInput.parse(rawInput);
     const checked = authorizeSend(input, ports);
     if (!checked.ok) return deny(input, checked.code, checked.reason);
     const authorization = { input, target: checked.target, grant: checked.grant };
     const { target } = authorization;
 
-    const admission = admitSend(authorization, ports, deny);
-    if ("kind" in admission) return admission;
-
-    const waitOpening = openSendWait(input, target, deny);
+    // Admission, deadline alarm and correlation commit before external delivery.
+    const waitOpening = LedgerAppend.transaction(() => {
+      const admission = admitSend(authorization, ports, deny, admitted);
+      if ("kind" in admission) return { ok: false as const, receipt: admission };
+      return openSendWait(input, target, deny);
+    });
     if (!waitOpening.ok) return waitOpening.receipt;
     const wait = await deliverSend(input, target, waitOpening.wait, ports);
     return recordSent(authorization, wait, ports);
