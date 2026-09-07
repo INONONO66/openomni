@@ -1,0 +1,8002 @@
+[
+  {
+    "path": "packages/ipc/src/peer-request-table.ts",
+    "line": 149,
+    "symbol": "unknown:dispatchNotification",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/src/peer-request-table.ts",
+    "line": 115,
+    "symbol": "unknown:dispatchRequest",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ipc/src/peer-request-table.ts",
+    "line": 7,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 23
+  },
+  {
+    "path": "packages/ipc/src/peer-request-table.ts",
+    "line": 130,
+    "symbol": "unknown:failRequest",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ipc/src/peer-request-table.ts",
+    "line": 12,
+    "symbol": "unknown:frame",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ipc/src/peer-request-table.ts",
+    "line": 85,
+    "symbol": "unknown:notification",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ipc/src/peer-request-table.ts",
+    "line": 19,
+    "symbol": "unknown:notify",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ipc/src/peer-request-table.ts",
+    "line": 32,
+    "symbol": "unknown:onNotification",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ipc/src/peer-request-table.ts",
+    "line": 31,
+    "symbol": "unknown:onRequest",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ipc/src/peer-request-table.ts",
+    "line": 17,
+    "symbol": "unknown:params",
+    "gate": "type",
+    "value": 1,
+    "count": 17
+  },
+  {
+    "path": "packages/ipc/src/peer-request-table.ts",
+    "line": 72,
+    "symbol": "unknown:raw",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ipc/src/peer-request-table.ts",
+    "line": 7,
+    "symbol": "unknown:reject",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ipc/src/peer-request-table.ts",
+    "line": 165,
+    "symbol": "unknown:rejectPending",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/src/peer-request-table.ts",
+    "line": 56,
+    "symbol": "unknown:request",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/ipc/src/peer-request-table.ts",
+    "line": 8,
+    "symbol": "unknown:resolve",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ipc/src/peer-request-table.ts",
+    "line": 18,
+    "symbol": "unknown:respond",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ipc/src/peer-request-table.ts",
+    "line": 73,
+    "symbol": "unknown:response",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ipc/src/peer-request-table.ts",
+    "line": 18,
+    "symbol": "unknown:result",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/ipc/src/peer-request-table.ts",
+    "line": 29,
+    "symbol": "unknown:send",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ipc/src/peer-request-table.ts",
+    "line": 102,
+    "symbol": "unknown:settleResponse",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ipc/src/peer-request-table.ts",
+    "line": 64,
+    "symbol": "unknown:timer",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/src/peer-request-table.ts",
+    "line": 8,
+    "symbol": "unknown:value",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/src/peer-request-table.ts",
+    "line": 150,
+    "symbol": "unknown:warnFailure",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 268,
+    "symbol": "implicitAny:IpcProtocolError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 9,
+    "symbol": "implicitAny:error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 346,
+    "symbol": "implicitAny:notif",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 340,
+    "symbol": "implicitAny:req",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 343,
+    "symbol": "implicitAny:res",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 10,
+    "symbol": "unknown:Error",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 334,
+    "symbol": "unknown:IpcMessage",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 268,
+    "symbol": "unknown:IpcProtocolError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 32,
+    "symbol": "unknown:RequestHandler",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 42,
+    "symbol": "unknown:TypeReference",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 42,
+    "symbol": "unknown:UnknownKeyword",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 42,
+    "symbol": "unknown:call",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 327,
+    "symbol": "unknown:close",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 79,
+    "symbol": "unknown:createIpcServer",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 244,
+    "symbol": "unknown:data",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 339,
+    "symbol": "unknown:decodeMessage",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 267,
+    "symbol": "unknown:err",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 272,
+    "symbol": "unknown:errResponse",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 9,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 12
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 355,
+    "symbol": "unknown:extractFrameId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 244,
+    "symbol": "unknown:frames",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 81,
+    "symbol": "unknown:handler",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 357,
+    "symbol": "unknown:id",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 9,
+    "symbol": "unknown:isMissingFileError",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 241,
+    "symbol": "unknown:messages",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 144,
+    "symbol": "unknown:msg",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 346,
+    "symbol": "unknown:notif",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 36,
+    "symbol": "unknown:notify",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 153,
+    "symbol": "unknown:onNotification",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 151,
+    "symbol": "unknown:onRequest",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 34,
+    "symbol": "unknown:params",
+    "gate": "type",
+    "value": 1,
+    "count": 20
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 264,
+    "symbol": "unknown:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 151,
+    "symbol": "unknown:peer",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 60,
+    "symbol": "unknown:probe",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 65,
+    "symbol": "unknown:probeSocketLive",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 339,
+    "symbol": "unknown:raw",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 211,
+    "symbol": "unknown:removeConnection",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 340,
+    "symbol": "unknown:req",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 343,
+    "symbol": "unknown:res",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 35,
+    "symbol": "unknown:respond",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 35,
+    "symbol": "unknown:result",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 149,
+    "symbol": "unknown:send",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 144,
+    "symbol": "unknown:sendFrame",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/src/server.ts",
+    "line": 70,
+    "symbol": "unknown:settle",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/src/typed-call.ts",
+    "line": 5,
+    "symbol": "implicitAny:MethodName",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/src/typed-call.ts",
+    "line": 6,
+    "symbol": "implicitAny:MethodParams",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/src/typed-call.ts",
+    "line": 7,
+    "symbol": "implicitAny:MethodResult",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/src/typed-call.ts",
+    "line": 4,
+    "symbol": "implicitAny:MethodTable",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/src/typed-call.ts",
+    "line": 18,
+    "symbol": "implicitAny:params",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/src/typed-call.ts",
+    "line": 15,
+    "symbol": "implicitAny:typedCall",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ipc/src/typed-call.ts",
+    "line": 5,
+    "symbol": "unknown:MethodName",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/src/typed-call.ts",
+    "line": 6,
+    "symbol": "unknown:MethodParams",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/src/typed-call.ts",
+    "line": 7,
+    "symbol": "unknown:MethodResult",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/src/typed-call.ts",
+    "line": 4,
+    "symbol": "unknown:MethodTable",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/src/typed-call.ts",
+    "line": 18,
+    "symbol": "unknown:params",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/src/typed-call.ts",
+    "line": 15,
+    "symbol": "unknown:typedCall",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ipc/test/backpressure.test.ts",
+    "line": 33,
+    "symbol": "unknown:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/backpressure.test.ts",
+    "line": 18,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/ipc/test/backpressure.test.ts",
+    "line": 76,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/backpressure.test.ts",
+    "line": 76,
+    "symbol": "unknown:SpreadElement",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/backpressure.test.ts",
+    "line": 25,
+    "symbol": "unknown:_params",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/backpressure.test.ts",
+    "line": 14,
+    "symbol": "unknown:createIpcServer",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/backpressure.test.ts",
+    "line": 49,
+    "symbol": "unknown:frame",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ipc/test/backpressure.test.ts",
+    "line": 39,
+    "symbol": "unknown:frameReceived",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ipc/test/backpressure.test.ts",
+    "line": 41,
+    "symbol": "unknown:frames",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ipc/test/backpressure.test.ts",
+    "line": 15,
+    "symbol": "unknown:rawSockets",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/backpressure.test.ts",
+    "line": 45,
+    "symbol": "unknown:request",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ipc/test/backpressure.test.ts",
+    "line": 25,
+    "symbol": "unknown:respond",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/backpressure.test.ts",
+    "line": 18,
+    "symbol": "unknown:s",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/backpressure.test.ts",
+    "line": 14,
+    "symbol": "unknown:servers",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/backpressure.test.ts",
+    "line": 31,
+    "symbol": "unknown:socket",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ipc/test/backpressure.test.ts",
+    "line": 25,
+    "symbol": "unknown:srv",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/backpressure.test.ts",
+    "line": 41,
+    "symbol": "unknown:{ frames }",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/client-edges.test.ts",
+    "line": 29,
+    "symbol": "implicitAny:IpcConnectionError",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/client-edges.test.ts",
+    "line": 96,
+    "symbol": "implicitAny:IpcProtocolError",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/client-edges.test.ts",
+    "line": 36,
+    "symbol": "implicitAny:connect",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ipc/test/client-edges.test.ts",
+    "line": 42,
+    "symbol": "implicitAny:destroy",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ipc/test/client-edges.test.ts",
+    "line": 127,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/client-edges.test.ts",
+    "line": 29,
+    "symbol": "unknown:IpcConnectionError",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/client-edges.test.ts",
+    "line": 96,
+    "symbol": "unknown:IpcProtocolError",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/client-edges.test.ts",
+    "line": 75,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/client-edges.test.ts",
+    "line": 94,
+    "symbol": "unknown:call",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ipc/test/client-edges.test.ts",
+    "line": 36,
+    "symbol": "unknown:connect",
+    "gate": "type",
+    "value": 1,
+    "count": 12
+  },
+  {
+    "path": "packages/ipc/test/client-edges.test.ts",
+    "line": 61,
+    "symbol": "unknown:connectedSocket",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ipc/test/client-edges.test.ts",
+    "line": 34,
+    "symbol": "unknown:connectingSocket",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ipc/test/client-edges.test.ts",
+    "line": 42,
+    "symbol": "unknown:destroy",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/ipc/test/client-edges.test.ts",
+    "line": 35,
+    "symbol": "unknown:destroyedSocket",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ipc/test/client-edges.test.ts",
+    "line": 16,
+    "symbol": "unknown:listenRaw",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/client-edges.test.ts",
+    "line": 16,
+    "symbol": "unknown:onConnection",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ipc/test/client-edges.test.ts",
+    "line": 85,
+    "symbol": "unknown:path",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ipc/test/client-edges.test.ts",
+    "line": 109,
+    "symbol": "unknown:serverSocket",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ipc/test/client-edges.test.ts",
+    "line": 16,
+    "symbol": "unknown:socket",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ipc/test/client-edges.test.ts",
+    "line": 37,
+    "symbol": "unknown:this",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ipc/test/disconnect.test.ts",
+    "line": 66,
+    "symbol": "unknown:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/disconnect.test.ts",
+    "line": 24,
+    "symbol": "unknown:AwaitExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/disconnect.test.ts",
+    "line": 24,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ipc/test/disconnect.test.ts",
+    "line": 12,
+    "symbol": "unknown:_params",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/disconnect.test.ts",
+    "line": 64,
+    "symbol": "unknown:connect",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/disconnect.test.ts",
+    "line": 65,
+    "symbol": "unknown:raw",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/disconnect.test.ts",
+    "line": 12,
+    "symbol": "unknown:respond",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/disconnect.test.ts",
+    "line": 12,
+    "symbol": "unknown:server",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 46,
+    "symbol": "implicitAny:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 94,
+    "symbol": "implicitAny:IpcConnectionError",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 114,
+    "symbol": "implicitAny:IpcRemoteError",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 134,
+    "symbol": "implicitAny:request",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 162,
+    "symbol": "implicitAny:response",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 41,
+    "symbol": "unknown:ArrayLiteralExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 130,
+    "symbol": "unknown:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 87,
+    "symbol": "unknown:AwaitExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 17,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 15
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 94,
+    "symbol": "unknown:IpcConnectionError",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 114,
+    "symbol": "unknown:IpcRemoteError",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 88,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 306,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 115,
+    "symbol": "unknown:TypeReference",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 58,
+    "symbol": "unknown:_notify",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 58,
+    "symbol": "unknown:_params",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 327,
+    "symbol": "unknown:_respond",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 113,
+    "symbol": "unknown:caught",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 354,
+    "symbol": "unknown:client",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 207,
+    "symbol": "unknown:conn",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 245,
+    "symbol": "unknown:connA",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 262,
+    "symbol": "unknown:connB",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 23,
+    "symbol": "unknown:connection",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 12,
+    "symbol": "unknown:createIpcServer",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 196,
+    "symbol": "unknown:disconnected",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 198,
+    "symbol": "unknown:e",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 38,
+    "symbol": "unknown:emptyCause",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 41,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 35
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 37,
+    "symbol": "unknown:falseCause",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 132,
+    "symbol": "unknown:frames",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 250,
+    "symbol": "unknown:gotRequest",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 74,
+    "symbol": "unknown:inFlight",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 311,
+    "symbol": "unknown:next",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 36,
+    "symbol": "unknown:nullCause",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 79,
+    "symbol": "unknown:onRequest",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 133,
+    "symbol": "unknown:raw",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 207,
+    "symbol": "unknown:rawServer",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 14,
+    "symbol": "unknown:rawSockets",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 24,
+    "symbol": "unknown:remote",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 134,
+    "symbol": "unknown:request",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 58,
+    "symbol": "unknown:respond",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 136,
+    "symbol": "unknown:response",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 305,
+    "symbol": "unknown:result",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 17,
+    "symbol": "unknown:s",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 12,
+    "symbol": "unknown:servers",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 127,
+    "symbol": "unknown:socket",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 58,
+    "symbol": "unknown:srv",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 79,
+    "symbol": "unknown:survivor",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 159,
+    "symbol": "unknown:twoErrors",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 39,
+    "symbol": "unknown:undefinedCause",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ipc/test/failure-classes.test.ts",
+    "line": 132,
+    "symbol": "unknown:{ frames }",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/framing.test.ts",
+    "line": 76,
+    "symbol": "implicitAny:IpcProtocolError",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ipc/test/framing.test.ts",
+    "line": 76,
+    "symbol": "unknown:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ipc/test/framing.test.ts",
+    "line": 27,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 22
+  },
+  {
+    "path": "packages/ipc/test/framing.test.ts",
+    "line": 76,
+    "symbol": "unknown:IpcProtocolError",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ipc/test/framing.test.ts",
+    "line": 136,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ipc/test/framing.test.ts",
+    "line": 21,
+    "symbol": "unknown:results",
+    "gate": "type",
+    "value": 1,
+    "count": 17
+  },
+  {
+    "path": "packages/ipc/test/helpers/signal.ts",
+    "line": 3,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/ipc/test/helpers/signal.ts",
+    "line": 3,
+    "symbol": "unknown:reject",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/ipc/test/helpers/signal.ts",
+    "line": 21,
+    "symbol": "unknown:timer",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/helpers/signal.ts",
+    "line": 27,
+    "symbol": "unknown:within",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/ipc-bidirectional.test.ts",
+    "line": 34,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/ipc-bidirectional.test.ts",
+    "line": 8,
+    "symbol": "unknown:createIpcServer",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/ipc-bidirectional.test.ts",
+    "line": 26,
+    "symbol": "unknown:echo",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/ipc-bidirectional.test.ts",
+    "line": 112,
+    "symbol": "unknown:got",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/ipc-bidirectional.test.ts",
+    "line": 44,
+    "symbol": "unknown:notifParams",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ipc/test/ipc-bidirectional.test.ts",
+    "line": 48,
+    "symbol": "unknown:onNotification",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ipc/test/ipc-bidirectional.test.ts",
+    "line": 23,
+    "symbol": "unknown:onRequest",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ipc/test/ipc-bidirectional.test.ts",
+    "line": 21,
+    "symbol": "unknown:params",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/ipc/test/ipc-bidirectional.test.ts",
+    "line": 21,
+    "symbol": "unknown:received",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ipc/test/ipc-bidirectional.test.ts",
+    "line": 23,
+    "symbol": "unknown:respond",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ipc/test/ipc-bidirectional.test.ts",
+    "line": 31,
+    "symbol": "unknown:result",
+    "gate": "type",
+    "value": 1,
+    "count": 12
+  },
+  {
+    "path": "packages/ipc/test/ipc-bidirectional.test.ts",
+    "line": 8,
+    "symbol": "unknown:servers",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/ipc-bidirectional.test.ts",
+    "line": 111,
+    "symbol": "unknown:srv",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ipc/test/peer-request-table.test.ts",
+    "line": 40,
+    "symbol": "implicitAny:IpcRemoteError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/peer-request-table.test.ts",
+    "line": 76,
+    "symbol": "implicitAny:IpcTimeoutError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/peer-request-table.test.ts",
+    "line": 10,
+    "symbol": "implicitAny:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/peer-request-table.test.ts",
+    "line": 66,
+    "symbol": "unknown:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ipc/test/peer-request-table.test.ts",
+    "line": 28,
+    "symbol": "unknown:AwaitExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ipc/test/peer-request-table.test.ts",
+    "line": 27,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 12
+  },
+  {
+    "path": "packages/ipc/test/peer-request-table.test.ts",
+    "line": 7,
+    "symbol": "unknown:Frame",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ipc/test/peer-request-table.test.ts",
+    "line": 40,
+    "symbol": "unknown:IpcRemoteError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/peer-request-table.test.ts",
+    "line": 76,
+    "symbol": "unknown:IpcTimeoutError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/peer-request-table.test.ts",
+    "line": 105,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ipc/test/peer-request-table.test.ts",
+    "line": 23,
+    "symbol": "unknown:call",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/ipc/test/peer-request-table.test.ts",
+    "line": 47,
+    "symbol": "unknown:callA",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/peer-request-table.test.ts",
+    "line": 48,
+    "symbol": "unknown:callB",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ipc/test/peer-request-table.test.ts",
+    "line": 39,
+    "symbol": "unknown:caught",
+    "gate": "type",
+    "value": 1,
+    "count": 12
+  },
+  {
+    "path": "packages/ipc/test/peer-request-table.test.ts",
+    "line": 64,
+    "symbol": "unknown:disconnectError",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ipc/test/peer-request-table.test.ts",
+    "line": 39,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 20
+  },
+  {
+    "path": "packages/ipc/test/peer-request-table.test.ts",
+    "line": 124,
+    "symbol": "unknown:failureFrames",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ipc/test/peer-request-table.test.ts",
+    "line": 82,
+    "symbol": "unknown:first",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/peer-request-table.test.ts",
+    "line": 19,
+    "symbol": "unknown:frame",
+    "gate": "type",
+    "value": 1,
+    "count": 12
+  },
+  {
+    "path": "packages/ipc/test/peer-request-table.test.ts",
+    "line": 9,
+    "symbol": "unknown:frames",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ipc/test/peer-request-table.test.ts",
+    "line": 115,
+    "symbol": "unknown:missing",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/peer-request-table.test.ts",
+    "line": 113,
+    "symbol": "unknown:missingFrames",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ipc/test/peer-request-table.test.ts",
+    "line": 95,
+    "symbol": "unknown:notify",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/peer-request-table.test.ts",
+    "line": 95,
+    "symbol": "unknown:onRequest",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/peer-request-table.test.ts",
+    "line": 95,
+    "symbol": "unknown:params",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/peer-request-table.test.ts",
+    "line": 10,
+    "symbol": "unknown:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/peer-request-table.test.ts",
+    "line": 24,
+    "symbol": "unknown:request",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ipc/test/peer-request-table.test.ts",
+    "line": 49,
+    "symbol": "unknown:requestA",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/peer-request-table.test.ts",
+    "line": 50,
+    "symbol": "unknown:requestB",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/peer-request-table.test.ts",
+    "line": 9,
+    "symbol": "unknown:requestFrom",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ipc/test/peer-request-table.test.ts",
+    "line": 95,
+    "symbol": "unknown:respond",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/peer-request-table.test.ts",
+    "line": 83,
+    "symbol": "unknown:second",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/peer-request-table.test.ts",
+    "line": 19,
+    "symbol": "unknown:send",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ipc/test/peer-request-table.test.ts",
+    "line": 17,
+    "symbol": "unknown:sent",
+    "gate": "type",
+    "value": 1,
+    "count": 15
+  },
+  {
+    "path": "packages/ipc/test/peer-request-table.test.ts",
+    "line": 19,
+    "symbol": "unknown:table",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ipc/test/peer-request-table.test.ts",
+    "line": 126,
+    "symbol": "unknown:throwing",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/server-edges.test.ts",
+    "line": 50,
+    "symbol": "implicitAny:IpcConnectionError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/server-edges.test.ts",
+    "line": 69,
+    "symbol": "implicitAny:IpcTimeoutError",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/server-edges.test.ts",
+    "line": 177,
+    "symbol": "implicitAny:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/server-edges.test.ts",
+    "line": 176,
+    "symbol": "implicitAny:frame",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/server-edges.test.ts",
+    "line": 68,
+    "symbol": "unknown:AwaitExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/server-edges.test.ts",
+    "line": 42,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 14
+  },
+  {
+    "path": "packages/ipc/test/server-edges.test.ts",
+    "line": 58,
+    "symbol": "unknown:Error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/server-edges.test.ts",
+    "line": 50,
+    "symbol": "unknown:IpcConnectionError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/server-edges.test.ts",
+    "line": 69,
+    "symbol": "unknown:IpcTimeoutError",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/server-edges.test.ts",
+    "line": 162,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/server-edges.test.ts",
+    "line": 80,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/ipc/test/server-edges.test.ts",
+    "line": 150,
+    "symbol": "unknown:_p",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/server-edges.test.ts",
+    "line": 92,
+    "symbol": "unknown:bounded",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ipc/test/server-edges.test.ts",
+    "line": 122,
+    "symbol": "unknown:callbackError",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ipc/test/server-edges.test.ts",
+    "line": 12,
+    "symbol": "unknown:connect",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ipc/test/server-edges.test.ts",
+    "line": 84,
+    "symbol": "unknown:correlated",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ipc/test/server-edges.test.ts",
+    "line": 38,
+    "symbol": "unknown:createIpcServer",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/server-edges.test.ts",
+    "line": 17,
+    "symbol": "unknown:exchange",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "packages/ipc/test/server-edges.test.ts",
+    "line": 157,
+    "symbol": "unknown:first",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ipc/test/server-edges.test.ts",
+    "line": 25,
+    "symbol": "unknown:frame",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ipc/test/server-edges.test.ts",
+    "line": 125,
+    "symbol": "unknown:get",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/server-edges.test.ts",
+    "line": 39,
+    "symbol": "unknown:rawSockets",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/server-edges.test.ts",
+    "line": 171,
+    "symbol": "unknown:reply",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/server-edges.test.ts",
+    "line": 150,
+    "symbol": "unknown:respond",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/server-edges.test.ts",
+    "line": 42,
+    "symbol": "unknown:s",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/server-edges.test.ts",
+    "line": 168,
+    "symbol": "unknown:second",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ipc/test/server-edges.test.ts",
+    "line": 38,
+    "symbol": "unknown:servers",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/server-edges.test.ts",
+    "line": 13,
+    "symbol": "unknown:socket",
+    "gate": "type",
+    "value": 1,
+    "count": 14
+  },
+  {
+    "path": "packages/ipc/test/server-edges.test.ts",
+    "line": 103,
+    "symbol": "unknown:srv",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ipc/test/server-edges.test.ts",
+    "line": 23,
+    "symbol": "unknown:timeout",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/server-edges.test.ts",
+    "line": 79,
+    "symbol": "unknown:unknown",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ipc/test/socket-path.test.ts",
+    "line": 4,
+    "symbol": "implicitAny:first",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/socket-path.test.ts",
+    "line": 7,
+    "symbol": "implicitAny:restarted",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/transport-resilience.test.ts",
+    "line": 157,
+    "symbol": "implicitAny:IpcConnectionError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/transport-resilience.test.ts",
+    "line": 94,
+    "symbol": "implicitAny:IpcRemoteError",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/transport-resilience.test.ts",
+    "line": 130,
+    "symbol": "unknown:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/transport-resilience.test.ts",
+    "line": 37,
+    "symbol": "unknown:AwaitExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/ipc/test/transport-resilience.test.ts",
+    "line": 130,
+    "symbol": "unknown:BinaryExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/transport-resilience.test.ts",
+    "line": 34,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/ipc/test/transport-resilience.test.ts",
+    "line": 157,
+    "symbol": "unknown:IpcConnectionError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/transport-resilience.test.ts",
+    "line": 94,
+    "symbol": "unknown:IpcRemoteError",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/transport-resilience.test.ts",
+    "line": 60,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/transport-resilience.test.ts",
+    "line": 95,
+    "symbol": "unknown:TypeReference",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/transport-resilience.test.ts",
+    "line": 46,
+    "symbol": "unknown:_notify",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/transport-resilience.test.ts",
+    "line": 55,
+    "symbol": "unknown:_p",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/transport-resilience.test.ts",
+    "line": 25,
+    "symbol": "unknown:_params",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ipc/test/transport-resilience.test.ts",
+    "line": 130,
+    "symbol": "unknown:args",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ipc/test/transport-resilience.test.ts",
+    "line": 55,
+    "symbol": "unknown:c1",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/transport-resilience.test.ts",
+    "line": 64,
+    "symbol": "unknown:c2",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/transport-resilience.test.ts",
+    "line": 106,
+    "symbol": "unknown:client",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ipc/test/transport-resilience.test.ts",
+    "line": 122,
+    "symbol": "unknown:conn",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/transport-resilience.test.ts",
+    "line": 11,
+    "symbol": "unknown:createIpcServer",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/transport-resilience.test.ts",
+    "line": 93,
+    "symbol": "unknown:e",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ipc/test/transport-resilience.test.ts",
+    "line": 93,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 12
+  },
+  {
+    "path": "packages/ipc/test/transport-resilience.test.ts",
+    "line": 149,
+    "symbol": "unknown:incumbent",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/transport-resilience.test.ts",
+    "line": 25,
+    "symbol": "unknown:onRequest",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ipc/test/transport-resilience.test.ts",
+    "line": 46,
+    "symbol": "unknown:params",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/transport-resilience.test.ts",
+    "line": 122,
+    "symbol": "unknown:rawServer",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/transport-resilience.test.ts",
+    "line": 25,
+    "symbol": "unknown:respond",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/ipc/test/transport-resilience.test.ts",
+    "line": 11,
+    "symbol": "unknown:servers",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/transport-resilience.test.ts",
+    "line": 46,
+    "symbol": "unknown:srv",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ipc/test/typed-facade-fixtures/compile-red.ts",
+    "line": 17,
+    "symbol": "implicitAny:typedCall",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/typed-facade-fixtures/compile-red.ts",
+    "line": 24,
+    "symbol": "unknown:mixedVersionResult",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ipc/test/typed-facade-fixtures/compile-red.ts",
+    "line": 17,
+    "symbol": "unknown:typedCall",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/typed-facade-types.test.ts",
+    "line": 43,
+    "symbol": "implicitAny:request",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/typed-facade-types.test.ts",
+    "line": 45,
+    "symbol": "implicitAny:server",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/typed-facade-types.test.ts",
+    "line": 31,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/typed-facade-types.test.ts",
+    "line": 40,
+    "symbol": "unknown:observed",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ipc/test/typed-facade-types.test.ts",
+    "line": 40,
+    "symbol": "unknown:params",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ipc/test/typed-facade-types.test.ts",
+    "line": 41,
+    "symbol": "unknown:received",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ipc/test/typed-facade-types.test.ts",
+    "line": 43,
+    "symbol": "unknown:request",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/typed-facade-types.test.ts",
+    "line": 41,
+    "symbol": "unknown:respond",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ipc/test/typed-facade-types.test.ts",
+    "line": 41,
+    "symbol": "unknown:server",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/src/actor/index.ts",
+    "line": 42,
+    "symbol": "unknown:endpoint",
+    "gate": "type",
+    "value": 1,
+    "count": 19
+  },
+  {
+    "path": "packages/ledger/src/actor/index.ts",
+    "line": 48,
+    "symbol": "unknown:existingForAddress",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/src/actor/index.ts",
+    "line": 62,
+    "symbol": "unknown:getEndpoint",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/src/actor/index.ts",
+    "line": 32,
+    "symbol": "unknown:getIdentity",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/src/actor/index.ts",
+    "line": 25,
+    "symbol": "unknown:identity",
+    "gate": "type",
+    "value": 1,
+    "count": 19
+  },
+  {
+    "path": "packages/ledger/src/actor/index.ts",
+    "line": 23,
+    "symbol": "unknown:input",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ledger/src/actor/index.ts",
+    "line": 66,
+    "symbol": "unknown:listEndpoints",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/src/actor/index.ts",
+    "line": 117,
+    "symbol": "unknown:mergeEndpoint",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/ledger/src/actor/index.ts",
+    "line": 76,
+    "symbol": "unknown:mintProvisional",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/ledger/src/actor/index.ts",
+    "line": 103,
+    "symbol": "unknown:promote",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ledger/src/actor/index.ts",
+    "line": 40,
+    "symbol": "unknown:registerEndpoint",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ledger/src/actor/index.ts",
+    "line": 23,
+    "symbol": "unknown:registerIdentity",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/actor/index.ts",
+    "line": 129,
+    "symbol": "unknown:resolveEndpoint",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/adopt.ts",
+    "line": 7,
+    "symbol": "implicitAny:HeadRevision",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/adopt.ts",
+    "line": 43,
+    "symbol": "implicitAny:adoptStream",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/adopt.ts",
+    "line": 7,
+    "symbol": "unknown:HeadRevision",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/adopt.ts",
+    "line": 24,
+    "symbol": "unknown:adoptStream",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/adopt.ts",
+    "line": 50,
+    "symbol": "unknown:data",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/adopt.ts",
+    "line": 28,
+    "symbol": "unknown:genesis",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/adopt.ts",
+    "line": 36,
+    "symbol": "unknown:head",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/adopt.ts",
+    "line": 31,
+    "symbol": "unknown:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/adopt.ts",
+    "line": 39,
+    "symbol": "unknown:tip",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/append.ts",
+    "line": 22,
+    "symbol": "unknown:append",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/append.ts",
+    "line": 57,
+    "symbol": "unknown:data",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/append.ts",
+    "line": 24,
+    "symbol": "unknown:event",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/append.ts",
+    "line": 28,
+    "symbol": "unknown:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/append.ts",
+    "line": 45,
+    "symbol": "unknown:row",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/append.ts",
+    "line": 52,
+    "symbol": "unknown:tip",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/index.ts",
+    "line": 14,
+    "symbol": "unknown:adoptStream",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/index.ts",
+    "line": 13,
+    "symbol": "unknown:append",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/index.ts",
+    "line": 16,
+    "symbol": "unknown:factsByType",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/index.ts",
+    "line": 15,
+    "symbol": "unknown:headFact",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/read.ts",
+    "line": 26,
+    "symbol": "implicitAny:data",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/read.ts",
+    "line": 49,
+    "symbol": "implicitAny:factsByType",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/read.ts",
+    "line": 22,
+    "symbol": "implicitAny:headFact",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/read.ts",
+    "line": 36,
+    "symbol": "unknown:factsByType",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/read.ts",
+    "line": 13,
+    "symbol": "unknown:headFact",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/read.ts",
+    "line": 14,
+    "symbol": "unknown:row",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/read.ts",
+    "line": 37,
+    "symbol": "unknown:rows",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/schema.ts",
+    "line": 29,
+    "symbol": "implicitAny:columns",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/schema.ts",
+    "line": 24,
+    "symbol": "implicitAny:data",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/schema.ts",
+    "line": 26,
+    "symbol": "implicitAny:eventHash",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/schema.ts",
+    "line": 35,
+    "symbol": "implicitAny:head",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/schema.ts",
+    "line": 17,
+    "symbol": "implicitAny:ledgerEvent",
+    "gate": "type",
+    "value": 1,
+    "count": 15
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/schema.ts",
+    "line": 33,
+    "symbol": "implicitAny:ledgerHead",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/schema.ts",
+    "line": 25,
+    "symbol": "implicitAny:prevHash",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/schema.ts",
+    "line": 21,
+    "symbol": "implicitAny:seq",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/schema.ts",
+    "line": 20,
+    "symbol": "implicitAny:streamId",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/schema.ts",
+    "line": 29,
+    "symbol": "implicitAny:table",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/schema.ts",
+    "line": 27,
+    "symbol": "implicitAny:timeCreated",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/schema.ts",
+    "line": 22,
+    "symbol": "implicitAny:type",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/schema.ts",
+    "line": 29,
+    "symbol": "unknown:columns",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/schema.ts",
+    "line": 24,
+    "symbol": "unknown:data",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/schema.ts",
+    "line": 26,
+    "symbol": "unknown:eventHash",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/schema.ts",
+    "line": 35,
+    "symbol": "unknown:head",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/schema.ts",
+    "line": 17,
+    "symbol": "unknown:ledgerEvent",
+    "gate": "type",
+    "value": 1,
+    "count": 15
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/schema.ts",
+    "line": 33,
+    "symbol": "unknown:ledgerHead",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/schema.ts",
+    "line": 25,
+    "symbol": "unknown:prevHash",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/schema.ts",
+    "line": 21,
+    "symbol": "unknown:seq",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/schema.ts",
+    "line": 20,
+    "symbol": "unknown:streamId",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/schema.ts",
+    "line": 29,
+    "symbol": "unknown:table",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/schema.ts",
+    "line": 27,
+    "symbol": "unknown:timeCreated",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/ledger-core/schema.ts",
+    "line": 22,
+    "symbol": "unknown:type",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/provisioning/index.ts",
+    "line": 33,
+    "symbol": "implicitAny:put",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/provisioning/index.ts",
+    "line": 10,
+    "symbol": "implicitAny:requireAdapter",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/provisioning/index.ts",
+    "line": 33,
+    "symbol": "unknown:put",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/provisioning/index.ts",
+    "line": 10,
+    "symbol": "unknown:requireAdapter",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/provisioning/vault.ts",
+    "line": 26,
+    "symbol": "implicitAny:decryptWith",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/provisioning/vault.ts",
+    "line": 109,
+    "symbol": "implicitAny:kekOf",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/provisioning/vault.ts",
+    "line": 129,
+    "symbol": "implicitAny:open",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/provisioning/vault.ts",
+    "line": 39,
+    "symbol": "unknown:cause",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/provisioning/vault.ts",
+    "line": 19,
+    "symbol": "unknown:cipher",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/provisioning/vault.ts",
+    "line": 35,
+    "symbol": "unknown:decipher",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/provisioning/vault.ts",
+    "line": 26,
+    "symbol": "unknown:decryptWith",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ledger/src/provisioning/vault.ts",
+    "line": 109,
+    "symbol": "unknown:kekOf",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/provisioning/vault.ts",
+    "line": 129,
+    "symbol": "unknown:open",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/session/kernel.ts",
+    "line": 506,
+    "symbol": "implicitAny:assertUniqueBlocks",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/session/kernel.ts",
+    "line": 493,
+    "symbol": "implicitAny:assertUniqueTools",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/session/kernel.ts",
+    "line": 447,
+    "symbol": "implicitAny:effect",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/session/kernel.ts",
+    "line": 263,
+    "symbol": "implicitAny:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/ledger/src/session/kernel.ts",
+    "line": 401,
+    "symbol": "implicitAny:stop",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/session/kernel.ts",
+    "line": 392,
+    "symbol": "implicitAny:subscribeObservation",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/src/session/kernel.ts",
+    "line": 77,
+    "symbol": "unknown:acquireLease",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/session/kernel.ts",
+    "line": 506,
+    "symbol": "unknown:assertUniqueBlocks",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/session/kernel.ts",
+    "line": 493,
+    "symbol": "unknown:assertUniqueTools",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/session/kernel.ts",
+    "line": 87,
+    "symbol": "unknown:commit",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/session/kernel.ts",
+    "line": 93,
+    "symbol": "unknown:commitInbox",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/session/kernel.ts",
+    "line": 102,
+    "symbol": "unknown:commitReceivedMessage",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/session/kernel.ts",
+    "line": 447,
+    "symbol": "unknown:effect",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/session/kernel.ts",
+    "line": 421,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/session/kernel.ts",
+    "line": 364,
+    "symbol": "unknown:getSnapshot",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/session/kernel.ts",
+    "line": 186,
+    "symbol": "unknown:latestGeneration",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/session/kernel.ts",
+    "line": 71,
+    "symbol": "unknown:materialize",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/session/kernel.ts",
+    "line": 140,
+    "symbol": "unknown:outboundRows",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/session/kernel.ts",
+    "line": 263,
+    "symbol": "unknown:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/ledger/src/session/kernel.ts",
+    "line": 171,
+    "symbol": "unknown:policyRows",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/session/kernel.ts",
+    "line": 523,
+    "symbol": "unknown:requiredActions",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/session/kernel.ts",
+    "line": 529,
+    "symbol": "unknown:requiredInbox",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/session/kernel.ts",
+    "line": 517,
+    "symbol": "unknown:requiredSessions",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/session/kernel.ts",
+    "line": 157,
+    "symbol": "unknown:row",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/session/kernel.ts",
+    "line": 401,
+    "symbol": "unknown:stop",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/session/kernel.ts",
+    "line": 429,
+    "symbol": "unknown:subscribe",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/session/kernel.ts",
+    "line": 392,
+    "symbol": "unknown:subscribeObservation",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/src/session/kernel.ts",
+    "line": 394,
+    "symbol": "unknown:watchSnapshot",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 18,
+    "symbol": "implicitAny:AllowedAction",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 25,
+    "symbol": "implicitAny:Correlation",
+    "gate": "type",
+    "value": 1,
+    "count": 12
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 134,
+    "symbol": "implicitAny:DecidedBy",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 4,
+    "symbol": "implicitAny:EpochMs",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 131,
+    "symbol": "implicitAny:HistoricalApproval",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 6,
+    "symbol": "implicitAny:HistoricalWait",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 143,
+    "symbol": "implicitAny:MergeSubject",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 7,
+    "symbol": "implicitAny:OwnerKind",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 9,
+    "symbol": "implicitAny:OwnerRef",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 152,
+    "symbol": "implicitAny:PersonMutationSubject",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 136,
+    "symbol": "implicitAny:PromotionSubject",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 40,
+    "symbol": "implicitAny:Quorum",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 126,
+    "symbol": "implicitAny:Record",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 60,
+    "symbol": "implicitAny:RecordBase",
+    "gate": "type",
+    "value": 1,
+    "count": 23
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 51,
+    "symbol": "implicitAny:Reply",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 37,
+    "symbol": "implicitAny:ResolutionPolicy",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 132,
+    "symbol": "implicitAny:State",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 16,
+    "symbol": "implicitAny:Status",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 161,
+    "symbol": "implicitAny:Subject",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 139,
+    "symbol": "implicitAny:actorId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 67,
+    "symbol": "implicitAny:allowedActions",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 80,
+    "symbol": "implicitAny:cancelledAt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 30,
+    "symbol": "implicitAny:chain",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 28,
+    "symbol": "implicitAny:channelId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 66,
+    "symbol": "implicitAny:correlation",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 77,
+    "symbol": "implicitAny:createdAt",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 90,
+    "symbol": "implicitAny:ctx",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 174,
+    "symbol": "implicitAny:deadline",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 180,
+    "symbol": "implicitAny:decidedAt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 181,
+    "symbol": "implicitAny:decidedBy",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 27,
+    "symbol": "implicitAny:endpointId",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 42,
+    "symbol": "implicitAny:expected",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 68,
+    "symbol": "implicitAny:expectedResponders",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 75,
+    "symbol": "implicitAny:expiresAt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 33,
+    "symbol": "implicitAny:externalConversationId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 76,
+    "symbol": "implicitAny:followUpWindow",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 147,
+    "symbol": "implicitAny:fromActorId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 12,
+    "symbol": "implicitAny:id",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 11,
+    "symbol": "implicitAny:kind",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 157,
+    "symbol": "implicitAny:manifestDigest",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 55,
+    "symbol": "implicitAny:messageId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 65,
+    "symbol": "implicitAny:originMessageId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 63,
+    "symbol": "implicitAny:ownerRef",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 72,
+    "symbol": "implicitAny:partial",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 155,
+    "symbol": "implicitAny:personId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 70,
+    "symbol": "implicitAny:quorum",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 56,
+    "symbol": "implicitAny:receivedAt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 73,
+    "symbol": "implicitAny:replies",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 53,
+    "symbol": "implicitAny:replyKey",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 29,
+    "symbol": "implicitAny:replyToMessageId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 172,
+    "symbol": "implicitAny:requestedBy",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 69,
+    "symbol": "implicitAny:resolutionPolicy",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 79,
+    "symbol": "implicitAny:resolvedAt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 54,
+    "symbol": "implicitAny:responderId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 74,
+    "symbol": "implicitAny:revision",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 175,
+    "symbol": "implicitAny:state",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 71,
+    "symbol": "implicitAny:status",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 170,
+    "symbol": "implicitAny:subject",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 31,
+    "symbol": "implicitAny:threadId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 43,
+    "symbol": "implicitAny:threshold",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 148,
+    "symbol": "implicitAny:toActorId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 32,
+    "symbol": "implicitAny:tokenHash",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 78,
+    "symbol": "implicitAny:updatedAt",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 84,
+    "symbol": "implicitAny:validateResolution",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 18,
+    "symbol": "unknown:AllowedAction",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 25,
+    "symbol": "unknown:Correlation",
+    "gate": "type",
+    "value": 1,
+    "count": 12
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 134,
+    "symbol": "unknown:DecidedBy",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 4,
+    "symbol": "unknown:EpochMs",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 131,
+    "symbol": "unknown:HistoricalApproval",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 6,
+    "symbol": "unknown:HistoricalWait",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 143,
+    "symbol": "unknown:MergeSubject",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 7,
+    "symbol": "unknown:OwnerKind",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 9,
+    "symbol": "unknown:OwnerRef",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 152,
+    "symbol": "unknown:PersonMutationSubject",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 136,
+    "symbol": "unknown:PromotionSubject",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 40,
+    "symbol": "unknown:Quorum",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 126,
+    "symbol": "unknown:Record",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 60,
+    "symbol": "unknown:RecordBase",
+    "gate": "type",
+    "value": 1,
+    "count": 23
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 51,
+    "symbol": "unknown:Reply",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 37,
+    "symbol": "unknown:ResolutionPolicy",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 132,
+    "symbol": "unknown:State",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 16,
+    "symbol": "unknown:Status",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 161,
+    "symbol": "unknown:Subject",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 139,
+    "symbol": "unknown:actorId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 67,
+    "symbol": "unknown:allowedActions",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 80,
+    "symbol": "unknown:cancelledAt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 30,
+    "symbol": "unknown:chain",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 28,
+    "symbol": "unknown:channelId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 66,
+    "symbol": "unknown:correlation",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 77,
+    "symbol": "unknown:createdAt",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 90,
+    "symbol": "unknown:ctx",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 174,
+    "symbol": "unknown:deadline",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 180,
+    "symbol": "unknown:decidedAt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 181,
+    "symbol": "unknown:decidedBy",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 27,
+    "symbol": "unknown:endpointId",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 42,
+    "symbol": "unknown:expected",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 68,
+    "symbol": "unknown:expectedResponders",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 75,
+    "symbol": "unknown:expiresAt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 33,
+    "symbol": "unknown:externalConversationId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 76,
+    "symbol": "unknown:followUpWindow",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 147,
+    "symbol": "unknown:fromActorId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 12,
+    "symbol": "unknown:id",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 11,
+    "symbol": "unknown:kind",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 157,
+    "symbol": "unknown:manifestDigest",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 55,
+    "symbol": "unknown:messageId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 65,
+    "symbol": "unknown:originMessageId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 63,
+    "symbol": "unknown:ownerRef",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 72,
+    "symbol": "unknown:partial",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 155,
+    "symbol": "unknown:personId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 70,
+    "symbol": "unknown:quorum",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 56,
+    "symbol": "unknown:receivedAt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 73,
+    "symbol": "unknown:replies",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 53,
+    "symbol": "unknown:replyKey",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 29,
+    "symbol": "unknown:replyToMessageId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 172,
+    "symbol": "unknown:requestedBy",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 69,
+    "symbol": "unknown:resolutionPolicy",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 79,
+    "symbol": "unknown:resolvedAt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 54,
+    "symbol": "unknown:responderId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 74,
+    "symbol": "unknown:revision",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 175,
+    "symbol": "unknown:state",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 71,
+    "symbol": "unknown:status",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 170,
+    "symbol": "unknown:subject",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 31,
+    "symbol": "unknown:threadId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 43,
+    "symbol": "unknown:threshold",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 148,
+    "symbol": "unknown:toActorId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 32,
+    "symbol": "unknown:tokenHash",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 78,
+    "symbol": "unknown:updatedAt",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/historical-request-format.ts",
+    "line": 84,
+    "symbol": "unknown:validateResolution",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/initialize.ts",
+    "line": 39,
+    "symbol": "unknown:AsExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/initialize.ts",
+    "line": 39,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/initialize.ts",
+    "line": 39,
+    "symbol": "unknown:TypeReference",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/initialize.ts",
+    "line": 39,
+    "symbol": "unknown:UnknownKeyword",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/initialize.ts",
+    "line": 21,
+    "symbol": "unknown:initialize",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/migration-runner.ts",
+    "line": 11,
+    "symbol": "implicitAny:Definition",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ledger/src/storage/migration-runner.ts",
+    "line": 62,
+    "symbol": "implicitAny:decodeJson",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/migration-runner.ts",
+    "line": 12,
+    "symbol": "implicitAny:name",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/migration-runner.ts",
+    "line": 71,
+    "symbol": "implicitAny:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/migration-runner.ts",
+    "line": 11,
+    "symbol": "unknown:Definition",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ledger/src/storage/migration-runner.ts",
+    "line": 126,
+    "symbol": "unknown:applyMigration",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/migration-runner.ts",
+    "line": 58,
+    "symbol": "unknown:migrationStatements",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/migration-runner.ts",
+    "line": 12,
+    "symbol": "unknown:name",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/migration-runner.ts",
+    "line": 71,
+    "symbol": "unknown:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/migration-runner.ts",
+    "line": 83,
+    "symbol": "unknown:prepareArchiveDisposition",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/migration-runner.ts",
+    "line": 72,
+    "symbol": "unknown:validateWatchAlarms",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-actor-registry-adapter.ts",
+    "line": 81,
+    "symbol": "implicitAny:findEndpoint",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-actor-registry-adapter.ts",
+    "line": 46,
+    "symbol": "implicitAny:getEndpoint",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-actor-registry-adapter.ts",
+    "line": 17,
+    "symbol": "implicitAny:getIdentity",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-actor-registry-adapter.ts",
+    "line": 112,
+    "symbol": "implicitAny:listEndpoints",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-actor-registry-adapter.ts",
+    "line": 48,
+    "symbol": "unknown:endpoint",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-actor-registry-adapter.ts",
+    "line": 72,
+    "symbol": "unknown:findEndpoint",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-actor-registry-adapter.ts",
+    "line": 42,
+    "symbol": "unknown:getEndpoint",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-actor-registry-adapter.ts",
+    "line": 13,
+    "symbol": "unknown:getIdentity",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-actor-registry-adapter.ts",
+    "line": 19,
+    "symbol": "unknown:identity",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-actor-registry-adapter.ts",
+    "line": 83,
+    "symbol": "unknown:listEndpoints",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-actor-registry-adapter.ts",
+    "line": 15,
+    "symbol": "unknown:row",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-actor-registry-adapter.ts",
+    "line": 86,
+    "symbol": "unknown:rows",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-actor-registry-adapter.ts",
+    "line": 48,
+    "symbol": "unknown:setEndpoint",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-actor-registry-adapter.ts",
+    "line": 19,
+    "symbol": "unknown:setIdentity",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-blacklist-adapter.ts",
+    "line": 11,
+    "symbol": "implicitAny:get",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-blacklist-adapter.ts",
+    "line": 39,
+    "symbol": "implicitAny:list",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-blacklist-adapter.ts",
+    "line": 9,
+    "symbol": "unknown:row",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-blacklist-adapter.ts",
+    "line": 37,
+    "symbol": "unknown:rows",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-busy.ts",
+    "line": 18,
+    "symbol": "unknown:Error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-busy.ts",
+    "line": 19,
+    "symbol": "unknown:code",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-busy.ts",
+    "line": 17,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-busy.ts",
+    "line": 17,
+    "symbol": "unknown:isSqliteBusyError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-channel-grant-adapter.ts",
+    "line": 13,
+    "symbol": "implicitAny:get",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-channel-grant-adapter.ts",
+    "line": 43,
+    "symbol": "implicitAny:list",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-channel-grant-adapter.ts",
+    "line": 11,
+    "symbol": "unknown:row",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-channel-grant-adapter.ts",
+    "line": 41,
+    "symbol": "unknown:rows",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-egress-budget-adapter.ts",
+    "line": 68,
+    "symbol": "unknown:claim",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-egress-budget-adapter.ts",
+    "line": 49,
+    "symbol": "unknown:existing",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-json-data.ts",
+    "line": 4,
+    "symbol": "implicitAny:SqliteJsonDataRowSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-json-data.ts",
+    "line": 5,
+    "symbol": "implicitAny:SqliteJsonDataRowsSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-json-data.ts",
+    "line": 4,
+    "symbol": "implicitAny:data",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-json-data.ts",
+    "line": 4,
+    "symbol": "unknown:SqliteJsonDataRowSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-json-data.ts",
+    "line": 5,
+    "symbol": "unknown:SqliteJsonDataRowsSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-json-data.ts",
+    "line": 4,
+    "symbol": "unknown:data",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 19,
+    "symbol": "implicitAny:actionRowSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 21,
+    "symbol": "implicitAny:alarmRowSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 1209,
+    "symbol": "implicitAny:common",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 1220,
+    "symbol": "implicitAny:decodeAction",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 1245,
+    "symbol": "implicitAny:decodeAlarm",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 1230,
+    "symbol": "implicitAny:decodeInbox",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 1264,
+    "symbol": "implicitAny:decodePolicy",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 1215,
+    "symbol": "implicitAny:effect",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 1139,
+    "symbol": "implicitAny:external",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 20,
+    "symbol": "implicitAny:inboxRowSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 1164,
+    "symbol": "implicitAny:intent",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 1268,
+    "symbol": "implicitAny:match",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 1138,
+    "symbol": "implicitAny:native",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 1235,
+    "symbol": "implicitAny:origin",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 22,
+    "symbol": "implicitAny:policyRowSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 1102,
+    "symbol": "implicitAny:publishCommitted",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 1129,
+    "symbol": "implicitAny:publishMessageTerminal",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 1224,
+    "symbol": "implicitAny:revert",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 1256,
+    "symbol": "implicitAny:spec",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 1214,
+    "symbol": "implicitAny:value",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 1269,
+    "symbol": "implicitAny:verdict",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 398,
+    "symbol": "unknown:Error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 255,
+    "symbol": "unknown:SessionCommitRefused",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 574,
+    "symbol": "unknown:actionExists",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 19,
+    "symbol": "unknown:actionRowSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 21,
+    "symbol": "unknown:alarmRowSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 1049,
+    "symbol": "unknown:appendGeneration",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 616,
+    "symbol": "unknown:commitInbox",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 428,
+    "symbol": "unknown:commitSession",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 1192,
+    "symbol": "unknown:decodeSession",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 254,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 749,
+    "symbol": "unknown:existing",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 1139,
+    "symbol": "unknown:external",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 1021,
+    "symbol": "unknown:fireAlarm",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 20,
+    "symbol": "unknown:inboxRowSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 790,
+    "symbol": "unknown:insertInbox",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 1138,
+    "symbol": "unknown:native",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 628,
+    "symbol": "unknown:ordinalRow",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 22,
+    "symbol": "unknown:policyRowSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 1102,
+    "symbol": "unknown:publishCommitted",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 1129,
+    "symbol": "unknown:publishMessageTerminal",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 755,
+    "symbol": "unknown:received",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 836,
+    "symbol": "unknown:receivedAction",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 1163,
+    "symbol": "unknown:requestMessageIdentity",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 166,
+    "symbol": "unknown:result",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 299,
+    "symbol": "unknown:row",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 177,
+    "symbol": "unknown:rows",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 619,
+    "symbol": "unknown:session",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 1160,
+    "symbol": "unknown:source",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-l0-adapter.ts",
+    "line": 707,
+    "symbol": "unknown:withinChildLimits",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-provisioning-adapter.ts",
+    "line": 13,
+    "symbol": "implicitAny:SecretRowSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 12
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-provisioning-adapter.ts",
+    "line": 15,
+    "symbol": "implicitAny:ciphertext",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-provisioning-adapter.ts",
+    "line": 70,
+    "symbol": "implicitAny:getChannelInstance",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-provisioning-adapter.ts",
+    "line": 43,
+    "symbol": "implicitAny:getPerson",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-provisioning-adapter.ts",
+    "line": 14,
+    "symbol": "implicitAny:id",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-provisioning-adapter.ts",
+    "line": 17,
+    "symbol": "implicitAny:kek_id",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-provisioning-adapter.ts",
+    "line": 97,
+    "symbol": "implicitAny:listChannelInstances",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-provisioning-adapter.ts",
+    "line": 61,
+    "symbol": "implicitAny:listPersons",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-provisioning-adapter.ts",
+    "line": 18,
+    "symbol": "implicitAny:purpose",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-provisioning-adapter.ts",
+    "line": 20,
+    "symbol": "implicitAny:rotated_at",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-provisioning-adapter.ts",
+    "line": 23,
+    "symbol": "implicitAny:row",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-provisioning-adapter.ts",
+    "line": 19,
+    "symbol": "implicitAny:time_created",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-provisioning-adapter.ts",
+    "line": 16,
+    "symbol": "implicitAny:wrapped_dek",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-provisioning-adapter.ts",
+    "line": 13,
+    "symbol": "unknown:SecretRowSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 12
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-provisioning-adapter.ts",
+    "line": 15,
+    "symbol": "unknown:ciphertext",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-provisioning-adapter.ts",
+    "line": 14,
+    "symbol": "unknown:id",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-provisioning-adapter.ts",
+    "line": 17,
+    "symbol": "unknown:kek_id",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-provisioning-adapter.ts",
+    "line": 18,
+    "symbol": "unknown:purpose",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-provisioning-adapter.ts",
+    "line": 20,
+    "symbol": "unknown:rotated_at",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-provisioning-adapter.ts",
+    "line": 23,
+    "symbol": "unknown:row",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-provisioning-adapter.ts",
+    "line": 59,
+    "symbol": "unknown:rows",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-provisioning-adapter.ts",
+    "line": 19,
+    "symbol": "unknown:time_created",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-provisioning-adapter.ts",
+    "line": 16,
+    "symbol": "unknown:wrapped_dek",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-reply-grant-adapter.ts",
+    "line": 64,
+    "symbol": "implicitAny:grant",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-reply-grant-adapter.ts",
+    "line": 4,
+    "symbol": "unknown:Error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-reply-grant-adapter.ts",
+    "line": 4,
+    "symbol": "unknown:ReplyGrantProjectionError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-reply-grant-adapter.ts",
+    "line": 19,
+    "symbol": "unknown:existing",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-reply-grant-adapter.ts",
+    "line": 72,
+    "symbol": "unknown:listLive",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-schema-lifecycle.ts",
+    "line": 128,
+    "symbol": "implicitAny:statement",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-schema-lifecycle.ts",
+    "line": 130,
+    "symbol": "unknown:applyConnectionPragmas",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-schema-lifecycle.ts",
+    "line": 86,
+    "symbol": "unknown:initializeSqliteDatabase",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-schema-lifecycle.ts",
+    "line": 128,
+    "symbol": "unknown:statement",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-storage.ts",
+    "line": 50,
+    "symbol": "unknown:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-storage.ts",
+    "line": 53,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-storage.ts",
+    "line": 51,
+    "symbol": "unknown:adoptStream",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-storage.ts",
+    "line": 50,
+    "symbol": "unknown:append",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-storage.ts",
+    "line": 98,
+    "symbol": "unknown:close",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-storage.ts",
+    "line": 40,
+    "symbol": "unknown:err",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-storage.ts",
+    "line": 50,
+    "symbol": "unknown:event",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-storage.ts",
+    "line": 54,
+    "symbol": "unknown:factsByType",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-storage.ts",
+    "line": 51,
+    "symbol": "unknown:genesis",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-storage.ts",
+    "line": 53,
+    "symbol": "unknown:headFact",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-surface-key-adapter.ts",
+    "line": 36,
+    "symbol": "unknown:createSqliteSurfaceKeyAdapter",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-surface-key-adapter.ts",
+    "line": 28,
+    "symbol": "unknown:row",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/sqlite-surface-key-adapter.ts",
+    "line": 51,
+    "symbol": "unknown:rows",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/storage.ts",
+    "line": 79,
+    "symbol": "implicitAny:event",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/src/storage/storage.ts",
+    "line": 79,
+    "symbol": "implicitAny:publishObservation",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/storage.ts",
+    "line": 87,
+    "symbol": "unknown:Error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/storage.ts",
+    "line": 87,
+    "symbol": "unknown:IncompleteAdapterError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/storage.ts",
+    "line": 99,
+    "symbol": "unknown:assertComplete",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/storage.ts",
+    "line": 79,
+    "symbol": "unknown:event",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/src/storage/storage.ts",
+    "line": 142,
+    "symbol": "unknown:get",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/storage.ts",
+    "line": 79,
+    "symbol": "unknown:publishObservation",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/timestamped-store.ts",
+    "line": 2,
+    "symbol": "unknown:requireSubAdapter",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/u967-preflight.ts",
+    "line": 9,
+    "symbol": "unknown:Error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/u967-preflight.ts",
+    "line": 9,
+    "symbol": "unknown:U967Error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/u967-preflight.ts",
+    "line": 36,
+    "symbol": "unknown:preflight967",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/u967-projection.ts",
+    "line": 9,
+    "symbol": "implicitAny:DispositionCandidates",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/ledger/src/storage/u967-projection.ts",
+    "line": 7,
+    "symbol": "implicitAny:HistoricalProjection",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/u967-projection.ts",
+    "line": 7,
+    "symbol": "implicitAny:HistoricalWait",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/u967-projection.ts",
+    "line": 42,
+    "symbol": "implicitAny:duplicates",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/u967-projection.ts",
+    "line": 156,
+    "symbol": "implicitAny:historical",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/u967-projection.ts",
+    "line": 11,
+    "symbol": "implicitAny:id",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/u967-projection.ts",
+    "line": 38,
+    "symbol": "implicitAny:invalid",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/u967-projection.ts",
+    "line": 167,
+    "symbol": "implicitAny:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/src/storage/u967-projection.ts",
+    "line": 64,
+    "symbol": "implicitAny:record",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/u967-projection.ts",
+    "line": 160,
+    "symbol": "implicitAny:retained",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/u967-projection.ts",
+    "line": 12,
+    "symbol": "implicitAny:revision",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/u967-projection.ts",
+    "line": 58,
+    "symbol": "implicitAny:statement",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/u967-projection.ts",
+    "line": 13,
+    "symbol": "implicitAny:status",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/u967-projection.ts",
+    "line": 165,
+    "symbol": "implicitAny:waits",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/u967-projection.ts",
+    "line": 9,
+    "symbol": "unknown:DispositionCandidates",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/ledger/src/storage/u967-projection.ts",
+    "line": 7,
+    "symbol": "unknown:HistoricalProjection",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/u967-projection.ts",
+    "line": 7,
+    "symbol": "unknown:HistoricalWait",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/u967-projection.ts",
+    "line": 11,
+    "symbol": "unknown:id",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/u967-projection.ts",
+    "line": 167,
+    "symbol": "unknown:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/src/storage/u967-projection.ts",
+    "line": 64,
+    "symbol": "unknown:record",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/u967-projection.ts",
+    "line": 12,
+    "symbol": "unknown:revision",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/u967-projection.ts",
+    "line": 13,
+    "symbol": "unknown:status",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/u969-preflight.ts",
+    "line": 14,
+    "symbol": "implicitAny:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ledger/src/storage/u969-preflight.ts",
+    "line": 43,
+    "symbol": "unknown:historicalRequestBlockers",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/src/storage/u969-preflight.ts",
+    "line": 14,
+    "symbol": "unknown:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ledger/src/storage/u969-preflight.ts",
+    "line": 102,
+    "symbol": "unknown:preflight969",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/actor/persistence.test.ts",
+    "line": 92,
+    "symbol": "unknown:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/actor/persistence.test.ts",
+    "line": 26,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 26
+  },
+  {
+    "path": "packages/ledger/test/actor/persistence.test.ts",
+    "line": 195,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/actor/persistence.test.ts",
+    "line": 194,
+    "symbol": "unknown:identity",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ledger/test/actor/persistence.test.ts",
+    "line": 41,
+    "symbol": "unknown:resolved",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ledger/test/actor/persistence.test.ts",
+    "line": 196,
+    "symbol": "unknown:roundTripped",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ledger/test/actor/persistence.test.ts",
+    "line": 76,
+    "symbol": "unknown:updated",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/actor/provisional.test.ts",
+    "line": 45,
+    "symbol": "unknown:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ledger/test/actor/provisional.test.ts",
+    "line": 46,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 12
+  },
+  {
+    "path": "packages/ledger/test/actor/provisional.test.ts",
+    "line": 37,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/actor/provisional.test.ts",
+    "line": 89,
+    "symbol": "unknown:merged",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/actor/provisional.test.ts",
+    "line": 16,
+    "symbol": "unknown:mintOne",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/test/actor/provisional.test.ts",
+    "line": 36,
+    "symbol": "unknown:minted",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/actor/provisional.test.ts",
+    "line": 78,
+    "symbol": "unknown:promoted",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/bench/memory-regression.bench.ts",
+    "line": 40,
+    "symbol": "implicitAny:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/bench/memory-regression.bench.ts",
+    "line": 38,
+    "symbol": "implicitAny:unsubscribe",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/bench/memory-regression.bench.ts",
+    "line": 40,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/bench/memory-regression.bench.ts",
+    "line": 38,
+    "symbol": "unknown:unsubscribe",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/channel-grant/persistence.test.ts",
+    "line": 38,
+    "symbol": "unknown:row",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/egress/egress-budget-store.test.ts",
+    "line": 189,
+    "symbol": "unknown:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/egress/egress-budget-store.test.ts",
+    "line": 189,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/egress/egress-budget-store.test.ts",
+    "line": 114,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ledger/test/egress/egress-budget-store.test.ts",
+    "line": 35,
+    "symbol": "unknown:observed",
+    "gate": "type",
+    "value": 1,
+    "count": 12
+  },
+  {
+    "path": "packages/ledger/test/egress/egress-budget-store.test.ts",
+    "line": 189,
+    "symbol": "unknown:op",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/test/egress/egress-budget-store.test.ts",
+    "line": 15,
+    "symbol": "unknown:overrides",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/egress/egress-budget-store.test.ts",
+    "line": 189,
+    "symbol": "unknown:transaction",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/helpers/disposition-967-archive-fault.ts",
+    "line": 36,
+    "symbol": "implicitAny:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/helpers/disposition-967-archive-fault.ts",
+    "line": 104,
+    "symbol": "implicitAny:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/helpers/disposition-967-archive-fault.ts",
+    "line": 37,
+    "symbol": "implicitAny:SpreadElement",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/helpers/disposition-967-archive-fault.ts",
+    "line": 36,
+    "symbol": "implicitAny:args",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ledger/test/helpers/disposition-967-archive-fault.ts",
+    "line": 97,
+    "symbol": "implicitAny:query",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/helpers/disposition-967-archive-fault.ts",
+    "line": 36,
+    "symbol": "implicitAny:value",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/test/helpers/disposition-967-archive-fault.ts",
+    "line": 104,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/helpers/disposition-967-archive-fault.ts",
+    "line": 16,
+    "symbol": "unknown:signal",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/helpers/disposition-967-archive-fault.ts",
+    "line": 99,
+    "symbol": "unknown:value",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/helpers/disposition-967-cli.ts",
+    "line": 40,
+    "symbol": "unknown:archiveAndVerify",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/helpers/disposition-967-fault.ts",
+    "line": 24,
+    "symbol": "implicitAny:nativeQuery",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/helpers/disposition-967-fault.ts",
+    "line": 28,
+    "symbol": "implicitAny:statement",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/ledger/test/helpers/disposition-967-fault.ts",
+    "line": 27,
+    "symbol": "implicitAny:value",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/test/helpers/disposition-967-fault.ts",
+    "line": 16,
+    "symbol": "unknown:signal",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/helpers/disposition-967-fault.ts",
+    "line": 81,
+    "symbol": "unknown:value",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/helpers/disposition-967.ts",
+    "line": 96,
+    "symbol": "implicitAny:HistoricalWait",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/helpers/disposition-967.ts",
+    "line": 125,
+    "symbol": "implicitAny:record",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/helpers/disposition-967.ts",
+    "line": 160,
+    "symbol": "implicitAny:statement",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/helpers/disposition-967.ts",
+    "line": 96,
+    "symbol": "implicitAny:status",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/helpers/disposition-967.ts",
+    "line": 96,
+    "symbol": "unknown:HistoricalWait",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/helpers/disposition-967.ts",
+    "line": 88,
+    "symbol": "unknown:[Symbol.dispose]",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/helpers/disposition-967.ts",
+    "line": 58,
+    "symbol": "unknown:createDispositionFixture",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/helpers/disposition-967.ts",
+    "line": 125,
+    "symbol": "unknown:record",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/helpers/disposition-967.ts",
+    "line": 96,
+    "symbol": "unknown:status",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/helpers/ledger.ts",
+    "line": 57,
+    "symbol": "unknown:Error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/helpers/ledger.ts",
+    "line": 45,
+    "symbol": "unknown:appendChain",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/helpers/ledger.ts",
+    "line": 17,
+    "symbol": "unknown:buildAppendInput",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/test/helpers/ledger.ts",
+    "line": 53,
+    "symbol": "unknown:captureThrown",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ledger/test/helpers/ledger.ts",
+    "line": 56,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ledger/test/helpers/ledger.ts",
+    "line": 53,
+    "symbol": "unknown:fn",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/test/helpers/ledger.ts",
+    "line": 37,
+    "symbol": "unknown:outcome",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/helpers/ledger.ts",
+    "line": 17,
+    "symbol": "unknown:overrides",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ledger/test/helpers/observation.ts",
+    "line": 4,
+    "symbol": "implicitAny:Subscriber",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/helpers/observation.ts",
+    "line": 23,
+    "symbol": "implicitAny:_descriptor",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/helpers/observation.ts",
+    "line": 4,
+    "symbol": "implicitAny:event",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/ledger/test/helpers/observation.ts",
+    "line": 10,
+    "symbol": "implicitAny:publish",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/ledger/test/helpers/observation.ts",
+    "line": 22,
+    "symbol": "implicitAny:set",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ledger/test/helpers/observation.ts",
+    "line": 17,
+    "symbol": "implicitAny:subscribe",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ledger/test/helpers/observation.ts",
+    "line": 12,
+    "symbol": "implicitAny:subscriber",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ledger/test/helpers/observation.ts",
+    "line": 7,
+    "symbol": "implicitAny:subscriptions",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ledger/test/helpers/observation.ts",
+    "line": 4,
+    "symbol": "unknown:Subscriber",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/helpers/observation.ts",
+    "line": 23,
+    "symbol": "unknown:_descriptor",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/helpers/observation.ts",
+    "line": 4,
+    "symbol": "unknown:event",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/ledger/test/helpers/observation.ts",
+    "line": 34,
+    "symbol": "unknown:matches",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/helpers/observation.ts",
+    "line": 10,
+    "symbol": "unknown:publish",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/ledger/test/helpers/observation.ts",
+    "line": 22,
+    "symbol": "unknown:set",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ledger/test/helpers/observation.ts",
+    "line": 17,
+    "symbol": "unknown:subscribe",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ledger/test/helpers/observation.ts",
+    "line": 12,
+    "symbol": "unknown:subscriber",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ledger/test/helpers/observation.ts",
+    "line": 7,
+    "symbol": "unknown:subscriptions",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ledger/test/helpers/observation.ts",
+    "line": 34,
+    "symbol": "unknown:value",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/helpers/reply-grant-race-worker.ts",
+    "line": 12,
+    "symbol": "implicitAny:[command]",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/helpers/reply-grant-race-worker.ts",
+    "line": 5,
+    "symbol": "implicitAny:[path, id]",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/test/helpers/reply-grant-race-worker.ts",
+    "line": 12,
+    "symbol": "implicitAny:command",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/helpers/reply-grant-race-worker.ts",
+    "line": 10,
+    "symbol": "implicitAny:process",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/helpers/reply-grant-race-worker.ts",
+    "line": 10,
+    "symbol": "implicitAny:signal",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/helpers/reply-grant-race-worker.ts",
+    "line": 10,
+    "symbol": "implicitAny:start",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ledger/test/helpers/reply-grant-race-worker.ts",
+    "line": 6,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/helpers/reply-grant-race-worker.ts",
+    "line": 5,
+    "symbol": "unknown:[path, id]",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/test/helpers/reply-grant-race-worker.ts",
+    "line": 10,
+    "symbol": "unknown:process",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/helpers/request.ts",
+    "line": 88,
+    "symbol": "unknown:expectCommitted",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/helpers/request.ts",
+    "line": 14,
+    "symbol": "unknown:requestFixture",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/helpers/sqlite.ts",
+    "line": 14,
+    "symbol": "unknown:Error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/helpers/sqlite.ts",
+    "line": 13,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ledger/test/helpers/sqlite.ts",
+    "line": 14,
+    "symbol": "unknown:removeSqliteFiles",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/integration/observability.test.ts",
+    "line": 50,
+    "symbol": "implicitAny:descriptor",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/test/integration/observability.test.ts",
+    "line": 50,
+    "symbol": "implicitAny:publish",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/test/integration/observability.test.ts",
+    "line": 50,
+    "symbol": "unknown:descriptor",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/test/integration/observability.test.ts",
+    "line": 50,
+    "symbol": "unknown:publish",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ledger/test/ledger-core/adopt.test.ts",
+    "line": 49,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/test/ledger-core/adopt.test.ts",
+    "line": 63,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ledger/test/ledger-core/adopt.test.ts",
+    "line": 26,
+    "symbol": "unknown:readEvents",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/ledger-core/adopt.test.ts",
+    "line": 19,
+    "symbol": "unknown:row",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/ledger-core/adopt.test.ts",
+    "line": 57,
+    "symbol": "unknown:thrown",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/ledger/test/ledger-core/append.test.ts",
+    "line": 121,
+    "symbol": "implicitAny:ledgerDb",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/ledger-core/append.test.ts",
+    "line": 123,
+    "symbol": "implicitAny:ledgerEvent",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/ledger-core/append.test.ts",
+    "line": 124,
+    "symbol": "implicitAny:ledgerHead",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/ledger-core/append.test.ts",
+    "line": 42,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/test/ledger-core/append.test.ts",
+    "line": 58,
+    "symbol": "unknown:conflict",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/ledger-core/append.test.ts",
+    "line": 100,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/ledger-core/append.test.ts",
+    "line": 40,
+    "symbol": "unknown:first",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/ledger-core/append.test.ts",
+    "line": 121,
+    "symbol": "unknown:ledgerDb",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/ledger-core/append.test.ts",
+    "line": 123,
+    "symbol": "unknown:ledgerEvent",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/ledger-core/append.test.ts",
+    "line": 124,
+    "symbol": "unknown:ledgerHead",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/ledger-core/append.test.ts",
+    "line": 25,
+    "symbol": "unknown:row",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/ledger-core/append.test.ts",
+    "line": 84,
+    "symbol": "unknown:rows",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/ledger-core/append.test.ts",
+    "line": 47,
+    "symbol": "unknown:second",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/ledger-core/db.ts",
+    "line": 22,
+    "symbol": "implicitAny:createLedgerDb",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/test/ledger-core/db.ts",
+    "line": 5,
+    "symbol": "implicitAny:ledgerEvent",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/ledger-core/db.ts",
+    "line": 5,
+    "symbol": "implicitAny:ledgerHead",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/ledger-core/db.ts",
+    "line": 5,
+    "symbol": "implicitAny:schema",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/test/ledger-core/db.ts",
+    "line": 22,
+    "symbol": "unknown:createLedgerDb",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/test/ledger-core/db.ts",
+    "line": 5,
+    "symbol": "unknown:ledgerEvent",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/ledger-core/db.ts",
+    "line": 5,
+    "symbol": "unknown:ledgerHead",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/ledger-core/db.ts",
+    "line": 5,
+    "symbol": "unknown:schema",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/test/ledger-core/public-reads.test.ts",
+    "line": 29,
+    "symbol": "unknown:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/ledger-core/public-reads.test.ts",
+    "line": 10,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ledger/test/ledger-core/public-reads.test.ts",
+    "line": 9,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/ledger-core/public-reads.test.ts",
+    "line": 29,
+    "symbol": "unknown:fact",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/provisioning/provisioning.test.ts",
+    "line": 73,
+    "symbol": "implicitAny:caught",
+    "gate": "type",
+    "value": 1,
+    "count": 19
+  },
+  {
+    "path": "packages/ledger/test/provisioning/provisioning.test.ts",
+    "line": 77,
+    "symbol": "implicitAny:error",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ledger/test/provisioning/provisioning.test.ts",
+    "line": 79,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/provisioning/provisioning.test.ts",
+    "line": 73,
+    "symbol": "unknown:caught",
+    "gate": "type",
+    "value": 1,
+    "count": 19
+  },
+  {
+    "path": "packages/ledger/test/provisioning/provisioning.test.ts",
+    "line": 76,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 18
+  },
+  {
+    "path": "packages/ledger/test/session/events.test.ts",
+    "line": 18,
+    "symbol": "implicitAny:stop",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/session/events.test.ts",
+    "line": 18,
+    "symbol": "unknown:stop",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/session/events.test.ts",
+    "line": 19,
+    "symbol": "unknown:timeout",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/session/kernel.test.ts",
+    "line": 391,
+    "symbol": "implicitAny:ArrayLiteralExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/session/kernel.test.ts",
+    "line": 392,
+    "symbol": "implicitAny:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/session/kernel.test.ts",
+    "line": 50,
+    "symbol": "implicitAny:event",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ledger/test/session/kernel.test.ts",
+    "line": 50,
+    "symbol": "implicitAny:publish",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/session/kernel.test.ts",
+    "line": 58,
+    "symbol": "implicitAny:subscribe",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/session/kernel.test.ts",
+    "line": 426,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/session/kernel.test.ts",
+    "line": 50,
+    "symbol": "unknown:event",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ledger/test/session/kernel.test.ts",
+    "line": 50,
+    "symbol": "unknown:publish",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/session/kernel.test.ts",
+    "line": 58,
+    "symbol": "unknown:subscribe",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/session/kernel.test.ts",
+    "line": 21,
+    "symbol": "unknown:timeout",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/session/materialize.test.ts",
+    "line": 47,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/session/materialize.test.ts",
+    "line": 79,
+    "symbol": "unknown:before",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/test/session/message-commit.test.ts",
+    "line": 222,
+    "symbol": "implicitAny:sender",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/session/message-commit.test.ts",
+    "line": 81,
+    "symbol": "implicitAny:unsubscribe",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/session/message-commit.test.ts",
+    "line": 88,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/session/message-commit.test.ts",
+    "line": 78,
+    "symbol": "unknown:timeout",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/session/message-commit.test.ts",
+    "line": 81,
+    "symbol": "unknown:unsubscribe",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/session/message-deadline.test.ts",
+    "line": 193,
+    "symbol": "implicitAny:unsubscribe",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/session/message-deadline.test.ts",
+    "line": 245,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/session/message-deadline.test.ts",
+    "line": 205,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/session/message-deadline.test.ts",
+    "line": 192,
+    "symbol": "unknown:timeout",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/session/message-deadline.test.ts",
+    "line": 193,
+    "symbol": "unknown:unsubscribe",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/test/session/outbound-projection.test.ts",
+    "line": 22,
+    "symbol": "unknown:append",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/session/request-storage.test.ts",
+    "line": 51,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/session/write-discipline.test.ts",
+    "line": 172,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/session/write-discipline.test.ts",
+    "line": 27,
+    "symbol": "unknown:kernelStores",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/adapter-contracts.test.ts",
+    "line": 390,
+    "symbol": "implicitAny:SuppressedError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/adapter-contracts.test.ts",
+    "line": 356,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/adapter-contracts.test.ts",
+    "line": 390,
+    "symbol": "unknown:SuppressedError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/adapter-contracts.test.ts",
+    "line": 194,
+    "symbol": "unknown:database",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/storage/adapter-contracts.test.ts",
+    "line": 372,
+    "symbol": "unknown:exec",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/adapter-contracts.test.ts",
+    "line": 369,
+    "symbol": "unknown:fake",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/storage/adapter-contracts.test.ts",
+    "line": 367,
+    "symbol": "unknown:migrationFailure",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ledger/test/storage/adapter-contracts.test.ts",
+    "line": 275,
+    "symbol": "unknown:rows",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/test/storage/alarm-control.test.ts",
+    "line": 17,
+    "symbol": "implicitAny:event",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/alarm-control.test.ts",
+    "line": 17,
+    "symbol": "implicitAny:publish",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/alarm-control.test.ts",
+    "line": 17,
+    "symbol": "unknown:event",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/alarm-control.test.ts",
+    "line": 17,
+    "symbol": "unknown:publish",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/alarm.test.ts",
+    "line": 13,
+    "symbol": "implicitAny:event",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/alarm.test.ts",
+    "line": 13,
+    "symbol": "implicitAny:publish",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/alarm.test.ts",
+    "line": 13,
+    "symbol": "unknown:event",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/alarm.test.ts",
+    "line": 46,
+    "symbol": "unknown:exercise",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/alarm.test.ts",
+    "line": 13,
+    "symbol": "unknown:publish",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/atomic-file.test.ts",
+    "line": 12,
+    "symbol": "implicitAny:fsync",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/test/storage/atomic-file.test.ts",
+    "line": 27,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/atomic-file.test.ts",
+    "line": 12,
+    "symbol": "unknown:fsync",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/test/storage/initialize.test.ts",
+    "line": 46,
+    "symbol": "unknown:TypeReference",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/storage/initialize.test.ts",
+    "line": 40,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/storage/initialize.test.ts",
+    "line": 37,
+    "symbol": "unknown:refusal",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
+    "line": 65,
+    "symbol": "implicitAny:intent",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
+    "line": 72,
+    "symbol": "implicitAny:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
+    "line": 742,
+    "symbol": "unknown:Error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
+    "line": 205,
+    "symbol": "unknown:MemorySessionCommitRefused",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
+    "line": 511,
+    "symbol": "unknown:appendGeneration",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
+    "line": 183,
+    "symbol": "unknown:commit",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
+    "line": 674,
+    "symbol": "unknown:commitMemorySession",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
+    "line": 41,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
+    "line": 472,
+    "symbol": "unknown:fire",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
+    "line": 65,
+    "symbol": "unknown:intent",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
+    "line": 108,
+    "symbol": "unknown:materialize",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
+    "line": 72,
+    "symbol": "unknown:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
+    "line": 350,
+    "symbol": "unknown:receive",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/storage/memory-l0-adapter.ts",
+    "line": 587,
+    "symbol": "unknown:withinChildLimits",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/message-migration.test.ts",
+    "line": 19,
+    "symbol": "implicitAny:columns",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/storage/message-migration.test.ts",
+    "line": 14,
+    "symbol": "implicitAny:name",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/message-migration.test.ts",
+    "line": 37,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/migration-guard.test.ts",
+    "line": 79,
+    "symbol": "implicitAny:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/migration-guard.test.ts",
+    "line": 92,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/storage/migration-guard.test.ts",
+    "line": 80,
+    "symbol": "unknown:U967Error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/migration-guard.test.ts",
+    "line": 80,
+    "symbol": "unknown:constructor",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/policy-generation.test.ts",
+    "line": 47,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/storage/read-validation.test.ts",
+    "line": 52,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/reply-grant.test.ts",
+    "line": 40,
+    "symbol": "implicitAny:ArrayLiteralExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/reply-grant.test.ts",
+    "line": 40,
+    "symbol": "implicitAny:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/storage/reply-grant.test.ts",
+    "line": 42,
+    "symbol": "implicitAny:AwaitExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/storage/reply-grant.test.ts",
+    "line": 40,
+    "symbol": "implicitAny:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ledger/test/storage/reply-grant.test.ts",
+    "line": 40,
+    "symbol": "implicitAny:ObjectLiteralExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/reply-grant.test.ts",
+    "line": 42,
+    "symbol": "implicitAny:ParenthesizedExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/reply-grant.test.ts",
+    "line": 40,
+    "symbol": "implicitAny:code",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/storage/reply-grant.test.ts",
+    "line": 47,
+    "symbol": "implicitAny:message",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/storage/reply-grant.test.ts",
+    "line": 41,
+    "symbol": "implicitAny:ready",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ledger/test/storage/reply-grant.test.ts",
+    "line": 40,
+    "symbol": "implicitAny:reason",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/storage/reply-grant.test.ts",
+    "line": 44,
+    "symbol": "implicitAny:results",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ledger/test/storage/reply-grant.test.ts",
+    "line": 29,
+    "symbol": "implicitAny:signal",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ledger/test/storage/reply-grant.test.ts",
+    "line": 128,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/reply-grant.test.ts",
+    "line": 144,
+    "symbol": "unknown:SyntaxError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/reply-grant.test.ts",
+    "line": 34,
+    "symbol": "unknown:contender",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/ledger/test/storage/reply-grant.test.ts",
+    "line": 27,
+    "symbol": "unknown:contenders",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ledger/test/storage/reply-grant.test.ts",
+    "line": 44,
+    "symbol": "unknown:results",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/request-atomicity.test.ts",
+    "line": 56,
+    "symbol": "implicitAny:event",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/request-atomicity.test.ts",
+    "line": 56,
+    "symbol": "implicitAny:publish",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/request-atomicity.test.ts",
+    "line": 56,
+    "symbol": "unknown:event",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/request-atomicity.test.ts",
+    "line": 56,
+    "symbol": "unknown:publish",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/request-migration.test.ts",
+    "line": 87,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/ledger/test/storage/request-migration.test.ts",
+    "line": 69,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/storage/request-migration.test.ts",
+    "line": 113,
+    "symbol": "unknown:before",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ledger/test/storage/sqlite-busy.test.ts",
+    "line": 54,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/sqlite-busy.test.ts",
+    "line": 37,
+    "symbol": "unknown:Error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/sqlite-busy.test.ts",
+    "line": 53,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/storage/sqlite-busy.test.ts",
+    "line": 38,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/sqlite-busy.test.ts",
+    "line": 38,
+    "symbol": "unknown:TypeLiteral",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/sqlite-busy.test.ts",
+    "line": 48,
+    "symbol": "unknown:busy",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ledger/test/storage/sqlite-busy.test.ts",
+    "line": 38,
+    "symbol": "unknown:code",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/storage/sqlite-busy.test.ts",
+    "line": 30,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/storage/sqlite-busy.test.ts",
+    "line": 49,
+    "symbol": "unknown:snapshot",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ledger/test/storage/sqlite-busy.test.ts",
+    "line": 23,
+    "symbol": "unknown:thrown",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ledger/test/storage/sqlite-storage.test.ts",
+    "line": 110,
+    "symbol": "implicitAny:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/test/storage/sqlite-storage.test.ts",
+    "line": 266,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 12
+  },
+  {
+    "path": "packages/ledger/test/storage/sqlite-storage.test.ts",
+    "line": 449,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/test/storage/sqlite-storage.test.ts",
+    "line": 323,
+    "symbol": "unknown:after",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ledger/test/storage/sqlite-storage.test.ts",
+    "line": 319,
+    "symbol": "unknown:before",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/ledger/test/storage/sqlite-storage.test.ts",
+    "line": 279,
+    "symbol": "unknown:digest",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/ledger/test/storage/sqlite-storage.test.ts",
+    "line": 59,
+    "symbol": "unknown:indexNames",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/sqlite-storage.test.ts",
+    "line": 441,
+    "symbol": "unknown:messages",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/sqlite-storage.test.ts",
+    "line": 442,
+    "symbol": "unknown:parts",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/sqlite-storage.test.ts",
+    "line": 283,
+    "symbol": "unknown:receipts",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/storage/sqlite-storage.test.ts",
+    "line": 81,
+    "symbol": "unknown:row",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ledger/test/storage/sqlite-storage.test.ts",
+    "line": 280,
+    "symbol": "unknown:schema",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/storage/sqlite-storage.test.ts",
+    "line": 284,
+    "symbol": "unknown:sessions",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ledger/test/storage/sqlite-storage.test.ts",
+    "line": 49,
+    "symbol": "unknown:storageDb",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/storage/sqlite-storage.test.ts",
+    "line": 53,
+    "symbol": "unknown:tableColumns",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/sqlite-storage.test.ts",
+    "line": 98,
+    "symbol": "unknown:tables",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ledger/test/storage/u967-disposition-cases.ts",
+    "line": 73,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ledger/test/storage/u967-disposition-cases.ts",
+    "line": 132,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/auth/storage.ts",
+    "line": 7,
+    "symbol": "implicitAny:ApiAuth",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/llm/src/auth/storage.ts",
+    "line": 18,
+    "symbol": "implicitAny:Info",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/llm/src/auth/storage.ts",
+    "line": 81,
+    "symbol": "implicitAny:InvalidFileError",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/llm/src/auth/storage.ts",
+    "line": 12,
+    "symbol": "implicitAny:ProxyAuth",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/llm/src/auth/storage.ts",
+    "line": 89,
+    "symbol": "implicitAny:ResolutionError",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/llm/src/auth/storage.ts",
+    "line": 15,
+    "symbol": "implicitAny:apiKey",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/auth/storage.ts",
+    "line": 14,
+    "symbol": "implicitAny:baseURL",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/auth/storage.ts",
+    "line": 9,
+    "symbol": "implicitAny:key",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/auth/storage.ts",
+    "line": 84,
+    "symbol": "implicitAny:message",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/auth/storage.ts",
+    "line": 117,
+    "symbol": "implicitAny:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/llm/src/auth/storage.ts",
+    "line": 85,
+    "symbol": "implicitAny:path",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/auth/storage.ts",
+    "line": 93,
+    "symbol": "implicitAny:provider",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/auth/storage.ts",
+    "line": 148,
+    "symbol": "implicitAny:readAuthFile",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/llm/src/auth/storage.ts",
+    "line": 94,
+    "symbol": "implicitAny:reason",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/llm/src/auth/storage.ts",
+    "line": 8,
+    "symbol": "implicitAny:type",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/auth/storage.ts",
+    "line": 163,
+    "symbol": "implicitAny:value",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/llm/src/auth/storage.ts",
+    "line": 7,
+    "symbol": "unknown:ApiAuth",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/llm/src/auth/storage.ts",
+    "line": 18,
+    "symbol": "unknown:Info",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/llm/src/auth/storage.ts",
+    "line": 81,
+    "symbol": "unknown:InvalidFileError",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/llm/src/auth/storage.ts",
+    "line": 12,
+    "symbol": "unknown:ProxyAuth",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/llm/src/auth/storage.ts",
+    "line": 89,
+    "symbol": "unknown:ResolutionError",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/llm/src/auth/storage.ts",
+    "line": 15,
+    "symbol": "unknown:apiKey",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  }
+]

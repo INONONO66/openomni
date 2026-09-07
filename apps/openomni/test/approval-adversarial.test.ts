@@ -97,6 +97,28 @@ it("merges only the approved endpoint into the exact target", async () => {
     await f.close();
   }
 });
+for (const [name, operation] of [
+  ["an unknown endpoint", { endpointId: "ep:ghost", toActorId: "actor:alice" }],
+  ["an unknown target", { endpointId: "ep:mallory", toActorId: "actor:ghost" }],
+  [
+    "an endpoint already bound to its target",
+    { endpointId: "ep:mallory", toActorId: "contact:mallory" },
+  ],
+] as const) {
+  it(`consent to merge ${name} is refused by the act itself, never applied`, async () => {
+    const f = protectedDispatch(eraseTool(createApprovalTool(port)), {
+      operation: { op: "endpoint_merge", ...operation },
+    });
+    try {
+      const result = await f.answer();
+      expect(result.isError).toBe(true);
+      expect(result.output).toContain("endpoint or target is missing, or already bound");
+      expect(ActorRegistry.getEndpoint("ep:mallory")?.actorId).toBe("contact:mallory");
+    } finally {
+      await f.close();
+    }
+  });
+}
 it("invalidates a merge when the source identity changes without moving its endpoint", async () => {
   const f = protectedDispatch(eraseTool(createApprovalTool(port)), {
     operation: { op: "endpoint_merge", endpointId: "ep:mallory", toActorId: "actor:alice" },

@@ -1,0 +1,8002 @@
+[
+  {
+    "path": "packages/protocol/src/event/tool.ts",
+    "line": 16,
+    "symbol": "unknown:Started",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/event/tool.ts",
+    "line": 38,
+    "symbol": "unknown:TimedOut",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/event/tool.ts",
+    "line": 9,
+    "symbol": "unknown:actor",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/event/tool.ts",
+    "line": 26,
+    "symbol": "unknown:durationMs",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/event/tool.ts",
+    "line": 19,
+    "symbol": "unknown:inputSummary",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/event/tool.ts",
+    "line": 27,
+    "symbol": "unknown:isError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/event/tool.ts",
+    "line": 34,
+    "symbol": "unknown:reason",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/event/tool.ts",
+    "line": 8,
+    "symbol": "unknown:runId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/event/tool.ts",
+    "line": 7,
+    "symbol": "unknown:sessionId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/event/tool.ts",
+    "line": 12,
+    "symbol": "unknown:time",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/event/tool.ts",
+    "line": 41,
+    "symbol": "unknown:timeoutMs",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/event/tool.ts",
+    "line": 10,
+    "symbol": "unknown:toolCallId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/event/tool.ts",
+    "line": 11,
+    "symbol": "unknown:toolName",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/event/tool.ts",
+    "line": 6,
+    "symbol": "unknown:traceId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/events.ts",
+    "line": 33,
+    "symbol": "implicitAny:Denied",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/events.ts",
+    "line": 11,
+    "symbol": "implicitAny:EpochMs",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/events.ts",
+    "line": 6,
+    "symbol": "implicitAny:EventBase",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/src/gateway/events.ts",
+    "line": 22,
+    "symbol": "implicitAny:MessagingEvents",
+    "gate": "type",
+    "value": 1,
+    "count": 13
+  },
+  {
+    "path": "packages/protocol/src/gateway/events.ts",
+    "line": 23,
+    "symbol": "implicitAny:Sent",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/events.ts",
+    "line": 35,
+    "symbol": "implicitAny:code",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/events.ts",
+    "line": 28,
+    "symbol": "implicitAny:endpointId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/events.ts",
+    "line": 27,
+    "symbol": "implicitAny:grantId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/events.ts",
+    "line": 7,
+    "symbol": "implicitAny:messageId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/events.ts",
+    "line": 26,
+    "symbol": "implicitAny:operation",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/events.ts",
+    "line": 29,
+    "symbol": "implicitAny:requestId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/events.ts",
+    "line": 9,
+    "symbol": "implicitAny:senderId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/events.ts",
+    "line": 10,
+    "symbol": "implicitAny:targetActorId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/events.ts",
+    "line": 11,
+    "symbol": "implicitAny:time",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/events.ts",
+    "line": 8,
+    "symbol": "implicitAny:traceId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/events.ts",
+    "line": 33,
+    "symbol": "unknown:Denied",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/events.ts",
+    "line": 11,
+    "symbol": "unknown:EpochMs",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/events.ts",
+    "line": 6,
+    "symbol": "unknown:EventBase",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/src/gateway/events.ts",
+    "line": 22,
+    "symbol": "unknown:MessagingEvents",
+    "gate": "type",
+    "value": 1,
+    "count": 13
+  },
+  {
+    "path": "packages/protocol/src/gateway/events.ts",
+    "line": 23,
+    "symbol": "unknown:Sent",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/events.ts",
+    "line": 35,
+    "symbol": "unknown:code",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/events.ts",
+    "line": 28,
+    "symbol": "unknown:endpointId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/events.ts",
+    "line": 27,
+    "symbol": "unknown:grantId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/events.ts",
+    "line": 7,
+    "symbol": "unknown:messageId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/events.ts",
+    "line": 26,
+    "symbol": "unknown:operation",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/events.ts",
+    "line": 29,
+    "symbol": "unknown:requestId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/events.ts",
+    "line": 9,
+    "symbol": "unknown:senderId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/events.ts",
+    "line": 10,
+    "symbol": "unknown:targetActorId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/events.ts",
+    "line": 11,
+    "symbol": "unknown:time",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/events.ts",
+    "line": 8,
+    "symbol": "unknown:traceId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/index.ts",
+    "line": 2,
+    "symbol": "implicitAny:MessagingEvents",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/index.ts",
+    "line": 2,
+    "symbol": "unknown:MessagingEvents",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 11,
+    "symbol": "implicitAny:Addressee",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 137,
+    "symbol": "implicitAny:AdmissionBase",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 80,
+    "symbol": "implicitAny:Delivery",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 8,
+    "symbol": "implicitAny:DurationMs",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 51,
+    "symbol": "implicitAny:Handle",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 7,
+    "symbol": "implicitAny:Id",
+    "gate": "type",
+    "value": 1,
+    "count": 23
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 61,
+    "symbol": "implicitAny:IngressFacts",
+    "gate": "type",
+    "value": 1,
+    "count": 14
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 165,
+    "symbol": "implicitAny:MessageContract",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 9,
+    "symbol": "implicitAny:MessageType",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 138,
+    "symbol": "implicitAny:Observation",
+    "gate": "type",
+    "value": 1,
+    "count": 31
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 136,
+    "symbol": "implicitAny:ObservationBase",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 39,
+    "symbol": "implicitAny:RequestAnswer",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 86,
+    "symbol": "implicitAny:Result",
+    "gate": "type",
+    "value": 1,
+    "count": 13
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 102,
+    "symbol": "implicitAny:RuleBase",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 103,
+    "symbol": "implicitAny:RuleTableA",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 116,
+    "symbol": "implicitAny:RuleTableB",
+    "gate": "type",
+    "value": 1,
+    "count": 33
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 28,
+    "symbol": "implicitAny:Send",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 54,
+    "symbol": "implicitAny:Sender",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 14,
+    "symbol": "implicitAny:Target",
+    "gate": "type",
+    "value": 1,
+    "count": 15
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 10,
+    "symbol": "implicitAny:TargetKind",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 12,
+    "symbol": "implicitAny:Verdict",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 25,
+    "symbol": "implicitAny:actorId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 107,
+    "symbol": "implicitAny:addressee",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 67,
+    "symbol": "implicitAny:addressees",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 152,
+    "symbol": "implicitAny:boundary",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 144,
+    "symbol": "implicitAny:bytes",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 70,
+    "symbol": "implicitAny:chain",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 66,
+    "symbol": "implicitAny:channelId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 108,
+    "symbol": "implicitAny:check",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 158,
+    "symbol": "implicitAny:childTurnMs",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 148,
+    "symbol": "implicitAny:commitMs",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 32,
+    "symbol": "implicitAny:content",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 45,
+    "symbol": "implicitAny:credential",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 34,
+    "symbol": "implicitAny:deadline",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 44,
+    "symbol": "implicitAny:decision",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 88,
+    "symbol": "implicitAny:delivery",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 68,
+    "symbol": "implicitAny:dm",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 102,
+    "symbol": "implicitAny:effect",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 63,
+    "symbol": "implicitAny:eventId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 55,
+    "symbol": "implicitAny:externalId",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 88,
+    "symbol": "implicitAny:handle",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 15,
+    "symbol": "implicitAny:id",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 137,
+    "symbol": "implicitAny:ingestMs",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 42,
+    "symbol": "implicitAny:inputId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 15,
+    "symbol": "implicitAny:kind",
+    "gate": "type",
+    "value": 1,
+    "count": 21
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 137,
+    "symbol": "implicitAny:matchedRuleIds",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 125,
+    "symbol": "implicitAny:max",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 51,
+    "symbol": "implicitAny:messageId",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 22,
+    "symbol": "implicitAny:parent",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 73,
+    "symbol": "implicitAny:payload",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 151,
+    "symbol": "implicitAny:queueMs",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 87,
+    "symbol": "implicitAny:reasonCode",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 74,
+    "symbol": "implicitAny:render",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 69,
+    "symbol": "implicitAny:reply",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 33,
+    "symbol": "implicitAny:replyTo",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 43,
+    "symbol": "implicitAny:request",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 19,
+    "symbol": "implicitAny:role",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 157,
+    "symbol": "implicitAny:roundTripMs",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 20,
+    "symbol": "implicitAny:runner",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 105,
+    "symbol": "implicitAny:sender",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 119,
+    "symbol": "implicitAny:senderRole",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 106,
+    "symbol": "implicitAny:senderTier",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 87,
+    "symbol": "implicitAny:status",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 55,
+    "symbol": "implicitAny:surface",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 104,
+    "symbol": "implicitAny:table",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 51,
+    "symbol": "implicitAny:target",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 120,
+    "symbol": "implicitAny:targetKind",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 121,
+    "symbol": "implicitAny:targetRole",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 30,
+    "symbol": "implicitAny:to",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 159,
+    "symbol": "implicitAny:tokens",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 31,
+    "symbol": "implicitAny:type",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 83,
+    "symbol": "implicitAny:value",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 146,
+    "symbol": "implicitAny:verdict",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 161,
+    "symbol": "implicitAny:waitedMs",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 127,
+    "symbol": "implicitAny:withinParent",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 65,
+    "symbol": "implicitAny:workspaceId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 11,
+    "symbol": "unknown:Addressee",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 137,
+    "symbol": "unknown:AdmissionBase",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 80,
+    "symbol": "unknown:Delivery",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 8,
+    "symbol": "unknown:DurationMs",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 51,
+    "symbol": "unknown:Handle",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 7,
+    "symbol": "unknown:Id",
+    "gate": "type",
+    "value": 1,
+    "count": 23
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 61,
+    "symbol": "unknown:IngressFacts",
+    "gate": "type",
+    "value": 1,
+    "count": 14
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 165,
+    "symbol": "unknown:MessageContract",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 9,
+    "symbol": "unknown:MessageType",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 138,
+    "symbol": "unknown:Observation",
+    "gate": "type",
+    "value": 1,
+    "count": 31
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 136,
+    "symbol": "unknown:ObservationBase",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 39,
+    "symbol": "unknown:RequestAnswer",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 86,
+    "symbol": "unknown:Result",
+    "gate": "type",
+    "value": 1,
+    "count": 13
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 102,
+    "symbol": "unknown:RuleBase",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 103,
+    "symbol": "unknown:RuleTableA",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 116,
+    "symbol": "unknown:RuleTableB",
+    "gate": "type",
+    "value": 1,
+    "count": 33
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 28,
+    "symbol": "unknown:Send",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 54,
+    "symbol": "unknown:Sender",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 14,
+    "symbol": "unknown:Target",
+    "gate": "type",
+    "value": 1,
+    "count": 15
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 10,
+    "symbol": "unknown:TargetKind",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 12,
+    "symbol": "unknown:Verdict",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 25,
+    "symbol": "unknown:actorId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 107,
+    "symbol": "unknown:addressee",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 67,
+    "symbol": "unknown:addressees",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 152,
+    "symbol": "unknown:boundary",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 144,
+    "symbol": "unknown:bytes",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 70,
+    "symbol": "unknown:chain",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 66,
+    "symbol": "unknown:channelId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 108,
+    "symbol": "unknown:check",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 158,
+    "symbol": "unknown:childTurnMs",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 148,
+    "symbol": "unknown:commitMs",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 32,
+    "symbol": "unknown:content",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 45,
+    "symbol": "unknown:credential",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 34,
+    "symbol": "unknown:deadline",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 44,
+    "symbol": "unknown:decision",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 88,
+    "symbol": "unknown:delivery",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 68,
+    "symbol": "unknown:dm",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 102,
+    "symbol": "unknown:effect",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 63,
+    "symbol": "unknown:eventId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 55,
+    "symbol": "unknown:externalId",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 88,
+    "symbol": "unknown:handle",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 15,
+    "symbol": "unknown:id",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 137,
+    "symbol": "unknown:ingestMs",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 42,
+    "symbol": "unknown:inputId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 15,
+    "symbol": "unknown:kind",
+    "gate": "type",
+    "value": 1,
+    "count": 21
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 137,
+    "symbol": "unknown:matchedRuleIds",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 125,
+    "symbol": "unknown:max",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 51,
+    "symbol": "unknown:messageId",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 22,
+    "symbol": "unknown:parent",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 73,
+    "symbol": "unknown:payload",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 151,
+    "symbol": "unknown:queueMs",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 87,
+    "symbol": "unknown:reasonCode",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 74,
+    "symbol": "unknown:render",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 69,
+    "symbol": "unknown:reply",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 33,
+    "symbol": "unknown:replyTo",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 43,
+    "symbol": "unknown:request",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 19,
+    "symbol": "unknown:role",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 157,
+    "symbol": "unknown:roundTripMs",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 20,
+    "symbol": "unknown:runner",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 105,
+    "symbol": "unknown:sender",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 119,
+    "symbol": "unknown:senderRole",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 106,
+    "symbol": "unknown:senderTier",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 87,
+    "symbol": "unknown:status",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 55,
+    "symbol": "unknown:surface",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 104,
+    "symbol": "unknown:table",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 51,
+    "symbol": "unknown:target",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 120,
+    "symbol": "unknown:targetKind",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 121,
+    "symbol": "unknown:targetRole",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 30,
+    "symbol": "unknown:to",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 159,
+    "symbol": "unknown:tokens",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 31,
+    "symbol": "unknown:type",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 83,
+    "symbol": "unknown:value",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 146,
+    "symbol": "unknown:verdict",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 161,
+    "symbol": "unknown:waitedMs",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 127,
+    "symbol": "unknown:withinParent",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/message.ts",
+    "line": 65,
+    "symbol": "unknown:workspaceId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 399,
+    "symbol": "implicitAny:ActorContext",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 40,
+    "symbol": "implicitAny:ActorContextSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 408,
+    "symbol": "implicitAny:Deliver",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 94,
+    "symbol": "implicitAny:DeliverSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 405,
+    "symbol": "implicitAny:DeliveredEvent",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 76,
+    "symbol": "implicitAny:DeliveredEventSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 38,
+    "symbol": "implicitAny:DeliveredTreatmentSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 429,
+    "symbol": "implicitAny:EgressDebitRow",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 264,
+    "symbol": "implicitAny:EgressDebitRowSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 432,
+    "symbol": "implicitAny:EgressDebitState",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 280,
+    "symbol": "implicitAny:EgressDebitStateSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 270,
+    "symbol": "implicitAny:EpochMs",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 381,
+    "symbol": "implicitAny:IngestResult",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 375,
+    "symbol": "implicitAny:IngestSender",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 378,
+    "symbol": "implicitAny:IngressFacts",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 414,
+    "symbol": "implicitAny:MessageClass",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 119,
+    "symbol": "implicitAny:MessageClassSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 435,
+    "symbol": "implicitAny:MessageDenialCode",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 206,
+    "symbol": "implicitAny:MessageDenialCodeSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 390,
+    "symbol": "implicitAny:MessageObservation",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 392,
+    "symbol": "implicitAny:MessageObserved",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 411,
+    "symbol": "implicitAny:MessageOperation",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 110,
+    "symbol": "implicitAny:MessageOperationSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 417,
+    "symbol": "implicitAny:MessageTarget",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 127,
+    "symbol": "implicitAny:MessageTargetSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 396,
+    "symbol": "implicitAny:Origin",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 25,
+    "symbol": "implicitAny:OriginSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 423,
+    "symbol": "implicitAny:ReplyGrantRule",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 184,
+    "symbol": "implicitAny:ReplyGrantRuleSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 16
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 369,
+    "symbol": "implicitAny:RequestAnswer",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 402,
+    "symbol": "implicitAny:RequestContext",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 60,
+    "symbol": "implicitAny:RequestContextSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 438,
+    "symbol": "implicitAny:RequestSpec",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 294,
+    "symbol": "implicitAny:RequestSpecSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 14
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 384,
+    "symbol": "implicitAny:RuleTableA",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 387,
+    "symbol": "implicitAny:RuleTableB",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 441,
+    "symbol": "implicitAny:SendInput",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 308,
+    "symbol": "implicitAny:SendInputBase",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 330,
+    "symbol": "implicitAny:SendInputSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 366,
+    "symbol": "implicitAny:SendMessage",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 372,
+    "symbol": "implicitAny:SendMessageHandle",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 420,
+    "symbol": "implicitAny:SenderTargetGrant",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 134,
+    "symbol": "implicitAny:SenderTargetGrantSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 15
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 426,
+    "symbol": "implicitAny:SocialBudget",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 232,
+    "symbol": "implicitAny:SocialBudgetSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 20
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 97,
+    "symbol": "implicitAny:actorContext",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 42,
+    "symbol": "implicitAny:actorId",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 63,
+    "symbol": "implicitAny:allowedAction",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 298,
+    "symbol": "implicitAny:allowedActions",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 270,
+    "symbol": "implicitAny:at",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 317,
+    "symbol": "implicitAny:body",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 190,
+    "symbol": "implicitAny:channel",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 269,
+    "symbol": "implicitAny:class",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 239,
+    "symbol": "implicitAny:classCaps",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 242,
+    "symbol": "implicitAny:converse",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 284,
+    "symbol": "implicitAny:converseInWindow",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 238,
+    "symbol": "implicitAny:cooldownMs",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 304,
+    "symbol": "implicitAny:correlation",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 282,
+    "symbol": "implicitAny:countInWindow",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 195,
+    "symbol": "implicitAny:createdAt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 194,
+    "symbol": "implicitAny:createdBy",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 150,
+    "symbol": "implicitAny:ctx",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 302,
+    "symbol": "implicitAny:deadline",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 101,
+    "symbol": "implicitAny:decision",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 253,
+    "symbol": "implicitAny:doNotContact",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 249,
+    "symbol": "implicitAny:endMinuteUtc",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 130,
+    "symbol": "implicitAny:endpointId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 99,
+    "symbol": "implicitAny:event",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 299,
+    "symbol": "implicitAny:expectedResponders",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 140,
+    "symbol": "implicitAny:expiresAt",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 28,
+    "symbol": "implicitAny:externalId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 136,
+    "symbol": "implicitAny:id",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 49,
+    "symbol": "implicitAny:inboundTreatment",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 192,
+    "symbol": "implicitAny:instanceTtlMs",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 285,
+    "symbol": "implicitAny:lastSendAt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 193,
+    "symbol": "implicitAny:maxLiveInstances",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 236,
+    "symbol": "implicitAny:maxPerWindow",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 311,
+    "symbol": "implicitAny:messageId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 241,
+    "symbol": "implicitAny:notify",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 283,
+    "symbol": "implicitAny:notifyInWindow",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 316,
+    "symbol": "implicitAny:operation",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 139,
+    "symbol": "implicitAny:operations",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 50,
+    "symbol": "implicitAny:origin",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 246,
+    "symbol": "implicitAny:quietHours",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 144,
+    "symbol": "implicitAny:replyScope",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 98,
+    "symbol": "implicitAny:requestContext",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 62,
+    "symbol": "implicitAny:requestId",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 320,
+    "symbol": "implicitAny:requestSpec",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 300,
+    "symbol": "implicitAny:resolution",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 142,
+    "symbol": "implicitAny:ruleId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 137,
+    "symbol": "implicitAny:senderId",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 96,
+    "symbol": "implicitAny:sessionId",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 248,
+    "symbol": "implicitAny:startMinuteUtc",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 27,
+    "symbol": "implicitAny:surface",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 145,
+    "symbol": "implicitAny:surfaceKey",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 315,
+    "symbol": "implicitAny:target",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 138,
+    "symbol": "implicitAny:targetActorId",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 301,
+    "symbol": "implicitAny:threshold",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 313,
+    "symbol": "implicitAny:traceId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 43,
+    "symbol": "implicitAny:trustTier",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 196,
+    "symbol": "implicitAny:updatedAt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 237,
+    "symbol": "implicitAny:windowMs",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 189,
+    "symbol": "implicitAny:workspace",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 399,
+    "symbol": "unknown:ActorContext",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 40,
+    "symbol": "unknown:ActorContextSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 408,
+    "symbol": "unknown:Deliver",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 94,
+    "symbol": "unknown:DeliverSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 405,
+    "symbol": "unknown:DeliveredEvent",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 76,
+    "symbol": "unknown:DeliveredEventSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 38,
+    "symbol": "unknown:DeliveredTreatmentSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 429,
+    "symbol": "unknown:EgressDebitRow",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 264,
+    "symbol": "unknown:EgressDebitRowSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 432,
+    "symbol": "unknown:EgressDebitState",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 280,
+    "symbol": "unknown:EgressDebitStateSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 270,
+    "symbol": "unknown:EpochMs",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 381,
+    "symbol": "unknown:IngestResult",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 375,
+    "symbol": "unknown:IngestSender",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 378,
+    "symbol": "unknown:IngressFacts",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 414,
+    "symbol": "unknown:MessageClass",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 119,
+    "symbol": "unknown:MessageClassSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 435,
+    "symbol": "unknown:MessageDenialCode",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 206,
+    "symbol": "unknown:MessageDenialCodeSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 390,
+    "symbol": "unknown:MessageObservation",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 392,
+    "symbol": "unknown:MessageObserved",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 411,
+    "symbol": "unknown:MessageOperation",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 110,
+    "symbol": "unknown:MessageOperationSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 417,
+    "symbol": "unknown:MessageTarget",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 127,
+    "symbol": "unknown:MessageTargetSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 396,
+    "symbol": "unknown:Origin",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 25,
+    "symbol": "unknown:OriginSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 423,
+    "symbol": "unknown:ReplyGrantRule",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 184,
+    "symbol": "unknown:ReplyGrantRuleSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 16
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 369,
+    "symbol": "unknown:RequestAnswer",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 402,
+    "symbol": "unknown:RequestContext",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 60,
+    "symbol": "unknown:RequestContextSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 438,
+    "symbol": "unknown:RequestSpec",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 294,
+    "symbol": "unknown:RequestSpecSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 14
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 384,
+    "symbol": "unknown:RuleTableA",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 387,
+    "symbol": "unknown:RuleTableB",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 441,
+    "symbol": "unknown:SendInput",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 308,
+    "symbol": "unknown:SendInputBase",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 330,
+    "symbol": "unknown:SendInputSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 366,
+    "symbol": "unknown:SendMessage",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 372,
+    "symbol": "unknown:SendMessageHandle",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 420,
+    "symbol": "unknown:SenderTargetGrant",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 134,
+    "symbol": "unknown:SenderTargetGrantSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 15
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 426,
+    "symbol": "unknown:SocialBudget",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 232,
+    "symbol": "unknown:SocialBudgetSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 20
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 97,
+    "symbol": "unknown:actorContext",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 42,
+    "symbol": "unknown:actorId",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 63,
+    "symbol": "unknown:allowedAction",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 298,
+    "symbol": "unknown:allowedActions",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 270,
+    "symbol": "unknown:at",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 317,
+    "symbol": "unknown:body",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 190,
+    "symbol": "unknown:channel",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 269,
+    "symbol": "unknown:class",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 239,
+    "symbol": "unknown:classCaps",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 242,
+    "symbol": "unknown:converse",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 284,
+    "symbol": "unknown:converseInWindow",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 238,
+    "symbol": "unknown:cooldownMs",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 304,
+    "symbol": "unknown:correlation",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 282,
+    "symbol": "unknown:countInWindow",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 195,
+    "symbol": "unknown:createdAt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 194,
+    "symbol": "unknown:createdBy",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 150,
+    "symbol": "unknown:ctx",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 302,
+    "symbol": "unknown:deadline",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 101,
+    "symbol": "unknown:decision",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 253,
+    "symbol": "unknown:doNotContact",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 249,
+    "symbol": "unknown:endMinuteUtc",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 130,
+    "symbol": "unknown:endpointId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 99,
+    "symbol": "unknown:event",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 299,
+    "symbol": "unknown:expectedResponders",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 140,
+    "symbol": "unknown:expiresAt",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 28,
+    "symbol": "unknown:externalId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 136,
+    "symbol": "unknown:id",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 49,
+    "symbol": "unknown:inboundTreatment",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 192,
+    "symbol": "unknown:instanceTtlMs",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 285,
+    "symbol": "unknown:lastSendAt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 193,
+    "symbol": "unknown:maxLiveInstances",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 236,
+    "symbol": "unknown:maxPerWindow",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 311,
+    "symbol": "unknown:messageId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 241,
+    "symbol": "unknown:notify",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 283,
+    "symbol": "unknown:notifyInWindow",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 316,
+    "symbol": "unknown:operation",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 139,
+    "symbol": "unknown:operations",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 50,
+    "symbol": "unknown:origin",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 246,
+    "symbol": "unknown:quietHours",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 144,
+    "symbol": "unknown:replyScope",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 98,
+    "symbol": "unknown:requestContext",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 62,
+    "symbol": "unknown:requestId",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 320,
+    "symbol": "unknown:requestSpec",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 300,
+    "symbol": "unknown:resolution",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 142,
+    "symbol": "unknown:ruleId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 137,
+    "symbol": "unknown:senderId",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 96,
+    "symbol": "unknown:sessionId",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 248,
+    "symbol": "unknown:startMinuteUtc",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 27,
+    "symbol": "unknown:surface",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 145,
+    "symbol": "unknown:surfaceKey",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 315,
+    "symbol": "unknown:target",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 138,
+    "symbol": "unknown:targetActorId",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 301,
+    "symbol": "unknown:threshold",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 313,
+    "symbol": "unknown:traceId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 43,
+    "symbol": "unknown:trustTier",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 196,
+    "symbol": "unknown:updatedAt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 237,
+    "symbol": "unknown:windowMs",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/gateway/schema.ts",
+    "line": 189,
+    "symbol": "unknown:workspace",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/index.ts",
+    "line": 2,
+    "symbol": "implicitAny:PlainValueSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/index.ts",
+    "line": 2,
+    "symbol": "unknown:PlainValueSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/index.ts",
+    "line": 2,
+    "symbol": "unknown:canonicalDigest",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/index.ts",
+    "line": 2,
+    "symbol": "unknown:isPlainValue",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 152,
+    "symbol": "implicitAny:ActivationMetadata",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 82,
+    "symbol": "implicitAny:ActivationMetadataSchemaImpl",
+    "gate": "type",
+    "value": 1,
+    "count": 18
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 141,
+    "symbol": "implicitAny:Actor",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 140,
+    "symbol": "implicitAny:ActorSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 23,
+    "symbol": "implicitAny:ActorSchemaImpl",
+    "gate": "type",
+    "value": 1,
+    "count": 20
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 171,
+    "symbol": "implicitAny:AgentDef",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 159,
+    "symbol": "implicitAny:AgentDefSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 13
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 204,
+    "symbol": "implicitAny:DirectEvent",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 199,
+    "symbol": "implicitAny:DirectEventSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 239,
+    "symbol": "implicitAny:EventDescriptors",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 239,
+    "symbol": "implicitAny:Events",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 183,
+    "symbol": "implicitAny:InboundEventBase",
+    "gate": "type",
+    "value": 1,
+    "count": 14
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 211,
+    "symbol": "implicitAny:InternalEvent",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 206,
+    "symbol": "implicitAny:InternalEventSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 147,
+    "symbol": "implicitAny:Meta",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 146,
+    "symbol": "implicitAny:MetaSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 122,
+    "symbol": "implicitAny:MetaSchemaImpl",
+    "gate": "type",
+    "value": 1,
+    "count": 17
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 48,
+    "symbol": "implicitAny:RawTargetSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 107,
+    "symbol": "implicitAny:SenderMetaSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 144,
+    "symbol": "implicitAny:Target",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 143,
+    "symbol": "implicitAny:TargetSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 57,
+    "symbol": "implicitAny:TargetSchemaImpl",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 149,
+    "symbol": "implicitAny:WorkerLifecycle",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 80,
+    "symbol": "implicitAny:WorkerLifecycleSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 196,
+    "symbol": "implicitAny:activation",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 85,
+    "symbol": "implicitAny:activationId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 124,
+    "symbol": "implicitAny:actor",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 26,
+    "symbol": "implicitAny:actorId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 202,
+    "symbol": "implicitAny:agent",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 36,
+    "symbol": "implicitAny:agentName",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 99,
+    "symbol": "implicitAny:attempt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 92,
+    "symbol": "implicitAny:background",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 164,
+    "symbol": "implicitAny:budget",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 188,
+    "symbol": "implicitAny:channel",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 127,
+    "symbol": "implicitAny:channelGrantId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 128,
+    "symbol": "implicitAny:channelGrantKind",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 172,
+    "symbol": "implicitAny:context",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 135,
+    "symbol": "implicitAny:correlation",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 84,
+    "symbol": "implicitAny:durableSessionId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 33,
+    "symbol": "implicitAny:endpoint",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 32,
+    "symbol": "implicitAny:endpointId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 98,
+    "symbol": "implicitAny:firedAt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 25,
+    "symbol": "implicitAny:id",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 126,
+    "symbol": "implicitAny:inboundTreatment",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 39,
+    "symbol": "implicitAny:isMain",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 38,
+    "symbol": "implicitAny:isResident",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 28,
+    "symbol": "implicitAny:kind",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 87,
+    "symbol": "implicitAny:lifecycle",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 194,
+    "symbol": "implicitAny:meta",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 201,
+    "symbol": "implicitAny:mode",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 161,
+    "symbol": "implicitAny:model",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 108,
+    "symbol": "implicitAny:name",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 52,
+    "symbol": "implicitAny:parentSessionId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 192,
+    "symbol": "implicitAny:payload",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 165,
+    "symbol": "implicitAny:permissions",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 166,
+    "symbol": "implicitAny:policyPlan",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 133,
+    "symbol": "implicitAny:replyToId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 27,
+    "symbol": "implicitAny:role",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 35,
+    "symbol": "implicitAny:runId",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 97,
+    "symbol": "implicitAny:scheduledAt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 131,
+    "symbol": "implicitAny:sender",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 34,
+    "symbol": "implicitAny:sessionId",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 31,
+    "symbol": "implicitAny:standing",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 187,
+    "symbol": "implicitAny:surface",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 129,
+    "symbol": "implicitAny:surfaceKey",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 162,
+    "symbol": "implicitAny:systemPrompt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 125,
+    "symbol": "implicitAny:target",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 132,
+    "symbol": "implicitAny:threadId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 167,
+    "symbol": "implicitAny:toolConfig",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 172,
+    "symbol": "implicitAny:toolExecutor",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 173,
+    "symbol": "implicitAny:toolExecutorFactory",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 163,
+    "symbol": "implicitAny:tools",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 186,
+    "symbol": "implicitAny:traceId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 93,
+    "symbol": "implicitAny:trigger",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 30,
+    "symbol": "implicitAny:trustTier",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 29,
+    "symbol": "implicitAny:type",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 190,
+    "symbol": "implicitAny:userId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 37,
+    "symbol": "implicitAny:workerId",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 189,
+    "symbol": "implicitAny:workspace",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 152,
+    "symbol": "unknown:ActivationMetadata",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 82,
+    "symbol": "unknown:ActivationMetadataSchemaImpl",
+    "gate": "type",
+    "value": 1,
+    "count": 18
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 141,
+    "symbol": "unknown:Actor",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 140,
+    "symbol": "unknown:ActorSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 23,
+    "symbol": "unknown:ActorSchemaImpl",
+    "gate": "type",
+    "value": 1,
+    "count": 20
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 171,
+    "symbol": "unknown:AgentDef",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 159,
+    "symbol": "unknown:AgentDefSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 13
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 204,
+    "symbol": "unknown:DirectEvent",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 199,
+    "symbol": "unknown:DirectEventSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 229,
+    "symbol": "unknown:DroppedIngressResult",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 239,
+    "symbol": "unknown:EventDescriptors",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 239,
+    "symbol": "unknown:Events",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 221,
+    "symbol": "unknown:ExecutedIngressResult",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 213,
+    "symbol": "unknown:InboundEvent",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 183,
+    "symbol": "unknown:InboundEventBase",
+    "gate": "type",
+    "value": 1,
+    "count": 14
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 236,
+    "symbol": "unknown:IngressResult",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 211,
+    "symbol": "unknown:InternalEvent",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 206,
+    "symbol": "unknown:InternalEventSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 147,
+    "symbol": "unknown:Meta",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 146,
+    "symbol": "unknown:MetaSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 122,
+    "symbol": "unknown:MetaSchemaImpl",
+    "gate": "type",
+    "value": 1,
+    "count": 17
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 48,
+    "symbol": "unknown:RawTargetSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 214,
+    "symbol": "unknown:ResolvedInboundEvent",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 107,
+    "symbol": "unknown:SenderMetaSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 144,
+    "symbol": "unknown:Target",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 143,
+    "symbol": "unknown:TargetSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 57,
+    "symbol": "unknown:TargetSchemaImpl",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 149,
+    "symbol": "unknown:WorkerLifecycle",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 80,
+    "symbol": "unknown:WorkerLifecycleSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 196,
+    "symbol": "unknown:activation",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 85,
+    "symbol": "unknown:activationId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 124,
+    "symbol": "unknown:actor",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 26,
+    "symbol": "unknown:actorId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 202,
+    "symbol": "unknown:agent",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 36,
+    "symbol": "unknown:agentName",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 99,
+    "symbol": "unknown:attempt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 92,
+    "symbol": "unknown:background",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 164,
+    "symbol": "unknown:budget",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 172,
+    "symbol": "unknown:call",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 188,
+    "symbol": "unknown:channel",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 127,
+    "symbol": "unknown:channelGrantId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 128,
+    "symbol": "unknown:channelGrantKind",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 135,
+    "symbol": "unknown:correlation",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 84,
+    "symbol": "unknown:durableSessionId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 33,
+    "symbol": "unknown:endpoint",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 32,
+    "symbol": "unknown:endpointId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 268,
+    "symbol": "unknown:event",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 299,
+    "symbol": "unknown:extractSurfaceKey",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 98,
+    "symbol": "unknown:firedAt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 25,
+    "symbol": "unknown:id",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 126,
+    "symbol": "unknown:inboundTreatment",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 57,
+    "symbol": "unknown:input",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 39,
+    "symbol": "unknown:isMain",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 38,
+    "symbol": "unknown:isResident",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 28,
+    "symbol": "unknown:kind",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 87,
+    "symbol": "unknown:lifecycle",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 194,
+    "symbol": "unknown:meta",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 201,
+    "symbol": "unknown:mode",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 161,
+    "symbol": "unknown:model",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 108,
+    "symbol": "unknown:name",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 52,
+    "symbol": "unknown:parentSessionId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 192,
+    "symbol": "unknown:payload",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 165,
+    "symbol": "unknown:permissions",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 166,
+    "symbol": "unknown:policyPlan",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 64,
+    "symbol": "unknown:record",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 240,
+    "symbol": "unknown:recordedRoutingDecision",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 240,
+    "symbol": "unknown:recordedRoutingDecisionReader",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 133,
+    "symbol": "unknown:replyToId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 268,
+    "symbol": "unknown:resolveTarget",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 66,
+    "symbol": "unknown:rest",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 27,
+    "symbol": "unknown:role",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 252,
+    "symbol": "unknown:routeDecidedFact",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 258,
+    "symbol": "unknown:routeNotDeliveredFact",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 35,
+    "symbol": "unknown:runId",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 97,
+    "symbol": "unknown:scheduledAt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 131,
+    "symbol": "unknown:sender",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 34,
+    "symbol": "unknown:sessionId",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 31,
+    "symbol": "unknown:standing",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 187,
+    "symbol": "unknown:surface",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 129,
+    "symbol": "unknown:surfaceKey",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 162,
+    "symbol": "unknown:systemPrompt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 125,
+    "symbol": "unknown:target",
+    "gate": "type",
+    "value": 1,
+    "count": 20
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 277,
+    "symbol": "unknown:targetKey",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 132,
+    "symbol": "unknown:threadId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 167,
+    "symbol": "unknown:toolConfig",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 172,
+    "symbol": "unknown:toolExecutor",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 173,
+    "symbol": "unknown:toolExecutorFactory",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 163,
+    "symbol": "unknown:tools",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 186,
+    "symbol": "unknown:traceId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 93,
+    "symbol": "unknown:trigger",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 30,
+    "symbol": "unknown:trustTier",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 29,
+    "symbol": "unknown:type",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 190,
+    "symbol": "unknown:userId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 37,
+    "symbol": "unknown:workerId",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ingress/index.ts",
+    "line": 189,
+    "symbol": "unknown:workspace",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ingress/route-record.ts",
+    "line": 46,
+    "symbol": "unknown:routeDecidedFact",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ingress/route-record.ts",
+    "line": 61,
+    "symbol": "unknown:routeNotDeliveredFact",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ipc/index.ts",
+    "line": 85,
+    "symbol": "implicitAny:Methods",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ipc/index.ts",
+    "line": 84,
+    "symbol": "implicitAny:Notification",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ipc/index.ts",
+    "line": 82,
+    "symbol": "implicitAny:Request",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ipc/index.ts",
+    "line": 83,
+    "symbol": "implicitAny:Response",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ipc/index.ts",
+    "line": 4,
+    "symbol": "implicitAny:baseMessage",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/ipc/index.ts",
+    "line": 22,
+    "symbol": "implicitAny:code",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ipc/index.ts",
+    "line": 24,
+    "symbol": "implicitAny:data",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ipc/index.ts",
+    "line": 20,
+    "symbol": "implicitAny:error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ipc/index.ts",
+    "line": 6,
+    "symbol": "implicitAny:id",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/ipc/index.ts",
+    "line": 23,
+    "symbol": "implicitAny:message",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ipc/index.ts",
+    "line": 12,
+    "symbol": "implicitAny:method",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ipc/index.ts",
+    "line": 42,
+    "symbol": "implicitAny:methods",
+    "gate": "type",
+    "value": 1,
+    "count": 21
+  },
+  {
+    "path": "packages/protocol/src/ipc/index.ts",
+    "line": 29,
+    "symbol": "implicitAny:notificationSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/protocol/src/ipc/index.ts",
+    "line": 13,
+    "symbol": "implicitAny:params",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/src/ipc/index.ts",
+    "line": 9,
+    "symbol": "implicitAny:requestSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "packages/protocol/src/ipc/index.ts",
+    "line": 16,
+    "symbol": "implicitAny:responseSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 13
+  },
+  {
+    "path": "packages/protocol/src/ipc/index.ts",
+    "line": 19,
+    "symbol": "implicitAny:result",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/src/ipc/index.ts",
+    "line": 10,
+    "symbol": "implicitAny:type",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/ipc/index.ts",
+    "line": 5,
+    "symbol": "implicitAny:v",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ipc/index.ts",
+    "line": 85,
+    "symbol": "unknown:Methods",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ipc/index.ts",
+    "line": 84,
+    "symbol": "unknown:Notification",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/ipc/index.ts",
+    "line": 82,
+    "symbol": "unknown:Request",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/ipc/index.ts",
+    "line": 83,
+    "symbol": "unknown:Response",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/ipc/index.ts",
+    "line": 4,
+    "symbol": "unknown:baseMessage",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/ipc/index.ts",
+    "line": 22,
+    "symbol": "unknown:code",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ipc/index.ts",
+    "line": 105,
+    "symbol": "unknown:createErrorResponse",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ipc/index.ts",
+    "line": 109,
+    "symbol": "unknown:createNotification",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/ipc/index.ts",
+    "line": 93,
+    "symbol": "unknown:createRequest",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/ipc/index.ts",
+    "line": 101,
+    "symbol": "unknown:createResponse",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/ipc/index.ts",
+    "line": 24,
+    "symbol": "unknown:data",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ipc/index.ts",
+    "line": 20,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ipc/index.ts",
+    "line": 6,
+    "symbol": "unknown:id",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/ipc/index.ts",
+    "line": 23,
+    "symbol": "unknown:message",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ipc/index.ts",
+    "line": 12,
+    "symbol": "unknown:method",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ipc/index.ts",
+    "line": 42,
+    "symbol": "unknown:methods",
+    "gate": "type",
+    "value": 1,
+    "count": 21
+  },
+  {
+    "path": "packages/protocol/src/ipc/index.ts",
+    "line": 29,
+    "symbol": "unknown:notificationSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/protocol/src/ipc/index.ts",
+    "line": 13,
+    "symbol": "unknown:params",
+    "gate": "type",
+    "value": 1,
+    "count": 16
+  },
+  {
+    "path": "packages/protocol/src/ipc/index.ts",
+    "line": 9,
+    "symbol": "unknown:requestSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "packages/protocol/src/ipc/index.ts",
+    "line": 16,
+    "symbol": "unknown:responseSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 13
+  },
+  {
+    "path": "packages/protocol/src/ipc/index.ts",
+    "line": 19,
+    "symbol": "unknown:result",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/protocol/src/ipc/index.ts",
+    "line": 10,
+    "symbol": "unknown:type",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/ipc/index.ts",
+    "line": 5,
+    "symbol": "unknown:v",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/json.ts",
+    "line": 89,
+    "symbol": "implicitAny:PlainValueSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/json.ts",
+    "line": 44,
+    "symbol": "implicitAny:descriptor",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/src/json.ts",
+    "line": 108,
+    "symbol": "implicitAny:entry",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/json.ts",
+    "line": 46,
+    "symbol": "implicitAny:isPlainArray",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/json.ts",
+    "line": 57,
+    "symbol": "implicitAny:isPlainObject",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/json.ts",
+    "line": 33,
+    "symbol": "implicitAny:isPlainValueUnsafe",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/json.ts",
+    "line": 110,
+    "symbol": "implicitAny:prototype",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/json.ts",
+    "line": 108,
+    "symbol": "implicitAny:renderCanonical",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/json.ts",
+    "line": 29,
+    "symbol": "implicitAny:value",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/json.ts",
+    "line": 89,
+    "symbol": "unknown:PlainValueSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/json.ts",
+    "line": 151,
+    "symbol": "unknown:canonicalDigest",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/json.ts",
+    "line": 134,
+    "symbol": "unknown:canonicalKey",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/json.ts",
+    "line": 37,
+    "symbol": "unknown:isPlainArray",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/json.ts",
+    "line": 67,
+    "symbol": "unknown:isPlainValue",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/json.ts",
+    "line": 29,
+    "symbol": "unknown:isPlainValueUnsafe",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/json.ts",
+    "line": 100,
+    "symbol": "unknown:renderCanonical",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/json.ts",
+    "line": 29,
+    "symbol": "unknown:value",
+    "gate": "type",
+    "value": 1,
+    "count": 20
+  },
+  {
+    "path": "packages/protocol/src/ledger/index.ts",
+    "line": 41,
+    "symbol": "implicitAny:AdoptError",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/ledger/index.ts",
+    "line": 38,
+    "symbol": "implicitAny:AdoptGenesis",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/index.ts",
+    "line": 32,
+    "symbol": "implicitAny:ChainBreak",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/index.ts",
+    "line": 29,
+    "symbol": "implicitAny:ChainBreakCode",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/index.ts",
+    "line": 17,
+    "symbol": "implicitAny:Durability",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/index.ts",
+    "line": 23,
+    "symbol": "implicitAny:ExpectedHead",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/index.ts",
+    "line": 20,
+    "symbol": "implicitAny:Input",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/index.ts",
+    "line": 26,
+    "symbol": "implicitAny:Outcome",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/index.ts",
+    "line": 35,
+    "symbol": "implicitAny:RecordedFact",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/index.ts",
+    "line": 44,
+    "symbol": "implicitAny:RouteNotDelivered",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/index.ts",
+    "line": 41,
+    "symbol": "unknown:AdoptError",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/ledger/index.ts",
+    "line": 38,
+    "symbol": "unknown:AdoptGenesis",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/ledger/index.ts",
+    "line": 32,
+    "symbol": "unknown:ChainBreak",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/index.ts",
+    "line": 29,
+    "symbol": "unknown:ChainBreakCode",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/index.ts",
+    "line": 17,
+    "symbol": "unknown:Durability",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/index.ts",
+    "line": 23,
+    "symbol": "unknown:ExpectedHead",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/index.ts",
+    "line": 20,
+    "symbol": "unknown:Input",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/ledger/index.ts",
+    "line": 26,
+    "symbol": "unknown:Outcome",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/index.ts",
+    "line": 35,
+    "symbol": "unknown:RecordedFact",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/ledger/index.ts",
+    "line": 44,
+    "symbol": "unknown:RouteNotDelivered",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 139,
+    "symbol": "implicitAny:AcquireLease",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 699,
+    "symbol": "implicitAny:ActionCommitted",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 709,
+    "symbol": "implicitAny:ActionCommittedEvent",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 65,
+    "symbol": "implicitAny:Append",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 64,
+    "symbol": "implicitAny:AppendBase",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 664,
+    "symbol": "implicitAny:Arm",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 41,
+    "symbol": "implicitAny:BaseNode",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 306,
+    "symbol": "implicitAny:Boundary",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 344,
+    "symbol": "implicitAny:Checkpoint",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 189,
+    "symbol": "implicitAny:Commit",
+    "gate": "type",
+    "value": 1,
+    "count": 34
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 211,
+    "symbol": "implicitAny:CommitResult",
+    "gate": "type",
+    "value": 1,
+    "count": 16
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 270,
+    "symbol": "implicitAny:ConfigureEffect",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 293,
+    "symbol": "implicitAny:ConfigureError",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 263,
+    "symbol": "implicitAny:ConfigureIntent",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 285,
+    "symbol": "implicitAny:ConfigureReceipt",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 278,
+    "symbol": "implicitAny:ConfigureRevert",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 403,
+    "symbol": "implicitAny:Delivery",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 12,
+    "symbol": "implicitAny:EncodedPayload",
+    "gate": "type",
+    "value": 1,
+    "count": 15
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 49,
+    "symbol": "implicitAny:EpochMs",
+    "gate": "type",
+    "value": 1,
+    "count": 15
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 675,
+    "symbol": "implicitAny:Fire",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 99,
+    "symbol": "implicitAny:GenerationPointers",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 9,
+    "symbol": "implicitAny:Identifier",
+    "gate": "type",
+    "value": 1,
+    "count": 55
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 80,
+    "symbol": "implicitAny:InboxAdmission",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 326,
+    "symbol": "implicitAny:Intent",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 57,
+    "symbol": "implicitAny:IrreversibleNode",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 21,
+    "symbol": "implicitAny:Kind",
+    "gate": "type",
+    "value": 1,
+    "count": 15
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 154,
+    "symbol": "implicitAny:LeaseResult",
+    "gate": "type",
+    "value": 1,
+    "count": 18
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 580,
+    "symbol": "implicitAny:Lifetime",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 125,
+    "symbol": "implicitAny:Materialize",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 133,
+    "symbol": "implicitAny:MaterializeResult",
+    "gate": "type",
+    "value": 1,
+    "count": 12
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 309,
+    "symbol": "implicitAny:Message",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 505,
+    "symbol": "implicitAny:MessageOrigin",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 61,
+    "symbol": "implicitAny:Node",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 10,
+    "symbol": "implicitAny:NullableIdentifier",
+    "gate": "type",
+    "value": 1,
+    "count": 12
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 470,
+    "symbol": "implicitAny:Observation",
+    "gate": "type",
+    "value": 1,
+    "count": 15
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 416,
+    "symbol": "implicitAny:Pending",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 715,
+    "symbol": "implicitAny:Phase",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 317,
+    "symbol": "implicitAny:PinnedGeneration",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 15,
+    "symbol": "implicitAny:PlainValueSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 71,
+    "symbol": "implicitAny:Receipt",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 174,
+    "symbol": "implicitAny:RenewLease",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 493,
+    "symbol": "implicitAny:ReplyOrigin",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 632,
+    "symbol": "implicitAny:RequestDeadline",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 335,
+    "symbol": "implicitAny:Resume",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 54,
+    "symbol": "implicitAny:RevertibleNode",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 93,
+    "symbol": "implicitAny:Role",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 108,
+    "symbol": "implicitAny:Row",
+    "gate": "type",
+    "value": 1,
+    "count": 40
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 248,
+    "symbol": "implicitAny:Snapshot",
+    "gate": "type",
+    "value": 1,
+    "count": 32
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 96,
+    "symbol": "implicitAny:State",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 520,
+    "symbol": "implicitAny:Status",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 239,
+    "symbol": "implicitAny:SystemBlock",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 423,
+    "symbol": "implicitAny:Tail",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 367,
+    "symbol": "implicitAny:Terminal",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 356,
+    "symbol": "implicitAny:TerminalIntent",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 364,
+    "symbol": "implicitAny:TerminalKind",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 229,
+    "symbol": "implicitAny:Tool",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 226,
+    "symbol": "implicitAny:ToolCategory",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 584,
+    "symbol": "implicitAny:Watch",
+    "gate": "type",
+    "value": 1,
+    "count": 17
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 623,
+    "symbol": "implicitAny:WatchSpec",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 73,
+    "symbol": "implicitAny:action",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 431,
+    "symbol": "implicitAny:actionId",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 477,
+    "symbol": "implicitAny:actionKind",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 196,
+    "symbol": "implicitAny:actions",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 206,
+    "symbol": "implicitAny:admit",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 373,
+    "symbol": "implicitAny:alarmIds",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 432,
+    "symbol": "implicitAny:at",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 684,
+    "symbol": "implicitAny:batchHash",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 351,
+    "symbol": "implicitAny:boundary",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 331,
+    "symbol": "implicitAny:boundaryActionId",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 233,
+    "symbol": "implicitAny:category",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 499,
+    "symbol": "implicitAny:childSessionId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 297,
+    "symbol": "implicitAny:code",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 588,
+    "symbol": "implicitAny:command",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 197,
+    "symbol": "implicitAny:consumeInboxIds",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 532,
+    "symbol": "implicitAny:consumedAt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 531,
+    "symbol": "implicitAny:consumedBy",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 85,
+    "symbol": "implicitAny:content",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 379,
+    "symbol": "implicitAny:context",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 201,
+    "symbol": "implicitAny:count",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 556,
+    "symbol": "implicitAny:createSession",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 134,
+    "symbol": "implicitAny:created",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 87,
+    "symbol": "implicitAny:createdAt",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 168,
+    "symbol": "implicitAny:currentFence",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 218,
+    "symbol": "implicitAny:currentRevision",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 511,
+    "symbol": "implicitAny:deadline",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 558,
+    "symbol": "implicitAny:depth",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 590,
+    "symbol": "implicitAny:description",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 48,
+    "symbol": "implicitAny:effect",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 14,
+    "symbol": "implicitAny:encodingVersion",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 654,
+    "symbol": "implicitAny:epoch",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 597,
+    "symbol": "implicitAny:event",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 143,
+    "symbol": "implicitAny:expectedFence",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 195,
+    "symbol": "implicitAny:expectedRevision",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 145,
+    "symbol": "implicitAny:expiresAt",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 558,
+    "symbol": "implicitAny:fanout",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 155,
+    "symbol": "implicitAny:fence",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 589,
+    "symbol": "implicitAny:filter",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 651,
+    "symbol": "implicitAny:fireAt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 484,
+    "symbol": "implicitAny:from",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 199,
+    "symbol": "implicitAny:generation",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 160,
+    "symbol": "implicitAny:holder",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 43,
+    "symbol": "implicitAny:id",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 407,
+    "symbol": "implicitAny:inboxId",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 329,
+    "symbol": "implicitAny:inboxIds",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 128,
+    "symbol": "implicitAny:initialAction",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 232,
+    "symbol": "implicitAny:inputSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 47,
+    "symbol": "implicitAny:intent",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 58,
+    "symbol": "implicitAny:irreversible",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 46,
+    "symbol": "implicitAny:kind",
+    "gate": "type",
+    "value": 1,
+    "count": 14
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 656,
+    "symbol": "implicitAny:lastBatch",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 448,
+    "symbol": "implicitAny:lease",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 115,
+    "symbol": "implicitAny:leaseExpiresAt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 114,
+    "symbol": "implicitAny:leaseFence",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 113,
+    "symbol": "implicitAny:leaseOwner",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 685,
+    "symbol": "implicitAny:limit",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 557,
+    "symbol": "implicitAny:limits",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 723,
+    "symbol": "implicitAny:match",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 298,
+    "symbol": "implicitAny:message",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 496,
+    "symbol": "implicitAny:messageId",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 436,
+    "symbol": "implicitAny:messages",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 231,
+    "symbol": "implicitAny:name",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 627,
+    "symbol": "implicitAny:notificationLimit",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 657,
+    "symbol": "implicitAny:notifications",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 144,
+    "symbol": "implicitAny:now",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 155,
+    "symbol": "implicitAny:ok",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 458,
+    "symbol": "implicitAny:openTurnId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 265,
+    "symbol": "implicitAny:operation",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 50,
+    "symbol": "implicitAny:ordinal",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 86,
+    "symbol": "implicitAny:origin",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 142,
+    "symbol": "implicitAny:owner",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 88,
+    "symbol": "implicitAny:parentActionId",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 44,
+    "symbol": "implicitAny:parentId",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 596,
+    "symbol": "implicitAny:path",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 581,
+    "symbol": "implicitAny:persistent",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 272,
+    "symbol": "implicitAny:phase",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 103,
+    "symbol": "implicitAny:policyGeneration",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 725,
+    "symbol": "implicitAny:priority",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 159,
+    "symbol": "implicitAny:reason",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 134,
+    "symbol": "implicitAny:receipt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 212,
+    "symbol": "implicitAny:receipts",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 205,
+    "symbol": "implicitAny:receive",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 204,
+    "symbol": "implicitAny:releaseLease",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 498,
+    "symbol": "implicitAny:replyTo",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 200,
+    "symbol": "implicitAny:requestCount",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 635,
+    "symbol": "implicitAny:requestId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 328,
+    "symbol": "implicitAny:resultId",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 330,
+    "symbol": "implicitAny:resumeCount",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 55,
+    "symbol": "implicitAny:revert",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 251,
+    "symbol": "implicitAny:revertTo",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 74,
+    "symbol": "implicitAny:revision",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 112,
+    "symbol": "implicitAny:role",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 127,
+    "symbol": "implicitAny:row",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 548,
+    "symbol": "implicitAny:sender",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 509,
+    "symbol": "implicitAny:senderSessionId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 234,
+    "symbol": "implicitAny:sequential",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 45,
+    "symbol": "implicitAny:sessionId",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 201,
+    "symbol": "implicitAny:since",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 273,
+    "symbol": "implicitAny:snapshot",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 242,
+    "symbol": "implicitAny:source",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 497,
+    "symbol": "implicitAny:sourceActionId",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 652,
+    "symbol": "implicitAny:spec",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 427,
+    "symbol": "implicitAny:startedAt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 117,
+    "symbol": "implicitAny:state",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 530,
+    "symbol": "implicitAny:status",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 255,
+    "symbol": "implicitAny:systemBlocks",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 102,
+    "symbol": "implicitAny:systemHash",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 254,
+    "symbol": "implicitAny:systemPreset",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 256,
+    "symbol": "implicitAny:systemValue",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 428,
+    "symbol": "implicitAny:terminal",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 500,
+    "symbol": "implicitAny:terminalKind",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 312,
+    "symbol": "implicitAny:text",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 582,
+    "symbol": "implicitAny:timeout_ms",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 485,
+    "symbol": "implicitAny:to",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 252,
+    "symbol": "implicitAny:tools",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 101,
+    "symbol": "implicitAny:toolsGeneration",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 253,
+    "symbol": "implicitAny:toolsHash",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 49,
+    "symbol": "implicitAny:ts",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 337,
+    "symbol": "implicitAny:turnId",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 459,
+    "symbol": "implicitAny:turns",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 659,
+    "symbol": "implicitAny:updatedAt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 15,
+    "symbol": "implicitAny:value",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 724,
+    "symbol": "implicitAny:verdict",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 625,
+    "symbol": "implicitAny:watch",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 139,
+    "symbol": "unknown:AcquireLease",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 699,
+    "symbol": "unknown:ActionCommitted",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 709,
+    "symbol": "unknown:ActionCommittedEvent",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 65,
+    "symbol": "unknown:Append",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 64,
+    "symbol": "unknown:AppendBase",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 664,
+    "symbol": "unknown:Arm",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 41,
+    "symbol": "unknown:BaseNode",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 306,
+    "symbol": "unknown:Boundary",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 344,
+    "symbol": "unknown:Checkpoint",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 189,
+    "symbol": "unknown:Commit",
+    "gate": "type",
+    "value": 1,
+    "count": 34
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 211,
+    "symbol": "unknown:CommitResult",
+    "gate": "type",
+    "value": 1,
+    "count": 16
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 270,
+    "symbol": "unknown:ConfigureEffect",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 293,
+    "symbol": "unknown:ConfigureError",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 263,
+    "symbol": "unknown:ConfigureIntent",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 285,
+    "symbol": "unknown:ConfigureReceipt",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 278,
+    "symbol": "unknown:ConfigureRevert",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 403,
+    "symbol": "unknown:Delivery",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 12,
+    "symbol": "unknown:EncodedPayload",
+    "gate": "type",
+    "value": 1,
+    "count": 15
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 49,
+    "symbol": "unknown:EpochMs",
+    "gate": "type",
+    "value": 1,
+    "count": 15
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 675,
+    "symbol": "unknown:Fire",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 99,
+    "symbol": "unknown:GenerationPointers",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 9,
+    "symbol": "unknown:Identifier",
+    "gate": "type",
+    "value": 1,
+    "count": 55
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 80,
+    "symbol": "unknown:InboxAdmission",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 326,
+    "symbol": "unknown:Intent",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 57,
+    "symbol": "unknown:IrreversibleNode",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 21,
+    "symbol": "unknown:Kind",
+    "gate": "type",
+    "value": 1,
+    "count": 15
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 154,
+    "symbol": "unknown:LeaseResult",
+    "gate": "type",
+    "value": 1,
+    "count": 18
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 580,
+    "symbol": "unknown:Lifetime",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 125,
+    "symbol": "unknown:Materialize",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 133,
+    "symbol": "unknown:MaterializeResult",
+    "gate": "type",
+    "value": 1,
+    "count": 12
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 309,
+    "symbol": "unknown:Message",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 505,
+    "symbol": "unknown:MessageOrigin",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 61,
+    "symbol": "unknown:Node",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 10,
+    "symbol": "unknown:NullableIdentifier",
+    "gate": "type",
+    "value": 1,
+    "count": 12
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 470,
+    "symbol": "unknown:Observation",
+    "gate": "type",
+    "value": 1,
+    "count": 15
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 416,
+    "symbol": "unknown:Pending",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 715,
+    "symbol": "unknown:Phase",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 317,
+    "symbol": "unknown:PinnedGeneration",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 15,
+    "symbol": "unknown:PlainValueSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 71,
+    "symbol": "unknown:Receipt",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 174,
+    "symbol": "unknown:RenewLease",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 493,
+    "symbol": "unknown:ReplyOrigin",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 632,
+    "symbol": "unknown:RequestDeadline",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 335,
+    "symbol": "unknown:Resume",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 54,
+    "symbol": "unknown:RevertibleNode",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 93,
+    "symbol": "unknown:Role",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 108,
+    "symbol": "unknown:Row",
+    "gate": "type",
+    "value": 1,
+    "count": 40
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 248,
+    "symbol": "unknown:Snapshot",
+    "gate": "type",
+    "value": 1,
+    "count": 32
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 96,
+    "symbol": "unknown:State",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 520,
+    "symbol": "unknown:Status",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 239,
+    "symbol": "unknown:SystemBlock",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 423,
+    "symbol": "unknown:Tail",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 367,
+    "symbol": "unknown:Terminal",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 356,
+    "symbol": "unknown:TerminalIntent",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 364,
+    "symbol": "unknown:TerminalKind",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 229,
+    "symbol": "unknown:Tool",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 226,
+    "symbol": "unknown:ToolCategory",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 584,
+    "symbol": "unknown:Watch",
+    "gate": "type",
+    "value": 1,
+    "count": 17
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 623,
+    "symbol": "unknown:WatchSpec",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 73,
+    "symbol": "unknown:action",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 431,
+    "symbol": "unknown:actionId",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 477,
+    "symbol": "unknown:actionKind",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 196,
+    "symbol": "unknown:actions",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 206,
+    "symbol": "unknown:admit",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 373,
+    "symbol": "unknown:alarmIds",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 432,
+    "symbol": "unknown:at",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 684,
+    "symbol": "unknown:batchHash",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 351,
+    "symbol": "unknown:boundary",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 331,
+    "symbol": "unknown:boundaryActionId",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 233,
+    "symbol": "unknown:category",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 499,
+    "symbol": "unknown:childSessionId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 297,
+    "symbol": "unknown:code",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 588,
+    "symbol": "unknown:command",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 197,
+    "symbol": "unknown:consumeInboxIds",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 532,
+    "symbol": "unknown:consumedAt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 531,
+    "symbol": "unknown:consumedBy",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 85,
+    "symbol": "unknown:content",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 379,
+    "symbol": "unknown:context",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 201,
+    "symbol": "unknown:count",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 556,
+    "symbol": "unknown:createSession",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 134,
+    "symbol": "unknown:created",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 87,
+    "symbol": "unknown:createdAt",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 168,
+    "symbol": "unknown:currentFence",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 218,
+    "symbol": "unknown:currentRevision",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 511,
+    "symbol": "unknown:deadline",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 558,
+    "symbol": "unknown:depth",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 590,
+    "symbol": "unknown:description",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 48,
+    "symbol": "unknown:effect",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 14,
+    "symbol": "unknown:encodingVersion",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 654,
+    "symbol": "unknown:epoch",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 597,
+    "symbol": "unknown:event",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 143,
+    "symbol": "unknown:expectedFence",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 195,
+    "symbol": "unknown:expectedRevision",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 145,
+    "symbol": "unknown:expiresAt",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 558,
+    "symbol": "unknown:fanout",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 155,
+    "symbol": "unknown:fence",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 589,
+    "symbol": "unknown:filter",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 651,
+    "symbol": "unknown:fireAt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 484,
+    "symbol": "unknown:from",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 199,
+    "symbol": "unknown:generation",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 160,
+    "symbol": "unknown:holder",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 43,
+    "symbol": "unknown:id",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 407,
+    "symbol": "unknown:inboxId",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 329,
+    "symbol": "unknown:inboxIds",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 128,
+    "symbol": "unknown:initialAction",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 232,
+    "symbol": "unknown:inputSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 47,
+    "symbol": "unknown:intent",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 58,
+    "symbol": "unknown:irreversible",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 46,
+    "symbol": "unknown:kind",
+    "gate": "type",
+    "value": 1,
+    "count": 14
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 656,
+    "symbol": "unknown:lastBatch",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 448,
+    "symbol": "unknown:lease",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 115,
+    "symbol": "unknown:leaseExpiresAt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 114,
+    "symbol": "unknown:leaseFence",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 113,
+    "symbol": "unknown:leaseOwner",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 685,
+    "symbol": "unknown:limit",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 557,
+    "symbol": "unknown:limits",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 723,
+    "symbol": "unknown:match",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 298,
+    "symbol": "unknown:message",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 496,
+    "symbol": "unknown:messageId",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 436,
+    "symbol": "unknown:messages",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 231,
+    "symbol": "unknown:name",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 627,
+    "symbol": "unknown:notificationLimit",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 657,
+    "symbol": "unknown:notifications",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 144,
+    "symbol": "unknown:now",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 155,
+    "symbol": "unknown:ok",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 458,
+    "symbol": "unknown:openTurnId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 265,
+    "symbol": "unknown:operation",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 50,
+    "symbol": "unknown:ordinal",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 86,
+    "symbol": "unknown:origin",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 142,
+    "symbol": "unknown:owner",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 88,
+    "symbol": "unknown:parentActionId",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 44,
+    "symbol": "unknown:parentId",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 596,
+    "symbol": "unknown:path",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 581,
+    "symbol": "unknown:persistent",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 272,
+    "symbol": "unknown:phase",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 103,
+    "symbol": "unknown:policyGeneration",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 725,
+    "symbol": "unknown:priority",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 159,
+    "symbol": "unknown:reason",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 134,
+    "symbol": "unknown:receipt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 212,
+    "symbol": "unknown:receipts",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 205,
+    "symbol": "unknown:receive",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 204,
+    "symbol": "unknown:releaseLease",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 498,
+    "symbol": "unknown:replyTo",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 200,
+    "symbol": "unknown:requestCount",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 635,
+    "symbol": "unknown:requestId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 328,
+    "symbol": "unknown:resultId",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 330,
+    "symbol": "unknown:resumeCount",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 55,
+    "symbol": "unknown:revert",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 251,
+    "symbol": "unknown:revertTo",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 74,
+    "symbol": "unknown:revision",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 112,
+    "symbol": "unknown:role",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 127,
+    "symbol": "unknown:row",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 548,
+    "symbol": "unknown:sender",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/ledger/l0.ts",
+    "line": 509,
+    "symbol": "unknown:senderSessionId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  }
+]

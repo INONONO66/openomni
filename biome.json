@@ -20,7 +20,7 @@
     "lineWidth": 100
   },
   "javascript": {
-    "globals": ["Bun"],
+    "globals": ["Bun", "HTMLRewriter"],
     "formatter": {
       "trailingCommas": "all"
     }

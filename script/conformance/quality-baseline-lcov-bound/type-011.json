@@ -1,0 +1,8002 @@
+[
+  {
+    "path": "packages/protocol/src/policy/resource.ts",
+    "line": 84,
+    "symbol": "unknown:source",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/policy/resource.ts",
+    "line": 22,
+    "symbol": "unknown:type",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "packages/protocol/src/policy/resource.ts",
+    "line": 52,
+    "symbol": "unknown:userId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/policy/resource.ts",
+    "line": 79,
+    "symbol": "unknown:version",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/policy/resource.ts",
+    "line": 61,
+    "symbol": "unknown:workerId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/index.ts",
+    "line": 25,
+    "symbol": "implicitAny:ChannelInstance",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/provisioning/index.ts",
+    "line": 19,
+    "symbol": "implicitAny:ChannelInstanceId",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/provisioning/index.ts",
+    "line": 22,
+    "symbol": "implicitAny:GrantPolicy",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/provisioning/index.ts",
+    "line": 16,
+    "symbol": "implicitAny:Person",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/provisioning/index.ts",
+    "line": 13,
+    "symbol": "implicitAny:PersonEndpoint",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/provisioning/index.ts",
+    "line": 10,
+    "symbol": "implicitAny:PersonId",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/provisioning/index.ts",
+    "line": 34,
+    "symbol": "implicitAny:Secret",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/provisioning/index.ts",
+    "line": 28,
+    "symbol": "implicitAny:SecretId",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/provisioning/index.ts",
+    "line": 31,
+    "symbol": "implicitAny:SecretPurpose",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/provisioning/index.ts",
+    "line": 40,
+    "symbol": "implicitAny:StoreError",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/provisioning/index.ts",
+    "line": 37,
+    "symbol": "implicitAny:StoreErrorCode",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/provisioning/index.ts",
+    "line": 46,
+    "symbol": "implicitAny:VaultError",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/provisioning/index.ts",
+    "line": 43,
+    "symbol": "implicitAny:VaultErrorCode",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/provisioning/index.ts",
+    "line": 25,
+    "symbol": "unknown:ChannelInstance",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/provisioning/index.ts",
+    "line": 19,
+    "symbol": "unknown:ChannelInstanceId",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/provisioning/index.ts",
+    "line": 22,
+    "symbol": "unknown:GrantPolicy",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/provisioning/index.ts",
+    "line": 16,
+    "symbol": "unknown:Person",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/provisioning/index.ts",
+    "line": 13,
+    "symbol": "unknown:PersonEndpoint",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/provisioning/index.ts",
+    "line": 10,
+    "symbol": "unknown:PersonId",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/provisioning/index.ts",
+    "line": 34,
+    "symbol": "unknown:Secret",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/provisioning/index.ts",
+    "line": 28,
+    "symbol": "unknown:SecretId",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/provisioning/index.ts",
+    "line": 31,
+    "symbol": "unknown:SecretPurpose",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/provisioning/index.ts",
+    "line": 40,
+    "symbol": "unknown:StoreError",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/provisioning/index.ts",
+    "line": 37,
+    "symbol": "unknown:StoreErrorCode",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/provisioning/index.ts",
+    "line": 46,
+    "symbol": "unknown:VaultError",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/provisioning/index.ts",
+    "line": 43,
+    "symbol": "unknown:VaultErrorCode",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 88,
+    "symbol": "implicitAny:ChannelInstance",
+    "gate": "type",
+    "value": 1,
+    "count": 13
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 21,
+    "symbol": "implicitAny:ChannelInstanceId",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 64,
+    "symbol": "implicitAny:EpochMs",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 73,
+    "symbol": "implicitAny:GrantPolicy",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 55,
+    "symbol": "implicitAny:Person",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 40,
+    "symbol": "implicitAny:PersonEndpoint",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 16,
+    "symbol": "implicitAny:PersonId",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 93,
+    "symbol": "implicitAny:PlainValueSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 112,
+    "symbol": "implicitAny:Secret",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 29,
+    "symbol": "implicitAny:SecretId",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 103,
+    "symbol": "implicitAny:SecretPurpose",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 134,
+    "symbol": "implicitAny:StoreError",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 125,
+    "symbol": "implicitAny:StoreErrorCode",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 155,
+    "symbol": "implicitAny:VaultError",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 144,
+    "symbol": "implicitAny:VaultErrorCode",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 76,
+    "symbol": "implicitAny:allowedSenders",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 42,
+    "symbol": "implicitAny:channel",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 115,
+    "symbol": "implicitAny:ciphertext",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 138,
+    "symbol": "implicitAny:code",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 119,
+    "symbol": "implicitAny:createdAt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 63,
+    "symbol": "implicitAny:createdBy",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 94,
+    "symbol": "implicitAny:credentialRef",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 75,
+    "symbol": "implicitAny:defaultTier",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 58,
+    "symbol": "implicitAny:displayName",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 92,
+    "symbol": "implicitAny:enabled",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 61,
+    "symbol": "implicitAny:endpoints",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 44,
+    "symbol": "implicitAny:externalId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 95,
+    "symbol": "implicitAny:grant",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 57,
+    "symbol": "implicitAny:id",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 117,
+    "symbol": "implicitAny:kekId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 59,
+    "symbol": "implicitAny:kind",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 137,
+    "symbol": "implicitAny:message",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 91,
+    "symbol": "implicitAny:provider",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 77,
+    "symbol": "implicitAny:provisionalMint",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 118,
+    "symbol": "implicitAny:purpose",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 62,
+    "symbol": "implicitAny:revision",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 120,
+    "symbol": "implicitAny:rotatedAt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 160,
+    "symbol": "implicitAny:secretId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 93,
+    "symbol": "implicitAny:settings",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 60,
+    "symbol": "implicitAny:trustTier",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 64,
+    "symbol": "implicitAny:updatedAt",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 43,
+    "symbol": "implicitAny:workspace",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 116,
+    "symbol": "implicitAny:wrappedDek",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 88,
+    "symbol": "unknown:ChannelInstance",
+    "gate": "type",
+    "value": 1,
+    "count": 13
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 21,
+    "symbol": "unknown:ChannelInstanceId",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 64,
+    "symbol": "unknown:EpochMs",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 73,
+    "symbol": "unknown:GrantPolicy",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 55,
+    "symbol": "unknown:Person",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 40,
+    "symbol": "unknown:PersonEndpoint",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 16,
+    "symbol": "unknown:PersonId",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 93,
+    "symbol": "unknown:PlainValueSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 112,
+    "symbol": "unknown:Secret",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 29,
+    "symbol": "unknown:SecretId",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 103,
+    "symbol": "unknown:SecretPurpose",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 134,
+    "symbol": "unknown:StoreError",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 125,
+    "symbol": "unknown:StoreErrorCode",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 155,
+    "symbol": "unknown:VaultError",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 144,
+    "symbol": "unknown:VaultErrorCode",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 76,
+    "symbol": "unknown:allowedSenders",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 42,
+    "symbol": "unknown:channel",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 115,
+    "symbol": "unknown:ciphertext",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 138,
+    "symbol": "unknown:code",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 119,
+    "symbol": "unknown:createdAt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 63,
+    "symbol": "unknown:createdBy",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 94,
+    "symbol": "unknown:credentialRef",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 75,
+    "symbol": "unknown:defaultTier",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 58,
+    "symbol": "unknown:displayName",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 92,
+    "symbol": "unknown:enabled",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 61,
+    "symbol": "unknown:endpoints",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 44,
+    "symbol": "unknown:externalId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 95,
+    "symbol": "unknown:grant",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 57,
+    "symbol": "unknown:id",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 117,
+    "symbol": "unknown:kekId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 59,
+    "symbol": "unknown:kind",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 137,
+    "symbol": "unknown:message",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 91,
+    "symbol": "unknown:provider",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 77,
+    "symbol": "unknown:provisionalMint",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 118,
+    "symbol": "unknown:purpose",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 62,
+    "symbol": "unknown:revision",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 120,
+    "symbol": "unknown:rotatedAt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 160,
+    "symbol": "unknown:secretId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 93,
+    "symbol": "unknown:settings",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 60,
+    "symbol": "unknown:trustTier",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 64,
+    "symbol": "unknown:updatedAt",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 43,
+    "symbol": "unknown:workspace",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/provisioning/schema.ts",
+    "line": 116,
+    "symbol": "unknown:wrappedDek",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/storage/index.ts",
+    "line": 9,
+    "symbol": "implicitAny:Storage",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/storage/index.ts",
+    "line": 58,
+    "symbol": "unknown:TypeReference",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/storage/index.ts",
+    "line": 145,
+    "symbol": "unknown:adoptStream",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/storage/index.ts",
+    "line": 135,
+    "symbol": "unknown:append",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/storage/index.ts",
+    "line": 62,
+    "symbol": "unknown:endpoint",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/storage/index.ts",
+    "line": 135,
+    "symbol": "unknown:event",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/storage/index.ts",
+    "line": 158,
+    "symbol": "unknown:factsByType",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/storage/index.ts",
+    "line": 63,
+    "symbol": "unknown:findEndpoint",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/storage/index.ts",
+    "line": 145,
+    "symbol": "unknown:genesis",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/storage/index.ts",
+    "line": 61,
+    "symbol": "unknown:getEndpoint",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/storage/index.ts",
+    "line": 58,
+    "symbol": "unknown:getIdentity",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/storage/index.ts",
+    "line": 151,
+    "symbol": "unknown:headFact",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/storage/index.ts",
+    "line": 59,
+    "symbol": "unknown:identity",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/storage/index.ts",
+    "line": 68,
+    "symbol": "unknown:listEndpoints",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/storage/index.ts",
+    "line": 62,
+    "symbol": "unknown:setEndpoint",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/storage/index.ts",
+    "line": 59,
+    "symbol": "unknown:setIdentity",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/time.ts",
+    "line": 12,
+    "symbol": "implicitAny:EpochMs",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/time.ts",
+    "line": 12,
+    "symbol": "unknown:EpochMs",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/token/index.ts",
+    "line": 30,
+    "symbol": "implicitAny:AgentUsage",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/token/index.ts",
+    "line": 4,
+    "symbol": "implicitAny:Count",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/token/index.ts",
+    "line": 39,
+    "symbol": "implicitAny:ProviderUsage",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/token/index.ts",
+    "line": 17,
+    "symbol": "implicitAny:Usage",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/src/token/index.ts",
+    "line": 22,
+    "symbol": "implicitAny:cacheReadTokens",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/token/index.ts",
+    "line": 23,
+    "symbol": "implicitAny:cacheWriteTokens",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/token/index.ts",
+    "line": 18,
+    "symbol": "implicitAny:inputTokens",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/token/index.ts",
+    "line": 19,
+    "symbol": "implicitAny:outputTokens",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/token/index.ts",
+    "line": 21,
+    "symbol": "implicitAny:reasoningTokens",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/token/index.ts",
+    "line": 20,
+    "symbol": "implicitAny:totalTokens",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/token/index.ts",
+    "line": 30,
+    "symbol": "unknown:AgentUsage",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/token/index.ts",
+    "line": 4,
+    "symbol": "unknown:Count",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/token/index.ts",
+    "line": 39,
+    "symbol": "unknown:ProviderUsage",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/token/index.ts",
+    "line": 17,
+    "symbol": "unknown:Usage",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/src/token/index.ts",
+    "line": 22,
+    "symbol": "unknown:cacheReadTokens",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/token/index.ts",
+    "line": 23,
+    "symbol": "unknown:cacheWriteTokens",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/token/index.ts",
+    "line": 18,
+    "symbol": "unknown:inputTokens",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/token/index.ts",
+    "line": 19,
+    "symbol": "unknown:outputTokens",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/token/index.ts",
+    "line": 21,
+    "symbol": "unknown:reasoningTokens",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/token/index.ts",
+    "line": 20,
+    "symbol": "unknown:totalTokens",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 37,
+    "symbol": "implicitAny:AnyToolDefinition",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 130,
+    "symbol": "implicitAny:Call",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 204,
+    "symbol": "implicitAny:CapabilityId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 170,
+    "symbol": "implicitAny:Category",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 79,
+    "symbol": "implicitAny:Config",
+    "gate": "type",
+    "value": 1,
+    "count": 12
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 96,
+    "symbol": "implicitAny:EpochMs",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 221,
+    "symbol": "implicitAny:EventDescriptors",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 221,
+    "symbol": "implicitAny:Events",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 145,
+    "symbol": "implicitAny:ExecutionContext",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 191,
+    "symbol": "implicitAny:Placement",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 150,
+    "symbol": "implicitAny:Result",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 69,
+    "symbol": "implicitAny:RiskTier",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 173,
+    "symbol": "implicitAny:Selection",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 47,
+    "symbol": "implicitAny:Source",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 194,
+    "symbol": "implicitAny:Spec",
+    "gate": "type",
+    "value": 1,
+    "count": 17
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 122,
+    "symbol": "implicitAny:State",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 100,
+    "symbol": "implicitAny:StateCompleted",
+    "gate": "type",
+    "value": 1,
+    "count": 15
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 112,
+    "symbol": "implicitAny:StateError",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 87,
+    "symbol": "implicitAny:StatePending",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 92,
+    "symbol": "implicitAny:StateRunning",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 10,
+    "symbol": "implicitAny:ToolExecutionContext",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 20,
+    "symbol": "implicitAny:TypeReference",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 81,
+    "symbol": "implicitAny:agentTools",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 174,
+    "symbol": "implicitAny:all",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 176,
+    "symbol": "implicitAny:allow",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 175,
+    "symbol": "implicitAny:categories",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 33,
+    "symbol": "implicitAny:ctx",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 177,
+    "symbol": "implicitAny:deny",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 196,
+    "symbol": "implicitAny:description",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 108,
+    "symbol": "implicitAny:end",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 115,
+    "symbol": "implicitAny:error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 33,
+    "symbol": "implicitAny:execute",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 131,
+    "symbol": "implicitAny:id",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 89,
+    "symbol": "implicitAny:input",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 197,
+    "symbol": "implicitAny:inputSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 161,
+    "symbol": "implicitAny:isError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 200,
+    "symbol": "implicitAny:labels",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 82,
+    "symbol": "implicitAny:mcpTools",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 105,
+    "symbol": "implicitAny:metadata",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 195,
+    "symbol": "implicitAny:name",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 103,
+    "symbol": "implicitAny:output",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 56,
+    "symbol": "implicitAny:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 202,
+    "symbol": "implicitAny:placement",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 201,
+    "symbol": "implicitAny:prompt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 204,
+    "symbol": "implicitAny:requires",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 198,
+    "symbol": "implicitAny:safe",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 199,
+    "symbol": "implicitAny:sequential",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 162,
+    "symbol": "implicitAny:settlement",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 14,
+    "symbol": "implicitAny:signal",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 96,
+    "symbol": "implicitAny:start",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 88,
+    "symbol": "implicitAny:status",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 80,
+    "symbol": "implicitAny:systemTools",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 95,
+    "symbol": "implicitAny:time",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 104,
+    "symbol": "implicitAny:title",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 132,
+    "symbol": "implicitAny:tool",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 152,
+    "symbol": "implicitAny:toolCallId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 159,
+    "symbol": "implicitAny:toolName",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 83,
+    "symbol": "implicitAny:workspaceRoot",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 37,
+    "symbol": "unknown:AnyToolDefinition",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 130,
+    "symbol": "unknown:Call",
+    "gate": "type",
+    "value": 1,
+    "count": 12
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 204,
+    "symbol": "unknown:CapabilityId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 170,
+    "symbol": "unknown:Category",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 79,
+    "symbol": "unknown:Config",
+    "gate": "type",
+    "value": 1,
+    "count": 12
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 96,
+    "symbol": "unknown:EpochMs",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 221,
+    "symbol": "unknown:EventDescriptors",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 221,
+    "symbol": "unknown:Events",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 191,
+    "symbol": "unknown:Placement",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 150,
+    "symbol": "unknown:Result",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 69,
+    "symbol": "unknown:RiskTier",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 173,
+    "symbol": "unknown:Selection",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 47,
+    "symbol": "unknown:Source",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 194,
+    "symbol": "unknown:Spec",
+    "gate": "type",
+    "value": 1,
+    "count": 19
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 122,
+    "symbol": "unknown:State",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 100,
+    "symbol": "unknown:StateCompleted",
+    "gate": "type",
+    "value": 1,
+    "count": 15
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 112,
+    "symbol": "unknown:StateError",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 87,
+    "symbol": "unknown:StatePending",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 92,
+    "symbol": "unknown:StateRunning",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 20,
+    "symbol": "unknown:TypeReference",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 81,
+    "symbol": "unknown:agentTools",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 174,
+    "symbol": "unknown:all",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 176,
+    "symbol": "unknown:allow",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 175,
+    "symbol": "unknown:categories",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 177,
+    "symbol": "unknown:deny",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 196,
+    "symbol": "unknown:description",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 108,
+    "symbol": "unknown:end",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 115,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 131,
+    "symbol": "unknown:id",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 89,
+    "symbol": "unknown:input",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 197,
+    "symbol": "unknown:inputSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 161,
+    "symbol": "unknown:isError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 200,
+    "symbol": "unknown:labels",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 82,
+    "symbol": "unknown:mcpTools",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 105,
+    "symbol": "unknown:metadata",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 195,
+    "symbol": "unknown:name",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 103,
+    "symbol": "unknown:output",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 56,
+    "symbol": "unknown:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 202,
+    "symbol": "unknown:placement",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 201,
+    "symbol": "unknown:prompt",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 204,
+    "symbol": "unknown:requires",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 198,
+    "symbol": "unknown:safe",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 199,
+    "symbol": "unknown:sequential",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 162,
+    "symbol": "unknown:settlement",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 96,
+    "symbol": "unknown:start",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 88,
+    "symbol": "unknown:status",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 80,
+    "symbol": "unknown:systemTools",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 95,
+    "symbol": "unknown:time",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 104,
+    "symbol": "unknown:title",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 132,
+    "symbol": "unknown:tool",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 152,
+    "symbol": "unknown:toolCallId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 159,
+    "symbol": "unknown:toolName",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/tool/index.ts",
+    "line": 83,
+    "symbol": "unknown:workspaceRoot",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/trace/index.ts",
+    "line": 17,
+    "symbol": "implicitAny:TraceContext",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/transcript/fold.ts",
+    "line": 42,
+    "symbol": "implicitAny:RejectReason",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/transcript/fold.ts",
+    "line": 50,
+    "symbol": "unknown:FoldOutcome",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/transcript/fold.ts",
+    "line": 42,
+    "symbol": "unknown:RejectReason",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/transcript/fold.ts",
+    "line": 149,
+    "symbol": "unknown:advancePart",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/transcript/fold.ts",
+    "line": 248,
+    "symbol": "unknown:advanceTextLikePart",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/transcript/fold.ts",
+    "line": 176,
+    "symbol": "unknown:advanceToolPart",
+    "gate": "type",
+    "value": 1,
+    "count": 14
+  },
+  {
+    "path": "packages/protocol/src/transcript/fold.ts",
+    "line": 95,
+    "symbol": "unknown:advanced",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/transcript/fold.ts",
+    "line": 63,
+    "symbol": "unknown:fact",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/transcript/fold.ts",
+    "line": 63,
+    "symbol": "unknown:fold",
+    "gate": "type",
+    "value": 1,
+    "count": 26
+  },
+  {
+    "path": "packages/protocol/src/transcript/fold.ts",
+    "line": 90,
+    "symbol": "unknown:index",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/transcript/fold.ts",
+    "line": 190,
+    "symbol": "unknown:input",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/transcript/fold.ts",
+    "line": 135,
+    "symbol": "unknown:isAppendableInitialState",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/transcript/fold.ts",
+    "line": 81,
+    "symbol": "unknown:part",
+    "gate": "type",
+    "value": 1,
+    "count": 23
+  },
+  {
+    "path": "packages/protocol/src/transcript/fold.ts",
+    "line": 87,
+    "symbol": "unknown:parts",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/src/transcript/fold.ts",
+    "line": 54,
+    "symbol": "unknown:reject",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/transcript/fold.ts",
+    "line": 51,
+    "symbol": "unknown:state",
+    "gate": "type",
+    "value": 1,
+    "count": 15
+  },
+  {
+    "path": "packages/protocol/src/transcript/index.ts",
+    "line": 19,
+    "symbol": "implicitAny:Fact",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/transcript/index.ts",
+    "line": 16,
+    "symbol": "implicitAny:FinishReason",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/transcript/index.ts",
+    "line": 13,
+    "symbol": "implicitAny:PartTransition",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/transcript/index.ts",
+    "line": 22,
+    "symbol": "implicitAny:RejectReason",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/transcript/index.ts",
+    "line": 10,
+    "symbol": "implicitAny:Usage",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/transcript/index.ts",
+    "line": 19,
+    "symbol": "unknown:Fact",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/transcript/index.ts",
+    "line": 16,
+    "symbol": "unknown:FinishReason",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/transcript/index.ts",
+    "line": 25,
+    "symbol": "unknown:FoldOutcome",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/transcript/index.ts",
+    "line": 13,
+    "symbol": "unknown:PartTransition",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/transcript/index.ts",
+    "line": 22,
+    "symbol": "unknown:RejectReason",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/transcript/index.ts",
+    "line": 10,
+    "symbol": "unknown:Usage",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/transcript/index.ts",
+    "line": 27,
+    "symbol": "unknown:fold",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 41,
+    "symbol": "implicitAny:EpochMs",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 131,
+    "symbol": "implicitAny:Fact",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 84,
+    "symbol": "implicitAny:FinishReason",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 15,
+    "symbol": "implicitAny:Id",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 87,
+    "symbol": "implicitAny:MessageCreatedFact",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 120,
+    "symbol": "implicitAny:MessageFinishedFact",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 104,
+    "symbol": "implicitAny:PartAdvancedFact",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 95,
+    "symbol": "implicitAny:PartAppendedFact",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 76,
+    "symbol": "implicitAny:PartTransition",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 16,
+    "symbol": "implicitAny:TokenCount",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 45,
+    "symbol": "implicitAny:TransitionCompleted",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 60,
+    "symbol": "implicitAny:TransitionError",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 68,
+    "symbol": "implicitAny:TransitionInterrupted",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 38,
+    "symbol": "implicitAny:TransitionRunning",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 18,
+    "symbol": "implicitAny:Usage",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 41,
+    "symbol": "implicitAny:at",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 90,
+    "symbol": "implicitAny:attemptId",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 23,
+    "symbol": "implicitAny:cache",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 64,
+    "symbol": "implicitAny:error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 126,
+    "symbol": "implicitAny:finish",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 20,
+    "symbol": "implicitAny:input",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 91,
+    "symbol": "implicitAny:message",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 99,
+    "symbol": "implicitAny:messageId",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 21,
+    "symbol": "implicitAny:output",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 100,
+    "symbol": "implicitAny:part",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 109,
+    "symbol": "implicitAny:partId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 72,
+    "symbol": "implicitAny:partialOutput",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 25,
+    "symbol": "implicitAny:read",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 22,
+    "symbol": "implicitAny:reasoning",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 56,
+    "symbol": "implicitAny:signature",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 50,
+    "symbol": "implicitAny:title",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 40,
+    "symbol": "implicitAny:to",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 110,
+    "symbol": "implicitAny:transition",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 89,
+    "symbol": "implicitAny:type",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 127,
+    "symbol": "implicitAny:usage",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 26,
+    "symbol": "implicitAny:write",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 41,
+    "symbol": "unknown:EpochMs",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 131,
+    "symbol": "unknown:Fact",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 84,
+    "symbol": "unknown:FinishReason",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 15,
+    "symbol": "unknown:Id",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 87,
+    "symbol": "unknown:MessageCreatedFact",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 120,
+    "symbol": "unknown:MessageFinishedFact",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 104,
+    "symbol": "unknown:PartAdvancedFact",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 95,
+    "symbol": "unknown:PartAppendedFact",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 76,
+    "symbol": "unknown:PartTransition",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 16,
+    "symbol": "unknown:TokenCount",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 45,
+    "symbol": "unknown:TransitionCompleted",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 60,
+    "symbol": "unknown:TransitionError",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 68,
+    "symbol": "unknown:TransitionInterrupted",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 38,
+    "symbol": "unknown:TransitionRunning",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 18,
+    "symbol": "unknown:Usage",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 41,
+    "symbol": "unknown:at",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 90,
+    "symbol": "unknown:attemptId",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 23,
+    "symbol": "unknown:cache",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 64,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 126,
+    "symbol": "unknown:finish",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 20,
+    "symbol": "unknown:input",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 91,
+    "symbol": "unknown:message",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 99,
+    "symbol": "unknown:messageId",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 21,
+    "symbol": "unknown:output",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 100,
+    "symbol": "unknown:part",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 109,
+    "symbol": "unknown:partId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 72,
+    "symbol": "unknown:partialOutput",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 25,
+    "symbol": "unknown:read",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 22,
+    "symbol": "unknown:reasoning",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 56,
+    "symbol": "unknown:signature",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 50,
+    "symbol": "unknown:title",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 40,
+    "symbol": "unknown:to",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 110,
+    "symbol": "unknown:transition",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 89,
+    "symbol": "unknown:type",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 127,
+    "symbol": "unknown:usage",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/src/transcript/schema.ts",
+    "line": 26,
+    "symbol": "unknown:write",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/actor.test.ts",
+    "line": 8,
+    "symbol": "implicitAny:identityInput",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/actor.test.ts",
+    "line": 39,
+    "symbol": "implicitAny:result",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/actor.test.ts",
+    "line": 108,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/actor.test.ts",
+    "line": 23,
+    "symbol": "unknown:endpoint",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/actor.test.ts",
+    "line": 22,
+    "symbol": "unknown:identity",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/test/actor.test.ts",
+    "line": 8,
+    "symbol": "unknown:identityInput",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/test/actor.test.ts",
+    "line": 82,
+    "symbol": "unknown:profile",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/test/actor.test.ts",
+    "line": 39,
+    "symbol": "unknown:result",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/app-connector.test.ts",
+    "line": 427,
+    "symbol": "implicitAny:hookResult",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/app-connector.test.ts",
+    "line": 394,
+    "symbol": "implicitAny:jsonlResult",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/app-connector.test.ts",
+    "line": 413,
+    "symbol": "implicitAny:noneResult",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/app-connector.test.ts",
+    "line": 156,
+    "symbol": "implicitAny:paths",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/app-connector.test.ts",
+    "line": 106,
+    "symbol": "implicitAny:result",
+    "gate": "type",
+    "value": 1,
+    "count": 24
+  },
+  {
+    "path": "packages/protocol/test/app-connector.test.ts",
+    "line": 420,
+    "symbol": "implicitAny:stdioResult",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/app-connector.test.ts",
+    "line": 386,
+    "symbol": "implicitAny:textResult",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/app-connector.test.ts",
+    "line": 215,
+    "symbol": "unknown:connector",
+    "gate": "type",
+    "value": 1,
+    "count": 31
+  },
+  {
+    "path": "packages/protocol/test/app-connector.test.ts",
+    "line": 90,
+    "symbol": "unknown:definition",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/test/app-connector.test.ts",
+    "line": 70,
+    "symbol": "unknown:driver",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/app-connector.test.ts",
+    "line": 427,
+    "symbol": "unknown:hookResult",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/app-connector.test.ts",
+    "line": 85,
+    "symbol": "unknown:installation",
+    "gate": "type",
+    "value": 1,
+    "count": 17
+  },
+  {
+    "path": "packages/protocol/test/app-connector.test.ts",
+    "line": 394,
+    "symbol": "unknown:jsonlResult",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/app-connector.test.ts",
+    "line": 413,
+    "symbol": "unknown:noneResult",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/app-connector.test.ts",
+    "line": 156,
+    "symbol": "unknown:paths",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/app-connector.test.ts",
+    "line": 106,
+    "symbol": "unknown:result",
+    "gate": "type",
+    "value": 1,
+    "count": 24
+  },
+  {
+    "path": "packages/protocol/test/app-connector.test.ts",
+    "line": 420,
+    "symbol": "unknown:stdioResult",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/app-connector.test.ts",
+    "line": 386,
+    "symbol": "unknown:textResult",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/app-connector.test.ts",
+    "line": 27,
+    "symbol": "unknown:validConnector",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/test/app-connector.test.ts",
+    "line": 10,
+    "symbol": "unknown:validDriver",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/bus.test.ts",
+    "line": 14,
+    "symbol": "implicitAny:ObjectLiteralExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/bus.test.ts",
+    "line": 29,
+    "symbol": "implicitAny:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/bus.test.ts",
+    "line": 44,
+    "symbol": "implicitAny:ZodError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/bus.test.ts",
+    "line": 8,
+    "symbol": "implicitAny:count",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/bus.test.ts",
+    "line": 12,
+    "symbol": "implicitAny:descriptor",
+    "gate": "type",
+    "value": 1,
+    "count": 13
+  },
+  {
+    "path": "packages/protocol/test/bus.test.ts",
+    "line": 7,
+    "symbol": "implicitAny:id",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/bus.test.ts",
+    "line": 6,
+    "symbol": "implicitAny:schema",
+    "gate": "type",
+    "value": 1,
+    "count": 14
+  },
+  {
+    "path": "packages/protocol/test/bus.test.ts",
+    "line": 14,
+    "symbol": "unknown:ObjectLiteralExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/bus.test.ts",
+    "line": 29,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/bus.test.ts",
+    "line": 44,
+    "symbol": "unknown:ZodError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/bus.test.ts",
+    "line": 8,
+    "symbol": "unknown:count",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/bus.test.ts",
+    "line": 12,
+    "symbol": "unknown:descriptor",
+    "gate": "type",
+    "value": 1,
+    "count": 13
+  },
+  {
+    "path": "packages/protocol/test/bus.test.ts",
+    "line": 7,
+    "symbol": "unknown:id",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/bus.test.ts",
+    "line": 6,
+    "symbol": "unknown:schema",
+    "gate": "type",
+    "value": 1,
+    "count": 14
+  },
+  {
+    "path": "packages/protocol/test/error.test.ts",
+    "line": 162,
+    "symbol": "implicitAny:A",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/test/error.test.ts",
+    "line": 163,
+    "symbol": "implicitAny:B",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/test/error.test.ts",
+    "line": 47,
+    "symbol": "implicitAny:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/test/error.test.ts",
+    "line": 98,
+    "symbol": "implicitAny:CopyError",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/test/error.test.ts",
+    "line": 7,
+    "symbol": "implicitAny:MyError",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/test/error.test.ts",
+    "line": 78,
+    "symbol": "implicitAny:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/error.test.ts",
+    "line": 31,
+    "symbol": "implicitAny:NoMessageError",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/test/error.test.ts",
+    "line": 18,
+    "symbol": "implicitAny:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/error.test.ts",
+    "line": 149,
+    "symbol": "implicitAny:StrError",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/error.test.ts",
+    "line": 140,
+    "symbol": "implicitAny:ZodError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/error.test.ts",
+    "line": 162,
+    "symbol": "implicitAny:code",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/error.test.ts",
+    "line": 163,
+    "symbol": "implicitAny:count",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/error.test.ts",
+    "line": 11,
+    "symbol": "implicitAny:detail",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/error.test.ts",
+    "line": 23,
+    "symbol": "implicitAny:error",
+    "gate": "type",
+    "value": 1,
+    "count": 17
+  },
+  {
+    "path": "packages/protocol/test/error.test.ts",
+    "line": 70,
+    "symbol": "implicitAny:explicit",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/test/error.test.ts",
+    "line": 164,
+    "symbol": "implicitAny:fromB",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/test/error.test.ts",
+    "line": 10,
+    "symbol": "implicitAny:message",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/error.test.ts",
+    "line": 69,
+    "symbol": "implicitAny:omitted",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/error.test.ts",
+    "line": 162,
+    "symbol": "unknown:A",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/test/error.test.ts",
+    "line": 163,
+    "symbol": "unknown:B",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/test/error.test.ts",
+    "line": 47,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/error.test.ts",
+    "line": 98,
+    "symbol": "unknown:CopyError",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/test/error.test.ts",
+    "line": 7,
+    "symbol": "unknown:MyError",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/test/error.test.ts",
+    "line": 78,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/error.test.ts",
+    "line": 31,
+    "symbol": "unknown:NoMessageError",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/test/error.test.ts",
+    "line": 18,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/test/error.test.ts",
+    "line": 149,
+    "symbol": "unknown:StrError",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/error.test.ts",
+    "line": 58,
+    "symbol": "unknown:TypeLiteral",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/error.test.ts",
+    "line": 58,
+    "symbol": "unknown:TypeReference",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/error.test.ts",
+    "line": 140,
+    "symbol": "unknown:ZodError",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/error.test.ts",
+    "line": 55,
+    "symbol": "unknown:cause",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/test/error.test.ts",
+    "line": 162,
+    "symbol": "unknown:code",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/error.test.ts",
+    "line": 163,
+    "symbol": "unknown:count",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/error.test.ts",
+    "line": 11,
+    "symbol": "unknown:detail",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/error.test.ts",
+    "line": 23,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 18
+  },
+  {
+    "path": "packages/protocol/test/error.test.ts",
+    "line": 70,
+    "symbol": "unknown:explicit",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/test/error.test.ts",
+    "line": 164,
+    "symbol": "unknown:fromB",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/test/error.test.ts",
+    "line": 106,
+    "symbol": "unknown:impostor",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/error.test.ts",
+    "line": 10,
+    "symbol": "unknown:message",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/error.test.ts",
+    "line": 69,
+    "symbol": "unknown:omitted",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/gateway.test.ts",
+    "line": 68,
+    "symbol": "implicitAny:ZodError",
+    "gate": "type",
+    "value": 1,
+    "count": 21
+  },
+  {
+    "path": "packages/protocol/test/gateway.test.ts",
+    "line": 122,
+    "symbol": "implicitAny:origin",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/gateway.test.ts",
+    "line": 60,
+    "symbol": "unknown:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/test/gateway.test.ts",
+    "line": 61,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/test/gateway.test.ts",
+    "line": 68,
+    "symbol": "unknown:ZodError",
+    "gate": "type",
+    "value": 1,
+    "count": 21
+  },
+  {
+    "path": "packages/protocol/test/gateway.test.ts",
+    "line": 38,
+    "symbol": "unknown:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/test/ingress-internal.test.ts",
+    "line": 20,
+    "symbol": "unknown:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/ingress-internal.test.ts",
+    "line": 21,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/ingress-internal.test.ts",
+    "line": 60,
+    "symbol": "unknown:expectParseFailure",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/ingress-internal.test.ts",
+    "line": 60,
+    "symbol": "unknown:parse",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/ingress-internal.test.ts",
+    "line": 6,
+    "symbol": "unknown:result",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/test/ingress.test.ts",
+    "line": 161,
+    "symbol": "unknown:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/ingress.test.ts",
+    "line": 162,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/ingress.test.ts",
+    "line": 50,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/ingress.test.ts",
+    "line": 15,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/test/ingress.test.ts",
+    "line": 49,
+    "symbol": "unknown:[tool]",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/ingress.test.ts",
+    "line": 6,
+    "symbol": "unknown:agent",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/test/ingress.test.ts",
+    "line": 62,
+    "symbol": "unknown:event",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/test/ingress.test.ts",
+    "line": 235,
+    "symbol": "unknown:expectParseFailure",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/ingress.test.ts",
+    "line": 93,
+    "symbol": "unknown:meta",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/test/ingress.test.ts",
+    "line": 235,
+    "symbol": "unknown:parse",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/ingress.test.ts",
+    "line": 178,
+    "symbol": "unknown:resident",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/ingress.test.ts",
+    "line": 49,
+    "symbol": "unknown:tool",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/ingress.test.ts",
+    "line": 191,
+    "symbol": "unknown:worker",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/ingress/routing-decision.test.ts",
+    "line": 5,
+    "symbol": "implicitAny:RoutingDecision",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/ingress/routing-decision.test.ts",
+    "line": 8,
+    "symbol": "implicitAny:RoutingDecisionInput",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/ingress/routing-decision.test.ts",
+    "line": 139,
+    "symbol": "implicitAny:ZodError",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/test/ingress/routing-decision.test.ts",
+    "line": 6,
+    "symbol": "implicitAny:routingDecisionSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/ingress/routing-decision.test.ts",
+    "line": 5,
+    "symbol": "unknown:RoutingDecision",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/ingress/routing-decision.test.ts",
+    "line": 8,
+    "symbol": "unknown:RoutingDecisionInput",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/ingress/routing-decision.test.ts",
+    "line": 139,
+    "symbol": "unknown:ZodError",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/test/ingress/routing-decision.test.ts",
+    "line": 6,
+    "symbol": "unknown:routingDecisionSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/ingress/target.test.ts",
+    "line": 16,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/ingress/target.test.ts",
+    "line": 7,
+    "symbol": "unknown:event",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/test/ipc/schema.test.ts",
+    "line": 93,
+    "symbol": "implicitAny:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/protocol/test/ipc/schema.test.ts",
+    "line": 121,
+    "symbol": "implicitAny:missingTimeout",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/ipc/schema.test.ts",
+    "line": 135,
+    "symbol": "implicitAny:unnamed",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/ipc/schema.test.ts",
+    "line": 116,
+    "symbol": "implicitAny:valid",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/test/ipc/schema.test.ts",
+    "line": 58,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 13
+  },
+  {
+    "path": "packages/protocol/test/ipc/schema.test.ts",
+    "line": 121,
+    "symbol": "unknown:missingTimeout",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/ipc/schema.test.ts",
+    "line": 78,
+    "symbol": "unknown:notif",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/test/ipc/schema.test.ts",
+    "line": 48,
+    "symbol": "unknown:req",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/test/ipc/schema.test.ts",
+    "line": 62,
+    "symbol": "unknown:res",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/test/ipc/schema.test.ts",
+    "line": 135,
+    "symbol": "unknown:unnamed",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/ipc/schema.test.ts",
+    "line": 116,
+    "symbol": "unknown:valid",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/test/json-boundary.test.ts",
+    "line": 24,
+    "symbol": "unknown:hostile",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/llm-event.test.ts",
+    "line": 40,
+    "symbol": "implicitAny:reasoningTokens",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/llm-event.test.ts",
+    "line": 11,
+    "symbol": "unknown:completedParseFails",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/llm-event.test.ts",
+    "line": 7,
+    "symbol": "unknown:input",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/test/llm-event.test.ts",
+    "line": 7,
+    "symbol": "unknown:parseCompleted",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/machine/machine-fs.test.ts",
+    "line": 48,
+    "symbol": "implicitAny:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 18
+  },
+  {
+    "path": "packages/protocol/test/machine/machine-fs.test.ts",
+    "line": 67,
+    "symbol": "implicitAny:allowedExports",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/machine/machine-fs.test.ts",
+    "line": 407,
+    "symbol": "implicitAny:empty",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/machine/machine-fs.test.ts",
+    "line": 90,
+    "symbol": "implicitAny:exports",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/machine/machine-fs.test.ts",
+    "line": 119,
+    "symbol": "implicitAny:legacy",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/test/machine/machine-fs.test.ts",
+    "line": 45,
+    "symbol": "implicitAny:result",
+    "gate": "type",
+    "value": 1,
+    "count": 36
+  },
+  {
+    "path": "packages/protocol/test/machine/machine-fs.test.ts",
+    "line": 398,
+    "symbol": "implicitAny:unknown",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/machine/machine-fs.test.ts",
+    "line": 48,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 18
+  },
+  {
+    "path": "packages/protocol/test/machine/machine-fs.test.ts",
+    "line": 407,
+    "symbol": "unknown:empty",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/machine/machine-fs.test.ts",
+    "line": 45,
+    "symbol": "unknown:result",
+    "gate": "type",
+    "value": 1,
+    "count": 36
+  },
+  {
+    "path": "packages/protocol/test/machine/machine-fs.test.ts",
+    "line": 398,
+    "symbol": "unknown:unknown",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/machine/machine.test.ts",
+    "line": 37,
+    "symbol": "implicitAny:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 22
+  },
+  {
+    "path": "packages/protocol/test/machine/machine.test.ts",
+    "line": 34,
+    "symbol": "implicitAny:result",
+    "gate": "type",
+    "value": 1,
+    "count": 20
+  },
+  {
+    "path": "packages/protocol/test/machine/machine.test.ts",
+    "line": 37,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 22
+  },
+  {
+    "path": "packages/protocol/test/machine/machine.test.ts",
+    "line": 34,
+    "symbol": "unknown:result",
+    "gate": "type",
+    "value": 1,
+    "count": 20
+  },
+  {
+    "path": "packages/protocol/test/mcp.test.ts",
+    "line": 40,
+    "symbol": "implicitAny:ZodError",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/test/mcp.test.ts",
+    "line": 18,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/mcp.test.ts",
+    "line": 40,
+    "symbol": "unknown:ZodError",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/test/message.test.ts",
+    "line": 36,
+    "symbol": "implicitAny:ZodError",
+    "gate": "type",
+    "value": 1,
+    "count": 18
+  },
+  {
+    "path": "packages/protocol/test/message.test.ts",
+    "line": 286,
+    "symbol": "implicitAny:agent",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/message.test.ts",
+    "line": 326,
+    "symbol": "implicitAny:parentID",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/message.test.ts",
+    "line": 36,
+    "symbol": "unknown:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/test/message.test.ts",
+    "line": 36,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/test/message.test.ts",
+    "line": 18,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/test/message.test.ts",
+    "line": 36,
+    "symbol": "unknown:ZodError",
+    "gate": "type",
+    "value": 1,
+    "count": 18
+  },
+  {
+    "path": "packages/protocol/test/message.test.ts",
+    "line": 9,
+    "symbol": "unknown:part",
+    "gate": "type",
+    "value": 1,
+    "count": 14
+  },
+  {
+    "path": "packages/protocol/test/message.test.ts",
+    "line": 372,
+    "symbol": "unknown:wp",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/module-surface.test.ts",
+    "line": 42,
+    "symbol": "implicitAny:manifest",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/module-surface.test.ts",
+    "line": 12,
+    "symbol": "implicitAny:parseProject",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/module-surface.test.ts",
+    "line": 23,
+    "symbol": "implicitAny:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "packages/protocol/test/module-surface.test.ts",
+    "line": 20,
+    "symbol": "unknown:host",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/module-surface.test.ts",
+    "line": 25,
+    "symbol": "unknown:parseProject",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/policy-event-shapes.test.ts",
+    "line": 52,
+    "symbol": "implicitAny:ArrayLiteralExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/policy-event-shapes.test.ts",
+    "line": 93,
+    "symbol": "implicitAny:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/policy-event-shapes.test.ts",
+    "line": 53,
+    "symbol": "implicitAny:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/test/policy-event-shapes.test.ts",
+    "line": 52,
+    "symbol": "implicitAny:descriptor",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/test/policy-event-shapes.test.ts",
+    "line": 30,
+    "symbol": "implicitAny:issue",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/policy-event-shapes.test.ts",
+    "line": 28,
+    "symbol": "implicitAny:issues",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/policy-event-shapes.test.ts",
+    "line": 155,
+    "symbol": "implicitAny:payload",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/policy-event-shapes.test.ts",
+    "line": 162,
+    "symbol": "implicitAny:rejected",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/policy-event-shapes.test.ts",
+    "line": 59,
+    "symbol": "implicitAny:reported",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/policy-event-shapes.test.ts",
+    "line": 28,
+    "symbol": "implicitAny:result",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/policy-event-shapes.test.ts",
+    "line": 52,
+    "symbol": "unknown:ArrayLiteralExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/policy-event-shapes.test.ts",
+    "line": 93,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/policy-event-shapes.test.ts",
+    "line": 53,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/protocol/test/policy-event-shapes.test.ts",
+    "line": 236,
+    "symbol": "unknown:blocked",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/policy-event-shapes.test.ts",
+    "line": 52,
+    "symbol": "unknown:descriptor",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/test/policy-event-shapes.test.ts",
+    "line": 30,
+    "symbol": "unknown:issue",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/policy-event-shapes.test.ts",
+    "line": 28,
+    "symbol": "unknown:issues",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/policy-event-shapes.test.ts",
+    "line": 69,
+    "symbol": "unknown:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/test/policy-event-shapes.test.ts",
+    "line": 155,
+    "symbol": "unknown:payload",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/policy-event-shapes.test.ts",
+    "line": 162,
+    "symbol": "unknown:rejected",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/policy-event-shapes.test.ts",
+    "line": 59,
+    "symbol": "unknown:reported",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/policy-event-shapes.test.ts",
+    "line": 218,
+    "symbol": "unknown:requested",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/policy-event-shapes.test.ts",
+    "line": 28,
+    "symbol": "unknown:result",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/policy-event-shapes.test.ts",
+    "line": 79,
+    "symbol": "unknown:withoutRun",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/policy-event.test.ts",
+    "line": 186,
+    "symbol": "implicitAny:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/test/policy-event.test.ts",
+    "line": 21,
+    "symbol": "unknown:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/protocol/test/policy-event.test.ts",
+    "line": 22,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/protocol/test/policy-event.test.ts",
+    "line": 186,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/test/policy-event.test.ts",
+    "line": 13,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/policy-event.test.ts",
+    "line": 8,
+    "symbol": "unknown:expectParseOk",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/policy-event.test.ts",
+    "line": 8,
+    "symbol": "unknown:parse",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/policy-event.test.ts",
+    "line": 166,
+    "symbol": "unknown:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/policy-event.test.ts",
+    "line": 9,
+    "symbol": "unknown:thrown",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/test/policy.test.ts",
+    "line": 362,
+    "symbol": "implicitAny:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/policy.test.ts",
+    "line": 428,
+    "symbol": "implicitAny:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/policy.test.ts",
+    "line": 113,
+    "symbol": "implicitAny:ZodError",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/policy.test.ts",
+    "line": 367,
+    "symbol": "implicitAny:emptyId",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/policy.test.ts",
+    "line": 355,
+    "symbol": "implicitAny:emptyProvider",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/policy.test.ts",
+    "line": 362,
+    "symbol": "implicitAny:issue",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/policy.test.ts",
+    "line": 362,
+    "symbol": "unknown:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/test/policy.test.ts",
+    "line": 493,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/policy.test.ts",
+    "line": 477,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/policy.test.ts",
+    "line": 113,
+    "symbol": "unknown:ZodError",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/policy.test.ts",
+    "line": 367,
+    "symbol": "unknown:emptyId",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/policy.test.ts",
+    "line": 355,
+    "symbol": "unknown:emptyProvider",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/policy.test.ts",
+    "line": 362,
+    "symbol": "unknown:issue",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/policy.test.ts",
+    "line": 469,
+    "symbol": "unknown:result",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/test/policy/conformance/descriptor.test.ts",
+    "line": 201,
+    "symbol": "implicitAny:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/policy/conformance/descriptor.test.ts",
+    "line": 13,
+    "symbol": "implicitAny:canonicalize",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/policy/conformance/descriptor.test.ts",
+    "line": 21,
+    "symbol": "implicitAny:digest",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/policy/conformance/descriptor.test.ts",
+    "line": 8,
+    "symbol": "implicitAny:entries",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/test/policy/conformance/descriptor.test.ts",
+    "line": 9,
+    "symbol": "implicitAny:entry",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/test/policy/conformance/descriptor.test.ts",
+    "line": 165,
+    "symbol": "implicitAny:restored",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/policy/conformance/descriptor.test.ts",
+    "line": 4,
+    "symbol": "unknown:canonicalize",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/policy/conformance/descriptor.test.ts",
+    "line": 156,
+    "symbol": "unknown:firstFixture",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/policy/conformance/descriptor.test.ts",
+    "line": 4,
+    "symbol": "unknown:value",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/test/policy/conformance/versioning.test.ts",
+    "line": 8,
+    "symbol": "unknown:DecisionReplayFixture",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/policy/conformance/versioning.test.ts",
+    "line": 21,
+    "symbol": "unknown:Error",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/policy/conformance/versioning.test.ts",
+    "line": 178,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/policy/conformance/versioning.test.ts",
+    "line": 21,
+    "symbol": "unknown:PolicyFixtureMigrationError",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/policy/conformance/versioning.test.ts",
+    "line": 156,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/policy/conformance/versioning.test.ts",
+    "line": 13,
+    "symbol": "unknown:decision",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/policy/conformance/versioning.test.ts",
+    "line": 136,
+    "symbol": "unknown:error",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/test/policy/conformance/versioning.test.ts",
+    "line": 144,
+    "symbol": "unknown:firstDecisionFixture",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/policy/conformance/versioning.test.ts",
+    "line": 117,
+    "symbol": "unknown:fixture",
+    "gate": "type",
+    "value": 1,
+    "count": 13
+  },
+  {
+    "path": "packages/protocol/test/policy/conformance/versioning.test.ts",
+    "line": 54,
+    "symbol": "unknown:oldDecisionFixtures",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/test/policy/conformance/versioning.test.ts",
+    "line": 189,
+    "symbol": "unknown:replay",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/policy/conformance/versioning.test.ts",
+    "line": 117,
+    "symbol": "unknown:replayDecisionFixture",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/policy/conformance/versioning.test.ts",
+    "line": 103,
+    "symbol": "unknown:requireCurrentPolicyPointContract",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/policy/conformance/versioning.test.ts",
+    "line": 134,
+    "symbol": "unknown:safeReplay",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/test/policy/decision-effect.test.ts",
+    "line": 8,
+    "symbol": "implicitAny:effects",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/policy/decision-effect.test.ts",
+    "line": 8,
+    "symbol": "unknown:effects",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/policy/effect-json-plain.test.ts",
+    "line": 53,
+    "symbol": "implicitAny:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/policy/effect-json-plain.test.ts",
+    "line": 21,
+    "symbol": "implicitAny:ObjectLiteralExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/policy/effect-json-plain.test.ts",
+    "line": 21,
+    "symbol": "implicitAny:input",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/policy/effect-json-plain.test.ts",
+    "line": 67,
+    "symbol": "implicitAny:result",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/test/policy/effect-json-plain.test.ts",
+    "line": 19,
+    "symbol": "implicitAny:value",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/policy/effect-json-plain.test.ts",
+    "line": 35,
+    "symbol": "unknown:ArrayLiteralExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/policy/effect-json-plain.test.ts",
+    "line": 34,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/policy/effect-json-plain.test.ts",
+    "line": 77,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/policy/effect-json-plain.test.ts",
+    "line": 37,
+    "symbol": "unknown:ObjectLiteralExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/policy/effect-json-plain.test.ts",
+    "line": 32,
+    "symbol": "unknown:cancellation",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/test/policy/effect-json-plain.test.ts",
+    "line": 59,
+    "symbol": "unknown:hostile",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/test/policy/effect-json-plain.test.ts",
+    "line": 37,
+    "symbol": "unknown:input",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/policy/effect-json-plain.test.ts",
+    "line": 37,
+    "symbol": "unknown:items",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/policy/effect-json-plain.test.ts",
+    "line": 67,
+    "symbol": "unknown:result",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/test/policy/effect-json-plain.test.ts",
+    "line": 27,
+    "symbol": "unknown:sparse",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/policy/effect-json-plain.test.ts",
+    "line": 73,
+    "symbol": "unknown:throwingGetter",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/test/policy/effect-json-plain.test.ts",
+    "line": 84,
+    "symbol": "unknown:throwingProxy",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/policy/effect-json-plain.test.ts",
+    "line": 35,
+    "symbol": "unknown:value",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schema-isolation.test.ts",
+    "line": 22,
+    "symbol": "implicitAny:missingToolNameAccepted",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schema-isolation.test.ts",
+    "line": 32,
+    "symbol": "implicitAny:missingToolOutputAccepted",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schema-isolation.test.ts",
+    "line": 6,
+    "symbol": "implicitAny:schema",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schema-isolation.test.ts",
+    "line": 5,
+    "symbol": "implicitAny:whileFieldIsOptional",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schema-isolation.test.ts",
+    "line": 22,
+    "symbol": "unknown:missingToolNameAccepted",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schema-isolation.test.ts",
+    "line": 32,
+    "symbol": "unknown:missingToolOutputAccepted",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schema-isolation.test.ts",
+    "line": 6,
+    "symbol": "unknown:schema",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schema-isolation.test.ts",
+    "line": 5,
+    "symbol": "unknown:whileFieldIsOptional",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schema-parity.test.ts",
+    "line": 19,
+    "symbol": "implicitAny:canonical",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schema-parity.test.ts",
+    "line": 16,
+    "symbol": "implicitAny:parityCases",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schema-parity.test.ts",
+    "line": 72,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schema-parity.test.ts",
+    "line": 8,
+    "symbol": "unknown:ParityCase",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schema-parity.test.ts",
+    "line": 71,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schema-parity.test.ts",
+    "line": 21,
+    "symbol": "unknown:availableTools",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schema-parity.test.ts",
+    "line": 12,
+    "symbol": "unknown:candidate",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schema-parity.test.ts",
+    "line": 13,
+    "symbol": "unknown:candidates",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schema-parity.test.ts",
+    "line": 19,
+    "symbol": "unknown:canonical",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schema-parity.test.ts",
+    "line": 12,
+    "symbol": "unknown:embed",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schema-parity.test.ts",
+    "line": 5,
+    "symbol": "unknown:input",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schema-parity.test.ts",
+    "line": 69,
+    "symbol": "unknown:parityCase",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schema-parity.test.ts",
+    "line": 16,
+    "symbol": "unknown:parityCases",
+    "gate": "type",
+    "value": 1,
+    "count": 16
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schema-parity.test.ts",
+    "line": 5,
+    "symbol": "unknown:safeParse",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schema-parity.test.ts",
+    "line": 21,
+    "symbol": "unknown:spec",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schema-parity.test.ts",
+    "line": 42,
+    "symbol": "unknown:toolResult",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schemas.test.ts",
+    "line": 184,
+    "symbol": "implicitAny:ArrayLiteralExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schemas.test.ts",
+    "line": 111,
+    "symbol": "implicitAny:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schemas.test.ts",
+    "line": 112,
+    "symbol": "implicitAny:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schemas.test.ts",
+    "line": 180,
+    "symbol": "implicitAny:Map",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schemas.test.ts",
+    "line": 106,
+    "symbol": "implicitAny:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schemas.test.ts",
+    "line": 166,
+    "symbol": "implicitAny:cached",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schemas.test.ts",
+    "line": 167,
+    "symbol": "implicitAny:cachedKeys",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schemas.test.ts",
+    "line": 179,
+    "symbol": "implicitAny:optionsMap",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schemas.test.ts",
+    "line": 144,
+    "symbol": "implicitAny:originalSafeParse",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schemas.test.ts",
+    "line": 201,
+    "symbol": "implicitAny:runId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schemas.test.ts",
+    "line": 178,
+    "symbol": "implicitAny:runOutcome",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schemas.test.ts",
+    "line": 156,
+    "symbol": "implicitAny:safeParse",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schemas.test.ts",
+    "line": 201,
+    "symbol": "implicitAny:sessionId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schemas.test.ts",
+    "line": 177,
+    "symbol": "implicitAny:shape",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schemas.test.ts",
+    "line": 180,
+    "symbol": "implicitAny:stopOption",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schemas.test.ts",
+    "line": 57,
+    "symbol": "implicitAny:value",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schemas.test.ts",
+    "line": 157,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schemas.test.ts",
+    "line": 106,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schemas.test.ts",
+    "line": 143,
+    "symbol": "unknown:originalParse",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schemas.test.ts",
+    "line": 144,
+    "symbol": "unknown:originalSafeParse",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schemas.test.ts",
+    "line": 156,
+    "symbol": "unknown:parse",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schemas.test.ts",
+    "line": 194,
+    "symbol": "unknown:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schemas.test.ts",
+    "line": 156,
+    "symbol": "unknown:safeParse",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schemas.test.ts",
+    "line": 195,
+    "symbol": "unknown:typedInput",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schemas.test.ts",
+    "line": 34,
+    "symbol": "unknown:validDispatchInput",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/policy/input-schemas.test.ts",
+    "line": 55,
+    "symbol": "unknown:validInputs",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/policy/module-surface.test.ts",
+    "line": 68,
+    "symbol": "implicitAny:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/test/policy/module-surface.test.ts",
+    "line": 80,
+    "symbol": "implicitAny:policyPointKeys",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/policy/module-surface.test.ts",
+    "line": 84,
+    "symbol": "implicitAny:zodObjectProbe",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/policy/module-surface.test.ts",
+    "line": 68,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/test/policy/module-surface.test.ts",
+    "line": 80,
+    "symbol": "unknown:policyPointKeys",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/policy/module-surface.test.ts",
+    "line": 84,
+    "symbol": "unknown:zodObjectProbe",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/policy/point-registry.test.ts",
+    "line": 68,
+    "symbol": "implicitAny:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/policy/point-registry.test.ts",
+    "line": 68,
+    "symbol": "unknown:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/policy/point-registry.test.ts",
+    "line": 87,
+    "symbol": "unknown:roundTripped",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/provisioning.test.ts",
+    "line": 81,
+    "symbol": "implicitAny:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/provisioning.test.ts",
+    "line": 87,
+    "symbol": "implicitAny:store",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/provisioning.test.ts",
+    "line": 94,
+    "symbol": "implicitAny:vault",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/provisioning.test.ts",
+    "line": 81,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/provisioning.test.ts",
+    "line": 87,
+    "symbol": "unknown:store",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/provisioning.test.ts",
+    "line": 94,
+    "symbol": "unknown:vault",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/route-record.test.ts",
+    "line": 48,
+    "symbol": "unknown:fact",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/test/send-message.test.ts",
+    "line": 82,
+    "symbol": "implicitAny:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 27
+  },
+  {
+    "path": "packages/protocol/test/send-message.test.ts",
+    "line": 156,
+    "symbol": "implicitAny:eventId",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/send-message.test.ts",
+    "line": 8,
+    "symbol": "implicitAny:issue",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/send-message.test.ts",
+    "line": 5,
+    "symbol": "implicitAny:issues",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/send-message.test.ts",
+    "line": 5,
+    "symbol": "implicitAny:result",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/send-message.test.ts",
+    "line": 82,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 27
+  },
+  {
+    "path": "packages/protocol/test/send-message.test.ts",
+    "line": 8,
+    "symbol": "unknown:issue",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/send-message.test.ts",
+    "line": 5,
+    "symbol": "unknown:issues",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/send-message.test.ts",
+    "line": 5,
+    "symbol": "unknown:result",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/tool-execution.test.ts",
+    "line": 21,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/tool-execution.test.ts",
+    "line": 16,
+    "symbol": "unknown:parsed",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/test/tool-placement.test.ts",
+    "line": 12,
+    "symbol": "implicitAny:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/test/tool-placement.test.ts",
+    "line": 9,
+    "symbol": "implicitAny:bogus",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/tool-placement.test.ts",
+    "line": 18,
+    "symbol": "implicitAny:legacy",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/tool-placement.test.ts",
+    "line": 27,
+    "symbol": "implicitAny:result",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/tool-placement.test.ts",
+    "line": 12,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/test/tool-placement.test.ts",
+    "line": 9,
+    "symbol": "unknown:bogus",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/tool-placement.test.ts",
+    "line": 18,
+    "symbol": "unknown:legacy",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/tool-placement.test.ts",
+    "line": 27,
+    "symbol": "unknown:result",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/tool.test.ts",
+    "line": 48,
+    "symbol": "implicitAny:ZodError",
+    "gate": "type",
+    "value": 1,
+    "count": 20
+  },
+  {
+    "path": "packages/protocol/test/tool.test.ts",
+    "line": 67,
+    "symbol": "implicitAny:negative",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/tool.test.ts",
+    "line": 434,
+    "symbol": "implicitAny:reparsed",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/tool.test.ts",
+    "line": 48,
+    "symbol": "unknown:ArrowFunction",
+    "gate": "type",
+    "value": 1,
+    "count": 16
+  },
+  {
+    "path": "packages/protocol/test/tool.test.ts",
+    "line": 48,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 16
+  },
+  {
+    "path": "packages/protocol/test/tool.test.ts",
+    "line": 80,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/tool.test.ts",
+    "line": 44,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/test/tool.test.ts",
+    "line": 48,
+    "symbol": "unknown:ZodError",
+    "gate": "type",
+    "value": 1,
+    "count": 20
+  },
+  {
+    "path": "packages/protocol/test/tool.test.ts",
+    "line": 246,
+    "symbol": "unknown:call",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/tool.test.ts",
+    "line": 67,
+    "symbol": "unknown:negative",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/tool.test.ts",
+    "line": 313,
+    "symbol": "unknown:spec",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/test/tool.test.ts",
+    "line": 38,
+    "symbol": "unknown:state",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/test/transcript.test.ts",
+    "line": 137,
+    "symbol": "unknown:ArrayLiteralExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/transcript.test.ts",
+    "line": 138,
+    "symbol": "unknown:CallExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 82
+  },
+  {
+    "path": "packages/protocol/test/transcript.test.ts",
+    "line": 193,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/transcript.test.ts",
+    "line": 130,
+    "symbol": "unknown:ObjectLiteralExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/protocol/test/transcript.test.ts",
+    "line": 161,
+    "symbol": "unknown:PropertyAccessExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/test/transcript.test.ts",
+    "line": 366,
+    "symbol": "unknown:TypeReference",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/transcript.test.ts",
+    "line": 73,
+    "symbol": "unknown:advancedFact",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/transcript.test.ts",
+    "line": 69,
+    "symbol": "unknown:appendedFact",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/transcript.test.ts",
+    "line": 96,
+    "symbol": "unknown:applyAll",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/protocol/test/transcript.test.ts",
+    "line": 36,
+    "symbol": "unknown:buildTextPart",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/transcript.test.ts",
+    "line": 48,
+    "symbol": "unknown:buildToolPart",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/transcript.test.ts",
+    "line": 65,
+    "symbol": "unknown:createdFact",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/transcript.test.ts",
+    "line": 109,
+    "symbol": "unknown:expectRejected",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/transcript.test.ts",
+    "line": 98,
+    "symbol": "unknown:fact",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/transcript.test.ts",
+    "line": 96,
+    "symbol": "unknown:facts",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/transcript.test.ts",
+    "line": 83,
+    "symbol": "unknown:finishedFact",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/transcript.test.ts",
+    "line": 99,
+    "symbol": "unknown:outcome",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "packages/protocol/test/transcript.test.ts",
+    "line": 36,
+    "symbol": "unknown:overrides",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/protocol/test/transcript.test.ts",
+    "line": 69,
+    "symbol": "unknown:part",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/protocol/test/transcript.test.ts",
+    "line": 137,
+    "symbol": "unknown:parts",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/protocol/test/transcript.test.ts",
+    "line": 380,
+    "symbol": "unknown:reasoning",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/protocol/test/transcript.test.ts",
+    "line": 527,
+    "symbol": "unknown:snapshot",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/protocol/test/transcript.test.ts",
+    "line": 97,
+    "symbol": "unknown:state",
+    "gate": "type",
+    "value": 1,
+    "count": 195
+  },
+  {
+    "path": "packages/protocol/test/transcript.test.ts",
+    "line": 317,
+    "symbol": "unknown:stepStart",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/protocol/test/transcript.test.ts",
+    "line": 424,
+    "symbol": "unknown:textState",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/ui/src/chrome.tsx",
+    "line": 115,
+    "symbol": "implicitAny:BaseInput",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/chrome.tsx",
+    "line": 36,
+    "symbol": "implicitAny:IconButton",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ui/src/chrome.tsx",
+    "line": 173,
+    "symbol": "implicitAny:MainHeader",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/ui/src/chrome.tsx",
+    "line": 37,
+    "symbol": "implicitAny:Plus",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/chrome.tsx",
+    "line": 70,
+    "symbol": "implicitAny:SearchLine",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/ui/src/chrome.tsx",
+    "line": 19,
+    "symbol": "implicitAny:SidebarHeader",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ui/src/chrome.tsx",
+    "line": 138,
+    "symbol": "implicitAny:Text",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/ui/src/chrome.tsx",
+    "line": 88,
+    "symbol": "implicitAny:event",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ui/src/chrome.tsx",
+    "line": 75,
+    "symbol": "implicitAny:inputRef",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ui/src/chrome.tsx",
+    "line": 74,
+    "symbol": "implicitAny:onKeyDown",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ui/src/chrome.tsx",
+    "line": 126,
+    "symbol": "implicitAny:ref",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/chrome.tsx",
+    "line": 79,
+    "symbol": "implicitAny:{\n  label,\n  value,\n  onValueChange,\n  onKeyDown,\n  inputRef,\n  controlsId,\n  activeDescendantId,\n  resultLabel,\n}",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/chrome.tsx",
+    "line": 115,
+    "symbol": "unknown:BaseInput",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/chrome.tsx",
+    "line": 36,
+    "symbol": "unknown:IconButton",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ui/src/chrome.tsx",
+    "line": 37,
+    "symbol": "unknown:Plus",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/chrome.tsx",
+    "line": 138,
+    "symbol": "unknown:Text",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/ui/src/composer.tsx",
+    "line": 37,
+    "symbol": "implicitAny:ApprovalTray",
+    "gate": "type",
+    "value": 1,
+    "count": 20
+  },
+  {
+    "path": "packages/ui/src/composer.tsx",
+    "line": 190,
+    "symbol": "implicitAny:Composer",
+    "gate": "type",
+    "value": 1,
+    "count": 23
+  },
+  {
+    "path": "packages/ui/src/composer.tsx",
+    "line": 70,
+    "symbol": "implicitAny:Voice",
+    "gate": "type",
+    "value": 1,
+    "count": 16
+  },
+  {
+    "path": "packages/ui/src/composer.tsx",
+    "line": 147,
+    "symbol": "implicitAny:composerKey",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/composer.tsx",
+    "line": 148,
+    "symbol": "implicitAny:event",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/ui/src/composer.tsx",
+    "line": 234,
+    "symbol": "implicitAny:field",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ui/src/composer.tsx",
+    "line": 252,
+    "symbol": "implicitAny:grow",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ui/src/composer.tsx",
+    "line": 245,
+    "symbol": "implicitAny:node",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/ui/src/composer.tsx",
+    "line": 282,
+    "symbol": "implicitAny:onChange",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/composer.tsx",
+    "line": 258,
+    "symbol": "implicitAny:onKeyDown",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ui/src/composer.tsx",
+    "line": 288,
+    "symbol": "implicitAny:ref",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/composer.tsx",
+    "line": 70,
+    "symbol": "unknown:Voice",
+    "gate": "type",
+    "value": 1,
+    "count": 16
+  },
+  {
+    "path": "packages/ui/src/console.tsx",
+    "line": 113,
+    "symbol": "implicitAny:Composer",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/console.tsx",
+    "line": 43,
+    "symbol": "implicitAny:Console",
+    "gate": "type",
+    "value": 1,
+    "count": 14
+  },
+  {
+    "path": "packages/ui/src/console.tsx",
+    "line": 81,
+    "symbol": "implicitAny:MainHeader",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/console.tsx",
+    "line": 73,
+    "symbol": "implicitAny:Panel",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ui/src/console.tsx",
+    "line": 89,
+    "symbol": "implicitAny:ScrollArea",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ui/src/console.tsx",
+    "line": 102,
+    "symbol": "implicitAny:Timeline",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/console.tsx",
+    "line": 98,
+    "symbol": "implicitAny:Voice",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ui/src/console.tsx",
+    "line": 44,
+    "symbol": "implicitAny:sidebar",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ui/src/console.tsx",
+    "line": 47,
+    "symbol": "implicitAny:{\n  sidebar,\n  session,\n  emptyLabel,\n}",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/console.tsx",
+    "line": 43,
+    "symbol": "unknown:Console",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/console.tsx",
+    "line": 73,
+    "symbol": "unknown:Panel",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ui/src/console.tsx",
+    "line": 89,
+    "symbol": "unknown:ScrollArea",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ui/src/console.tsx",
+    "line": 98,
+    "symbol": "unknown:Voice",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ui/src/console.tsx",
+    "line": 44,
+    "symbol": "unknown:sidebar",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ui/src/console.tsx",
+    "line": 47,
+    "symbol": "unknown:{\n  sidebar,\n  session,\n  emptyLabel,\n}",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/index.ts",
+    "line": 7,
+    "symbol": "implicitAny:Console",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/index.ts",
+    "line": 8,
+    "symbol": "implicitAny:Disclosure",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/index.ts",
+    "line": 9,
+    "symbol": "implicitAny:Highlight",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/index.ts",
+    "line": 12,
+    "symbol": "implicitAny:Panel",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/index.ts",
+    "line": 10,
+    "symbol": "implicitAny:Row",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/index.ts",
+    "line": 11,
+    "symbol": "implicitAny:ScrollArea",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/index.ts",
+    "line": 6,
+    "symbol": "implicitAny:SearchLine",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/index.ts",
+    "line": 6,
+    "symbol": "implicitAny:SidebarHeader",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/index.ts",
+    "line": 12,
+    "symbol": "implicitAny:Text",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/index.ts",
+    "line": 14,
+    "symbol": "implicitAny:Timeline",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/index.ts",
+    "line": 7,
+    "symbol": "unknown:Console",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/index.ts",
+    "line": 8,
+    "symbol": "unknown:Disclosure",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/index.ts",
+    "line": 12,
+    "symbol": "unknown:Panel",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/index.ts",
+    "line": 10,
+    "symbol": "unknown:Row",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/index.ts",
+    "line": 11,
+    "symbol": "unknown:ScrollArea",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/index.ts",
+    "line": 12,
+    "symbol": "unknown:Text",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/primitives/button.tsx",
+    "line": 60,
+    "symbol": "implicitAny:BaseButton",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ui/src/primitives/button.tsx",
+    "line": 45,
+    "symbol": "implicitAny:IconButton",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ui/src/primitives/button.tsx",
+    "line": 50,
+    "symbol": "implicitAny:children",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ui/src/primitives/button.tsx",
+    "line": 51,
+    "symbol": "implicitAny:rest",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ui/src/primitives/button.tsx",
+    "line": 52,
+    "symbol": "implicitAny:{\n  label,\n  variant = \"ghost\",\n  size = \"md\",\n  className = \"\",\n  children,\n  ...rest\n}",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ui/src/primitives/button.tsx",
+    "line": 60,
+    "symbol": "unknown:BaseButton",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ui/src/primitives/button.tsx",
+    "line": 45,
+    "symbol": "unknown:IconButton",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/primitives/button.tsx",
+    "line": 50,
+    "symbol": "unknown:children",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ui/src/primitives/button.tsx",
+    "line": 52,
+    "symbol": "unknown:{\n  label,\n  variant = \"ghost\",\n  size = \"md\",\n  className = \"\",\n  children,\n  ...rest\n}",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ui/src/primitives/code.tsx",
+    "line": 59,
+    "symbol": "implicitAny:CodeFence",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ui/src/primitives/code.tsx",
+    "line": 23,
+    "symbol": "implicitAny:CodeToken",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ui/src/primitives/code.tsx",
+    "line": 71,
+    "symbol": "implicitAny:Text",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ui/src/primitives/code.tsx",
+    "line": 25,
+    "symbol": "implicitAny:children",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/ui/src/primitives/code.tsx",
+    "line": 62,
+    "symbol": "implicitAny:{\n  lang,\n  children,\n}",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/primitives/code.tsx",
+    "line": 26,
+    "symbol": "implicitAny:{\n  tone,\n  children,\n}",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/primitives/code.tsx",
+    "line": 59,
+    "symbol": "unknown:CodeFence",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/primitives/code.tsx",
+    "line": 23,
+    "symbol": "unknown:CodeToken",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/primitives/code.tsx",
+    "line": 71,
+    "symbol": "unknown:Text",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ui/src/primitives/code.tsx",
+    "line": 25,
+    "symbol": "unknown:children",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/ui/src/primitives/code.tsx",
+    "line": 62,
+    "symbol": "unknown:{\n  lang,\n  children,\n}",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/primitives/code.tsx",
+    "line": 26,
+    "symbol": "unknown:{\n  tone,\n  children,\n}",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/primitives/disclosure.tsx",
+    "line": 72,
+    "symbol": "implicitAny:Disclosure",
+    "gate": "type",
+    "value": 1,
+    "count": 18
+  },
+  {
+    "path": "packages/ui/src/primitives/disclosure.tsx",
+    "line": 82,
+    "symbol": "implicitAny:children",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ui/src/primitives/disclosure.tsx",
+    "line": 74,
+    "symbol": "implicitAny:trailing",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ui/src/primitives/disclosure.tsx",
+    "line": 83,
+    "symbol": "implicitAny:{\n  label,\n  trailing,\n  collapsedCount,\n  level = 0,\n  tone = \"subtle\",\n  defaultOpen = true,\n  open,\n  onOpenChange,\n  className = \"\",\n  children,\n}",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/primitives/disclosure.tsx",
+    "line": 72,
+    "symbol": "unknown:Disclosure",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/ui/src/primitives/disclosure.tsx",
+    "line": 82,
+    "symbol": "unknown:children",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ui/src/primitives/disclosure.tsx",
+    "line": 74,
+    "symbol": "unknown:trailing",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ui/src/primitives/disclosure.tsx",
+    "line": 83,
+    "symbol": "unknown:{\n  label,\n  trailing,\n  collapsedCount,\n  level = 0,\n  tone = \"subtle\",\n  defaultOpen = true,\n  open,\n  onOpenChange,\n  className = \"\",\n  children,\n}",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/primitives/epoch-rule.tsx",
+    "line": 36,
+    "symbol": "implicitAny:EpochRule",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/ui/src/primitives/epoch-rule.tsx",
+    "line": 59,
+    "symbol": "implicitAny:Hairline",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ui/src/primitives/epoch-rule.tsx",
+    "line": 54,
+    "symbol": "implicitAny:content",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "packages/ui/src/primitives/gutter.tsx",
+    "line": 85,
+    "symbol": "implicitAny:GutterLine",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "packages/ui/src/primitives/gutter.tsx",
+    "line": 90,
+    "symbol": "implicitAny:children",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ui/src/primitives/gutter.tsx",
+    "line": 91,
+    "symbol": "implicitAny:{\n  number,\n  mark = \"context\",\n  anchored = false,\n  onAnchor,\n  children,\n}",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/primitives/gutter.tsx",
+    "line": 85,
+    "symbol": "unknown:GutterLine",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/primitives/gutter.tsx",
+    "line": 90,
+    "symbol": "unknown:children",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ui/src/primitives/gutter.tsx",
+    "line": 91,
+    "symbol": "unknown:{\n  number,\n  mark = \"context\",\n  anchored = false,\n  onAnchor,\n  children,\n}",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/primitives/highlight.tsx",
+    "line": 44,
+    "symbol": "implicitAny:Highlight",
+    "gate": "type",
+    "value": 1,
+    "count": 7
+  },
+  {
+    "path": "packages/ui/src/primitives/row.tsx",
+    "line": 105,
+    "symbol": "implicitAny:BaseButton",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ui/src/primitives/row.tsx",
+    "line": 72,
+    "symbol": "implicitAny:Row",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ui/src/primitives/row.tsx",
+    "line": 78,
+    "symbol": "implicitAny:children",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ui/src/primitives/row.tsx",
+    "line": 79,
+    "symbol": "implicitAny:rest",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ui/src/primitives/row.tsx",
+    "line": 80,
+    "symbol": "implicitAny:{\n  current = false,\n  lines = \"one\",\n  level = 0,\n  chevronSlot = false,\n  className = \"\",\n  children,\n  ...rest\n}",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ui/src/primitives/row.tsx",
+    "line": 105,
+    "symbol": "unknown:BaseButton",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ui/src/primitives/row.tsx",
+    "line": 72,
+    "symbol": "unknown:Row",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/primitives/row.tsx",
+    "line": 78,
+    "symbol": "unknown:children",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ui/src/primitives/row.tsx",
+    "line": 80,
+    "symbol": "unknown:{\n  current = false,\n  lines = \"one\",\n  level = 0,\n  chevronSlot = false,\n  className = \"\",\n  children,\n  ...rest\n}",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ui/src/primitives/scroll-area.tsx",
+    "line": 26,
+    "symbol": "implicitAny:ScrollArea",
+    "gate": "type",
+    "value": 1,
+    "count": 15
+  },
+  {
+    "path": "packages/ui/src/primitives/scroll-area.tsx",
+    "line": 59,
+    "symbol": "implicitAny:box",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ui/src/primitives/scroll-area.tsx",
+    "line": 89,
+    "symbol": "implicitAny:child",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ui/src/primitives/scroll-area.tsx",
+    "line": 31,
+    "symbol": "implicitAny:children",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ui/src/primitives/scroll-area.tsx",
+    "line": 99,
+    "symbol": "implicitAny:ref",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/primitives/scroll-area.tsx",
+    "line": 56,
+    "symbol": "implicitAny:viewport",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ui/src/primitives/scroll-area.tsx",
+    "line": 32,
+    "symbol": "implicitAny:{\n  className = \"\",\n  contentClassName = \"\",\n  contentProps,\n  pinToEnd,\n  children,\n}",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/primitives/scroll-area.tsx",
+    "line": 26,
+    "symbol": "unknown:ScrollArea",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/ui/src/primitives/scroll-area.tsx",
+    "line": 31,
+    "symbol": "unknown:children",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ui/src/primitives/scroll-area.tsx",
+    "line": 32,
+    "symbol": "unknown:{\n  className = \"\",\n  contentClassName = \"\",\n  contentProps,\n  pinToEnd,\n  children,\n}",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/primitives/spinner.tsx",
+    "line": 68,
+    "symbol": "implicitAny:Spinner",
+    "gate": "type",
+    "value": 1,
+    "count": 11
+  },
+  {
+    "path": "packages/ui/src/primitives/state.tsx",
+    "line": 76,
+    "symbol": "implicitAny:StatusDot",
+    "gate": "type",
+    "value": 1,
+    "count": 12
+  },
+  {
+    "path": "packages/ui/src/primitives/surface.tsx",
+    "line": 166,
+    "symbol": "implicitAny:Caret",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ui/src/primitives/surface.tsx",
+    "line": 30,
+    "symbol": "implicitAny:Panel",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ui/src/primitives/surface.tsx",
+    "line": 111,
+    "symbol": "implicitAny:Text",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ui/src/primitives/surface.tsx",
+    "line": 33,
+    "symbol": "implicitAny:as",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ui/src/primitives/surface.tsx",
+    "line": 35,
+    "symbol": "implicitAny:children",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/ui/src/primitives/surface.tsx",
+    "line": 36,
+    "symbol": "implicitAny:rest",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ui/src/primitives/surface.tsx",
+    "line": 121,
+    "symbol": "implicitAny:{\n  level = \"body\",\n  tone = \"fg\",\n  mono = false,\n  sans = false,\n  numeric = false,\n  as: Tag = \"span\",\n  className = \"\",\n  children,\n  ...rest\n}",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ui/src/primitives/surface.tsx",
+    "line": 37,
+    "symbol": "implicitAny:{\n  tone = \"bg\",\n  edge = \"none\",\n  as: Tag = \"div\",\n  className = \"\",\n  children,\n  ...rest\n}",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ui/src/primitives/surface.tsx",
+    "line": 30,
+    "symbol": "unknown:Panel",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/primitives/surface.tsx",
+    "line": 111,
+    "symbol": "unknown:Text",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/primitives/surface.tsx",
+    "line": 35,
+    "symbol": "unknown:children",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/ui/src/primitives/surface.tsx",
+    "line": 121,
+    "symbol": "unknown:{\n  level = \"body\",\n  tone = \"fg\",\n  mono = false,\n  sans = false,\n  numeric = false,\n  as: Tag = \"span\",\n  className = \"\",\n  children,\n  ...rest\n}",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ui/src/primitives/surface.tsx",
+    "line": 37,
+    "symbol": "unknown:{\n  tone = \"bg\",\n  edge = \"none\",\n  as: Tag = \"div\",\n  className = \"\",\n  children,\n  ...rest\n}",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ui/src/timeline/markdown-block.tsx",
+    "line": 70,
+    "symbol": "implicitAny:Caret",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/timeline/markdown-block.tsx",
+    "line": 35,
+    "symbol": "implicitAny:Code",
+    "gate": "type",
+    "value": 1,
+    "count": 12
+  },
+  {
+    "path": "packages/ui/src/timeline/markdown-block.tsx",
+    "line": 45,
+    "symbol": "implicitAny:CodeFence",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ui/src/timeline/markdown-block.tsx",
+    "line": 51,
+    "symbol": "implicitAny:CodeToken",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ui/src/timeline/markdown-block.tsx",
+    "line": 48,
+    "symbol": "implicitAny:GutterLine",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ui/src/timeline/markdown-block.tsx",
+    "line": 61,
+    "symbol": "implicitAny:MarkdownBlockView",
+    "gate": "type",
+    "value": 1,
+    "count": 15
+  },
+  {
+    "path": "packages/ui/src/timeline/markdown-block.tsx",
+    "line": 74,
+    "symbol": "implicitAny:Voice",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ui/src/timeline/markdown-block.tsx",
+    "line": 70,
+    "symbol": "implicitAny:caret",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ui/src/timeline/markdown-block.tsx",
+    "line": 45,
+    "symbol": "unknown:CodeFence",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ui/src/timeline/markdown-block.tsx",
+    "line": 51,
+    "symbol": "unknown:CodeToken",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ui/src/timeline/markdown-block.tsx",
+    "line": 48,
+    "symbol": "unknown:GutterLine",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ui/src/timeline/markdown-block.tsx",
+    "line": 74,
+    "symbol": "unknown:Voice",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ui/src/timeline/spacing.ts",
+    "line": 119,
+    "symbol": "unknown:spacingClass",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/timeline/timeline.tsx",
+    "line": 308,
+    "symbol": "implicitAny:EpochRule",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/timeline/timeline.tsx",
+    "line": 366,
+    "symbol": "implicitAny:MarkdownBlockView",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/timeline/timeline.tsx",
+    "line": 233,
+    "symbol": "implicitAny:PartView",
+    "gate": "type",
+    "value": 1,
+    "count": 15
+  },
+  {
+    "path": "packages/ui/src/timeline/timeline.tsx",
+    "line": 82,
+    "symbol": "implicitAny:Timeline",
+    "gate": "type",
+    "value": 1,
+    "count": 9
+  },
+  {
+    "path": "packages/ui/src/timeline/timeline.tsx",
+    "line": 348,
+    "symbol": "implicitAny:ToolGroup",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/timeline/timeline.tsx",
+    "line": 243,
+    "symbol": "implicitAny:TurnTime",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ui/src/timeline/timeline.tsx",
+    "line": 141,
+    "symbol": "implicitAny:TurnView",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/ui/src/timeline/timeline.tsx",
+    "line": 127,
+    "symbol": "implicitAny:Voice",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/ui/src/timeline/timeline.tsx",
+    "line": 382,
+    "symbol": "implicitAny:d",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/timeline/timeline.tsx",
+    "line": 127,
+    "symbol": "unknown:Voice",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/ui/src/timeline/tool-rows.tsx",
+    "line": 107,
+    "symbol": "implicitAny:Chevron",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ui/src/timeline/tool-rows.tsx",
+    "line": 189,
+    "symbol": "implicitAny:Spinner",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/timeline/tool-rows.tsx",
+    "line": 191,
+    "symbol": "implicitAny:StatusDot",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/timeline/tool-rows.tsx",
+    "line": 224,
+    "symbol": "implicitAny:ToolGroup",
+    "gate": "type",
+    "value": 1,
+    "count": 14
+  },
+  {
+    "path": "packages/ui/src/timeline/tool-rows.tsx",
+    "line": 129,
+    "symbol": "implicitAny:ToolRow",
+    "gate": "type",
+    "value": 1,
+    "count": 26
+  },
+  {
+    "path": "packages/ui/src/timeline/tool-rows.tsx",
+    "line": 169,
+    "symbol": "implicitAny:Voice",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ui/src/timeline/tool-rows.tsx",
+    "line": 169,
+    "symbol": "unknown:Voice",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ui/src/timeline/voice.tsx",
+    "line": 54,
+    "symbol": "implicitAny:Voice",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ui/src/timeline/voice.tsx",
+    "line": 56,
+    "symbol": "implicitAny:as",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/timeline/voice.tsx",
+    "line": 58,
+    "symbol": "implicitAny:children",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ui/src/timeline/voice.tsx",
+    "line": 59,
+    "symbol": "implicitAny:rest",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ui/src/timeline/voice.tsx",
+    "line": 60,
+    "symbol": "implicitAny:{\n  voice,\n  as: Tag = \"span\",\n  className = \"\",\n  children,\n  ...rest\n}",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ui/src/timeline/voice.tsx",
+    "line": 54,
+    "symbol": "unknown:Voice",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/src/timeline/voice.tsx",
+    "line": 58,
+    "symbol": "unknown:children",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ui/src/timeline/voice.tsx",
+    "line": 60,
+    "symbol": "unknown:{\n  voice,\n  as: Tag = \"span\",\n  className = \"\",\n  children,\n  ...rest\n}",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ui/test/chrome.test.tsx",
+    "line": 21,
+    "symbol": "implicitAny:MainHeader",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ui/test/chrome.test.tsx",
+    "line": 6,
+    "symbol": "implicitAny:SearchLine",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ui/test/chrome.test.tsx",
+    "line": 39,
+    "symbol": "implicitAny:SidebarHeader",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ui/test/chrome.test.tsx",
+    "line": 21,
+    "symbol": "implicitAny:html",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ui/test/chrome.test.tsx",
+    "line": 6,
+    "symbol": "implicitAny:props",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ui/test/chrome.test.tsx",
+    "line": 6,
+    "symbol": "implicitAny:searchLine",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ui/test/composer.test.tsx",
+    "line": 197,
+    "symbol": "implicitAny:ApprovalTray",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/test/composer.test.tsx",
+    "line": 80,
+    "symbol": "implicitAny:Composer",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ui/test/composer.test.tsx",
+    "line": 165,
+    "symbol": "implicitAny:Console",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/test/composer.test.tsx",
+    "line": 82,
+    "symbol": "implicitAny:composer",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/test/composer.test.tsx",
+    "line": 165,
+    "symbol": "implicitAny:html",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/test/composer.test.tsx",
+    "line": 80,
+    "symbol": "implicitAny:props",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/test/composer.test.tsx",
+    "line": 197,
+    "symbol": "implicitAny:tray",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/test/composer.test.tsx",
+    "line": 165,
+    "symbol": "unknown:Console",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/test/composer.test.tsx",
+    "line": 201,
+    "symbol": "unknown:_",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/test/composer.test.tsx",
+    "line": 201,
+    "symbol": "unknown:tray",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/test/density.test.ts",
+    "line": 30,
+    "symbol": "unknown:BASE",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/test/density.test.ts",
+    "line": 22,
+    "symbol": "unknown:SHELL",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/test/density.test.ts",
+    "line": 42,
+    "symbol": "unknown:lineHeight",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/test/density.test.ts",
+    "line": 36,
+    "symbol": "unknown:px",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/test/fonts.test.ts",
+    "line": 66,
+    "symbol": "implicitAny:manifest",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ui/test/primitives.test.tsx",
+    "line": 168,
+    "symbol": "implicitAny:CodeFence",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ui/test/primitives.test.tsx",
+    "line": 200,
+    "symbol": "implicitAny:CodeToken",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ui/test/primitives.test.tsx",
+    "line": 113,
+    "symbol": "implicitAny:Disclosure",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/ui/test/primitives.test.tsx",
+    "line": 16,
+    "symbol": "implicitAny:IconButton",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ui/test/primitives.test.tsx",
+    "line": 93,
+    "symbol": "implicitAny:JsxElement",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "packages/ui/test/primitives.test.tsx",
+    "line": 41,
+    "symbol": "implicitAny:Row",
+    "gate": "type",
+    "value": 1,
+    "count": 18
+  },
+  {
+    "path": "packages/ui/test/primitives.test.tsx",
+    "line": 206,
+    "symbol": "implicitAny:comment",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/test/primitives.test.tsx",
+    "line": 74,
+    "symbol": "implicitAny:current",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/test/primitives.test.tsx",
+    "line": 16,
+    "symbol": "implicitAny:html",
+    "gate": "type",
+    "value": 1,
+    "count": 17
+  },
+  {
+    "path": "packages/ui/test/primitives.test.tsx",
+    "line": 73,
+    "symbol": "implicitAny:idle",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/test/primitives.test.tsx",
+    "line": 205,
+    "symbol": "implicitAny:keyword",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/test/primitives.test.tsx",
+    "line": 151,
+    "symbol": "implicitAny:trailing",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/test/primitives.test.tsx",
+    "line": 168,
+    "symbol": "unknown:CodeFence",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ui/test/primitives.test.tsx",
+    "line": 200,
+    "symbol": "unknown:CodeToken",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ui/test/primitives.test.tsx",
+    "line": 113,
+    "symbol": "unknown:Disclosure",
+    "gate": "type",
+    "value": 1,
+    "count": 10
+  },
+  {
+    "path": "packages/ui/test/primitives.test.tsx",
+    "line": 16,
+    "symbol": "unknown:IconButton",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ui/test/primitives.test.tsx",
+    "line": 41,
+    "symbol": "unknown:Row",
+    "gate": "type",
+    "value": 1,
+    "count": 18
+  },
+  {
+    "path": "packages/ui/test/surface.test.tsx",
+    "line": 52,
+    "symbol": "implicitAny:Highlight",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ui/test/surface.test.tsx",
+    "line": 10,
+    "symbol": "implicitAny:JsxElement",
+    "gate": "type",
+    "value": 1,
+    "count": 8
+  },
+  {
+    "path": "packages/ui/test/surface.test.tsx",
+    "line": 10,
+    "symbol": "implicitAny:Panel",
+    "gate": "type",
+    "value": 1,
+    "count": 12
+  },
+  {
+    "path": "packages/ui/test/surface.test.tsx",
+    "line": 93,
+    "symbol": "implicitAny:ScrollArea",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ui/test/surface.test.tsx",
+    "line": 26,
+    "symbol": "implicitAny:Text",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ui/test/surface.test.tsx",
+    "line": 26,
+    "symbol": "implicitAny:html",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "packages/ui/test/surface.test.tsx",
+    "line": 64,
+    "symbol": "implicitAny:muted",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/test/surface.test.tsx",
+    "line": 10,
+    "symbol": "unknown:Panel",
+    "gate": "type",
+    "value": 1,
+    "count": 12
+  },
+  {
+    "path": "packages/ui/test/surface.test.tsx",
+    "line": 93,
+    "symbol": "unknown:ScrollArea",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ui/test/surface.test.tsx",
+    "line": 26,
+    "symbol": "unknown:Text",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ui/test/timeline-ledger.test.tsx",
+    "line": 40,
+    "symbol": "implicitAny:Timeline",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ui/test/timeline-ledger.test.tsx",
+    "line": 219,
+    "symbol": "implicitAny:html",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/test/timeline-ledger.test.tsx",
+    "line": 40,
+    "symbol": "implicitAny:render",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/test/timeline-ledger.test.tsx",
+    "line": 70,
+    "symbol": "unknown:NewExpression",
+    "gate": "type",
+    "value": 1,
+    "count": 6
+  },
+  {
+    "path": "packages/ui/test/timeline-ledger.test.tsx",
+    "line": 38,
+    "symbol": "unknown:render",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/test/tokens.test.ts",
+    "line": 43,
+    "symbol": "unknown:literal",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/test/tokens.test.ts",
+    "line": 27,
+    "symbol": "unknown:ramp",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ui/test/transcript-law.test.tsx",
+    "line": 386,
+    "symbol": "implicitAny:Console",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/test/transcript-law.test.tsx",
+    "line": 386,
+    "symbol": "implicitAny:SCREEN",
+    "gate": "type",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "path": "packages/ui/test/transcript-law.test.tsx",
+    "line": 293,
+    "symbol": "implicitAny:Timeline",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ui/test/transcript-law.test.tsx",
+    "line": 293,
+    "symbol": "implicitAny:html",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "packages/ui/test/transcript-law.test.tsx",
+    "line": 401,
+    "symbol": "implicitAny:sidebar",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "packages/ui/test/transcript-law.test.tsx",
+    "line": 386,
+    "symbol": "unknown:Console",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/alarm-type-contract.test.ts",
+    "line": 36,
+    "symbol": "unknown:unsafeValues",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/benchmark-workflow.test.ts",
+    "line": 5,
+    "symbol": "implicitAny:Step",
+    "gate": "type",
+    "value": 1,
+    "count": 14
+  },
+  {
+    "path": "script/benchmark-workflow.test.ts",
+    "line": 11,
+    "symbol": "implicitAny:Workflow",
+    "gate": "type",
+    "value": 1,
+    "count": 13
+  },
+  {
+    "path": "script/benchmark-workflow.test.ts",
+    "line": 8,
+    "symbol": "implicitAny:if",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/benchmark-workflow.test.ts",
+    "line": 12,
+    "symbol": "implicitAny:jobs",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/benchmark-workflow.test.ts",
+    "line": 15,
+    "symbol": "implicitAny:needs",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/benchmark-workflow.test.ts",
+    "line": 7,
+    "symbol": "implicitAny:run",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/benchmark-workflow.test.ts",
+    "line": 16,
+    "symbol": "implicitAny:steps",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/benchmark-workflow.test.ts",
+    "line": 6,
+    "symbol": "implicitAny:uses",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/benchmark-workflow.test.ts",
+    "line": 9,
+    "symbol": "implicitAny:with",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/benchmark-workflow.test.ts",
+    "line": 5,
+    "symbol": "unknown:Step",
+    "gate": "type",
+    "value": 1,
+    "count": 14
+  },
+  {
+    "path": "script/benchmark-workflow.test.ts",
+    "line": 11,
+    "symbol": "unknown:Workflow",
+    "gate": "type",
+    "value": 1,
+    "count": 13
+  },
+  {
+    "path": "script/benchmark-workflow.test.ts",
+    "line": 8,
+    "symbol": "unknown:if",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/benchmark-workflow.test.ts",
+    "line": 12,
+    "symbol": "unknown:jobs",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/benchmark-workflow.test.ts",
+    "line": 15,
+    "symbol": "unknown:needs",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/benchmark-workflow.test.ts",
+    "line": 7,
+    "symbol": "unknown:run",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/benchmark-workflow.test.ts",
+    "line": 16,
+    "symbol": "unknown:steps",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/benchmark-workflow.test.ts",
+    "line": 6,
+    "symbol": "unknown:uses",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/benchmark-workflow.test.ts",
+    "line": 9,
+    "symbol": "unknown:with",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/benchmark-workflow.test.ts",
+    "line": 21,
+    "symbol": "unknown:workflow",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-coverage-ratchet.ts",
+    "line": 356,
+    "symbol": "implicitAny:baseline",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-coverage-ratchet.ts",
+    "line": 53,
+    "symbol": "implicitAny:baselineSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "path": "script/check-coverage-ratchet.ts",
+    "line": 45,
+    "symbol": "implicitAny:countSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "path": "script/check-coverage-ratchet.ts",
+    "line": 46,
+    "symbol": "implicitAny:coverageSchema",
+    "gate": "type",
+    "value": 1,
+    "count": 5
+  },
+  {
+    "path": "script/check-coverage-ratchet.ts",
+    "line": 172,
+    "symbol": "implicitAny:files",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "path": "script/check-coverage-ratchet.ts",
+    "line": 48,
+    "symbol": "implicitAny:linesFound",
+    "gate": "type",
+    "value": 1,
+    "count": 1
+  }
+]

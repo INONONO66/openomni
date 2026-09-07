@@ -1,0 +1,1325 @@
+[
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 64,
+    "endLine": 64,
+    "symbol": "unproven-statement:cee393afdc83fc3946ff1ff5a647097c2f553111f3411d3a787763c8cb2ba3e0",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 37,
+    "endLine": 37,
+    "symbol": "unproven-statement:d4790d3faf54d515412572f6ac7c1c7449fe68cfd3c0265c4b4ed183fef1302a",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 39,
+    "endLine": 39,
+    "symbol": "unproven-statement:d916bfbb4a1e0828e3c82a92bb9243f0b3030ac2a07c8e0ac7bc97eab550bcac",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 36,
+    "endLine": 43,
+    "symbol": "unproven-statement:e3e1441d5e27e3b24bf58a83760313b5af99750a8e86765f2eeb5ec90fb57676",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 24,
+    "endLine": 24,
+    "symbol": "unproven-statement:f0aca238b64636152ec980ae040ea18dbd76901a87aca9353c435d7d853513b8",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 12,
+    "endLine": 70,
+    "symbol": "unproven-statement:f7968bb5c1e444459d978a4f17c88476301806244092a3907597baccb3579ca9",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.test.ts",
+    "line": 18,
+    "endLine": 18,
+    "symbol": "unproven-statement:f9210f472e416e0f3dcd2c66fe63e89137cd7810c35f077d059c50ceca588c1e",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 443,
+    "endLine": 445,
+    "symbol": "unproven-statement:00d11bdc663f5639fb5fff637c4a67a76ce80a38584e43fd2bce139e0838d749",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 119,
+    "endLine": 119,
+    "symbol": "unproven-statement:01e478a10a87d4df4f928c0753d2bf6cfcb86135fe22bbd3f874d3b8be66fc9e",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 407,
+    "endLine": 409,
+    "symbol": "unproven-statement:034e8752944286b2ffe61808ddcc7db813089fe508614b5d4a32f40570acfcbf",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 224,
+    "endLine": 231,
+    "symbol": "unproven-statement:05a24a7b2b2915714537b1506f19159d5bac75ec90aacee68ac400fefdaa3ea4",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 435,
+    "endLine": 437,
+    "symbol": "unproven-statement:065ddeb0cc38eaf57e7b855c299fdd8398a3dafff4016714bdb0fd903422a79b",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 423,
+    "endLine": 423,
+    "symbol": "unproven-statement:0cc68f6ba9cc83b3493a6e8ce5c6680d7b7705f46c7d9d089b9b83bf58d5c912",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 359,
+    "endLine": 359,
+    "symbol": "unproven-statement:0e250e71e3520a174e22f7a504d7bad6dd69864de3a191535b47c7c09bfec132",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 175,
+    "endLine": 175,
+    "symbol": "unproven-statement:0fb438fb3a8d17cd2e2e6238ee9773daf5844588f11357f7befa6b3ffb4a1ca7",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 257,
+    "endLine": 261,
+    "symbol": "unproven-statement:1168b42c06ec2c833c4f34265b6c062dd7a9d8cdb33772048c213e7e0d230504",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 245,
+    "endLine": 245,
+    "symbol": "unproven-statement:1509b029ec81624f93172a89fb8d4f46e3b264f454d4699bc596b0d27bdec088",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 295,
+    "endLine": 302,
+    "symbol": "unproven-statement:15223dcd874a2a9068e67da2c87233bf11152c039f0c414c6800a84ff67093d0",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 327,
+    "endLine": 327,
+    "symbol": "unproven-statement:157a746c13bc5bf14dbe1e39b72250897c7e0499c9ffc57c512436fdfe585032",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 177,
+    "endLine": 177,
+    "symbol": "unproven-statement:1596c35ef401219ac3823a3ba317ff39369ff83b870cf548a2c10f8542a9577b",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 307,
+    "endLine": 307,
+    "symbol": "unproven-statement:15daee802f31153bec89dffa8f506408d1669ae2cd2a87d77549b248ece000af",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 211,
+    "endLine": 223,
+    "symbol": "unproven-statement:17f99c2df30829c158675c9dc9f6e56996fbff104d7e0d9703cc3d0d6c71939b",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 241,
+    "endLine": 254,
+    "symbol": "unproven-statement:1cb57fa565fbc314ec7235850874f1f507655c6de5febe260c1e3f43d1504b75",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 190,
+    "endLine": 192,
+    "symbol": "unproven-statement:1ebeb3e4a8d909c9b0497d2fc181c95f6b9768457bd00d0bf25c0517e1369050",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 431,
+    "endLine": 433,
+    "symbol": "unproven-statement:1fce7da59f4464e88b90a4923db67d666cc5d75a0574783c3ff479511560f2d6",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 417,
+    "endLine": 417,
+    "symbol": "unproven-statement:21f836a044dd9bb04ade4dd6f6f021a7467c59d25b1d7bb79fc2891396db822f",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 436,
+    "endLine": 436,
+    "symbol": "unproven-statement:242163c910ba90594de95231d6a9b811586a972b7aba97b864cf1d4dd9fe1042",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 319,
+    "endLine": 319,
+    "symbol": "unproven-statement:255c06df1ae9d3c7ff7534afe2772c2208ca0368c3a48395e81459204b6453d2",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 332,
+    "endLine": 335,
+    "symbol": "unproven-statement:260a86fc776b890e66ec9fa098388438e8a2273daa83330fdfe444d01f37d3ac",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 306,
+    "endLine": 306,
+    "symbol": "unproven-statement:2744b8744c2f64290b5717b3d503b9db7d25100030f6e4ac7f601245d9b22f75",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 290,
+    "endLine": 290,
+    "symbol": "unproven-statement:2868e149c895eada2e7ff21106ba3d7ce540fc76b9cbb49798e50c628f5da205",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 429,
+    "endLine": 429,
+    "symbol": "unproven-statement:29e88bbe3cd4c4aa22dccd11c53f18165b0c5b0d436e5119db74e73c67f4ca62",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 157,
+    "endLine": 159,
+    "symbol": "unproven-statement:2fe2b2de2de27ef5fc0fd3e7e630fac0282be8eeb23c1b8f5b8c8b801a1888fd",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 161,
+    "endLine": 161,
+    "symbol": "unproven-statement:321efe4fe318be56d0fad8599aa0fbbaaee71f72dfe02c799d73958bf1c82a8d",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 363,
+    "endLine": 363,
+    "symbol": "unproven-statement:34993e0dde3dd761d6907be00774fd305aee2cea2f961fc4e0881a1e682f4d87",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 259,
+    "endLine": 259,
+    "symbol": "unproven-statement:361515ba8bb705987af8be58a1689fe93883f5a0aa708d5a1bc8a5d703bd5ca9",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 212,
+    "endLine": 212,
+    "symbol": "unproven-statement:36392a5ca452ac567a97244e0b7296468ac2bfcae51bd3e05a1f1604bbf8dcd0",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 203,
+    "endLine": 203,
+    "symbol": "unproven-statement:3667dab20e190a4b0c9015f9468a720c656101231d73a14b3efc12171a3505ec",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 353,
+    "endLine": 353,
+    "symbol": "unproven-statement:36d922b01fab828d9f08a43d4d2a810df490503b11a9ce322338aab537b645a4",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 317,
+    "endLine": 317,
+    "symbol": "unproven-statement:37aaa6aeb88b4da6e0be9c5a58812a9c18b39c7c365a7a112ba22ad775faec71",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 253,
+    "endLine": 253,
+    "symbol": "unproven-statement:37fe0c7ca6641f87e450887ed9c50e4c35d869d836b7ac1ee7a6cd7c6bf2e5bc",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 420,
+    "endLine": 420,
+    "symbol": "unproven-statement:414db28148506fd159a1eb7a71835b02e2e8ed6599ab6aff45efb16c3da0f509",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 236,
+    "endLine": 236,
+    "symbol": "unproven-statement:431ed804c12d978ab5586915e1cecdc4707332bcbfafcbac5e4a0a0b4463f26c",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 444,
+    "endLine": 444,
+    "symbol": "unproven-statement:43cdea24be06d8c42ed5788b886dea4c594411761598789e511196a222dd7625",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 93,
+    "endLine": 93,
+    "symbol": "unproven-statement:445114a6f3810bcbbbf78449de96fd02f80aed8d0ffd7682ee2659bbf9af588f",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 238,
+    "endLine": 238,
+    "symbol": "unproven-statement:4507a25334d9a01cffcd5dbe7766411e28ba0d710893842cb216e68bd8c03e29",
+    "value": 1,
+    "count": 4
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 196,
+    "endLine": 196,
+    "symbol": "unproven-statement:4c83b0686b84bf974aad094b037bc703a7bd66699c45eedc8411a9aa8a711191",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 180,
+    "endLine": 182,
+    "symbol": "unproven-statement:4cabbdbed59d27a6950c9be8441b979aea639fd73445587baf43df4deac6c087",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 108,
+    "endLine": 152,
+    "symbol": "unproven-statement:4dec2ed579b0c87057f9bb9a4e84c9142d5996ca99f392cf5f25295acb23d39e",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 240,
+    "endLine": 240,
+    "symbol": "unproven-statement:4e39351797a3f8c17f5672d9eef686a300b994a29c8f1c439d6067f2d9e825e0",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 364,
+    "endLine": 364,
+    "symbol": "unproven-statement:4f650681a49c76867fc93cc8a234e78de12460f071cb7a9225f2e93788d8f9fc",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 220,
+    "endLine": 222,
+    "symbol": "unproven-statement:4fe3448ac15cbc1bc006e47bcf3a1e717598ec577cd0a3f3179a2149520c5ab1",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 438,
+    "endLine": 438,
+    "symbol": "unproven-statement:51269529c2c0cdf9c74352c096f8c6777fe41d1486640334edb1c1f1fb3b3da6",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 425,
+    "endLine": 425,
+    "symbol": "unproven-statement:52fc39cc608a76d9fa71bdfdd340d4ff5036086a880b5c53341a367952b0fefe",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 243,
+    "endLine": 245,
+    "symbol": "unproven-statement:56867b091a0171b665db1a53561f3b1fe19543b51630e7735efdc065892a36c7",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 256,
+    "endLine": 278,
+    "symbol": "unproven-statement:5c58472963890879bf259e9837a804e231c5bc9f6bf68d4d6fed13f0c207102e",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 130,
+    "endLine": 130,
+    "symbol": "unproven-statement:612751b872fe2a7cbf01b472ed752c2746618fab406898f0d00d407299a64332",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 109,
+    "endLine": 109,
+    "symbol": "unproven-statement:638fbef1947a021600f28a6eda05f11d0dbcc5e1d5d07070c63cbbcd824e0378",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 151,
+    "endLine": 151,
+    "symbol": "unproven-statement:6463e983142c901791d05fde850d2abfe994088bd17f716e1eef56f3cc449df6",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 131,
+    "endLine": 139,
+    "symbol": "unproven-statement:6ae9f00748a8bda7f8e41b9a245bfb546048b9d37fbec5fd7ef5899582153561",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 163,
+    "endLine": 166,
+    "symbol": "unproven-statement:6fa2595dbd6596ec18eefab12bd90a0d7d07f8602d55dfe4e3c66ec816bd4e19",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 263,
+    "endLine": 268,
+    "symbol": "unproven-statement:729b7ff53c9579cee00aa2480742aa2698aa3bac41a0a19641377cc85885a5e9",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 164,
+    "endLine": 164,
+    "symbol": "unproven-statement:73b5496b16031f835eb18979333d11eca30f9c015028c370240e9997ea5f8634",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 140,
+    "endLine": 148,
+    "symbol": "unproven-statement:74492337198b1098af5a5e21464440eb649e68680a286109c1b79e0b73fd2631",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 264,
+    "endLine": 267,
+    "symbol": "unproven-statement:74f02e9b8777f04b7746922e562a59ea1351df263a3ded4a898e197687031d1f",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 242,
+    "endLine": 242,
+    "symbol": "unproven-statement:779291a23ddf149a7e2fd77c2d6a7d7503fb1a81e1f2285424a6fe3cd719bc9c",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 428,
+    "endLine": 439,
+    "symbol": "unproven-statement:77c4ffa98f122c03705da1fcddb63d86fc6661c0007bd50f000b2f8571d5d861",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 179,
+    "endLine": 179,
+    "symbol": "unproven-statement:789f068ad47c851a1d43545088bcac67958fc4f70482afe659d225e38beb6622",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 340,
+    "endLine": 340,
+    "symbol": "unproven-statement:7923feced955877d8ef03c6ac2fc0925af18ff743083eb21f59d92135e54b177",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 111,
+    "endLine": 117,
+    "symbol": "unproven-statement:7f3e2c653581418fe366a76df6415a6a6d8d91607e6dfa8fb8d96268047edfcd",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 331,
+    "endLine": 342,
+    "symbol": "unproven-statement:807044a1cdba83c838e8f9a0bbb118ddad2235e36ed6bd82f159441495017d93",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 202,
+    "endLine": 202,
+    "symbol": "unproven-statement:81aaa38bd7f34956fcfe9a89bae65a5ab95c0d801e67c1601d3bd9cc44058cc6",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 288,
+    "endLine": 288,
+    "symbol": "unproven-statement:81afa0fad64446a9ca6d8cb73db6b58630b7f63dec91973730bcff490171c982",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 271,
+    "endLine": 276,
+    "symbol": "unproven-statement:82d57ce51920d189c8990d2f81eca1b625e2b48c2fc0e2ca729a69750465db7c",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 362,
+    "endLine": 362,
+    "symbol": "unproven-statement:83a3dea2e60796a14c8101dd85ab0bcb0ab103da1d866d9175cd4ed45f8cca22",
+    "value": 1,
+    "count": 3
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 361,
+    "endLine": 361,
+    "symbol": "unproven-statement:87692ed3681a9a7377537d3459880fbd2b8f0f7bf39e185a5f3c41771c4bb7ef",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 357,
+    "endLine": 357,
+    "symbol": "unproven-statement:8a60d6f610cdc86aa7d2eaba19e5b40715dccec2ac30f93744b7447c9ce5adab",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 227,
+    "endLine": 230,
+    "symbol": "unproven-statement:8a6df57090635f26a77831cec0213d412b638221efcaa327d6d2b4eedc5864aa",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 122,
+    "endLine": 128,
+    "symbol": "unproven-statement:8af97f86e89acfb4cc07ccaa5a48db0f87146b75251b47ee7dadef0387a002f4",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 360,
+    "endLine": 365,
+    "symbol": "unproven-statement:8e4759bc6bd110b4a0f9e5f657e54c2ef4b91563559eb8994564c5bf294fcf77",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 200,
+    "endLine": 200,
+    "symbol": "unproven-statement:9097d05bc008bb898f0241936453315fdfe25a312832915a8f070cc75ed68083",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 185,
+    "endLine": 185,
+    "symbol": "unproven-statement:90d872d0d1ba0aac3e95544d5c69dccc73fd9aaeb7a6febf2e40dddbc74b5995",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 218,
+    "endLine": 218,
+    "symbol": "unproven-statement:9153e11a7abe177f2e6a382ac0c23733509eb6f7756ba93cd472446abfc7c6b2",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 293,
+    "endLine": 293,
+    "symbol": "unproven-statement:91b1ce27aa48e21cf5d6a43d4403221a22967e938093f06bf03ee26ae1df6d7e",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 121,
+    "endLine": 129,
+    "symbol": "unproven-statement:91d025e0f47e4004abd2d6850c942a017f96bbc09533e4911eaf0aa6e0ff38b1",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 320,
+    "endLine": 320,
+    "symbol": "unproven-statement:93e2b5c4b6d42e859091a71e34292596c84f4378b05cb7b2a72269c10aaf03dd",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 150,
+    "endLine": 150,
+    "symbol": "unproven-statement:956acb02fb144b0b74cd960eeecd30fdaa58748676382e2740f89f556e37d12f",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 330,
+    "endLine": 330,
+    "symbol": "unproven-statement:96e7b6c377a9a168396c54f99fea28aee3c3f0e55988877cd067743f50b297ca",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 304,
+    "endLine": 304,
+    "symbol": "unproven-statement:97249eb57142ce3c917efcd07b0515cd841c804b8afb424407bdbc711db0aa9f",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 270,
+    "endLine": 277,
+    "symbol": "unproven-statement:97eab5d6f93bc942a36d1aaf353a220dd055b9dfcb14a1e142a786e354ab3fc8",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 132,
+    "endLine": 138,
+    "symbol": "unproven-statement:980814cd8b704c09c0beef872de5bdb879ecf78d250cfa736a5ddb3854a439c8",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 199,
+    "endLine": 199,
+    "symbol": "unproven-statement:9d1089ab0e953af38b95b566eb8e7fd6796fffc1c05bd41a9b78cc32537c327f",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 339,
+    "endLine": 341,
+    "symbol": "unproven-statement:9de14432c199f851376384e0135d75cdb62f0d314143127bb996735614262feb",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 214,
+    "endLine": 217,
+    "symbol": "unproven-statement:9ded70953ea23b080e5caa15510b99f453e32977fc80a7af8fe4987321563f95",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 318,
+    "endLine": 321,
+    "symbol": "unproven-statement:9f9da732b60cbc5f0ebc7e24365d554621a61fcef2d814ec554036cefa0b0a4f",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 92,
+    "endLine": 92,
+    "symbol": "unproven-statement:9f9e70894a05831621b82854d181315670471c755b0e266ea97d5413dff51e22",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 149,
+    "endLine": 149,
+    "symbol": "unproven-statement:a3e9889bad8fc82e8a5ac623a79b7ea567db1fcb31b37faeb4d7b706788730e1",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 262,
+    "endLine": 269,
+    "symbol": "unproven-statement:a67380cd46fa1e658d46774d65f65bd06ce56b9dfa1c081e51c1296c14ad7c8b",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 210,
+    "endLine": 210,
+    "symbol": "unproven-statement:a71ce1c6f66f811707761b6111afa49a8718804a3c72693402cb1080450b215d",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 183,
+    "endLine": 183,
+    "symbol": "unproven-statement:a989f2d519985c7906bdb712d95ebfb92e045a52129393ccc2f49236f63a1a32",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 158,
+    "endLine": 158,
+    "symbol": "unproven-statement:aa621ea5a0a7af78acdb9567aa2e0d78a57c438f3d5898773ea7e7960f761147",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 395,
+    "endLine": 399,
+    "symbol": "unproven-statement:aa705decf682dc6cd4e23deb497f5f4c70544106be986ef104b24586a9e164fa",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 213,
+    "endLine": 219,
+    "symbol": "unproven-statement:aabbe843598526726995c2000da53b5bc577e3eb1be3e044e3cbdd70d50402bf",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 337,
+    "endLine": 337,
+    "symbol": "unproven-statement:abaa4c4ad7151312853295d4e0dafb49b69bbbc599ac3a8227c5ce2ef1d013c5",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 415,
+    "endLine": 415,
+    "symbol": "unproven-statement:abd2e5e6a09e85a479077485f262f572779e181f28274d7719192dff6c6bf678",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 416,
+    "endLine": 416,
+    "symbol": "unproven-statement:ac336f2133e1f42024d2fe033c7df3b11ae45aadf94adc377870f6d632fb3f84",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 94,
+    "endLine": 94,
+    "symbol": "unproven-statement:b23163e6b9722dd65c6e11be101c5bf2003483b56e8ca72bb26231d36537bb9f",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 156,
+    "endLine": 156,
+    "symbol": "unproven-statement:b2504368e2ba5d6992d56ef70702d717c21b82ac1266c0e65d2c4d23cdab39d1",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 398,
+    "endLine": 398,
+    "symbol": "unproven-statement:b2812ce6da2c7816c5f44b0634de1d93fdf08522e8cffd56b4d2459e011633b6",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 426,
+    "endLine": 426,
+    "symbol": "unproven-statement:b458790d767f65fcb443962dc0ac4dcfd340a71295a11707fd0b06f81d7fd16c",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 226,
+    "endLine": 226,
+    "symbol": "unproven-statement:b82f187d88ea793d859309978a328de26c7fd7d67bfc75eab64255578f872c56",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 237,
+    "endLine": 237,
+    "symbol": "unproven-statement:bc56a6afa7960015aeaae4744e4bf2f6ee50c44bf1bbe14a5d058c83cf0a9202",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 141,
+    "endLine": 147,
+    "symbol": "unproven-statement:bcb3a66354b92583e01894ce28ac79fc80ff905b07ef6708568ae4a62962678b",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 105,
+    "endLine": 105,
+    "symbol": "unproven-statement:be76771f283237c6b0baec959aabe3d5ad31a84354c0602a5729fffbefe799cd",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 184,
+    "endLine": 186,
+    "symbol": "unproven-statement:bf392ee92b76f867cbb305520748f32ef614d3b1bf60c7a3b54053db7377f25b",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 247,
+    "endLine": 250,
+    "symbol": "unproven-statement:c0bcdb5ab3529507ee70d7da9def4d3660af5e8b6015585aea68d0da3f938c52",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 358,
+    "endLine": 366,
+    "symbol": "unproven-statement:c0cefc2930d981c013c983cc3250f2026e9fd74e2891045afd1d6381ac69d650",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 294,
+    "endLine": 294,
+    "symbol": "unproven-statement:c3a9695e92a4b49689c979410bd2bdf708aad3b566770ef18942134a05c9e8d2",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 419,
+    "endLine": 419,
+    "symbol": "unproven-statement:c45d3916ae5f42808f9594f38267dd93b1dbe78c61a908f88c0e3a0221369b24",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 414,
+    "endLine": 414,
+    "symbol": "unproven-statement:c64b1e1714673a240f60aa86cc958f048d388686eb510f1c08012d234f3dfd45",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 296,
+    "endLine": 301,
+    "symbol": "unproven-statement:c78ecd7158223e14ce853fded71097b3a6237325a89262446717104b50fe572e",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 225,
+    "endLine": 225,
+    "symbol": "unproven-statement:ccd0bf262798adbe488ebe517e818ab92a3c8407bbb5fe7eee10732482451318",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 160,
+    "endLine": 162,
+    "symbol": "unproven-statement:cd60d84eef9f564cf66cd32ea6e59f679bac4f5041f154bf202267148e12c7d2",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 272,
+    "endLine": 275,
+    "symbol": "unproven-statement:cd67a2580a1828088215eca937e851f0bf6edf305c633225afc0e6e7c6ad372a",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 221,
+    "endLine": 221,
+    "symbol": "unproven-statement:cefc5910a518bfdcf785f3a577d8b7d557bb9bbc540b258d9fbe7221c0db5934",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 187,
+    "endLine": 189,
+    "symbol": "unproven-statement:d426c6e5fd9258b77f305d0adc909dc2f8855b67ca0b762bcb7a86f9d7a17557",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 191,
+    "endLine": 191,
+    "symbol": "unproven-statement:da0e0cda3d35962a1ecad76e636363d65acc133f3dcece06717be22780557985",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 165,
+    "endLine": 165,
+    "symbol": "unproven-statement:dade2c543e394aeb1f3e0a9b51c157bbdb4d20b24245fa807e64e8c1be8db85f",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 110,
+    "endLine": 118,
+    "symbol": "unproven-statement:dd04489655148d2a12a6db93619f3edaf0b267887c6cfd6083b3436fb38a1958",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 255,
+    "endLine": 255,
+    "symbol": "unproven-statement:e1681152b711070740f1a56ed34f465aa04ce849e6efad14a424207451fea6e8",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 246,
+    "endLine": 252,
+    "symbol": "unproven-statement:e398d4b35a3a1504500c4171407a08d8d30ba981ae004646309890e0b4fe68cf",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 107,
+    "endLine": 107,
+    "symbol": "unproven-statement:e51a9b282a82280abf3f517068bb67b08e5a6c55af99f5a7aa4260531032300c",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 371,
+    "endLine": 403,
+    "symbol": "unproven-statement:e56858bd7ddf720ed110234612466d47c9125e53c1fa385228ad972e1553c401",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 338,
+    "endLine": 338,
+    "symbol": "unproven-statement:e60c7b76d8056cef1216d496cf60f47d9218c8cf0f284a60f78817f153c8ef6c",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 201,
+    "endLine": 204,
+    "symbol": "unproven-statement:e7cbf5134c65578f8a2fd6d7a0620f343600ae7bb9c43f750e5479d5a2c353e4",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 120,
+    "endLine": 120,
+    "symbol": "unproven-statement:e8cd113ad43e541134a122d35dd5fdb6df403fec917cbd4aa61f588d2e7ea6f6",
+    "value": 1,
+    "count": 2
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 418,
+    "endLine": 421,
+    "symbol": "unproven-statement:e9df7b3ab2ffcf77ad4e603d77e1e26d0733a9e7bafc5ac0e622061fb2b2a418",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 358,
+    "endLine": 358,
+    "symbol": "unproven-statement:eaf2bb2de83679ff8296c889183855aff5ada4a460724ac1313814e142591fba",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 430,
+    "endLine": 439,
+    "symbol": "unproven-statement:ed7214fce82fe2b417bda60fd503bc5211ef2fc6fe11caef5f1c3a5a1fa3ed27",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 344,
+    "endLine": 350,
+    "symbol": "unproven-statement:eff1c53a3b9ae9f61abe8ee4c4e7be3af778aec4d024385e33b69aad7a2a83e1",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 176,
+    "endLine": 178,
+    "symbol": "unproven-statement:f29eb54112ae98f7d77f231a9ddfff88227c2f10e1259a760168c82b6ca48009",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 87,
+    "endLine": 87,
+    "symbol": "unproven-statement:f836a3c803bbe72df94bf3f69158d27df87b1b490c2366a069f5ae39da10a094",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 181,
+    "endLine": 181,
+    "symbol": "unproven-statement:f904af526319e4718f6fc4a445d1679cd79da965ec9f1cf8ba1f56c32a428dd2",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 289,
+    "endLine": 291,
+    "symbol": "unproven-statement:f94f67818d44b9cbc58d9dde372c24b1860445ff117a46459959d9b580b917ac",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 188,
+    "endLine": 188,
+    "symbol": "unproven-statement:f962a575ea212b99eb13df3b5b164474b2b4761f17890533f45ced480d9234e9",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 75,
+    "endLine": 84,
+    "symbol": "unproven-statement:faf6f9a5cf27d9158faf709dc899f28e0096babde6c15826fbbd39f73434c40e",
+    "value": 1,
+    "count": 1
+  },
+  {
+    "gate": "coverage",
+    "path": "script/verify-tsconfig-inheritance.ts",
+    "line": 106,
+    "endLine": 106,
+    "symbol": "unproven-statement:fb9c1970c39287c56797749b7da93933dc2d5734c04e4eada46c367e8ae21425",
+    "value": 1,
+    "count": 1
+  }
+]

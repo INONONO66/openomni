@@ -154,6 +154,29 @@ describe("original Person invocation consent", () => {
     await personDeclare(port)({ manifest: { ...MANAGER_MANIFEST, trustTier: "collaborator" } });
     expect(PersonStore.get(MANAGER_MANIFEST.id)?.trustTier).toBe("collaborator");
   });
+  test("the act itself refuses consent bound to a Person revision that no longer holds", async () => {
+    const { port, supervisor } = portWith();
+    const tool = createProvisionTool(port);
+    const context = {
+      sessionId: "provision-session",
+      turnId: "provision-turn",
+      callId: "stale-consent",
+      signal: new AbortController().signal,
+    };
+    const declare = (domainRevisions: Record<string, number>) =>
+      tool.execute(
+        { operation: { op: "person_declare", args: { manifest: MANAGER_MANIFEST } } },
+        { ...context, domainRevisions },
+      );
+    await expect(declare({ [MANAGER_MANIFEST.id]: 0 })).rejects.toThrow("domain revision changed");
+    expect(PersonStore.get(MANAGER_MANIFEST.id)).toBeUndefined();
+    expect(supervisor.calls).toEqual([]);
+    expect(await declare({ [MANAGER_MANIFEST.id]: -1 })).toMatchObject({
+      op: "person_declare",
+      result: { kind: "declared", id: MANAGER_MANIFEST.id, revision: 0 },
+    });
+    expect(supervisor.calls).toEqual(["materialize"]);
+  });
   test("domain revision changes invalidate consent instead of applying a stale manifest", async () => {
     const { port } = portWith();
     const f = protectedDispatch(eraseTool(createProvisionTool(port)), {
