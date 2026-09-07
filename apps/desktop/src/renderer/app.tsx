@@ -1,8 +1,8 @@
 import { Chat, useChat } from "@ai-sdk/react";
-import { Console } from "@openomni/ui";
+import { Console, type ConsoleShell, type ConsoleStrip, type WindowPlatform } from "@openomni/ui";
 import { useStore } from "@tanstack/react-store";
 import type { ChatTransport, UIMessage } from "ai";
-import { type ReactNode, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { applyAtBoundary, orderByAttention } from "./attention";
 import type { Boundary, Held } from "./attention";
 import { uiMessagesToTranscript } from "./chat/adapter";
@@ -10,14 +10,25 @@ import type { OpenOmniUIMessage } from "./chat/message";
 import { selectChatTransport } from "./chat/select-transport";
 import { SessionTree } from "./shell/session-tree";
 import { useGatewayEndpoint } from "./state/queries";
+import { readShellPreferences, writeShellPreferences } from "./state/shell-preferences";
 import {
+  back,
+  canGoBack,
+  canGoForward,
   consoleStore,
   createSession,
+  forward,
+  jumpTo,
+  navigate,
+  ROUTE_LABEL,
+  type Route,
   type Session,
   type SessionId,
-  selectSession,
   setDraft,
+  setSidebarOpen,
+  setSidebarWidth,
   toggleProject,
+  toggleSidebar,
 } from "./state/store";
 
 /**
@@ -42,11 +53,44 @@ import {
  * cursor. A selection made FROM the search field is deliberately not a
  * boundary: the operator is still inside the control, narrowing.
  */
-export function App() {
+export function App({ platform, storage }: AppEnvironment) {
   const sessions = useStore(consoleStore, (state) => state.sessions);
   const selectedId = useStore(consoleStore, (state) => state.selectedSessionId);
+  const route = useStore(consoleStore, (state) => state.route);
   const collapsedProjectIds = useStore(consoleStore, (state) => state.collapsedProjectIds);
+  const sidebarOpen = useStore(consoleStore, (state) => state.sidebarOpen);
+  const sidebarWidth = useStore(consoleStore, (state) => state.sidebarWidth);
+  const history = useStore(consoleStore, (state) => state.history);
   const endpoint = useGatewayEndpoint();
+
+  // The shell's two persisted facts, read BEFORE first paint so the sidebar
+  // never opens at the default and then jumps to the remembered width, and
+  // written back on every change after that.
+  useLayoutEffect(() => {
+    if (storage === null) return;
+    const remembered = readShellPreferences(storage);
+    setSidebarOpen(remembered.open);
+    setSidebarWidth(remembered.width);
+    const subscription = consoleStore.subscribe(() => {
+      const { sidebarOpen: open, sidebarWidth: width } = consoleStore.state;
+      writeShellPreferences(storage, { open, width });
+    });
+    return subscription.unsubscribe;
+  }, [storage]);
+
+  // ⌘[ / ⌘] are the renderer's: one owner for the shortcut, documented in
+  // docs/desktop-shell.md, and no IPC round trip for a cursor move.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey)) return;
+      if (event.key === "[") back();
+      else if (event.key === "]") forward();
+      else return;
+      event.preventDefault();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   const [held, setHeld] = useState<Held>(() => ({
     shown: idealOrder(sessions),
@@ -83,7 +127,7 @@ export function App() {
   // what to look at, so a new order costs them nothing — UNLESS the decision
   // was made from inside the search field, where they have not finished yet.
   const select = (id: SessionId, boundary: Boundary | null = "selection") => {
-    selectSession(id);
+    navigate({ kind: "session", sessionId: id });
     adopt(boundary);
   };
 
@@ -92,31 +136,88 @@ export function App() {
     adopt("selection");
   };
 
-  const session = sessions.find((candidate) => candidate.id === selectedId);
+  const shell: ConsoleShell = {
+    sidebarOpen,
+    sidebarWidth,
+    onToggleSidebar: toggleSidebar,
+    onSidebarWidthCommit: setSidebarWidth,
+  };
+  const strip: ConsoleStrip = {
+    createLabel: "New session",
+    onCreate: create,
+    platform,
+    history: {
+      entries: history.entries,
+      currentId: history.entries[history.cursor]?.id ?? null,
+      now: Date.now(),
+      canBack: canGoBack(history),
+      canForward: canGoForward(history),
+      onBack: back,
+      onForward: forward,
+      onJump: jumpTo,
+    },
+  };
   const sidebar = (
     <SessionTree
       collapsedProjectIds={collapsedProjectIds}
-      onCreate={create}
+      onNavigate={(destination) => navigate({ kind: "route", route: destination })}
       onSelect={select}
       onToggleProject={toggleProject}
       ordered={held.shown}
       pendingChanges={held.pendingChanges}
+      route={route}
       selectedId={selectedId}
       sessions={sessions}
     />
   );
 
-  return (
-    // The window's own height. `Console` fills whatever box it is given.
-    <div className="h-screen min-h-0">
-      {session === undefined ? (
-        <Console emptyLabel="Select or create a session" sidebar={sidebar} />
-      ) : (
-        <SessionConsole notice={notice} session={session} sidebar={sidebar} transport={transport} />
-      )}
-    </div>
+  // A route other than the tree is an honest empty column: it has a tab, a
+  // sentence, and nothing fabricated behind either.
+  if (route !== "sessions") {
+    return (
+      <Console
+        emptyLabel={ROUTE_EMPTY[route]}
+        shell={shell}
+        sidebar={sidebar}
+        strip={strip}
+        title={ROUTE_LABEL[route]}
+      />
+    );
+  }
+
+  const session = sessions.find((candidate) => candidate.id === selectedId);
+  return session === undefined ? (
+    <Console
+      emptyLabel="Select or create a session"
+      shell={shell}
+      sidebar={sidebar}
+      strip={strip}
+    />
+  ) : (
+    <SessionConsole
+      notice={notice}
+      session={session}
+      shell={shell}
+      sidebar={sidebar}
+      strip={strip}
+      transport={transport}
+    />
   );
 }
+
+/** What the renderer is running in: read once at boot, in `main.tsx`. */
+export interface AppEnvironment {
+  readonly platform: WindowPlatform;
+  /** `null` in a runtime without one — the shell then runs on defaults. */
+  readonly storage: Storage | null;
+}
+
+/** What each empty route says. Sentences, not placeholders: nothing is coming. */
+const ROUTE_EMPTY = {
+  inbox: "Nothing in the inbox.",
+  automations: "No automations yet.",
+  memory: "Nothing remembered yet.",
+} as const satisfies Record<Exclude<Route, "sessions">, string>;
 
 /**
  * The main column for ONE open session, and the only place `useChat` runs.
@@ -128,11 +229,15 @@ export function App() {
  */
 function SessionConsole({
   session,
+  shell,
+  strip,
   sidebar,
   transport,
   notice,
 }: {
   readonly session: Session;
+  readonly shell: ConsoleShell;
+  readonly strip: ConsoleStrip;
   readonly sidebar: ReactNode;
   readonly transport: ChatTransport<UIMessage> | null;
   /** Why the composer is disabled, when it is. */
@@ -185,7 +290,6 @@ function SessionConsole({
       emptyLabel="No turns in this session yet."
       session={{
         id: session.id,
-        title: session.title,
         nodes,
         costs,
         draft,
@@ -204,7 +308,10 @@ function SessionConsole({
         onApprove: decide(true),
         onDeny: decide(false),
       }}
+      shell={shell}
       sidebar={sidebar}
+      strip={strip}
+      title={session.title}
     />
   );
 }

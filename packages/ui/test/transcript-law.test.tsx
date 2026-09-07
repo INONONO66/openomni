@@ -386,9 +386,9 @@ const SCREEN = renderToStaticMarkup(
   <Console
     shell={SHELL}
     strip={STRIP}
+    title="ledger append path"
     session={{
       id: "budget",
-      title: "ledger append path",
       nodes: transcript,
       draft: "",
       composerHint: "claude-sonnet-4-6",

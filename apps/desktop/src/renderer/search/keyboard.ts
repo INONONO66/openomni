@@ -6,9 +6,8 @@ import type { SessionId } from "../state/store";
  * There is no DOM in this test runner, so the keyboard flow is expressed as a
  * reducer over explicit state and verified directly. That is not a workaround:
  * a keyboard contract written as a pile of handlers is a contract nobody can
- * read, and the interesting decisions here — what Esc means when the field has
- * text versus when it is empty, where focus lands after Enter — are decisions
- * about state, not about events.
+ * read, and the interesting decisions here — that Esc always leaves, where
+ * focus lands after Enter — are decisions about state, not about events.
  *
  * The view's job is reduced to translating a real key event into one `Intent`
  * and executing the returned `Effect`s.
@@ -35,8 +34,10 @@ export interface SearchState {
  * operator for the caret.
  */
 export type Effect =
+  /** Open the field (it lives in the section header only while searching) and put the caret in it. */
   | { readonly kind: "focusField" }
-  | { readonly kind: "focusSelectedRow" }
+  /** Close the field and return focus to the row the operator is working in. */
+  | { readonly kind: "close" }
   | { readonly kind: "select"; readonly id: SessionId };
 
 export interface Transition {
@@ -70,13 +71,10 @@ export function reduce(
       return { state: { query: intent.query, activeId: null }, effects: [] };
 
     case "escape":
-      // Two meanings, decided by whether there is anything to undo. Esc with
-      // text clears the query and keeps the caret; Esc on an empty field is
-      // "leave", and leaving returns focus to the row the operator is actually
-      // working in — not to nowhere.
-      return state.query.length > 0
-        ? { state: INITIAL, effects: [{ kind: "focusField" }] }
-        : { state: INITIAL, effects: [{ kind: "focusSelectedRow" }] };
+      // One meaning: leave. The query clears, the field closes, and focus
+      // returns to the row the operator is actually working in — not to
+      // nowhere. (Capy's section-header search; docs/desktop-shell.md.)
+      return { state: INITIAL, effects: [{ kind: "close" }] };
 
     case "move": {
       if (sequence.length === 0) return { state, effects: [] };

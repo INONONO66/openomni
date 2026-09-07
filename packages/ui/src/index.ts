@@ -9,7 +9,7 @@ export type { HistoryEntry } from "./history-menu";
 export { Highlight } from "./primitives/highlight";
 export { ScrollArea } from "./primitives/scroll-area";
 export { Text } from "./primitives/surface";
-export { clampSidebarWidth, SIDEBAR_WIDTH } from "./sidebar";
+export { clampSidebarWidth, Sidebar, SIDEBAR_WIDTH } from "./sidebar";
 export {
   NavItem,
   SectionHeader,

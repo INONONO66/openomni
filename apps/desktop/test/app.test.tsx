@@ -22,7 +22,7 @@ function shell(endpoint: "pending" | null) {
   if (endpoint !== "pending") client.setQueryData(queryKeys.gatewayEndpoint, endpoint);
   return renderToStaticMarkup(
     <StateProvider client={client}>
-      <App />
+      <App platform="darwin" storage={null} />
     </StateProvider>,
   );
 }

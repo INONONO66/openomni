@@ -1,11 +1,21 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { App } from "./app";
+import { App, type AppEnvironment } from "./app";
 import { StateProvider } from "./state/provider";
 import "./styles.css";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("renderer root element missing");
+
+// The window has a tab strip, and the frame's `--shell-top` reads that fact
+// from `<html>` before any component mounts (packages/ui/src/styles.css).
+document.documentElement.dataset.tabStrip = "";
+
+/** Read once at boot: where the OS draws its window controls, and the storage the shell remembers itself in. */
+const environment: AppEnvironment = {
+  platform: navigator.platform.startsWith("Mac") ? "darwin" : "other",
+  storage: window.localStorage,
+};
 
 /**
  * Mounted immediately. Nothing is awaited before the first paint: the gateway
@@ -15,7 +25,7 @@ if (!root) throw new Error("renderer root element missing");
 createRoot(root).render(
   <StrictMode>
     <StateProvider>
-      <App />
+      <App {...environment} />
     </StateProvider>
   </StrictMode>,
 );

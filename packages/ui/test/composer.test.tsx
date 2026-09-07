@@ -166,9 +166,9 @@ describe("the composer surface", () => {
       <Console
         shell={SHELL}
         strip={STRIP}
+        title="Session"
         session={{
           id: "stop",
-          title: "Session",
           nodes: [],
           draft: "",
           onDraftChange: () => undefined,

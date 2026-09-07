@@ -50,11 +50,14 @@ export function Console({
   shell,
   strip,
   sidebar,
+  title,
   session,
   emptyLabel,
 }: {
   readonly shell: ConsoleShell;
   readonly strip: ConsoleStrip;
+  /** The tab's title: what the main column is on. No title, no tab. */
+  readonly title?: string | undefined;
   /**
    * The sidebar column's content. A slot rather than a prop-driven tree: what
    * ranks and filters those rows is the app's, and this component must not
@@ -64,8 +67,8 @@ export function Console({
   readonly sidebar: ReactNode;
   /**
    * What the main column shows, or `undefined` when nothing is open. The
-   * column is then a header with no title and one sentence — `emptyLabel` —
-   * on the measure, and no composer: there is nothing to address a message to.
+   * column is then one sentence — `emptyLabel` — on the measure, and no
+   * composer: there is nothing to address a message to.
    */
   readonly session?: ConsoleSession | undefined;
   /** The main column's sentence when there is nothing to show. */
@@ -92,7 +95,7 @@ export function Console({
         history={strip.history}
         onCreate={strip.onCreate}
         platform={strip.platform}
-        title={session?.title}
+        title={title}
         trailing={strip.trailing}
       />
       <SidebarGap />
@@ -179,8 +182,6 @@ export interface ConsoleStrip {
 export interface ConsoleSession {
   /** The key transcript expansion state is remembered under. */
   readonly id: string;
-  /** The tab's title. */
-  readonly title: string;
   readonly nodes: readonly TranscriptNode[];
   readonly costs?: Readonly<Record<number, TurnCost>>;
   readonly draft?: string;

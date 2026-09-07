@@ -1,12 +1,20 @@
 import { beforeEach, describe, expect, test } from "bun:test";
+import { SIDEBAR_WIDTH } from "@openomni/ui";
 import {
+  back,
+  canGoBack,
+  canGoForward,
   consoleStore,
   createSession,
   DEFAULT_PROJECT_ID,
+  forward,
   INITIAL_CLIENT_STATE,
-  selectSession,
+  jumpTo,
+  navigate,
   setDraft,
+  setSidebarWidth,
   toggleProject,
+  toggleSidebar,
 } from "../src/renderer/state/store";
 
 /**
@@ -45,7 +53,7 @@ describe("selection and groups", () => {
   test("Given two sessions, When the first is selected, Then the selection moves", () => {
     const first = createSession(1);
     createSession(2);
-    selectSession(first);
+    navigate({ kind: "session", sessionId: first });
 
     expect(consoleStore.state.selectedSessionId).toBe(first);
   });
@@ -67,5 +75,86 @@ describe("drafts are per session", () => {
 
     expect(consoleStore.state.drafts[first]).toBe("half a thought");
     expect(consoleStore.state.drafts[second]).toBeUndefined();
+  });
+});
+
+describe("history has browser semantics", () => {
+  test("Given three visits, When going back twice and forward once, Then the cursor follows and the column moves", () => {
+    const first = createSession(1);
+    const second = createSession(2);
+    navigate({ kind: "route", route: "inbox" }, 3);
+
+    expect(consoleStore.state.history.entries.map((entry) => entry.title)).toEqual([
+      "Session 1",
+      "Session 2",
+      "Inbox",
+    ]);
+    back();
+    back();
+    expect(consoleStore.state.selectedSessionId).toBe(first);
+    expect(consoleStore.state.route).toBe("sessions");
+    forward();
+    expect(consoleStore.state.selectedSessionId).toBe(second);
+    expect(canGoBack(consoleStore.state.history)).toBe(true);
+    expect(canGoForward(consoleStore.state.history)).toBe(true);
+  });
+
+  test("Given a cursor behind the end, When a new place is visited, Then the forward entries are dropped", () => {
+    createSession(1);
+    createSession(2);
+    back();
+    navigate({ kind: "route", route: "memory" }, 3);
+
+    expect(consoleStore.state.history.entries.map((entry) => entry.title)).toEqual([
+      "Session 1",
+      "Memory",
+    ]);
+    expect(canGoForward(consoleStore.state.history)).toBe(false);
+  });
+
+  test("Given the current place, When visited again, Then no entry is added", () => {
+    createSession(1);
+    navigate({ kind: "route", route: "inbox" }, 2);
+    navigate({ kind: "route", route: "inbox" }, 3);
+
+    expect(consoleStore.state.history.entries).toHaveLength(2);
+  });
+
+  test("Given an entry id, When jumped to, Then the cursor lands there without pushing", () => {
+    const first = createSession(1);
+    createSession(2);
+    navigate({ kind: "route", route: "automations" }, 3);
+    const target = consoleStore.state.history.entries[0];
+    if (target === undefined) throw new Error("expected a first entry");
+
+    jumpTo(target.id);
+    expect(consoleStore.state.history.cursor).toBe(0);
+    expect(consoleStore.state.history.entries).toHaveLength(3);
+    expect(consoleStore.state.selectedSessionId).toBe(first);
+  });
+
+  test("Given the stack ends, When moving past them, Then nothing changes", () => {
+    expect(canGoBack(consoleStore.state.history)).toBe(false);
+    back();
+    forward();
+    expect(consoleStore.state.history.cursor).toBe(-1);
+  });
+});
+
+describe("the sidebar's width and mode", () => {
+  test("Given widths outside the range, When set, Then they are clamped to it", () => {
+    setSidebarWidth(SIDEBAR_WIDTH.min - 100);
+    expect(consoleStore.state.sidebarWidth).toBe(SIDEBAR_WIDTH.min);
+    setSidebarWidth(SIDEBAR_WIDTH.max + 100);
+    expect(consoleStore.state.sidebarWidth).toBe(SIDEBAR_WIDTH.max);
+    setSidebarWidth(260.4);
+    expect(consoleStore.state.sidebarWidth).toBe(260);
+  });
+
+  test("Given an open sidebar, When toggled twice, Then it closes and reopens", () => {
+    toggleSidebar();
+    expect(consoleStore.state.sidebarOpen).toBe(false);
+    toggleSidebar();
+    expect(consoleStore.state.sidebarOpen).toBe(true);
   });
 });
