@@ -85,6 +85,8 @@ export function Console({
     // mechanism's wrapper, and it is addressed under that name.
     <Sidebar
       data-density="shell"
+      floating={shell.sidebarFloating}
+      onFloatingChange={shell.onSidebarFloatingChange}
       onToggle={shell.onToggleSidebar}
       onWidthCommit={shell.onSidebarWidthCommit}
       open={shell.sidebarOpen}
@@ -163,9 +165,13 @@ export function Console({
 /** The frame's state: the app owns it, persists it, and hands it down. */
 export interface ConsoleShell {
   readonly sidebarOpen: boolean;
+  /** Collapsed but revealed by hover as an overlay. Transient: never persisted. */
+  readonly sidebarFloating: boolean;
   /** Already clamped by `clampSidebarWidth`. */
   readonly sidebarWidth: number;
+  /** Open ↔ collapsed; while floating, this pins the overlay open. */
   readonly onToggleSidebar: () => void;
+  readonly onSidebarFloatingChange: (floating: boolean) => void;
   readonly onSidebarWidthCommit: (width: number) => void;
 }
 

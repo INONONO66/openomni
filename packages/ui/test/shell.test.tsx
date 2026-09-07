@@ -2,7 +2,15 @@ import { describe, expect, test } from "bun:test";
 import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { relativeTime } from "../src/history-menu";
-import { clampSidebarWidth, Sidebar, SidebarContainer, SidebarGap } from "../src/sidebar";
+import {
+  clampSidebarWidth,
+  createRevealIntent,
+  type RevealTimers,
+  SIDEBAR_REVEAL,
+  Sidebar,
+  SidebarContainer,
+  SidebarGap,
+} from "../src/sidebar";
 import { SectionHeader, SidebarHeader } from "../src/sidebar-nav";
 import { TabStrip, type WindowPlatform } from "../src/tab-strip";
 import { TreeRow } from "../src/tree-row";
@@ -14,9 +22,21 @@ import { STRIP } from "./fixture";
  * (docs/desktop-shell.md); the tests pin the ones a regression would move.
  */
 
-function frame(open: boolean, children: ReactNode, platform: WindowPlatform = "darwin") {
+function frame(
+  open: boolean,
+  children: ReactNode,
+  platform: WindowPlatform = "darwin",
+  floating = false,
+) {
   return renderToStaticMarkup(
-    <Sidebar onToggle={() => undefined} onWidthCommit={() => undefined} open={open} width={240}>
+    <Sidebar
+      floating={floating}
+      onFloatingChange={() => undefined}
+      onToggle={() => undefined}
+      onWidthCommit={() => undefined}
+      open={open}
+      width={240}
+    >
       <TabStrip
         createLabel="New"
         history={STRIP.history}
@@ -55,15 +75,19 @@ describe("the sidebar root", () => {
     expect(root).toContain("--sidebar-width:240px");
   });
 
-  test("Given a collapsed sidebar, When rendered, Then the column is inert and the handle leaves the tab order", () => {
+  test("Given a collapsed sidebar, When rendered, Then the column is hidden, inert, and has no handle", () => {
     const html = frame(false, <p>rows</p>);
     expect(tag(html, "Sidebar")).toContain('data-sidebar-state="collapsed"');
+    const container = tag(html, "Sidebar.Container");
+    expect(container).toContain('data-mode="hidden"');
+    expect(container).toContain("-translate-x-full");
     expect(tag(html, "Sidebar.Content")).toContain("inert");
-    expect(tag(html, "Sidebar.ResizeHandle")).toContain('tabindex="-1"');
+    expect(html).not.toContain('data-ui="Sidebar.ResizeHandle"');
   });
 
-  test("Given an open sidebar, When rendered, Then the column is live and the handle is a focus stop", () => {
+  test("Given an open sidebar, When rendered, Then the column is pinned, live, and the handle is a focus stop", () => {
     const html = frame(true, <p>rows</p>);
+    expect(tag(html, "Sidebar.Container")).toContain('data-mode="pinned"');
     expect(tag(html, "Sidebar.Content")).not.toContain("inert");
     expect(tag(html, "Sidebar.ResizeHandle")).toContain('tabindex="0"');
   });
@@ -76,32 +100,199 @@ describe("the sidebar root", () => {
     expect(gap).toContain("transition-[width]");
     expect(gap).toContain("group-data-[sidebar-state=collapsed]/sidebar:w-0");
     expect(container).toContain("transition-[translate]");
-    expect(container).toContain("group-data-[sidebar-state=collapsed]/sidebar:-translate-x-full");
     expect(content).toContain("transition-[opacity,translate]");
     expect(content).toContain("delay-[40ms]");
+    // The measured scale: the frame slides on `base`, the column fades on `fast`.
+    expect(gap).toContain("duration-base");
+    expect(container).toContain("duration-base");
+    expect(content).toContain("duration-fast");
     for (const part of [gap, container, content]) {
+      expect(part).toContain("ease-frame");
       expect(part).toContain("motion-reduce:transition-none");
       expect(part).toContain("group-data-[resizing]/sidebar:duration-0");
     }
   });
 });
 
-describe("the tab strip's controls zone", () => {
-  test("Given an open sidebar, When rendered, Then the zone is the sidebar's width and holds no toggle", () => {
-    const html = frame(true, null);
-    expect(tag(html, "TabStrip.Controls")).toContain("w-(--sidebar-width)");
-    expect(html).not.toContain('aria-label="Expand sidebar"');
+describe("the hover reveal", () => {
+  test("Given a collapsed sidebar, When rendered, Then an 8px edge zone listens and the column is hidden", () => {
+    const html = frame(false, <p>rows</p>);
+    expect(tag(html, "Sidebar.Edge")).toContain("w-2");
+    expect(tag(html, "Sidebar.Edge")).toContain("top-(--shell-top)");
+    expect(tag(html, "Sidebar.Container")).toContain('data-mode="hidden"');
   });
 
-  test("Given a collapsed sidebar on darwin, When rendered, Then the zone clears the traffic lights and leads with the toggle", () => {
+  test("Given an open sidebar, When rendered, Then there is no edge zone", () => {
+    expect(frame(true, null)).not.toContain('data-ui="Sidebar.Edge"');
+  });
+
+  test("Given a collapsed sidebar that is floating, When rendered, Then the SAME column is an inset, raised overlay", () => {
+    const html = frame(false, <p data-ui="Rows">rows</p>, "darwin", true);
+    const container = tag(html, "Sidebar.Container");
+    expect(container).toContain('data-mode="overlay"');
+    expect(container).toContain("left-2 bottom-2");
+    expect(container).toContain("top-[calc(var(--shell-top)+--spacing(2))]");
+    expect(container).toContain("rounded-panel");
+    expect(container).toContain("shadow-panel");
+    expect(container).toContain("z-(--z-drawer)");
+    expect(container).toContain("w-(--sidebar-width)");
+    expect(container).not.toContain("-translate-x-full");
+    // Live: the rows are reachable and there is exactly one of them.
+    expect(tag(html, "Sidebar.Content")).not.toContain("inert");
+    expect(html.match(/data-ui="Rows"/g)).toHaveLength(1);
+    // Floating, not pinned: the gap stays closed and the handle stays away.
+    expect(tag(html, "Sidebar")).toContain('data-sidebar-state="collapsed"');
+    expect(html).not.toContain('data-ui="Sidebar.ResizeHandle"');
+  });
+
+  test("Given an open sidebar, When `floating` is also set, Then pinned wins", () => {
+    expect(tag(frame(true, null, "darwin", true), "Sidebar.Container")).toContain(
+      'data-mode="pinned"',
+    );
+  });
+});
+
+/** A clock the test advances by hand: every scheduled callback and when it is due. */
+function fakeClock() {
+  let now = 0;
+  let nextId = 1;
+  const pending = new Map<number, { at: number; run: () => void }>();
+  const timers: RevealTimers = {
+    setTimeout: (callback, ms) => {
+      const id = nextId++;
+      pending.set(id, { at: now + ms, run: callback });
+      return id;
+    },
+    clearTimeout: (handle) => {
+      pending.delete(handle as number);
+    },
+  };
+  const advance = (ms: number) => {
+    const until = now + ms;
+    for (const [id, timer] of [...pending].sort((a, b) => a[1].at - b[1].at)) {
+      if (timer.at > until) break;
+      pending.delete(id);
+      now = timer.at;
+      timer.run();
+    }
+    now = until;
+  };
+  return { timers, advance, pendingCount: () => pending.size };
+}
+
+describe("the reveal's timing", () => {
+  function harness() {
+    const clock = fakeClock();
+    const log: boolean[] = [];
+    let floating = false;
+    const intent = createRevealIntent(
+      () => floating,
+      (value) => {
+        floating = value;
+        log.push(value);
+      },
+      clock.timers,
+    );
+    return { ...clock, intent, log, shown: () => floating };
+  }
+
+  test("Given the pointer rests on a hot zone, When the open delay passes, Then it opens once", () => {
+    const h = harness();
+    h.intent.enter();
+    h.advance(SIDEBAR_REVEAL.openDelay - 1);
+    expect(h.log).toEqual([]);
+    h.advance(1);
+    expect(h.log).toEqual([true]);
+    h.intent.enter();
+    h.advance(1000);
+    expect(h.log).toEqual([true]);
+  });
+
+  test("Given the pointer leaves before the delay, When time passes, Then nothing opens", () => {
+    const h = harness();
+    h.intent.enter();
+    h.advance(SIDEBAR_REVEAL.openDelay - 50);
+    h.intent.leave();
+    h.advance(1000);
+    expect(h.log).toEqual([]);
+    expect(h.pendingCount()).toBe(0);
+  });
+
+  test("Given it is shown, When the pointer leaves for the close delay, Then it closes", () => {
+    const h = harness();
+    h.intent.enter();
+    h.advance(SIDEBAR_REVEAL.openDelay);
+    h.intent.leave();
+    h.advance(SIDEBAR_REVEAL.closeDelay - 1);
+    expect(h.shown()).toBe(true);
+    h.advance(1);
+    expect(h.log).toEqual([true, false]);
+  });
+
+  test("Given it is shown, When the pointer hops from the toggle into the panel, Then the close is cancelled", () => {
+    const h = harness();
+    h.intent.enter();
+    h.advance(SIDEBAR_REVEAL.openDelay);
+    h.intent.leave();
+    h.advance(SIDEBAR_REVEAL.closeDelay - 100);
+    h.intent.enter();
+    h.advance(1000);
+    expect(h.log).toEqual([true]);
+    expect(h.pendingCount()).toBe(0);
+  });
+
+  test("Given a pending open or close, When cancelled, Then neither fires", () => {
+    const h = harness();
+    h.intent.enter();
+    h.intent.cancel();
+    h.advance(1000);
+    expect(h.log).toEqual([]);
+    h.intent.enter();
+    h.advance(SIDEBAR_REVEAL.openDelay);
+    h.intent.leave();
+    h.intent.cancel();
+    h.advance(1000);
+    expect(h.log).toEqual([true]);
+    expect(h.pendingCount()).toBe(0);
+  });
+});
+
+describe("the tab strip's controls zone", () => {
+  /** The toggle's opening tag: the one element named `Sidebar.Toggle`. */
+  const toggle = (html: string) => tag(html, "Sidebar.Toggle");
+
+  test("Given an open sidebar, When rendered, Then the zone is the sidebar's width and leads with the one toggle", () => {
+    const html = frame(true, null);
+    const zone = tag(html, "TabStrip.Controls");
+    expect(zone).toContain("w-(--sidebar-width)");
+    expect(zone).toContain("pl-[76px]");
+    expect(html.match(/data-ui="Sidebar.Toggle"/g)).toHaveLength(1);
+    expect(toggle(html)).toContain('aria-label="Collapse sidebar"');
+    expect(toggle(html)).toContain('aria-expanded="true"');
+    expect(html.indexOf('data-ui="Sidebar.Toggle"')).toBeLessThan(
+      html.indexOf('aria-label="History"'),
+    );
+    expect(html.indexOf('aria-label="History"')).toBeLessThan(html.indexOf('aria-label="Back"'));
+    expect(html.indexOf('aria-label="Back"')).toBeLessThan(html.indexOf('aria-label="Forward"'));
+  });
+
+  test("Given a collapsed sidebar on darwin, When rendered, Then the zone clears the traffic lights and the same toggle leads it", () => {
     const html = frame(false, null);
     const zone = tag(html, "TabStrip.Controls");
     expect(zone).toContain("pl-[76px]");
     expect(zone).toContain("w-tab-controls-collapsed ");
-    expect(zone).toContain("duration-fast");
-    expect(html.indexOf('aria-label="Expand sidebar"')).toBeLessThan(
+    expect(html.match(/data-ui="Sidebar.Toggle"/g)).toHaveLength(1);
+    expect(toggle(html)).toContain('aria-label="Expand sidebar"');
+    expect(toggle(html)).toContain('aria-expanded="false"');
+    expect(html.indexOf('data-ui="Sidebar.Toggle"')).toBeLessThan(
       html.indexOf('aria-label="History"'),
     );
+  });
+
+  test("Given a floating reveal, When rendered, Then the toggle still reads as the collapsed state it would pin", () => {
+    const html = frame(false, null, "darwin", true);
+    expect(toggle(html)).toContain('aria-label="Expand sidebar"');
+    expect(toggle(html)).toContain('aria-expanded="false"');
   });
 
   test("Given a collapsed sidebar elsewhere, When rendered, Then the zone starts at the window edge", () => {
@@ -110,10 +301,11 @@ describe("the tab strip's controls zone", () => {
     expect(zone).not.toContain("pl-[76px]");
   });
 
-  test("Given the zone, When rendered, Then it animates width and padding on the frame's curve and yields to reduced motion", () => {
+  test("Given the zone, When rendered, Then it animates width on the frame's curve and yields to reduced motion", () => {
     const zone = tag(frame(true, null), "TabStrip.Controls");
-    expect(zone).toContain("transition-[width,padding]");
-    expect(zone).toContain("ease-out-quint");
+    expect(zone).toContain("transition-[width]");
+    expect(zone).toContain("duration-base");
+    expect(zone).toContain("ease-frame");
     expect(zone).toContain("motion-reduce:transition-none");
     expect(zone).toContain("group-data-[resizing]/sidebar:duration-0");
   });
@@ -126,7 +318,14 @@ describe("the tab strip's controls zone", () => {
 
   test("Given a title, When rendered, Then the tab is a 28px card with no status mark", () => {
     const html = renderToStaticMarkup(
-      <Sidebar onToggle={() => undefined} onWidthCommit={() => undefined} open width={240}>
+      <Sidebar
+        floating={false}
+        onFloatingChange={() => undefined}
+        onToggle={() => undefined}
+        onWidthCommit={() => undefined}
+        open
+        width={240}
+      >
         <TabStrip
           createLabel="New"
           history={STRIP.history}
@@ -150,14 +349,17 @@ describe("the tab strip's controls zone", () => {
 });
 
 describe("the sidebar header", () => {
-  test("Given the header, When rendered, Then it is a 44px drag surface with search then toggle at the right", () => {
+  test("Given the header, When rendered, Then it is a 44px drag surface with the search at the right and no toggle of its own", () => {
     const html = frame(true, <SidebarHeader onSearch={() => undefined} />);
     const header = tag(html, "Sidebar.Header");
     expect(header).toContain("h-11");
     expect(header).toContain("drag-region");
-    expect(html.indexOf('aria-label="Search (⌘K)"')).toBeLessThan(
-      html.indexOf('aria-label="Collapse sidebar"'),
-    );
+    const headerHtml = html.slice(html.indexOf(header));
+    expect(headerHtml).toContain('aria-label="Search (⌘K)"');
+    expect(headerHtml).not.toContain("Collapse sidebar");
+    // The one toggle in the window is the strip's, above the header.
+    expect(html.match(/data-ui="Sidebar.Toggle"/g)).toHaveLength(1);
+    expect(html.indexOf('data-ui="Sidebar.Toggle"')).toBeLessThan(html.indexOf(header));
   });
 });
 

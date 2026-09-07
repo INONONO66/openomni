@@ -19,19 +19,23 @@ export const UI_NAMES = {
   TabStrip: "TabStrip",
   /** The strip's left zone: window controls, sidebar toggle, history trio. */
   TabStripControls: "TabStrip.Controls",
+  /** The one sidebar toggle, first in the strip's zone in every state. */
+  SidebarToggle: "Sidebar.Toggle",
   /** The one tab: the open column's title. */
   Tab: "Tab",
   /** The window root: sidebar state and the runtime `--sidebar-width` live here. */
   Sidebar: "Sidebar",
   /** The in-flow spacer the fixed sidebar container sits over. */
   SidebarGap: "Sidebar.Gap",
-  /** The fixed box that slides; the resize handle hangs off its right edge. */
+  /** The fixed box that slides; pinned, revealed as an overlay, or hidden (`data-mode`). */
   SidebarContainer: "Sidebar.Container",
-  /** The fading column inside the container; `inert` while collapsed. */
+  /** The fading column inside the container; `inert` while hidden. */
   SidebarContent: "Sidebar.Content",
-  /** The 16px grab zone on the sidebar's right edge. */
+  /** The 8px hot zone on the window's left edge while the sidebar is collapsed. */
+  SidebarEdge: "Sidebar.Edge",
+  /** The 16px grab zone on the sidebar's right edge; pinned mode only. */
   SidebarResizeHandle: "Sidebar.ResizeHandle",
-  /** The sidebar's top row: brand, then search and the collapse toggle. */
+  /** The sidebar's top row: brand, then the search shortcut. */
   SidebarHeader: "Sidebar.Header",
   /** The primary destinations, under the header. */
   SidebarNav: "Sidebar.Nav",

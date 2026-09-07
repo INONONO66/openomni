@@ -1,11 +1,10 @@
 import { Button as BaseButton } from "@base-ui/react/button";
 import { Input as BaseInput } from "@base-ui/react/input";
-import { PanelLeft, Search, X } from "lucide-react";
+import { Search, X } from "lucide-react";
 import { type ReactNode, type Ref, useId } from "react";
 import { UI_NAMES } from "./names";
 import { IconButton } from "./primitives/button";
 import { Text } from "./primitives/surface";
-import { useSidebar } from "./sidebar";
 
 /**
  * The sidebar column's rows, top to bottom: a 44px header, a nav of 28px
@@ -15,9 +14,10 @@ import { useSidebar } from "./sidebar";
  */
 
 /**
- * The header: the brand at the left, then `ml-auto` the search shortcut and the
- * collapse toggle. On desktop it is the drag surface beside the traffic
- * lights, so its controls opt out of dragging by the `drag-region` rule.
+ * The header: the brand at the left, then `ml-auto` the search shortcut. The
+ * sidebar toggle is NOT here: it lives in the tab strip, where it stays put in
+ * both states (tab-strip.tsx). On desktop the header is a drag surface, so its
+ * control opts out of dragging by the `drag-region` rule.
  */
 export function SidebarHeader({
   brand,
@@ -28,7 +28,6 @@ export function SidebarHeader({
   /** The header's search shortcut (⌘K); the field itself lives in the section header. */
   readonly onSearch: () => void;
 }) {
-  const { onToggle } = useSidebar();
   return (
     <div
       className="drag-region flex h-11 shrink-0 items-center gap-1 px-2 pl-4"
@@ -37,9 +36,6 @@ export function SidebarHeader({
       <div className="flex h-5 items-center">{brand}</div>
       <IconButton className="ml-auto" label="Search (⌘K)" onClick={onSearch} size="sm">
         <Search />
-      </IconButton>
-      <IconButton label="Collapse sidebar" onClick={onToggle} size="sm">
-        <PanelLeft />
       </IconButton>
     </div>
   );

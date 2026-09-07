@@ -228,8 +228,10 @@ export const pending: readonly PendingApproval[] = [
 /** The frame at rest: sidebar open at its default width, an empty history. */
 export const SHELL: ConsoleShell = {
   sidebarOpen: true,
+  sidebarFloating: false,
   sidebarWidth: 240,
   onToggleSidebar: () => undefined,
+  onSidebarFloatingChange: () => undefined,
   onSidebarWidthCommit: () => undefined,
 };
 

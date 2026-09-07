@@ -10,13 +10,14 @@ import { useSidebar } from "./sidebar";
  * surface, with a CONTROLS ZONE on the left whose width tracks the sidebar.
  *
  * The zone is the trick. While the sidebar is open it is exactly
- * `--sidebar-width` wide, so the tab starts where the main column starts and
- * the history trio sits flush against the sidebar's right edge. When the
- * sidebar collapses the zone shrinks to what the window controls, the sidebar
- * toggle, and the trio need — and because it animates `width` on the same
- * duration and curve as the sidebar gap, the tab slides left in lockstep with
- * the column beneath it. Every number is measured from the reference console
- * (docs/desktop-shell.md).
+ * `--sidebar-width` wide, so the tab starts where the main column starts. When
+ * the sidebar collapses the zone shrinks to what the window controls, the
+ * sidebar toggle, and the trio need — and because it animates `width` on the
+ * same duration and curve as the sidebar gap, the tab slides left in lockstep
+ * with the column beneath it. The zone's CONTENT never moves: Linear-style,
+ * `[toggle]` gap `[history] [back] [forward]` leads it after the window
+ * controls in both states, so the one toggle is always in the same place
+ * under the pointer. Every number is measured (docs/desktop-shell.md).
  *
  * `platform` is a fact about where the OS draws its window controls, not about
  * the data: on darwin the traffic lights are inset 76px into the collapsed
@@ -40,27 +41,34 @@ export function TabStrip({
   readonly history: HistoryControls;
   readonly trailing?: ReactNode;
 }) {
-  const { open, onToggle } = useSidebar();
+  const { open, onToggle, reveal } = useSidebar();
   return (
     <header
       className="drag-region fixed inset-x-0 top-0 z-(--z-top-bar) flex h-10 w-full shrink-0 items-center bg-sunken"
       data-ui={UI_NAMES.TabStrip}
     >
       <div
-        className={`flex h-full shrink-0 items-center overflow-hidden transition-[width,padding] duration-base ease-out-quint group-data-[resizing]/sidebar:duration-0 motion-reduce:transition-none ${
-          open ? "w-(--sidebar-width) pr-2" : `duration-fast ${COLLAPSED_ZONE[platform]}`
-        }`}
+        className={`flex h-full shrink-0 items-center overflow-hidden transition-[width] duration-base ease-frame group-data-[resizing]/sidebar:duration-0 motion-reduce:transition-none ${
+          open ? "w-(--sidebar-width)" : COLLAPSED_WIDTH[platform]
+        } ${ZONE_INSET[platform]}`}
         data-ui={UI_NAMES.TabStripControls}
       >
-        {/* Collapsed: the toggle leads, a 12px gap, then the trio. Open: the
-            toggle has moved into the sidebar header and the trio hugs the
-            zone's right edge. */}
-        {!open && (
-          <IconButton className="mr-3" label="Expand sidebar" onClick={onToggle} size="sm">
-            <PanelLeft />
-          </IconButton>
-        )}
-        <div className={`flex items-center gap-1 ${open ? "ml-auto" : ""}`}>
+        {/* The toggle leads, a 12px gap, then the trio. While collapsed the
+            toggle is also a hot zone: resting on it reveals the column as an
+            overlay, and clicking it while revealed pins the column open. */}
+        <IconButton
+          aria-expanded={open}
+          className="mr-3"
+          data-ui={UI_NAMES.SidebarToggle}
+          label={open ? "Collapse sidebar" : "Expand sidebar"}
+          onClick={onToggle}
+          onPointerEnter={open ? undefined : reveal.enter}
+          onPointerLeave={open ? undefined : reveal.leave}
+          size="sm"
+        >
+          <PanelLeft />
+        </IconButton>
+        <div className="flex items-center gap-1">
           <HistoryMenu
             currentId={history.currentId}
             entries={history.entries}
@@ -96,9 +104,15 @@ export function TabStrip({
 /** Where the OS draws its window controls; decides the collapsed zone's shape. */
 export type WindowPlatform = "darwin" | "other";
 
-const COLLAPSED_ZONE: Record<WindowPlatform, string> = {
-  darwin: "w-tab-controls-collapsed pr-3 pl-[76px]",
-  other: "w-tab-controls-collapsed-generic px-2",
+const COLLAPSED_WIDTH: Record<WindowPlatform, string> = {
+  darwin: "w-tab-controls-collapsed",
+  other: "w-tab-controls-collapsed-generic",
+};
+
+/** The zone's padding is the same in both states: only its width moves. */
+const ZONE_INSET: Record<WindowPlatform, string> = {
+  darwin: "pr-3 pl-[76px]",
+  other: "px-2",
 };
 
 /** The main column's navigation history, as the strip's trio reads it. */
