@@ -50,13 +50,27 @@ describe("the strip's tokens", () => {
     expect(overlay).toBe(240);
   });
 
-  test("Given the trio's arrive transition, When read, Then it is timed by the zone's own duration and curve", () => {
-    const utility = CSS.slice(CSS.indexOf("@utility strip-trio-arrive"));
+  test("Given the trio's fade, When read, Then it is a progress property on the zone's own duration and curve, driven by data-collapsed", () => {
+    expect(CSS).toContain('@property --strip-trio-progress {\n  syntax: "<number>";');
+    const utility = CSS.slice(CSS.indexOf("@utility strip-trio {"));
     const block = utility.slice(0, utility.indexOf("\n}\n"));
-    expect(block).toContain("transition-duration: calc(var(--duration-base) * 2 / 3);");
-    expect(block).toContain("transition-delay: calc(var(--duration-base) / 3);");
+    expect(block).toContain("transition-property: --strip-trio-progress;");
+    expect(block).toContain("transition-duration: var(--duration-base);");
     expect(block).toContain("transition-timing-function: var(--ease-frame);");
-    expect(block).toContain("@starting-style");
+    expect(block).toContain('&[data-collapsed="true"] {\n    --strip-trio-progress: 1;');
+    // The reference's clamp(1 - 3p, 0, 1), p from the nearer end.
+    expect(block.replace(/\s+/g, " ")).toContain(
+      "opacity: clamp( 0, 1 - 3 * min(var(--strip-trio-progress), 1 - var(--strip-trio-progress)), 1 );",
+    );
+    expect(CSS).not.toContain("@starting-style");
+  });
+
+  test("Given the strip's source, When read, Then the trio carries no key: one node in both states", async () => {
+    const strip = await Bun.file(join(SRC, "tab-strip.tsx")).text();
+    const trio = strip.slice(strip.indexOf('className="strip-trio'), strip.indexOf("<HistoryMenu"));
+    expect(trio).toContain("data-collapsed={!open}");
+    expect(trio).not.toContain("key=");
+    expect(strip).not.toContain("key={open");
   });
 });
 

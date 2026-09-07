@@ -74,12 +74,13 @@ export function TabStrip({
         >
           <SidebarToggleIcon opened={mode !== "hidden"} />
         </IconButton>
-        {/* `ml-auto` is the spacer. Re-keyed on open/collapse so the arrive
-            transition replays with the zone's width transition. */}
+        {/* `ml-auto` is the spacer. ONE node in both states — never re-keyed:
+            `data-collapsed` drives `strip-trio`'s progress transition, so the
+            fade rides the zone's width motion without a remount. */}
         <div
-          className="strip-trio-arrive ml-auto flex items-center gap-1"
+          className="strip-trio ml-auto flex items-center gap-1 group-data-[resizing]/sidebar:duration-0 motion-reduce:transition-none"
+          data-collapsed={!open}
           data-ui={UI_NAMES.TabStripTrio}
-          key={open ? "open" : "collapsed"}
         >
           <HistoryMenu
             currentId={history.currentId}

@@ -480,20 +480,35 @@ body {
 /* The strip's history trio while the controls zone changes width.
 
    The reference derives the trio's opacity from the width motion itself,
-   `clamp(1 - 3p, 0, 1)`: gone in the first third of the travel. CSS has no
-   handle on a transition's progress, so the same shape is stated against the
-   SAME `--duration-base` / `--ease-frame` the zone's width runs on: the trio
-   is re-keyed on every open/collapse, enters at opacity 0 (`@starting-style`),
-   holds for the first third, and fades in over the remaining two. A
-   transition, not a keyframe: this motion answers the toggle, and the
-   keyframe budget is reserved for the marks that move without the reader. */
-@utility strip-trio-arrive {
-  transition-property: opacity;
-  transition-duration: calc(var(--duration-base) * 2 / 3);
-  transition-delay: calc(var(--duration-base) / 3);
+   `clamp(1 - 3p, 0, 1)`: gone in the first third of the travel. The trio is
+   ONE node in both states (never re-keyed, so it never remounts), and the
+   state it reads is `data-collapsed`. A registered custom property is the
+   progress `p`: the attribute flips it 0 <-> 1, and the property TRANSITIONS on
+   the SAME `--duration-base` / `--ease-frame` the zone's width runs on, so `p`
+   is the width's own progress. Opacity is the reference's formula with `p`
+   measured from the nearer end of the travel: out over the first third, in
+   over the last. A transition, not a keyframe: this motion answers the toggle,
+   and the keyframe budget is reserved for the marks that move without the
+   reader. Reduced motion and a resize drag zero it like every frame element. */
+@property --strip-trio-progress {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+@utility strip-trio {
+  --strip-trio-progress: 0;
+  transition-property: --strip-trio-progress;
+  transition-duration: var(--duration-base);
   transition-timing-function: var(--ease-frame);
-  @starting-style {
-    opacity: 0;
+  opacity: clamp(
+    0,
+    1 -
+    3 *
+    min(var(--strip-trio-progress), 1 - var(--strip-trio-progress)),
+    1
+  );
+  &[data-collapsed="true"] {
+    --strip-trio-progress: 1;
   }
 }
 

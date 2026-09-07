@@ -295,7 +295,9 @@ describe("the tab strip's controls zone", () => {
     const trio = tag(html, "TabStrip.Trio");
     expect(trio).toContain("ml-auto");
     expect(trio).toContain("gap-1");
-    expect(trio).toContain("strip-trio-arrive");
+    expect(trio).toContain("strip-trio ");
+    expect(trio).toContain('data-collapsed="false"');
+    expect(tag(frame(false, null), "TabStrip.Trio")).toContain('data-collapsed="true"');
     expect(
       zone.slice(trioAt + 1).match(/data-ui="(?!IconButton|Sidebar\.Toggle\.Icon)[^"]+"/g),
     ).toBeNull();
