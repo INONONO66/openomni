@@ -142,7 +142,10 @@ describe("daemon filesystem driver", () => {
       const fsOp = createFsDriver(new Map([["docs", link]]));
       try {
         await expect(fsOp({ op: "read", export: "docs", path: "note.txt" })).resolves.toMatchObject(
-          { status: "completed", value: { op: "read", data: Buffer.from("inside").toString("base64") } },
+          {
+            status: "completed",
+            value: { op: "read", data: Buffer.from("inside").toString("base64") },
+          },
         );
       } finally {
         fsOp.close();
@@ -349,7 +352,10 @@ describe("daemon filesystem driver", () => {
       const fsOp = createFsDriver(new Map([["docs", root]]));
 
       const first = await fsOp({ op: "read", export: "docs", path: "victim.txt" });
-      expect(first).toMatchObject({ status: "completed", value: { op: "read", data: Buffer.from("inside").toString("base64") } });
+      expect(first).toMatchObject({
+        status: "completed",
+        value: { op: "read", data: Buffer.from("inside").toString("base64") },
+      });
       rmSync(victim);
       symlinkSync(join(outside, "secret.txt"), victim);
       await expect(fsOp({ op: "read", export: "docs", path: "victim.txt" })).resolves.toEqual({
@@ -541,7 +547,6 @@ describe("daemon filesystem driver", () => {
         });
       } finally {
         await new Promise<void>((closed) => server.close(() => closed()));
-
       }
     });
   });
@@ -553,19 +558,33 @@ describe("daemon filesystem driver", () => {
       symlinkSync(join(outside, "absent"), join(root, "dangling"));
       symlinkSync(outside, join(root, "directory"));
       const driver = createFsDriver(new Map([["docs", root]]));
-      const write = (path: string) => driver({ op: "write", export: "docs", path, data: Buffer.from("changed").toString("base64") });
+      const write = (path: string) =>
+        driver({
+          op: "write",
+          export: "docs",
+          path,
+          data: Buffer.from("changed").toString("base64"),
+        });
       try {
         for (const path of ["escape", "dangling", "directory/secret", "../outside/secret"]) {
-          expect(await write(path)).toMatchObject({ status: "refused", reason: "path_escapes_export" });
+          expect(await write(path)).toMatchObject({
+            status: "refused",
+            reason: "path_escapes_export",
+          });
         }
         expect(readFileSync(join(outside, "secret"), "utf8")).toBe("untouched");
         const pinned = join(base, "pinned");
         renameSync(root, pinned);
         symlinkSync(outside, root);
-        expect(await write("created")).toEqual({ status: "completed", value: { op: "write", bytesWritten: 7 } });
+        expect(await write("created")).toEqual({
+          status: "completed",
+          value: { op: "write", bytesWritten: 7 },
+        });
         expect(readFileSync(join(pinned, "created"), "utf8")).toBe("changed");
         expect(lstatSync(join(pinned, "created")).mode & 0o777).toBe(0o600);
-      } finally { driver.close(); }
+      } finally {
+        driver.close();
+      }
     });
   });
 

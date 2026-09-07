@@ -98,11 +98,7 @@ export function ShellView() {
                     // Settled sessions are PLAIN ROWS at the same depth as live
                     // ones, under a quieter header. They are not a third level:
                     // they are sessions in this project that have finished.
-                    <Disclosure
-                      label={`settled · ${group.settled.length}`}
-                      level={1}
-                      tone="faint"
-                    >
+                    <Disclosure label={`settled · ${group.settled.length}`} level={1} tone="faint">
                       <ul className="flex flex-col">
                         {group.settled.map((session) => (
                           <SidebarRow key={session.name} query={query} session={session} />

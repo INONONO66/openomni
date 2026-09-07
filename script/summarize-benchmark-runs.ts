@@ -68,7 +68,9 @@ async function readBenchmarkRuns(root: string): Promise<BenchmarkRun[]> {
 
   for (const entry of entries) {
     if (!entry.isDirectory()) {
-      throw new Error(`Benchmark run root contains a non-directory entry: ${join(root, entry.name)}`);
+      throw new Error(
+        `Benchmark run root contains a non-directory entry: ${join(root, entry.name)}`,
+      );
     }
     const runRoot = join(root, entry.name);
     const metrics: BenchmarkMetric[] = [];
@@ -169,7 +171,11 @@ function summarizeMetrics(metrics: readonly BenchmarkMetric[]): BenchmarkStats[]
 }
 
 function toGateMetrics(stats: readonly BenchmarkStats[]): BenchmarkMetric[] {
-  return stats.map((metric) => ({ name: metric.name, unit: metric.unit, value: Math.round(metric.p50) }));
+  return stats.map((metric) => ({
+    name: metric.name,
+    unit: metric.unit,
+    value: Math.round(metric.p50),
+  }));
 }
 
 function percentile(sortedValues: readonly number[], percentileValue: number): number {

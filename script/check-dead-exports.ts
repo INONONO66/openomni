@@ -254,7 +254,10 @@ async function main(): Promise<void> {
     return;
   }
 
-  const [standardReport, entryExportReport] = await Promise.all([runKnip(), runKnip(".", true, true)]);
+  const [standardReport, entryExportReport] = await Promise.all([
+    runKnip(),
+    runKnip(".", true, true),
+  ]);
   const packageEntries = new Set(
     knipWorkspaces().map((workspace) => `${workspace.dir}/src/index.ts`),
   );

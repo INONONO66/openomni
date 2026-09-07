@@ -56,7 +56,11 @@ async function deletedSymbolViolations(): Promise<string[]> {
     let scanned = 0;
     const glob = new Bun.Glob(`${root}/**/*.{ts,tsx}`);
     for await (const filePath of glob.scan({ cwd: repoRoot, onlyFiles: true })) {
-      if (/\.(?:test|spec)\.tsx?$/.test(filePath) || /\/(?:test|tests|__tests__|fixtures|dist|node_modules)\//.test(filePath)) continue;
+      if (
+        /\.(?:test|spec)\.tsx?$/.test(filePath) ||
+        /\/(?:test|tests|__tests__|fixtures|dist|node_modules)\//.test(filePath)
+      )
+        continue;
       scanned += 1;
       const source = await Bun.file(join(repoRoot, filePath)).text();
       for (const symbol of DELETED_SYMBOLS) {

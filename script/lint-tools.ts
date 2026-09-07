@@ -27,10 +27,7 @@
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { collectToolSpecs, TOOL_DEFINITIONS } from "../apps/openomni/src/tools/core/catalog.js";
-import type {
-  AnyToolDefinition,
-  ToolCategory,
-} from "../packages/protocol/src/tool/index.js";
+import type { AnyToolDefinition, ToolCategory } from "../packages/protocol/src/tool/index.js";
 
 interface Violation {
   readonly check:

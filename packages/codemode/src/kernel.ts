@@ -220,9 +220,15 @@ while True:
     _emit({"kind": "result", "result": _result})
 `;
 
-const ToolCallFrame = Machine.ToolCall.extend({ kind: z.literal("tool_call"), callId: z.string().min(1) });
+const ToolCallFrame = Machine.ToolCall.extend({
+  kind: z.literal("tool_call"),
+  callId: z.string().min(1),
+});
 type ToolCallFrame = z.infer<typeof ToolCallFrame>;
-const Frame = z.discriminatedUnion("kind", [ToolCallFrame, z.object({ kind: z.literal("result"), result: Machine.CellResult }).strict()]);
+const Frame = z.discriminatedUnion("kind", [
+  ToolCallFrame,
+  z.object({ kind: z.literal("result"), result: Machine.CellResult }).strict(),
+]);
 
 /** Answers a call made from inside a cell. */
 type CellToolCaller = (call: Machine.ToolCall) => Promise<Machine.ToolCallResult>;
@@ -251,9 +257,15 @@ export class PythonKernel {
   private readonly lifetime = new AbortController();
   private readonly exits = new Set<Promise<void>>();
 
-  run(request: Machine.CellRequest, callTool: CellToolCaller, signal?: AbortSignal): Promise<Machine.CellResult> {
-    const cancellation = signal === undefined ? this.lifetime.signal : AbortSignal.any([signal, this.lifetime.signal]);
-    if (cancellation.aborted) return Promise.resolve({ status: "cancelled", cellId: request.cellId });
+  run(
+    request: Machine.CellRequest,
+    callTool: CellToolCaller,
+    signal?: AbortSignal,
+  ): Promise<Machine.CellResult> {
+    const cancellation =
+      signal === undefined ? this.lifetime.signal : AbortSignal.any([signal, this.lifetime.signal]);
+    if (cancellation.aborted)
+      return Promise.resolve({ status: "cancelled", cellId: request.cellId });
     const deadline = Date.now() + request.timeoutMs;
     let queueExpired = false;
     let resolveResult!: (result: Machine.CellResult) => void;
@@ -352,7 +364,11 @@ export class PythonKernel {
       try {
         frame = Frame.parse(JSON.parse(line));
       } catch (error) {
-        this.settleWithParseFailure(process, pending, error instanceof Error ? error : new Error(String(error)));
+        this.settleWithParseFailure(
+          process,
+          pending,
+          error instanceof Error ? error : new Error(String(error)),
+        );
         return;
       }
       // A tool call leaves the cell pending — including its deadline, so a cell
@@ -422,7 +438,11 @@ export class PythonKernel {
           })}\n`,
         );
       } catch (error) {
-        this.settleWithParseFailure(process, pending, error instanceof Error ? error : new Error(String(error)));
+        this.settleWithParseFailure(
+          process,
+          pending,
+          error instanceof Error ? error : new Error(String(error)),
+        );
       }
       return;
     }

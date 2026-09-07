@@ -103,7 +103,7 @@ const ledgerTimeline = [
               { mark: "remove", text: "  if lease.generation != self.g {" },
               { text: "    return Err(Fenced { seen: 1487 });" },
               { text: "  }" },
-              { text: "  Ok(lease.commit(\"entry.append\"))" },
+              { text: '  Ok(lease.commit("entry.append"))' },
               { text: "}" },
             ],
           },

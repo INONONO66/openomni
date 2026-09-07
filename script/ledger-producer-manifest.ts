@@ -54,12 +54,7 @@ import ts from "typescript";
 
 interface LedgerStreamProducer {
   /** Stream class key owned by this producer manifest. */
-  readonly streamClass:
-    | "wait"
-    | "route"
-    | "route_correction"
-    | "gateway_send"
-    | "approval";
+  readonly streamClass: "wait" | "route" | "route_correction" | "gateway_send" | "approval";
   /**
    * Repo-relative paths of the enumerated modules that append this class's facts.
    */
@@ -186,7 +181,7 @@ const COMMIT_EXECUTOR_MODULE = "packages/ledger/src/storage/commit-coordinator.t
 
 function tableWriteSqlPattern(tables: readonly string[]): RegExp {
   const table = `(?:${tables.join("|")})`;
-  const identifier = '(?:[\\w$]+|"(?:[^"]|"")+"|`(?:[^`]|``)+`|\\[[^\\]]+\\]|\'(?:[^\']|\'\')+\')';
+  const identifier = "(?:[\\w$]+|\"(?:[^\"]|\"\")+\"|`(?:[^`]|``)+`|\\[[^\\]]+\\]|'(?:[^']|'')+')";
   const target = `(?:${table}(?![\\w$])|"${table}"|\`${table}\`|\\[${table}\\]|'${table}')`;
   return new RegExp(
     `\\b(?:insert(?:\\s+or\\s+\\w+)?\\s+into|replace\\s+into|update(?:\\s+or\\s+\\w+)?|delete\\s+from)\\s+(?:${identifier}\\s*\\.\\s*)?${target}`,
@@ -262,7 +257,13 @@ export function matchesFrozenTableWriteSql(tsSource: string): boolean {
 }
 
 function matchesTsSql(source: string, pattern: RegExp): boolean {
-  const file = ts.createSourceFile("source.tsx", source, ts.ScriptTarget.Latest, false, ts.ScriptKind.TSX);
+  const file = ts.createSourceFile(
+    "source.tsx",
+    source,
+    ts.ScriptTarget.Latest,
+    false,
+    ts.ScriptKind.TSX,
+  );
   function visit(node: ts.Node): boolean {
     // Literal text is decoded by TypeScript, including escaped SQL quotes.
     // Template fragments stay separate: dynamically assembled names are not inferred.
@@ -297,7 +298,9 @@ export async function scanLedgerProducers(rootDir: string): Promise<LedgerProduc
   const frozenTableWriters: string[] = [];
   const migrationSqlWriters: string[] = [];
   const sourceFiles = [...SOURCE_GLOB.scanSync({ cwd: rootDir })].filter(
-    (file) => !/\.(?:test|spec)\.tsx?$/.test(file) && !/\/(?:test|tests|__tests__|node_modules|dist)\//.test(file),
+    (file) =>
+      !/\.(?:test|spec)\.tsx?$/.test(file) &&
+      !/\/(?:test|tests|__tests__|node_modules|dist)\//.test(file),
   );
   sourceFiles.sort();
   for (const file of sourceFiles) {

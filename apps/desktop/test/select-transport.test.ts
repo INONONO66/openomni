@@ -47,7 +47,9 @@ describe("the transport follows the endpoint", () => {
     // A loopback gateway with no configured token rejects an `auth` offer it
     // cannot match, so an empty offer is not the same as an absent one.
     expect(selectChatTransport({ url: "ws://127.0.0.1:3000/ws" }).protocols).toBeUndefined();
-    expect(selectChatTransport({ url: "ws://127.0.0.1:3000/ws", token: "" }).protocols).toBeUndefined();
+    expect(
+      selectChatTransport({ url: "ws://127.0.0.1:3000/ws", token: "" }).protocols,
+    ).toBeUndefined();
   });
 
   test("Given a token no subprotocol can carry, When selected, Then it is refused by name", () => {
@@ -57,7 +59,7 @@ describe("the transport follows the endpoint", () => {
     // "Wrong protocol for WebSocket" on their first message and nothing
     // pointing at the variable that caused it. The daemon puts no character
     // constraint on the token, so this is reachable by configuration.
-    for (const token of ["has space", "tab\there", "quote\"d", "comma,d", "sla/sh"]) {
+    for (const token of ["has space", "tab\there", 'quote"d', "comma,d", "sla/sh"]) {
       expect(() => selectChatTransport({ url: "ws://127.0.0.1:3000/ws", token })).toThrow(
         /OPENOMNI_WS_TOKEN/,
       );
@@ -144,7 +146,12 @@ describe("the token reaches the wire", () => {
     });
     await wire.seen;
 
-    expect(wire.header()?.split(",").map((part) => part.trim())).toEqual(["auth", "s3cret"]);
+    expect(
+      wire
+        .header()
+        ?.split(",")
+        .map((part) => part.trim()),
+    ).toEqual(["auth", "s3cret"]);
     await sent;
   });
 

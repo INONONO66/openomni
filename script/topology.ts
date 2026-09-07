@@ -157,11 +157,7 @@ export const TOPOLOGY = [
     displayName: "channels",
     dir: "packages/channels",
     packageName: "@openomni/channels",
-    allowedDeps: [
-      "@openomni/protocol",
-      "@openomni/policy",
-      "@openomni/ledger",
-    ],
+    allowedDeps: ["@openomni/protocol", "@openomni/policy", "@openomni/ledger"],
     srcAllowedDeps: ["@openomni/protocol", "@openomni/policy", "@openomni/ledger"],
     testLane: true,
     coverageLane: true,

@@ -1,9 +1,4 @@
-import type {
-  PendingApproval,
-  TranscriptCodeLine,
-  TranscriptNode,
-  TurnCost,
-} from "../src";
+import type { PendingApproval, TranscriptCodeLine, TranscriptNode, TurnCost } from "../src";
 
 /**
  * The showcase's transcript, as data.
@@ -148,9 +143,21 @@ export const transcript: readonly TranscriptNode[] = [
   },
   // Six calls, one of them running: the fold's summary and its never-hide rule
   // on screen at the same time.
-  { kind: "tool", id: "t4", tool: "read", target: "packages/kernel/tests/ledger.rs", duration: "44ms" },
+  {
+    kind: "tool",
+    id: "t4",
+    tool: "read",
+    target: "packages/kernel/tests/ledger.rs",
+    duration: "44ms",
+  },
   { kind: "tool", id: "t5", tool: "read", target: "docs/kernel-contract.md", duration: "31ms" },
-  { kind: "tool", id: "t6", tool: "read", target: "packages/kernel/src/ledger/mod.rs", duration: "28ms" },
+  {
+    kind: "tool",
+    id: "t6",
+    tool: "read",
+    target: "packages/kernel/src/ledger/mod.rs",
+    duration: "28ms",
+  },
   {
     kind: "tool",
     id: "t7",
@@ -159,8 +166,20 @@ export const transcript: readonly TranscriptNode[] = [
     duration: "12ms",
     payload: ["+  let lease = self.lease.acquire().await?;", "-  if lease.generation != self.g {"],
   },
-  { kind: "tool", id: "t8", tool: "edit", target: "packages/kernel/src/ledger/lease.rs", duration: "9ms" },
-  { kind: "tool", id: "t9", tool: "shell", target: "cargo test -p kernel ledger::", status: "running" },
+  {
+    kind: "tool",
+    id: "t8",
+    tool: "edit",
+    target: "packages/kernel/src/ledger/lease.rs",
+    duration: "9ms",
+  },
+  {
+    kind: "tool",
+    id: "t9",
+    tool: "shell",
+    target: "cargo test -p kernel ledger::",
+    status: "running",
+  },
   {
     kind: "assistant",
     id: "a1",

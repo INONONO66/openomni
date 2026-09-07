@@ -9,7 +9,11 @@ import { TOPOLOGY } from "./topology";
 const root = join(import.meta.dir, "..");
 function cli(args: readonly string[], env: Record<string, string> = {}) {
   return Bun.spawnSync([process.execPath, "script/ci.ts", ...args], {
-    cwd: root, env: { ...process.env, ...env }, stdout: "pipe", stderr: "pipe", timeout: 10_000,
+    cwd: root,
+    env: { ...process.env, ...env },
+    stdout: "pipe",
+    stderr: "pipe",
+    timeout: 10_000,
   });
 }
 
@@ -17,32 +21,46 @@ function fixture() {
   const dir = mkdtempSync(join(tmpdir(), "openomni-ci-"));
   for (const workspace of TOPOLOGY) {
     mkdirSync(join(dir, workspace.dir), { recursive: true });
-    writeFileSync(join(dir, workspace.dir, "package.json"), JSON.stringify({
-      scripts: workspace.key === "protocol" ? { build: "tsc" } : {},
-    }));
+    writeFileSync(
+      join(dir, workspace.dir, "package.json"),
+      JSON.stringify({
+        scripts: workspace.key === "protocol" ? { build: "tsc" } : {},
+      }),
+    );
   }
   return { dir, [Symbol.dispose]: () => rmSync(dir, { recursive: true, force: true }) };
 }
 const jobSchema = z.object({
   needs: z.array(z.string()).optional(),
   if: z.string().optional(),
-  steps: z.array(z.object({
-    run: z.string().optional(),
-    if: z.string().optional(),
-    uses: z.string().optional(),
-    with: z.looseObject({ ref: z.string().optional(), "fetch-depth": z.number().optional() }).optional(),
-    "working-directory": z.string().optional(),
-  })),
+  steps: z.array(
+    z.object({
+      run: z.string().optional(),
+      if: z.string().optional(),
+      uses: z.string().optional(),
+      with: z
+        .looseObject({ ref: z.string().optional(), "fetch-depth": z.number().optional() })
+        .optional(),
+      "working-directory": z.string().optional(),
+    }),
+  ),
 });
 
 test("docs-only planning keeps both final statuses successful while work is intentionally skipped", () => {
   // Given a real planner decision and GitHub's skipped job results.
   const plan = planChanges(["README.md"]);
-  const needs = Object.fromEntries(["prepare", "tests", "static", "deps", "quality", "dependency-review"]
-    .map((job) => [job, { result: "skipped" }]));
+  const needs = Object.fromEntries(
+    ["prepare", "tests", "static", "deps", "quality", "dependency-review"].map((job) => [
+      job,
+      { result: "skipped" },
+    ]),
+  );
   // When the actual CLI consumes GitHub's serialized output.
-  const result = cli(["gate"], { CI_PLAN: JSON.stringify(plan),
-    CI_NEEDS: JSON.stringify({ ...needs, plan: { result: "success" } }), CI_EVENT: "pull_request" });
+  const result = cli(["gate"], {
+    CI_PLAN: JSON.stringify(plan),
+    CI_NEEDS: JSON.stringify({ ...needs, plan: { result: "success" } }),
+    CI_EVENT: "pull_request",
+  });
   // Then documentation is a deliberate success, not a missing required status.
   expect(result.exitCode).toBe(0);
 });
@@ -52,14 +70,18 @@ for (const job of ["plan", "prepare", "tests", "static", "deps", "quality", "dep
     test(`final gate rejects ${job} ${status} for a required full run`, () => {
       // Given a full plan and one unsuccessful/missing required result.
       const needs: Record<string, { result: string }> = Object.fromEntries(
-        ["plan", "prepare", "tests", "static", "deps", "quality", "dependency-review"]
-          .map((key) => [key, { result: "success" }]),
+        ["plan", "prepare", "tests", "static", "deps", "quality", "dependency-review"].map(
+          (key) => [key, { result: "success" }],
+        ),
       );
       if (status === "missing") delete needs[job];
       else needs[job] = { result: status };
       // When the real final-gate entry point runs.
-      const result = cli(["gate"], { CI_PLAN: JSON.stringify(planChanges([], true)),
-        CI_NEEDS: JSON.stringify(needs), CI_EVENT: "pull_request" });
+      const result = cli(["gate"], {
+        CI_PLAN: JSON.stringify(planChanges([], true)),
+        CI_NEEDS: JSON.stringify(needs),
+        CI_EVENT: "pull_request",
+      });
       // Then matrix failure/cancellation and unexpected skips remain failures.
       expect(result.exitCode).not.toBe(0);
       expect(result.stderr.toString()).toContain(`${job}: ${status}`);
@@ -84,8 +106,11 @@ test("documentation typecheck invokes no executable workspace", () => {
 
 test("typecheck rejects untrusted lane paths before spawning", () => {
   // Given a forged plan that attempts to escape the repository.
-  const plan = { ...planChanges([], true), full: false,
-    matrix: { include: [{ key: "protocol", dir: "../../tmp; exit 0", coverage: true }] } };
+  const plan = {
+    ...planChanges([], true),
+    full: false,
+    matrix: { include: [{ key: "protocol", dir: "../../tmp; exit 0", coverage: true }] },
+  };
   // When the CLI parses it, then no raw path reaches a shell.
   expect(cli(["check-types"], { CI_PLAN: JSON.stringify(plan) }).exitCode).not.toBe(0);
 });
@@ -128,12 +153,14 @@ test("shared artifacts preserve workspace paths and symlinks without node_module
 
 test("workflow restores the one build before every executable consumer", () => {
   // Given the shipped workflow.
-  const jobs = z.object({ jobs: z.record(z.string(), jobSchema) }).parse(
-    Bun.YAML.parse(readFileSync(join(root, ".github/workflows/ci.yml"), "utf8")),
-  ).jobs;
+  const jobs = z
+    .object({ jobs: z.record(z.string(), jobSchema) })
+    .parse(Bun.YAML.parse(readFileSync(join(root, ".github/workflows/ci.yml"), "utf8"))).jobs;
   // When discovering consumers, then none rebuilds or bypasses artifact validation.
   for (const name of ["tests", "static", "deps", "quality"]) {
-    expect(jobs[name]?.steps.some((step) => step.uses?.startsWith("actions/download-artifact@"))).toBe(true);
+    expect(
+      jobs[name]?.steps.some((step) => step.uses?.startsWith("actions/download-artifact@")),
+    ).toBe(true);
     expect(jobs[name]?.steps.some((step) => step.run === "bun run ci restore")).toBe(true);
     expect(jobs[name]?.steps.some((step) => step.run?.includes("run build"))).toBe(false);
   }
@@ -149,19 +176,32 @@ test("workflow restores the one build before every executable consumer", () => {
 
 test("the stable Test status accepts only the planned documentation skip", () => {
   // Given the real docs plan and exactly the Test job's needs.
-  const result = cli(["test-gate"], { CI_PLAN: JSON.stringify(planChanges(["README.md"])),
-    CI_NEEDS: JSON.stringify({ plan: { result: "success" }, prepare: { result: "skipped" }, tests: { result: "skipped" } }) });
+  const result = cli(["test-gate"], {
+    CI_PLAN: JSON.stringify(planChanges(["README.md"])),
+    CI_NEEDS: JSON.stringify({
+      plan: { result: "success" },
+      prepare: { result: "skipped" },
+      tests: { result: "skipped" },
+    }),
+  });
   // When its CLI executes, then the always-running status succeeds.
   expect(result.exitCode).toBe(0);
 });
 
 test("the full push gate accepts successful checks without PR-only dependency review", () => {
   // Given full main-branch results with only the PR-specific check disabled.
-  const needs = Object.fromEntries(["plan", "prepare", "tests", "static", "deps", "quality"]
-    .map((key) => [key, { result: "success" }]));
+  const needs = Object.fromEntries(
+    ["plan", "prepare", "tests", "static", "deps", "quality"].map((key) => [
+      key,
+      { result: "success" },
+    ]),
+  );
   // When the real gate executes, then all mandatory work is accepted.
-  const result = cli(["gate"], { CI_PLAN: JSON.stringify(planChanges([], true)), CI_EVENT: "push",
-    CI_NEEDS: JSON.stringify({ ...needs, "dependency-review": { result: "skipped" } }) });
+  const result = cli(["gate"], {
+    CI_PLAN: JSON.stringify(planChanges([], true)),
+    CI_EVENT: "push",
+    CI_NEEDS: JSON.stringify({ ...needs, "dependency-review": { result: "skipped" } }),
+  });
   expect(result.exitCode).toBe(0);
 });
 
@@ -169,7 +209,9 @@ test("restore rejects an archive that omits a declared build", () => {
   // Given a downloaded archive containing no required workspace dist.
   using sandbox = fixture();
   writeFileSync(join(sandbox.dir, "unrelated.txt"), "not a build");
-  const packed = Bun.spawnSync(["tar", "-cf", "workspace-dist.tar", "unrelated.txt"], { cwd: sandbox.dir });
+  const packed = Bun.spawnSync(["tar", "-cf", "workspace-dist.tar", "unrelated.txt"], {
+    cwd: sandbox.dir,
+  });
   expect(packed.exitCode).toBe(0);
   // When restore runs, then merely having an artifact is insufficient.
   const result = cli(["restore", "--root", sandbox.dir]);
@@ -179,15 +221,16 @@ test("restore rejects an archive that omits a declared build", () => {
 
 test("selected test lanes depend only on planning and the shared build", () => {
   // Given the real workflow, not a duplicate configuration fixture.
-  const workflow = z.object({ jobs: z.record(z.string(), jobSchema) }).parse(
-    Bun.YAML.parse(readFileSync(join(root, ".github/workflows/ci.yml"), "utf8")),
-  );
+  const workflow = z
+    .object({ jobs: z.record(z.string(), jobSchema) })
+    .parse(Bun.YAML.parse(readFileSync(join(root, ".github/workflows/ci.yml"), "utf8")));
   // When GitHub discovers the test job.
   const job = workflow.jobs.tests;
   // Then unrelated static and dependency gates cannot serialize it.
   expect(job?.needs).toEqual(["plan", "prepare"]);
   for (const lane of [...TOPOLOGY, { key: "scripts", dir: "script" }]) {
-    expect(job?.steps.find((step) => step["working-directory"] === lane.dir)?.if)
-      .toBe(`matrix.key == '${lane.key}'`);
+    expect(job?.steps.find((step) => step["working-directory"] === lane.dir)?.if).toBe(
+      `matrix.key == '${lane.key}'`,
+    );
   }
 });

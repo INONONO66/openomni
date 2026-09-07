@@ -8,7 +8,11 @@ const chain = [primary, second, third];
 
 describe("Placement.selectModel", () => {
   it("selects the primary with no failure history", () => {
-    expect(Placement.selectModel(chain, [])).toEqual({ model: primary, index: 0, exhausted: false });
+    expect(Placement.selectModel(chain, [])).toEqual({
+      model: primary,
+      index: 0,
+      exhausted: false,
+    });
   });
 
   it("advances one candidate per advancing failure class", () => {
@@ -36,7 +40,12 @@ describe("Placement.selectModel", () => {
   }
 
   it("counts only the advancing classes in a mixed history", () => {
-    const selection = Placement.selectModel(chain, ["tool_error", "timeout", "context_overflow", "transient_error"]);
+    const selection = Placement.selectModel(chain, [
+      "tool_error",
+      "timeout",
+      "context_overflow",
+      "transient_error",
+    ]);
     expect(selection.index).toBe(2);
     expect(selection.exhausted).toBe(false);
   });

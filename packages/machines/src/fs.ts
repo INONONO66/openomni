@@ -1,5 +1,13 @@
 import { CString, FFIType, dlopen, toArrayBuffer, type Pointer } from "bun:ffi";
-import { closeSync, constants, fstatSync, ftruncateSync, openSync, readSync, writeSync } from "node:fs";
+import {
+  closeSync,
+  constants,
+  fstatSync,
+  ftruncateSync,
+  openSync,
+  readSync,
+  writeSync,
+} from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { Machine } from "@openomni/protocol";
 
@@ -36,10 +44,14 @@ type Root = {
 const libcPath = process.platform === "darwin" ? "/usr/lib/libSystem.B.dylib" : "libc.so.6";
 // Darwin's public openat is variadic: arm64 passes its mode on the stack.
 // Bind the fixed-arity syscall entry so FFI passes creation mode correctly.
-const openSignature = { args: [FFIType.i32, FFIType.cstring, FFIType.i32, FFIType.i32], returns: FFIType.i32 } as const;
-const nativeOpen = process.platform === "darwin"
-  ? dlopen(libcPath, { __openat: openSignature }).symbols.__openat
-  : dlopen(libcPath, { openat: openSignature }).symbols.openat;
+const openSignature = {
+  args: [FFIType.i32, FFIType.cstring, FFIType.i32, FFIType.i32],
+  returns: FFIType.i32,
+} as const;
+const nativeOpen =
+  process.platform === "darwin"
+    ? dlopen(libcPath, { __openat: openSignature }).symbols.__openat
+    : dlopen(libcPath, { openat: openSignature }).symbols.openat;
 const libc = dlopen(libcPath, {
   readlinkat: {
     args: [FFIType.i32, FFIType.cstring, FFIType.ptr, FFIType.u64],
@@ -197,11 +209,7 @@ function walk(
 
   while (true) {
     if (pending.length === 0) {
-      const opened = openAt(
-        dirfd,
-        ".",
-        O_TARGET | O_CLOEXEC | (finalDirectory ? O_DIRECTORY : 0),
-      );
+      const opened = openAt(dirfd, ".", O_TARGET | O_CLOEXEC | (finalDirectory ? O_DIRECTORY : 0));
       if (!("fd" in opened)) return fail(refusalForOpenError(opened.errno, shown));
       closeOwned();
       const symlinkStat =
@@ -449,19 +457,34 @@ export function createFsDriver(
     if (data !== undefined && data.length > Machine.FS_WRITE_MAX_BYTES) {
       return refused("too_large", "write exceeds socket byte cap");
     }
-    const target = walk(root, segments, request.op === "list", request.op === "stat", shown,
-      request.op === "write" ? constants.O_WRONLY | constants.O_CREAT | constants.O_NONBLOCK : O_TARGET);
+    const target = walk(
+      root,
+      segments,
+      request.op === "list",
+      request.op === "stat",
+      shown,
+      request.op === "write"
+        ? constants.O_WRONLY | constants.O_CREAT | constants.O_NONBLOCK
+        : O_TARGET,
+    );
 
     if (isRefusal(target)) return target;
 
     try {
       if (data !== undefined) {
-        if (!fstatSync(target.fd).isFile()) return refused("wrong_kind", `path is not a file: ${shown}`);
+        if (!fstatSync(target.fd).isFile())
+          return refused("wrong_kind", `path is not a file: ${shown}`);
         // Never truncate before checking the pinned descriptor's kind.
         ftruncateSync(target.fd, 0);
         let bytesWritten = 0;
         while (bytesWritten < data.length) {
-          bytesWritten += writeSync(target.fd, data, bytesWritten, data.length - bytesWritten, bytesWritten);
+          bytesWritten += writeSync(
+            target.fd,
+            data,
+            bytesWritten,
+            data.length - bytesWritten,
+            bytesWritten,
+          );
         }
         return { status: "completed", value: { op: "write", bytesWritten } };
       }

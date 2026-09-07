@@ -38,9 +38,7 @@ function nodesOf(id: string) {
 }
 
 function transcript(id: string): string {
-  return renderToStaticMarkup(
-    <Timeline emptyLabel="empty" nodes={nodesOf(id)} sessionId={id} />,
-  );
+  return renderToStaticMarkup(<Timeline emptyLabel="empty" nodes={nodesOf(id)} sessionId={id} />);
 }
 
 /**
@@ -98,9 +96,7 @@ describe("the transcript sets exactly three voices", () => {
     // as a unit separately.
     for (const id of IDS) {
       const html = transcript(id);
-      const outside = html
-        .split(/<pre[\s\S]*?<\/pre>/)
-        .join("");
+      const outside = html.split(/<pre[\s\S]*?<\/pre>/).join("");
       const sizes = [...outside.matchAll(/text-\[(\d+)px\]\/\[(\d+)px\]/g)].map(
         (m) => `${m[1]}/${m[2]}`,
       );
@@ -120,7 +116,13 @@ describe("the transcript sets exactly three voices", () => {
       const outside = transcript(id)
         .split(/<pre[\s\S]*?<\/pre>/)
         .join("");
-      for (const level of ["text-display", "text-title", "text-heading", "text-body", "text-label"]) {
+      for (const level of [
+        "text-display",
+        "text-title",
+        "text-heading",
+        "text-body",
+        "text-label",
+      ]) {
         expect(outside, `${level} leaked into the transcript in ${id}`).not.toContain(level);
       }
     }
@@ -230,10 +232,7 @@ describe("the sidebar row keeps its own rank", () => {
     // than exempted silently. Its three voices are literal pixel pairs BECAUSE
     // they must not be re-pointable by a density scope, and that rule is gated
     // above. Two different laws, so two different assertions.
-    const nav = SHELL.slice(
-      SHELL.indexOf('aria-label="Sessions"'),
-      SHELL.indexOf("<main"),
-    );
+    const nav = SHELL.slice(SHELL.indexOf('aria-label="Sessions"'), SHELL.indexOf("<main"));
     expect(nav.length).toBeGreaterThan(0);
     expect(nav).not.toMatch(/text-\[\d+(px|rem)\]/);
     expect(nav).not.toMatch(/font-size:/);
