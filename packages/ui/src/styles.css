@@ -186,6 +186,7 @@
      `section`, spent between a group header and its first row. */
   --spacing-gutter: 16px;
   --spacing-section: 24px;
+  --spacing-control-xs: 20px;
   --spacing-control-sm: 24px;
   /* The strip's step: between `sm` and `md`, a 28px box around a 16px glyph.
      Measured from the reference console's strip controls (`IconButton size=medium`). */

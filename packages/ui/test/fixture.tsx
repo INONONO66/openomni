@@ -236,6 +236,9 @@ export const SHELL: ConsoleShell = {
 };
 
 export const STRIP: ConsoleStrip = {
+  tabs: [],
+  onActivate: () => undefined,
+  onClose: () => undefined,
   createLabel: "New",
   onCreate: () => undefined,
   platform: "darwin",

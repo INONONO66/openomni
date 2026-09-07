@@ -45,6 +45,7 @@ function Frame({ open, floating = false }: { readonly open: boolean; readonly fl
       width={240}
     >
       <TabStrip
+        {...STRIP}
         createLabel={STRIP.createLabel}
         history={STRIP.history}
         onCreate={STRIP.onCreate}

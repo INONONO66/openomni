@@ -9,7 +9,7 @@ export interface HistoryEntry {
   readonly id: string;
   readonly title: string;
   /** Epoch ms. */
-  readonly at: number;
+  readonly at?: number;
 }
 
 /** The menu lists this many, newest first; the stack behind it may be longer. */
@@ -37,6 +37,11 @@ export function HistoryMenu({
   readonly onJump: (id: string) => void;
 }) {
   const recent = entries.slice(-HISTORY_MENU_LIMIT).reverse();
+  const current = entries.find((entry) => entry.id === currentId);
+  if (current !== undefined && !recent.includes(current)) {
+    recent.pop();
+    recent.push(current);
+  }
   return (
     <Menu.Root>
       <Menu.Trigger render={<IconButton label="History" size="base" />}>
@@ -71,9 +76,11 @@ export function HistoryMenu({
                     onClick={() => onJump(entry.id)}
                   >
                     <span className="min-w-0 flex-1 truncate">{entry.title}</span>
-                    <Text className="shrink-0" level="meta" mono numeric tone="faint">
-                      {relativeTime(entry.at, now)}
-                    </Text>
+                    {entry.at !== undefined && (
+                      <Text className="shrink-0" level="meta" mono numeric tone="faint">
+                        {relativeTime(entry.at, now)}
+                      </Text>
+                    )}
                   </Menu.Item>
                 );
               })

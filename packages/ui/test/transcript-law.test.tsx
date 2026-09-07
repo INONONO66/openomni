@@ -385,9 +385,11 @@ describe("tool expansion is scoped to its session", () => {
 const SCREEN = renderToStaticMarkup(
   <Console
     shell={SHELL}
-    strip={STRIP}
-    title="ledger append path"
-    session={{
+    strip={{
+      ...STRIP,
+      tabs: [{ id: "budget", title: "ledger append path", icon: <svg aria-hidden="true" />, active: true }],
+    }}
+    transcript={{
       id: "budget",
       nodes: transcript,
       draft: "",

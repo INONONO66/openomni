@@ -9,6 +9,11 @@ import { CodeFence, CodeToken } from "../src/primitives/code";
  */
 
 describe("IconButton", () => {
+  test("xs reserves a 20px box and a 12px glyph", () => {
+    const html = renderToStaticMarkup(<IconButton label="Close" size="xs"><svg aria-hidden="true" /></IconButton>);
+    expect(html).toContain("size-control-xs");
+    expect(html).toContain("]:size-3");
+  });
   test("Given a label, When rendered, Then it names itself and stays square", () => {
     const html = renderToStaticMarkup(
       <IconButton label="New session" size="sm">
