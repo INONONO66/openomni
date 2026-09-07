@@ -30,6 +30,7 @@ export const Correlation = z
     endpointId: z.string().min(1).optional(),
     channelId: z.string().min(1).optional(),
     replyToMessageId: z.string().min(1).optional(),
+    chain: z.array(z.string().min(1)).optional(),
     threadId: z.string().min(1).optional(),
     tokenHash: z.string().min(1).optional(),
     externalConversationId: z.string().min(1).optional(),
@@ -156,11 +157,12 @@ export const Create = RecordBase.omit({
 });
 export type Create = z.infer<typeof Create>;
 
-export const CorrelationQuery = Correlation
-  .strict()
-  .refine((query) => Object.values(query).some((value) => value !== undefined), {
+export const CorrelationQuery = Correlation.strict().refine(
+  (query) => Object.values(query).some((value) => value !== undefined),
+  {
     message: "At least one correlation field is required",
-  });
+  },
+);
 export type CorrelationQuery = z.infer<typeof CorrelationQuery>;
 
 export const StoreErrorCode = z.enum([

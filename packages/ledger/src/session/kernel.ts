@@ -11,6 +11,7 @@ import {
   type ObservationSink,
 } from "@openomni/protocol";
 import { Storage } from "../storage/storage.js";
+import { messageDeadlineArm } from "../storage/l0-action-builders.js";
 
 export const LEASE_TTL_MS = 30_000;
 export const HEARTBEAT_INTERVAL_MS = 10_000;
@@ -102,23 +103,7 @@ export function armMessageDeadline(input: {
   readonly createdAt: number;
   readonly replyTo?: string;
 }): Alarm.Row {
-  const sender = row(input.sessionId);
-  const spec = Alarm.MessageDeadline.parse({
-    kind: "message_deadline",
-    messageId: input.messageId,
-    sourceActionId: input.sourceActionId,
-    createdAt: input.createdAt,
-    ...(input.replyTo === undefined ? {} : { replyTo: input.replyTo }),
-    generation: {
-      toolsGeneration: sender.toolsGeneration,
-      systemHash: sender.systemHash,
-      policyGeneration: sender.policyGeneration,
-    },
-  });
-  const alarm = requiredAlarms().arm({
-    id: `${input.sourceActionId}:deadline`, sessionId: input.sessionId,
-    kind: "at", fireAt: input.fireAt, spec: { encodingVersion: 1, value: spec },
-  });
+  const alarm = requiredAlarms().arm(messageDeadlineArm(input, row(input.sessionId)));
   if (alarm === undefined) throw new Error(`message deadline arm refused: ${input.messageId}`);
   return alarm;
 }

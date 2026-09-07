@@ -22,6 +22,15 @@ export namespace EgressBudgetStore {
     );
   }
 
+  /** Read-only applicability projection; inbound admission never debits egress. */
+  export function read(
+    senderId: string,
+    targetActorId: string,
+    windowStartAt: number,
+  ): Gateway.EgressDebitState {
+    return subAdapter().read(senderId, targetActorId, windowStartAt);
+  }
+
   /**
    * Atomically evaluate and append one counted-window claim. `windowStartAt`
    * is the caller's inclusive lower bound. The evaluator stays at the policy

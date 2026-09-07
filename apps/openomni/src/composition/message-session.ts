@@ -125,13 +125,8 @@ export function prepareMessage(
         ...(!exists ? { createSession: materialize(target, null, "resident", "resident") } : {}),
         message: {
           sender: "external",
-          addressee: "bot",
-          identity: true,
-          grantTier: true,
-          egressBudget: true,
           eventIdUnique:
             !exists || !SessionHandleStore.inboxRows(target).some((row) => row.id === messageId),
-          replyCorrelation: true,
         },
       };
     }
