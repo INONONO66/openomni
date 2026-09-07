@@ -34,11 +34,6 @@
     "linesHit": 2058,
     "pct": 99.09
   },
-  "packages/placement": {
-    "linesFound": 44,
-    "linesHit": 44,
-    "pct": 100
-  },
   "packages/policy": {
     "linesFound": 1240,
     "linesHit": 1226,

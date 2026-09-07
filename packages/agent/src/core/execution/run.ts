@@ -6,7 +6,7 @@ import {
   run as llmRun,
   type Sink,
 } from "@openomni/llm";
-import { Placement } from "@openomni/placement";
+import { selectModel } from "@openomni/llm";
 import type { PlainValue } from "@openomni/protocol";
 import { CompactionSession } from "../../compaction";
 import { DEFAULT_PROTECT_RECENT } from "../../compaction/contract";
@@ -15,7 +15,7 @@ import type { AgentResult, ChatAgentConfig, ChatAgentInput } from "../types";
 import * as Retry from "../retry";
 import { evaluateBudget, publishBudgetTelemetry } from "../budget";
 import { AgentStopError } from "./stop-chain";
-import { assertToolExecutor, assertUnambiguousToolMetadata } from "./tool-placement";
+import { assertToolExecutor, assertUnambiguousToolMetadata } from "./tools";
 import {
   buildTurn,
   handleContinue,
@@ -115,7 +115,7 @@ async function runModelStep(
   let provider = config.model.provider;
   const prepareAttempt = async (attempt: number, failures: readonly string[]) => {
     recordRunAttempt(state, attempt);
-    const selected = Placement.selectModel(
+    const selected = selectModel(
       [config.model, ...(config.modelFallbacks ?? [])],
       [...priorFailures, ...failures],
     );

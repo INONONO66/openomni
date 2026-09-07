@@ -1,7 +1,6 @@
 import {
   createSessionChatRunner,
   createTurnDispatcher,
-  HOST_TARGET,
   session,
   sessionTool,
   type ChatAgentConfig,
@@ -107,7 +106,6 @@ export function createWorkerSessionRunner(
             executor: dispatcher.executor,
             systemPrompt: input.system,
             tools,
-            toolTargets: [HOST_TARGET],
             toolChoice: tools.length === 0 ? "none" : "auto",
             toolExecutor: toolExecutorForTurn(dispatcher, input),
             toolWave: (calls, signal) =>

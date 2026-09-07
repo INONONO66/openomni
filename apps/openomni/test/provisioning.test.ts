@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { statSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -275,7 +275,14 @@ describe("boot profile selection (§8.1, §8.4)", () => {
       createdAt: NOW,
     });
     ChannelInstanceStore.put(instance({ revision: 4 }));
-    const before = desiredChannels(envConfig, { OPENOMNI_VAULT_KEY: KEY_B64 }, home);
+    const get = spyOn(SecretStore, "get");
+    let before: ReturnType<typeof desiredChannels>;
+    try {
+      before = desiredChannels(envConfig, { OPENOMNI_VAULT_KEY: KEY_B64 }, home);
+      expect(get.mock.calls).toEqual([["secret:channel-telegram-main"]]);
+    } finally {
+      get.mockRestore();
+    }
     expect(before.rows[0]?.instanceId).toBe("channel:telegram:main");
     expect(before.rows[0]?.key).toBe(`4:${NOW}`);
 

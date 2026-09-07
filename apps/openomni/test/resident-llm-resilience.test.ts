@@ -74,7 +74,6 @@ describe("Resident model fallback wiring", () => {
       modelFallbacks: [FALLBACK],
       apiKey: "test-key",
       tools: {},
-      targets: () => [],
       llm: {
         resolveModel: async (model) => {
           resolved.push(model);
@@ -112,7 +111,6 @@ describe("Resident model fallback wiring", () => {
       model: PRIMARY,
       apiKey: "test-key",
       tools: {},
-      targets: () => [],
       llm: {
         resolveModel: async (model) => {
           resolved.push(model);
@@ -172,7 +170,6 @@ describe("Resident terminal LLM failure surfacing", () => {
       model: PRIMARY,
       apiKey: "test-key",
       tools: {},
-      targets: () => [],
       llm: alwaysFailing(error),
     });
   }
@@ -286,7 +283,6 @@ describe("Resident terminal LLM failure surfacing", () => {
       model: PRIMARY,
       apiKey: "test-key",
       tools: {},
-      targets: () => [],
       llm: {
         resolveModel: async () => {
           throw new Error("catalog invariant failed");

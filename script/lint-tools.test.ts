@@ -100,11 +100,9 @@ describe("lint-tools definition invariants", () => {
     expect(definitionInvariantViolations([item], [located(item)])).toEqual([]);
   });
 
-  test("directory and declared category must agree", () => {
-    const item = definition("misplaced_query");
-    expect(messages([item], [located(item, "mutation")])).toContainEqual(
-      expect.stringContaining("[tool-category-directory]"),
-    );
+  test("category is independent of the target directory", () => {
+    const item = definition("file_query");
+    expect(definitionInvariantViolations([item], [{ definition: item, filePath: "apps/openomni/src/tools/fs/read.ts" }])).toEqual([]);
   });
 
   test("every catalog definition must map to a source file", () => {

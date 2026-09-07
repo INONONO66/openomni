@@ -28,7 +28,6 @@ import {
 } from "@openomni/ledger";
 
 import { createMachineHost, type MachineHost } from "@openomni/machines";
-import type { Placement } from "@openomni/placement";
 import { type Channel, Gateway, type Ingress } from "@openomni/protocol";
 import { Bus, newTraceId } from "@openomni/agent";
 import { desiredChannels, materializePersons } from "./provisioning/declared";
@@ -58,7 +57,6 @@ import { createMountedChannelGrantRegistrar, createResidentGateway } from "./gat
 import { createComposer, rollbackToCause } from "./composition/composer";
 import { buildInboundEvent } from "./inbound";
 import { createResident, type ResidentDelivery } from "./resident";
-import { HOST_TARGET } from "@openomni/agent";
 import { composeCodemode } from "./composition/codemode";
 
 interface StartOptions {
@@ -69,20 +67,6 @@ interface StartOptions {
   readonly config?: OpenOmniConfig;
   readonly llm?: ChatAgentConfig["llm"];
   readonly toolDefinitions?: readonly import("@openomni/protocol").AnyToolDefinition[];
-}
-
-/**
- * The targets a turn may place tools on: the brain, plus every enrolled
- * machine that is attached right now, each reduced to what it may actually
- * do. Reading attachment per turn is what makes a machine that connects
- * between two messages offerable on the second one.
- */
-function attachedTargets(
-  host: MachineHost | undefined,
-): readonly Placement.ToolTarget[] {
-  if (host === undefined) return [HOST_TARGET];
-  const machines = host.list().map((entry): Placement.ToolTarget => ({ kind: "machine", id: entry.machineId, capabilities: entry.capabilities }));
-  return [HOST_TARGET, ...machines];
 }
 
 /**
@@ -343,8 +327,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       await composer.mount("machines", (ctx) => ctx.effect(() => attachedHost.close()));
     }
 
-    // Self-referential: a cell's catalog is the same one that dispatches cells,
-    // and placement subtracts what a cell cannot reach.
+    // A cell's catalog shares the dispatcher's tool.pre policy boundary.
     const llmPort = createLlmToolPort(
       { ...config.model, ...(transport === undefined ? {} : { transport }) },
       options.llm ?? {},
@@ -364,12 +347,12 @@ export async function startOpenOmni(options: StartOptions = {}) {
       compaction: configuredCompaction(config, options.llm ?? {}),
       tools: {
         delegation: delegationKernel,
+        machines: host,
         ...(cells === undefined ? {} : { cells }),
         llm: llmPort,
         approvals: approvalPort,
         provisioning: provisioningPort,
       },
-      targets: () => attachedTargets(host),
       sessionRuntime,
       ...(options.llm === undefined ? {} : { llm: options.llm }),
     });

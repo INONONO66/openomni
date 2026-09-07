@@ -86,7 +86,6 @@ test("a resident tool call is executed and observed through the durable executor
         bindTools: () => undefined,
       },
     },
-    targets: () => [{ kind: "host", capabilities: [] }],
     sessionRuntime: {
       observations,
       clock: () => 10,

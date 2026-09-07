@@ -47,6 +47,7 @@ describe("@openomni/llm root public surface", () => {
       "accumulateUsage",
       "observeRetry",
       "run",
+      "selectModel",
     ]);
   });
 
